@@ -29,6 +29,9 @@ export default async function DashboardPage() {
           <Link className="module-link" href="/catalog"><article><span>04</span><h2>Test Catalog</h2><p>Configuration-driven tests, components, specimens and ranges.</p></article></Link>
           {permissions.has("patients.view") && <Link className="module-link" href="/patients"><article><span>05</span><h2>Patients</h2><p>Central patient identity, identifiers and duplicate protection across branches.</p></article></Link>}
           {permissions.has("referrers.view") && <Link className="module-link" href="/referrers"><article><span>06</span><h2>Referrers & Clients</h2><p>Referral sources and commercial accounts kept as linked but separate master data.</p></article></Link>}
+          {permissions.has("pricing.view") && <Link className="module-link" href="/pricing"><article><span>07</span><h2>Pricing</h2><p>Effective-dated organization, branch, client and contract prices.</p></article></Link>}
+          {permissions.has("orders.view") && <Link className="module-link" href="/orders"><article><span>08</span><h2>Orders</h2><p>Register patient test orders with price snapshots and billing context.</p></article></Link>}
+          {permissions.has("billing.view") && <Link className="module-link" href="/billing"><article><span>09</span><h2>Billing</h2><p>Invoices, balances and partial or split payment allocations.</p></article></Link>}
         </div>
       </section>
     </main>
