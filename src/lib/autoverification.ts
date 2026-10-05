@@ -43,10 +43,11 @@ export function evaluateAutoverification(input: {
       input.source === "CALCULATED";
 
     if (!sourceAllowed) reasons.push("RESULT_SOURCE_NOT_ALLOWED");
-    if (policy.requireNoCritical && input.values.some(value => value.isCritical)) reasons.push("CRITICAL_VALUE_PRESENT");
-    if (policy.requireDeltaWithinLimit && input.values.some(value => value.deltaEvaluation === "EXCEEDED")) reasons.push("DELTA_LIMIT_EXCEEDED");
-    if (policy.requireNoPendingReflex && input.pendingReflexCount > 0) reasons.push("PENDING_REFLEX_RECOMMENDATION");
-    if (policy.requireNoBlockingHolds && input.blockingHoldCount > 0) reasons.push("BLOCKING_VALIDATION_HOLD");
+    if (input.values.some(value => value.isCritical)) reasons.push("CRITICAL_VALUE_PRESENT");
+    if (input.values.some(value => value.deltaEvaluation === "EXCEEDED")) reasons.push("DELTA_LIMIT_EXCEEDED");
+    if (input.pendingReflexCount > 0) reasons.push("PENDING_REFLEX_RECOMMENDATION");
+    if (input.blockingHoldCount > 0) reasons.push("BLOCKING_VALIDATION_HOLD");
+    if (input.source === "ANALYZER") reasons.push("ANALYZER_QC_GATE_NOT_AVAILABLE");
     if (policy.requireAllFlagsNormal && input.values.some(value => !["NORMAL", "UNKNOWN"].includes(value.flag))) {
       reasons.push("NON_NORMAL_FLAG_PRESENT");
     }
