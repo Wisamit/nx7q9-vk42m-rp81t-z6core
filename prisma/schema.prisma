@@ -279,6 +279,62 @@ enum ReflexEventStatus {
   SUPERSEDED
 }
 
+enum InventoryItemType {
+  REAGENT
+  CONTROL
+  CALIBRATOR
+  KIT
+  TUBE
+  NEEDLE
+  CONSUMABLE
+  OTHER
+}
+
+enum InventoryMovementType {
+  RECEIPT
+  ISSUE
+  CONSUMPTION
+  ADJUSTMENT_IN
+  ADJUSTMENT_OUT
+  TRANSFER_OUT
+  TRANSFER_IN
+  RETURN
+  DISPOSAL
+}
+
+enum InventoryTransferStatus {
+  DRAFT
+  APPROVED
+  DISPATCHED
+  PARTIALLY_RECEIVED
+  RECEIVED
+  CANCELLED
+}
+
+enum PurchaseRequestStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  REJECTED
+  CONVERTED
+  CANCELLED
+}
+
+enum PurchaseOrderStatus {
+  DRAFT
+  APPROVED
+  SENT
+  PARTIALLY_RECEIVED
+  RECEIVED
+  CANCELLED
+}
+
+enum GoodsReceiptStatus {
+  DRAFT
+  POSTED
+  CANCELLED
+}
+
 enum ValidationHoldCondition {
   ALWAYS
   RESULT_SOURCE
@@ -379,8 +435,25 @@ model Organization {
   analyzers Analyzer[]
   criticalEscalationPolicies CriticalEscalationPolicy[]
   microbiologyCases MicrobiologyCase[]
+  branchStocks BranchStock[]
+  inventoryLotStocks InventoryLotStock[]
+  stockMovements StockMovement[]
+  purchaseRequests PurchaseRequest[]
+  purchaseOrders PurchaseOrder[]
+  goodsReceipts GoodsReceipt[]
+  outgoingInventoryTransfers InventoryTransfer[] @relation("InventoryTransferSourceBranch")
+  incomingInventoryTransfers InventoryTransfer[] @relation("InventoryTransferDestinationBranch")
   organisms Organism[]
   antibiotics Antibiotic[]
+  inventoryCategories InventoryCategory[]
+  inventoryItems InventoryItem[]
+  suppliers Supplier[]
+  inventoryLots InventoryLot[]
+  stockMovements StockMovement[]
+  purchaseRequests PurchaseRequest[]
+  purchaseOrders PurchaseOrder[]
+  goodsReceipts GoodsReceipt[]
+  inventoryTransfers InventoryTransfer[]
 
   @@map("organizations")
 }
@@ -549,6 +622,16 @@ model User {
   finalizedMicrobiologyCases MicrobiologyCase[] @relation("MicrobiologyCaseFinalizer")
   cultureObservations CultureObservation[]
   susceptibilityTests SusceptibilityTest[]
+  requestedPurchaseRequests PurchaseRequest[] @relation("PurchaseRequestRequester")
+  approvedPurchaseRequests PurchaseRequest[] @relation("PurchaseRequestApprover")
+  createdPurchaseOrders PurchaseOrder[] @relation("PurchaseOrderCreator")
+  approvedPurchaseOrders PurchaseOrder[] @relation("PurchaseOrderApprover")
+  receivedGoodsReceipts GoodsReceipt[] @relation("GoodsReceiptReceiver")
+  inventoryStockMovements StockMovement[] @relation("StockMovementActor")
+  requestedInventoryTransfers InventoryTransfer[] @relation("InventoryTransferRequester")
+  approvedInventoryTransfers InventoryTransfer[] @relation("InventoryTransferApprover")
+  dispatchedInventoryTransfers InventoryTransfer[] @relation("InventoryTransferDispatcher")
+  receivedInventoryTransfers InventoryTransfer[] @relation("InventoryTransferReceiver")
 
   @@unique([organizationId, username])
   @@unique([organizationId, email])
@@ -2348,4 +2431,386 @@ model AnalyzerResultImport {
   @@index([orderItemId, status])
   @@index([specimenId, status])
   @@map("analyzer_result_imports")
+}
+
+
+model InventoryCategory {
+  id             String       @id @default(uuid()) @db.Char(36)
+  organizationId String       @map("organization_id") @db.Char(36)
+  code           String       @db.VarChar(80)
+  nameEn         String       @map("name_en") @db.VarChar(200)
+  nameAr         String?      @map("name_ar") @db.VarChar(200)
+  status         RecordStatus @default(ACTIVE)
+  createdAt      DateTime     @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt      DateTime     @updatedAt @map("updated_at") @db.DateTime(3)
+  deactivatedAt  DateTime?    @map("deactivated_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  items        InventoryItem[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId, status])
+  @@map("inventory_categories")
+}
+
+model Supplier {
+  id             String       @id @default(uuid()) @db.Char(36)
+  organizationId String       @map("organization_id") @db.Char(36)
+  code           String       @db.VarChar(80)
+  nameEn         String       @map("name_en") @db.VarChar(220)
+  nameAr         String?      @map("name_ar") @db.VarChar(220)
+  phone          String?      @db.VarChar(50)
+  email          String?      @db.VarChar(191)
+  address        String?      @db.Text
+  taxNumber      String?      @map("tax_number") @db.VarChar(100)
+  paymentTerms   String?      @map("payment_terms") @db.VarChar(500)
+  status         RecordStatus @default(ACTIVE)
+  createdAt      DateTime     @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt      DateTime     @updatedAt @map("updated_at") @db.DateTime(3)
+  deactivatedAt  DateTime?    @map("deactivated_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  lots         InventoryLot[]
+  purchaseOrders PurchaseOrder[]
+  goodsReceipts GoodsReceipt[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId, status])
+  @@map("suppliers")
+}
+
+model InventoryItem {
+  id                String            @id @default(uuid()) @db.Char(36)
+  organizationId    String            @map("organization_id") @db.Char(36)
+  categoryId        String?           @map("category_id") @db.Char(36)
+  code              String            @db.VarChar(80)
+  nameEn            String            @map("name_en") @db.VarChar(220)
+  nameAr            String?           @map("name_ar") @db.VarChar(220)
+  itemType          InventoryItemType @map("item_type")
+  stockUnit         String            @map("stock_unit") @db.VarChar(50)
+  minimumStockQty   Decimal           @default(0) @map("minimum_stock_qty") @db.Decimal(18, 4)
+  reorderQty        Decimal?          @map("reorder_qty") @db.Decimal(18, 4)
+  storageConditions String?           @map("storage_conditions") @db.VarChar(500)
+  lotTracking       Boolean           @default(true) @map("lot_tracking")
+  expiryTracking    Boolean           @default(true) @map("expiry_tracking")
+  status            RecordStatus      @default(ACTIVE)
+  createdAt         DateTime          @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt         DateTime          @updatedAt @map("updated_at") @db.DateTime(3)
+  deactivatedAt     DateTime?         @map("deactivated_at") @db.DateTime(3)
+
+  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  category     InventoryCategory? @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  lots         InventoryLot[]
+  branchStocks BranchStock[]
+  stockMovements StockMovement[]
+  transferItems InventoryTransferItem[]
+  purchaseRequestItems PurchaseRequestItem[]
+  purchaseOrderItems PurchaseOrderItem[]
+  goodsReceiptItems GoodsReceiptItem[]
+
+  @@unique([organizationId, code])
+  @@index([categoryId, status])
+  @@index([organizationId, itemType, status])
+  @@map("inventory_items")
+}
+
+model InventoryLot {
+  id             String       @id @default(uuid()) @db.Char(36)
+  organizationId String       @map("organization_id") @db.Char(36)
+  itemId         String       @map("item_id") @db.Char(36)
+  supplierId     String?      @map("supplier_id") @db.Char(36)
+  lotNumber      String       @map("lot_number") @db.VarChar(120)
+  manufacturerLot String?     @map("manufacturer_lot") @db.VarChar(120)
+  receivedDate   DateTime?    @map("received_date") @db.Date
+  expiryDate     DateTime?    @map("expiry_date") @db.Date
+  openedDate     DateTime?    @map("opened_date") @db.Date
+  inUseDate      DateTime?    @map("in_use_date") @db.Date
+  unitCost       Decimal?     @map("unit_cost") @db.Decimal(18, 4)
+  currency       String?      @db.Char(3)
+  status         RecordStatus @default(ACTIVE)
+  createdAt      DateTime     @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt      DateTime     @updatedAt @map("updated_at") @db.DateTime(3)
+  deactivatedAt  DateTime?    @map("deactivated_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  item         InventoryItem @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  supplier     Supplier?     @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  branchStocks InventoryLotStock[]
+  movements    StockMovement[]
+  transferItems InventoryTransferItem[]
+  goodsReceiptItems GoodsReceiptItem[]
+
+  @@unique([organizationId, itemId, lotNumber])
+  @@index([itemId, expiryDate, status])
+  @@index([supplierId, status])
+  @@map("inventory_lots")
+}
+
+model BranchStock {
+  id              String   @id @default(uuid()) @db.Char(36)
+  branchId        String   @map("branch_id") @db.Char(36)
+  itemId          String   @map("item_id") @db.Char(36)
+  quantityOnHand  Decimal  @default(0) @map("quantity_on_hand") @db.Decimal(18, 4)
+  reservedQty     Decimal  @default(0) @map("reserved_qty") @db.Decimal(18, 4)
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.DateTime(3)
+  createdAt       DateTime @default(now()) @map("created_at") @db.DateTime(3)
+
+  branch Branch        @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  item   InventoryItem @relation(fields: [itemId], references: [id], onDelete: Restrict)
+
+  @@unique([branchId, itemId])
+  @@index([itemId])
+  @@map("branch_stock")
+}
+
+model InventoryLotStock {
+  id             String   @id @default(uuid()) @db.Char(36)
+  branchId       String   @map("branch_id") @db.Char(36)
+  lotId          String   @map("lot_id") @db.Char(36)
+  quantityOnHand Decimal  @default(0) @map("quantity_on_hand") @db.Decimal(18, 4)
+  reservedQty    Decimal  @default(0) @map("reserved_qty") @db.Decimal(18, 4)
+  createdAt      DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.DateTime(3)
+
+  branch Branch       @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  lot    InventoryLot @relation(fields: [lotId], references: [id], onDelete: Restrict)
+
+  @@unique([branchId, lotId])
+  @@index([lotId])
+  @@map("inventory_lot_stock")
+}
+
+model StockMovement {
+  id             String                @id @default(uuid()) @db.Char(36)
+  organizationId String                @map("organization_id") @db.Char(36)
+  branchId       String                @map("branch_id") @db.Char(36)
+  itemId         String                @map("item_id") @db.Char(36)
+  lotId          String?               @map("lot_id") @db.Char(36)
+  movementType   InventoryMovementType @map("movement_type")
+  quantity       Decimal               @db.Decimal(18, 4)
+  balanceAfter   Decimal               @map("balance_after") @db.Decimal(18, 4)
+  referenceType  String?               @map("reference_type") @db.VarChar(80)
+  referenceId    String?               @map("reference_id") @db.Char(36)
+  reason         String?               @db.VarChar(500)
+  actorUserId    String                @map("actor_user_id") @db.Char(36)
+  occurredAt     DateTime              @default(now()) @map("occurred_at") @db.DateTime(3)
+  createdAt      DateTime              @default(now()) @map("created_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  branch       Branch       @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  item         InventoryItem @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  lot          InventoryLot? @relation(fields: [lotId], references: [id], onDelete: Restrict)
+  actor        User          @relation("StockMovementActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([branchId, itemId, occurredAt])
+  @@index([lotId, occurredAt])
+  @@index([referenceType, referenceId])
+  @@map("stock_movements")
+}
+
+model InventoryTransfer {
+  id                  String                  @id @default(uuid()) @db.Char(36)
+  organizationId      String                  @map("organization_id") @db.Char(36)
+  transferNumber      String                  @map("transfer_number") @db.VarChar(80)
+  sourceBranchId      String                  @map("source_branch_id") @db.Char(36)
+  destinationBranchId String                  @map("destination_branch_id") @db.Char(36)
+  status              InventoryTransferStatus @default(DRAFT)
+  notes               String?                 @db.Text
+  requestedByUserId   String                  @map("requested_by_user_id") @db.Char(36)
+  requestedAt         DateTime                @default(now()) @map("requested_at") @db.DateTime(3)
+  approvedByUserId    String?                 @map("approved_by_user_id") @db.Char(36)
+  approvedAt          DateTime?               @map("approved_at") @db.DateTime(3)
+  dispatchedByUserId  String?                 @map("dispatched_by_user_id") @db.Char(36)
+  dispatchedAt        DateTime?               @map("dispatched_at") @db.DateTime(3)
+  receivedByUserId    String?                 @map("received_by_user_id") @db.Char(36)
+  receivedAt          DateTime?               @map("received_at") @db.DateTime(3)
+  createdAt           DateTime                @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt           DateTime                @updatedAt @map("updated_at") @db.DateTime(3)
+
+  organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  sourceBranch      Branch       @relation("InventoryTransferSourceBranch", fields: [sourceBranchId], references: [id], onDelete: Restrict)
+  destinationBranch Branch       @relation("InventoryTransferDestinationBranch", fields: [destinationBranchId], references: [id], onDelete: Restrict)
+  requestedBy       User         @relation("InventoryTransferRequester", fields: [requestedByUserId], references: [id], onDelete: Restrict)
+  approvedBy        User?        @relation("InventoryTransferApprover", fields: [approvedByUserId], references: [id], onDelete: Restrict)
+  dispatchedBy      User?        @relation("InventoryTransferDispatcher", fields: [dispatchedByUserId], references: [id], onDelete: Restrict)
+  receivedBy        User?        @relation("InventoryTransferReceiver", fields: [receivedByUserId], references: [id], onDelete: Restrict)
+  items             InventoryTransferItem[]
+
+  @@unique([organizationId, transferNumber])
+  @@index([sourceBranchId, status, requestedAt])
+  @@index([destinationBranchId, status, requestedAt])
+  @@map("inventory_transfers")
+}
+
+model InventoryTransferItem {
+  id             String   @id @default(uuid()) @db.Char(36)
+  transferId     String   @map("transfer_id") @db.Char(36)
+  itemId         String   @map("item_id") @db.Char(36)
+  lotId          String   @map("lot_id") @db.Char(36)
+  requestedQty   Decimal  @map("requested_qty") @db.Decimal(18, 4)
+  approvedQty    Decimal? @map("approved_qty") @db.Decimal(18, 4)
+  dispatchedQty  Decimal? @map("dispatched_qty") @db.Decimal(18, 4)
+  receivedQty    Decimal? @map("received_qty") @db.Decimal(18, 4)
+  discrepancyQty Decimal? @map("discrepancy_qty") @db.Decimal(18, 4)
+  createdAt      DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.DateTime(3)
+
+  transfer InventoryTransfer @relation(fields: [transferId], references: [id], onDelete: Restrict)
+  item     InventoryItem     @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  lot      InventoryLot      @relation(fields: [lotId], references: [id], onDelete: Restrict)
+
+  @@unique([transferId, lotId])
+  @@index([itemId])
+  @@map("inventory_transfer_items")
+}
+
+model PurchaseRequest {
+  id                String                @id @default(uuid()) @db.Char(36)
+  organizationId    String                @map("organization_id") @db.Char(36)
+  branchId          String                @map("branch_id") @db.Char(36)
+  requestNumber     String                @map("request_number") @db.VarChar(80)
+  status            PurchaseRequestStatus @default(DRAFT)
+  notes             String?               @db.Text
+  requestedByUserId String                @map("requested_by_user_id") @db.Char(36)
+  requestedAt       DateTime              @default(now()) @map("requested_at") @db.DateTime(3)
+  approvedByUserId  String?               @map("approved_by_user_id") @db.Char(36)
+  approvedAt        DateTime?             @map("approved_at") @db.DateTime(3)
+  createdAt         DateTime              @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt         DateTime              @updatedAt @map("updated_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  branch       Branch       @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  requestedBy  User         @relation("PurchaseRequestRequester", fields: [requestedByUserId], references: [id], onDelete: Restrict)
+  approvedBy   User?        @relation("PurchaseRequestApprover", fields: [approvedByUserId], references: [id], onDelete: Restrict)
+  items        PurchaseRequestItem[]
+  purchaseOrders PurchaseOrder[]
+
+  @@unique([organizationId, requestNumber])
+  @@index([branchId, status, requestedAt])
+  @@map("purchase_requests")
+}
+
+model PurchaseRequestItem {
+  id                 String   @id @default(uuid()) @db.Char(36)
+  purchaseRequestId  String   @map("purchase_request_id") @db.Char(36)
+  itemId             String   @map("item_id") @db.Char(36)
+  requestedQty       Decimal  @map("requested_qty") @db.Decimal(18, 4)
+  estimatedUnitCost  Decimal? @map("estimated_unit_cost") @db.Decimal(18, 4)
+  currency           String?  @db.Char(3)
+  notes              String?  @db.VarChar(500)
+  createdAt          DateTime @default(now()) @map("created_at") @db.DateTime(3)
+
+  purchaseRequest PurchaseRequest @relation(fields: [purchaseRequestId], references: [id], onDelete: Restrict)
+  item            InventoryItem   @relation(fields: [itemId], references: [id], onDelete: Restrict)
+
+  @@unique([purchaseRequestId, itemId])
+  @@index([itemId])
+  @@map("purchase_request_items")
+}
+
+model PurchaseOrder {
+  id                String              @id @default(uuid()) @db.Char(36)
+  organizationId    String              @map("organization_id") @db.Char(36)
+  branchId          String              @map("branch_id") @db.Char(36)
+  supplierId        String              @map("supplier_id") @db.Char(36)
+  purchaseRequestId String?             @map("purchase_request_id") @db.Char(36)
+  poNumber          String              @map("po_number") @db.VarChar(80)
+  status            PurchaseOrderStatus @default(DRAFT)
+  currency          String              @db.Char(3)
+  supplierReference String?             @map("supplier_reference") @db.VarChar(150)
+  orderedAt         DateTime?           @map("ordered_at") @db.DateTime(3)
+  expectedAt        DateTime?           @map("expected_at") @db.DateTime(3)
+  createdByUserId   String              @map("created_by_user_id") @db.Char(36)
+  approvedByUserId  String?             @map("approved_by_user_id") @db.Char(36)
+  approvedAt        DateTime?           @map("approved_at") @db.DateTime(3)
+  notes             String?             @db.Text
+  createdAt         DateTime            @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt         DateTime            @updatedAt @map("updated_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  branch       Branch       @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  supplier     Supplier     @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  purchaseRequest PurchaseRequest? @relation(fields: [purchaseRequestId], references: [id], onDelete: Restrict)
+  createdBy    User         @relation("PurchaseOrderCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  approvedBy   User?        @relation("PurchaseOrderApprover", fields: [approvedByUserId], references: [id], onDelete: Restrict)
+  items        PurchaseOrderItem[]
+  goodsReceipts GoodsReceipt[]
+
+  @@unique([organizationId, poNumber])
+  @@index([branchId, status, createdAt])
+  @@index([supplierId, status])
+  @@map("purchase_orders")
+}
+
+model PurchaseOrderItem {
+  id              String   @id @default(uuid()) @db.Char(36)
+  purchaseOrderId String   @map("purchase_order_id") @db.Char(36)
+  itemId          String   @map("item_id") @db.Char(36)
+  orderedQty      Decimal  @map("ordered_qty") @db.Decimal(18, 4)
+  receivedQty     Decimal  @default(0) @map("received_qty") @db.Decimal(18, 4)
+  unitCost        Decimal  @map("unit_cost") @db.Decimal(18, 4)
+  createdAt       DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.DateTime(3)
+
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict)
+  item          InventoryItem @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  goodsReceiptItems GoodsReceiptItem[]
+
+  @@unique([purchaseOrderId, itemId])
+  @@index([itemId])
+  @@map("purchase_order_items")
+}
+
+model GoodsReceipt {
+  id               String             @id @default(uuid()) @db.Char(36)
+  organizationId   String             @map("organization_id") @db.Char(36)
+  branchId         String             @map("branch_id") @db.Char(36)
+  supplierId       String             @map("supplier_id") @db.Char(36)
+  purchaseOrderId  String?            @map("purchase_order_id") @db.Char(36)
+  receiptNumber    String             @map("receipt_number") @db.VarChar(80)
+  supplierReference String?           @map("supplier_reference") @db.VarChar(150)
+  status           GoodsReceiptStatus @default(DRAFT)
+  receivedByUserId String             @map("received_by_user_id") @db.Char(36)
+  receivedAt       DateTime           @default(now()) @map("received_at") @db.DateTime(3)
+  postedAt         DateTime?          @map("posted_at") @db.DateTime(3)
+  notes            String?            @db.Text
+  createdAt        DateTime           @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt        DateTime           @updatedAt @map("updated_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  branch       Branch       @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  supplier     Supplier     @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  purchaseOrder PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict)
+  receivedBy   User         @relation("GoodsReceiptReceiver", fields: [receivedByUserId], references: [id], onDelete: Restrict)
+  items        GoodsReceiptItem[]
+
+  @@unique([organizationId, receiptNumber])
+  @@index([branchId, status, receivedAt])
+  @@index([supplierId, receivedAt])
+  @@map("goods_receipts")
+}
+
+model GoodsReceiptItem {
+  id                  String   @id @default(uuid()) @db.Char(36)
+  goodsReceiptId      String   @map("goods_receipt_id") @db.Char(36)
+  purchaseOrderItemId String?  @map("purchase_order_item_id") @db.Char(36)
+  itemId              String   @map("item_id") @db.Char(36)
+  lotId               String?  @map("lot_id") @db.Char(36)
+  lotNumber           String   @map("lot_number") @db.VarChar(120)
+  expiryDate          DateTime? @map("expiry_date") @db.Date
+  quantity            Decimal  @db.Decimal(18, 4)
+  unitCost            Decimal  @map("unit_cost") @db.Decimal(18, 4)
+  currency            String   @db.Char(3)
+  createdAt           DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt           DateTime @updatedAt @map("updated_at") @db.DateTime(3)
+
+  goodsReceipt     GoodsReceipt      @relation(fields: [goodsReceiptId], references: [id], onDelete: Restrict)
+  purchaseOrderItem PurchaseOrderItem? @relation(fields: [purchaseOrderItemId], references: [id], onDelete: Restrict)
+  item             InventoryItem     @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  lot              InventoryLot?     @relation(fields: [lotId], references: [id], onDelete: Restrict)
+
+  @@index([goodsReceiptId])
+  @@index([itemId, lotNumber])
+  @@index([lotId])
+  @@map("goods_receipt_items")
 }
