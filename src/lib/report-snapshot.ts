@@ -58,6 +58,11 @@ export async function buildDiagnosticReportSnapshot(db: Prisma.TransactionClient
       resultStatus: result!.status,
       source: result!.source,
       methodId: result!.methodId,
+      analyzer: result!.analyzerCodeSnapshot ? {
+        id: result!.analyzerId,
+        code: result!.analyzerCodeSnapshot,
+        name: result!.analyzerNameSnapshot,
+      } : null,
       performingBranch: {
         id: result!.performingBranch.id,
         code: result!.performingBranch.code,

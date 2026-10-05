@@ -56,6 +56,7 @@ type ReportResult = {
   testNameEn: string;
   testNameAr: string | null;
   resultVersion: number;
+  analyzer: { id: string | null; code: string; name: string | null } | null;
   performingBranch: { code: string; nameEn: string; nameAr: string | null };
   specimen: { barcode: string; collectedAt: string | null; receivedAt: string | null } | null;
   values: ReportValue[];
@@ -203,7 +204,7 @@ export default async function DiagnosticReportPage({ params }: { params: Promise
                 <td colSpan={5}>
                   <strong>{result.testCode} — {result.testNameEn}</strong>
                   {result.testNameAr && <span dir="rtl"> · {result.testNameAr}</span>}
-                  <small> · {result.performingBranch.nameEn} · Result v{result.resultVersion}</small>
+                  <small> · {result.performingBranch.nameEn} · Result v{result.resultVersion}{result.analyzer ? ` · Analyzer: ${result.analyzer.code}${result.analyzer.name ? " — " + result.analyzer.name : ""}` : ""}</small>
                 </td>
               </tr>,
               ...result.values.map((value) => <tr key={`${result.testCode}-${value.componentCode}`} className={value.isCritical ? "report-critical-row" : ""}>
