@@ -1,8 +1,8 @@
-import { canAccessBranch, permissionSet } from "@/lib/auth";
+import { canAccessBranch, getCurrentSession, permissionSet } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import type { AttachmentTargetType } from "../../generated/prisma/client";
 
-type Session = NonNullable<Awaited<ReturnType<typeof import("@/lib/auth").getCurrentSession>>>;
+type Session = NonNullable<Awaited<ReturnType<typeof getCurrentSession>>>;
 
 function hasAny(permissions: Set<string>, values: string[]) {
   return values.some(value => permissions.has(value));
