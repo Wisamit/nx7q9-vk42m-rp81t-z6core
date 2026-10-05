@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { prisma } from "@/lib/db";
 import { requestContext } from "@/lib/auth";
 import { hashPortalToken, newPortalToken, portalSessionExpiry, PORTAL_SESSION_COOKIE } from "@/lib/portal-auth";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 function normalize(value: unknown) {
   if (typeof value !== "string") return "";
@@ -18,6 +19,18 @@ export async function POST(request: Request) {
   const login = normalize(body?.login);
   const password = typeof body?.password === "string" ? body.password : "";
   if (!organizationCode || !login || !password) return NextResponse.json({ error: "invalid_credentials" }, { status: 401 });
+
+  const [ipLimit, identityLimit] = await Promise.all([
+    checkRateLimit({ scope: "portal_login_ip", key: ctx.ipAddress || "unknown", limit: 40, windowMs: 15 * 60_000 }),
+    checkRateLimit({ scope: "portal_login_identity", key: organizationCode + ":" + login, limit: 12, windowMs: 15 * 60_000 }),
+  ]);
+  if (!ipLimit.allowed || !identityLimit.allowed) {
+    const retryAfter = Math.max(ipLimit.retryAfterSeconds, identityLimit.retryAfterSeconds);
+    return NextResponse.json(
+      { error: "rate_limited" },
+      { status: 429, headers: { "Retry-After": String(retryAfter) } },
+    );
+  }
 
   const account = await prisma.portalAccount.findFirst({
     where: {

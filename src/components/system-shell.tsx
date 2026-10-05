@@ -185,6 +185,7 @@ export function SystemShell({ user, children }: { user: ShellUser; children: Rea
               {user.branches.map(branch => <option value={branch.id} key={branch.id}>{branch.code} — {branch.name}</option>)}
             </select>
           </label>}
+          <Link className="system-security-link" href="/security">{tr("Security", "الأمان")}</Link>
           <button className="system-locale-toggle" type="button" disabled={localeBusy} onClick={() => void switchLocale()}>
             {localeBusy ? "…" : locale === "ar" ? "EN" : "AR"}
           </button>

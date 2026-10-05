@@ -1030,6 +1030,11 @@ model User {
   failedLoginAttempts Int    @default(0) @map("failed_login_attempts")
   lockedUntil     DateTime?  @map("locked_until") @db.DateTime(3)
   passwordChangedAt DateTime? @map("password_changed_at") @db.DateTime(3)
+  mfaEnabled       Boolean   @default(false) @map("mfa_enabled")
+  mfaSecretEncrypted String? @map("mfa_secret_encrypted") @db.VarChar(700)
+  mfaPendingSecretEncrypted String? @map("mfa_pending_secret_encrypted") @db.VarChar(700)
+  mfaConfirmedAt   DateTime? @map("mfa_confirmed_at") @db.DateTime(3)
+  mfaRecoveryCodes Json?     @map("mfa_recovery_codes")
   createdAt      DateTime   @default(now()) @map("created_at") @db.DateTime(3)
   updatedAt      DateTime   @updatedAt @map("updated_at") @db.DateTime(3)
   deactivatedAt  DateTime?  @map("deactivated_at") @db.DateTime(3)
@@ -1040,6 +1045,7 @@ model User {
   departmentScopes UserDepartmentScope[]
   auditEvents      AuditEvent[]          @relation("AuditActor")
   sessions         UserSession[]
+  mfaChallenges     StaffMfaChallenge[]
   approvedReferenceIntervals ReferenceInterval[] @relation("ReferenceIntervalApprover")
   createdCatalogImportMappings CatalogImportMapping[] @relation("CatalogImportMappingCreator")
   createdOrders LabOrder[] @relation("OrderCreator")
@@ -1255,6 +1261,35 @@ model AuditEvent {
   @@index([actorUserId, occurredAt])
   @@index([entityType, entityId, occurredAt])
   @@map("audit_events")
+}
+
+model StaffMfaChallenge {
+  id          String    @id @default(uuid()) @db.Char(36)
+  userId      String    @map("user_id") @db.Char(36)
+  tokenHash   String    @unique @map("token_hash") @db.Char(64)
+  expiresAt   DateTime  @map("expires_at") @db.DateTime(3)
+  consumedAt  DateTime? @map("consumed_at") @db.DateTime(3)
+  ipAddress   String?   @map("ip_address") @db.VarChar(45)
+  userAgent   String?   @map("user_agent") @db.VarChar(500)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.DateTime(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([userId, expiresAt, consumedAt])
+  @@map("staff_mfa_challenges")
+}
+
+model RequestRateLimit {
+  id          String   @id @default(uuid()) @db.Char(36)
+  scope       String   @db.VarChar(80)
+  keyHash     String   @map("key_hash") @db.Char(64)
+  windowStart DateTime @map("window_start") @db.DateTime(3)
+  count       Int      @default(0)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.DateTime(3)
+
+  @@unique([scope, keyHash])
+  @@index([updatedAt])
+  @@map("request_rate_limits")
 }
 
 model UserSession {
