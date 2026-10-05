@@ -24,6 +24,7 @@ export function ResultEntryForm({
   comments,
   resultId,
   resultStatus,
+  canVerify,
 }: {
   orderItemId: string;
   specimenId: string;
@@ -32,6 +33,7 @@ export function ResultEntryForm({
   comments: string;
   resultId: string | null;
   resultStatus: string | null;
+  canVerify: boolean;
 }) {
   const router = useRouter();
   const [values, setValues] = useState<Record<string, string>>(
@@ -155,7 +157,7 @@ export function ResultEntryForm({
 
     <div className="result-actions">
       {!locked && <button className="primary-button" disabled={busy !== ""}>{busy === "save" ? "Saving…" : "Save Result"}</button>}
-      {!locked && savedResultId && complete && <button className="secondary-button" type="button" disabled={busy !== ""} onClick={() => void verify()}>{busy === "verify" ? "Verifying…" : "Verify Result"}</button>}
+      {!locked && canVerify && savedResultId && complete && <button className="secondary-button" type="button" disabled={busy !== ""} onClick={() => void verify()}>{busy === "verify" ? "Verifying…" : "Verify Result"}</button>}
       {locked && <span className="muted">Verified/released results are locked. Future edits must use an amendment workflow.</span>}
     </div>
   </form>;
