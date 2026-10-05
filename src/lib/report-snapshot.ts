@@ -75,6 +75,7 @@ export async function buildDiagnosticReportSnapshot(db: Prisma.TransactionClient
         receivedAt: specimen.receivedAt?.toISOString() || null,
       } : null,
       values: result!.values.map((value) => ({
+        componentId: value.componentId,
         componentCode: value.componentCodeSnapshot,
         componentNameEn: value.componentNameEnSnapshot,
         componentNameAr: value.componentNameArSnapshot,
