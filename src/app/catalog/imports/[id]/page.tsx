@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { SafeImportButton } from "@/components/safe-import-button";
+import { RevalidateImportButton } from "@/components/revalidate-import-button";
 
 export const dynamic = "force-dynamic";
 
@@ -116,6 +117,7 @@ export default async function ImportBatchPage({
           <Link className={status === "ERROR" ? "filter-chip active" : "filter-chip"} href={`/catalog/imports/${batch.id}?status=ERROR`}>Errors ({counts.ERROR || 0})</Link>
           <Link className={status === "WARNING" ? "filter-chip active" : "filter-chip"} href={`/catalog/imports/${batch.id}?status=WARNING`}>Warnings ({counts.WARNING || 0})</Link>
           <Link className={status === "VALID" ? "filter-chip active" : "filter-chip"} href={`/catalog/imports/${batch.id}?status=VALID`}>Valid ({counts.VALID || 0})</Link>
+          {batch.status === "DRAFT" && <RevalidateImportButton batchId={batch.id} />}
           {batch.status === "VALIDATED" && <SafeImportButton batchId={batch.id} />}
         </div>
       </div>
