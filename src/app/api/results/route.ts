@@ -4,6 +4,8 @@ import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { numericFlag, resolveReferenceInterval } from "@/lib/result-reference";
 import { evaluateDelta } from "@/lib/delta-check";
+import { evaluateFormula, formulaVariables } from "@/lib/formula-engine";
+import { reflexMatches } from "@/lib/reflex-rules";
 
 function text(value: unknown, max = 5000) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -77,6 +79,22 @@ export async function POST(request: Request) {
             include: { unit: true },
             orderBy: [{ displayOrder: "asc" }, { code: "asc" }],
           },
+          calculatedRules: {
+            where: {
+              status: "ACTIVE",
+              effectiveFrom: { lte: new Date() },
+              OR: [{ effectiveTo: null }, { effectiveTo: { gte: new Date() } }],
+            },
+            include: { targetComponent: true },
+          },
+          sourceReflexRules: {
+            where: {
+              status: "ACTIVE",
+              effectiveFrom: { lte: new Date() },
+              OR: [{ effectiveTo: null }, { effectiveTo: { gte: new Date() } }],
+            },
+            include: { targetTest: true },
+          },
         },
       },
       specimenLinks: {
@@ -138,6 +156,10 @@ export async function POST(request: Request) {
     interval: Awaited<ReturnType<typeof resolveReferenceInterval>> | null;
     flag: ReturnType<typeof numericFlag>;
     delta: Awaited<ReturnType<typeof evaluateDelta>>;
+    isCalculated: boolean;
+    calculatedRuleId: string | null;
+    calculationExpression: string | null;
+    calculationInputs: Record<string, string> | null;
   }> = [];
 
   try {
