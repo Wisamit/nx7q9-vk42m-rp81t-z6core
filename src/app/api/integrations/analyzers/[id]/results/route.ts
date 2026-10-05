@@ -120,12 +120,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (!mappingByCode.has(mapping.analyzerTestCode)) mappingByCode.set(mapping.analyzerTestCode, mapping);
   }
 
-  const newItems = normalized.filter(item => !existingByObservation.has(item.observationId));
+  const processableItems = normalized.filter(item => {
+    const existing = existingByObservation.get(item.observationId);
+    return !existing || existing.status === "ERROR";
+  });
+  const duplicateObservationCount = normalized.length - processableItems.length;
+  const reprocessedObservationCount = processableItems.filter(item => existingByObservation.has(item.observationId)).length;
+  const newObservationCount = processableItems.length - reprocessedObservationCount;
+
   const staged = await prisma.$transaction(async tx => {
     const output: Array<{ observationId: string; importId: string; status: string; errorCode: string | null }> = [];
     let errorCount = 0;
 
-    for (const item of newItems) {
+    for (const item of processableItems) {
       const mapping = mappingByCode.get(item.analyzerTestCode) || null;
       const specimen = specimenByBarcode.get(item.barcode) || null;
 
@@ -170,24 +177,37 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       const status = errorCode ? "ERROR" : "MAPPED";
       if (errorCode) errorCount++;
 
-      const created = await tx.analyzerResultImport.create({
-        data: {
-          messageId: message.id,
-          bridgeObservationId: item.observationId,
-          analyzerId: credential.analyzer.id,
-          mappingId: mapping?.id || null,
-          orderItemId,
-          specimenId: specimen?.id || null,
-          barcodeSnapshot: item.barcode,
-          analyzerTestCode: item.analyzerTestCode,
-          rawValue: item.rawValue,
-          rawUnit: item.rawUnit,
-          status,
-          errorCode,
-          errorText,
-        },
-      });
-      output.push({ observationId: item.observationId, importId: created.id, status, errorCode });
+      const existingImport = existingByObservation.get(item.observationId);
+      const savedImport = existingImport
+        ? await tx.analyzerResultImport.update({
+            where: { id: existingImport.id },
+            data: {
+              mappingId: mapping?.id || null,
+              orderItemId,
+              specimenId: specimen?.id || null,
+              status,
+              errorCode,
+              errorText,
+            },
+          })
+        : await tx.analyzerResultImport.create({
+            data: {
+              messageId: message.id,
+              bridgeObservationId: item.observationId,
+              analyzerId: credential.analyzer.id,
+              mappingId: mapping?.id || null,
+              orderItemId,
+              specimenId: specimen?.id || null,
+              barcodeSnapshot: item.barcode,
+              analyzerTestCode: item.analyzerTestCode,
+              rawValue: item.rawValue,
+              rawUnit: item.rawUnit,
+              status,
+              errorCode,
+              errorText,
+            },
+          });
+      output.push({ observationId: item.observationId, importId: savedImport.id, status, errorCode });
     }
 
     const allRows = await tx.analyzerResultImport.findMany({ where: { messageId: message.id } });
@@ -216,8 +236,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           analyzerId: credential.analyzer.id,
           bridgeMessageId,
           receivedObservationCount: normalized.length,
-          newObservationCount: newItems.length,
-          duplicateObservationCount: normalized.length - newItems.length,
+          newObservationCount,
+          reprocessedObservationCount,
+          duplicateObservationCount,
           errorCount: totalErrors,
           credentialId: credential.id,
         },
@@ -232,8 +253,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     status: "ok",
     messageId: message.id,
     observationCount: normalized.length,
-    newObservationCount: newItems.length,
-    duplicateObservationCount: normalized.length - newItems.length,
+    newObservationCount,
+    reprocessedObservationCount,
+    duplicateObservationCount,
     errorCount: staged.errorCount,
     imports: staged.output,
   }, { status: 202 });
