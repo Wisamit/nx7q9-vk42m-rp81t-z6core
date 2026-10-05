@@ -28,6 +28,10 @@ const FOUNDATION_PERMISSIONS = [
   ["orders.create", "orders", "Create laboratory orders"],
   ["billing.view", "billing", "View invoices and balances"],
   ["billing.manage", "billing", "Manage invoices and payments"],
+  ["specimens.view", "specimens", "View specimen and barcode traceability"],
+  ["specimens.collect", "specimens", "Collect and label specimens"],
+  ["specimens.receive", "specimens", "Receive specimens into laboratory custody"],
+  ["specimens.reject", "specimens", "Reject unsuitable specimens with reason"],
 ] as const;
 
 function text(value: unknown, max = 200) {

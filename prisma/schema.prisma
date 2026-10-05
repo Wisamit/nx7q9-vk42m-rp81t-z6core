@@ -102,6 +102,27 @@ enum PaymentStatus {
   REFUNDED
 }
 
+enum SpecimenStatus {
+  PLANNED
+  COLLECTED
+  RECEIVED
+  IN_TRANSIT
+  IN_PROCESS
+  REJECTED
+  DISPOSED
+}
+
+enum SpecimenEventType {
+  CREATED
+  COLLECTED
+  RECEIVED
+  REJECTED
+  RELOCATED
+  TRANSFERRED
+  PROCESSING_STARTED
+  DISPOSED
+}
+
 model Organization {
   id              String       @id @default(uuid()) @db.Char(36)
   code            String       @unique @db.VarChar(50)
@@ -137,6 +158,7 @@ model Organization {
   orders LabOrder[]
   invoices Invoice[]
   payments Payment[]
+  specimens Specimen[]
 
   @@map("organizations")
 }
@@ -173,6 +195,9 @@ model Branch {
   performedOrderItems OrderItem[] @relation("PerformedBranchOrderItems")
   invoices Invoice[]
   payments Payment[]
+  collectedSpecimens Specimen[] @relation("SpecimenCollectionBranch")
+  currentSpecimens Specimen[] @relation("SpecimenCurrentBranch")
+  specimenEvents SpecimenEvent[]
 
   @@unique([organizationId, code])
   @@index([organizationId, status])
@@ -267,6 +292,10 @@ model User {
   createdInvoices Invoice[] @relation("InvoiceCreator")
   cashierPayments Payment[] @relation("PaymentCashier")
   orderStatusChanges OrderStatusHistory[] @relation("OrderStatusChanger")
+  collectedSpecimens Specimen[] @relation("SpecimenCollector")
+  receivedSpecimens Specimen[] @relation("SpecimenReceiver")
+  rejectedSpecimens Specimen[] @relation("SpecimenRejector")
+  specimenEvents SpecimenEvent[] @relation("SpecimenEventActor")
 
   @@unique([organizationId, username])
   @@unique([organizationId, email])
@@ -464,6 +493,7 @@ model SpecimenType {
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   tests        LabTest[]
+  specimens    Specimen[]
 
   @@unique([organizationId, code])
   @@map("specimen_types")
@@ -484,6 +514,7 @@ model Container {
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   tests        LabTest[]
+  specimens    Specimen[]
 
   @@unique([organizationId, code])
   @@map("containers")
@@ -971,6 +1002,7 @@ model LabOrder {
   items         OrderItem[]
   invoices      Invoice[]
   statusHistory OrderStatusHistory[]
+  specimens     Specimen[]
 
   @@unique([organizationId, accessionNumber])
   @@index([orderingBranchId, orderedAt])
@@ -1003,6 +1035,7 @@ model OrderItem {
   performedBranch Branch?        @relation("PerformedBranchOrderItems", fields: [performedBranchId], references: [id], onDelete: Restrict)
   priceListItem   PriceListItem? @relation(fields: [priceListItemId], references: [id], onDelete: Restrict)
   invoiceLines    InvoiceLine[]
+  specimenLinks   SpecimenOrderItem[]
 
   @@unique([orderId, testId])
   @@index([performedBranchId, status])
@@ -1119,4 +1152,87 @@ model OrderStatusHistory {
   @@index([orderId, changedAt])
   @@index([changedByUserId, changedAt])
   @@map("order_status_history")
+}
+
+
+model Specimen {
+  id                  String         @id @default(uuid()) @db.Char(36)
+  organizationId      String         @map("organization_id") @db.Char(36)
+  orderId             String         @map("order_id") @db.Char(36)
+  parentSpecimenId    String?        @map("parent_specimen_id") @db.Char(36)
+  specimenTypeId      String?        @map("specimen_type_id") @db.Char(36)
+  containerId         String?        @map("container_id") @db.Char(36)
+  barcode             String         @db.VarChar(80)
+  sequenceNumber      Int            @map("sequence_number")
+  status              SpecimenStatus @default(PLANNED)
+  collectionBranchId  String?        @map("collection_branch_id") @db.Char(36)
+  currentBranchId     String?        @map("current_branch_id") @db.Char(36)
+  collectedByUserId   String?        @map("collected_by_user_id") @db.Char(36)
+  collectedAt         DateTime?      @map("collected_at") @db.DateTime(3)
+  receivedByUserId    String?        @map("received_by_user_id") @db.Char(36)
+  receivedAt          DateTime?      @map("received_at") @db.DateTime(3)
+  rejectedByUserId    String?        @map("rejected_by_user_id") @db.Char(36)
+  rejectedAt          DateTime?      @map("rejected_at") @db.DateTime(3)
+  rejectionReasonCode String?        @map("rejection_reason_code") @db.VarChar(80)
+  rejectionReasonText String?        @map("rejection_reason_text") @db.VarChar(500)
+  volume              Decimal?       @db.Decimal(10, 3)
+  volumeUnit          String?        @map("volume_unit") @db.VarChar(30)
+  notes               String?        @db.Text
+  createdAt           DateTime       @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt           DateTime       @updatedAt @map("updated_at") @db.DateTime(3)
+
+  organization     Organization  @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  order            LabOrder      @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  parentSpecimen   Specimen?     @relation("SpecimenParentChild", fields: [parentSpecimenId], references: [id], onDelete: Restrict)
+  childSpecimens   Specimen[]    @relation("SpecimenParentChild")
+  specimenType     SpecimenType? @relation(fields: [specimenTypeId], references: [id], onDelete: Restrict)
+  container        Container?    @relation(fields: [containerId], references: [id], onDelete: Restrict)
+  collectionBranch Branch?       @relation("SpecimenCollectionBranch", fields: [collectionBranchId], references: [id], onDelete: Restrict)
+  currentBranch    Branch?       @relation("SpecimenCurrentBranch", fields: [currentBranchId], references: [id], onDelete: Restrict)
+  collectedBy      User?         @relation("SpecimenCollector", fields: [collectedByUserId], references: [id], onDelete: Restrict)
+  receivedBy       User?         @relation("SpecimenReceiver", fields: [receivedByUserId], references: [id], onDelete: Restrict)
+  rejectedBy       User?         @relation("SpecimenRejector", fields: [rejectedByUserId], references: [id], onDelete: Restrict)
+  orderItems       SpecimenOrderItem[]
+  events           SpecimenEvent[]
+
+  @@unique([organizationId, barcode])
+  @@unique([orderId, sequenceNumber])
+  @@index([orderId, status])
+  @@index([currentBranchId, status])
+  @@index([collectionBranchId, collectedAt])
+  @@index([specimenTypeId, status])
+  @@map("specimens")
+}
+
+model SpecimenOrderItem {
+  specimenId  String   @map("specimen_id") @db.Char(36)
+  orderItemId String   @map("order_item_id") @db.Char(36)
+  createdAt   DateTime @default(now()) @map("created_at") @db.DateTime(3)
+
+  specimen  Specimen  @relation(fields: [specimenId], references: [id], onDelete: Restrict)
+  orderItem OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
+
+  @@id([specimenId, orderItemId])
+  @@index([orderItemId])
+  @@map("specimen_order_items")
+}
+
+model SpecimenEvent {
+  id            String            @id @default(uuid()) @db.Char(36)
+  specimenId    String            @map("specimen_id") @db.Char(36)
+  eventType     SpecimenEventType @map("event_type")
+  branchId      String?           @map("branch_id") @db.Char(36)
+  actorUserId   String?           @map("actor_user_id") @db.Char(36)
+  fromStatus    SpecimenStatus?   @map("from_status")
+  toStatus      SpecimenStatus?   @map("to_status")
+  details       Json?
+  occurredAt    DateTime          @default(now()) @map("occurred_at") @db.DateTime(3)
+
+  specimen Specimen @relation(fields: [specimenId], references: [id], onDelete: Restrict)
+  branch   Branch?  @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  actor    User?    @relation("SpecimenEventActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([specimenId, occurredAt])
+  @@index([branchId, occurredAt])
+  @@map("specimen_events")
 }

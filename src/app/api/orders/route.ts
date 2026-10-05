@@ -45,7 +45,7 @@ export async function POST(request: Request) {
     prisma.patient.findFirst({ where: { id: patientId, organizationId: session.user.organizationId, status: "ACTIVE" }, select: { id: true, patientNumber: true, fullNameEn: true } }),
     prisma.labTest.findMany({
       where: { id: { in: testIds }, organizationId: session.user.organizationId, status: "ACTIVE" },
-      include: { defaultUnit: true, branchAvailability: { where: { status: "ACTIVE" } } },
+      include: { defaultUnit: true, specimenType: true, container: true, branchAvailability: { where: { status: "ACTIVE" } } },
     }),
     referrerId ? prisma.referrer.findFirst({ where: { id: referrerId, organizationId: session.user.organizationId, status: "ACTIVE" }, select: { id: true, clientId: true } }) : null,
     clientId ? prisma.client.findFirst({ where: { id: clientId, organizationId: session.user.organizationId, status: "ACTIVE" }, select: { id: true } }) : null,
@@ -139,6 +139,56 @@ export async function POST(request: Request) {
           },
         });
         createdItems.push({ item, test: entry.test, unitPrice });
+      }
+
+      const specimenGroups = new Map<string, typeof createdItems>();
+      for (const entry of createdItems) {
+        const specimenTypeId = entry.test.specimenTypeId;
+        const containerId = entry.test.containerId;
+        const groupKey = specimenTypeId ? `${specimenTypeId}:${containerId || "NO_CONTAINER"}` : `ITEM:${entry.item.id}`;
+        const group = specimenGroups.get(groupKey) || [];
+        group.push(entry);
+        specimenGroups.set(groupKey, group);
+      }
+
+      let specimenSequence = 1;
+      for (const group of specimenGroups.values()) {
+        const first = group[0];
+        const barcode = `${accessionNumber}-${String(specimenSequence).padStart(2, "0")}`;
+        const specimen = await tx.specimen.create({
+          data: {
+            organizationId: session.user.organizationId,
+            orderId: order.id,
+            specimenTypeId: first.test.specimenTypeId,
+            containerId: first.test.containerId,
+            barcode,
+            sequenceNumber: specimenSequence,
+            currentBranchId: branchId,
+          },
+        });
+
+        await tx.specimenOrderItem.createMany({
+          data: group.map((entry) => ({ specimenId: specimen.id, orderItemId: entry.item.id })),
+        });
+
+        await tx.specimenEvent.create({
+          data: {
+            specimenId: specimen.id,
+            eventType: "CREATED",
+            branchId,
+            actorUserId: session.user.id,
+            fromStatus: null,
+            toStatus: "PLANNED",
+            details: {
+              barcode,
+              specimenTypeCode: first.test.specimenType?.code || null,
+              containerCode: first.test.container?.code || null,
+              orderItemIds: group.map((entry) => entry.item.id),
+            },
+          },
+        });
+
+        specimenSequence++;
       }
 
       let invoiceNumber = documentNumber("INV");
