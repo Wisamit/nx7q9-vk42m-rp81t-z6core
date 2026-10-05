@@ -134,28 +134,46 @@ export function ResultEntryForm({
 
     setBusy("verify");
     setMessage("");
-    let response = await fetch(`/api/results/${savedResultId}/verify`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ confirmDeltaWarnings: false }),
-    });
-    let body = await response.json().catch(() => ({}));
+    let confirmDeltaWarnings = false;
+    let confirmQcWarnings = false;
+    let response: Response | null = null;
+    let body: Record<string, unknown> = {};
 
-    if (!response.ok && body.error === "delta_review_confirmation_required") {
-      const confirmed = confirm(`${body.deltaExceededCount} delta-check warning(s) exceeded configured limits. Confirm that you reviewed these warnings and continue verification?`);
-      if (confirmed) {
-        response = await fetch(`/api/results/${savedResultId}/verify`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ confirmDeltaWarnings: true }),
-        });
-        body = await response.json().catch(() => ({}));
+    for (let attempt = 0; attempt < 3; attempt++) {
+      response = await fetch(`/api/results/${savedResultId}/verify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirmDeltaWarnings, confirmQcWarnings }),
+      });
+      body = await response.json().catch(() => ({})) as Record<string, unknown>;
+      if (response.ok) break;
+
+      if (body.error === "qc_warning_confirmation_required" && !confirmQcWarnings) {
+        const reasons = Array.isArray(body.reasons)
+          ? body.reasons.map((reason) => typeof reason === "object" && reason && "code" in reason ? String(reason.code) : "").filter(Boolean).join(", ")
+          : "";
+        const confirmed = confirm(`QC has warning-level conditions${reasons ? ": " + reasons : ""}. Confirm that you reviewed QC and continue verification?`);
+        if (!confirmed) break;
+        confirmQcWarnings = true;
+        continue;
       }
+
+      if (body.error === "delta_review_confirmation_required" && !confirmDeltaWarnings) {
+        const count = typeof body.deltaExceededCount === "number" ? body.deltaExceededCount : 0;
+        const confirmed = confirm(`${count} delta-check warning(s) exceeded configured limits. Confirm that you reviewed these warnings and continue verification?`);
+        if (!confirmed) break;
+        confirmDeltaWarnings = true;
+        continue;
+      }
+
+      break;
     }
 
-    if (response.ok) {
-      setSavedStatus(body.resultStatus);
-      setMessage(body.criticalCount > 0
+    if (response?.ok) {
+      const resultStatus = typeof body.resultStatus === "string" ? body.resultStatus : "VERIFIED";
+      const criticalCount = typeof body.criticalCount === "number" ? body.criticalCount : 0;
+      setSavedStatus(resultStatus);
+      setMessage(criticalCount > 0
         ? "Result verified. Critical result acknowledgement/communication is required before release."
         : "Result verified successfully.");
       router.refresh();
@@ -163,8 +181,10 @@ export function ResultEntryForm({
       setMessage("Verification blocked: review all pending reflex recommendations first.");
     } else if (body.error === "validation_hold_review_required") {
       setMessage("Verification blocked: resolve all active blocking validation holds first.");
+    } else if (body.error === "qc_blocking_hold") {
+      setMessage("Verification blocked: analyzer QC is not currently acceptable. Review QC status and open QC violations.");
     } else {
-      setMessage(body.error || "Result verification failed.");
+      setMessage(typeof body.error === "string" ? body.error : "Result verification failed.");
     }
     setBusy("");
   }
