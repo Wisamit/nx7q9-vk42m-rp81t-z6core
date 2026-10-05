@@ -53,7 +53,24 @@ export async function POST(request: Request) {
       },
     });
     if (nonconformance && !["CLOSED","CANCELLED"].includes(nonconformance.status)) {
-      await tx.nonconformance.update({ where: { id: nonconformance.id }, data: { status: "ACTION_REQUIRED", ownerUserId: nonconformance.ownerUserId || ownerUserId } });
+      await tx.nonconformance.update({
+        where: { id: nonconformance.id },
+        data: { status: "ACTION_REQUIRED", ownerUserId: nonconformance.ownerUserId || ownerUserId },
+      });
+      await tx.auditEvent.create({
+        data: {
+          organizationId: session.user.organizationId,
+          branchId: nonconformance.branchId || branchId || session.activeBranchId,
+          actorUserId: session.user.id,
+          action: "NONCONFORMANCE_LINKED_TO_CAPA",
+          entityType: "Nonconformance",
+          entityId: nonconformance.id,
+          oldValues: { status: nonconformance.status, ownerUserId: nonconformance.ownerUserId },
+          newValues: { status: "ACTION_REQUIRED", ownerUserId: nonconformance.ownerUserId || ownerUserId, capaId: created.id },
+          ipAddress: ctx.ipAddress,
+          userAgent: ctx.userAgent,
+        },
+      });
     }
     await tx.auditEvent.create({
       data: {
