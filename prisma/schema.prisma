@@ -1585,6 +1585,9 @@ model LaboratoryResult {
   specimenId         String?      @map("specimen_id") @db.Char(36)
   performingBranchId String       @map("performing_branch_id") @db.Char(36)
   methodId           String?      @map("method_id") @db.Char(36)
+  analyzerId         String?      @map("analyzer_id") @db.Char(36)
+  analyzerCodeSnapshot String?    @map("analyzer_code_snapshot") @db.VarChar(80)
+  analyzerNameSnapshot String?    @map("analyzer_name_snapshot") @db.VarChar(200)
   version            Int          @default(1)
   status             ResultStatus @default(DRAFT)
   source             ResultSource @default(MANUAL)
@@ -1611,6 +1614,7 @@ model LaboratoryResult {
   specimen         Specimen?         @relation(fields: [specimenId], references: [id], onDelete: Restrict)
   performingBranch Branch            @relation("ResultPerformingBranch", fields: [performingBranchId], references: [id], onDelete: Restrict)
   method           Method?           @relation(fields: [methodId], references: [id], onDelete: Restrict)
+  analyzer         Analyzer?         @relation(fields: [analyzerId], references: [id], onDelete: Restrict)
   enteredBy        User              @relation("ResultEnteredBy", fields: [enteredByUserId], references: [id], onDelete: Restrict)
   verifiedBy       User?             @relation("ResultVerifiedBy", fields: [verifiedByUserId], references: [id], onDelete: Restrict)
   releasedBy       User?             @relation("ResultReleasedBy", fields: [releasedByUserId], references: [id], onDelete: Restrict)
@@ -1629,6 +1633,7 @@ model LaboratoryResult {
   @@index([performingBranchId, status, enteredAt])
   @@index([specimenId, status])
   @@index([orderItemId, status])
+  @@index([analyzerId, status])
   @@index([autoverificationPolicyId])
   @@map("laboratory_results")
 }
@@ -1668,6 +1673,7 @@ model LaboratoryResultValue {
   calculatedRuleId          String?     @map("calculated_rule_id") @db.Char(36)
   calculationExpressionSnapshot String? @map("calculation_expression_snapshot") @db.VarChar(1000)
   calculationInputsSnapshot Json?       @map("calculation_inputs_snapshot")
+  analyzerImportId          String?      @map("analyzer_import_id") @db.Char(36)
   createdAt                DateTime    @default(now()) @map("created_at") @db.DateTime(3)
   updatedAt                DateTime    @updatedAt @map("updated_at") @db.DateTime(3)
 
@@ -1676,11 +1682,13 @@ model LaboratoryResultValue {
   unit              Unit?            @relation(fields: [unitId], references: [id], onDelete: Restrict)
   referenceInterval ReferenceInterval? @relation(fields: [referenceIntervalId], references: [id], onDelete: Restrict)
   calculatedRule    CalculatedResultRule? @relation(fields: [calculatedRuleId], references: [id], onDelete: Restrict)
+  analyzerImport     AnalyzerResultImport? @relation(fields: [analyzerImportId], references: [id], onDelete: Restrict)
 
   @@unique([resultId, componentCodeSnapshot])
   @@index([componentId])
   @@index([flag, isCritical])
   @@index([calculatedRuleId])
+  @@index([analyzerImportId])
   @@map("laboratory_result_values")
 }
 
@@ -2226,6 +2234,7 @@ model Analyzer {
   mappings     AnalyzerTestMapping[]
   messages     AnalyzerMessage[]
   resultImports AnalyzerResultImport[]
+  results LaboratoryResult[]
 
   @@unique([organizationId, code])
   @@index([branchId, status])
@@ -2331,6 +2340,7 @@ model AnalyzerResultImport {
   orderItem OrderItem?          @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
   specimen  Specimen?           @relation(fields: [specimenId], references: [id], onDelete: Restrict)
   result    LaboratoryResult?   @relation(fields: [resultId], references: [id], onDelete: Restrict)
+  resultValues LaboratoryResultValue[]
 
   @@unique([messageId, bridgeObservationId])
   @@index([messageId, status])
