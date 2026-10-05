@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 
 type TestSuggestion = { id: string; code: string; nameEn: string; score: number };
 type UnitSuggestion = { id: string; code: string; symbol: string; score: number };
-type DetailItem = { value: string; count: number; suggestion?: TestSuggestion | UnitSuggestion | null };
+type DetailItem = { value: string; count: number; suggestion?: TestSuggestion | UnitSuggestion | null; candidates?: Array<TestSuggestion | UnitSuggestion> };
 type TestOption = { id: string; code: string; nameEn: string };
 type UnitOption = { id: string; code: string; symbol: string };
 type Preview = {
@@ -119,6 +119,11 @@ export function ReferenceRangeImportButton({ batchId }: { batchId: string }) {
             {item.suggestion && "nameEn" in item.suggestion && <button className="suggestion-button" type="button" onClick={() => { const s = item.suggestion as TestSuggestion; setMappingTargets(v => ({ ...v, [mapKey]: s.id })); setMappingSearch(v => ({ ...v, [mapKey]: `${s.code} — ${s.nameEn}` })); }}>
               Suggested: {item.suggestion.code} — {item.suggestion.nameEn} ({item.suggestion.score}%)
             </button>}
+            {item.candidates && item.candidates.length > 0 && <div className="candidate-list">
+              {item.candidates.filter((candidate): candidate is TestSuggestion => "nameEn" in candidate).map(candidate => <button key={candidate.id} type="button" className="candidate-chip" onClick={() => { setMappingTargets(v => ({ ...v, [mapKey]: candidate.id })); setMappingSearch(v => ({ ...v, [mapKey]: `${candidate.code} — ${candidate.nameEn}` })); }}>
+                {candidate.code} — {candidate.nameEn} <span>{candidate.score}%</span>
+              </button>)}
+            </div>}
             <input
               className="mapping-search-input"
               list="test-mapping-options"
@@ -146,6 +151,11 @@ export function ReferenceRangeImportButton({ batchId }: { batchId: string }) {
             {item.suggestion && "symbol" in item.suggestion && <button className="suggestion-button" type="button" onClick={() => { const s = item.suggestion as UnitSuggestion; setMappingTargets(v => ({ ...v, [mapKey]: s.id })); setMappingSearch(v => ({ ...v, [mapKey]: `${s.symbol} (${s.code})` })); }}>
               Suggested: {item.suggestion.symbol} ({item.suggestion.code}) — {item.suggestion.score}%
             </button>}
+            {item.candidates && item.candidates.length > 0 && <div className="candidate-list">
+              {item.candidates.filter((candidate): candidate is UnitSuggestion => "symbol" in candidate).map(candidate => <button key={candidate.id} type="button" className="candidate-chip" onClick={() => { setMappingTargets(v => ({ ...v, [mapKey]: candidate.id })); setMappingSearch(v => ({ ...v, [mapKey]: `${candidate.symbol} (${candidate.code})` })); }}>
+                {candidate.symbol} ({candidate.code}) <span>{candidate.score}%</span>
+              </button>)}
+            </div>}
             <input
               className="mapping-search-input"
               list="unit-mapping-options"
