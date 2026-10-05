@@ -16,23 +16,23 @@ export default async function DashboardPage() {
   const todayEnd = new Date();
   todayEnd.setHours(23, 59, 59, 999);
 
-  const [todayOrders, activeSpecimens, openCritical, waitingQueue, todayInvoices] = branchId ? await Promise.all([
-    prisma.labOrder.count({
+  const [todayOrders, activeSpecimens, openCritical, waitingQueue, todayInvoices] = await Promise.all([
+    branchId ? prisma.labOrder.count({
       where: {
         organizationId: user.organizationId,
         orderingBranchId: branchId,
         orderedAt: { gte: todayStart, lte: todayEnd },
         status: { not: "CANCELLED" },
       },
-    }),
-    prisma.specimen.count({
+    }) : Promise.resolve(0),
+    branchId ? prisma.specimen.count({
       where: {
         organizationId: user.organizationId,
         currentBranchId: branchId,
         status: { in: ["RECEIVED", "IN_PROCESS", "IN_TRANSIT"] },
       },
-    }),
-    prisma.criticalResultEvent.count({
+    }) : Promise.resolve(0),
+    branchId ? prisma.criticalResultEvent.count({
       where: {
         status: "OPEN",
         result: {
@@ -40,16 +40,16 @@ export default async function DashboardPage() {
           performingBranchId: branchId,
         },
       },
-    }),
-    prisma.queueTicket.count({
+    }) : Promise.resolve(0),
+    branchId ? prisma.queueTicket.count({
       where: {
         organizationId: user.organizationId,
         branchId,
         queueDate: todayStart,
         status: "WAITING",
       },
-    }),
-    prisma.invoice.findMany({
+    }) : Promise.resolve(0),
+    branchId ? prisma.invoice.findMany({
       where: {
         organizationId: user.organizationId,
         branchId,
@@ -58,8 +58,8 @@ export default async function DashboardPage() {
       },
       select: { currency: true, total: true, paidAmount: true, balanceAmount: true },
       take: 5000,
-    }),
-  ]) : [0, 0, 0, 0, []];
+    }) : Promise.resolve([]),
+  ]);
 
   const finance = new Map<string, { total: number; paid: number; balance: number }>();
   for (const invoice of todayInvoices) {
