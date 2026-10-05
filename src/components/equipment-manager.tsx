@@ -6,7 +6,14 @@ import { useRouter } from "next/navigation";
 type Branch = { id: string; code: string; nameEn: string };
 type Department = { id: string; code: string; nameEn: string; branchId: string | null };
 type Analyzer = { id: string; code: string; name: string; branchId: string; departmentId: string | null };
-type EquipmentOption = { id: string; assetId: string; name: string; status: string; analyzerId: string | null };
+type EquipmentOption = {
+  id: string;
+  assetId: string;
+  name: string;
+  status: string;
+  analyzerId: string | null;
+  maintenancePlans: Array<{ id: string; name: string; nextDueAt: string }>;
+};
 
 export function EquipmentManager({
   branches,
@@ -70,6 +77,7 @@ export function EquipmentManager({
     const equipmentId = String(form.get("equipmentId") || "");
     await submit(`/api/equipment/${equipmentId}/maintenance`, {
       maintenanceType: form.get("maintenanceType"),
+      maintenancePlanId: form.get("maintenancePlanId"),
       status: form.get("status"),
       scheduledAt: form.get("scheduledAt"),
       startedAt: form.get("startedAt"),
@@ -167,6 +175,10 @@ export function EquipmentManager({
       <form className="catalog-form" onSubmit={maintenance}>
         <label className="form-span">Equipment<select name="equipmentId" required defaultValue=""><option value="">Select equipment…</option>{equipmentOptions.map(item => <option key={item.id} value={item.id}>{item.assetId} — {item.name}</option>)}</select></label>
         <label>Type<select name="maintenanceType" defaultValue="PREVENTIVE"><option value="PREVENTIVE">Preventive</option><option value="CORRECTIVE">Corrective</option></select></label>
+        <label>Plan<select name="maintenancePlanId" defaultValue="">
+          <option value="">Ad-hoc maintenance</option>
+          {equipmentOptions.flatMap(item => item.maintenancePlans.map(plan => <option key={plan.id} value={plan.id}>{item.assetId} · {plan.name} · due {plan.nextDueAt}</option>))}
+        </select></label>
         <label>Status<select name="status" defaultValue="COMPLETED"><option value="SCHEDULED">Scheduled</option><option value="IN_PROGRESS">In progress</option><option value="COMPLETED">Completed</option></select></label>
         <label>Scheduled<input name="scheduledAt" type="datetime-local" /></label>
         <label>Started<input name="startedAt" type="datetime-local" /></label>
