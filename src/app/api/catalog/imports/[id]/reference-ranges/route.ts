@@ -42,7 +42,7 @@ async function analyze(batchId: string, organizationId: string) {
       if (!name) continue;
       const k = key(name);
       const list = testMap.get(k) || [];
-      list.push(test);
+      if (!list.some((existing) => existing.id === test.id)) list.push(test);
       testMap.set(k, list);
     }
   }
