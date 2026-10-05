@@ -70,6 +70,11 @@ export default async function WorklistsPage({
     }),
   ]);
 
+  const pendingEntry = items.filter(item => !item.results[0]).length;
+  const inProgress = items.filter(item => item.results[0] && !["VERIFIED","RELEASED","AMENDED"].includes(item.results[0].status)).length;
+  const verified = items.filter(item => item.results[0]?.status === "VERIFIED").length;
+  const critical = items.filter(item => item.results[0]?.values.some(value => value.isCritical)).length;
+
   return <main className="catalog-shell">
     <header className="page-header">
       <div>
@@ -82,6 +87,13 @@ export default async function WorklistsPage({
         <Link className="secondary-link" href="/dashboard">Back to Dashboard</Link>
       </div>
     </header>
+
+    <section className="workflow-summary">
+      <article><span>Awaiting entry</span><strong>{pendingEntry}</strong><small>received tests without result</small></article>
+      <article><span>In progress</span><strong>{inProgress}</strong><small>entered / under review</small></article>
+      <article><span>Verified</span><strong>{verified}</strong><small>ready for release workflow</small></article>
+      <article className={critical ? "summary-attention" : ""}><span>Critical</span><strong>{critical}</strong><small>items containing critical values</small></article>
+    </section>
 
     <section className="table-card">
       <div className="table-toolbar">
@@ -119,9 +131,9 @@ export default async function WorklistsPage({
                   <td>{item.order.patient.patientNumber}<br/><small>{item.order.patient.fullNameEn}</small></td>
                   <td><strong>{item.testCodeSnapshot}</strong><br/><small>{item.testNameEnSnapshot}</small></td>
                   <td>{item.test.department?.nameEn || "Unassigned"}</td>
-                  <td>{readySpecimen?.barcode || "—"}<br/><small>{readySpecimen?.status || "—"}</small></td>
+                  <td><span className="barcode-text">{readySpecimen?.barcode || "—"}</span><br/><small>{readySpecimen?.status || "—"}</small></td>
                   <td>{readySpecimen?.currentBranch?.nameEn || item.performedBranch?.nameEn || "—"}</td>
-                  <td>{result?.status || item.status}</td>
+                  <td><span className={"status-badge status-" + (result?.status || item.status).toLowerCase().replaceAll("_","-")}>{result?.status || item.status}</span></td>
                   <td>{criticalCount > 0 ? <strong className="critical-text">{criticalCount} critical</strong> : abnormalCount > 0 ? `${abnormalCount} flagged` : "—"}</td>
                   <td><Link className="secondary-link" href={`/worklists/${item.id}`}>{result ? "Open Result" : "Enter Result"}</Link></td>
                 </tr>;

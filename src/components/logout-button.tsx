@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-export function LogoutButton() {
+export function LogoutButton({ label = "تسجيل الخروج" }: { label?: string }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
 
@@ -14,5 +14,5 @@ export function LogoutButton() {
     router.refresh();
   }
 
-  return <button className="secondary-button" onClick={logout} disabled={loading}>{loading ? "…" : "تسجيل الخروج"}</button>;
+  return <button className="secondary-button" onClick={logout} disabled={loading}>{loading ? "…" : label}</button>;
 }

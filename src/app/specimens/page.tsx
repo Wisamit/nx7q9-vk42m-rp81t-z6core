@@ -61,6 +61,11 @@ export default async function SpecimensPage({
     }),
   ]);
 
+  const planned = specimens.filter(item => item.status === "PLANNED").length;
+  const collected = specimens.filter(item => item.status === "COLLECTED").length;
+  const received = specimens.filter(item => ["RECEIVED","IN_PROCESS"].includes(item.status)).length;
+  const rejected = specimens.filter(item => item.status === "REJECTED").length;
+
   return <main className="catalog-shell">
     <header className="page-header">
       <div>
@@ -74,6 +79,13 @@ export default async function SpecimensPage({
         <Link className="secondary-link" href="/dashboard">Back to Dashboard</Link>
       </div>
     </header>
+
+    <section className="workflow-summary">
+      <article><span>Planned</span><strong>{planned}</strong><small>awaiting collection</small></article>
+      <article><span>Collected</span><strong>{collected}</strong><small>awaiting receipt / routing</small></article>
+      <article><span>Lab ready</span><strong>{received}</strong><small>received or in process</small></article>
+      <article className={rejected ? "summary-attention" : ""}><span>Rejected</span><strong>{rejected}</strong><small>requires attention / recollection</small></article>
+    </section>
 
     <section className="table-card">
       <div className="table-toolbar">
@@ -100,7 +112,7 @@ export default async function SpecimensPage({
         specimens.map(specimen => <section className="detail-card specimen-card" key={specimen.id}>
           <div className="specimen-card-head">
             <div>
-              <p className="eyebrow">{specimen.status}</p>
+              <span className={"status-badge status-" + specimen.status.toLowerCase().replaceAll("_","-")}>{specimen.status}</span>
               <h2 className="barcode-text">{specimen.barcode}</h2>
               <p className="muted">{specimen.order.accessionNumber} · {specimen.order.patient.patientNumber} · {specimen.order.patient.fullNameEn}</p>
             </div>

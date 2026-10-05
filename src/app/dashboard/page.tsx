@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { LogoutButton } from "@/components/logout-button";
 import { permissionSet, requireSession } from "@/lib/auth";
+import { prisma } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
@@ -9,45 +9,131 @@ export default async function DashboardPage() {
   const permissions = permissionSet(session);
   const user = session.user;
   const branch = session.activeBranch;
+  const branchId = branch?.id || session.user.branchScopes.find(scope => scope.branch.status === "ACTIVE")?.branchId || null;
 
-  return (
-    <main className="dashboard-shell" dir="ltr">
-      <header className="topbar">
-        <div><strong>Family Lab LIS</strong><span>{user.organization.nameAr || user.organization.nameEn}</span></div>
-        <div className="topbar-actions"><span>{user.displayNameAr || user.displayNameEn}</span><LogoutButton /></div>
-      </header>
-      <section className="dashboard-content">
-        <div className="welcome-card">
-          <p className="eyebrow">Dashboard</p>
-          <h1>Welcome, {user.displayNameEn || user.displayNameAr}</h1>
-          <p className="muted">Current branch: <strong>{branch?.nameEn || branch?.nameAr || "—"}</strong></p>
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const todayEnd = new Date();
+  todayEnd.setHours(23, 59, 59, 999);
+
+  const [todayOrders, activeSpecimens, openCritical, waitingQueue, todayInvoices] = await Promise.all([
+    branchId ? prisma.labOrder.count({
+      where: {
+        organizationId: user.organizationId,
+        orderingBranchId: branchId,
+        orderedAt: { gte: todayStart, lte: todayEnd },
+        status: { not: "CANCELLED" },
+      },
+    }) : Promise.resolve(0),
+    branchId ? prisma.specimen.count({
+      where: {
+        organizationId: user.organizationId,
+        currentBranchId: branchId,
+        status: { in: ["RECEIVED", "IN_PROCESS", "IN_TRANSIT"] },
+      },
+    }) : Promise.resolve(0),
+    branchId ? prisma.criticalResultEvent.count({
+      where: {
+        status: "OPEN",
+        result: {
+          organizationId: user.organizationId,
+          performingBranchId: branchId,
+        },
+      },
+    }) : Promise.resolve(0),
+    branchId ? prisma.queueTicket.count({
+      where: {
+        organizationId: user.organizationId,
+        branchId,
+        queueDate: todayStart,
+        status: "WAITING",
+      },
+    }) : Promise.resolve(0),
+    branchId ? prisma.invoice.findMany({
+      where: {
+        organizationId: user.organizationId,
+        branchId,
+        issuedAt: { gte: todayStart, lte: todayEnd },
+        status: { not: "VOID" },
+      },
+      select: { currency: true, total: true, paidAmount: true, balanceAmount: true },
+      take: 5000,
+    }) : Promise.resolve([]),
+  ]);
+
+  const finance = new Map<string, { total: number; paid: number; balance: number }>();
+  for (const invoice of todayInvoices) {
+    const row = finance.get(invoice.currency) || { total: 0, paid: 0, balance: 0 };
+    row.total += invoice.total.toNumber();
+    row.paid += invoice.paidAmount.toNumber();
+    row.balance += invoice.balanceAmount.toNumber();
+    finance.set(invoice.currency, row);
+  }
+
+  const quickActions = [
+    permissions.has("orders.create") ? { href: "/orders", label: "New Order", description: "Register patient tests and billing", key: "OR" } : null,
+    permissions.has("specimens.view") ? { href: "/specimens", label: "Specimen Desk", description: "Collect, receive and trace samples", key: "SP" } : null,
+    permissions.has("worklists.view") ? { href: "/worklists", label: "Worklists", description: "Enter and verify laboratory results", key: "WL" } : null,
+    permissions.has("reports.view") ? { href: "/reports", label: "Reports", description: "Review released diagnostic reports", key: "RP" } : null,
+  ].filter((item): item is NonNullable<typeof item> => Boolean(item));
+
+  const managementLinks = [
+    permissions.has("critical.communicate") ? { href: "/critical-results", label: "Critical Results", value: openCritical, tone: openCritical > 0 ? "danger" : "neutral" } : null,
+    permissions.has("qc.view") ? { href: "/qc", label: "Quality Control", value: "QC", tone: "neutral" } : null,
+    permissions.has("quality.view") ? { href: "/quality", label: "Quality Management", value: "QMS", tone: "neutral" } : null,
+    permissions.has("analytics.view") ? { href: "/analytics", label: "Management Analytics", value: "KPI", tone: "neutral" } : null,
+  ].filter((item): item is NonNullable<typeof item> => Boolean(item));
+
+  return <main className="dashboard-home">
+    <section className="dashboard-hero">
+      <div>
+        <p className="eyebrow">Operational Overview</p>
+        <h1>{branch?.nameEn || branch?.nameAr || "Family Lab"}</h1>
+        <p>Welcome back, <strong>{user.displayNameEn || user.displayNameAr}</strong>. Here is the current laboratory workload.</p>
+      </div>
+      <div className="dashboard-date">
+        <span>Today</span>
+        <strong>{new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "2-digit", month: "short", year: "numeric" }).format(new Date())}</strong>
+      </div>
+    </section>
+
+    <section className="dashboard-kpis">
+      <article><div className="kpi-icon">OR</div><div><span>Orders today</span><strong>{todayOrders}</strong><small>Registered at this branch</small></div></article>
+      <article><div className="kpi-icon">SP</div><div><span>Active specimens</span><strong>{activeSpecimens}</strong><small>Received / in process / transit</small></div></article>
+      <article className={openCritical > 0 ? "kpi-alert" : ""}><div className="kpi-icon">CR</div><div><span>Open critical</span><strong>{openCritical}</strong><small>Require communication / acknowledgement</small></div></article>
+      <article><div className="kpi-icon">QU</div><div><span>Waiting queue</span><strong>{waitingQueue}</strong><small>Reception and phlebotomy</small></div></article>
+    </section>
+
+    <section className="dashboard-layout">
+      <div className="dashboard-panel">
+        <div className="dashboard-panel-head"><div><p className="eyebrow">Fast workflow</p><h2>Quick Actions</h2></div></div>
+        <div className="quick-action-grid">
+          {quickActions.map(action => <Link href={action.href} className="quick-action" key={action.href}>
+            <span>{action.key}</span>
+            <div><strong>{action.label}</strong><small>{action.description}</small></div>
+            <b>→</b>
+          </Link>)}
         </div>
-        <div className="module-grid">
-          <article><span>01</span><h2>Organization & Branches</h2><p>{permissions.has("branches.manage") ? "Manage branches and their settings." : "View authorized branches."}</p></article>
-          <article><span>02</span><h2>Users & Permissions</h2><p>Role-based permissions and branch scopes.</p></article>
-          <article><span>03</span><h2>Audit Log</h2><p>Track security events and significant changes.</p></article>
-          <Link className="module-link" href="/catalog"><article><span>04</span><h2>Test Catalog</h2><p>Configuration-driven tests, components, specimens and ranges.</p></article></Link>
-          {permissions.has("patients.view") && <Link className="module-link" href="/patients"><article><span>05</span><h2>Patients</h2><p>Central patient identity, identifiers and duplicate protection across branches.</p></article></Link>}
-          {permissions.has("referrers.view") && <Link className="module-link" href="/referrers"><article><span>06</span><h2>Referrers & Clients</h2><p>Referral sources and commercial accounts kept as linked but separate master data.</p></article></Link>}
-          {permissions.has("pricing.view") && <Link className="module-link" href="/pricing"><article><span>07</span><h2>Pricing</h2><p>Effective-dated organization, branch, client and contract prices.</p></article></Link>}
-          {permissions.has("orders.view") && <Link className="module-link" href="/orders"><article><span>08</span><h2>Orders</h2><p>Register patient test orders with price snapshots and billing context.</p></article></Link>}
-          {permissions.has("billing.view") && <Link className="module-link" href="/billing"><article><span>09</span><h2>Billing</h2><p>Invoices, balances and partial or split payment allocations.</p></article></Link>}
-          {permissions.has("specimens.view") && <Link className="module-link" href="/specimens"><article><span>10</span><h2>Specimens</h2><p>Barcode collection, receipt, rejection, recollection and custody traceability.</p></article></Link>}
-          {permissions.has("transfers.view") && <Link className="module-link" href="/transfers"><article><span>11</span><h2>Transfers</h2><p>Inter-branch shipment manifests and barcode-by-barcode receiving.</p></article></Link>}
-          {permissions.has("worklists.view") && <Link className="module-link" href="/worklists"><article><span>12</span><h2>Worklists</h2><p>Received specimens, manual result entry, reference flags and verification.</p></article></Link>}
-          {permissions.has("reports.view") && <Link className="module-link" href="/reports"><article><span>13</span><h2>Reports</h2><p>Immutable partial, final and amended diagnostic report versions.</p></article></Link>}
-          {permissions.has("clinical_rules.manage") && <Link className="module-link" href="/clinical-rules"><article><span>14</span><h2>Clinical Rules</h2><p>Calculated results, reflex, validation holds, autoverification, escalation and delta policies.</p></article></Link>}
-          {permissions.has("critical.communicate") && <Link className="module-link" href="/critical-results"><article><span>15</span><h2>Critical Results</h2><p>Open critical values, acknowledgement deadlines and escalation tracking.</p></article></Link>}
-          {permissions.has("microbiology.view") && <Link className="module-link" href="/microbiology"><article><span>16</span><h2>Microbiology</h2><p>Culture observations, organisms, isolates and antimicrobial susceptibility workflow.</p></article></Link>}
-          {permissions.has("analyzers.view") && <Link className="module-link" href="/analyzers"><article><span>17</span><h2>Analyzers</h2><p>Analyzer registry, bridge credentials, mappings and raw interface message inbox.</p></article></Link>}
-          {permissions.has("inventory.view") && <Link className="module-link" href="/inventory"><article><span>18</span><h2>Inventory</h2><p>Branch stock, lot and expiry traceability, FEFO, suppliers and procurement receiving.</p></article></Link>}
-          {permissions.has("equipment.view") && <Link className="module-link" href="/equipment"><article><span>19</span><h2>Equipment</h2><p>Asset register, maintenance, calibration, downtime and analyzer linkage.</p></article></Link>}
-          {permissions.has("qc.view") && <Link className="module-link" href="/qc"><article><span>20</span><h2>Quality Control</h2><p>QC materials, lots, Levey-Jennings trends, Westgard rules and analyzer QC gating.</p></article></Link>}
-          {permissions.has("quality.view") && <Link className="module-link" href="/quality"><article><span>21</span><h2>Quality Management</h2><p>Nonconformance, CAPA, controlled documents, training, competency, indicators and internal audits.</p></article></Link>}
-          {["portal_accounts.manage","appointments.view","appointments.manage","home_collection.view","home_collection.manage","queue.view","queue.manage"].some(code => permissions.has(code)) && <Link className="module-link" href="/digital-services"><article><span>22</span><h2>Digital Services</h2><p>Patient, doctor and corporate portals, appointments, home collection and branch queue.</p></article></Link>}
-          {permissions.has("analytics.view") && <Link className="module-link" href="/analytics"><article><span>23</span><h2>Analytics</h2><p>Branch comparison, TAT, finance, source/referrer, profitability and quality KPIs.</p></article></Link>}
+      </div>
+
+      <aside className="dashboard-panel">
+        <div className="dashboard-panel-head"><div><p className="eyebrow">Finance</p><h2>Today</h2></div>{permissions.has("billing.view") && <Link href="/billing">Open billing</Link>}</div>
+        <div className="finance-snapshot">
+          {finance.size === 0 ? <p className="muted">No invoices issued today.</p> : [...finance.entries()].map(([currency, row]) => <div key={currency}>
+            <div><strong>{currency}</strong><span>{row.total.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div>
+            <small>Collected {row.paid.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})} · Outstanding {row.balance.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</small>
+          </div>)}
         </div>
-      </section>
-    </main>
-  );
+      </aside>
+    </section>
+
+    {managementLinks.length > 0 && <section className="dashboard-panel dashboard-management">
+      <div className="dashboard-panel-head"><div><p className="eyebrow">Management & Quality</p><h2>Attention & Insights</h2></div></div>
+      <div className="management-links">
+        {managementLinks.map(item => <Link href={item.href} className={"management-link " + item.tone} key={item.href}>
+          <span>{item.label}</span><strong>{item.value}</strong>
+        </Link>)}
+      </div>
+    </section>}
+  </main>;
 }
