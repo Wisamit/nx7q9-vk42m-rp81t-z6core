@@ -45,8 +45,8 @@ CREATE TABLE `price_list_package_items` (
   `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   `updated_at` DATETIME(3) NOT NULL,
   `deactivated_at` DATETIME(3) NULL,
-  UNIQUE INDEX `price_list_package_items_price_list_id_package_id_effective_from_key`(`price_list_id`, `package_id`, `effective_from`),
-  INDEX `price_list_package_items_package_id_status_effective_from_effective_to_idx`(`package_id`, `status`, `effective_from`, `effective_to`),
+  UNIQUE INDEX `pl_pkg_item_effective_uq`(`price_list_id`, `package_id`, `effective_from`),
+  INDEX `pl_pkg_item_effective_idx`(`package_id`, `status`, `effective_from`, `effective_to`),
   PRIMARY KEY (`id`),
   CONSTRAINT `price_list_package_items_price_list_id_fkey`
     FOREIGN KEY (`price_list_id`) REFERENCES `price_lists`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
