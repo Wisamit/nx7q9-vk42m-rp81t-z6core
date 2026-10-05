@@ -27,10 +27,10 @@ export async function POST(request: Request) {
   const allowManual = body.allowManual === true;
   const allowAnalyzer = body.allowAnalyzer !== false;
   const allowImport = body.allowImport === true;
-  const requireNoCritical = body.requireNoCritical !== false;
-  const requireDeltaWithinLimit = body.requireDeltaWithinLimit !== false;
-  const requireNoPendingReflex = body.requireNoPendingReflex !== false;
-  const requireNoBlockingHolds = body.requireNoBlockingHolds !== false;
+  const requireNoCritical = true;
+  const requireDeltaWithinLimit = true;
+  const requireNoPendingReflex = true;
+  const requireNoBlockingHolds = true;
   const requireAllFlagsNormal = body.requireAllFlagsNormal === true;
   const effectiveFrom = new Date(String(body.effectiveFrom || ""));
   const effectiveTo = body.effectiveTo ? new Date(String(body.effectiveTo)) : null;
