@@ -351,6 +351,8 @@ model Branch {
   reportVersions DiagnosticReportVersion[] @relation("ReportVersionBranch")
   deltaRules DeltaRule[]
   reflexRules ReflexRule[]
+  autoverificationPolicies AutoverificationPolicy[]
+  validationHoldRules ValidationHoldRule[]
 
   @@unique([organizationId, code])
   @@index([organizationId, status])
@@ -1520,6 +1522,8 @@ model LaboratoryResult {
   values           LaboratoryResultValue[]
   criticalEvents   CriticalResultEvent[]
   reflexEvents      ReflexRuleEvent[]
+  autoverificationPolicy AutoverificationPolicy? @relation(fields: [autoverificationPolicyId], references: [id], onDelete: Restrict)
+  validationHoldEvents ValidationHoldEvent[]
 
   @@unique([orderItemId, version])
   @@index([performingBranchId, status, enteredAt])
