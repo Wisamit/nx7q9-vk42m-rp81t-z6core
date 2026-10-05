@@ -23,7 +23,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!canAccessBranch(session, microbiologyCase.performingBranchId)) {
     return NextResponse.json({ error: "branch_forbidden" }, { status: 403 });
   }
-  if (["FINAL","CANCELLED"].includes(microbiologyCase.status)) {
+  if (microbiologyCase.resultId || ["FINAL","CANCELLED"].includes(microbiologyCase.status)) {
     return NextResponse.json({ error: "microbiology_case_locked", status: microbiologyCase.status }, { status: 409 });
   }
 
@@ -39,6 +39,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       data: {
         caseId: id,
         organismId,
+        organismCodeSnapshot: organism.code,
+        organismNameEnSnapshot: organism.nameEn,
+        organismNameArSnapshot: organism.nameAr,
         sequenceNumber,
         quantityText: text(body.quantityText, 200) || null,
         colonyNotes: text(body.colonyNotes) || null,
