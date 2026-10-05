@@ -163,7 +163,7 @@ export async function POST(request: Request) {
             evaluatedRules: {
               enabledRules,
               violations,
-            },
+            } as Prisma.InputJsonValue,
           },
         });
 
