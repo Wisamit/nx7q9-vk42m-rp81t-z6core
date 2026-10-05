@@ -4,6 +4,7 @@ import { requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { SafeImportButton } from "@/components/safe-import-button";
 import { RevalidateImportButton } from "@/components/revalidate-import-button";
+import { ReferenceRangeImportButton } from "@/components/reference-range-import-button";
 
 export const dynamic = "force-dynamic";
 
@@ -107,6 +108,12 @@ export default async function ImportBatchPage({
             )}
         </div>
       </article>
+    </section>
+
+    <section className="detail-card range-import-card">
+      <h2>Reference Range Migration</h2>
+      <p className="muted">Only exact test matches with mapped units and unambiguous age/sex context are eligible for automatic import. Ambiguous rows remain staged for review.</p>
+      <ReferenceRangeImportButton batchId={batch.id} />
     </section>
 
     <section className="table-card">
