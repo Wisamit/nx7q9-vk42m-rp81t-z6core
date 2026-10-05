@@ -6,12 +6,38 @@ function object(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 function text(value: unknown) { return typeof value === "string" ? value.trim() : ""; }
+function issueCodes(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return [];
+    const code = (item as Record<string, unknown>).code;
+    return typeof code === "string" ? [code] : [];
+  });
+}
 function key(value: string) { return value.trim().replace(/\s+/g, " ").toUpperCase(); }
 function looseKey(value: string) {
   return value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/[^A-Z0-9]+/g, "");
 }
 function unitKey(value: string) {
-  return value.trim().toUpperCase().replace(/[µμ]/g, "U").replace(/\s+/g, "").replace(/PER/g, "/");
+  return value.trim().toUpperCase().replace(/[µμ]/g, "U").replace(/\s+/g, "").replace(/PER/g, "/").replace(/\.$/, "");
+}
+function canonicalUnitKey(value: string) {
+  return unitKey(value)
+    .replace(/^GM\//, "G/")
+    .replace(/^MCG\//, "UG/")
+    .replace(/^ΜG\//, "UG/")
+    .replace(/\^2/g, "2");
+}
+function clinicalAliasKeys(value: string) {
+  const source = looseKey(value);
+  const groups: string[][] = [
+    ["PCO2", "PARTIALPRESSURECARBONDIOXIDE", "CARBONDIOXIDEPARTIALPRESSURE"],
+    ["PO2", "PARTIALPRESSUREOXYGEN", "OXYGENPARTIALPRESSURE"],
+    ["ROSSA", "SSARO", "ANTISSA", "ANTIROSSA", "ROSSA"],
+    ["FPDS", "FDP", "FIBRINDEGRADATIONPRODUCTS", "FIBRINDEGRADATIONPRODUCT"],
+  ];
+  const group = groups.find((items) => items.includes(source));
+  return group || [];
 }
 function bigrams(value: string) {
   const normalized = looseKey(value);
@@ -107,7 +133,7 @@ async function analyze(batchId: string, organizationId: string) {
 
   const testMap = new Map<string, typeof tests>();
   function addTestAlias(alias: string, test: typeof tests[number]) {
-    for (const k of [key(alias), looseKey(alias)]) {
+    for (const k of [key(alias), looseKey(alias), ...clinicalAliasKeys(alias)]) {
       if (!k) continue;
       const list = testMap.get(k) || [];
       if (!list.some((existing) => existing.id === test.id)) list.push(test);
@@ -131,7 +157,7 @@ async function analyze(batchId: string, organizationId: string) {
 
   const unitMap = new Map<string, typeof units[number]>();
   function addUnitAlias(alias: string, unit: typeof units[number]) {
-    for (const k of [key(alias), unitKey(alias)]) if (k) unitMap.set(k, unit);
+    for (const k of [key(alias), unitKey(alias), canonicalUnitKey(alias)]) if (k) unitMap.set(k, unit);
   }
   for (const unit of units) {
     addUnitAlias(unit.code, unit);
@@ -166,12 +192,14 @@ async function analyze(batchId: string, organizationId: string) {
     const s = object(row.sourceData);
     const testName = text(n.testName || s["test name"] || s.Testname);
     const reviewedTest = reviewedTestAliases.get(looseKey(testName));
+    const aliasMatches = clinicalAliasKeys(testName).flatMap((alias) => testMap.get(alias) || []);
+    const dedupedAliasMatches = aliasMatches.filter((candidate, index, all) => all.findIndex((other) => other.id === candidate.id) === index);
     const exactMatches = reviewedTest ? [reviewedTest] : (testMap.get(key(testName)) || []);
     const looseMatches = reviewedTest ? [reviewedTest] : (testMap.get(looseKey(testName)) || []);
-    const matches = exactMatches.length ? exactMatches : looseMatches;
+    const matches = exactMatches.length ? exactMatches : looseMatches.length ? looseMatches : dedupedAliasMatches;
     const rangeUnit = text(n.unit || s["test unit"] || s.unit);
     const reviewedUnit = rangeUnit ? reviewedUnitAliases.get(unitKey(rangeUnit)) : undefined;
-    const explicitMappedUnit = rangeUnit ? (reviewedUnit || unitMap.get(key(rangeUnit)) || unitMap.get(unitKey(rangeUnit))) : undefined;
+    const explicitMappedUnit = rangeUnit ? (reviewedUnit || unitMap.get(key(rangeUnit)) || unitMap.get(unitKey(rangeUnit)) || unitMap.get(canonicalUnitKey(rangeUnit))) : undefined;
     const mappedSex = sex(n.sex ?? s.sex);
     const from = decimal(n.ageFrom ?? s.agefrom);
     const to = decimal(n.ageTo ?? s.ageto);
@@ -183,7 +211,12 @@ async function analyze(batchId: string, organizationId: string) {
 
     let reason = "";
     let test = matches.length === 1 ? matches[0] : undefined;
-    const mappedUnit = explicitMappedUnit || (!rangeUnit && test?.defaultUnit ? test.defaultUnit : undefined);
+    const componentUnit = test?.components.length === 1 ? test.components[0].unit : undefined;
+    const trustedTestUnit = test?.defaultUnit || componentUnit;
+    const equivalentExplicitFallback = rangeUnit && trustedTestUnit &&
+      [trustedTestUnit.symbol, trustedTestUnit.code].some((candidate) => canonicalUnitKey(candidate) === canonicalUnitKey(rangeUnit))
+      ? trustedTestUnit : undefined;
+    const mappedUnit = explicitMappedUnit || equivalentExplicitFallback || (!rangeUnit ? trustedTestUnit : undefined);
     if (matches.length === 0) reason = "TEST_NOT_FOUND";
     else if (matches.length > 1) reason = "AMBIGUOUS_TEST_MATCH";
     else if (!mappedUnit) reason = rangeUnit ? "UNIT_NOT_MAPPED" : "UNIT_MISSING_NO_TEST_DEFAULT";
@@ -209,6 +242,14 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
   const batch = await prisma.catalogImportBatch.findFirst({ where: { id, organizationId: session.user.organizationId } });
   if (!batch) return NextResponse.json({ error: "batch_not_found" }, { status: 404 });
   const analysis = await analyze(batch.id, session.user.organizationId);
+  const generatedTestWarnings = await prisma.catalogImportRow.findMany({
+    where: { batchId: batch.id, entityType: "TEST", status: "WARNING" },
+    select: { validationIssues: true },
+  });
+  const generatedTestsRemaining = generatedTestWarnings.filter((row) => {
+    const codes = issueCodes(row.validationIssues);
+    return codes.length === 1 && codes[0] === "GENERATED_TEST_CODE";
+  }).length;
   const topValues = (reason: string, pick: (item: typeof analysis.review[number]) => string) => {
     const counts = new Map<string, number>();
     for (const item of analysis.review.filter((row) => row.reason === reason)) {
@@ -235,6 +276,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
     safe: analysis.safe.length,
     review: analysis.review.length,
     reasons: analysis.reasons,
+    generatedTestsRemaining,
     details: {
       unmatchedTests,
       unmappedUnits,

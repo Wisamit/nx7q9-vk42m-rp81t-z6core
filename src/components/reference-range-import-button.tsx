@@ -13,6 +13,7 @@ type Preview = {
   safe: number;
   review: number;
   reasons: Record<string, number>;
+  generatedTestsRemaining?: number;
   details?: {
     unmatchedTests: DetailItem[];
     unmappedUnits: DetailItem[];
@@ -31,6 +32,7 @@ export function ReferenceRangeImportButton({ batchId }: { batchId: string }) {
   const [mappingTargets, setMappingTargets] = useState<Record<string, string>>({});
   const [mappingSearch, setMappingSearch] = useState<Record<string, string>>({});
   const [message, setMessage] = useState("");
+  const [resolving, setResolving] = useState(false);
 
   async function loadPreview() {
     const response = await fetch(`/api/catalog/imports/${batchId}/reference-ranges`, { cache: "no-store" });
@@ -43,6 +45,31 @@ export function ReferenceRangeImportButton({ batchId }: { batchId: string }) {
   useEffect(() => {
     void loadPreview().catch(() => setPreview(null));
   }, [batchId]);
+
+  async function resolveSafeLegacy() {
+    if (!preview) return;
+    setResolving(true);
+    setMessage("");
+    try {
+      if ((preview.generatedTestsRemaining || 0) > 0) {
+        const masters = await fetch(`/api/catalog/imports/${batchId}/commit`, { method: "POST" });
+        const masterBody = await masters.json().catch(() => ({}));
+        if (!masters.ok) throw new Error(masterBody.error || "Safe master recovery failed.");
+      }
+
+      const ranges = await fetch(`/api/catalog/imports/${batchId}/reference-ranges`, { method: "POST" });
+      const rangeBody = await ranges.json().catch(() => ({}));
+      if (!ranges.ok) throw new Error(rangeBody.error || "Reference range resolution failed.");
+
+      setMessage(`Resolved ${rangeBody.imported || 0} additional inactive reference intervals; ${rangeBody.review || 0} remain for manual review.`);
+      await loadPreview();
+      router.refresh();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Safe legacy resolution failed.");
+    } finally {
+      setResolving(false);
+    }
+  }
 
   async function run() {
     if (!preview?.safe) return;
@@ -97,7 +124,8 @@ export function ReferenceRangeImportButton({ batchId }: { batchId: string }) {
       <span>{preview.review} review</span>
     </div>
 
-    {preview.safe > 0 && <button className="primary-button" disabled={busy} onClick={run}>{busy ? "Importing ranges…" : "Import Safe Reference Ranges"}</button>}
+    {((preview.generatedTestsRemaining || 0) > 0 || preview.safe > 0) && <button className="primary-button" disabled={busy || resolving} onClick={resolveSafeLegacy}>{resolving ? "Resolving…" : "Resolve Safe Legacy Items"}</button>}
+    {preview.safe > 0 && <button className="secondary-button" disabled={busy || resolving} onClick={run}>{busy ? "Importing ranges…" : "Import Safe Reference Ranges"}</button>}
     {message && <span className="range-import-message">{message}</span>}
 
     {preview.review > 0 && Object.keys(preview.reasons || {}).length > 0 && <div className="range-review-reasons">

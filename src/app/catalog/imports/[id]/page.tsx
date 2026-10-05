@@ -47,7 +47,7 @@ export default async function ImportBatchPage({
     }),
     prisma.catalogImportRow.findMany({
       where: { batchId: batch.id, status: { in: ["WARNING", "ERROR"] } },
-      select: { validationIssues: true },
+      select: { entityType: true, status: true, validationIssues: true },
     }),
     prisma.catalogImportRow.findMany({
       where: { batchId: batch.id, ...(status ? { status } : {}) },
@@ -67,7 +67,11 @@ export default async function ImportBatchPage({
     return acc;
   }, {} as Record<string, number>);
 
-  const safeMasterRemaining = groups.filter((row) => row.status === "VALID" && row.entityType !== "REFERENCE_INTERVAL").reduce((sum, row) => sum + row._count._all, 0);
+  const generatedTestRemaining = issueRows.filter((row) => row.entityType === "TEST" && row.status === "WARNING" && (() => {
+    const codes = issueCodes(row.validationIssues);
+    return codes.length === 1 && codes[0] === "GENERATED_TEST_CODE";
+  })()).length;
+  const safeMasterRemaining = groups.filter((row) => row.status === "VALID" && row.entityType !== "REFERENCE_INTERVAL").reduce((sum, row) => sum + row._count._all, 0) + generatedTestRemaining;
 
   const issueSummary = issueRows.flatMap((row) => issueCodes(row.validationIssues)).reduce((acc, code) => {
     acc[code] = (acc[code] || 0) + 1;
