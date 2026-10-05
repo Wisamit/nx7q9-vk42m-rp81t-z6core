@@ -16,6 +16,8 @@ const FOUNDATION_PERMISSIONS = [
   ["catalog.view", "catalog", "View test catalog"],
   ["catalog.manage", "catalog", "Manage test catalog"],
   ["catalog.reference_ranges.manage", "catalog", "Manage reference intervals and critical limits"],
+  ["patients.view", "patients", "View patients"],
+  ["patients.manage", "patients", "Create and update patients"],
 ] as const;
 
 function text(value: unknown, max = 200) {
