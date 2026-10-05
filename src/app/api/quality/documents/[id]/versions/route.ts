@@ -1,4 +1,4 @@
-import { Prisma } from "../../../../../../generated/prisma/client";
+import { Prisma } from "../../../../../../../generated/prisma/client";
 import { NextResponse } from "next/server";
 import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
