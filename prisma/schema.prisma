@@ -759,6 +759,7 @@ model Organization {
   methods Method[]
   labTests LabTest[]
   testPanels TestPanel[]
+  commercialPackages CommercialPackage[]
   catalogImportBatches CatalogImportBatch[]
   catalogImportMappings CatalogImportMapping[]
   patients Patient[]
@@ -1407,6 +1408,7 @@ model LabTest {
   components         TestComponent[]
   branchAvailability TestBranchAvailability[]
   panelItems         TestPanelItem[]
+  commercialPackageItems CommercialPackageItem[]
   importMappings     CatalogImportMapping[]
   priceListItems     PriceListItem[]
   orderItems         OrderItem[]
@@ -1552,6 +1554,43 @@ model TestPanelItem {
   @@map("test_panel_items")
 }
 
+
+model CommercialPackage {
+  id             String       @id @default(uuid()) @db.Char(36)
+  organizationId String       @map("organization_id") @db.Char(36)
+  code           String       @db.VarChar(80)
+  nameEn         String       @map("name_en") @db.VarChar(220)
+  nameAr         String?      @map("name_ar") @db.VarChar(220)
+  descriptionEn  String?      @map("description_en") @db.Text
+  descriptionAr  String?      @map("description_ar") @db.Text
+  status         RecordStatus @default(ACTIVE)
+  createdAt      DateTime     @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt      DateTime     @updatedAt @map("updated_at") @db.DateTime(3)
+  deactivatedAt  DateTime?    @map("deactivated_at") @db.DateTime(3)
+
+  organization   Organization             @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  items          CommercialPackageItem[]
+  priceListItems PriceListPackageItem[]
+  orderPackages  OrderPackage[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId, status])
+  @@map("commercial_packages")
+}
+
+model CommercialPackageItem {
+  packageId    String   @map("package_id") @db.Char(36)
+  testId       String   @map("test_id") @db.Char(36)
+  displayOrder Int      @default(0) @map("display_order")
+  createdAt    DateTime @default(now()) @map("created_at") @db.DateTime(3)
+
+  package CommercialPackage @relation(fields: [packageId], references: [id], onDelete: Restrict)
+  test    LabTest           @relation(fields: [testId], references: [id], onDelete: Restrict)
+
+  @@id([packageId, testId])
+  @@index([testId])
+  @@map("commercial_package_items")
+}
 
 model CatalogImportBatch {
   id             String            @id @default(uuid()) @db.Char(36)
@@ -1806,6 +1845,7 @@ model PriceList {
   client       Client?      @relation(fields: [clientId], references: [id], onDelete: Restrict)
   contract     Contract?    @relation(fields: [contractId], references: [id], onDelete: Restrict)
   items        PriceListItem[]
+  packageItems PriceListPackageItem[]
 
   @@unique([organizationId, code])
   @@index([organizationId, scopeType, status, effectiveFrom, effectiveTo])
@@ -1836,6 +1876,27 @@ model PriceListItem {
   @@map("price_list_items")
 }
 
+model PriceListPackageItem {
+  id             String       @id @default(uuid()) @db.Char(36)
+  priceListId    String       @map("price_list_id") @db.Char(36)
+  packageId      String       @map("package_id") @db.Char(36)
+  unitPrice      Decimal      @map("unit_price") @db.Decimal(18, 4)
+  effectiveFrom  DateTime     @map("effective_from") @db.DateTime(3)
+  effectiveTo    DateTime?    @map("effective_to") @db.DateTime(3)
+  status         RecordStatus @default(ACTIVE)
+  createdAt      DateTime     @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt      DateTime     @updatedAt @map("updated_at") @db.DateTime(3)
+  deactivatedAt  DateTime?    @map("deactivated_at") @db.DateTime(3)
+
+  priceList     PriceList          @relation(fields: [priceListId], references: [id], onDelete: Restrict)
+  package       CommercialPackage  @relation(fields: [packageId], references: [id], onDelete: Restrict)
+  orderPackages OrderPackage[]
+
+  @@unique([priceListId, packageId, effectiveFrom])
+  @@index([packageId, status, effectiveFrom, effectiveTo])
+  @@map("price_list_package_items")
+}
+
 model LabOrder {
   id               String        @id @default(uuid()) @db.Char(36)
   organizationId   String        @map("organization_id") @db.Char(36)
@@ -1864,6 +1925,7 @@ model LabOrder {
   source        OrderSource? @relation(fields: [sourceId], references: [id], onDelete: Restrict)
   createdBy     User         @relation("OrderCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
   items         OrderItem[]
+  packages      OrderPackage[]
   answers       OrderAnswer[]
   invoices      Invoice[]
   statusHistory OrderStatusHistory[]
@@ -1878,6 +1940,46 @@ model LabOrder {
   @@index([clientId, orderedAt])
   @@index([sourceId, orderedAt])
   @@map("orders")
+}
+
+model OrderPackage {
+  id                         String   @id @default(uuid()) @db.Char(36)
+  orderId                    String   @map("order_id") @db.Char(36)
+  packageId                  String   @map("package_id") @db.Char(36)
+  priceListPackageItemId     String?  @map("price_list_package_item_id") @db.Char(36)
+  packageCodeSnapshot        String   @map("package_code_snapshot") @db.VarChar(80)
+  packageNameEnSnapshot      String   @map("package_name_en_snapshot") @db.VarChar(220)
+  packageNameArSnapshot      String?  @map("package_name_ar_snapshot") @db.VarChar(220)
+  unitPriceSnapshot          Decimal  @map("unit_price_snapshot") @db.Decimal(18, 4)
+  discountAmountSnapshot     Decimal  @default(0) @map("discount_amount_snapshot") @db.Decimal(18, 4)
+  taxAmountSnapshot          Decimal  @default(0) @map("tax_amount_snapshot") @db.Decimal(18, 4)
+  finalPriceSnapshot         Decimal  @map("final_price_snapshot") @db.Decimal(18, 4)
+  currency                   String   @db.Char(3)
+  createdAt                  DateTime @default(now()) @map("created_at") @db.DateTime(3)
+
+  order                LabOrder              @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  package              CommercialPackage     @relation(fields: [packageId], references: [id], onDelete: Restrict)
+  priceListPackageItem PriceListPackageItem? @relation(fields: [priceListPackageItemId], references: [id], onDelete: Restrict)
+  items                OrderPackageItem[]
+  invoiceLines         InvoiceLine[]
+
+  @@unique([orderId, packageId])
+  @@index([packageId])
+  @@index([priceListPackageItemId])
+  @@map("order_packages")
+}
+
+model OrderPackageItem {
+  orderPackageId String   @map("order_package_id") @db.Char(36)
+  orderItemId    String   @map("order_item_id") @db.Char(36)
+  createdAt      DateTime @default(now()) @map("created_at") @db.DateTime(3)
+
+  orderPackage OrderPackage @relation(fields: [orderPackageId], references: [id], onDelete: Restrict)
+  orderItem    OrderItem    @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
+
+  @@id([orderPackageId, orderItemId])
+  @@index([orderItemId])
+  @@map("order_package_items")
 }
 
 model OrderItem {
@@ -1908,6 +2010,7 @@ model OrderItem {
   results          LaboratoryResult[]
   analyzerResultImports AnalyzerResultImport[]
   microbiologyCases MicrobiologyCase[]
+  packageLinks     OrderPackageItem[]
   answers          OrderAnswer[]
 
   @@unique([orderId, testId])
@@ -1954,6 +2057,7 @@ model InvoiceLine {
   id                 String   @id @default(uuid()) @db.Char(36)
   invoiceId          String   @map("invoice_id") @db.Char(36)
   orderItemId        String?  @map("order_item_id") @db.Char(36)
+  orderPackageId     String?  @map("order_package_id") @db.Char(36)
   description        String   @db.VarChar(255)
   testCodeSnapshot   String?  @map("test_code_snapshot") @db.VarChar(80)
   testNameEnSnapshot String?  @map("test_name_en_snapshot") @db.VarChar(220)
@@ -1964,11 +2068,13 @@ model InvoiceLine {
   lineTotal          Decimal  @map("line_total") @db.Decimal(18, 4)
   createdAt          DateTime @default(now()) @map("created_at") @db.DateTime(3)
 
-  invoice   Invoice    @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
-  orderItem OrderItem? @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
+  invoice      Invoice       @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  orderItem    OrderItem?    @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
+  orderPackage OrderPackage? @relation(fields: [orderPackageId], references: [id], onDelete: Restrict)
 
   @@index([invoiceId])
   @@index([orderItemId])
+  @@index([orderPackageId])
   @@map("invoice_lines")
 }
 
