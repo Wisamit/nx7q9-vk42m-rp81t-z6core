@@ -55,6 +55,15 @@ const FOUNDATION_PERMISSIONS = [
   ["analyzers.manage", "integrations", "Manage analyzers, bridge credentials and mappings"],
   ["analyzers.replay", "integrations", "Replay analyzer interface messages and error queue items"],
   ["analyzers.import", "integrations", "Import mapped analyzer observations into laboratory results"],
+  ["inventory.view", "inventory", "View branch inventory and lot balances"],
+  ["inventory.manage", "inventory", "Manage inventory master data"],
+  ["inventory.adjust", "inventory", "Post controlled inventory adjustments"],
+  ["inventory.consume", "inventory", "Consume inventory with FEFO lot allocation and traceability"],
+  ["inventory.transfer", "inventory", "Manage inter-branch inventory transfers"],
+  ["procurement.view", "inventory", "View procurement requests, orders and receipts"],
+  ["procurement.manage", "inventory", "Create and manage procurement documents"],
+  ["procurement.approve", "inventory", "Approve purchase requests and purchase orders"],
+  ["procurement.receive", "inventory", "Receive and post supplier goods into inventory"],
 ] as const;
 
 function text(value: unknown, max = 200) {
