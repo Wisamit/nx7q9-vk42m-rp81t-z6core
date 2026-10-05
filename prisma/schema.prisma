@@ -194,6 +194,37 @@ enum DiagnosticReportVersionStatus {
   RETRACTED
 }
 
+enum ReportDeliveryChannel {
+  PRINT
+  DOWNLOAD
+  EMAIL
+  SMS
+  WHATSAPP
+  PORTAL
+  OTHER
+}
+
+enum ReportDeliveryStatus {
+  RECORDED
+  QUEUED
+  SENT
+  DELIVERED
+  FAILED
+}
+
+enum DeltaEvaluation {
+  NOT_CONFIGURED
+  NO_PREVIOUS_RESULT
+  WITHIN_LIMIT
+  EXCEEDED
+}
+
+enum CommentTemplateScope {
+  ORGANIZATION
+  TEST
+  COMPONENT
+}
+
 model Organization {
   id              String       @id @default(uuid()) @db.Char(36)
   code            String       @unique @db.VarChar(50)
@@ -233,6 +264,8 @@ model Organization {
   transferManifests SpecimenTransferManifest[]
   results LaboratoryResult[]
   diagnosticReports DiagnosticReport[]
+  deltaRules DeltaRule[]
+  resultCommentTemplates ResultCommentTemplate[]
 
   @@map("organizations")
 }
@@ -276,6 +309,7 @@ model Branch {
   incomingTransferManifests SpecimenTransferManifest[] @relation("TransferDestinationBranch")
   laboratoryResults LaboratoryResult[] @relation("ResultPerformingBranch")
   reportVersions DiagnosticReportVersion[] @relation("ReportVersionBranch")
+  deltaRules DeltaRule[]
 
   @@unique([organizationId, code])
   @@index([organizationId, status])
@@ -384,6 +418,7 @@ model User {
   criticalCommunications CriticalResultCommunication[] @relation("CriticalCommunicator")
   acknowledgedCriticalEvents CriticalResultEvent[] @relation("CriticalEventAcknowledgedBy")
   reportVersions DiagnosticReportVersion[] @relation("ReportVersionIssuer")
+  reportDeliveries ReportDeliveryEvent[]
   amendmentRequests LaboratoryResult[] @relation("ResultAmendmentRequestedBy")
 
   @@unique([organizationId, username])
@@ -627,6 +662,8 @@ model Unit {
   components   TestComponent[]
   importMappings CatalogImportMapping[]
   resultValues LaboratoryResultValue[]
+  deltaRules DeltaRule[]
+  commentTemplates ResultCommentTemplate[]
 
   @@unique([organizationId, code])
   @@map("units")
@@ -718,6 +755,8 @@ model TestComponent {
   unit               Unit? @relation(fields: [unitId], references: [id], onDelete: Restrict)
   referenceIntervals ReferenceInterval[]
   resultValues LaboratoryResultValue[]
+  deltaRules DeltaRule[]
+  commentTemplates ResultCommentTemplate[]
 
   @@unique([testId, code])
   @@index([testId, displayOrder])
@@ -1458,6 +1497,13 @@ model LaboratoryResultValue {
   criticalHighSnapshot     Decimal?    @map("critical_high_snapshot") @db.Decimal(18, 6)
   flag                     ResultFlag  @default(UNKNOWN)
   isCritical               Boolean     @default(false) @map("is_critical")
+  deltaEvaluation           DeltaEvaluation @default(NOT_CONFIGURED) @map("delta_evaluation")
+  previousValueSnapshot     Decimal?    @map("previous_value_snapshot") @db.Decimal(24, 8)
+  previousResultAtSnapshot  DateTime?   @map("previous_result_at_snapshot") @db.DateTime(3)
+  deltaAbsoluteSnapshot     Decimal?    @map("delta_absolute_snapshot") @db.Decimal(24, 8)
+  deltaPercentSnapshot      Decimal?    @map("delta_percent_snapshot") @db.Decimal(18, 6)
+  deltaAbsoluteLimitSnapshot Decimal?   @map("delta_absolute_limit_snapshot") @db.Decimal(24, 8)
+  deltaPercentLimitSnapshot Decimal?    @map("delta_percent_limit_snapshot") @db.Decimal(18, 6)
   createdAt                DateTime    @default(now()) @map("created_at") @db.DateTime(3)
   updatedAt                DateTime    @updatedAt @map("updated_at") @db.DateTime(3)
 
@@ -1553,9 +1599,85 @@ model DiagnosticReportVersion {
   issuedBy    User                    @relation("ReportVersionIssuer", fields: [issuedByUserId], references: [id], onDelete: Restrict)
   supersedes  DiagnosticReportVersion? @relation("ReportVersionSupersession", fields: [supersedesVersionId], references: [id], onDelete: Restrict)
   supersededBy DiagnosticReportVersion[] @relation("ReportVersionSupersession")
+  deliveries   ReportDeliveryEvent[]
 
   @@unique([reportId, version])
   @@index([branchId, issuedAt])
   @@index([status, issuedAt])
   @@map("diagnostic_report_versions")
+}
+
+
+model DeltaRule {
+  id                       String       @id @default(uuid()) @db.Char(36)
+  organizationId           String       @map("organization_id") @db.Char(36)
+  testId                   String       @map("test_id") @db.Char(36)
+  componentId              String?      @map("component_id") @db.Char(36)
+  branchId                 String?      @map("branch_id") @db.Char(36)
+  methodId                 String?      @map("method_id") @db.Char(36)
+  absoluteLimit            Decimal?     @map("absolute_limit") @db.Decimal(24, 8)
+  percentLimit             Decimal?     @map("percent_limit") @db.Decimal(18, 6)
+  lookbackDays             Int          @default(365) @map("lookback_days")
+  effectiveFrom            DateTime     @map("effective_from") @db.DateTime(3)
+  effectiveTo              DateTime?    @map("effective_to") @db.DateTime(3)
+  status                   RecordStatus @default(ACTIVE)
+  createdAt                DateTime     @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt                DateTime     @updatedAt @map("updated_at") @db.DateTime(3)
+  deactivatedAt            DateTime?    @map("deactivated_at") @db.DateTime(3)
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  test         LabTest        @relation(fields: [testId], references: [id], onDelete: Restrict)
+  component    TestComponent? @relation(fields: [componentId], references: [id], onDelete: Restrict)
+  branch       Branch?        @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  method       Method?        @relation(fields: [methodId], references: [id], onDelete: Restrict)
+
+  @@index([testId, componentId, status, effectiveFrom, effectiveTo])
+  @@index([branchId, status])
+  @@index([methodId, status])
+  @@map("delta_rules")
+}
+
+model ResultCommentTemplate {
+  id             String               @id @default(uuid()) @db.Char(36)
+  organizationId String               @map("organization_id") @db.Char(36)
+  scope          CommentTemplateScope @default(ORGANIZATION)
+  testId         String?              @map("test_id") @db.Char(36)
+  componentId    String?              @map("component_id") @db.Char(36)
+  code           String               @db.VarChar(80)
+  nameEn         String               @map("name_en") @db.VarChar(220)
+  nameAr         String?              @map("name_ar") @db.VarChar(220)
+  textEn         String               @map("text_en") @db.Text
+  textAr         String?              @map("text_ar") @db.Text
+  status         RecordStatus         @default(ACTIVE)
+  createdAt      DateTime             @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt      DateTime             @updatedAt @map("updated_at") @db.DateTime(3)
+  deactivatedAt  DateTime?            @map("deactivated_at") @db.DateTime(3)
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  test         LabTest?       @relation(fields: [testId], references: [id], onDelete: Restrict)
+  component    TestComponent? @relation(fields: [componentId], references: [id], onDelete: Restrict)
+
+  @@unique([organizationId, code])
+  @@index([testId, status])
+  @@index([componentId, status])
+  @@map("result_comment_templates")
+}
+
+model ReportDeliveryEvent {
+  id             String               @id @default(uuid()) @db.Char(36)
+  reportVersionId String              @map("report_version_id") @db.Char(36)
+  channel        ReportDeliveryChannel
+  status         ReportDeliveryStatus @default(RECORDED)
+  recipient      String?              @db.VarChar(255)
+  externalRef    String?              @map("external_ref") @db.VarChar(255)
+  details        Json?
+  performedByUserId String?           @map("performed_by_user_id") @db.Char(36)
+  occurredAt     DateTime             @default(now()) @map("occurred_at") @db.DateTime(3)
+
+  reportVersion DiagnosticReportVersion @relation(fields: [reportVersionId], references: [id], onDelete: Restrict)
+  performedBy   User?                   @relation(fields: [performedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([reportVersionId, occurredAt])
+  @@index([performedByUserId, occurredAt])
+  @@map("report_delivery_events")
 }
