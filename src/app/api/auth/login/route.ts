@@ -2,9 +2,13 @@ import { compare } from "bcryptjs";
 import { NextRequest, NextResponse } from "next/server";
 import { newSessionToken, hashSessionToken, requestContext, sessionExpiry, SESSION_COOKIE } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { checkRateLimit } from "@/lib/rate-limit";
+import { hashOpaqueToken, newMfaChallengeToken } from "@/lib/staff-mfa";
 
 const MAX_FAILED_ATTEMPTS = 5;
 const LOCK_MINUTES = 15;
+const MFA_CHALLENGE_COOKIE = "family_lab_mfa_challenge";
+const MFA_CHALLENGE_MINUTES = 5;
 
 export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => null);
@@ -13,6 +17,19 @@ export async function POST(request: NextRequest) {
 
   if (!username || !password) {
     return NextResponse.json({ error: "invalid_credentials" }, { status: 401 });
+  }
+
+  const context = await requestContext();
+  const [ipLimit, identityLimit] = await Promise.all([
+    checkRateLimit({ scope: "staff_login_ip", key: context.ipAddress || "unknown", limit: 30, windowMs: 15 * 60_000 }),
+    checkRateLimit({ scope: "staff_login_identity", key: username, limit: 12, windowMs: 15 * 60_000 }),
+  ]);
+  if (!ipLimit.allowed || !identityLimit.allowed) {
+    const retryAfter = Math.max(ipLimit.retryAfterSeconds, identityLimit.retryAfterSeconds);
+    return NextResponse.json(
+      { error: "rate_limited" },
+      { status: 429, headers: { "Retry-After": String(retryAfter) } },
+    );
   }
 
   const user = await prisma.user.findFirst({
@@ -29,7 +46,6 @@ export async function POST(request: NextRequest) {
   }
 
   const valid = await compare(password, user.passwordHash);
-  const context = await requestContext();
 
   if (!valid) {
     const failed = user.failedLoginAttempts + 1;
@@ -65,6 +81,50 @@ export async function POST(request: NextRequest) {
   const activeBranch = user.branchScopes.find((scope) => scope.branch.status === "ACTIVE")?.branch ?? null;
   if (!activeBranch) {
     return NextResponse.json({ error: "no_active_branch_scope" }, { status: 403 });
+  }
+
+  if (user.mfaEnabled) {
+    if (!user.mfaSecretEncrypted) {
+      return NextResponse.json({ error: "mfa_configuration_invalid" }, { status: 503 });
+    }
+    const challengeToken = newMfaChallengeToken();
+    const challengeExpiresAt = new Date(Date.now() + MFA_CHALLENGE_MINUTES * 60_000);
+    await prisma.$transaction([
+      prisma.user.update({
+        where: { id: user.id },
+        data: { failedLoginAttempts: 0, lockedUntil: null },
+      }),
+      prisma.staffMfaChallenge.create({
+        data: {
+          userId: user.id,
+          tokenHash: hashOpaqueToken(challengeToken),
+          expiresAt: challengeExpiresAt,
+          ipAddress: context.ipAddress,
+          userAgent: context.userAgent,
+        },
+      }),
+      prisma.auditEvent.create({
+        data: {
+          organizationId: user.organizationId,
+          branchId: activeBranch.id,
+          actorUserId: user.id,
+          action: "MFA_CHALLENGE_ISSUED",
+          entityType: "User",
+          entityId: user.id,
+          ipAddress: context.ipAddress,
+          userAgent: context.userAgent,
+        },
+      }),
+    ]);
+    const response = NextResponse.json({ status: "mfa_required", mfaRequired: true }, { status: 202 });
+    response.cookies.set(MFA_CHALLENGE_COOKIE, challengeToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      path: "/",
+      expires: challengeExpiresAt,
+    });
+    return response;
   }
 
   const token = newSessionToken();
