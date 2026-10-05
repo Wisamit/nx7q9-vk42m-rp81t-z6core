@@ -64,7 +64,7 @@ CREATE TABLE `departments` (
   `updated_at` DATETIME(3) NOT NULL,
   `deactivated_at` DATETIME(3) NULL,
   PRIMARY KEY (`id`),
-  UNIQUE INDEX `departments_organization_id_branch_id_code_key`(`organization_id`, `branch_id`, `code`),
+  UNIQUE INDEX `departments_organization_id_code_key`(`organization_id`, `code`),
   INDEX `departments_organization_id_status_idx`(`organization_id`, `status`),
   INDEX `departments_branch_id_status_idx`(`branch_id`, `status`),
   CONSTRAINT `departments_organization_id_fkey` FOREIGN KEY (`organization_id`) REFERENCES `organizations`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
