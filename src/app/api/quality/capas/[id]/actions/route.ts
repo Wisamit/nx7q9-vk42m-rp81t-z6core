@@ -57,7 +57,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const { id } = await params;
   const body = await request.json().catch(() => null) as { actionId?: string; status?: string } | null;
   const actionId = text(body?.actionId,36);
-  const status = ["OPEN","IN_PROGRESS","COMPLETED","CANCELLED"].includes(body?.status || "") ? body!.status! : null;
+  const status =
+    body?.status === "OPEN" ||
+    body?.status === "IN_PROGRESS" ||
+    body?.status === "COMPLETED" ||
+    body?.status === "CANCELLED"
+      ? body.status
+      : null;
   if (!actionId || !status) return NextResponse.json({ error: "invalid_request" }, { status: 400 });
 
   const action = await prisma.capaAction.findFirst({
