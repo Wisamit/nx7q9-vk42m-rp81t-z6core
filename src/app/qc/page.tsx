@@ -72,9 +72,16 @@ export default async function QcPage() {
       },
       include: {
         analyzer: true,
-        qcLot: { include: { material: true } },
         operator: true,
-        results: true,
+        results: {
+          include: {
+            target: {
+              include: {
+                qcLot: { include: { material: true } },
+              },
+            },
+          },
+        },
         violations: true,
       },
       orderBy: { runAt: "desc" },
@@ -173,7 +180,10 @@ export default async function QcPage() {
         <tbody>{recentRuns.length === 0 ? <tr><td colSpan={7} className="empty-state">No QC runs recorded.</td></tr> : recentRuns.map(run => <tr key={run.id}>
           <td>{run.runAt.toISOString().replace("T"," ").slice(0,19)}</td>
           <td><strong>{run.analyzer.code}</strong><br/><small>{run.analyzer.name}</small></td>
-          <td>{run.qcLot.material.code} · {run.qcLot.material.levelName}<br/><small>{run.qcLot.lotNumber}</small></td>
+          <td>{[...new Map(run.results.map(result => [
+            result.target.qcLotId,
+            result.target.qcLot.material.code + " · " + result.target.qcLot.material.levelName + " · " + result.target.qcLot.lotNumber,
+          ])).values()].join(" | ") || "—"}</td>
           <td>{run.status}</td>
           <td>{run.results.length}</td>
           <td>{run.violations.length}</td>
