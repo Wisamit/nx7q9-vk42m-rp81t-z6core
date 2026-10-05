@@ -14,6 +14,7 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
     include: {
       values: true,
       criticalEvents: { include: { communications: true } },
+      microbiologyCase: true,
       orderItem: { include: { order: true } },
     },
   });
@@ -51,6 +52,17 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
       await tx.laboratoryResult.updateMany({
         where: { id: result.amendedFromId, status: "RELEASED" },
         data: { status: "AMENDED" },
+      });
+    }
+
+    if (result.microbiologyCase) {
+      await tx.microbiologyCase.update({
+        where: { id: result.microbiologyCase.id },
+        data: {
+          status: "FINAL",
+          finalizedByUserId: session.user.id,
+          finalizedAt: releasedAt,
+        },
       });
     }
 
@@ -122,6 +134,7 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
           reportVersion: version,
           reportStatus,
           amendedFromId: result.amendedFromId,
+          microbiologyCaseId: result.microbiologyCase?.id || null,
         },
         reason: result.amendmentReason || null,
         ipAddress: ctx.ipAddress,
