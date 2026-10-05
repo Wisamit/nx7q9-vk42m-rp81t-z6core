@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { ChangeEvent, FormEvent, useState } from "react";
 import type { SystemSettings, ThemePalette } from "@/lib/system-settings";
 import { SystemIcon } from "@/components/system-icon";
@@ -98,13 +99,13 @@ export function SystemSettingsForm({ initial, locale }: { initial: SystemSetting
       <div className="branding-upload-grid">
         <div className="branding-upload">
           <strong>{tr("Logo", "اللوغو")}</strong>
-          <div className="branding-preview logo-preview">{value.logoDataUrl ? <img src={value.logoDataUrl} alt="Family Lab logo preview" /> : <span>Family Lab</span>}</div>
+          <div className="branding-preview logo-preview">{value.logoDataUrl ? <Image src={value.logoDataUrl} alt="Family Lab logo preview" width={240} height={110} unoptimized /> : <span>Family Lab</span>}</div>
           <input type="file" accept="image/png,image/jpeg,image/webp" onChange={e => void handleImage(e, "logoDataUrl")} />
           {value.logoDataUrl && <button type="button" className="secondary-button" onClick={() => set("logoDataUrl", null)}>{tr("Remove custom logo", "إزالة اللوغو المخصص")}</button>}
         </div>
         <div className="branding-upload">
           <strong>{tr("Browser icon / favicon", "أيقونة المتصفح / Favicon")}</strong>
-          <div className="branding-preview favicon-preview">{value.faviconDataUrl ? <img src={value.faviconDataUrl} alt="Favicon preview" /> : <span>FL</span>}</div>
+          <div className="branding-preview favicon-preview">{value.faviconDataUrl ? <Image src={value.faviconDataUrl} alt="Favicon preview" width={64} height={64} unoptimized /> : <span>FL</span>}</div>
           <input type="file" accept="image/png,image/x-icon,image/vnd.microsoft.icon" onChange={e => void handleImage(e, "faviconDataUrl")} />
           {value.faviconDataUrl && <button type="button" className="secondary-button" onClick={() => set("faviconDataUrl", null)}>{tr("Remove custom icon", "إزالة الأيقونة المخصصة")}</button>}
         </div>
