@@ -17,13 +17,13 @@ export async function POST(request: Request) {
 
   const endpointId = text(body.endpointId, 36);
   const name = text(body.name, 160);
-  const scopes: string[] = Array.isArray(body.scopes)
-    ? [...new Set(
-        body.scopes
-          .filter((scope: unknown): scope is string => typeof scope === "string")
-          .filter((scope: string) => ALLOWED_SCOPES.has(scope))
-      )]
-    : [];
+  const scopeValues: string[] = [];
+  if (Array.isArray(body.scopes)) {
+    for (const scope of body.scopes) {
+      if (typeof scope === "string" && ALLOWED_SCOPES.has(scope)) scopeValues.push(scope);
+    }
+  }
+  const scopes = [...new Set(scopeValues)];
   const expiresAt = body.expiresAt ? new Date(String(body.expiresAt)) : null;
 
   if (!endpointId || !name || scopes.length === 0) {
