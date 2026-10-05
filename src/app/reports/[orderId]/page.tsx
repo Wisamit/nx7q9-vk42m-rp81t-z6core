@@ -1,4 +1,7 @@
 import Link from "next/link";
+import Image from "next/image";
+import QRCode from "qrcode";
+import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { canAccessBranch, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
@@ -104,6 +107,12 @@ export default async function DiagnosticReportPage({ params }: { params: Promise
   }
 
   const snapshot = latest.contentSnapshot as unknown as Snapshot;
+  const headerStore = await headers();
+  const host = headerStore.get("x-forwarded-host") || headerStore.get("host") || "";
+  const protocol = headerStore.get("x-forwarded-proto") || "https";
+  const configuredBaseUrl = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "");
+  const verificationUrl = configuredBaseUrl || host ? `${configuredBaseUrl || protocol + "://" + host}/verify/report/${latest.verificationToken}` : "";
+  const qrDataUrl = verificationUrl ? await QRCode.toDataURL(verificationUrl, { width: 132, margin: 1 }) : "";
 
   return <main className="report-shell">
     <div className="report-toolbar no-print">
@@ -128,9 +137,11 @@ export default async function DiagnosticReportPage({ params }: { params: Promise
           <p>{[snapshot.branch.phone, snapshot.branch.email].filter(Boolean).join(" · ")}</p>
         </div>
         <div className="report-version-stamp">
+          {qrDataUrl && <Image src={qrDataUrl} alt="Report verification QR code" width={104} height={104} unoptimized />}
           <strong>{latest.status}</strong>
           <span>Report version {latest.version}</span>
           <span>Issued {latest.issuedAt.toISOString().replace("T"," ").slice(0,19)}</span>
+          <span>Scan QR to verify</span>
         </div>
       </header>
 
@@ -199,6 +210,7 @@ export default async function DiagnosticReportPage({ params }: { params: Promise
         <div>
           <span>Issued by: {latest.issuedBy.displayNameEn}</span>
           <span>Verification token: {latest.verificationToken.slice(0,16)}…</span>
+          {verificationUrl && <span className="verification-url">{verificationUrl}</span>}
         </div>
       </footer>
     </article>
