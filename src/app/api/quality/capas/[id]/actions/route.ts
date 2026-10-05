@@ -55,7 +55,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const session = await requirePermission("quality.capa.manage");
   const ctx = await requestContext();
   const { id } = await params;
-  const body = await request.json().catch(() => null) as { actionId?: string; status?: string; evidence?: unknown } | null;
+  const body = await request.json().catch(() => null) as { actionId?: string; status?: string } | null;
   const actionId = text(body?.actionId,36);
   const status = ["OPEN","IN_PROGRESS","COMPLETED","CANCELLED"].includes(body?.status || "") ? body!.status! : null;
   if (!actionId || !status) return NextResponse.json({ error: "invalid_request" }, { status: 400 });
@@ -73,7 +73,6 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       data: {
         status,
         completedAt: status === "COMPLETED" ? new Date() : null,
-        evidence: body?.evidence === undefined ? action.evidence : body.evidence as never,
       },
     });
     await tx.auditEvent.create({
