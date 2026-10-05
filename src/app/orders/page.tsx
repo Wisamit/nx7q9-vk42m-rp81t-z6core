@@ -8,6 +8,8 @@ export const dynamic = "force-dynamic";
 export default async function OrdersPage() {
   const session = await requirePermission("orders.view");
 
+  const accessibleBranchIds = session.user.branchScopes.map(scope => scope.branchId);
+
   const [patients, tests, clients, referrers, branches, orders] = await Promise.all([
     prisma.patient.findMany({
       where: { organizationId: session.user.organizationId, status: "ACTIVE" },
@@ -32,7 +34,7 @@ export default async function OrdersPage() {
     }),
     prisma.branch.findMany({
       where: {
-        id: { in: session.user.branchScopes.map(scope => scope.branchId) },
+        id: { in: accessibleBranchIds },
         organizationId: session.user.organizationId,
         status: "ACTIVE",
       },
@@ -40,7 +42,7 @@ export default async function OrdersPage() {
       orderBy: { nameEn: "asc" },
     }),
     prisma.labOrder.findMany({
-      where: { organizationId: session.user.organizationId },
+      where: { organizationId: session.user.organizationId, orderingBranchId: { in: accessibleBranchIds } },
       include: {
         patient: true,
         orderingBranch: true,
