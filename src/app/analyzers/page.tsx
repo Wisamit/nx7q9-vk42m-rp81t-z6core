@@ -11,7 +11,7 @@ export default async function AnalyzersPage() {
   const permissions = permissionSet(session);
   const branchIds = session.user.branchScopes.map(scope => scope.branchId);
 
-  const [analyzers, branches, departments, tests, messages] = await Promise.all([
+  const [analyzers, branches, departments, tests, messages, resultImports] = await Promise.all([
     prisma.analyzer.findMany({
       where: { organizationId: session.user.organizationId, branchId: { in: branchIds } },
       include: {
@@ -59,6 +59,16 @@ export default async function AnalyzersPage() {
       include: { analyzer: true },
       orderBy: { receivedAt: "desc" },
       take: 100,
+    }),
+    prisma.analyzerResultImport.findMany({
+      where: { analyzer: { branchId: { in: branchIds } } },
+      include: {
+        analyzer: true,
+        mapping: { include: { test: true, component: true } },
+        orderItem: true,
+      },
+      orderBy: { createdAt: "desc" },
+      take: 200,
     }),
   ]);
 
@@ -109,6 +119,25 @@ export default async function AnalyzersPage() {
           <td>{item.errorCode || item.errorText || "—"}</td>
           <td><code>{item.payloadHash.slice(0,16)}…</code></td>
           <td>{permissions.has("analyzers.replay") && ["ERROR","DEAD_LETTER"].includes(item.status) ? <AnalyzerMessageReplayButton messageId={item.id} /> : "—"}</td>
+        </tr>)}</tbody>
+      </table></div>
+    </section>
+
+
+    <section className="table-card detail-section">
+      <div className="table-toolbar"><h2>Normalized Result Staging</h2><span>{resultImports.length} recent</span></div>
+      <div className="table-wrap"><table>
+        <thead><tr><th>Created</th><th>Analyzer</th><th>Observation</th><th>Barcode</th><th>Analyzer code</th><th>LIS target</th><th>Raw value</th><th>Status</th><th>Error</th></tr></thead>
+        <tbody>{resultImports.length === 0 ? <tr><td colSpan={9} className="empty-state">No normalized analyzer observations staged.</td></tr> : resultImports.map(item => <tr key={item.id}>
+          <td>{item.createdAt.toISOString().replace("T"," ").slice(0,19)}</td>
+          <td>{item.analyzer.code}</td>
+          <td>{item.bridgeObservationId}</td>
+          <td><strong>{item.barcodeSnapshot || "—"}</strong></td>
+          <td>{item.analyzerTestCode}</td>
+          <td>{item.mapping ? item.mapping.test.code + (item.mapping.component ? " · " + item.mapping.component.code : "") : "—"}</td>
+          <td><strong>{item.rawValue}</strong>{item.rawUnit ? " " + item.rawUnit : ""}</td>
+          <td>{item.status}</td>
+          <td>{item.errorCode ? item.errorCode + (item.errorText ? " · " + item.errorText : "") : "—"}</td>
         </tr>)}</tbody>
       </table></div>
     </section>
