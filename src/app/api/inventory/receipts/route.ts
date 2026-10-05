@@ -49,7 +49,7 @@ export async function POST(request: Request) {
   if (purchaseOrder && (purchaseOrder.branchId !== branchId || purchaseOrder.supplierId !== supplierId)) {
     return NextResponse.json({ error: "purchase_order_context_mismatch" }, { status: 409 });
   }
-  if (purchaseOrder && ["CANCELLED","RECEIVED"].includes(purchaseOrder.status)) {
+  if (purchaseOrder && !["APPROVED","SENT","PARTIALLY_RECEIVED"].includes(purchaseOrder.status)) {
     return NextResponse.json({ error: "purchase_order_not_receivable", status: purchaseOrder.status }, { status: 409 });
   }
 
