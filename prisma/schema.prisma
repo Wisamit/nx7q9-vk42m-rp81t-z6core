@@ -53,6 +53,14 @@ enum OrderPriority {
   STAT
 }
 
+enum OrderQuestionResponseType {
+  TEXT
+  NUMERIC
+  BOOLEAN
+  DATE
+  SINGLE_CHOICE
+}
+
 enum OrderStatus {
   DRAFT
   REGISTERED
@@ -760,6 +768,8 @@ model Organization {
   contracts Contract[]
   priceLists PriceList[]
   orders LabOrder[]
+  orderQuestions OrderQuestion[]
+  orderAnswers OrderAnswer[]
   invoices Invoice[]
   payments Payment[]
   specimens Specimen[]
@@ -1000,6 +1010,7 @@ model User {
   approvedReferenceIntervals ReferenceInterval[] @relation("ReferenceIntervalApprover")
   createdCatalogImportMappings CatalogImportMapping[] @relation("CatalogImportMappingCreator")
   createdOrders LabOrder[] @relation("OrderCreator")
+  recordedOrderAnswers OrderAnswer[] @relation("OrderAnswerRecorder")
   createdInvoices Invoice[] @relation("InvoiceCreator")
   cashierPayments Payment[] @relation("PaymentCashier")
   orderStatusChanges OrderStatusHistory[] @relation("OrderStatusChanger")
@@ -1399,6 +1410,7 @@ model LabTest {
   importMappings     CatalogImportMapping[]
   priceListItems     PriceListItem[]
   orderItems         OrderItem[]
+  orderQuestions     OrderQuestion[]
   deltaRules         DeltaRule[]
   commentTemplates   ResultCommentTemplate[]
   calculatedRules    CalculatedResultRule[]
@@ -1852,6 +1864,7 @@ model LabOrder {
   source        OrderSource? @relation(fields: [sourceId], references: [id], onDelete: Restrict)
   createdBy     User         @relation("OrderCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
   items         OrderItem[]
+  answers       OrderAnswer[]
   invoices      Invoice[]
   statusHistory OrderStatusHistory[]
   specimens     Specimen[]
@@ -1895,6 +1908,7 @@ model OrderItem {
   results          LaboratoryResult[]
   analyzerResultImports AnalyzerResultImport[]
   microbiologyCases MicrobiologyCase[]
+  answers          OrderAnswer[]
 
   @@unique([orderId, testId])
   @@index([performedBranchId, status])
@@ -4695,4 +4709,61 @@ model ReportTemplateVersion {
   @@index([templateId, status, effectiveFrom])
   @@index([status, effectiveFrom, effectiveTo])
   @@map("report_template_versions")
+}
+
+
+model OrderQuestion {
+  id             String                    @id @default(uuid()) @db.Char(36)
+  organizationId String                    @map("organization_id") @db.Char(36)
+  testId         String                    @map("test_id") @db.Char(36)
+  code           String                    @db.VarChar(100)
+  questionEn     String                    @map("question_en") @db.VarChar(500)
+  questionAr     String?                   @map("question_ar") @db.VarChar(500)
+  responseType   OrderQuestionResponseType @map("response_type")
+  required       Boolean                   @default(false)
+  options        Json?
+  displayOrder   Int                       @default(0) @map("display_order")
+  status         RecordStatus              @default(ACTIVE)
+  createdAt      DateTime                  @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt      DateTime                  @updatedAt @map("updated_at") @db.DateTime(3)
+  deactivatedAt  DateTime?                 @map("deactivated_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  test         LabTest      @relation(fields: [testId], references: [id], onDelete: Restrict)
+  answers      OrderAnswer[]
+
+  @@unique([testId, code])
+  @@index([organizationId, status])
+  @@index([testId, status, displayOrder])
+  @@map("order_questions")
+}
+
+model OrderAnswer {
+  id                       String                    @id @default(uuid()) @db.Char(36)
+  organizationId           String                    @map("organization_id") @db.Char(36)
+  orderId                  String                    @map("order_id") @db.Char(36)
+  orderItemId              String                    @map("order_item_id") @db.Char(36)
+  questionId               String                    @map("question_id") @db.Char(36)
+  questionCodeSnapshot     String                    @map("question_code_snapshot") @db.VarChar(100)
+  questionTextEnSnapshot   String                    @map("question_text_en_snapshot") @db.VarChar(500)
+  questionTextArSnapshot   String?                   @map("question_text_ar_snapshot") @db.VarChar(500)
+  responseTypeSnapshot     OrderQuestionResponseType @map("response_type_snapshot")
+  answerText               String?                   @map("answer_text") @db.Text
+  answerNumeric            Decimal?                  @map("answer_numeric") @db.Decimal(18, 6)
+  answerBoolean            Boolean?                  @map("answer_boolean")
+  answerDate               DateTime?                 @map("answer_date") @db.Date
+  selectedOptionSnapshot   String?                   @map("selected_option_snapshot") @db.VarChar(500)
+  recordedByUserId         String                    @map("recorded_by_user_id") @db.Char(36)
+  recordedAt               DateTime                  @default(now()) @map("recorded_at") @db.DateTime(3)
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  order        LabOrder      @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  orderItem    OrderItem     @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
+  question     OrderQuestion @relation(fields: [questionId], references: [id], onDelete: Restrict)
+  recordedBy   User          @relation("OrderAnswerRecorder", fields: [recordedByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([orderItemId, questionId])
+  @@index([organizationId, orderId])
+  @@index([questionId, recordedAt])
+  @@map("order_answers")
 }

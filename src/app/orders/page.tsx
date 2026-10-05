@@ -19,7 +19,25 @@ export default async function OrdersPage() {
     }),
     prisma.labTest.findMany({
       where: { organizationId: session.user.organizationId, status: "ACTIVE" },
-      select: { id: true, code: true, nameEn: true },
+      select: {
+        id: true,
+        code: true,
+        nameEn: true,
+        orderQuestions: {
+          where: { status: "ACTIVE" },
+          select: {
+            id: true,
+            code: true,
+            questionEn: true,
+            questionAr: true,
+            responseType: true,
+            required: true,
+            options: true,
+            displayOrder: true,
+          },
+          orderBy: [{ displayOrder: "asc" }, { code: "asc" }],
+        },
+      },
       orderBy: { nameEn: "asc" },
     }),
     prisma.client.findMany({
@@ -92,7 +110,15 @@ export default async function OrdersPage() {
       <div className="section-title-row"><div><p className="eyebrow">Reception workflow</p><h2>New Order</h2></div><span className="keyboard-hint">Search patient → select tests → register</span></div>
       <OrderCreateForm
         patients={patients}
-        tests={tests}
+        tests={tests.map(test => ({
+          ...test,
+          orderQuestions: test.orderQuestions.map(question => ({
+            ...question,
+            options: Array.isArray(question.options)
+              ? question.options.filter((item): item is string => typeof item === "string")
+              : [],
+          })),
+        }))}
         clients={clients}
         referrers={referrers}
         sources={sources}

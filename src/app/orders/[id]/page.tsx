@@ -18,7 +18,13 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       client: true,
       createdBy: true,
       items: {
-        include: { test: true, performedBranch: true, priceListItem: { include: { priceList: true } }, results: { orderBy: { version: "desc" }, take: 1, include: { values: true } } },
+        include: {
+          test: true,
+          performedBranch: true,
+          priceListItem: { include: { priceList: true } },
+          answers: { orderBy: { recordedAt: "asc" } },
+          results: { orderBy: { version: "desc" }, take: 1, include: { values: true } },
+        },
         orderBy: { createdAt: "asc" },
       },
       invoices: {
@@ -82,6 +88,27 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         </table>
       </div>
     </section>
+
+    {order.items.some(item => item.answers.length > 0) && <section className="table-card detail-section">
+      <div className="table-toolbar"><h2>Ask-at-Order Answers</h2><span>Historical question snapshots</span></div>
+      <div className="table-wrap"><table>
+        <thead><tr><th>Test</th><th>Question</th><th>Answer</th><th>Recorded</th></tr></thead>
+        <tbody>{order.items.flatMap(item => item.answers.map(answer => {
+          const displayAnswer = answer.answerText
+            ?? answer.answerNumeric?.toString()
+            ?? (answer.answerBoolean === null ? null : answer.answerBoolean ? "Yes" : "No")
+            ?? answer.answerDate?.toISOString().slice(0,10)
+            ?? answer.selectedOptionSnapshot
+            ?? "—";
+          return <tr key={answer.id}>
+            <td><strong>{item.testCodeSnapshot}</strong></td>
+            <td>{answer.questionTextEnSnapshot}{answer.questionTextArSnapshot && <><br/><small dir="rtl">{answer.questionTextArSnapshot}</small></>}</td>
+            <td><strong>{displayAnswer}</strong></td>
+            <td>{answer.recordedAt.toISOString().replace("T"," ").slice(0,19)}</td>
+          </tr>;
+        }))}</tbody>
+      </table></div>
+    </section>}
 
     <section className="table-card detail-section">
       <div className="table-toolbar"><h2>Specimens</h2><span>{order.specimens.length} planned / historical</span></div>

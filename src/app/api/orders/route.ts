@@ -46,7 +46,13 @@ export async function POST(request: Request) {
     prisma.patient.findFirst({ where: { id: patientId, organizationId: session.user.organizationId, status: "ACTIVE" }, select: { id: true, patientNumber: true, fullNameEn: true } }),
     prisma.labTest.findMany({
       where: { id: { in: testIds }, organizationId: session.user.organizationId, status: "ACTIVE" },
-      include: { defaultUnit: true, specimenType: true, container: true, branchAvailability: { where: { status: "ACTIVE" } } },
+      include: {
+        defaultUnit: true,
+        specimenType: true,
+        container: true,
+        branchAvailability: { where: { status: "ACTIVE" } },
+        orderQuestions: { where: { status: "ACTIVE" }, orderBy: [{ displayOrder: "asc" }, { code: "asc" }] },
+      },
     }),
     prisma.orderSource.findFirst({ where: { id: sourceId, organizationId: session.user.organizationId, status: "ACTIVE" }, select: { id: true, code: true, category: true } }),
     referrerId ? prisma.referrer.findFirst({ where: { id: referrerId, organizationId: session.user.organizationId, status: "ACTIVE" }, select: { id: true, clientId: true } }) : null,
@@ -58,6 +64,84 @@ export async function POST(request: Request) {
   if (!source) return NextResponse.json({ error: "source_not_found" }, { status: 404 });
   if (referrerId && !referrer) return NextResponse.json({ error: "referrer_not_found" }, { status: 404 });
   if (clientId && !client) return NextResponse.json({ error: "client_not_found" }, { status: 404 });
+
+  const answerInput: unknown[] = Array.isArray(body.answers) ? body.answers : [];
+  const rawAnswers = answerInput.filter((entry): entry is { questionId: string; value: unknown } =>
+    Boolean(entry && typeof entry === "object" && typeof (entry as { questionId?: unknown }).questionId === "string")
+  );
+  const answerIds = rawAnswers.map(entry => entry.questionId);
+  if (new Set(answerIds).size !== answerIds.length) {
+    return NextResponse.json({ error: "duplicate_order_question_answer" }, { status: 400 });
+  }
+  const answerMap = new Map(rawAnswers.map(entry => [entry.questionId, entry.value]));
+  const questions = tests.flatMap(test => test.orderQuestions.map(question => ({ question, test })));
+  const allowedQuestionIds = new Set(questions.map(entry => entry.question.id));
+  if (rawAnswers.some(entry => !allowedQuestionIds.has(entry.questionId))) {
+    return NextResponse.json({ error: "order_question_not_applicable" }, { status: 400 });
+  }
+
+  const preparedAnswers = new Map<string, {
+    answerText: string | null;
+    answerNumeric: Prisma.Decimal | null;
+    answerBoolean: boolean | null;
+    answerDate: Date | null;
+    selectedOptionSnapshot: string | null;
+  }>();
+
+  try {
+    for (const { question, test } of questions) {
+      const raw = answerMap.get(question.id);
+      const stringValue = typeof raw === "string" ? raw.trim() : raw == null ? "" : String(raw).trim();
+      const empty = stringValue === "";
+      if (empty) {
+        if (question.required) {
+          return NextResponse.json({
+            error: "required_order_question_missing",
+            questionId: question.id,
+            questionCode: question.code,
+            testCode: test.code,
+          }, { status: 400 });
+        }
+        continue;
+      }
+
+      if (question.responseType === "TEXT") {
+        preparedAnswers.set(question.id, {
+          answerText: stringValue.slice(0, 5000), answerNumeric: null, answerBoolean: null, answerDate: null, selectedOptionSnapshot: null,
+        });
+      } else if (question.responseType === "NUMERIC") {
+        const value = new Prisma.Decimal(stringValue);
+        preparedAnswers.set(question.id, {
+          answerText: null, answerNumeric: value, answerBoolean: null, answerDate: null, selectedOptionSnapshot: null,
+        });
+      } else if (question.responseType === "BOOLEAN") {
+        if (!["true","false"].includes(stringValue.toLowerCase())) throw new Error("INVALID_BOOLEAN");
+        preparedAnswers.set(question.id, {
+          answerText: null, answerNumeric: null, answerBoolean: stringValue.toLowerCase() === "true", answerDate: null, selectedOptionSnapshot: null,
+        });
+      } else if (question.responseType === "DATE") {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(stringValue)) throw new Error("INVALID_DATE");
+        const value = new Date(stringValue + "T00:00:00.000Z");
+        if (Number.isNaN(value.getTime()) || value.toISOString().slice(0, 10) !== stringValue) throw new Error("INVALID_DATE");
+        preparedAnswers.set(question.id, {
+          answerText: null, answerNumeric: null, answerBoolean: null, answerDate: value, selectedOptionSnapshot: null,
+        });
+      } else if (question.responseType === "SINGLE_CHOICE") {
+        const options = Array.isArray(question.options)
+          ? question.options.filter((item): item is string => typeof item === "string")
+          : [];
+        if (!options.includes(stringValue)) throw new Error("INVALID_CHOICE");
+        preparedAnswers.set(question.id, {
+          answerText: null, answerNumeric: null, answerBoolean: null, answerDate: null, selectedOptionSnapshot: stringValue.slice(0, 500),
+        });
+      }
+    }
+  } catch (error) {
+    return NextResponse.json({
+      error: "invalid_order_question_answer",
+      detail: error instanceof Error ? error.message.toLowerCase() : "invalid_value",
+    }, { status: 400 });
+  }
 
   const effectiveClientId = clientId || referrer?.clientId || null;
 
@@ -142,6 +226,29 @@ export async function POST(request: Request) {
             currency,
           },
         });
+        for (const question of entry.test.orderQuestions) {
+          const answer = preparedAnswers.get(question.id);
+          if (!answer) continue;
+          await tx.orderAnswer.create({
+            data: {
+              organizationId: session.user.organizationId,
+              orderId: order.id,
+              orderItemId: item.id,
+              questionId: question.id,
+              questionCodeSnapshot: question.code,
+              questionTextEnSnapshot: question.questionEn,
+              questionTextArSnapshot: question.questionAr,
+              responseTypeSnapshot: question.responseType,
+              answerText: answer.answerText,
+              answerNumeric: answer.answerNumeric,
+              answerBoolean: answer.answerBoolean,
+              answerDate: answer.answerDate,
+              selectedOptionSnapshot: answer.selectedOptionSnapshot,
+              recordedByUserId: session.user.id,
+            },
+          });
+        }
+
         createdItems.push({ item, test: entry.test, unitPrice });
       }
 
@@ -253,6 +360,9 @@ export async function POST(request: Request) {
             clientId: effectiveClientId,
             priority,
             testIds,
+            answeredOrderQuestionCodes: questions
+              .filter(entry => preparedAnswers.has(entry.question.id))
+              .map(entry => entry.question.code),
             invoiceNumber,
             currency,
             total: subtotal.toString(),
