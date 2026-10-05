@@ -1,5 +1,5 @@
 import { compare } from "bcryptjs";
-import { Prisma } from "../../../../../generated/prisma/client";
+import { Prisma } from "../../../../../../generated/prisma/client";
 import { NextResponse } from "next/server";
 import { requestContext, requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
