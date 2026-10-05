@@ -47,6 +47,61 @@ enum ReferrerType {
   OTHER
 }
 
+enum OrderPriority {
+  ROUTINE
+  URGENT
+  STAT
+}
+
+enum OrderStatus {
+  DRAFT
+  REGISTERED
+  COLLECTED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum OrderItemStatus {
+  ORDERED
+  COLLECTED
+  IN_PROGRESS
+  RESULTED
+  VERIFIED
+  CANCELLED
+}
+
+enum PriceListScope {
+  ORGANIZATION
+  BRANCH
+  CLIENT
+  CONTRACT
+}
+
+enum InvoiceStatus {
+  DRAFT
+  ISSUED
+  PARTIALLY_PAID
+  PAID
+  VOID
+  CREDITED
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  BANK_TRANSFER
+  ONLINE
+  CREDIT_ACCOUNT
+  OTHER
+}
+
+enum PaymentStatus {
+  POSTED
+  VOIDED
+  REFUNDED
+}
+
 model Organization {
   id              String       @id @default(uuid()) @db.Char(36)
   code            String       @unique @db.VarChar(50)
@@ -77,6 +132,11 @@ model Organization {
   patientIdentifiers PatientIdentifier[]
   clients Client[]
   referrers Referrer[]
+  contracts Contract[]
+  priceLists PriceList[]
+  orders LabOrder[]
+  invoices Invoice[]
+  payments Payment[]
 
   @@map("organizations")
 }
@@ -108,6 +168,11 @@ model Branch {
   activeSessions UserSession[] @relation("ActiveBranchSessions")
   testAvailability TestBranchAvailability[]
   referenceIntervals ReferenceInterval[]
+  priceLists PriceList[]
+  orders LabOrder[] @relation("OrderingBranchOrders")
+  performedOrderItems OrderItem[] @relation("PerformedBranchOrderItems")
+  invoices Invoice[]
+  payments Payment[]
 
   @@unique([organizationId, code])
   @@index([organizationId, status])
@@ -198,6 +263,9 @@ model User {
   sessions         UserSession[]
   approvedReferenceIntervals ReferenceInterval[] @relation("ReferenceIntervalApprover")
   createdCatalogImportMappings CatalogImportMapping[] @relation("CatalogImportMappingCreator")
+  createdOrders LabOrder[] @relation("OrderCreator")
+  createdInvoices Invoice[] @relation("InvoiceCreator")
+  cashierPayments Payment[] @relation("PaymentCashier")
 
   @@unique([organizationId, username])
   @@unique([organizationId, email])
@@ -499,6 +567,8 @@ model LabTest {
   branchAvailability TestBranchAvailability[]
   panelItems         TestPanelItem[]
   importMappings     CatalogImportMapping[]
+  priceListItems     PriceListItem[]
+  orderItems         OrderItem[]
 
   @@unique([organizationId, code])
   @@index([organizationId, status])
@@ -707,6 +777,7 @@ model Patient {
 
   organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   identifiers  PatientIdentifier[]
+  orders        LabOrder[]
 
   @@unique([organizationId, patientNumber])
   @@index([organizationId, normalizedName])
@@ -756,6 +827,10 @@ model Client {
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   referrers     Referrer[]
+  contracts     Contract[]
+  priceLists    PriceList[]
+  orders        LabOrder[]
+  invoices      Invoice[]
 
   @@unique([organizationId, code])
   @@index([organizationId, nameEn])
@@ -780,9 +855,248 @@ model Referrer {
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   client       Client?      @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  orders       LabOrder[]
 
   @@unique([organizationId, code])
   @@index([organizationId, nameEn])
   @@index([clientId, status])
   @@map("referrers")
+}
+
+
+model Contract {
+  id             String       @id @default(uuid()) @db.Char(36)
+  organizationId String       @map("organization_id") @db.Char(36)
+  clientId       String       @map("client_id") @db.Char(36)
+  code           String       @db.VarChar(60)
+  nameEn         String       @map("name_en") @db.VarChar(220)
+  nameAr         String?      @map("name_ar") @db.VarChar(220)
+  currency       String       @db.Char(3)
+  effectiveFrom  DateTime     @map("effective_from") @db.DateTime(3)
+  effectiveTo    DateTime?    @map("effective_to") @db.DateTime(3)
+  status         RecordStatus @default(ACTIVE)
+  createdAt      DateTime     @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt      DateTime     @updatedAt @map("updated_at") @db.DateTime(3)
+  deactivatedAt  DateTime?    @map("deactivated_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  client       Client       @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  priceLists   PriceList[]
+
+  @@unique([organizationId, code])
+  @@index([clientId, status, effectiveFrom, effectiveTo])
+  @@map("contracts")
+}
+
+model PriceList {
+  id             String         @id @default(uuid()) @db.Char(36)
+  organizationId String         @map("organization_id") @db.Char(36)
+  code           String         @db.VarChar(60)
+  nameEn         String         @map("name_en") @db.VarChar(220)
+  nameAr         String?        @map("name_ar") @db.VarChar(220)
+  scopeType      PriceListScope @default(ORGANIZATION) @map("scope_type")
+  branchId       String?        @map("branch_id") @db.Char(36)
+  clientId       String?        @map("client_id") @db.Char(36)
+  contractId     String?        @map("contract_id") @db.Char(36)
+  currency       String         @db.Char(3)
+  priority       Int            @default(0)
+  effectiveFrom  DateTime       @map("effective_from") @db.DateTime(3)
+  effectiveTo    DateTime?      @map("effective_to") @db.DateTime(3)
+  status         RecordStatus   @default(ACTIVE)
+  createdAt      DateTime       @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt      DateTime       @updatedAt @map("updated_at") @db.DateTime(3)
+  deactivatedAt  DateTime?      @map("deactivated_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  branch       Branch?      @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  client       Client?      @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  contract     Contract?    @relation(fields: [contractId], references: [id], onDelete: Restrict)
+  items        PriceListItem[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId, scopeType, status, effectiveFrom, effectiveTo])
+  @@index([branchId, status])
+  @@index([clientId, status])
+  @@index([contractId, status])
+  @@map("price_lists")
+}
+
+model PriceListItem {
+  id             String       @id @default(uuid()) @db.Char(36)
+  priceListId    String       @map("price_list_id") @db.Char(36)
+  testId         String       @map("test_id") @db.Char(36)
+  unitPrice      Decimal      @map("unit_price") @db.Decimal(18, 4)
+  effectiveFrom  DateTime     @map("effective_from") @db.DateTime(3)
+  effectiveTo    DateTime?    @map("effective_to") @db.DateTime(3)
+  status         RecordStatus @default(ACTIVE)
+  createdAt      DateTime     @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt      DateTime     @updatedAt @map("updated_at") @db.DateTime(3)
+  deactivatedAt  DateTime?    @map("deactivated_at") @db.DateTime(3)
+
+  priceList PriceList @relation(fields: [priceListId], references: [id], onDelete: Restrict)
+  test      LabTest   @relation(fields: [testId], references: [id], onDelete: Restrict)
+  orderItems OrderItem[]
+
+  @@unique([priceListId, testId, effectiveFrom])
+  @@index([testId, status, effectiveFrom, effectiveTo])
+  @@map("price_list_items")
+}
+
+model LabOrder {
+  id               String        @id @default(uuid()) @db.Char(36)
+  organizationId   String        @map("organization_id") @db.Char(36)
+  accessionNumber  String        @map("accession_number") @db.VarChar(50)
+  orderingBranchId String        @map("ordering_branch_id") @db.Char(36)
+  patientId        String        @map("patient_id") @db.Char(36)
+  referrerId       String?       @map("referrer_id") @db.Char(36)
+  clientId         String?       @map("client_id") @db.Char(36)
+  priority         OrderPriority @default(ROUTINE)
+  status           OrderStatus   @default(REGISTERED)
+  clinicalNotes    String?       @map("clinical_notes") @db.Text
+  diagnosis        String?       @db.VarChar(500)
+  fasting          Boolean?      
+  pregnancyInfo    String?       @map("pregnancy_info") @db.VarChar(500)
+  orderedAt        DateTime      @default(now()) @map("ordered_at") @db.DateTime(3)
+  createdByUserId  String        @map("created_by_user_id") @db.Char(36)
+  createdAt        DateTime      @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt        DateTime      @updatedAt @map("updated_at") @db.DateTime(3)
+
+  organization  Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  orderingBranch Branch      @relation("OrderingBranchOrders", fields: [orderingBranchId], references: [id], onDelete: Restrict)
+  patient       Patient      @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  referrer      Referrer?    @relation(fields: [referrerId], references: [id], onDelete: Restrict)
+  client        Client?      @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  createdBy     User         @relation("OrderCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  items         OrderItem[]
+  invoices      Invoice[]
+
+  @@unique([organizationId, accessionNumber])
+  @@index([orderingBranchId, orderedAt])
+  @@index([patientId, orderedAt])
+  @@index([clientId, orderedAt])
+  @@map("orders")
+}
+
+model OrderItem {
+  id                    String          @id @default(uuid()) @db.Char(36)
+  orderId               String          @map("order_id") @db.Char(36)
+  testId                String          @map("test_id") @db.Char(36)
+  performedBranchId     String?         @map("performed_branch_id") @db.Char(36)
+  priceListItemId       String?         @map("price_list_item_id") @db.Char(36)
+  testCodeSnapshot      String          @map("test_code_snapshot") @db.VarChar(80)
+  testNameEnSnapshot    String          @map("test_name_en_snapshot") @db.VarChar(220)
+  testNameArSnapshot    String?         @map("test_name_ar_snapshot") @db.VarChar(220)
+  unitSnapshot          String?         @map("unit_snapshot") @db.VarChar(80)
+  unitPriceSnapshot     Decimal         @default(0) @map("unit_price_snapshot") @db.Decimal(18, 4)
+  discountAmountSnapshot Decimal        @default(0) @map("discount_amount_snapshot") @db.Decimal(18, 4)
+  taxAmountSnapshot     Decimal         @default(0) @map("tax_amount_snapshot") @db.Decimal(18, 4)
+  finalPriceSnapshot    Decimal         @default(0) @map("final_price_snapshot") @db.Decimal(18, 4)
+  currency              String          @db.Char(3)
+  status                OrderItemStatus @default(ORDERED)
+  createdAt             DateTime        @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt             DateTime        @updatedAt @map("updated_at") @db.DateTime(3)
+
+  order           LabOrder       @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  test            LabTest        @relation(fields: [testId], references: [id], onDelete: Restrict)
+  performedBranch Branch?        @relation("PerformedBranchOrderItems", fields: [performedBranchId], references: [id], onDelete: Restrict)
+  priceListItem   PriceListItem? @relation(fields: [priceListItemId], references: [id], onDelete: Restrict)
+  invoiceLines    InvoiceLine[]
+
+  @@unique([orderId, testId])
+  @@index([performedBranchId, status])
+  @@index([testId, status])
+  @@map("order_items")
+}
+
+model Invoice {
+  id              String        @id @default(uuid()) @db.Char(36)
+  organizationId  String        @map("organization_id") @db.Char(36)
+  branchId        String        @map("branch_id") @db.Char(36)
+  orderId         String?       @map("order_id") @db.Char(36)
+  clientId        String?       @map("client_id") @db.Char(36)
+  invoiceNumber   String        @map("invoice_number") @db.VarChar(50)
+  status          InvoiceStatus @default(ISSUED)
+  currency        String        @db.Char(3)
+  subtotal        Decimal       @default(0) @db.Decimal(18, 4)
+  discountTotal   Decimal       @default(0) @map("discount_total") @db.Decimal(18, 4)
+  taxTotal        Decimal       @default(0) @map("tax_total") @db.Decimal(18, 4)
+  total           Decimal       @default(0) @db.Decimal(18, 4)
+  paidAmount      Decimal       @default(0) @map("paid_amount") @db.Decimal(18, 4)
+  balanceAmount   Decimal       @default(0) @map("balance_amount") @db.Decimal(18, 4)
+  issuedAt        DateTime      @default(now()) @map("issued_at") @db.DateTime(3)
+  createdByUserId String        @map("created_by_user_id") @db.Char(36)
+  createdAt       DateTime      @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt       DateTime      @updatedAt @map("updated_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  branch       Branch       @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  order        LabOrder?    @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  client       Client?      @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  createdBy    User         @relation("InvoiceCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  lines        InvoiceLine[]
+  allocations  PaymentAllocation[]
+
+  @@unique([organizationId, invoiceNumber])
+  @@index([branchId, issuedAt])
+  @@index([clientId, status, issuedAt])
+  @@map("invoices")
+}
+
+model InvoiceLine {
+  id                 String   @id @default(uuid()) @db.Char(36)
+  invoiceId          String   @map("invoice_id") @db.Char(36)
+  orderItemId        String?  @map("order_item_id") @db.Char(36)
+  description        String   @db.VarChar(255)
+  testCodeSnapshot   String?  @map("test_code_snapshot") @db.VarChar(80)
+  testNameEnSnapshot String?  @map("test_name_en_snapshot") @db.VarChar(220)
+  quantity           Decimal  @default(1) @db.Decimal(12, 3)
+  unitPrice          Decimal  @map("unit_price") @db.Decimal(18, 4)
+  discountAmount     Decimal  @default(0) @map("discount_amount") @db.Decimal(18, 4)
+  taxAmount          Decimal  @default(0) @map("tax_amount") @db.Decimal(18, 4)
+  lineTotal          Decimal  @map("line_total") @db.Decimal(18, 4)
+  createdAt          DateTime @default(now()) @map("created_at") @db.DateTime(3)
+
+  invoice   Invoice    @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  orderItem OrderItem? @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
+
+  @@index([invoiceId])
+  @@index([orderItemId])
+  @@map("invoice_lines")
+}
+
+model Payment {
+  id             String        @id @default(uuid()) @db.Char(36)
+  organizationId String        @map("organization_id") @db.Char(36)
+  branchId       String        @map("branch_id") @db.Char(36)
+  amount         Decimal       @db.Decimal(18, 4)
+  currency       String        @db.Char(3)
+  method         PaymentMethod
+  status         PaymentStatus @default(POSTED)
+  reference      String?       @db.VarChar(150)
+  receivedAt     DateTime      @default(now()) @map("received_at") @db.DateTime(3)
+  cashierUserId  String        @map("cashier_user_id") @db.Char(36)
+  createdAt      DateTime      @default(now()) @map("created_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  branch       Branch       @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  cashier      User         @relation("PaymentCashier", fields: [cashierUserId], references: [id], onDelete: Restrict)
+  allocations  PaymentAllocation[]
+
+  @@index([branchId, receivedAt])
+  @@index([cashierUserId, receivedAt])
+  @@map("payments")
+}
+
+model PaymentAllocation {
+  paymentId String   @map("payment_id") @db.Char(36)
+  invoiceId String   @map("invoice_id") @db.Char(36)
+  amount    Decimal  @db.Decimal(18, 4)
+  createdAt DateTime @default(now()) @map("created_at") @db.DateTime(3)
+
+  payment Payment @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+
+  @@id([paymentId, invoiceId])
+  @@index([invoiceId])
+  @@map("payment_allocations")
 }
