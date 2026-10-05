@@ -37,6 +37,12 @@ model Organization {
   roles       Role[]
   departments Department[]
   auditEvents AuditEvent[]
+  specimenTypes SpecimenType[]
+  containers Container[]
+  units Unit[]
+  methods Method[]
+  labTests LabTest[]
+  testBranchAvailability TestBranchAvailability[]
 
   @@map("organizations")
 }
@@ -66,6 +72,8 @@ model Branch {
   userScopes   UserBranchScope[]
   auditEvents  AuditEvent[]
   activeSessions UserSession[] @relation("ActiveBranchSessions")
+  testAvailability TestBranchAvailability[]
+  referenceIntervals ReferenceInterval[]
 
   @@unique([organizationId, code])
   @@index([organizationId, status])
@@ -102,6 +110,7 @@ model Department {
   branch       Branch?               @relation(fields: [branchId], references: [id], onDelete: Restrict)
   workstations Workstation[]
   userScopes   UserDepartmentScope[]
+  labTests      LabTest[]
 
   @@unique([organizationId, code])
   @@index([organizationId, status])
@@ -153,6 +162,7 @@ model User {
   departmentScopes UserDepartmentScope[]
   auditEvents      AuditEvent[]          @relation("AuditActor")
   sessions         UserSession[]
+  approvedReferenceIntervals ReferenceInterval[] @relation("ReferenceIntervalApprover")
 
   @@unique([organizationId, username])
   @@unique([organizationId, email])
@@ -292,4 +302,222 @@ model UserSession {
   @@index([userId, expiresAt])
   @@index([activeBranchId])
   @@map("user_sessions")
+}
+
+
+enum ResultType {
+  NUMERIC
+  TEXT
+  QUALITATIVE
+  BOOLEAN
+  DATE
+}
+
+enum SexApplicability {
+  ANY
+  MALE
+  FEMALE
+}
+
+enum AgeUnit {
+  DAY
+  WEEK
+  MONTH
+  YEAR
+}
+
+model SpecimenType {
+  id             String       @id @default(uuid()) @db.Char(36)
+  organizationId String       @map("organization_id") @db.Char(36)
+  code           String       @db.VarChar(50)
+  nameEn         String       @map("name_en") @db.VarChar(150)
+  nameAr         String?      @map("name_ar") @db.VarChar(150)
+  status         RecordStatus @default(ACTIVE)
+  createdAt      DateTime     @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt      DateTime     @updatedAt @map("updated_at") @db.DateTime(3)
+  deactivatedAt  DateTime?    @map("deactivated_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  tests        LabTest[]
+
+  @@unique([organizationId, code])
+  @@map("specimen_types")
+}
+
+model Container {
+  id             String       @id @default(uuid()) @db.Char(36)
+  organizationId String       @map("organization_id") @db.Char(36)
+  code           String       @db.VarChar(50)
+  nameEn         String       @map("name_en") @db.VarChar(150)
+  nameAr         String?      @map("name_ar") @db.VarChar(150)
+  tubeColor      String?      @map("tube_color") @db.VarChar(80)
+  additive       String?      @db.VarChar(150)
+  status         RecordStatus @default(ACTIVE)
+  createdAt      DateTime     @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt      DateTime     @updatedAt @map("updated_at") @db.DateTime(3)
+  deactivatedAt  DateTime?    @map("deactivated_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  tests        LabTest[]
+
+  @@unique([organizationId, code])
+  @@map("containers")
+}
+
+model Unit {
+  id             String       @id @default(uuid()) @db.Char(36)
+  organizationId String       @map("organization_id") @db.Char(36)
+  code           String       @db.VarChar(50)
+  symbol         String       @db.VarChar(50)
+  nameEn         String?      @map("name_en") @db.VarChar(150)
+  nameAr         String?      @map("name_ar") @db.VarChar(150)
+  ucumCode       String?      @map("ucum_code") @db.VarChar(50)
+  status         RecordStatus @default(ACTIVE)
+  createdAt      DateTime     @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt      DateTime     @updatedAt @map("updated_at") @db.DateTime(3)
+  deactivatedAt  DateTime?    @map("deactivated_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  tests        LabTest[]
+  components   TestComponent[]
+
+  @@unique([organizationId, code])
+  @@map("units")
+}
+
+model Method {
+  id             String       @id @default(uuid()) @db.Char(36)
+  organizationId String       @map("organization_id") @db.Char(36)
+  code           String       @db.VarChar(50)
+  nameEn         String       @map("name_en") @db.VarChar(150)
+  nameAr         String?      @map("name_ar") @db.VarChar(150)
+  status         RecordStatus @default(ACTIVE)
+  createdAt      DateTime     @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt      DateTime     @updatedAt @map("updated_at") @db.DateTime(3)
+  deactivatedAt  DateTime?    @map("deactivated_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  tests        LabTest[]
+  referenceIntervals ReferenceInterval[]
+
+  @@unique([organizationId, code])
+  @@map("methods")
+}
+
+model LabTest {
+  id                     String       @id @default(uuid()) @db.Char(36)
+  organizationId         String       @map("organization_id") @db.Char(36)
+  code                   String       @db.VarChar(80)
+  nameEn                 String       @map("name_en") @db.VarChar(200)
+  nameAr                 String?      @map("name_ar") @db.VarChar(200)
+  abbreviation           String?      @db.VarChar(80)
+  departmentId           String?      @map("department_id") @db.Char(36)
+  specimenTypeId         String?      @map("specimen_type_id") @db.Char(36)
+  containerId            String?      @map("container_id") @db.Char(36)
+  methodId               String?      @map("method_id") @db.Char(36)
+  defaultUnitId          String?      @map("default_unit_id") @db.Char(36)
+  resultType             ResultType   @default(NUMERIC) @map("result_type")
+  decimalPrecision       Int?         @map("decimal_precision")
+  minimumVolume          Decimal?     @map("minimum_volume") @db.Decimal(10, 3)
+  minimumVolumeUnit      String?      @map("minimum_volume_unit") @db.VarChar(30)
+  collectionInstructions String?      @map("collection_instructions") @db.Text
+  patientPreparation     String?      @map("patient_preparation") @db.Text
+  storageConditions      String?      @map("storage_conditions") @db.Text
+  stabilityMinutes       Int?         @map("stability_minutes")
+  assay                  String?      @db.VarChar(200)
+  tatMinutes             Int?         @map("tat_minutes")
+  loincCode              String?      @map("loinc_code") @db.VarChar(30)
+  status                 RecordStatus @default(ACTIVE)
+  createdAt              DateTime     @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt              DateTime     @updatedAt @map("updated_at") @db.DateTime(3)
+  deactivatedAt          DateTime?    @map("deactivated_at") @db.DateTime(3)
+
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  department         Department? @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  specimenType       SpecimenType? @relation(fields: [specimenTypeId], references: [id], onDelete: Restrict)
+  container          Container? @relation(fields: [containerId], references: [id], onDelete: Restrict)
+  method             Method? @relation(fields: [methodId], references: [id], onDelete: Restrict)
+  defaultUnit        Unit? @relation(fields: [defaultUnitId], references: [id], onDelete: Restrict)
+  components         TestComponent[]
+  branchAvailability TestBranchAvailability[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId, status])
+  @@index([departmentId, status])
+  @@map("lab_tests")
+}
+
+model TestComponent {
+  id               String       @id @default(uuid()) @db.Char(36)
+  testId           String       @map("test_id") @db.Char(36)
+  code             String       @db.VarChar(80)
+  nameEn           String       @map("name_en") @db.VarChar(200)
+  nameAr           String?      @map("name_ar") @db.VarChar(200)
+  unitId           String?      @map("unit_id") @db.Char(36)
+  resultType       ResultType   @default(NUMERIC) @map("result_type")
+  decimalPrecision Int?         @map("decimal_precision")
+  displayOrder     Int          @default(0) @map("display_order")
+  status           RecordStatus @default(ACTIVE)
+  createdAt        DateTime     @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt        DateTime     @updatedAt @map("updated_at") @db.DateTime(3)
+  deactivatedAt    DateTime?    @map("deactivated_at") @db.DateTime(3)
+
+  test               LabTest @relation(fields: [testId], references: [id], onDelete: Restrict)
+  unit               Unit? @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  referenceIntervals ReferenceInterval[]
+
+  @@unique([testId, code])
+  @@index([testId, displayOrder])
+  @@map("test_components")
+}
+
+model TestBranchAvailability {
+  testId       String       @map("test_id") @db.Char(36)
+  branchId     String       @map("branch_id") @db.Char(36)
+  status       RecordStatus @default(ACTIVE)
+  performedHere Boolean     @default(true) @map("performed_here")
+  createdAt    DateTime     @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt    DateTime     @updatedAt @map("updated_at") @db.DateTime(3)
+
+  test   LabTest @relation(fields: [testId], references: [id], onDelete: Restrict)
+  branch Branch @relation(fields: [branchId], references: [id], onDelete: Restrict)
+
+  @@id([testId, branchId])
+  @@index([branchId, status])
+  @@map("test_branch_availability")
+}
+
+model ReferenceInterval {
+  id                String           @id @default(uuid()) @db.Char(36)
+  componentId       String           @map("component_id") @db.Char(36)
+  branchId          String?          @map("branch_id") @db.Char(36)
+  methodId          String?          @map("method_id") @db.Char(36)
+  sex               SexApplicability @default(ANY)
+  ageFrom           Decimal?         @map("age_from") @db.Decimal(10, 3)
+  ageTo             Decimal?         @map("age_to") @db.Decimal(10, 3)
+  ageUnit           AgeUnit?         @map("age_unit")
+  lowValue          Decimal?         @map("low_value") @db.Decimal(18, 6)
+  highValue         Decimal?         @map("high_value") @db.Decimal(18, 6)
+  normalTextEn      String?          @map("normal_text_en") @db.VarChar(500)
+  normalTextAr      String?          @map("normal_text_ar") @db.VarChar(500)
+  criticalLow       Decimal?         @map("critical_low") @db.Decimal(18, 6)
+  criticalHigh      Decimal?         @map("critical_high") @db.Decimal(18, 6)
+  source            String?          @db.VarChar(255)
+  notes             String?          @db.Text
+  effectiveFrom     DateTime         @map("effective_from") @db.DateTime(3)
+  effectiveTo       DateTime?        @map("effective_to") @db.DateTime(3)
+  approvedByUserId  String?          @map("approved_by_user_id") @db.Char(36)
+  approvedAt        DateTime?        @map("approved_at") @db.DateTime(3)
+  status            RecordStatus     @default(ACTIVE)
+  createdAt         DateTime         @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt         DateTime         @updatedAt @map("updated_at") @db.DateTime(3)
+
+  component TestComponent @relation(fields: [componentId], references: [id], onDelete: Restrict)
+  branch    Branch? @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  method    Method? @relation(fields: [methodId], references: [id], onDelete: Restrict)
+  approvedBy User? @relation("ReferenceIntervalApprover", fields: [approvedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([componentId, effectiveFrom, effectiveTo])
+  @@index([branchId, status])
+  @@map("reference_intervals")
 }

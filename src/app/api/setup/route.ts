@@ -13,6 +13,9 @@ const FOUNDATION_PERMISSIONS = [
   ["roles.manage", "identity", "Manage roles and permissions"],
   ["audit.view", "audit", "View audit events"],
   ["settings.manage", "organization", "Manage operational settings"],
+  ["catalog.view", "catalog", "View test catalog"],
+  ["catalog.manage", "catalog", "Manage test catalog"],
+  ["catalog.reference_ranges.manage", "catalog", "Manage reference intervals and critical limits"],
 ] as const;
 
 function text(value: unknown, max = 200) {
