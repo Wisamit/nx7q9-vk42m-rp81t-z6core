@@ -242,6 +242,25 @@ enum ReflexEventStatus {
   SUPERSEDED
 }
 
+enum ValidationHoldCondition {
+  ALWAYS
+  RESULT_SOURCE
+  ANY_ABNORMAL
+  ANY_CRITICAL
+  DELTA_EXCEEDED
+}
+
+enum ValidationHoldSeverity {
+  WARNING
+  BLOCK
+}
+
+enum ValidationHoldEventStatus {
+  ACTIVE
+  RESOLVED
+  SUPERSEDED
+}
+
 model Organization {
   id              String       @id @default(uuid()) @db.Char(36)
   code            String       @unique @db.VarChar(50)
@@ -285,6 +304,8 @@ model Organization {
   resultCommentTemplates ResultCommentTemplate[]
   calculatedResultRules CalculatedResultRule[]
   reflexRules ReflexRule[]
+  autoverificationPolicies AutoverificationPolicy[]
+  validationHoldRules ValidationHoldRule[]
 
   @@map("organizations")
 }
@@ -330,6 +351,8 @@ model Branch {
   reportVersions DiagnosticReportVersion[] @relation("ReportVersionBranch")
   deltaRules DeltaRule[]
   reflexRules ReflexRule[]
+  autoverificationPolicies AutoverificationPolicy[]
+  validationHoldRules ValidationHoldRule[]
 
   @@unique([organizationId, code])
   @@index([organizationId, status])
@@ -441,6 +464,7 @@ model User {
   reportDeliveries ReportDeliveryEvent[]
   amendmentRequests LaboratoryResult[] @relation("ResultAmendmentRequestedBy")
   reviewedReflexEvents ReflexRuleEvent[]
+  reviewedValidationHoldEvents ValidationHoldEvent[] @relation("ValidationHoldReviewedBy")
 
   @@unique([organizationId, username])
   @@unique([organizationId, email])
@@ -754,6 +778,8 @@ model LabTest {
   calculatedRules    CalculatedResultRule[]
   sourceReflexRules  ReflexRule[] @relation("ReflexSourceTest")
   targetReflexRules  ReflexRule[] @relation("ReflexTargetTest")
+  autoverificationPolicies AutoverificationPolicy[]
+  validationHoldRules ValidationHoldRule[]
 
   @@unique([organizationId, code])
   @@index([organizationId, status])
@@ -1476,6 +1502,9 @@ model LaboratoryResult {
   amendmentRequestedByUserId String? @map("amendment_requested_by_user_id") @db.Char(36)
   amendmentRequestedAt DateTime?  @map("amendment_requested_at") @db.DateTime(3)
   comments           String?      @db.Text
+  autoVerified       Boolean      @default(false) @map("auto_verified")
+  autoverificationPolicyId String? @map("autoverification_policy_id") @db.Char(36)
+  autoverificationDecisionSnapshot Json? @map("autoverification_decision_snapshot")
   createdAt          DateTime     @default(now()) @map("created_at") @db.DateTime(3)
   updatedAt          DateTime     @updatedAt @map("updated_at") @db.DateTime(3)
 
@@ -1493,11 +1522,14 @@ model LaboratoryResult {
   values           LaboratoryResultValue[]
   criticalEvents   CriticalResultEvent[]
   reflexEvents      ReflexRuleEvent[]
+  autoverificationPolicy AutoverificationPolicy? @relation(fields: [autoverificationPolicyId], references: [id], onDelete: Restrict)
+  validationHoldEvents ValidationHoldEvent[]
 
   @@unique([orderItemId, version])
   @@index([performingBranchId, status, enteredAt])
   @@index([specimenId, status])
   @@index([orderItemId, status])
+  @@index([autoverificationPolicyId])
   @@map("laboratory_results")
 }
 
@@ -1796,4 +1828,87 @@ model ReflexRuleEvent {
   @@index([status, createdAt])
   @@index([reviewedByUserId, reviewedAt])
   @@map("reflex_rule_events")
+}
+
+
+model AutoverificationPolicy {
+  id                       String       @id @default(uuid()) @db.Char(36)
+  organizationId           String       @map("organization_id") @db.Char(36)
+  testId                   String       @map("test_id") @db.Char(36)
+  branchId                 String?      @map("branch_id") @db.Char(36)
+  enabled                  Boolean      @default(false)
+  allowManual              Boolean      @default(false) @map("allow_manual")
+  allowAnalyzer            Boolean      @default(true) @map("allow_analyzer")
+  allowImport              Boolean      @default(false) @map("allow_import")
+  requireNoCritical        Boolean      @default(true) @map("require_no_critical")
+  requireDeltaWithinLimit  Boolean      @default(true) @map("require_delta_within_limit")
+  requireNoPendingReflex   Boolean      @default(true) @map("require_no_pending_reflex")
+  requireNoBlockingHolds   Boolean      @default(true) @map("require_no_blocking_holds")
+  requireAllFlagsNormal    Boolean      @default(false) @map("require_all_flags_normal")
+  effectiveFrom            DateTime     @map("effective_from") @db.DateTime(3)
+  effectiveTo              DateTime?    @map("effective_to") @db.DateTime(3)
+  status                   RecordStatus @default(ACTIVE)
+  createdAt                DateTime     @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt                DateTime     @updatedAt @map("updated_at") @db.DateTime(3)
+  deactivatedAt            DateTime?    @map("deactivated_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  test         LabTest      @relation(fields: [testId], references: [id], onDelete: Restrict)
+  branch       Branch?      @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  results      LaboratoryResult[]
+
+  @@index([testId, branchId, status, effectiveFrom, effectiveTo])
+  @@index([organizationId, status])
+  @@map("autoverification_policies")
+}
+
+model ValidationHoldRule {
+  id             String                  @id @default(uuid()) @db.Char(36)
+  organizationId String                  @map("organization_id") @db.Char(36)
+  testId         String                  @map("test_id") @db.Char(36)
+  branchId       String?                 @map("branch_id") @db.Char(36)
+  condition      ValidationHoldCondition
+  resultSource   ResultSource?           @map("result_source")
+  severity       ValidationHoldSeverity  @default(BLOCK)
+  reasonEn       String                  @map("reason_en") @db.VarChar(500)
+  reasonAr       String?                 @map("reason_ar") @db.VarChar(500)
+  effectiveFrom  DateTime                @map("effective_from") @db.DateTime(3)
+  effectiveTo    DateTime?               @map("effective_to") @db.DateTime(3)
+  status         RecordStatus            @default(ACTIVE)
+  createdAt      DateTime                @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt      DateTime                @updatedAt @map("updated_at") @db.DateTime(3)
+  deactivatedAt  DateTime?               @map("deactivated_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  test         LabTest      @relation(fields: [testId], references: [id], onDelete: Restrict)
+  branch       Branch?      @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  events       ValidationHoldEvent[]
+
+  @@index([testId, branchId, status, effectiveFrom, effectiveTo])
+  @@index([organizationId, status])
+  @@map("validation_hold_rules")
+}
+
+model ValidationHoldEvent {
+  id               String                    @id @default(uuid()) @db.Char(36)
+  resultId         String                    @map("result_id") @db.Char(36)
+  ruleId           String                    @map("rule_id") @db.Char(36)
+  status           ValidationHoldEventStatus @default(ACTIVE)
+  severitySnapshot ValidationHoldSeverity    @map("severity_snapshot")
+  reasonEnSnapshot String                    @map("reason_en_snapshot") @db.VarChar(500)
+  reasonArSnapshot String?                   @map("reason_ar_snapshot") @db.VarChar(500)
+  reviewedByUserId String?                   @map("reviewed_by_user_id") @db.Char(36)
+  reviewedAt       DateTime?                 @map("reviewed_at") @db.DateTime(3)
+  reviewNote       String?                   @map("review_note") @db.VarChar(1000)
+  createdAt        DateTime                  @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt        DateTime                  @updatedAt @map("updated_at") @db.DateTime(3)
+
+  result     LaboratoryResult   @relation(fields: [resultId], references: [id], onDelete: Restrict)
+  rule       ValidationHoldRule @relation(fields: [ruleId], references: [id], onDelete: Restrict)
+  reviewedBy User?              @relation("ValidationHoldReviewedBy", fields: [reviewedByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([resultId, ruleId])
+  @@index([status, severitySnapshot, createdAt])
+  @@index([reviewedByUserId, reviewedAt])
+  @@map("validation_hold_events")
 }

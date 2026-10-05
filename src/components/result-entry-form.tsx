@@ -110,9 +110,13 @@ export function ResultEntryForm({
       if (body.criticalCount > 0) notices.push(`${body.criticalCount} critical value(s)`);
       if (body.deltaExceededCount > 0) notices.push(`${body.deltaExceededCount} delta warning(s)`);
       if (body.pendingReflexCount > 0) notices.push(`${body.pendingReflexCount} reflex recommendation(s)`);
-      setMessage(notices.length
-        ? `Saved with ${notices.join(", ")}. Review validation items before verification.`
-        : body.complete ? "Result saved and ready for verification." : "Draft saved. Complete all required result fields before verification.");
+      if (body.blockingValidationHoldCount > 0) notices.push(`${body.blockingValidationHoldCount} blocking validation hold(s)`);
+      if (body.warningValidationHoldCount > 0) notices.push(`${body.warningValidationHoldCount} validation warning(s)`);
+      setMessage(body.autoVerified
+        ? "Result saved and autoverified by the active clinical policy. Release remains a separate controlled action."
+        : notices.length
+          ? `Saved with ${notices.join(", ")}. Review validation items before verification.`
+          : body.complete ? "Result saved and ready for verification." : "Draft saved. Complete all required result fields before verification.");
       router.refresh();
     } else {
       setMessage(body.error || "Result could not be saved.");
@@ -153,6 +157,8 @@ export function ResultEntryForm({
       router.refresh();
     } else if (body.error === "reflex_review_required") {
       setMessage("Verification blocked: review all pending reflex recommendations first.");
+    } else if (body.error === "validation_hold_review_required") {
+      setMessage("Verification blocked: resolve all active blocking validation holds first.");
     } else {
       setMessage(body.error || "Result verification failed.");
     }

@@ -6,6 +6,8 @@ import { numericFlag, resolveReferenceInterval } from "@/lib/result-reference";
 import { evaluateDelta } from "@/lib/delta-check";
 import { evaluateFormula, formulaVariables } from "@/lib/formula-engine";
 import { reflexMatches } from "@/lib/reflex-rules";
+import { evaluateAutoverification } from "@/lib/autoverification";
+import { validationHoldMatches } from "@/lib/validation-holds";
 
 function text(value: unknown, max = 5000) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -95,6 +97,28 @@ export async function POST(request: Request) {
             },
             include: { targetTest: true },
           },
+          autoverificationPolicies: {
+            where: {
+              status: "ACTIVE",
+              effectiveFrom: { lte: new Date() },
+              AND: [
+                { OR: [{ effectiveTo: null }, { effectiveTo: { gte: new Date() } }] },
+                { OR: [{ branchId: null }, { branchId: performingBranchId }] },
+              ],
+            },
+            orderBy: { createdAt: "desc" },
+          },
+          validationHoldRules: {
+            where: {
+              status: "ACTIVE",
+              effectiveFrom: { lte: new Date() },
+              AND: [
+                { OR: [{ effectiveTo: null }, { effectiveTo: { gte: new Date() } }] },
+                { OR: [{ branchId: null }, { branchId: performingBranchId }] },
+              ],
+            },
+            orderBy: { createdAt: "asc" },
+          },
         },
       },
       specimenLinks: {
@@ -121,6 +145,12 @@ export async function POST(request: Request) {
   if (existing && ["VERIFIED", "RELEASED", "AMENDED", "CANCELLED"].includes(existing.status)) {
     return NextResponse.json({ error: "result_locked_requires_amendment", status: existing.status }, { status: 409 });
   }
+
+  const resultSource = "MANUAL" as const;
+  const autoverificationPolicy =
+    orderItem.test.autoverificationPolicies.find(policy => policy.branchId === performingBranchId)
+    || orderItem.test.autoverificationPolicies.find(policy => policy.branchId === null)
+    || null;
 
   const configuredComponents = orderItem.test.components;
   const expected = configuredComponents.length > 0
@@ -300,8 +330,11 @@ export async function POST(request: Request) {
             performingBranchId,
             methodId: orderItem.test.methodId,
             status: resultStatus,
-            source: "MANUAL",
+            source: resultSource,
             enteredByUserId: session.user.id,
+            autoVerified: false,
+            autoverificationPolicyId: null,
+            autoverificationDecisionSnapshot: Prisma.DbNull,
             enteredAt: new Date(),
             comments: comments || null,
           },
@@ -315,7 +348,7 @@ export async function POST(request: Request) {
             methodId: orderItem.test.methodId,
             version: 1,
             status: resultStatus,
-            source: "MANUAL",
+            source: resultSource,
             enteredByUserId: session.user.id,
             comments: comments || null,
           },
@@ -416,11 +449,82 @@ export async function POST(request: Request) {
       }
     }
 
+    for (const rule of orderItem.test.validationHoldRules) {
+      const matched = validationHoldMatches(rule, {
+        source: resultSource,
+        values: prepared.map(item => ({
+          flag: item.flag.flag,
+          isCritical: item.flag.isCritical,
+          deltaEvaluation: item.delta.evaluation,
+        })),
+      });
+
+      if (matched) {
+        await tx.validationHoldEvent.upsert({
+          where: { resultId_ruleId: { resultId: result.id, ruleId: rule.id } },
+          update: {
+            status: "ACTIVE",
+            severitySnapshot: rule.severity,
+            reasonEnSnapshot: rule.reasonEn,
+            reasonArSnapshot: rule.reasonAr,
+            reviewedByUserId: null,
+            reviewedAt: null,
+            reviewNote: null,
+          },
+          create: {
+            resultId: result.id,
+            ruleId: rule.id,
+            severitySnapshot: rule.severity,
+            reasonEnSnapshot: rule.reasonEn,
+            reasonArSnapshot: rule.reasonAr,
+          },
+        });
+      } else {
+        await tx.validationHoldEvent.updateMany({
+          where: { resultId: result.id, ruleId: rule.id, status: "ACTIVE" },
+          data: { status: "SUPERSEDED" },
+        });
+      }
+    }
+
+    const [pendingReflexCount, blockingHoldCount, warningHoldCount] = await Promise.all([
+      tx.reflexRuleEvent.count({ where: { resultId: result.id, status: "PENDING" } }),
+      tx.validationHoldEvent.count({ where: { resultId: result.id, status: "ACTIVE", severitySnapshot: "BLOCK" } }),
+      tx.validationHoldEvent.count({ where: { resultId: result.id, status: "ACTIVE", severitySnapshot: "WARNING" } }),
+    ]);
+
+    const autoverificationDecision = evaluateAutoverification({
+      policy: autoverificationPolicy,
+      source: resultSource,
+      complete,
+      values: prepared.map(item => ({
+        flag: item.flag.flag,
+        isCritical: item.flag.isCritical,
+        deltaEvaluation: item.delta.evaluation,
+      })),
+      pendingReflexCount,
+      blockingHoldCount,
+    });
+    const finalResultStatus = autoverificationDecision.eligible ? "VERIFIED" : resultStatus;
+    const autoverifiedAt = autoverificationDecision.eligible ? new Date() : null;
+
+    await tx.laboratoryResult.update({
+      where: { id: result.id },
+      data: {
+        status: finalResultStatus,
+        autoVerified: autoverificationDecision.eligible,
+        autoverificationPolicyId: autoverificationDecision.policyId,
+        autoverificationDecisionSnapshot: autoverificationDecision as Prisma.InputJsonValue,
+        verifiedByUserId: null,
+        verifiedAt: autoverifiedAt,
+      },
+    });
+
     await tx.orderItem.update({
       where: { id: orderItemId },
       data: {
         performedBranchId: performingBranchId,
-        status: "IN_PROGRESS",
+        status: autoverificationDecision.eligible ? "VERIFIED" : "IN_PROGRESS",
       },
     });
 
@@ -471,7 +575,7 @@ export async function POST(request: Request) {
           })),
         } : undefined,
         newValues: {
-          status: resultStatus,
+          status: finalResultStatus,
           orderItemId,
           specimenId,
           performingBranchId,
@@ -494,9 +598,60 @@ export async function POST(request: Request) {
       },
     });
 
+    if (autoverificationDecision.eligible) {
+      const remaining = await tx.orderItem.count({
+        where: {
+          orderId: orderItem.orderId,
+          status: { notIn: ["VERIFIED", "CANCELLED"] },
+        },
+      });
+
+      if (remaining === 0) {
+        const currentOrder = await tx.labOrder.findUnique({ where: { id: orderItem.orderId }, select: { status: true } });
+        if (currentOrder && currentOrder.status !== "COMPLETED") {
+          await tx.labOrder.update({ where: { id: orderItem.orderId }, data: { status: "COMPLETED" } });
+          await tx.orderStatusHistory.create({
+            data: {
+              orderId: orderItem.orderId,
+              fromStatus: currentOrder.status,
+              toStatus: "COMPLETED",
+              reason: "All non-cancelled order items verified; final item autoverified",
+              changedByUserId: session.user.id,
+            },
+          });
+        }
+      }
+
+      await tx.auditEvent.create({
+        data: {
+          organizationId: session.user.organizationId,
+          branchId: performingBranchId,
+          actorUserId: session.user.id,
+          action: "RESULT_AUTOVERIFIED",
+          entityType: "LaboratoryResult",
+          entityId: result.id,
+          oldValues: { status: resultStatus },
+          newValues: {
+            status: "VERIFIED",
+            policyId: autoverificationDecision.policyId,
+            verifiedAt: autoverifiedAt,
+            source: resultSource,
+            warningHoldCount,
+          },
+          reason: "Result met all mandatory autoverification safety gates",
+          ipAddress: ctx.ipAddress,
+          userAgent: ctx.userAgent,
+        },
+      });
+    }
+
     return tx.laboratoryResult.findUnique({
       where: { id: result.id },
-      include: { values: { orderBy: { componentCodeSnapshot: "asc" } }, reflexEvents: true },
+      include: {
+        values: { orderBy: { componentCodeSnapshot: "asc" } },
+        reflexEvents: true,
+        validationHoldEvents: true,
+      },
     });
   }, { timeout: 30000 });
 
@@ -507,5 +662,9 @@ export async function POST(request: Request) {
     criticalCount: saved?.values.filter((value) => value.isCritical).length || 0,
     deltaExceededCount: saved?.values.filter((value) => value.deltaEvaluation === "EXCEEDED").length || 0,
     pendingReflexCount: saved?.reflexEvents.filter((event) => event.status === "PENDING").length || 0,
+    blockingValidationHoldCount: saved?.validationHoldEvents.filter((event) => event.status === "ACTIVE" && event.severitySnapshot === "BLOCK").length || 0,
+    warningValidationHoldCount: saved?.validationHoldEvents.filter((event) => event.status === "ACTIVE" && event.severitySnapshot === "WARNING").length || 0,
+    autoVerified: saved?.autoVerified || false,
+    autoverificationDecision: saved?.autoverificationDecisionSnapshot || null,
   }, { status: existing ? 200 : 201 });
 }
