@@ -270,24 +270,31 @@ export async function POST(request: Request) {
         },
       });
 
-      const createdItems = [];
+      const createdItems: Array<{
+        item: { id: string };
+        test: (typeof tests)[number];
+        unitPrice: Prisma.Decimal;
+        packageId: string | null;
+      }> = [];
       let subtotal = new Prisma.Decimal(0);
+      const createdOrderPackages = new Map<string, {
+        id: string;
+        package: (typeof packages)[number];
+        unitPrice: Prisma.Decimal;
+      }>();
 
-      for (const entry of prices) {
-        const price = entry.price!;
+      for (const pkg of packages) {
+        const price = packagePriceMap.get(pkg.id)!;
         const unitPrice = new Prisma.Decimal(price.unitPrice);
         subtotal = subtotal.add(unitPrice);
-
-        const item = await tx.orderItem.create({
+        const orderPackage = await tx.orderPackage.create({
           data: {
             orderId: order.id,
-            testId: entry.test.id,
-            performedBranchId: entry.test.branchAvailability.some((availability) => availability.branchId === branchId && availability.performedHere) ? branchId : null,
-            priceListItemId: price.priceListItemId,
-            testCodeSnapshot: entry.test.code,
-            testNameEnSnapshot: entry.test.nameEn,
-            testNameArSnapshot: entry.test.nameAr,
-            unitSnapshot: entry.test.defaultUnit?.symbol || null,
+            packageId: pkg.id,
+            priceListPackageItemId: price.priceListPackageItemId,
+            packageCodeSnapshot: pkg.code,
+            packageNameEnSnapshot: pkg.nameEn,
+            packageNameArSnapshot: pkg.nameAr,
             unitPriceSnapshot: unitPrice,
             discountAmountSnapshot: new Prisma.Decimal(0),
             taxAmountSnapshot: new Prisma.Decimal(0),
@@ -295,7 +302,44 @@ export async function POST(request: Request) {
             currency,
           },
         });
-        for (const question of entry.test.orderQuestions) {
+        createdOrderPackages.set(pkg.id, { id: orderPackage.id, package: pkg, unitPrice });
+      }
+
+      for (const test of tests) {
+        const packageId = packageTestOwner.get(test.id) || null;
+        const directPrice = packageId ? null : directPriceMap.get(test.id);
+        if (!packageId && !directPrice) throw new Error("DIRECT_PRICE_RESOLUTION_MISSING");
+        const unitPrice = packageId ? new Prisma.Decimal(0) : new Prisma.Decimal(directPrice!.unitPrice);
+        if (!packageId) subtotal = subtotal.add(unitPrice);
+
+        const item = await tx.orderItem.create({
+          data: {
+            orderId: order.id,
+            testId: test.id,
+            performedBranchId: test.branchAvailability.some((availability) => availability.branchId === branchId && availability.performedHere) ? branchId : null,
+            priceListItemId: packageId ? null : directPrice!.priceListItemId,
+            testCodeSnapshot: test.code,
+            testNameEnSnapshot: test.nameEn,
+            testNameArSnapshot: test.nameAr,
+            unitSnapshot: test.defaultUnit?.symbol || null,
+            unitPriceSnapshot: unitPrice,
+            discountAmountSnapshot: new Prisma.Decimal(0),
+            taxAmountSnapshot: new Prisma.Decimal(0),
+            finalPriceSnapshot: unitPrice,
+            currency,
+          },
+          select: { id: true },
+        });
+
+        if (packageId) {
+          const orderPackage = createdOrderPackages.get(packageId);
+          if (!orderPackage) throw new Error("ORDER_PACKAGE_MISSING");
+          await tx.orderPackageItem.create({
+            data: { orderPackageId: orderPackage.id, orderItemId: item.id },
+          });
+        }
+
+        for (const question of test.orderQuestions) {
           const answer = preparedAnswers.get(question.id);
           if (!answer) continue;
           await tx.orderAnswer.create({
@@ -318,7 +362,7 @@ export async function POST(request: Request) {
           });
         }
 
-        createdItems.push({ item, test: entry.test, unitPrice });
+        createdItems.push({ item, test, unitPrice, packageId });
       }
 
       const specimenGroups = new Map<string, typeof createdItems>();
