@@ -1,11 +1,10 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
   const router = useRouter();
-  const params = useSearchParams();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -44,7 +43,6 @@ export default function LoginPage() {
         <p className="eyebrow">Family Lab LIS</p>
         <h1>تسجيل الدخول</h1>
         <p className="muted">نظام معلومات المختبر متعدد الفروع</p>
-        {params.get("setup") === "complete" && <p className="form-success">تم إنشاء النظام بنجاح. سجّل الدخول بحساب المدير.</p>}
         <form onSubmit={submit} className="form-stack">
           <label>اسم المستخدم<input name="username" required autoComplete="username" autoCapitalize="none" /></label>
           <label>كلمة المرور<input name="password" type="password" required autoComplete="current-password" /></label>
