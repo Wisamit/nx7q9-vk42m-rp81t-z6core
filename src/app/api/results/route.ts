@@ -296,6 +296,7 @@ export async function POST(request: Request) {
       ? await tx.laboratoryResult.update({
           where: { id: existing.id },
           data: {
+            specimenId,
             performingBranchId,
             methodId: orderItem.test.methodId,
             status: resultStatus,
@@ -461,6 +462,8 @@ export async function POST(request: Request) {
         entityId: result.id,
         oldValues: existing ? {
           status: existing.status,
+          specimenId: existing.specimenId,
+          performingBranchId: existing.performingBranchId,
           values: existing.values.map((value) => ({
             componentCode: value.componentCodeSnapshot,
             displayValue: value.displayValue,
