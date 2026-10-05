@@ -42,21 +42,36 @@ function similarity(a: string, b: string) {
   }
   return (2 * intersection) / (aPairs.length + bPairs.length);
 }
-function bestTestSuggestion(source: string, tests: Array<{ id: string; code: string; nameEn: string; abbreviation: string | null }>) {
-  let best: { id: string; code: string; nameEn: string; score: number } | null = null;
-  for (const test of tests) {
-    const score = Math.max(similarity(source, test.nameEn), similarity(source, test.code), test.abbreviation ? similarity(source, test.abbreviation) : 0);
-    if (!best || score > best.score) best = { id: test.id, code: test.code, nameEn: test.nameEn, score };
-  }
-  return best && best.score >= 0.58 ? { ...best, score: Math.round(best.score * 100) } : null;
+function rankedTestCandidates(source: string, tests: Array<{ id: string; code: string; nameEn: string; abbreviation: string | null }>) {
+  return tests
+    .map((test) => ({
+      id: test.id,
+      code: test.code,
+      nameEn: test.nameEn,
+      score: Math.round(Math.max(
+        similarity(source, test.nameEn),
+        similarity(source, test.code),
+        test.abbreviation ? similarity(source, test.abbreviation) : 0,
+      ) * 100),
+    }))
+    .filter((candidate) => candidate.score >= 20)
+    .sort((a, b) => b.score - a.score || a.nameEn.localeCompare(b.nameEn))
+    .slice(0, 5);
 }
-function bestUnitSuggestion(source: string, units: Array<{ id: string; code: string; symbol: string }>) {
-  let best: { id: string; code: string; symbol: string; score: number } | null = null;
-  for (const unit of units) {
-    const score = Math.max(similarity(unitKey(source), unitKey(unit.symbol)), similarity(unitKey(source), unitKey(unit.code)));
-    if (!best || score > best.score) best = { id: unit.id, code: unit.code, symbol: unit.symbol, score };
-  }
-  return best && best.score >= 0.55 ? { ...best, score: Math.round(best.score * 100) } : null;
+function rankedUnitCandidates(source: string, units: Array<{ id: string; code: string; symbol: string }>) {
+  return units
+    .map((unit) => ({
+      id: unit.id,
+      code: unit.code,
+      symbol: unit.symbol,
+      score: Math.round(Math.max(
+        similarity(unitKey(source), unitKey(unit.symbol)),
+        similarity(unitKey(source), unitKey(unit.code)),
+      ) * 100),
+    }))
+    .filter((candidate) => candidate.score >= 20)
+    .sort((a, b) => b.score - a.score || a.symbol.localeCompare(b.symbol))
+    .slice(0, 5);
 }
 function decimal(value: unknown): string | null {
   if (value === null || value === undefined || value === "") return null;
@@ -206,8 +221,14 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
       .map(([value, count]) => ({ value, count }));
   };
 
-  const unmatchedTests = topValues("TEST_NOT_FOUND", (item) => item.testName).map((item) => ({ ...item, suggestion: bestTestSuggestion(item.value, analysis.tests) }));
-  const unmappedUnits = topValues("UNIT_NOT_MAPPED", (item) => item.rangeUnit).map((item) => ({ ...item, suggestion: bestUnitSuggestion(item.value, analysis.units) }));
+  const unmatchedTests = topValues("TEST_NOT_FOUND", (item) => item.testName).map((item) => {
+    const candidates = rankedTestCandidates(item.value, analysis.tests);
+    return { ...item, suggestion: candidates[0] && candidates[0].score >= 58 ? candidates[0] : null, candidates };
+  });
+  const unmappedUnits = topValues("UNIT_NOT_MAPPED", (item) => item.rangeUnit).map((item) => {
+    const candidates = rankedUnitCandidates(item.value, analysis.units);
+    return { ...item, suggestion: candidates[0] && candidates[0].score >= 55 ? candidates[0] : null, candidates };
+  });
 
   return NextResponse.json({
     total: analysis.total,
