@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { requirePortalSession } from "@/lib/portal-auth";
 import { prisma } from "@/lib/db";
+import { requestContext } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -59,6 +60,22 @@ export default async function PortalReportPage({ params }: { params: Promise<{ v
     allowed = Boolean(access);
   }
   if (!allowed) notFound();
+
+  const ctx = await requestContext();
+  await prisma.auditEvent.create({
+    data: {
+      organizationId: account.organizationId,
+      branchId: version.branchId,
+      actorUserId: null,
+      action: "PORTAL_REPORT_VIEWED",
+      entityType: "DiagnosticReportVersion",
+      entityId: version.id,
+      sessionId: session.id,
+      newValues: { reportId: version.reportId, version: version.version, accountType: account.type },
+      ipAddress: ctx.ipAddress,
+      userAgent: ctx.userAgent,
+    },
+  });
 
   const snapshot = version.contentSnapshot as unknown as ReportSnapshot;
   return <main className="catalog-shell">
