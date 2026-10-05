@@ -95,7 +95,7 @@ async function analyze(batchId: string, organizationId: string) {
     const looseMatches = testMap.get(looseKey(testName)) || [];
     const matches = exactMatches.length ? exactMatches : looseMatches;
     const rangeUnit = text(n.unit || s["test unit"] || s.unit);
-    const mappedUnit = rangeUnit ? (unitMap.get(key(rangeUnit)) || unitMap.get(unitKey(rangeUnit))) : undefined;
+    const explicitMappedUnit = rangeUnit ? (unitMap.get(key(rangeUnit)) || unitMap.get(unitKey(rangeUnit))) : undefined;
     const mappedSex = sex(n.sex ?? s.sex);
     const from = decimal(n.ageFrom ?? s.agefrom);
     const to = decimal(n.ageTo ?? s.ageto);
@@ -107,9 +107,10 @@ async function analyze(batchId: string, organizationId: string) {
 
     let reason = "";
     let test = matches.length === 1 ? matches[0] : undefined;
+    const mappedUnit = explicitMappedUnit || (!rangeUnit && test?.defaultUnit ? test.defaultUnit : undefined);
     if (matches.length === 0) reason = "TEST_NOT_FOUND";
     else if (matches.length > 1) reason = "AMBIGUOUS_TEST_MATCH";
-    else if (!mappedUnit) reason = "UNIT_NOT_MAPPED";
+    else if (!mappedUnit) reason = rangeUnit ? "UNIT_NOT_MAPPED" : "UNIT_MISSING_NO_TEST_DEFAULT";
     else if (!mappedSex) reason = "SEX_NOT_MAPPED";
     else if ((from !== null || to !== null) && !mappedAgeUnit) reason = "AGE_UNIT_NOT_MAPPED";
     else if (low === null && high === null && !normalText) reason = "EMPTY_REFERENCE_INTERVAL";
