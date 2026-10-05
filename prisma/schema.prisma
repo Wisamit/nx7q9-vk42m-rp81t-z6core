@@ -435,14 +435,6 @@ model Organization {
   analyzers Analyzer[]
   criticalEscalationPolicies CriticalEscalationPolicy[]
   microbiologyCases MicrobiologyCase[]
-  branchStocks BranchStock[]
-  inventoryLotStocks InventoryLotStock[]
-  stockMovements StockMovement[]
-  purchaseRequests PurchaseRequest[]
-  purchaseOrders PurchaseOrder[]
-  goodsReceipts GoodsReceipt[]
-  outgoingInventoryTransfers InventoryTransfer[] @relation("InventoryTransferSourceBranch")
-  incomingInventoryTransfers InventoryTransfer[] @relation("InventoryTransferDestinationBranch")
   organisms Organism[]
   antibiotics Antibiotic[]
   inventoryCategories InventoryCategory[]
@@ -505,6 +497,14 @@ model Branch {
   validationHoldRules ValidationHoldRule[]
   criticalEscalationPolicies CriticalEscalationPolicy[]
   microbiologyCases MicrobiologyCase[]
+  branchStocks BranchStock[]
+  inventoryLotStocks InventoryLotStock[]
+  stockMovements StockMovement[]
+  purchaseRequests PurchaseRequest[]
+  purchaseOrders PurchaseOrder[]
+  goodsReceipts GoodsReceipt[]
+  outgoingInventoryTransfers InventoryTransfer[] @relation("InventoryTransferSourceBranch")
+  incomingInventoryTransfers InventoryTransfer[] @relation("InventoryTransferDestinationBranch")
 
   @@unique([organizationId, code])
   @@index([organizationId, status])
