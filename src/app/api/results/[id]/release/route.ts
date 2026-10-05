@@ -4,6 +4,7 @@ import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { buildDiagnosticReportSnapshot } from "@/lib/report-snapshot";
 import { resolveAnalyzerQcGate } from "@/lib/qc-gate";
+import { queueReportIntegrations } from "@/lib/integration-outbox";
 
 export async function POST(_: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await requirePermission("results.release");
@@ -137,6 +138,17 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
       data: { currentVersion: version },
     });
 
+    const integrationQueue = await queueReportIntegrations(tx, {
+      organizationId: session.user.organizationId,
+      branchId: result.orderItem.order.orderingBranchId,
+      orderId: result.orderItem.orderId,
+      reportVersionId: reportVersion.id,
+      reportVersion: version,
+      reportStatus,
+      issuedAt: releasedAt,
+      snapshot: snapshot.contentSnapshot,
+    });
+
     await tx.auditEvent.create({
       data: {
         organizationId: session.user.organizationId,
@@ -157,6 +169,7 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
           microbiologyCaseId: result.microbiologyCase?.id || null,
           qcGateStatus: qcGate?.status || null,
           qcGateReasons: qcGate?.reasons || [],
+          integrationQueue,
         },
         reason: result.amendmentReason || null,
         ipAddress: ctx.ipAddress,
@@ -170,6 +183,7 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
       reportVersionId: reportVersion.id,
       reportVersion: version,
       reportStatus,
+      integrationQueue,
     };
   }, { timeout: 30000 });
 
@@ -181,5 +195,6 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
     reportVersionId: released.reportVersionId,
     reportVersion: released.reportVersion,
     reportStatus: released.reportStatus,
+    integrationQueue: released.integrationQueue,
   });
 }

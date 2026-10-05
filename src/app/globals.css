@@ -83,3 +83,5 @@ input,.catalog-form select,.catalog-form textarea,.form-grid select,.form-grid t
 @media(max-width:900px){.result-context-strip{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:540px){.result-context-strip{grid-template-columns:1fr}}
 
 .status-paid,.status-posted{background:#ecfdf3;color:#067647}.status-partially-paid{background:#fffaeb;color:#b54708}.status-void,.status-cancelled{background:#f2f4f7;color:#667085;text-decoration:none}
+
+.integration-secret{margin-top:12px;padding:12px;border:1px solid #f5c2c7;border-radius:10px;background:#fff8f8;display:grid;gap:7px}.integration-secret strong{font-size:11px;color:#b42318}.integration-secret code{display:block;overflow-wrap:anywhere;font-size:11px;background:#fff;border:1px solid #f1d3d6;border-radius:8px;padding:9px;user-select:all}
