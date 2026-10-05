@@ -52,8 +52,8 @@ export default async function PortalReportPage({ params }: { params: Promise<{ v
         patientId: order.patientId,
         canViewReports: true,
         status: "ACTIVE",
-        effectiveFrom: { lte: version.issuedAt },
-        OR: [{ effectiveTo: null }, { effectiveTo: { gte: version.issuedAt } }],
+        effectiveFrom: { lte: new Date() },
+        OR: [{ effectiveTo: null }, { effectiveTo: { gte: new Date() } }],
       },
       select: { id: true },
     });
