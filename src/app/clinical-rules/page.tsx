@@ -2,13 +2,14 @@ import Link from "next/link";
 import { requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { ClinicalRulesManager } from "@/components/clinical-rules-manager";
+import { AdvancedClinicalRulesManager } from "@/components/advanced-clinical-rules-manager";
 
 export const dynamic = "force-dynamic";
 
 export default async function ClinicalRulesPage() {
   const session = await requirePermission("clinical_rules.manage");
 
-  const [tests, branches, methods, deltaRules, commentTemplates] = await Promise.all([
+  const [tests, branches, methods, deltaRules, commentTemplates, calculatedRules, reflexRules] = await Promise.all([
     prisma.labTest.findMany({
       where: { organizationId: session.user.organizationId, status: "ACTIVE" },
       include: { components: { where: { status: "ACTIVE" }, orderBy: { displayOrder: "asc" } } },
@@ -36,14 +37,26 @@ export default async function ClinicalRulesPage() {
       orderBy: { createdAt: "desc" },
       take: 200,
     }),
+    prisma.calculatedResultRule.findMany({
+      where: { organizationId: session.user.organizationId },
+      include: { test: true, targetComponent: true },
+      orderBy: { createdAt: "desc" },
+      take: 200,
+    }),
+    prisma.reflexRule.findMany({
+      where: { organizationId: session.user.organizationId },
+      include: { sourceTest: true, sourceComponent: true, targetTest: true, branch: true },
+      orderBy: { createdAt: "desc" },
+      take: 200,
+    }),
   ]);
 
   return <main className="catalog-shell">
     <header className="page-header">
       <div>
         <p className="eyebrow">Advanced Clinical Rules</p>
-        <h1>Delta Checks & Result Comments</h1>
-        <p className="muted">Effective-dated delta rules compare current numeric values with prior released results. Reusable comments stay configuration-driven.</p>
+        <h1>Clinical Rules</h1>
+        <p className="muted">Calculated results, reflex recommendations, delta checks and reusable comments are configuration-driven and effective-dated.</p>
       </div>
       <Link className="secondary-link" href="/dashboard">Back to Dashboard</Link>
     </header>
