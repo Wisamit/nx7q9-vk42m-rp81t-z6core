@@ -4,13 +4,14 @@ import { prisma } from "@/lib/db";
 import { ClinicalRulesManager } from "@/components/clinical-rules-manager";
 import { AdvancedClinicalRulesManager } from "@/components/advanced-clinical-rules-manager";
 import { AutoverificationValidationManager } from "@/components/autoverification-validation-manager";
+import { CriticalEscalationManager } from "@/components/critical-escalation-manager";
 
 export const dynamic = "force-dynamic";
 
 export default async function ClinicalRulesPage() {
   const session = await requirePermission("clinical_rules.manage");
 
-  const [tests, branches, methods, deltaRules, commentTemplates, calculatedRules, reflexRules, autoverificationPolicies, validationHoldRules] = await Promise.all([
+  const [tests, branches, methods, deltaRules, commentTemplates, calculatedRules, reflexRules, autoverificationPolicies, validationHoldRules, criticalEscalationPolicies] = await Promise.all([
     prisma.labTest.findMany({
       where: { organizationId: session.user.organizationId, status: "ACTIVE" },
       include: { components: { where: { status: "ACTIVE" }, orderBy: { displayOrder: "asc" } } },
@@ -62,6 +63,12 @@ export default async function ClinicalRulesPage() {
       orderBy: { createdAt: "desc" },
       take: 200,
     }),
+    prisma.criticalEscalationPolicy.findMany({
+      where: { organizationId: session.user.organizationId },
+      include: { test: true, branch: true },
+      orderBy: { createdAt: "desc" },
+      take: 200,
+    }),
   ]);
 
   return <main className="catalog-shell">
@@ -69,7 +76,7 @@ export default async function ClinicalRulesPage() {
       <div>
         <p className="eyebrow">Advanced Clinical Rules</p>
         <h1>Clinical Rules</h1>
-        <p className="muted">Calculated results, reflex recommendations, validation holds, autoverification, delta checks and reusable comments are configuration-driven and effective-dated.</p>
+        <p className="muted">Calculated results, reflex recommendations, validation holds, autoverification, critical escalation, delta checks and reusable comments are configuration-driven and effective-dated.</p>
       </div>
       <Link className="secondary-link" href="/dashboard">Back to Dashboard</Link>
     </header>
@@ -106,6 +113,28 @@ export default async function ClinicalRulesPage() {
       tests={tests.map(test => ({ id: test.id, code: test.code, nameEn: test.nameEn }))}
       branches={branches}
     />
+
+    <CriticalEscalationManager
+      tests={tests.map(test => ({ id: test.id, code: test.code, nameEn: test.nameEn }))}
+      branches={branches}
+    />
+
+    <section className="detail-card detail-section">
+      <div className="table-toolbar"><h2>Critical Escalation Policies</h2><span>{criticalEscalationPolicies.length} shown</span></div>
+      <div className="table-wrap"><table>
+        <thead><tr><th>Test</th><th>Branch</th><th>Acknowledge</th><th>Escalation interval</th><th>Max level</th><th>Read-back</th><th>Effective</th><th>Status</th></tr></thead>
+        <tbody>{criticalEscalationPolicies.length === 0 ? <tr><td colSpan={8} className="empty-state">No critical escalation policies configured.</td></tr> : criticalEscalationPolicies.map(policy => <tr key={policy.id}>
+          <td><strong>{policy.test.code}</strong><br/><small>{policy.test.nameEn}</small></td>
+          <td>{policy.branch?.nameEn || "All branches"}</td>
+          <td>{policy.acknowledgementMinutes} min</td>
+          <td>{policy.escalationIntervalMinutes} min</td>
+          <td>{policy.maxEscalationLevel}</td>
+          <td>{policy.requireReadBack ? "Required" : "Optional"}</td>
+          <td>{policy.effectiveFrom.toISOString().slice(0,10)} → {policy.effectiveTo?.toISOString().slice(0,10) || "Open"}</td>
+          <td>{policy.status}</td>
+        </tr>)}</tbody>
+      </table></div>
+    </section>
 
     <section className="detail-grid detail-section">
       <article className="table-card">
