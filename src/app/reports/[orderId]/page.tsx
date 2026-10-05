@@ -112,7 +112,8 @@ export default async function DiagnosticReportPage({ params }: { params: Promise
   const host = headerStore.get("x-forwarded-host") || headerStore.get("host") || "";
   const protocol = headerStore.get("x-forwarded-proto") || "https";
   const configuredBaseUrl = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "");
-  const verificationUrl = configuredBaseUrl || host ? `${configuredBaseUrl || protocol + "://" + host}/verify/report/${latest.verificationToken}` : "";
+  const baseUrl = configuredBaseUrl || (host ? protocol + "://" + host : "");
+  const verificationUrl = baseUrl ? `${baseUrl}/verify/report/${latest.verificationToken}` : "";
   const qrDataUrl = verificationUrl ? await QRCode.toDataURL(verificationUrl, { width: 132, margin: 1 }) : "";
 
   return <main className="report-shell">
@@ -123,7 +124,7 @@ export default async function DiagnosticReportPage({ params }: { params: Promise
         <p className="muted">Version {latest.version} · {latest.status}</p>
       </div>
       <div className="header-actions">
-        <PrintReportButton reportVersionId={latest.id} canRecordDelivery={permissions.has("reports.deliver")} />
+        {permissions.has("reports.deliver") && <PrintReportButton reportVersionId={latest.id} canRecordDelivery />}
         <Link className="secondary-link" href={`/orders/${orderId}`}>Back to Order</Link>
       </div>
     </div>
