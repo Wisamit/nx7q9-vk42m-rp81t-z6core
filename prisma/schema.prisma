@@ -44,6 +44,7 @@ model Organization {
   labTests LabTest[]
   testPanels TestPanel[]
   catalogImportBatches CatalogImportBatch[]
+  catalogImportMappings CatalogImportMapping[]
 
   @@map("organizations")
 }
@@ -164,6 +165,7 @@ model User {
   auditEvents      AuditEvent[]          @relation("AuditActor")
   sessions         UserSession[]
   approvedReferenceIntervals ReferenceInterval[] @relation("ReferenceIntervalApprover")
+  createdCatalogImportMappings CatalogImportMapping[] @relation("CatalogImportMappingCreator")
 
   @@unique([organizationId, username])
   @@unique([organizationId, email])
@@ -343,6 +345,11 @@ enum ImportRowStatus {
   SKIPPED
 }
 
+enum CatalogImportMappingType {
+  TEST_ALIAS
+  UNIT_ALIAS
+}
+
 model SpecimenType {
   id             String       @id @default(uuid()) @db.Char(36)
   organizationId String       @map("organization_id") @db.Char(36)
@@ -397,6 +404,7 @@ model Unit {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   tests        LabTest[]
   components   TestComponent[]
+  importMappings CatalogImportMapping[]
 
   @@unique([organizationId, code])
   @@map("units")
@@ -458,6 +466,7 @@ model LabTest {
   components         TestComponent[]
   branchAvailability TestBranchAvailability[]
   panelItems         TestPanelItem[]
+  importMappings     CatalogImportMapping[]
 
   @@unique([organizationId, code])
   @@index([organizationId, status])
@@ -619,4 +628,28 @@ model CatalogImportRow {
   @@index([batchId, status])
   @@index([entityType, legacyKey])
   @@map("catalog_import_rows")
+}
+
+
+model CatalogImportMapping {
+  id                    String                   @id @default(uuid()) @db.Char(36)
+  organizationId        String                   @map("organization_id") @db.Char(36)
+  mappingType           CatalogImportMappingType @map("mapping_type")
+  sourceValue           String                   @map("source_value") @db.VarChar(255)
+  normalizedSourceValue String                   @map("normalized_source_value") @db.VarChar(255)
+  targetTestId          String?                  @map("target_test_id") @db.Char(36)
+  targetUnitId          String?                  @map("target_unit_id") @db.Char(36)
+  createdByUserId       String                   @map("created_by_user_id") @db.Char(36)
+  createdAt             DateTime                 @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt             DateTime                 @updatedAt @map("updated_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  targetTest   LabTest?     @relation(fields: [targetTestId], references: [id], onDelete: Restrict)
+  targetUnit   Unit?        @relation(fields: [targetUnitId], references: [id], onDelete: Restrict)
+  createdBy    User         @relation("CatalogImportMappingCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([organizationId, mappingType, normalizedSourceValue])
+  @@index([targetTestId])
+  @@index([targetUnitId])
+  @@map("catalog_import_mappings")
 }
