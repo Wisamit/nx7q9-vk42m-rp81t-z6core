@@ -64,3 +64,17 @@ export function permissionSet(session: NonNullable<Awaited<ReturnType<typeof get
     ),
   );
 }
+
+export async function requirePermission(code: string) {
+  const session = await requireSession();
+  const permissions = permissionSet(session);
+  if (!permissions.has(code)) redirect("/dashboard?forbidden=1");
+  return session;
+}
+
+export function canAccessBranch(
+  session: NonNullable<Awaited<ReturnType<typeof getCurrentSession>>>,
+  branchId: string,
+) {
+  return session.user.branchScopes.some((scope) => scope.branchId === branchId && scope.branch.status === "ACTIVE");
+}
