@@ -83,6 +83,7 @@ export function DigitalServicesConsole({
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
   const [portalType, setPortalType] = useState("PATIENT");
+  const [collectorByVisit, setCollectorByVisit] = useState<Record<string, string>>({});
 
   async function send(url: string, method: "POST" | "PATCH", payload: unknown, key: string, success: string) {
     setBusy(key);
@@ -163,10 +164,10 @@ export function DigitalServicesConsole({
   }
 
   async function updateHomeCollection(item: HomeCollection, status: string) {
-    let collectorId: string | undefined;
-    if (status === "ASSIGNED") {
-      collectorId = window.prompt("Collector user ID:") || undefined;
-      if (!collectorId) return;
+    const collectorId = status === "ASSIGNED" ? collectorByVisit[item.id] : undefined;
+    if (status === "ASSIGNED" && !collectorId) {
+      setMessage("Select a collector before assigning the visit.");
+      return;
     }
     await send(`/api/home-collections/${item.id}`, "POST", { status, assignedCollectorUserId: collectorId }, "home-" + item.id, "Home collection updated.");
   }
@@ -300,7 +301,13 @@ export function DigitalServicesConsole({
         <tbody>{homeCollections.length === 0 ? <tr><td colSpan={7} className="empty-state">No home collection visits.</td></tr> : homeCollections.map(item => <tr key={item.id}>
           <td>{item.appointmentNumber}</td><td>{item.patient}</td><td>{item.branch}</td><td>{item.scheduledStart.replace("T"," ").slice(0,16)}</td><td>{item.collector || "Unassigned"}</td><td>{item.status}</td>
           <td>{permissions.homeCollection && <>
-            {item.status === "SCHEDULED" && <button className="secondary-button" onClick={() => void updateHomeCollection(item,"ASSIGNED")}>Assign</button>}
+            {item.status === "SCHEDULED" && <div className="result-actions">
+              <select value={collectorByVisit[item.id] || ""} onChange={event => setCollectorByVisit(current => ({ ...current, [item.id]: event.target.value }))}>
+                <option value="">Collector…</option>
+                {users.map(user => <option key={user.id} value={user.id}>{user.label}</option>)}
+              </select>
+              <button className="secondary-button" onClick={() => void updateHomeCollection(item,"ASSIGNED")}>Assign</button>
+            </div>}
             {item.status === "ASSIGNED" && <button className="secondary-button" onClick={() => void updateHomeCollection(item,"EN_ROUTE")}>En route</button>}
             {item.status === "EN_ROUTE" && <button className="secondary-button" onClick={() => void updateHomeCollection(item,"ARRIVED")}>Arrived</button>}
             {item.status === "ARRIVED" && <button className="secondary-button" onClick={() => void updateHomeCollection(item,"COLLECTING")}>Start collection</button>}
