@@ -697,6 +697,8 @@ model Organization {
   appointments Appointment[]
   queueTickets QueueTicket[]
 
+  sources OrderSource[]
+
   @@map("organizations")
 }
 
@@ -1504,6 +1506,26 @@ model PatientIdentifier {
 }
 
 
+model OrderSource {
+  id             String       @id @default(uuid()) @db.Char(36)
+  organizationId String       @map("organization_id") @db.Char(36)
+  code           String       @db.VarChar(60)
+  category       String       @db.VarChar(80)
+  nameEn         String       @map("name_en") @db.VarChar(220)
+  nameAr         String?      @map("name_ar") @db.VarChar(220)
+  status         RecordStatus @default(ACTIVE)
+  createdAt      DateTime     @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt      DateTime     @updatedAt @map("updated_at") @db.DateTime(3)
+  deactivatedAt  DateTime?    @map("deactivated_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  orders       LabOrder[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId, category, status])
+  @@map("order_sources")
+}
+
 model Client {
   id             String       @id @default(uuid()) @db.Char(36)
   organizationId String       @map("organization_id") @db.Char(36)
@@ -1651,6 +1673,7 @@ model LabOrder {
   patientId        String        @map("patient_id") @db.Char(36)
   referrerId       String?       @map("referrer_id") @db.Char(36)
   clientId         String?       @map("client_id") @db.Char(36)
+  sourceId         String?       @map("source_id") @db.Char(36)
   priority         OrderPriority @default(ROUTINE)
   status           OrderStatus   @default(REGISTERED)
   clinicalNotes    String?       @map("clinical_notes") @db.Text
@@ -1667,6 +1690,7 @@ model LabOrder {
   patient       Patient      @relation(fields: [patientId], references: [id], onDelete: Restrict)
   referrer      Referrer?    @relation(fields: [referrerId], references: [id], onDelete: Restrict)
   client        Client?      @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  source        OrderSource? @relation(fields: [sourceId], references: [id], onDelete: Restrict)
   createdBy     User         @relation("OrderCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
   items         OrderItem[]
   invoices      Invoice[]
@@ -1678,6 +1702,7 @@ model LabOrder {
   @@index([orderingBranchId, orderedAt])
   @@index([patientId, orderedAt])
   @@index([clientId, orderedAt])
+  @@index([sourceId, orderedAt])
   @@map("orders")
 }
 
