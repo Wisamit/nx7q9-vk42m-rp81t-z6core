@@ -3,7 +3,9 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
-type TestSuggestion = { id: string; code: string; nameEn: string; score: number };\ntype UnitSuggestion = { id: string; code: string; symbol: string; score: number };\ntype DetailItem = { value: string; count: number; suggestion?: TestSuggestion | UnitSuggestion | null };
+type TestSuggestion = { id: string; code: string; nameEn: string; score: number };
+type UnitSuggestion = { id: string; code: string; symbol: string; score: number };
+type DetailItem = { value: string; count: number; suggestion?: TestSuggestion | UnitSuggestion | null };
 type TestOption = { id: string; code: string; nameEn: string };
 type UnitOption = { id: string; code: string; symbol: string };
 type Preview = {
