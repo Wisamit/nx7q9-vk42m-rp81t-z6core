@@ -14,12 +14,14 @@ function normalize(value: unknown) {
 export async function POST(request: Request) {
   const ctx = await requestContext();
   const body = await request.json().catch(() => null);
+  const organizationCode = typeof body?.organizationCode === "string" ? body.organizationCode.trim().toUpperCase().slice(0, 50) : "";
   const login = normalize(body?.login);
   const password = typeof body?.password === "string" ? body.password : "";
-  if (!login || !password) return NextResponse.json({ error: "invalid_credentials" }, { status: 401 });
+  if (!organizationCode || !login || !password) return NextResponse.json({ error: "invalid_credentials" }, { status: 401 });
 
   const account = await prisma.portalAccount.findFirst({
     where: {
+      organization: { code: organizationCode, status: "ACTIVE" },
       OR: [{ normalizedEmail: login }, { normalizedPhone: login }],
     },
   });
