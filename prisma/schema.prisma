@@ -261,6 +261,39 @@ enum ValidationHoldEventStatus {
   SUPERSEDED
 }
 
+enum MicrobiologyCaseStatus {
+  DRAFT
+  IN_PROGRESS
+  PRELIMINARY
+  FINAL
+  CANCELLED
+}
+
+enum CultureStatus {
+  PENDING
+  NO_GROWTH
+  GROWTH
+  MIXED_GROWTH
+  CONTAMINATED
+  FINAL
+}
+
+enum CultureObservationType {
+  GRAM_STAIN
+  MICROSCOPY
+  CULTURE
+  COLONY_COUNT
+  OTHER
+}
+
+enum SusceptibilityInterpretation {
+  S
+  I
+  R
+  NON_SUSCEPTIBLE
+  UNKNOWN
+}
+
 model Organization {
   id              String       @id @default(uuid()) @db.Char(36)
   code            String       @unique @db.VarChar(50)
@@ -307,6 +340,9 @@ model Organization {
   autoverificationPolicies AutoverificationPolicy[]
   validationHoldRules ValidationHoldRule[]
   criticalEscalationPolicies CriticalEscalationPolicy[]
+  microbiologyCases MicrobiologyCase[]
+  organisms Organism[]
+  antibiotics Antibiotic[]
 
   @@map("organizations")
 }
@@ -355,6 +391,7 @@ model Branch {
   autoverificationPolicies AutoverificationPolicy[]
   validationHoldRules ValidationHoldRule[]
   criticalEscalationPolicies CriticalEscalationPolicy[]
+  microbiologyCases MicrobiologyCase[]
 
   @@unique([organizationId, code])
   @@index([organizationId, status])
@@ -467,6 +504,10 @@ model User {
   amendmentRequests LaboratoryResult[] @relation("ResultAmendmentRequestedBy")
   reviewedReflexEvents ReflexRuleEvent[]
   reviewedValidationHoldEvents ValidationHoldEvent[] @relation("ValidationHoldReviewedBy")
+  createdMicrobiologyCases MicrobiologyCase[] @relation("MicrobiologyCaseCreator")
+  finalizedMicrobiologyCases MicrobiologyCase[] @relation("MicrobiologyCaseFinalizer")
+  cultureObservations CultureObservation[]
+  susceptibilityTests SusceptibilityTest[]
 
   @@unique([organizationId, username])
   @@unique([organizationId, email])
@@ -1226,6 +1267,7 @@ model OrderItem {
   invoiceLines    InvoiceLine[]
   specimenLinks   SpecimenOrderItem[]
   results          LaboratoryResult[]
+  microbiologyCases MicrobiologyCase[]
 
   @@unique([orderId, testId])
   @@index([performedBranchId, status])
@@ -1385,6 +1427,7 @@ model Specimen {
   orderItems       SpecimenOrderItem[]
   events           SpecimenEvent[]
   transferItems    SpecimenTransferItem[]
+  microbiologyCases MicrobiologyCase[]
   results          LaboratoryResult[]
 
   @@unique([organizationId, barcode])
@@ -1527,6 +1570,7 @@ model LaboratoryResult {
   reflexEvents      ReflexRuleEvent[]
   autoverificationPolicy AutoverificationPolicy? @relation(fields: [autoverificationPolicyId], references: [id], onDelete: Restrict)
   validationHoldEvents ValidationHoldEvent[]
+  microbiologyCase MicrobiologyCase?
 
   @@unique([orderItemId, version])
   @@index([performingBranchId, status, enteredAt])
@@ -1951,4 +1995,154 @@ model CriticalEscalationPolicy {
   @@index([testId, branchId, status, effectiveFrom, effectiveTo])
   @@index([organizationId, status])
   @@map("critical_escalation_policies")
+}
+
+
+model MicrobiologyCase {
+  id                 String                 @id @default(uuid()) @db.Char(36)
+  organizationId     String                 @map("organization_id") @db.Char(36)
+  orderItemId        String                 @map("order_item_id") @db.Char(36)
+  specimenId         String                 @map("specimen_id") @db.Char(36)
+  performingBranchId String                 @map("performing_branch_id") @db.Char(36)
+  resultId           String?                @unique @map("result_id") @db.Char(36)
+  status             MicrobiologyCaseStatus @default(DRAFT)
+  cultureStatus      CultureStatus          @default(PENDING) @map("culture_status")
+  preliminaryComment String?                @map("preliminary_comment") @db.Text
+  finalComment       String?                @map("final_comment") @db.Text
+  createdByUserId    String                 @map("created_by_user_id") @db.Char(36)
+  finalizedByUserId  String?                @map("finalized_by_user_id") @db.Char(36)
+  finalizedAt        DateTime?              @map("finalized_at") @db.DateTime(3)
+  createdAt          DateTime               @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt          DateTime               @updatedAt @map("updated_at") @db.DateTime(3)
+
+  organization     Organization     @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  orderItem        OrderItem        @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
+  specimen         Specimen         @relation(fields: [specimenId], references: [id], onDelete: Restrict)
+  performingBranch Branch           @relation(fields: [performingBranchId], references: [id], onDelete: Restrict)
+  result           LaboratoryResult? @relation(fields: [resultId], references: [id], onDelete: Restrict)
+  createdBy        User             @relation("MicrobiologyCaseCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  finalizedBy      User?            @relation("MicrobiologyCaseFinalizer", fields: [finalizedByUserId], references: [id], onDelete: Restrict)
+  observations     CultureObservation[]
+  isolates         MicrobiologyIsolate[]
+
+  @@unique([orderItemId, specimenId])
+  @@index([performingBranchId, status, createdAt])
+  @@index([organizationId, cultureStatus, createdAt])
+  @@map("microbiology_cases")
+}
+
+model CultureObservation {
+  id              String                 @id @default(uuid()) @db.Char(36)
+  caseId          String                 @map("case_id") @db.Char(36)
+  observationType CultureObservationType @map("observation_type")
+  observationText String                 @map("observation_text") @db.Text
+  enteredByUserId String                 @map("entered_by_user_id") @db.Char(36)
+  observedAt      DateTime               @default(now()) @map("observed_at") @db.DateTime(3)
+  createdAt       DateTime               @default(now()) @map("created_at") @db.DateTime(3)
+
+  case      MicrobiologyCase @relation(fields: [caseId], references: [id], onDelete: Restrict)
+  enteredBy User             @relation(fields: [enteredByUserId], references: [id], onDelete: Restrict)
+
+  @@index([caseId, observedAt])
+  @@map("culture_observations")
+}
+
+model Organism {
+  id             String       @id @default(uuid()) @db.Char(36)
+  organizationId String       @map("organization_id") @db.Char(36)
+  code           String       @db.VarChar(80)
+  nameEn         String       @map("name_en") @db.VarChar(220)
+  nameAr         String?      @map("name_ar") @db.VarChar(220)
+  category       String?      @db.VarChar(120)
+  status         RecordStatus @default(ACTIVE)
+  createdAt      DateTime     @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt      DateTime     @updatedAt @map("updated_at") @db.DateTime(3)
+  deactivatedAt  DateTime?    @map("deactivated_at") @db.DateTime(3)
+
+  organization Organization          @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  isolates     MicrobiologyIsolate[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId, status, nameEn])
+  @@map("organisms")
+}
+
+model MicrobiologyIsolate {
+  id             String   @id @default(uuid()) @db.Char(36)
+  caseId         String   @map("case_id") @db.Char(36)
+  organismId     String   @map("organism_id") @db.Char(36)
+  sequenceNumber Int      @default(1) @map("sequence_number")
+  quantityText   String?  @map("quantity_text") @db.VarChar(200)
+  colonyNotes    String?  @map("colony_notes") @db.Text
+  createdAt      DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.DateTime(3)
+
+  case                MicrobiologyCase     @relation(fields: [caseId], references: [id], onDelete: Restrict)
+  organism            Organism             @relation(fields: [organismId], references: [id], onDelete: Restrict)
+  susceptibilityTests SusceptibilityTest[]
+
+  @@unique([caseId, sequenceNumber])
+  @@index([organismId])
+  @@map("microbiology_isolates")
+}
+
+model Antibiotic {
+  id             String       @id @default(uuid()) @db.Char(36)
+  organizationId String       @map("organization_id") @db.Char(36)
+  code           String       @db.VarChar(80)
+  nameEn         String       @map("name_en") @db.VarChar(220)
+  nameAr         String?      @map("name_ar") @db.VarChar(220)
+  drugClass      String?      @map("drug_class") @db.VarChar(150)
+  status         RecordStatus @default(ACTIVE)
+  createdAt      DateTime     @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt      DateTime     @updatedAt @map("updated_at") @db.DateTime(3)
+  deactivatedAt  DateTime?    @map("deactivated_at") @db.DateTime(3)
+
+  organization Organization           @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  results      SusceptibilityResult[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId, status, nameEn])
+  @@map("antibiotics")
+}
+
+model SusceptibilityTest {
+  id              String   @id @default(uuid()) @db.Char(36)
+  isolateId       String   @map("isolate_id") @db.Char(36)
+  method          String?  @db.VarChar(150)
+  comments        String?  @db.Text
+  enteredByUserId String   @map("entered_by_user_id") @db.Char(36)
+  testedAt        DateTime @default(now()) @map("tested_at") @db.DateTime(3)
+  createdAt       DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.DateTime(3)
+
+  isolate   MicrobiologyIsolate   @relation(fields: [isolateId], references: [id], onDelete: Restrict)
+  enteredBy User                  @relation(fields: [enteredByUserId], references: [id], onDelete: Restrict)
+  results   SusceptibilityResult[]
+
+  @@index([isolateId, testedAt])
+  @@map("susceptibility_tests")
+}
+
+model SusceptibilityResult {
+  id                         String                       @id @default(uuid()) @db.Char(36)
+  susceptibilityTestId       String                       @map("susceptibility_test_id") @db.Char(36)
+  antibioticId               String                       @map("antibiotic_id") @db.Char(36)
+  antibioticCodeSnapshot     String                       @map("antibiotic_code_snapshot") @db.VarChar(80)
+  antibioticNameEnSnapshot   String                       @map("antibiotic_name_en_snapshot") @db.VarChar(220)
+  antibioticNameArSnapshot   String?                      @map("antibiotic_name_ar_snapshot") @db.VarChar(220)
+  interpretation             SusceptibilityInterpretation @default(UNKNOWN)
+  micValue                   Decimal?                     @map("mic_value") @db.Decimal(18, 6)
+  micUnit                    String?                      @map("mic_unit") @db.VarChar(40)
+  zoneDiameterMm             Decimal?                     @map("zone_diameter_mm") @db.Decimal(10, 3)
+  breakpointSnapshot         String?                      @map("breakpoint_snapshot") @db.VarChar(255)
+  createdAt                  DateTime                     @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt                  DateTime                     @updatedAt @map("updated_at") @db.DateTime(3)
+
+  susceptibilityTest SusceptibilityTest @relation(fields: [susceptibilityTestId], references: [id], onDelete: Restrict)
+  antibiotic         Antibiotic         @relation(fields: [antibioticId], references: [id], onDelete: Restrict)
+
+  @@unique([susceptibilityTestId, antibioticId])
+  @@index([antibioticId, interpretation])
+  @@map("susceptibility_results")
 }
