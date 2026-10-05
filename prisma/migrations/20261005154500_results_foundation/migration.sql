@@ -68,3 +68,15 @@ CREATE TABLE `laboratory_result_values` (
   CONSTRAINT `laboratory_result_values_unit_id_fkey` FOREIGN KEY (`unit_id`) REFERENCES `units`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
   CONSTRAINT `laboratory_result_values_reference_interval_id_fkey` FOREIGN KEY (`reference_interval_id`) REFERENCES `reference_intervals`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+
+INSERT IGNORE INTO `permissions` (`id`,`code`,`module`,`description`,`created_at`) VALUES
+(UUID(),'worklists.view','laboratory','View laboratory worklists',CURRENT_TIMESTAMP(3)),
+(UUID(),'results.enter','results','Enter and save laboratory results',CURRENT_TIMESTAMP(3)),
+(UUID(),'results.verify','results','Verify laboratory results',CURRENT_TIMESTAMP(3));
+
+INSERT IGNORE INTO `role_permissions` (`role_id`,`permission_id`,`granted_at`)
+SELECT r.id, p.id, CURRENT_TIMESTAMP(3)
+FROM `roles` r
+JOIN `permissions` p ON p.code IN ('worklists.view','results.enter','results.verify')
+WHERE r.code='SYSTEM_ADMIN';
