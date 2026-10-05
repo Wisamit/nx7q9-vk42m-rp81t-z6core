@@ -89,7 +89,7 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
         reportId: report.id,
         version,
         status: reportStatus,
-        branchId: result.orderItem.orderingBranchId,
+        branchId: result.orderItem.order.orderingBranchId,
         contentSnapshot: snapshot.contentSnapshot,
         resultVersionSnapshot: snapshot.resultVersionSnapshot,
         verificationToken: randomBytes(32).toString("hex"),
