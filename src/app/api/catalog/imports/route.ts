@@ -5,28 +5,6 @@ import { prisma } from "@/lib/db";
 import type { Prisma } from "../../../../../generated/prisma/client";
 import { allowedImportEntities, normalizeImportRow, rowValidationStatus, validateImportRow, type ImportInputRow } from "@/lib/catalog-import";
 
-type ImportEntity="TEST"|"PANEL"|"UNIT"|"CONTAINER"|"REFERENCE_INTERVAL";
-type InputRow={entityType:ImportEntity;legacyKey?:string;data:Prisma.InputJsonObject};
-const allowed=new Set<ImportEntity>(["TEST","PANEL","UNIT","CONTAINER","REFERENCE_INTERVAL"]);
-
-function text(v:unknown){return typeof v==="string"?v.trim():""}
-function normalize(row:InputRow): Prisma.InputJsonObject {
- const d=row.data;
- if(row.entityType==="TEST") return {code:text(d.code||d.Abrev||d.Abre),nameEn:text(d.nameEn||d.Testname||d["test name"]),unit:text(d.unit),assay:text(d.Assay),collection:text(d.Collection),panel:text(d.Panel)};
- if(row.entityType==="UNIT") return {code:text(d.code||d.unit||d.Unit),symbol:text(d.symbol||d.unit||d.Unit)};
- if(row.entityType==="PANEL") return {code:text(d.code||d.profilname).replace(/\s+/g,"_").toUpperCase(),nameEn:text(d.nameEn||d.profilname)};
- if(row.entityType==="CONTAINER") return {code:text(d.code||d.name).replace(/\s+/g,"_").toUpperCase(),nameEn:text(d.nameEn||d.name)};
- return {testName:text(d.testName||d["test name"]),low:d.L??d.low,high:d.H??d.high,unit:text(d["test unit"]||d.unit),sex:text(d.sex).toUpperCase()||"ANY",ageFrom:d.agefrom??null,ageTo:d.ageto??null,ageUnit:text(d.ag).toUpperCase()};
-}
-function issues(entityType:ImportEntity,n:Prisma.InputJsonObject){
- const out:{severity:"ERROR"|"WARNING";code:string;message:string}[]=[];
- if(entityType==="TEST"&&(!n.code||!n.nameEn))out.push({severity:"ERROR",code:"MISSING_TEST_IDENTITY",message:"Test code/abbreviation and name are required."});
- if(["UNIT","PANEL","CONTAINER"].includes(entityType)&&(!n.code||!n.nameEn&&entityType!=="UNIT"))out.push({severity:"ERROR",code:"MISSING_MASTER_IDENTITY",message:"Code/name could not be normalized."});
- if(entityType==="REFERENCE_INTERVAL"&&!n.testName)out.push({severity:"ERROR",code:"MISSING_RANGE_TEST",message:"Reference interval has no test name."});
- if(entityType==="REFERENCE_INTERVAL"&&!n.unit)out.push({severity:"WARNING",code:"MISSING_RANGE_UNIT",message:"Reference interval has no unit and requires review."});
- return out;
-}
-
 export async function POST(request:Request){
  const session=await requirePermission("catalog.manage"); const ctx=await requestContext();
  const payload=await request.json().catch(()=>null) as {sourceName?:string;rows?:ImportInputRow[]}|null;
