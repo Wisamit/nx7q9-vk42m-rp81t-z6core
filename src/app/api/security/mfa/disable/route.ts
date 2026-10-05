@@ -1,4 +1,5 @@
 import { compare } from "bcryptjs";
+import { Prisma } from "../../../../../generated/prisma/client";
 import { NextResponse } from "next/server";
 import { requestContext, requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
@@ -36,7 +37,7 @@ export async function POST(request: Request) {
         mfaSecretEncrypted: null,
         mfaPendingSecretEncrypted: null,
         mfaConfirmedAt: null,
-        mfaRecoveryCodes: null,
+        mfaRecoveryCodes: Prisma.DbNull,
       },
     }),
     prisma.userSession.updateMany({
