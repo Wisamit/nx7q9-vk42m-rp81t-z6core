@@ -32,7 +32,7 @@ export default async function CatalogPage() {
           <table><thead><tr><th>Code</th><th>English name</th><th>Arabic name</th><th>Department</th><th>Specimen</th><th>Components</th><th>Status</th></tr></thead>
           <tbody>
             {tests.length === 0 ? <tr><td colSpan={7} className="empty-state">No tests configured yet.</td></tr> :
-              tests.map((test) => <tr key={test.id}><td><strong>{test.code}</strong></td><td>{test.nameEn}</td><td dir="rtl">{test.nameAr || "—"}</td><td>{test.department?.nameEn || "—"}</td><td>{test.specimenType?.nameEn || "—"}</td><td>{test.components.length}</td><td>{test.status}</td></tr>)}
+              tests.map((test) => <tr key={test.id}><td><Link className="table-link" href={`/catalog/tests/${test.id}`}><strong>{test.code}</strong></Link></td><td><Link className="table-link" href={`/catalog/tests/${test.id}`}>{test.nameEn}</Link></td><td dir="rtl">{test.nameAr || "—"}</td><td>{test.department?.nameEn || "—"}</td><td>{test.specimenType?.nameEn || "—"}</td><td>{test.components.length}</td><td>{test.status}</td></tr>)}
           </tbody></table>
         </div>
       </section>
