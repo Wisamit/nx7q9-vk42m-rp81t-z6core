@@ -439,6 +439,7 @@ model LabTest {
   defaultUnit        Unit? @relation(fields: [defaultUnitId], references: [id], onDelete: Restrict)
   components         TestComponent[]
   branchAvailability TestBranchAvailability[]
+  panelItems         TestPanelItem[]
 
   @@unique([organizationId, code])
   @@index([organizationId, status])
@@ -519,4 +520,41 @@ model ReferenceInterval {
   @@index([componentId, effectiveFrom, effectiveTo])
   @@index([branchId, status])
   @@map("reference_intervals")
+}
+
+
+model TestPanel {
+  id             String       @id @default(uuid()) @db.Char(36)
+  organizationId String       @map("organization_id") @db.Char(36)
+  code           String       @db.VarChar(80)
+  nameEn         String       @map("name_en") @db.VarChar(200)
+  nameAr         String?      @map("name_ar") @db.VarChar(200)
+  descriptionEn  String?      @map("description_en") @db.Text
+  descriptionAr  String?      @map("description_ar") @db.Text
+  status         RecordStatus @default(ACTIVE)
+  createdAt      DateTime     @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt      DateTime     @updatedAt @map("updated_at") @db.DateTime(3)
+  deactivatedAt  DateTime?    @map("deactivated_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  items        TestPanelItem[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId, status])
+  @@map("test_panels")
+}
+
+model TestPanelItem {
+  panelId      String   @map("panel_id") @db.Char(36)
+  testId       String   @map("test_id") @db.Char(36)
+  displayOrder Int      @default(0) @map("display_order")
+  required     Boolean  @default(true)
+  createdAt    DateTime @default(now()) @map("created_at") @db.DateTime(3)
+
+  panel TestPanel @relation(fields: [panelId], references: [id], onDelete: Restrict)
+  test  LabTest   @relation(fields: [testId], references: [id], onDelete: Restrict)
+
+  @@id([panelId, testId])
+  @@index([testId])
+  @@map("test_panel_items")
 }
