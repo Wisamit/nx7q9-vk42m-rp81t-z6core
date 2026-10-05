@@ -8,36 +8,10 @@ import { evaluateFormula, formulaVariables } from "@/lib/formula-engine";
 import { reflexMatches } from "@/lib/reflex-rules";
 import { evaluateAutoverification } from "@/lib/autoverification";
 import { validationHoldMatches } from "@/lib/validation-holds";
+import { parseResultValue } from "@/lib/result-value-parser";
 
 function text(value: unknown, max = 5000) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
-}
-
-function parseValue(resultType: "NUMERIC" | "TEXT" | "QUALITATIVE" | "BOOLEAN" | "DATE", raw: unknown) {
-  if (raw === null || raw === undefined || raw === "") return null;
-
-  if (resultType === "NUMERIC") {
-    const value = String(raw).trim();
-    if (!/^[+-]?(?:\d+(?:\.\d+)?|\.\d+)$/.test(value)) throw new Error("INVALID_NUMERIC_VALUE");
-    const numeric = new Prisma.Decimal(value);
-    return { valueNumeric: numeric, valueText: null, valueBoolean: null, valueDate: null, displayValue: value };
-  }
-
-  if (resultType === "BOOLEAN") {
-    const normalized = typeof raw === "boolean" ? raw : String(raw).toLowerCase() === "true" ? true : String(raw).toLowerCase() === "false" ? false : null;
-    if (normalized === null) throw new Error("INVALID_BOOLEAN_VALUE");
-    return { valueNumeric: null, valueText: null, valueBoolean: normalized, valueDate: null, displayValue: normalized ? "True" : "False" };
-  }
-
-  if (resultType === "DATE") {
-    const value = new Date(String(raw));
-    if (Number.isNaN(value.getTime())) throw new Error("INVALID_DATE_VALUE");
-    return { valueNumeric: null, valueText: null, valueBoolean: null, valueDate: value, displayValue: value.toISOString().slice(0, 10) };
-  }
-
-  const value = text(raw, 1000);
-  if (!value) return null;
-  return { valueNumeric: null, valueText: value, valueBoolean: null, valueDate: null, displayValue: value };
 }
 
 export async function POST(request: Request) {
@@ -145,6 +119,13 @@ export async function POST(request: Request) {
   if (existing && ["VERIFIED", "RELEASED", "AMENDED", "CANCELLED"].includes(existing.status)) {
     return NextResponse.json({ error: "result_locked_requires_amendment", status: existing.status }, { status: 409 });
   }
+  if (existing && existing.source !== "MANUAL") {
+    return NextResponse.json({
+      error: "result_source_conflict_requires_explicit_workflow",
+      source: existing.source,
+      status: existing.status,
+    }, { status: 409 });
+  }
 
   const resultSource = "MANUAL" as const;
   const autoverificationPolicy =
@@ -184,7 +165,7 @@ export async function POST(request: Request) {
     resultType: "NUMERIC" | "TEXT" | "QUALITATIVE" | "BOOLEAN" | "DATE";
     unitId: string | null;
     unitSnapshot: string | null;
-    parsed: NonNullable<ReturnType<typeof parseValue>>;
+    parsed: NonNullable<ReturnType<typeof parseResultValue>>;
     interval: Awaited<ReturnType<typeof resolveReferenceInterval>> | null;
     flag: ReturnType<typeof numericFlag>;
     delta: Awaited<ReturnType<typeof evaluateDelta>>;
@@ -200,7 +181,7 @@ export async function POST(request: Request) {
       if (component.componentId && calculatedTargetIds.has(component.componentId)) continue;
 
       const raw = valueByComponent.get(component.componentId || "__TEST__");
-      const parsed = parseValue(component.resultType, raw);
+      const parsed = parseResultValue(component.resultType, raw);
       if (!parsed) continue;
 
       const interval = component.componentId ? await resolveReferenceInterval(prisma, {
