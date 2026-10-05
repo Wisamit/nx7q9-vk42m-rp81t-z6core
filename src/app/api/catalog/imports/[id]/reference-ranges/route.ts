@@ -140,7 +140,7 @@ async function analyze(batchId: string, organizationId: string) {
   const safe = analyzed.filter(x => !x.reason);
   const review = analyzed.filter(x => !!x.reason);
   const reasons = review.reduce((a,x) => { a[x.reason] = (a[x.reason] || 0) + 1; return a; }, {} as Record<string,number>);
-  return { safe, review, reasons, total: rows.length };
+  return { safe, review, reasons, total: rows.length, tests, units };
 }
 
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -172,8 +172,8 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
       unitConflicts: topValues("TEST_UNIT_CONFLICT", (item) => `${item.testName} | ${item.rangeUnit}`),
       emptyIntervals: topValues("EMPTY_REFERENCE_INTERVAL", (item) => item.testName),
     },
-    testOptions: tests.map((test) => ({ id: test.id, code: test.code, nameEn: test.nameEn })).sort((a,b) => a.nameEn.localeCompare(b.nameEn)),
-    unitOptions: units.map((unit) => ({ id: unit.id, code: unit.code, symbol: unit.symbol })).sort((a,b) => a.symbol.localeCompare(b.symbol)),
+    testOptions: analysis.tests.map((test) => ({ id: test.id, code: test.code, nameEn: test.nameEn })).sort((a, b) => a.nameEn.localeCompare(b.nameEn)),
+    unitOptions: analysis.units.map((unit) => ({ id: unit.id, code: unit.code, symbol: unit.symbol })).sort((a, b) => a.symbol.localeCompare(b.symbol)),
   });
 }
 
