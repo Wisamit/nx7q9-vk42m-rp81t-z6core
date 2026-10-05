@@ -29,7 +29,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!canAccessBranch(session, result.performingBranchId)) return NextResponse.json({ error: "branch_forbidden" }, { status: 403 });
   if (!["DRAFT", "ENTERED"].includes(result.status)) return NextResponse.json({ error: "result_not_verifiable", status: result.status }, { status: 409 });
 
-  const expectedCount = Math.max(1, result.orderItem.test.components.length);
+  const expectedCount = result.microbiologySnapshot ? 1 : Math.max(1, result.orderItem.test.components.length);
   if (result.values.length !== expectedCount) {
     return NextResponse.json({ error: "result_incomplete", expectedCount, enteredCount: result.values.length }, { status: 409 });
   }
