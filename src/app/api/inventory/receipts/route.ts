@@ -60,7 +60,15 @@ export async function POST(request: Request) {
   if (inventoryItems.length !== itemIds.length) return NextResponse.json({ error: "inventory_item_not_found" }, { status: 404 });
   const itemById = new Map(inventoryItems.map(item => [item.id, item]));
 
-  const prepared = [];
+  const prepared: Array<{
+    purchaseOrderItemId: string | null;
+    itemId: string;
+    lotNumber: string;
+    expiryDate: Date | null;
+    quantity: Prisma.Decimal;
+    unitCost: Prisma.Decimal;
+    currency: string;
+  }> = [];
   try {
     for (const raw of body.items) {
       const itemId = text(raw.itemId, 36);
