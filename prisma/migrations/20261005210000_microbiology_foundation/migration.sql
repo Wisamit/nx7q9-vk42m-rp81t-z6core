@@ -1,3 +1,6 @@
+ALTER TABLE `lab_tests`
+  ADD COLUMN `workflow_type` ENUM('GENERAL','MICROBIOLOGY') NOT NULL DEFAULT 'GENERAL' AFTER `result_type`;
+
 CREATE TABLE `organisms` (
   `id` CHAR(36) NOT NULL, `organization_id` CHAR(36) NOT NULL, `code` VARCHAR(80) NOT NULL,
   `name_en` VARCHAR(220) NOT NULL, `name_ar` VARCHAR(220) NULL, `category` VARCHAR(120) NULL,
