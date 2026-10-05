@@ -17,7 +17,8 @@
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "@prisma/adapter-mariadb": "7.10.0",
-    "mysql2": "3.23.1"
+    "mysql2": "3.23.1",
+    "bcryptjs": "3.0.2"
   },
   "devDependencies": {
     "@types/node": "^22",
@@ -26,7 +27,8 @@
     "eslint": "^9",
     "eslint-config-next": "16.3.8",
     "prisma": "7.10.0",
-    "typescript": "^5"
+    "typescript": "^5",
+    "@types/bcryptjs": "^2.4.6"
   },
   "engines": {
     "node": ">=22.18.0 <25"
