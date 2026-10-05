@@ -162,6 +162,11 @@ enum ResultSource {
   CALCULATED
 }
 
+enum ResultRepeatType {
+  RERUN
+  REPEAT
+}
+
 enum AnalyzerProtocol {
   ASTM
   HL7_V2
@@ -776,6 +781,7 @@ model Organization {
   specimens Specimen[]
   transferManifests SpecimenTransferManifest[]
   results LaboratoryResult[]
+  resultRepeatEvents ResultRepeatEvent[]
   diagnosticReports DiagnosticReport[]
   deltaRules DeltaRule[]
   resultCommentTemplates ResultCommentTemplate[]
@@ -1031,6 +1037,7 @@ model User {
   reportVersions DiagnosticReportVersion[] @relation("ReportVersionIssuer")
   reportDeliveries ReportDeliveryEvent[]
   amendmentRequests LaboratoryResult[] @relation("ResultAmendmentRequestedBy")
+  resultRepeatEvents ResultRepeatEvent[] @relation("ResultRepeatRequestedBy")
   reviewedReflexEvents ReflexRuleEvent[]
   reviewedValidationHoldEvents ValidationHoldEvent[] @relation("ValidationHoldReviewedBy")
   performedMaintenanceEvents MaintenanceEvent[] @relation("MaintenancePerformedBy")
@@ -2008,6 +2015,7 @@ model OrderItem {
   invoiceLines    InvoiceLine[]
   specimenLinks   SpecimenOrderItem[]
   results          LaboratoryResult[]
+  resultRepeatEvents ResultRepeatEvent[]
   analyzerResultImports AnalyzerResultImport[]
   microbiologyCases MicrobiologyCase[]
   packageLinks     OrderPackageItem[]
@@ -2177,6 +2185,7 @@ model Specimen {
   transferItems    SpecimenTransferItem[]
   microbiologyCases MicrobiologyCase[]
   results          LaboratoryResult[]
+  resultRepeatEvents ResultRepeatEvent[]
 
   @@unique([organizationId, barcode])
   @@unique([orderId, sequenceNumber])
@@ -2325,6 +2334,7 @@ model LaboratoryResult {
   validationHoldEvents ValidationHoldEvent[]
   microbiologyCase MicrobiologyCase?
   analyzerResultImports AnalyzerResultImport[]
+  repeatEvents ResultRepeatEvent[]
 
   @@unique([orderItemId, version])
   @@index([performingBranchId, status, enteredAt])
@@ -2333,6 +2343,29 @@ model LaboratoryResult {
   @@index([analyzerId, status])
   @@index([autoverificationPolicyId])
   @@map("laboratory_results")
+}
+
+model ResultRepeatEvent {
+  id                String           @id @default(uuid()) @db.Char(36)
+  organizationId    String           @map("organization_id") @db.Char(36)
+  orderItemId       String           @map("order_item_id") @db.Char(36)
+  resultId          String?          @map("result_id") @db.Char(36)
+  specimenId        String?          @map("specimen_id") @db.Char(36)
+  type              ResultRepeatType
+  reason            String           @db.VarChar(1000)
+  requestedByUserId String           @map("requested_by_user_id") @db.Char(36)
+  requestedAt       DateTime         @default(now()) @map("requested_at") @db.DateTime(3)
+
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  orderItem    OrderItem         @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
+  result       LaboratoryResult? @relation(fields: [resultId], references: [id], onDelete: Restrict)
+  specimen     Specimen?         @relation(fields: [specimenId], references: [id], onDelete: Restrict)
+  requestedBy  User              @relation("ResultRepeatRequestedBy", fields: [requestedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([orderItemId, requestedAt])
+  @@index([resultId, requestedAt])
+  @@index([specimenId, requestedAt])
+  @@map("result_repeat_events")
 }
 
 model LaboratoryResultValue {

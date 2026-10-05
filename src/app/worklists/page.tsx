@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { BulkResultEntry } from "@/components/bulk-result-entry";
 
 export const dynamic = "force-dynamic";
 
@@ -48,7 +49,17 @@ export default async function WorklistsPage({
       },
       include: {
         order: { include: { patient: true, orderingBranch: true } },
-        test: { include: { department: true } },
+        test: {
+          include: {
+            department: true,
+            defaultUnit: true,
+            components: {
+              where: { status: "ACTIVE" },
+              include: { unit: true },
+              orderBy: [{ displayOrder: "asc" }, { code: "asc" }],
+            },
+          },
+        },
         performedBranch: true,
         specimenLinks: {
           include: { specimen: { include: { currentBranch: true } } },
@@ -75,6 +86,48 @@ export default async function WorklistsPage({
   const verified = items.filter(item => item.results[0]?.status === "VERIFIED").length;
   const critical = items.filter(item => item.results[0]?.values.some(value => value.isCritical)).length;
 
+  const bulkRows = items.flatMap(item => {
+    const readySpecimen = item.specimenLinks.map(link => link.specimen).find(specimen =>
+      ["RECEIVED","IN_PROCESS"].includes(specimen.status) &&
+      Boolean(specimen.currentBranchId) &&
+      branchIds.includes(specimen.currentBranchId!)
+    );
+    const latest = item.results[0];
+    if (!readySpecimen?.currentBranchId) return [];
+    if (latest && (latest.source !== "MANUAL" || ["VERIFIED","RELEASED","AMENDED","CANCELLED"].includes(latest.status))) return [];
+
+    const currentByComponent = new Map((latest?.values || []).map(value => [value.componentId || "__TEST__", value.displayValue]));
+    const fields = item.test.components.length > 0
+      ? item.test.components.map(component => ({
+          componentId: component.id,
+          code: component.code,
+          nameEn: component.nameEn,
+          resultType: component.resultType,
+          currentValue: currentByComponent.get(component.id) || "",
+        }))
+      : [{
+          componentId: null,
+          code: item.test.code,
+          nameEn: item.test.nameEn,
+          resultType: item.test.resultType,
+          currentValue: currentByComponent.get("__TEST__") || "",
+        }];
+
+    return [{
+      orderItemId: item.id,
+      accessionNumber: item.order.accessionNumber,
+      patientNumber: item.order.patient.patientNumber,
+      patientName: item.order.patient.fullNameEn,
+      testCode: item.testCodeSnapshot,
+      testName: item.testNameEnSnapshot,
+      specimenId: readySpecimen.id,
+      barcode: readySpecimen.barcode,
+      performingBranchId: readySpecimen.currentBranchId,
+      fields,
+      comments: latest?.comments || "",
+    }];
+  });
+
   return <main className="catalog-shell">
     <header className="page-header">
       <div>
@@ -94,6 +147,8 @@ export default async function WorklistsPage({
       <article><span>Verified</span><strong>{verified}</strong><small>ready for release workflow</small></article>
       <article className={critical ? "summary-attention" : ""}><span>Critical</span><strong>{critical}</strong><small>items containing critical values</small></article>
     </section>
+
+    <BulkResultEntry rows={bulkRows} />
 
     <section className="table-card">
       <div className="table-toolbar">
