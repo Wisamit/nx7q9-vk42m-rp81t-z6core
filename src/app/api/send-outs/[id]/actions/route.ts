@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { Prisma } from "../../../../../../generated/prisma/client";
 import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 
@@ -26,7 +27,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   if (!canAccessBranch(session, referral.branchId)) return NextResponse.json({ error: "branch_forbidden" }, { status: 403 });
 
   let nextStatus: "DISPATCHED" | "RESULT_RECEIVED" | "VERIFIED" | "COMPLETED" | "CANCELLED";
-  let update: Record<string, unknown> = {};
+  let update: Prisma.SendOutReferralUncheckedUpdateInput = {};
   let eventMetadata: Record<string, unknown> = {};
 
   if (action === "DISPATCH") {
@@ -88,7 +89,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         toStatus: nextStatus,
         actorUserId: session.user.id,
         note,
-        metadata: Object.keys(eventMetadata).length ? eventMetadata : undefined,
+        metadata: Object.keys(eventMetadata).length ? eventMetadata as Prisma.InputJsonValue : undefined,
       },
     });
 
@@ -123,7 +124,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         entityType: "SendOutReferral",
         entityId: referral.id,
         oldValues: { status: referral.status },
-        newValues: { status: nextStatus, ...eventMetadata },
+        newValues: { status: nextStatus, ...eventMetadata } as Prisma.InputJsonValue,
         reason: note,
         ipAddress: ctx.ipAddress,
         userAgent: ctx.userAgent,
