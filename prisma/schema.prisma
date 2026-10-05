@@ -3931,7 +3931,7 @@ model Appointment {
   portalAccount PortalAccount? @relation("PortalAppointmentCreator", fields: [portalAccountId], references: [id], onDelete: Restrict)
   createdBy    User?        @relation("AppointmentCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
   homeCollectionVisit HomeCollectionVisit?
-  queueTicket QueueTicket?
+  queueTickets QueueTicket[]
 
   @@unique([organizationId, appointmentNumber])
   @@index([branchId, scheduledStart, status])
@@ -3970,7 +3970,7 @@ model QueueTicket {
   organizationId   String            @map("organization_id") @db.Char(36)
   branchId         String            @map("branch_id") @db.Char(36)
   patientId        String            @map("patient_id") @db.Char(36)
-  appointmentId    String?           @unique @map("appointment_id") @db.Char(36)
+  appointmentId    String?           @map("appointment_id") @db.Char(36)
   ticketNumber     String            @map("ticket_number") @db.VarChar(40)
   queueDate        DateTime          @map("queue_date") @db.Date
   sequence         Int
@@ -3995,6 +3995,7 @@ model QueueTicket {
   calledBy User? @relation("QueueTicketCaller", fields: [calledByUserId], references: [id], onDelete: Restrict)
 
   @@unique([branchId, stage, queueDate, sequence])
+  @@unique([appointmentId, stage, queueDate])
   @@index([branchId, stage, queueDate, status, priority, issuedAt])
   @@index([patientId, issuedAt])
   @@map("queue_tickets")
