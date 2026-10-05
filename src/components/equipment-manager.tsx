@@ -110,6 +110,31 @@ export function EquipmentManager({
     }, "downtime", action === "OPEN" ? "Downtime opened." : "Downtime closed.", event.currentTarget);
   }
 
+  async function maintenancePlan(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const equipmentId = String(form.get("equipmentId") || "");
+    await submit(`/api/equipment/${equipmentId}/maintenance-plans`, {
+      name: form.get("name"),
+      frequencyDays: form.get("frequencyDays"),
+      nextDueAt: form.get("nextDueAt"),
+      instructions: form.get("instructions"),
+    }, "maintenance-plan", "Maintenance plan created.", event.currentTarget);
+  }
+
+  async function equipmentDocument(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const equipmentId = String(form.get("equipmentId") || "");
+    await submit(`/api/equipment/${equipmentId}/documents`, {
+      documentType: form.get("documentType"),
+      name: form.get("name"),
+      externalUrl: form.get("externalUrl"),
+      expiresAt: form.get("expiresAt"),
+      notes: form.get("notes"),
+    }, "document", "Equipment document recorded.", event.currentTarget);
+  }
+
   if (!canManage) return null;
 
   const equipmentOptions = equipment.filter(item => item.status !== "RETIRED");
@@ -179,6 +204,32 @@ export function EquipmentManager({
         <label className="form-span">Impact<input name="impact" /></label>
         <label className="form-span">Resolution<input name="resolution" /></label>
         <button className="secondary-button form-span" disabled={busy !== ""}>{busy === "downtime" ? "Saving…" : "Update Downtime"}</button>
+      </form>
+    </article>
+
+    <article className="detail-card">
+      <h2>Preventive Maintenance Plan</h2>
+      <form className="catalog-form" onSubmit={maintenancePlan}>
+        <label className="form-span">Equipment<select name="equipmentId" required defaultValue=""><option value="">Select equipment…</option>{equipmentOptions.map(item => <option key={item.id} value={item.id}>{item.assetId} — {item.name}</option>)}</select></label>
+        <label>Plan name<input name="name" required placeholder="Monthly preventive service" /></label>
+        <label>Frequency (days)<input name="frequencyDays" type="number" min="1" max="3650" required /></label>
+        <label>Next due<input name="nextDueAt" type="date" required /></label>
+        <label className="form-span">Instructions<textarea name="instructions" rows={2} /></label>
+        <button className="secondary-button form-span" disabled={busy !== ""}>{busy === "maintenance-plan" ? "Saving…" : "Create Maintenance Plan"}</button>
+      </form>
+    </article>
+
+    <article className="detail-card">
+      <h2>Equipment Document</h2>
+      <p className="muted">Record a controlled document or attachment reference. File-storage upload can use the storage-key field through the API when a storage provider is connected.</p>
+      <form className="catalog-form" onSubmit={equipmentDocument}>
+        <label className="form-span">Equipment<select name="equipmentId" required defaultValue=""><option value="">Select equipment…</option>{equipmentOptions.map(item => <option key={item.id} value={item.id}>{item.assetId} — {item.name}</option>)}</select></label>
+        <label>Document type<input name="documentType" required placeholder="MANUAL / CERTIFICATE / SERVICE_REPORT" /></label>
+        <label>Name<input name="name" required /></label>
+        <label className="form-span">External URL<input name="externalUrl" type="url" required placeholder="https://…" /></label>
+        <label>Expiry<input name="expiresAt" type="date" /></label>
+        <label className="form-span">Notes<textarea name="notes" rows={2} /></label>
+        <button className="secondary-button form-span" disabled={busy !== ""}>{busy === "document" ? "Saving…" : "Record Document"}</button>
       </form>
     </article>
 
