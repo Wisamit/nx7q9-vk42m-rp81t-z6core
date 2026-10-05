@@ -1,0 +1,270 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+enum RecordStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum UserStatus {
+  INVITED
+  ACTIVE
+  SUSPENDED
+  DISABLED
+}
+
+model Organization {
+  id              String       @id @default(uuid()) @db.Char(36)
+  code            String       @unique @db.VarChar(50)
+  nameEn          String       @map("name_en") @db.VarChar(200)
+  nameAr          String?      @map("name_ar") @db.VarChar(200)
+  legalName       String?      @map("legal_name") @db.VarChar(255)
+  defaultCurrency String       @default("AED") @map("default_currency") @db.Char(3)
+  defaultTimezone String       @default("Asia/Dubai") @map("default_timezone") @db.VarChar(64)
+  status          RecordStatus @default(ACTIVE)
+  createdAt       DateTime     @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt       DateTime     @updatedAt @map("updated_at") @db.DateTime(3)
+  deactivatedAt   DateTime?    @map("deactivated_at") @db.DateTime(3)
+
+  branches    Branch[]
+  users       User[]
+  roles       Role[]
+  departments Department[]
+  auditEvents AuditEvent[]
+
+  @@map("organizations")
+}
+
+model Branch {
+  id              String       @id @default(uuid()) @db.Char(36)
+  organizationId  String       @map("organization_id") @db.Char(36)
+  code            String       @db.VarChar(50)
+  nameEn          String       @map("name_en") @db.VarChar(200)
+  nameAr          String?      @map("name_ar") @db.VarChar(200)
+  timezone        String       @default("Asia/Dubai") @db.VarChar(64)
+  defaultCurrency String       @default("AED") @map("default_currency") @db.Char(3)
+  phone           String?      @db.VarChar(50)
+  email           String?      @db.VarChar(191)
+  addressEn       String?      @map("address_en") @db.Text
+  addressAr       String?      @map("address_ar") @db.Text
+  isCentralLab    Boolean      @default(false) @map("is_central_lab")
+  status          RecordStatus @default(ACTIVE)
+  createdAt       DateTime     @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt       DateTime     @updatedAt @map("updated_at") @db.DateTime(3)
+  deactivatedAt   DateTime?    @map("deactivated_at") @db.DateTime(3)
+
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  settings     BranchSetting[]
+  departments Department[]
+  workstations Workstation[]
+  userScopes   UserBranchScope[]
+  auditEvents  AuditEvent[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId, status])
+  @@map("branches")
+}
+
+model BranchSetting {
+  id        String   @id @default(uuid()) @db.Char(36)
+  branchId  String   @map("branch_id") @db.Char(36)
+  key       String   @db.VarChar(100)
+  value     Json
+  createdAt DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.DateTime(3)
+
+  branch Branch @relation(fields: [branchId], references: [id], onDelete: Restrict)
+
+  @@unique([branchId, key])
+  @@map("branch_settings")
+}
+
+model Department {
+  id             String       @id @default(uuid()) @db.Char(36)
+  organizationId String       @map("organization_id") @db.Char(36)
+  branchId       String?      @map("branch_id") @db.Char(36)
+  code           String       @db.VarChar(50)
+  nameEn         String       @map("name_en") @db.VarChar(150)
+  nameAr         String?      @map("name_ar") @db.VarChar(150)
+  status         RecordStatus @default(ACTIVE)
+  createdAt      DateTime     @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt      DateTime     @updatedAt @map("updated_at") @db.DateTime(3)
+  deactivatedAt  DateTime?    @map("deactivated_at") @db.DateTime(3)
+
+  organization Organization          @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  branch       Branch?               @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  workstations Workstation[]
+  userScopes   UserDepartmentScope[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId, status])
+  @@index([branchId, status])
+  @@map("departments")
+}
+
+model Workstation {
+  id           String       @id @default(uuid()) @db.Char(36)
+  branchId     String       @map("branch_id") @db.Char(36)
+  departmentId String?      @map("department_id") @db.Char(36)
+  code         String       @db.VarChar(50)
+  nameEn       String       @map("name_en") @db.VarChar(150)
+  nameAr       String?      @map("name_ar") @db.VarChar(150)
+  status       RecordStatus @default(ACTIVE)
+  createdAt    DateTime     @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt    DateTime     @updatedAt @map("updated_at") @db.DateTime(3)
+  deactivatedAt DateTime?   @map("deactivated_at") @db.DateTime(3)
+
+  branch     Branch      @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  department Department? @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+
+  @@unique([branchId, code])
+  @@index([departmentId, status])
+  @@map("workstations")
+}
+
+model User {
+  id             String     @id @default(uuid()) @db.Char(36)
+  organizationId String     @map("organization_id") @db.Char(36)
+  username       String     @db.VarChar(100)
+  email          String?    @db.VarChar(191)
+  passwordHash   String?    @map("password_hash") @db.VarChar(255)
+  displayNameEn  String     @map("display_name_en") @db.VarChar(200)
+  displayNameAr  String?    @map("display_name_ar") @db.VarChar(200)
+  preferredLocale String    @default("en") @map("preferred_locale") @db.VarChar(10)
+  status         UserStatus @default(INVITED)
+  lastLoginAt    DateTime?  @map("last_login_at") @db.DateTime(3)
+  createdAt      DateTime   @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt      DateTime   @updatedAt @map("updated_at") @db.DateTime(3)
+  deactivatedAt  DateTime?  @map("deactivated_at") @db.DateTime(3)
+
+  organization     Organization          @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  roles            UserRole[]
+  branchScopes     UserBranchScope[]
+  departmentScopes UserDepartmentScope[]
+  auditEvents      AuditEvent[]          @relation("AuditActor")
+
+  @@unique([organizationId, username])
+  @@unique([organizationId, email])
+  @@index([organizationId, status])
+  @@map("users")
+}
+
+model Role {
+  id             String       @id @default(uuid()) @db.Char(36)
+  organizationId String       @map("organization_id") @db.Char(36)
+  code           String       @db.VarChar(80)
+  nameEn         String       @map("name_en") @db.VarChar(150)
+  nameAr         String?      @map("name_ar") @db.VarChar(150)
+  isSystem       Boolean      @default(false) @map("is_system")
+  status         RecordStatus @default(ACTIVE)
+  createdAt      DateTime     @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt      DateTime     @updatedAt @map("updated_at") @db.DateTime(3)
+  deactivatedAt  DateTime?    @map("deactivated_at") @db.DateTime(3)
+
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  users        UserRole[]
+  permissions  RolePermission[]
+
+  @@unique([organizationId, code])
+  @@map("roles")
+}
+
+model Permission {
+  id          String   @id @default(uuid()) @db.Char(36)
+  code        String   @unique @db.VarChar(120)
+  module      String   @db.VarChar(80)
+  description String?  @db.VarChar(255)
+  createdAt   DateTime @default(now()) @map("created_at") @db.DateTime(3)
+
+  roles RolePermission[]
+
+  @@index([module])
+  @@map("permissions")
+}
+
+model UserRole {
+  userId    String   @map("user_id") @db.Char(36)
+  roleId    String   @map("role_id") @db.Char(36)
+  assignedAt DateTime @default(now()) @map("assigned_at") @db.DateTime(3)
+  assignedBy String?  @map("assigned_by") @db.Char(36)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Restrict)
+
+  @@id([userId, roleId])
+  @@index([roleId])
+  @@map("user_roles")
+}
+
+model RolePermission {
+  roleId       String   @map("role_id") @db.Char(36)
+  permissionId String   @map("permission_id") @db.Char(36)
+  grantedAt    DateTime @default(now()) @map("granted_at") @db.DateTime(3)
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Restrict)
+
+  @@id([roleId, permissionId])
+  @@index([permissionId])
+  @@map("role_permissions")
+}
+
+model UserBranchScope {
+  userId    String   @map("user_id") @db.Char(36)
+  branchId  String   @map("branch_id") @db.Char(36)
+  createdAt DateTime @default(now()) @map("created_at") @db.DateTime(3)
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Restrict)
+  branch Branch @relation(fields: [branchId], references: [id], onDelete: Restrict)
+
+  @@id([userId, branchId])
+  @@index([branchId])
+  @@map("user_branch_scopes")
+}
+
+model UserDepartmentScope {
+  userId       String   @map("user_id") @db.Char(36)
+  departmentId String   @map("department_id") @db.Char(36)
+  createdAt    DateTime @default(now()) @map("created_at") @db.DateTime(3)
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Restrict)
+  department Department @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+
+  @@id([userId, departmentId])
+  @@index([departmentId])
+  @@map("user_department_scopes")
+}
+
+model AuditEvent {
+  id             String   @id @default(uuid()) @db.Char(36)
+  organizationId String   @map("organization_id") @db.Char(36)
+  branchId       String?  @map("branch_id") @db.Char(36)
+  actorUserId    String?  @map("actor_user_id") @db.Char(36)
+  action         String   @db.VarChar(100)
+  entityType     String   @map("entity_type") @db.VarChar(100)
+  entityId       String   @map("entity_id") @db.VarChar(100)
+  oldValues      Json?    @map("old_values")
+  newValues      Json?    @map("new_values")
+  reason         String?  @db.Text
+  requestId      String?  @map("request_id") @db.VarChar(100)
+  sessionId      String?  @map("session_id") @db.VarChar(100)
+  ipAddress      String?  @map("ip_address") @db.VarChar(45)
+  userAgent      String?  @map("user_agent") @db.VarChar(500)
+  occurredAt     DateTime @default(now()) @map("occurred_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  branch       Branch?      @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  actor        User?        @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, occurredAt])
+  @@index([branchId, occurredAt])
+  @@index([actorUserId, occurredAt])
+  @@index([entityType, entityId, occurredAt])
+  @@map("audit_events")
+}
