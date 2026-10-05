@@ -51,7 +51,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ iso
   if (antibiotics.length !== ids.length) return NextResponse.json({ error: "antibiotic_not_found" }, { status: 404 });
   const byId = new Map(antibiotics.map(item => [item.id, item]));
 
-  const prepared = [];
+  const prepared: Array<{
+    antibiotic: (typeof antibiotics)[number];
+    interpretation: "S" | "I" | "R" | "NON_SUSCEPTIBLE" | "UNKNOWN";
+    micValue: number | null;
+    micUnit: string | null;
+    zoneDiameterMm: number | null;
+    breakpointSnapshot: string | null;
+  }> = [];
   for (const item of body.results) {
     const antibioticId = text(item.antibioticId, 36);
     const antibiotic = byId.get(antibioticId);
