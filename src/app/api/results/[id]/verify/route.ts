@@ -49,6 +49,40 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
       data: { status: "VERIFIED" },
     });
 
+    if (criticalValues.length > 0) {
+      await tx.criticalResultEvent.upsert({
+        where: { resultId: result.id },
+        update: {
+          status: "OPEN",
+          criticalValueSnapshot: criticalValues.map((value) => ({
+            componentCode: value.componentCodeSnapshot,
+            componentName: value.componentNameEnSnapshot,
+            displayValue: value.displayValue,
+            unit: value.unitSnapshot,
+            flag: value.flag,
+            criticalLow: value.criticalLowSnapshot?.toString() || null,
+            criticalHigh: value.criticalHighSnapshot?.toString() || null,
+          })),
+          acknowledgedAt: null,
+          acknowledgedByUserId: null,
+          closedAt: null,
+        },
+        create: {
+          resultId: result.id,
+          status: "OPEN",
+          criticalValueSnapshot: criticalValues.map((value) => ({
+            componentCode: value.componentCodeSnapshot,
+            componentName: value.componentNameEnSnapshot,
+            displayValue: value.displayValue,
+            unit: value.unitSnapshot,
+            flag: value.flag,
+            criticalLow: value.criticalLowSnapshot?.toString() || null,
+            criticalHigh: value.criticalHighSnapshot?.toString() || null,
+          })),
+        },
+      });
+    }
+
     const remaining = await tx.orderItem.count({
       where: {
         orderId: result.orderItem.orderId,
