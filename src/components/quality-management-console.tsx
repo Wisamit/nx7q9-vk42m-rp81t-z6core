@@ -309,8 +309,14 @@ export function QualityManagementConsole({
     }, "doc-new-" + document.id, "New immutable document version created.");
   }
 
-  async function documentWorkflow(versionId: string, action: "SUBMIT_REVIEW" | "APPROVE" | "MAKE_EFFECTIVE") {
-    const label = action === "SUBMIT_REVIEW" ? "submit for review" : action === "APPROVE" ? "approve" : "make effective";
+  async function documentWorkflow(versionId: string, action: "SUBMIT_REVIEW" | "COMPLETE_REVIEW" | "APPROVE" | "MAKE_EFFECTIVE") {
+    const label = action === "SUBMIT_REVIEW"
+      ? "submit for review"
+      : action === "COMPLETE_REVIEW"
+        ? "complete review"
+        : action === "APPROVE"
+          ? "approve"
+          : "make effective";
     if (!window.confirm(`Confirm: ${label} this document version?`)) return;
     await send(`/api/quality/document-versions/${versionId}/workflow`, "POST", { action }, "doc-workflow-" + versionId, `Document version action completed: ${label}.`);
   }
@@ -551,7 +557,8 @@ export function QualityManagementConsole({
             <td>{document.versions.slice(0,4).map(version => <div key={version.id}><small>v{version.version} · {version.status}{version.reviewDueAt ? " · review " + version.reviewDueAt.slice(0,10) : ""}</small></div>)}</td>
             <td>{permissions.documents && latest && <div className="result-actions">
               {latest.status === "DRAFT" && <button type="button" className="secondary-button" onClick={() => void documentWorkflow(latest.id,"SUBMIT_REVIEW")}>Submit Review</button>}
-              {latest.status === "IN_REVIEW" && <button type="button" className="secondary-button" onClick={() => void documentWorkflow(latest.id,"APPROVE")}>Approve</button>}
+              {latest.status === "IN_REVIEW" && <button type="button" className="secondary-button" onClick={() => void documentWorkflow(latest.id,"COMPLETE_REVIEW")}>Complete Review</button>}
+              {latest.status === "REVIEWED" && <button type="button" className="secondary-button" onClick={() => void documentWorkflow(latest.id,"APPROVE")}>Approve</button>}
               {latest.status === "APPROVED" && <button type="button" className="secondary-button" onClick={() => void documentWorkflow(latest.id,"MAKE_EFFECTIVE")}>Make Effective</button>}
               {["EFFECTIVE","RETIRED"].includes(latest.status) && <button type="button" className="secondary-button" onClick={() => void newDocumentVersion(document)}>New Version</button>}
             </div>}</td>
