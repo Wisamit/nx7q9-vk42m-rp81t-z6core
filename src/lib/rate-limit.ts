@@ -23,7 +23,7 @@ export async function checkRateLimit(input: {
   const windowStart = new Date(startMs);
   const hash = keyHash(input.key || "unknown");
 
-  async function apply() {
+  async function apply(): Promise<number> {
     const existing = await prisma.requestRateLimit.findUnique({
       where: { scope_keyHash: { scope: input.scope, keyHash: hash } },
     });
