@@ -1,4 +1,4 @@
-import { NotificationChannel } from "../../../../../../generated/prisma/client";
+import { NotificationChannel } from "../../../../../generated/prisma/client";
 import { NextResponse } from "next/server";
 import { requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
