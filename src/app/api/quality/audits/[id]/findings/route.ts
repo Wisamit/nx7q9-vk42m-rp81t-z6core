@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import { NextResponse } from "next/server";
 import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
@@ -41,7 +42,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const created = await tx.internalAuditFinding.create({
       data: {
         auditId: id,
-        findingNumber: `F-${String(audit.findings.length + 1).padStart(3,"0")}`,
+        findingNumber: `F-${randomUUID().slice(0,8).toUpperCase()}`,
         severity,
         description,
         requirementRef,
