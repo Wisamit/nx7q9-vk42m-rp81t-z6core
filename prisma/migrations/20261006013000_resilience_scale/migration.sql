@@ -86,6 +86,57 @@ CREATE TABLE `branch_continuity_policies` (
   CONSTRAINT `branch_continuity_policies_updater_fkey` FOREIGN KEY (`updated_by_user_id`) REFERENCES `users`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
+
+CREATE TABLE `edge_nodes` (
+  `id` CHAR(36) NOT NULL,
+  `organization_id` CHAR(36) NOT NULL,
+  `branch_id` CHAR(36) NOT NULL,
+  `code` VARCHAR(80) NOT NULL,
+  `name` VARCHAR(200) NOT NULL,
+  `status` ENUM('ACTIVE','INACTIVE') NOT NULL DEFAULT 'ACTIVE',
+  `software_version` VARCHAR(80) NULL,
+  `last_heartbeat_at` DATETIME(3) NULL,
+  `last_sync_at` DATETIME(3) NULL,
+  `created_by_user_id` CHAR(36) NOT NULL,
+  `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `updated_at` DATETIME(3) NOT NULL,
+  `deactivated_at` DATETIME(3) NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE INDEX `edge_nodes_org_code_key`(`organization_id`,`code`),
+  INDEX `edge_nodes_branch_status_idx`(`branch_id`,`status`),
+  INDEX `edge_nodes_heartbeat_idx`(`last_heartbeat_at`),
+  CONSTRAINT `edge_nodes_org_fkey` FOREIGN KEY (`organization_id`) REFERENCES `organizations`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
+  CONSTRAINT `edge_nodes_branch_fkey` FOREIGN KEY (`branch_id`) REFERENCES `branches`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
+  CONSTRAINT `edge_nodes_creator_fkey` FOREIGN KEY (`created_by_user_id`) REFERENCES `users`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+CREATE TABLE `edge_queue_messages` (
+  `id` CHAR(36) NOT NULL,
+  `organization_id` CHAR(36) NOT NULL,
+  `branch_id` CHAR(36) NOT NULL,
+  `edge_node_id` CHAR(36) NOT NULL,
+  `direction` ENUM('TO_CENTRAL','TO_EDGE') NOT NULL,
+  `event_type` VARCHAR(120) NOT NULL,
+  `idempotency_key` VARCHAR(160) NOT NULL,
+  `payload` JSON NOT NULL,
+  `payload_hash` CHAR(64) NOT NULL,
+  `status` ENUM('QUEUED','RECEIVED','ACKNOWLEDGED','FAILED','DEAD_LETTER') NOT NULL DEFAULT 'QUEUED',
+  `attempt_count` INTEGER NOT NULL DEFAULT 0,
+  `last_error` TEXT NULL,
+  `received_at` DATETIME(3) NULL,
+  `acknowledged_at` DATETIME(3) NULL,
+  `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `updated_at` DATETIME(3) NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE INDEX `edge_queue_messages_node_direction_idempotency_key`(`edge_node_id`,`direction`,`idempotency_key`),
+  INDEX `edge_queue_messages_org_status_created_idx`(`organization_id`,`status`,`created_at`),
+  INDEX `edge_queue_messages_branch_status_created_idx`(`branch_id`,`status`,`created_at`),
+  INDEX `edge_queue_messages_node_status_created_idx`(`edge_node_id`,`status`,`created_at`),
+  CONSTRAINT `edge_queue_messages_org_fkey` FOREIGN KEY (`organization_id`) REFERENCES `organizations`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
+  CONSTRAINT `edge_queue_messages_branch_fkey` FOREIGN KEY (`branch_id`) REFERENCES `branches`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
+  CONSTRAINT `edge_queue_messages_node_fkey` FOREIGN KEY (`edge_node_id`) REFERENCES `edge_nodes`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
 CREATE INDEX `orders_branch_status_ordered_idx` ON `orders`(`ordering_branch_id`,`status`,`ordered_at`);
 CREATE INDEX `specimens_branch_status_updated_idx` ON `specimens`(`current_branch_id`,`status`,`updated_at`);
 CREATE INDEX `user_sessions_expiry_revoked_idx` ON `user_sessions`(`expires_at`,`revoked_at`);
