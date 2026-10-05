@@ -29,53 +29,53 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (action === "MAKE_EFFECTIVE" && effectiveFrom > now) return NextResponse.json({ error: "future_effective_activation_not_supported" }, { status: 409 });
 
   const saved = await prisma.$transaction(async tx => {
+    let updated;
     if (action === "SUBMIT_REVIEW") {
-      return tx.qualityDocumentVersion.update({
+      updated = await tx.qualityDocumentVersion.update({
         where: { id },
         data: { status: "IN_REVIEW", reviewedByUserId: session.user.id, reviewedAt: now },
       });
-    }
-    if (action === "APPROVE") {
-      return tx.qualityDocumentVersion.update({
+    } else if (action === "APPROVE") {
+      updated = await tx.qualityDocumentVersion.update({
         where: { id },
         data: { status: "APPROVED", approvedByUserId: session.user.id, approvedAt: now },
       });
-    }
-
-    const currentlyEffective = await tx.qualityDocumentVersion.findMany({
-      where: { documentId: version.documentId, status: "EFFECTIVE", id: { not: id } },
-      select: { id: true },
-    });
-    if (currentlyEffective.length) {
-      await tx.qualityDocumentVersion.updateMany({
-        where: { id: { in: currentlyEffective.map(item => item.id) } },
-        data: { status: "RETIRED", retiredAt: now },
+    } else {
+      const currentlyEffective = await tx.qualityDocumentVersion.findMany({
+        where: { documentId: version.documentId, status: "EFFECTIVE", id: { not: id } },
+        select: { id: true },
+      });
+      if (currentlyEffective.length) {
+        await tx.qualityDocumentVersion.updateMany({
+          where: { id: { in: currentlyEffective.map(item => item.id) } },
+          data: { status: "RETIRED", retiredAt: now },
+        });
+      }
+      updated = await tx.qualityDocumentVersion.update({
+        where: { id },
+        data: { status: "EFFECTIVE", effectiveFrom, retiredAt: null },
+      });
+      await tx.qualityDocument.update({
+        where: { id: version.documentId },
+        data: { currentEffectiveVersion: version.version },
       });
     }
-    const activated = await tx.qualityDocumentVersion.update({
-      where: { id },
-      data: { status: "EFFECTIVE", effectiveFrom, retiredAt: null },
-    });
-    await tx.qualityDocument.update({
-      where: { id: version.documentId },
-      data: { currentEffectiveVersion: version.version },
-    });
-    return activated;
-  });
 
-  await prisma.auditEvent.create({
-    data: {
-      organizationId: session.user.organizationId,
-      branchId: version.document.branchId || session.activeBranchId,
-      actorUserId: session.user.id,
-      action: `QUALITY_DOCUMENT_${action}`,
-      entityType: "QualityDocumentVersion",
-      entityId: version.id,
-      oldValues: { status: version.status },
-      newValues: { status: saved.status, version: version.version, effectiveFrom: saved.effectiveFrom },
-      ipAddress: ctx.ipAddress,
-      userAgent: ctx.userAgent,
-    },
+    await tx.auditEvent.create({
+      data: {
+        organizationId: session.user.organizationId,
+        branchId: version.document.branchId || session.activeBranchId,
+        actorUserId: session.user.id,
+        action: `QUALITY_DOCUMENT_${action}`,
+        entityType: "QualityDocumentVersion",
+        entityId: version.id,
+        oldValues: { status: version.status },
+        newValues: { status: updated.status, version: version.version, effectiveFrom: updated.effectiveFrom },
+        ipAddress: ctx.ipAddress,
+        userAgent: ctx.userAgent,
+      },
+    });
+    return updated;
   });
 
   return NextResponse.json({ status: "ok", version: saved });
