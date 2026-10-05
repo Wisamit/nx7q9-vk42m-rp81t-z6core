@@ -73,6 +73,21 @@ export default async function ClinicalRulesPage() {
       methods={methods}
     />
 
+    <AdvancedClinicalRulesManager
+      tests={tests.map(test => ({
+        id: test.id,
+        code: test.code,
+        nameEn: test.nameEn,
+        components: test.components.map(component => ({
+          id: component.id,
+          code: component.code,
+          nameEn: component.nameEn,
+          resultType: component.resultType,
+        })),
+      }))}
+      branches={branches}
+    />
+
     <section className="detail-grid detail-section">
       <article className="table-card">
         <div className="table-toolbar"><h2>Delta Rules</h2><span>{deltaRules.length} shown</span></div>
