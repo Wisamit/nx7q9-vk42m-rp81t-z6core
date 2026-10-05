@@ -23,6 +23,34 @@ type ReportValue = {
   referenceTextAr: string | null;
 };
 
+type MicrobiologySnapshot = {
+  cultureStatus: string;
+  preliminaryComment: string | null;
+  finalComment: string | null;
+  observations: Array<{ type: string; text: string; observedAt: string }>;
+  isolates: Array<{
+    sequenceNumber: number;
+    organism: { code: string; nameEn: string; nameAr: string | null };
+    quantityText: string | null;
+    colonyNotes: string | null;
+    susceptibilityTests: Array<{
+      method: string | null;
+      comments: string | null;
+      testedAt: string;
+      results: Array<{
+        antibioticCode: string;
+        antibioticNameEn: string;
+        antibioticNameAr: string | null;
+        interpretation: string;
+        micValue: string | null;
+        micUnit: string | null;
+        zoneDiameterMm: string | null;
+        breakpointSnapshot: string | null;
+      }>;
+    }>;
+  }>;
+};
+
 type ReportResult = {
   testCode: string;
   testNameEn: string;
@@ -32,6 +60,7 @@ type ReportResult = {
   specimen: { barcode: string; collectedAt: string | null; receivedAt: string | null } | null;
   values: ReportValue[];
   comments: string | null;
+  microbiology: MicrobiologySnapshot | null;
   verifiedBy: { nameEn: string; nameAr: string | null } | null;
   verifiedAt: string | null;
   releasedBy: { nameEn: string; nameAr: string | null } | null;
@@ -187,7 +216,40 @@ export default async function DiagnosticReportPage({ params }: { params: Promise
                 <td>{value.unit || "—"}</td>
                 <td>{referenceText(value)}</td>
               </tr>),
-              result.comments ? <tr key={`${result.testCode}-comment`}><td colSpan={5}><strong>Comment:</strong> {result.comments}</td></tr> : null,
+              result.microbiology ? <tr key={`${result.testCode}-microbiology`}>
+                <td colSpan={5}>
+                  <div className="report-notes">
+                    <p><strong>Culture status:</strong> {result.microbiology.cultureStatus.replaceAll("_", " ")}</p>
+                    {result.microbiology.finalComment && <p><strong>Final interpretation:</strong> {result.microbiology.finalComment}</p>}
+                    {result.microbiology.observations.length > 0 && <div>
+                      <strong>Culture observations</strong>
+                      <ul>{result.microbiology.observations.map((observation, index) =>
+                        <li key={index}>{observation.type.replaceAll("_", " ")}: {observation.text}</li>
+                      )}</ul>
+                    </div>}
+                    {result.microbiology.isolates.map(isolate => <div key={isolate.sequenceNumber} className="detail-section">
+                      <p><strong>Isolate #{isolate.sequenceNumber}: {isolate.organism.code} — {isolate.organism.nameEn}</strong>
+                        {isolate.quantityText ? ` · ${isolate.quantityText}` : ""}</p>
+                      {isolate.colonyNotes && <p>{isolate.colonyNotes}</p>}
+                      {isolate.susceptibilityTests.map((panel, panelIndex) => <div key={panelIndex}>
+                        <p><strong>Susceptibility:</strong> {panel.method || "Method not specified"}</p>
+                        <table>
+                          <thead><tr><th>Antibiotic</th><th>S/I/R</th><th>MIC</th><th>Zone</th><th>Breakpoint</th></tr></thead>
+                          <tbody>{panel.results.map(item => <tr key={item.antibioticCode}>
+                            <td>{item.antibioticCode} — {item.antibioticNameEn}</td>
+                            <td>{item.interpretation}</td>
+                            <td>{item.micValue || "—"}{item.micUnit ? " " + item.micUnit : ""}</td>
+                            <td>{item.zoneDiameterMm ? item.zoneDiameterMm + " mm" : "—"}</td>
+                            <td>{item.breakpointSnapshot || "—"}</td>
+                          </tr>)}</tbody>
+                        </table>
+                        {panel.comments && <p>{panel.comments}</p>}
+                      </div>)}
+                    </div>)}
+                  </div>
+                </td>
+              </tr> : null,
+              result.comments && !result.microbiology ? <tr key={`${result.testCode}-comment`}><td colSpan={5}><strong>Comment:</strong> {result.comments}</td></tr> : null,
               <tr className="report-result-meta" key={`${result.testCode}-meta`}>
                 <td colSpan={5}>
                   Specimen: {result.specimen?.barcode || "—"} · Collected: {result.specimen?.collectedAt?.replace("T"," ").slice(0,19) || "—"} ·

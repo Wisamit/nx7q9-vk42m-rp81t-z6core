@@ -30,6 +30,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (original.status !== "RELEASED") {
     return NextResponse.json({ error: "only_released_results_can_be_amended", status: original.status }, { status: 409 });
   }
+  if (original.microbiologySnapshot) {
+    return NextResponse.json({
+      error: "microbiology_requires_dedicated_amendment_workflow",
+      resultId: original.id,
+    }, { status: 409 });
+  }
 
   const newer = await prisma.laboratoryResult.findFirst({
     where: {

@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import { permissionSet, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { MicrobiologyCaseEditor } from "@/components/microbiology-case-editor";
+import { MicrobiologyFinalWorkflow } from "@/components/microbiology-final-workflow";
+import { ValidationHoldPanel } from "@/components/validation-hold-panel";
 
 export const dynamic = "force-dynamic";
 
@@ -29,6 +31,14 @@ export default async function MicrobiologyCasePage({ params }: { params: Promise
       },
       createdBy: true,
       finalizedBy: true,
+      result: {
+        include: {
+          validationHoldEvents: {
+            include: { reviewedBy: true },
+            orderBy: { createdAt: "asc" },
+          },
+        },
+      },
       observations: {
         include: { enteredBy: true },
         orderBy: { observedAt: "asc" },
@@ -64,7 +74,7 @@ export default async function MicrobiologyCasePage({ params }: { params: Promise
     }),
   ]);
 
-  const locked = ["FINAL","CANCELLED"].includes(microbiologyCase.status);
+  const locked = ["FINAL","CANCELLED"].includes(microbiologyCase.status) || Boolean(microbiologyCase.result);
 
   return <main className="catalog-shell">
     <header className="page-header">
@@ -136,9 +146,36 @@ export default async function MicrobiologyCasePage({ params }: { params: Promise
           <dt>Created by</dt><dd>{microbiologyCase.createdBy.displayNameEn}</dd>
           <dt>Finalized by</dt><dd>{microbiologyCase.finalizedBy?.displayNameEn || "—"}</dd>
         </dl>
-        <p className="muted">Finalization is intentionally unavailable until this case is linked into the normal versioned LaboratoryResult validation/release/report workflow.</p>
+        <p className="muted">Final microbiology content is bridged into the normal versioned LaboratoryResult workflow before verification and release.</p>
       </article>
     </section>
+
+
+    <MicrobiologyFinalWorkflow
+      caseId={microbiologyCase.id}
+      resultId={microbiologyCase.result?.id || null}
+      resultStatus={microbiologyCase.result?.status || null}
+      finalComment={microbiologyCase.finalComment || ""}
+      canEnter={permissions.has("microbiology.enter")}
+      canVerify={permissions.has("results.verify")}
+      canRelease={permissions.has("results.release")}
+      orderId={microbiologyCase.orderItem.order.id}
+    />
+
+    {microbiologyCase.result && <ValidationHoldPanel
+      resultId={microbiologyCase.result.id}
+      canReview={permissions.has("validation_holds.review")}
+      events={microbiologyCase.result.validationHoldEvents.map(event => ({
+        id: event.id,
+        status: event.status,
+        severity: event.severitySnapshot,
+        reasonEn: event.reasonEnSnapshot,
+        reasonAr: event.reasonArSnapshot,
+        reviewedBy: event.reviewedBy?.displayNameEn || null,
+        reviewedAt: event.reviewedAt?.toISOString() || null,
+        reviewNote: event.reviewNote,
+      }))}
+    />}
 
     <section className="detail-section">
       <h2>Isolates & Susceptibility</h2>
