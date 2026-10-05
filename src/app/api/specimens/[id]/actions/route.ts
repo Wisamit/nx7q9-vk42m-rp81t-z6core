@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { specimenActionError } from "@/lib/clinical-safety";
 
 function text(value: unknown, max = 500) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -43,10 +44,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   });
   if (!specimen) return NextResponse.json({ error: "specimen_not_found" }, { status: 404 });
 
-  if (body.action === "COLLECT") {
-    if (specimen.status !== "PLANNED") return NextResponse.json({ error: "specimen_not_collectable", status: specimen.status }, { status: 409 });
-    if (!specimen.specimenTypeId) return NextResponse.json({ error: "specimen_type_required_before_collection" }, { status: 409 });
+  const lifecycleError = specimenActionError({
+    status: specimen.status,
+    action: body.action,
+    specimenTypeConfigured: Boolean(specimen.specimenTypeId),
+  });
+  if (lifecycleError) {
+    return NextResponse.json({ error: lifecycleError, status: specimen.status }, { status: 409 });
+  }
 
+  if (body.action === "COLLECT") {
     const volumeText = body.volume == null || body.volume === "" ? "" : String(body.volume);
     const volume = volumeText ? Number(volumeText) : null;
     if (volume !== null && (!Number.isFinite(volume) || volume < 0)) {
@@ -127,10 +134,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
 
   if (body.action === "RECEIVE") {
-    if (!["COLLECTED", "IN_TRANSIT"].includes(specimen.status)) {
-      return NextResponse.json({ error: "specimen_not_receivable", status: specimen.status }, { status: 409 });
-    }
-
     const result = await prisma.$transaction(async (tx) => {
       const updated = await tx.specimen.update({
         where: { id: specimen.id },
@@ -172,10 +175,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     });
 
     return NextResponse.json({ status: "ok", specimen: result });
-  }
-
-  if (!["COLLECTED", "RECEIVED"].includes(specimen.status)) {
-    return NextResponse.json({ error: "specimen_not_rejectable", status: specimen.status }, { status: 409 });
   }
 
   const reasonCode = text(body.rejectionReasonCode, 80);
