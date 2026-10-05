@@ -359,7 +359,7 @@ export async function POST(request: Request) {
           isCalculated: item.isCalculated,
           calculatedRuleId: item.calculatedRuleId,
           calculationExpressionSnapshot: item.calculationExpression,
-          calculationInputsSnapshot: item.calculationInputs,
+          calculationInputsSnapshot: item.calculationInputs ? item.calculationInputs as Prisma.InputJsonValue : undefined,
         },
       });
     }
