@@ -343,10 +343,11 @@ export default async function DiagnosticReportPage({ params }: { params: Promise
       <div className="table-toolbar"><h2>Report Version History</h2><span>{report.versions.length} version(s)</span></div>
       <div className="table-wrap">
         <table>
-          <thead><tr><th>Version</th><th>Status</th><th>Issued</th><th>Issued by</th><th>Branch</th><th>Amendment reason</th></tr></thead>
+          <thead><tr><th>Version</th><th>Status</th><th>Template</th><th>Issued</th><th>Issued by</th><th>Branch</th><th>Amendment reason</th></tr></thead>
           <tbody>{report.versions.map(version => <tr key={version.id}>
             <td><strong>{version.version}</strong></td>
             <td>{version.status}</td>
+            <td>{version.reportTemplateVersionId ? "Versioned template" : "Legacy/default layout"}</td>
             <td>{version.issuedAt.toISOString().replace("T"," ").slice(0,19)}</td>
             <td>{version.issuedBy.displayNameEn}</td>
             <td>{version.branch.nameEn}</td>
