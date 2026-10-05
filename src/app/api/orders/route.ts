@@ -65,11 +65,10 @@ export async function POST(request: Request) {
   if (referrerId && !referrer) return NextResponse.json({ error: "referrer_not_found" }, { status: 404 });
   if (clientId && !client) return NextResponse.json({ error: "client_not_found" }, { status: 404 });
 
-  const rawAnswers = Array.isArray(body.answers)
-    ? body.answers.filter((entry): entry is { questionId: string; value: unknown } =>
-        Boolean(entry && typeof entry === "object" && typeof (entry as { questionId?: unknown }).questionId === "string")
-      )
-    : [];
+  const answerInput: unknown[] = Array.isArray(body.answers) ? body.answers : [];
+  const rawAnswers = answerInput.filter((entry): entry is { questionId: string; value: unknown } =>
+    Boolean(entry && typeof entry === "object" && typeof (entry as { questionId?: unknown }).questionId === "string")
+  );
   const answerIds = rawAnswers.map(entry => entry.questionId);
   if (new Set(answerIds).size !== answerIds.length) {
     return NextResponse.json({ error: "duplicate_order_question_answer" }, { status: 400 });
