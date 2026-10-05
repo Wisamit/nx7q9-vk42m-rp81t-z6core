@@ -1,0 +1,223 @@
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { canAccessBranch, requirePermission } from "@/lib/auth";
+import { prisma } from "@/lib/db";
+import { PrintReportButton } from "@/components/print-report-button";
+
+export const dynamic = "force-dynamic";
+
+type ReportValue = {
+  componentCode: string;
+  componentNameEn: string;
+  componentNameAr: string | null;
+  displayValue: string;
+  unit: string | null;
+  flag: string;
+  isCritical: boolean;
+  referenceLow: string | null;
+  referenceHigh: string | null;
+  referenceTextEn: string | null;
+  referenceTextAr: string | null;
+};
+
+type ReportResult = {
+  testCode: string;
+  testNameEn: string;
+  testNameAr: string | null;
+  resultVersion: number;
+  performingBranch: { code: string; nameEn: string; nameAr: string | null };
+  specimen: { barcode: string; collectedAt: string | null; receivedAt: string | null } | null;
+  values: ReportValue[];
+  comments: string | null;
+  verifiedBy: { nameEn: string; nameAr: string | null } | null;
+  verifiedAt: string | null;
+  releasedBy: { nameEn: string; nameAr: string | null } | null;
+  releasedAt: string | null;
+  amendedFromResultId: string | null;
+  amendmentReason: string | null;
+};
+
+type Snapshot = {
+  organization: { nameEn: string; nameAr: string | null; legalName: string | null };
+  branch: {
+    code: string;
+    nameEn: string;
+    nameAr: string | null;
+    phone: string | null;
+    email: string | null;
+    addressEn: string | null;
+    addressAr: string | null;
+  };
+  patient: {
+    patientNumber: string;
+    fullNameEn: string;
+    fullNameAr: string | null;
+    dateOfBirth: string | null;
+    sexAtBirth: string;
+  };
+  order: {
+    accessionNumber: string;
+    priority: string;
+    orderedAt: string;
+    diagnosis: string | null;
+    clinicalNotes: string | null;
+  };
+  referrer: { nameEn: string; nameAr: string | null } | null;
+  results: ReportResult[];
+  completeness: { releasedItemCount: number; totalItemCount: number; final: boolean };
+};
+
+function referenceText(value: ReportValue) {
+  if (value.referenceTextEn) return value.referenceTextEn;
+  if (value.referenceLow !== null || value.referenceHigh !== null) {
+    return `${value.referenceLow ?? "—"} – ${value.referenceHigh ?? "—"}`;
+  }
+  return "—";
+}
+
+export default async function DiagnosticReportPage({ params }: { params: Promise<{ orderId: string }> }) {
+  const session = await requirePermission("reports.view");
+  const { orderId } = await params;
+
+  const report = await prisma.diagnosticReport.findFirst({
+    where: { orderId, organizationId: session.user.organizationId },
+    include: {
+      order: { include: { orderingBranch: true } },
+      versions: {
+        include: { issuedBy: true, branch: true },
+        orderBy: { version: "desc" },
+      },
+    },
+  });
+
+  if (!report || !canAccessBranch(session, report.order.orderingBranchId)) notFound();
+
+  const latest = report.versions[0];
+  if (!latest) {
+    return <main className="catalog-shell">
+      <header className="page-header">
+        <div><p className="eyebrow">Diagnostic Report</p><h1>No Released Report Yet</h1></div>
+        <Link className="secondary-link" href={`/orders/${orderId}`}>Back to Order</Link>
+      </header>
+      <section className="detail-card"><p className="muted">A report version is created when a verified result is released.</p></section>
+    </main>;
+  }
+
+  const snapshot = latest.contentSnapshot as unknown as Snapshot;
+
+  return <main className="report-shell">
+    <div className="report-toolbar no-print">
+      <div>
+        <p className="eyebrow">Diagnostic Report</p>
+        <h1>{snapshot.order.accessionNumber}</h1>
+        <p className="muted">Version {latest.version} · {latest.status}</p>
+      </div>
+      <div className="header-actions">
+        <PrintReportButton />
+        <Link className="secondary-link" href={`/orders/${orderId}`}>Back to Order</Link>
+      </div>
+    </div>
+
+    <article className="diagnostic-report">
+      <header className="report-header">
+        <div>
+          <h1>{snapshot.organization.nameEn}</h1>
+          {snapshot.organization.nameAr && <h2 dir="rtl">{snapshot.organization.nameAr}</h2>}
+          <p>{snapshot.branch.nameEn}{snapshot.branch.nameAr ? ` · ${snapshot.branch.nameAr}` : ""}</p>
+          <p>{snapshot.branch.addressEn || ""}</p>
+          <p>{[snapshot.branch.phone, snapshot.branch.email].filter(Boolean).join(" · ")}</p>
+        </div>
+        <div className="report-version-stamp">
+          <strong>{latest.status}</strong>
+          <span>Report version {latest.version}</span>
+          <span>Issued {latest.issuedAt.toISOString().replace("T"," ").slice(0,19)}</span>
+        </div>
+      </header>
+
+      {latest.status === "AMENDED" && <div className="report-amended-banner">
+        <strong>AMENDED REPORT</strong>
+        <span>{latest.amendmentReason || "A released result was amended."}</span>
+      </div>}
+
+      <section className="report-patient-grid">
+        <div><span>Patient</span><strong>{snapshot.patient.fullNameEn}</strong>{snapshot.patient.fullNameAr && <small dir="rtl">{snapshot.patient.fullNameAr}</small>}</div>
+        <div><span>Patient No.</span><strong>{snapshot.patient.patientNumber}</strong></div>
+        <div><span>Date of Birth</span><strong>{snapshot.patient.dateOfBirth || "—"}</strong></div>
+        <div><span>Sex</span><strong>{snapshot.patient.sexAtBirth}</strong></div>
+        <div><span>Accession</span><strong>{snapshot.order.accessionNumber}</strong></div>
+        <div><span>Priority</span><strong>{snapshot.order.priority}</strong></div>
+        <div><span>Ordered</span><strong>{snapshot.order.orderedAt.replace("T"," ").slice(0,19)}</strong></div>
+        <div><span>Referrer</span><strong>{snapshot.referrer?.nameEn || "—"}</strong></div>
+      </section>
+
+      <section className="report-results">
+        <table>
+          <thead>
+            <tr><th>Test / Component</th><th>Result</th><th>Flag</th><th>Unit</th><th>Reference Range</th></tr>
+          </thead>
+          <tbody>
+            {snapshot.results.map((result) => [
+              <tr className="report-test-heading" key={`${result.testCode}-head`}>
+                <td colSpan={5}>
+                  <strong>{result.testCode} — {result.testNameEn}</strong>
+                  {result.testNameAr && <span dir="rtl"> · {result.testNameAr}</span>}
+                  <small> · {result.performingBranch.nameEn} · Result v{result.resultVersion}</small>
+                </td>
+              </tr>,
+              ...result.values.map((value) => <tr key={`${result.testCode}-${value.componentCode}`} className={value.isCritical ? "report-critical-row" : ""}>
+                <td>
+                  <strong>{value.componentNameEn}</strong>
+                  {value.componentNameAr && <small dir="rtl">{value.componentNameAr}</small>}
+                </td>
+                <td><strong>{value.displayValue}</strong></td>
+                <td>{value.flag === "UNKNOWN" ? "—" : value.flag}</td>
+                <td>{value.unit || "—"}</td>
+                <td>{referenceText(value)}</td>
+              </tr>),
+              result.comments ? <tr key={`${result.testCode}-comment`}><td colSpan={5}><strong>Comment:</strong> {result.comments}</td></tr> : null,
+              <tr className="report-result-meta" key={`${result.testCode}-meta`}>
+                <td colSpan={5}>
+                  Specimen: {result.specimen?.barcode || "—"} · Collected: {result.specimen?.collectedAt?.replace("T"," ").slice(0,19) || "—"} ·
+                  Verified: {result.verifiedBy?.nameEn || "—"} · Released: {result.releasedBy?.nameEn || "—"}
+                </td>
+              </tr>,
+            ])}
+          </tbody>
+        </table>
+      </section>
+
+      {(snapshot.order.diagnosis || snapshot.order.clinicalNotes) && <section className="report-notes">
+        {snapshot.order.diagnosis && <p><strong>Clinical indication:</strong> {snapshot.order.diagnosis}</p>}
+        {snapshot.order.clinicalNotes && <p><strong>Clinical notes:</strong> {snapshot.order.clinicalNotes}</p>}
+      </section>}
+
+      <footer className="report-footer">
+        <div>
+          <strong>{snapshot.completeness.final ? "Final report" : "Partial report"}</strong>
+          <span>{snapshot.completeness.releasedItemCount}/{snapshot.completeness.totalItemCount} order item(s) released</span>
+        </div>
+        <div>
+          <span>Issued by: {latest.issuedBy.displayNameEn}</span>
+          <span>Verification token: {latest.verificationToken.slice(0,16)}…</span>
+        </div>
+      </footer>
+    </article>
+
+    <section className="table-card report-history no-print">
+      <div className="table-toolbar"><h2>Report Version History</h2><span>{report.versions.length} version(s)</span></div>
+      <div className="table-wrap">
+        <table>
+          <thead><tr><th>Version</th><th>Status</th><th>Issued</th><th>Issued by</th><th>Branch</th><th>Amendment reason</th></tr></thead>
+          <tbody>{report.versions.map(version => <tr key={version.id}>
+            <td><strong>{version.version}</strong></td>
+            <td>{version.status}</td>
+            <td>{version.issuedAt.toISOString().replace("T"," ").slice(0,19)}</td>
+            <td>{version.issuedBy.displayNameEn}</td>
+            <td>{version.branch.nameEn}</td>
+            <td>{version.amendmentReason || "—"}</td>
+          </tr>)}</tbody>
+        </table>
+      </div>
+    </section>
+  </main>;
+}

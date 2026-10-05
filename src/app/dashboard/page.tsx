@@ -35,6 +35,7 @@ export default async function DashboardPage() {
           {permissions.has("specimens.view") && <Link className="module-link" href="/specimens"><article><span>10</span><h2>Specimens</h2><p>Barcode collection, receipt, rejection, recollection and custody traceability.</p></article></Link>}
           {permissions.has("transfers.view") && <Link className="module-link" href="/transfers"><article><span>11</span><h2>Transfers</h2><p>Inter-branch shipment manifests and barcode-by-barcode receiving.</p></article></Link>}
           {permissions.has("worklists.view") && <Link className="module-link" href="/worklists"><article><span>12</span><h2>Worklists</h2><p>Received specimens, manual result entry, reference flags and verification.</p></article></Link>}
+          {permissions.has("reports.view") && <Link className="module-link" href="/reports"><article><span>13</span><h2>Reports</h2><p>Immutable partial, final and amended diagnostic report versions.</p></article></Link>}
         </div>
       </section>
     </main>

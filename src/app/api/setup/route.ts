@@ -39,6 +39,10 @@ const FOUNDATION_PERMISSIONS = [
   ["worklists.view", "laboratory", "View laboratory worklists"],
   ["results.enter", "results", "Enter and save laboratory results"],
   ["results.verify", "results", "Verify laboratory results"],
+  ["results.release", "results", "Release verified laboratory results"],
+  ["results.amend", "results", "Initiate amendments for released results"],
+  ["critical.communicate", "results", "Document critical result communication and acknowledgement"],
+  ["reports.view", "reporting", "View diagnostic report versions"],
 ] as const;
 
 function text(value: unknown, max = 200) {

@@ -164,6 +164,36 @@ enum ResultFlag {
   UNKNOWN
 }
 
+enum CriticalEventStatus {
+  OPEN
+  ACKNOWLEDGED
+  CLOSED
+}
+
+enum CriticalCommunicationMethod {
+  PHONE
+  VERBAL
+  EMAIL
+  SMS
+  WHATSAPP
+  OTHER
+}
+
+enum CriticalCommunicationOutcome {
+  ACKNOWLEDGED
+  NO_ANSWER
+  LEFT_MESSAGE
+  FAILED
+  ESCALATED
+}
+
+enum DiagnosticReportVersionStatus {
+  PARTIAL
+  FINAL
+  AMENDED
+  RETRACTED
+}
+
 model Organization {
   id              String       @id @default(uuid()) @db.Char(36)
   code            String       @unique @db.VarChar(50)
@@ -202,6 +232,7 @@ model Organization {
   specimens Specimen[]
   transferManifests SpecimenTransferManifest[]
   results LaboratoryResult[]
+  diagnosticReports DiagnosticReport[]
 
   @@map("organizations")
 }
@@ -244,6 +275,7 @@ model Branch {
   outgoingTransferManifests SpecimenTransferManifest[] @relation("TransferSourceBranch")
   incomingTransferManifests SpecimenTransferManifest[] @relation("TransferDestinationBranch")
   laboratoryResults LaboratoryResult[] @relation("ResultPerformingBranch")
+  reportVersions DiagnosticReportVersion[] @relation("ReportVersionBranch")
 
   @@unique([organizationId, code])
   @@index([organizationId, status])
@@ -348,6 +380,11 @@ model User {
   receivedTransferItems SpecimenTransferItem[] @relation("TransferItemReceiver")
   enteredResults LaboratoryResult[] @relation("ResultEnteredBy")
   verifiedResults LaboratoryResult[] @relation("ResultVerifiedBy")
+  releasedResults LaboratoryResult[] @relation("ResultReleasedBy")
+  criticalCommunications CriticalResultCommunication[] @relation("CriticalCommunicator")
+  acknowledgedCriticalEvents CriticalResultEvent[] @relation("CriticalEventAcknowledgedBy")
+  reportVersions DiagnosticReportVersion[] @relation("ReportVersionIssuer")
+  amendmentRequests LaboratoryResult[] @relation("ResultAmendmentRequestedBy")
 
   @@unique([organizationId, username])
   @@unique([organizationId, email])
@@ -1059,6 +1096,7 @@ model LabOrder {
   invoices      Invoice[]
   statusHistory OrderStatusHistory[]
   specimens     Specimen[]
+  diagnosticReport DiagnosticReport?
 
   @@unique([organizationId, accessionNumber])
   @@index([orderingBranchId, orderedAt])
@@ -1365,9 +1403,12 @@ model LaboratoryResult {
   enteredAt          DateTime     @default(now()) @map("entered_at") @db.DateTime(3)
   verifiedByUserId   String?      @map("verified_by_user_id") @db.Char(36)
   verifiedAt         DateTime?    @map("verified_at") @db.DateTime(3)
+  releasedByUserId   String?      @map("released_by_user_id") @db.Char(36)
   releasedAt         DateTime?    @map("released_at") @db.DateTime(3)
   amendedFromId      String?      @map("amended_from_id") @db.Char(36)
   amendmentReason    String?      @map("amendment_reason") @db.VarChar(1000)
+  amendmentRequestedByUserId String? @map("amendment_requested_by_user_id") @db.Char(36)
+  amendmentRequestedAt DateTime?  @map("amendment_requested_at") @db.DateTime(3)
   comments           String?      @db.Text
   createdAt          DateTime     @default(now()) @map("created_at") @db.DateTime(3)
   updatedAt          DateTime     @updatedAt @map("updated_at") @db.DateTime(3)
@@ -1379,9 +1420,12 @@ model LaboratoryResult {
   method           Method?           @relation(fields: [methodId], references: [id], onDelete: Restrict)
   enteredBy        User              @relation("ResultEnteredBy", fields: [enteredByUserId], references: [id], onDelete: Restrict)
   verifiedBy       User?             @relation("ResultVerifiedBy", fields: [verifiedByUserId], references: [id], onDelete: Restrict)
+  releasedBy       User?             @relation("ResultReleasedBy", fields: [releasedByUserId], references: [id], onDelete: Restrict)
+  amendmentRequestedBy User?         @relation("ResultAmendmentRequestedBy", fields: [amendmentRequestedByUserId], references: [id], onDelete: Restrict)
   amendedFrom      LaboratoryResult? @relation("ResultAmendmentChain", fields: [amendedFromId], references: [id], onDelete: Restrict)
   amendments       LaboratoryResult[] @relation("ResultAmendmentChain")
   values           LaboratoryResultValue[]
+  criticalEvents   CriticalResultEvent[]
 
   @@unique([orderItemId, version])
   @@index([performingBranchId, status, enteredAt])
@@ -1426,4 +1470,92 @@ model LaboratoryResultValue {
   @@index([componentId])
   @@index([flag, isCritical])
   @@map("laboratory_result_values")
+}
+
+
+model CriticalResultEvent {
+  id                    String              @id @default(uuid()) @db.Char(36)
+  resultId              String              @map("result_id") @db.Char(36)
+  status                CriticalEventStatus @default(OPEN)
+  criticalValueSnapshot Json                @map("critical_value_snapshot")
+  detectedAt            DateTime            @default(now()) @map("detected_at") @db.DateTime(3)
+  acknowledgedAt        DateTime?           @map("acknowledged_at") @db.DateTime(3)
+  acknowledgedByUserId  String?             @map("acknowledged_by_user_id") @db.Char(36)
+  closedAt              DateTime?           @map("closed_at") @db.DateTime(3)
+  createdAt             DateTime            @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt             DateTime            @updatedAt @map("updated_at") @db.DateTime(3)
+
+  result          LaboratoryResult @relation(fields: [resultId], references: [id], onDelete: Restrict)
+  acknowledgedBy  User?            @relation("CriticalEventAcknowledgedBy", fields: [acknowledgedByUserId], references: [id], onDelete: Restrict)
+  communications  CriticalResultCommunication[]
+
+  @@unique([resultId])
+  @@index([status, detectedAt])
+  @@map("critical_result_events")
+}
+
+model CriticalResultCommunication {
+  id                       String                       @id @default(uuid()) @db.Char(36)
+  criticalEventId          String                       @map("critical_event_id") @db.Char(36)
+  method                   CriticalCommunicationMethod
+  outcome                  CriticalCommunicationOutcome
+  recipientName            String                       @map("recipient_name") @db.VarChar(200)
+  recipientRole            String?                      @map("recipient_role") @db.VarChar(150)
+  recipientContact         String?                      @map("recipient_contact") @db.VarChar(200)
+  acknowledgementConfirmed Boolean                      @default(false) @map("acknowledgement_confirmed")
+  readBackConfirmed        Boolean                      @default(false) @map("read_back_confirmed")
+  notes                    String?                      @db.Text
+  communicatedByUserId     String                       @map("communicated_by_user_id") @db.Char(36)
+  communicatedAt           DateTime                     @default(now()) @map("communicated_at") @db.DateTime(3)
+  createdAt                DateTime                     @default(now()) @map("created_at") @db.DateTime(3)
+
+  criticalEvent  CriticalResultEvent @relation(fields: [criticalEventId], references: [id], onDelete: Restrict)
+  communicatedBy User                @relation("CriticalCommunicator", fields: [communicatedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([criticalEventId, communicatedAt])
+  @@index([communicatedByUserId, communicatedAt])
+  @@map("critical_result_communications")
+}
+
+model DiagnosticReport {
+  id             String   @id @default(uuid()) @db.Char(36)
+  organizationId String   @map("organization_id") @db.Char(36)
+  orderId        String   @unique @map("order_id") @db.Char(36)
+  currentVersion Int      @default(0) @map("current_version")
+  createdAt      DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.DateTime(3)
+
+  organization Organization             @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  order        LabOrder                 @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  versions     DiagnosticReportVersion[]
+
+  @@index([organizationId, createdAt])
+  @@map("diagnostic_reports")
+}
+
+model DiagnosticReportVersion {
+  id                  String                        @id @default(uuid()) @db.Char(36)
+  reportId            String                        @map("report_id") @db.Char(36)
+  version             Int
+  status              DiagnosticReportVersionStatus
+  branchId            String                        @map("branch_id") @db.Char(36)
+  contentSnapshot     Json                          @map("content_snapshot")
+  resultVersionSnapshot Json                        @map("result_version_snapshot")
+  verificationToken   String                        @unique @map("verification_token") @db.VarChar(128)
+  issuedByUserId      String                        @map("issued_by_user_id") @db.Char(36)
+  issuedAt            DateTime                      @default(now()) @map("issued_at") @db.DateTime(3)
+  supersedesVersionId String?                       @map("supersedes_version_id") @db.Char(36)
+  amendmentReason     String?                       @map("amendment_reason") @db.VarChar(1000)
+  createdAt           DateTime                      @default(now()) @map("created_at") @db.DateTime(3)
+
+  report      DiagnosticReport        @relation(fields: [reportId], references: [id], onDelete: Restrict)
+  branch      Branch                  @relation("ReportVersionBranch", fields: [branchId], references: [id], onDelete: Restrict)
+  issuedBy    User                    @relation("ReportVersionIssuer", fields: [issuedByUserId], references: [id], onDelete: Restrict)
+  supersedes  DiagnosticReportVersion? @relation("ReportVersionSupersession", fields: [supersedesVersionId], references: [id], onDelete: Restrict)
+  supersededBy DiagnosticReportVersion[] @relation("ReportVersionSupersession")
+
+  @@unique([reportId, version])
+  @@index([branchId, issuedAt])
+  @@index([status, issuedAt])
+  @@map("diagnostic_report_versions")
 }

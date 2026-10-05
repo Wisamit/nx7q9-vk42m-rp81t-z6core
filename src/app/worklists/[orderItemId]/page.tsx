@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { requirePermission } from "@/lib/auth";
+import { permissionSet, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { resolveReferenceInterval } from "@/lib/result-reference";
 import { ResultEntryForm } from "@/components/result-entry-form";
+import { ResultWorkflowActions } from "@/components/result-workflow-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -28,6 +29,7 @@ function rangeDisplay(interval: {
 export default async function WorklistResultPage({ params }: { params: Promise<{ orderItemId: string }> }) {
   const session = await requirePermission("results.enter");
   const { orderItemId } = await params;
+  const permissions = permissionSet(session);
   const branchIds = session.user.branchScopes.map(scope => scope.branchId);
 
   const item = await prisma.orderItem.findFirst({
@@ -61,6 +63,16 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
           performingBranch: true,
           enteredBy: true,
           verifiedBy: true,
+          releasedBy: true,
+          amendedFrom: true,
+          criticalEvents: {
+            include: {
+              communications: {
+                include: { communicatedBy: true },
+                orderBy: { communicatedAt: "desc" },
+              },
+            },
+          },
           specimen: { include: { currentBranch: true, specimenType: true, container: true } },
         },
       },
@@ -185,8 +197,34 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
         comments={latestResult?.comments || ""}
         resultId={latestResult?.id || null}
         resultStatus={latestResult?.status || null}
+        canVerify={permissions.has("results.verify")}
       />
     </section>
+
+    {latestResult && <section className="detail-card detail-section">
+      <h2>Validation, Release & Amendment</h2>
+      <ResultWorkflowActions
+        resultId={latestResult.id}
+        resultStatus={latestResult.status}
+        criticalCount={latestResult.values.filter(value => value.isCritical).length}
+        criticalEventStatus={latestResult.criticalEvents[0]?.status || null}
+        communications={(latestResult.criticalEvents[0]?.communications || []).map(item => ({
+          id: item.id,
+          method: item.method,
+          outcome: item.outcome,
+          recipientName: item.recipientName,
+          recipientRole: item.recipientRole,
+          acknowledgementConfirmed: item.acknowledgementConfirmed,
+          readBackConfirmed: item.readBackConfirmed,
+          communicatedAt: item.communicatedAt.toISOString(),
+          communicatedBy: item.communicatedBy.displayNameEn,
+        }))}
+        canCommunicate={permissions.has("critical.communicate")}
+        canRelease={permissions.has("results.release")}
+        canAmend={permissions.has("results.amend")}
+      />
+      {permissions.has("reports.view") && <p><Link className="secondary-link" href={`/reports/${item.orderId}`}>Open Diagnostic Report</Link></p>}
+    </section>}
 
     {latestResult && <section className="detail-card detail-section">
       <h2>Result Audit Context</h2>
@@ -197,6 +235,10 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
         <dt>Entered at</dt><dd>{latestResult.enteredAt.toISOString().replace("T"," ").slice(0,19)}</dd>
         <dt>Verified by</dt><dd>{latestResult.verifiedBy?.displayNameEn || "—"}</dd>
         <dt>Verified at</dt><dd>{latestResult.verifiedAt?.toISOString().replace("T"," ").slice(0,19) || "—"}</dd>
+        <dt>Released by</dt><dd>{latestResult.releasedBy?.displayNameEn || "—"}</dd>
+        <dt>Released at</dt><dd>{latestResult.releasedAt?.toISOString().replace("T"," ").slice(0,19) || "—"}</dd>
+        <dt>Version</dt><dd>{latestResult.version}{latestResult.amendedFromId ? " · amendment" : ""}</dd>
+        <dt>Amendment reason</dt><dd>{latestResult.amendmentReason || "—"}</dd>
       </dl>
     </section>}
   </main>;
