@@ -43,6 +43,7 @@ export default async function DashboardPage() {
           {permissions.has("inventory.view") && <Link className="module-link" href="/inventory"><article><span>18</span><h2>Inventory</h2><p>Branch stock, lot and expiry traceability, FEFO, suppliers and procurement receiving.</p></article></Link>}
           {permissions.has("equipment.view") && <Link className="module-link" href="/equipment"><article><span>19</span><h2>Equipment</h2><p>Asset register, maintenance, calibration, downtime and analyzer linkage.</p></article></Link>}
           {permissions.has("qc.view") && <Link className="module-link" href="/qc"><article><span>20</span><h2>Quality Control</h2><p>QC materials, lots, Levey-Jennings trends, Westgard rules and analyzer QC gating.</p></article></Link>}
+          {permissions.has("quality.view") && <Link className="module-link" href="/quality"><article><span>21</span><h2>Quality Management</h2><p>Nonconformance, CAPA, controlled documents, training, competency, indicators and internal audits.</p></article></Link>}
         </div>
       </section>
     </main>

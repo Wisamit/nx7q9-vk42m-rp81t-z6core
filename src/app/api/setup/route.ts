@@ -70,6 +70,13 @@ const FOUNDATION_PERMISSIONS = [
   ["qc.manage", "quality", "Manage QC materials, lots, targets and rules"],
   ["qc.enter", "quality", "Enter and evaluate quality control runs"],
   ["qc.resolve", "quality", "Document QC corrective actions and resolve violations"],
+  ["quality.view", "quality", "View quality management records"],
+  ["quality.nonconformance.manage", "quality", "Manage nonconformance records"],
+  ["quality.capa.manage", "quality", "Manage corrective and preventive actions"],
+  ["quality.documents.manage", "quality", "Manage controlled quality documents"],
+  ["quality.training.manage", "quality", "Manage training, competency and analyzer authorization"],
+  ["quality.indicators.manage", "quality", "Manage quality indicators and measurements"],
+  ["quality.audits.manage", "quality", "Manage internal audits and findings"],
 ] as const;
 
 function text(value: unknown, max = 200) {

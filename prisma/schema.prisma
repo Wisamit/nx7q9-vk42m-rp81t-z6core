@@ -454,6 +454,114 @@ enum SusceptibilityInterpretation {
   UNKNOWN
 }
 
+
+enum NonconformanceSeverity {
+  MINOR
+  MAJOR
+  CRITICAL
+}
+
+enum NonconformanceStatus {
+  OPEN
+  INVESTIGATING
+  ACTION_REQUIRED
+  CLOSED
+  CANCELLED
+}
+
+enum CapaStatus {
+  DRAFT
+  OPEN
+  IN_PROGRESS
+  EFFECTIVENESS_REVIEW
+  CLOSED
+  CANCELLED
+}
+
+enum CapaEffectiveness {
+  UNKNOWN
+  EFFECTIVE
+  PARTIALLY_EFFECTIVE
+  INEFFECTIVE
+}
+
+enum CapaActionType {
+  CORRECTIVE
+  PREVENTIVE
+}
+
+enum CapaActionStatus {
+  OPEN
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum QualityDocumentType {
+  SOP
+  POLICY
+  WORK_INSTRUCTION
+  FORM
+  CHECKLIST
+  OTHER
+}
+
+enum QualityDocumentVersionStatus {
+  DRAFT
+  IN_REVIEW
+  REVIEWED
+  APPROVED
+  EFFECTIVE
+  RETIRED
+}
+
+enum TrainingRecordStatus {
+  ASSIGNED
+  IN_PROGRESS
+  COMPLETED
+  EXPIRED
+  WAIVED
+}
+
+enum CompetencyAssessmentResult {
+  PASS
+  FAIL
+  CONDITIONAL
+}
+
+enum AnalyzerAuthorizationStatus {
+  ACTIVE
+  SUSPENDED
+  EXPIRED
+  REVOKED
+}
+
+enum QualityIndicatorDirection {
+  LOWER_IS_BETTER
+  HIGHER_IS_BETTER
+  TARGET_RANGE
+}
+
+enum InternalAuditStatus {
+  PLANNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum AuditFindingSeverity {
+  OBSERVATION
+  MINOR
+  MAJOR
+  CRITICAL
+}
+
+enum AuditFindingStatus {
+  OPEN
+  ACTION_REQUIRED
+  CLOSED
+}
+
 model Organization {
   id              String       @id @default(uuid()) @db.Char(36)
   code            String       @unique @db.VarChar(50)
@@ -518,6 +626,14 @@ model Organization {
   qcLots QcLot[]
   qcTargets QcTarget[]
   qcRuns QcRun[]
+  nonconformances Nonconformance[]
+  capas Capa[]
+  qualityDocuments QualityDocument[]
+  trainingRecords TrainingRecord[]
+  competencyAssessments CompetencyAssessment[]
+  analyzerAuthorizations AnalyzerAuthorization[]
+  qualityIndicators QualityIndicator[]
+  internalAudits InternalAudit[]
 
   @@map("organizations")
 }
@@ -579,6 +695,13 @@ model Branch {
   incomingInventoryTransfers InventoryTransfer[] @relation("InventoryTransferDestinationBranch")
   equipment Equipment[]
   qcRuns QcRun[]
+  nonconformances Nonconformance[]
+  capas Capa[]
+  qualityDocuments QualityDocument[]
+  trainingRecords TrainingRecord[]
+  competencyAssessments CompetencyAssessment[]
+  qualityIndicators QualityIndicator[]
+  internalAudits InternalAudit[]
 
   @@unique([organizationId, code])
   @@index([organizationId, status])
@@ -713,6 +836,27 @@ model User {
   approvedInventoryTransfers InventoryTransfer[] @relation("InventoryTransferApprover")
   dispatchedInventoryTransfers InventoryTransfer[] @relation("InventoryTransferDispatcher")
   receivedInventoryTransfers InventoryTransfer[] @relation("InventoryTransferReceiver")
+  reportedNonconformances Nonconformance[] @relation("NonconformanceReporter")
+  ownedNonconformances Nonconformance[] @relation("NonconformanceOwner")
+  closedNonconformances Nonconformance[] @relation("NonconformanceCloser")
+  ownedCapas Capa[] @relation("CapaOwner")
+  ownedCapaActions CapaAction[] @relation("CapaActionOwner")
+  effectivenessReviewedCapas Capa[] @relation("CapaEffectivenessReviewer")
+  closedCapas Capa[] @relation("CapaCloser")
+  ownedQualityDocuments QualityDocument[] @relation("QualityDocumentOwner")
+  submittedQualityDocumentVersions QualityDocumentVersion[] @relation("QualityDocumentVersionSubmitter")
+  reviewedQualityDocumentVersions QualityDocumentVersion[] @relation("QualityDocumentVersionReviewer")
+  approvedQualityDocumentVersions QualityDocumentVersion[] @relation("QualityDocumentVersionApprover")
+  qualityTrainingRecords TrainingRecord[] @relation("TrainingSubject")
+  recordedTrainingRecords TrainingRecord[] @relation("TrainingRecorder")
+  competencyAssessments CompetencyAssessment[] @relation("CompetencySubject")
+  assessedCompetencies CompetencyAssessment[] @relation("CompetencyAssessor")
+  analyzerAuthorizations AnalyzerAuthorization[] @relation("AnalyzerAuthorizedUser")
+  approvedAnalyzerAuthorizations AnalyzerAuthorization[] @relation("AnalyzerAuthorizationApprover")
+  qualityIndicatorMeasurements QualityIndicatorMeasurement[] @relation("QualityIndicatorRecorder")
+  ledInternalAudits InternalAudit[] @relation("InternalAuditLead")
+  ownedAuditFindings InternalAuditFinding[] @relation("AuditFindingOwner")
+  closedAuditFindings InternalAuditFinding[] @relation("AuditFindingCloser")
 
   @@unique([organizationId, username])
   @@unique([organizationId, email])
@@ -2407,6 +2551,9 @@ model Analyzer {
   downtimeEvents EquipmentDowntime[]
   qcTargets QcTarget[]
   qcRuns QcRun[]
+  trainingRecords TrainingRecord[]
+  competencyAssessments CompetencyAssessment[]
+  authorizations AnalyzerAuthorization[]
 
   @@unique([organizationId, code])
   @@index([branchId, status])
@@ -3221,4 +3368,355 @@ model QcAction {
 
   @@index([violationId, performedAt])
   @@map("qc_actions")
+}
+
+
+model Nonconformance {
+  id               String                 @id @default(uuid()) @db.Char(36)
+  organizationId   String                 @map("organization_id") @db.Char(36)
+  branchId         String?                @map("branch_id") @db.Char(36)
+  caseNumber       String                 @map("case_number") @db.VarChar(60)
+  title            String                 @db.VarChar(255)
+  description      String                 @db.Text
+  category         String                 @db.VarChar(100)
+  severity         NonconformanceSeverity
+  status           NonconformanceStatus   @default(OPEN)
+  occurredAt       DateTime?              @map("occurred_at") @db.DateTime(3)
+  detectedAt       DateTime               @default(now()) @map("detected_at") @db.DateTime(3)
+  sourceEntityType String?                @map("source_entity_type") @db.VarChar(100)
+  sourceEntityId   String?                @map("source_entity_id") @db.VarChar(100)
+  immediateAction  String?                @map("immediate_action") @db.Text
+  rootCause        String?                @map("root_cause") @db.Text
+  reportedByUserId String                 @map("reported_by_user_id") @db.Char(36)
+  ownerUserId      String?                @map("owner_user_id") @db.Char(36)
+  closureSummary   String?                @map("closure_summary") @db.Text
+  closedByUserId   String?                @map("closed_by_user_id") @db.Char(36)
+  closedAt         DateTime?              @map("closed_at") @db.DateTime(3)
+  createdAt        DateTime               @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt        DateTime               @updatedAt @map("updated_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  branch       Branch?      @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  reportedBy   User         @relation("NonconformanceReporter", fields: [reportedByUserId], references: [id], onDelete: Restrict)
+  owner        User?        @relation("NonconformanceOwner", fields: [ownerUserId], references: [id], onDelete: Restrict)
+  closedBy     User?        @relation("NonconformanceCloser", fields: [closedByUserId], references: [id], onDelete: Restrict)
+  capas        Capa[]
+
+  @@unique([organizationId, caseNumber])
+  @@index([branchId, status, detectedAt])
+  @@index([ownerUserId, status])
+  @@index([severity, status, detectedAt])
+  @@index([sourceEntityType, sourceEntityId])
+  @@map("nonconformances")
+}
+
+model Capa {
+  id                              String            @id @default(uuid()) @db.Char(36)
+  organizationId                  String            @map("organization_id") @db.Char(36)
+  branchId                        String?           @map("branch_id") @db.Char(36)
+  capaNumber                      String            @map("capa_number") @db.VarChar(60)
+  nonconformanceId                String?           @map("nonconformance_id") @db.Char(36)
+  title                           String            @db.VarChar(255)
+  issueDescription                String            @map("issue_description") @db.Text
+  rootCause                       String?           @map("root_cause") @db.Text
+  ownerUserId                     String            @map("owner_user_id") @db.Char(36)
+  dueDate                         DateTime?         @map("due_date") @db.Date
+  status                          CapaStatus        @default(OPEN)
+  effectivenessReview             String?           @map("effectiveness_review") @db.Text
+  effectiveness                   CapaEffectiveness @default(UNKNOWN)
+  effectivenessReviewedByUserId   String?           @map("effectiveness_reviewed_by_user_id") @db.Char(36)
+  effectivenessReviewedAt         DateTime?         @map("effectiveness_reviewed_at") @db.DateTime(3)
+  closedByUserId                  String?           @map("closed_by_user_id") @db.Char(36)
+  closedAt                        DateTime?         @map("closed_at") @db.DateTime(3)
+  createdAt                       DateTime          @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt                       DateTime          @updatedAt @map("updated_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  branch       Branch?      @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  nonconformance Nonconformance? @relation(fields: [nonconformanceId], references: [id], onDelete: Restrict)
+  owner        User         @relation("CapaOwner", fields: [ownerUserId], references: [id], onDelete: Restrict)
+  effectivenessReviewedBy User? @relation("CapaEffectivenessReviewer", fields: [effectivenessReviewedByUserId], references: [id], onDelete: Restrict)
+  closedBy     User?        @relation("CapaCloser", fields: [closedByUserId], references: [id], onDelete: Restrict)
+  actions      CapaAction[]
+  auditFindings InternalAuditFinding[]
+
+  @@unique([organizationId, capaNumber])
+  @@index([branchId, status, dueDate])
+  @@index([ownerUserId, status, dueDate])
+  @@index([nonconformanceId])
+  @@map("capas")
+}
+
+model CapaAction {
+  id          String           @id @default(uuid()) @db.Char(36)
+  capaId      String           @map("capa_id") @db.Char(36)
+  actionType  CapaActionType   @map("action_type")
+  description String           @db.Text
+  ownerUserId String?          @map("owner_user_id") @db.Char(36)
+  dueDate     DateTime?        @map("due_date") @db.Date
+  status      CapaActionStatus @default(OPEN)
+  completedAt DateTime?        @map("completed_at") @db.DateTime(3)
+  evidence    Json?
+  createdAt   DateTime         @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt   DateTime         @updatedAt @map("updated_at") @db.DateTime(3)
+
+  capa  Capa  @relation(fields: [capaId], references: [id], onDelete: Restrict)
+  owner User? @relation("CapaActionOwner", fields: [ownerUserId], references: [id], onDelete: Restrict)
+
+  @@index([capaId, status, dueDate])
+  @@index([ownerUserId, status, dueDate])
+  @@map("capa_actions")
+}
+
+model QualityDocument {
+  id                      String              @id @default(uuid()) @db.Char(36)
+  organizationId          String              @map("organization_id") @db.Char(36)
+  branchId                String?             @map("branch_id") @db.Char(36)
+  code                    String              @db.VarChar(80)
+  titleEn                 String              @map("title_en") @db.VarChar(255)
+  titleAr                 String?             @map("title_ar") @db.VarChar(255)
+  documentType            QualityDocumentType @map("document_type")
+  ownerUserId             String?             @map("owner_user_id") @db.Char(36)
+  currentEffectiveVersion Int                 @default(0) @map("current_effective_version")
+  status                  RecordStatus        @default(ACTIVE)
+  createdAt               DateTime            @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt               DateTime            @updatedAt @map("updated_at") @db.DateTime(3)
+  deactivatedAt           DateTime?           @map("deactivated_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  branch       Branch?      @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  owner        User?        @relation("QualityDocumentOwner", fields: [ownerUserId], references: [id], onDelete: Restrict)
+  versions     QualityDocumentVersion[]
+
+  @@unique([organizationId, code])
+  @@index([branchId, status])
+  @@index([documentType, status])
+  @@map("quality_documents")
+}
+
+model QualityDocumentVersion {
+  id                  String                       @id @default(uuid()) @db.Char(36)
+  documentId          String                       @map("document_id") @db.Char(36)
+  version             Int
+  status              QualityDocumentVersionStatus @default(DRAFT)
+  contentSnapshot     Json?                        @map("content_snapshot")
+  storageKey          String?                      @map("storage_key") @db.VarChar(500)
+  externalUrl         String?                      @map("external_url") @db.VarChar(1000)
+  changeSummary       String?                      @map("change_summary") @db.VarChar(1000)
+  submittedByUserId   String                       @map("submitted_by_user_id") @db.Char(36)
+  reviewedByUserId    String?                      @map("reviewed_by_user_id") @db.Char(36)
+  reviewedAt          DateTime?                    @map("reviewed_at") @db.DateTime(3)
+  approvedByUserId    String?                      @map("approved_by_user_id") @db.Char(36)
+  approvedAt          DateTime?                    @map("approved_at") @db.DateTime(3)
+  effectiveFrom       DateTime?                    @map("effective_from") @db.DateTime(3)
+  reviewDueAt         DateTime?                    @map("review_due_at") @db.Date
+  retiredAt           DateTime?                    @map("retired_at") @db.DateTime(3)
+  supersedesVersionId String?                      @map("supersedes_version_id") @db.Char(36)
+  createdAt           DateTime                     @default(now()) @map("created_at") @db.DateTime(3)
+
+  document    QualityDocument @relation(fields: [documentId], references: [id], onDelete: Restrict)
+  submittedBy User            @relation("QualityDocumentVersionSubmitter", fields: [submittedByUserId], references: [id], onDelete: Restrict)
+  reviewedBy  User?           @relation("QualityDocumentVersionReviewer", fields: [reviewedByUserId], references: [id], onDelete: Restrict)
+  approvedBy  User?           @relation("QualityDocumentVersionApprover", fields: [approvedByUserId], references: [id], onDelete: Restrict)
+  supersedes  QualityDocumentVersion? @relation("QualityDocumentVersionSupersession", fields: [supersedesVersionId], references: [id], onDelete: Restrict)
+  supersededBy QualityDocumentVersion[] @relation("QualityDocumentVersionSupersession")
+  trainingRecords TrainingRecord[]
+  competencyAssessments CompetencyAssessment[]
+
+  @@unique([documentId, version])
+  @@index([status, effectiveFrom])
+  @@index([reviewDueAt])
+  @@map("quality_document_versions")
+}
+
+model TrainingRecord {
+  id                    String               @id @default(uuid()) @db.Char(36)
+  organizationId        String               @map("organization_id") @db.Char(36)
+  branchId              String?              @map("branch_id") @db.Char(36)
+  userId                String               @map("user_id") @db.Char(36)
+  documentVersionId     String?              @map("document_version_id") @db.Char(36)
+  analyzerId            String?              @map("analyzer_id") @db.Char(36)
+  title                 String               @db.VarChar(255)
+  provider              String?              @db.VarChar(220)
+  assignedAt            DateTime             @default(now()) @map("assigned_at") @db.DateTime(3)
+  completedAt           DateTime?            @map("completed_at") @db.DateTime(3)
+  expiresAt             DateTime?            @map("expires_at") @db.Date
+  status                TrainingRecordStatus @default(ASSIGNED)
+  certificateStorageKey String?              @map("certificate_storage_key") @db.VarChar(500)
+  certificateUrl        String?              @map("certificate_url") @db.VarChar(1000)
+  notes                 String?              @db.Text
+  recordedByUserId      String               @map("recorded_by_user_id") @db.Char(36)
+  createdAt             DateTime             @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt             DateTime             @updatedAt @map("updated_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  branch       Branch?      @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  user         User         @relation("TrainingSubject", fields: [userId], references: [id], onDelete: Restrict)
+  documentVersion QualityDocumentVersion? @relation(fields: [documentVersionId], references: [id], onDelete: Restrict)
+  analyzer     Analyzer?    @relation(fields: [analyzerId], references: [id], onDelete: Restrict)
+  recordedBy   User         @relation("TrainingRecorder", fields: [recordedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([userId, status, expiresAt])
+  @@index([branchId, status])
+  @@index([documentVersionId])
+  @@index([analyzerId])
+  @@map("training_records")
+}
+
+model CompetencyAssessment {
+  id                String                     @id @default(uuid()) @db.Char(36)
+  organizationId    String                     @map("organization_id") @db.Char(36)
+  branchId          String?                    @map("branch_id") @db.Char(36)
+  userId            String                     @map("user_id") @db.Char(36)
+  analyzerId        String?                    @map("analyzer_id") @db.Char(36)
+  documentVersionId String?                    @map("document_version_id") @db.Char(36)
+  competencyName    String                     @map("competency_name") @db.VarChar(255)
+  assessmentMethod  String                     @map("assessment_method") @db.VarChar(255)
+  result            CompetencyAssessmentResult
+  assessedByUserId  String                     @map("assessed_by_user_id") @db.Char(36)
+  assessedAt        DateTime                   @default(now()) @map("assessed_at") @db.DateTime(3)
+  nextDueAt         DateTime?                  @map("next_due_at") @db.Date
+  evidence          Json?
+  notes             String?                    @db.Text
+  createdAt         DateTime                   @default(now()) @map("created_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  branch       Branch?      @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  user         User         @relation("CompetencySubject", fields: [userId], references: [id], onDelete: Restrict)
+  analyzer     Analyzer?    @relation(fields: [analyzerId], references: [id], onDelete: Restrict)
+  documentVersion QualityDocumentVersion? @relation(fields: [documentVersionId], references: [id], onDelete: Restrict)
+  assessedBy   User         @relation("CompetencyAssessor", fields: [assessedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([userId, assessedAt, nextDueAt])
+  @@index([analyzerId, assessedAt])
+  @@index([branchId, assessedAt])
+  @@map("competency_assessments")
+}
+
+model AnalyzerAuthorization {
+  id               String                      @id @default(uuid()) @db.Char(36)
+  organizationId   String                      @map("organization_id") @db.Char(36)
+  userId           String                      @map("user_id") @db.Char(36)
+  analyzerId       String                      @map("analyzer_id") @db.Char(36)
+  status           AnalyzerAuthorizationStatus @default(ACTIVE)
+  authorizedAt     DateTime                    @default(now()) @map("authorized_at") @db.DateTime(3)
+  expiresAt        DateTime?                   @map("expires_at") @db.Date
+  scopeNotes       String?                     @map("scope_notes") @db.VarChar(1000)
+  approvedByUserId String                      @map("approved_by_user_id") @db.Char(36)
+  revokedAt        DateTime?                   @map("revoked_at") @db.DateTime(3)
+  revocationReason String?                     @map("revocation_reason") @db.VarChar(1000)
+  createdAt        DateTime                    @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt        DateTime                    @updatedAt @map("updated_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  user         User         @relation("AnalyzerAuthorizedUser", fields: [userId], references: [id], onDelete: Restrict)
+  analyzer     Analyzer     @relation(fields: [analyzerId], references: [id], onDelete: Restrict)
+  approvedBy   User         @relation("AnalyzerAuthorizationApprover", fields: [approvedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([userId, analyzerId, status, expiresAt])
+  @@index([analyzerId, status])
+  @@map("analyzer_authorizations")
+}
+
+model QualityIndicator {
+  id             String                    @id @default(uuid()) @db.Char(36)
+  organizationId String                    @map("organization_id") @db.Char(36)
+  branchId       String?                   @map("branch_id") @db.Char(36)
+  scopeKey       String                    @map("scope_key") @db.VarChar(80)
+  code           String                    @db.VarChar(80)
+  nameEn         String                    @map("name_en") @db.VarChar(220)
+  nameAr         String?                   @map("name_ar") @db.VarChar(220)
+  description    String?                   @db.Text
+  unit           String?                   @db.VarChar(80)
+  direction      QualityIndicatorDirection
+  targetMin      Decimal?                  @map("target_min") @db.Decimal(24, 8)
+  targetMax      Decimal?                  @map("target_max") @db.Decimal(24, 8)
+  status         RecordStatus              @default(ACTIVE)
+  createdAt      DateTime                  @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt      DateTime                  @updatedAt @map("updated_at") @db.DateTime(3)
+  deactivatedAt  DateTime?                 @map("deactivated_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  branch       Branch?      @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  measurements QualityIndicatorMeasurement[]
+
+  @@unique([organizationId, code, scopeKey])
+  @@index([branchId, status])
+  @@map("quality_indicators")
+}
+
+model QualityIndicatorMeasurement {
+  id               String   @id @default(uuid()) @db.Char(36)
+  indicatorId      String   @map("indicator_id") @db.Char(36)
+  periodStart      DateTime @map("period_start") @db.Date
+  periodEnd        DateTime @map("period_end") @db.Date
+  numerator        Decimal? @db.Decimal(24, 8)
+  denominator      Decimal? @db.Decimal(24, 8)
+  value            Decimal  @db.Decimal(24, 8)
+  recordedByUserId String   @map("recorded_by_user_id") @db.Char(36)
+  recordedAt       DateTime @default(now()) @map("recorded_at") @db.DateTime(3)
+  notes            String?  @db.VarChar(1000)
+
+  indicator  QualityIndicator @relation(fields: [indicatorId], references: [id], onDelete: Restrict)
+  recordedBy User             @relation("QualityIndicatorRecorder", fields: [recordedByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([indicatorId, periodStart, periodEnd])
+  @@index([indicatorId, periodEnd])
+  @@map("quality_indicator_measurements")
+}
+
+model InternalAudit {
+  id                String              @id @default(uuid()) @db.Char(36)
+  organizationId    String              @map("organization_id") @db.Char(36)
+  branchId          String?             @map("branch_id") @db.Char(36)
+  auditNumber       String              @map("audit_number") @db.VarChar(60)
+  title             String              @db.VarChar(255)
+  scope             String              @db.Text
+  status            InternalAuditStatus @default(PLANNED)
+  scheduledAt       DateTime            @map("scheduled_at") @db.Date
+  startedAt         DateTime?           @map("started_at") @db.DateTime(3)
+  completedAt       DateTime?           @map("completed_at") @db.DateTime(3)
+  leadAuditorUserId String              @map("lead_auditor_user_id") @db.Char(36)
+  summary           String?             @db.Text
+  createdAt         DateTime            @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt         DateTime            @updatedAt @map("updated_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  branch       Branch?      @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  leadAuditor  User         @relation("InternalAuditLead", fields: [leadAuditorUserId], references: [id], onDelete: Restrict)
+  findings     InternalAuditFinding[]
+
+  @@unique([organizationId, auditNumber])
+  @@index([branchId, status, scheduledAt])
+  @@index([leadAuditorUserId, status])
+  @@map("internal_audits")
+}
+
+model InternalAuditFinding {
+  id             String               @id @default(uuid()) @db.Char(36)
+  auditId        String               @map("audit_id") @db.Char(36)
+  findingNumber  String               @map("finding_number") @db.VarChar(60)
+  severity       AuditFindingSeverity
+  description    String               @db.Text
+  requirementRef String?              @map("requirement_ref") @db.VarChar(255)
+  status         AuditFindingStatus   @default(OPEN)
+  ownerUserId    String?              @map("owner_user_id") @db.Char(36)
+  dueDate        DateTime?            @map("due_date") @db.Date
+  capaId         String?              @map("capa_id") @db.Char(36)
+  closedByUserId String?              @map("closed_by_user_id") @db.Char(36)
+  closedAt       DateTime?            @map("closed_at") @db.DateTime(3)
+  closureNote    String?              @map("closure_note") @db.Text
+  createdAt      DateTime             @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt      DateTime             @updatedAt @map("updated_at") @db.DateTime(3)
+
+  audit    InternalAudit @relation(fields: [auditId], references: [id], onDelete: Restrict)
+  owner    User?         @relation("AuditFindingOwner", fields: [ownerUserId], references: [id], onDelete: Restrict)
+  closedBy User?         @relation("AuditFindingCloser", fields: [closedByUserId], references: [id], onDelete: Restrict)
+  capa     Capa?         @relation(fields: [capaId], references: [id], onDelete: Restrict)
+
+  @@unique([auditId, findingNumber])
+  @@index([status, dueDate])
+  @@index([ownerUserId, status])
+  @@index([capaId])
+  @@map("internal_audit_findings")
 }
