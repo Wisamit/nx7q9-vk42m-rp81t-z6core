@@ -32,6 +32,7 @@ export default async function DashboardPage() {
           {permissions.has("pricing.view") && <Link className="module-link" href="/pricing"><article><span>07</span><h2>Pricing</h2><p>Effective-dated organization, branch, client and contract prices.</p></article></Link>}
           {permissions.has("orders.view") && <Link className="module-link" href="/orders"><article><span>08</span><h2>Orders</h2><p>Register patient test orders with price snapshots and billing context.</p></article></Link>}
           {permissions.has("billing.view") && <Link className="module-link" href="/billing"><article><span>09</span><h2>Billing</h2><p>Invoices, balances and partial or split payment allocations.</p></article></Link>}
+          {permissions.has("specimens.view") && <Link className="module-link" href="/specimens"><article><span>10</span><h2>Specimens</h2><p>Barcode collection, receipt, rejection, recollection and custody traceability.</p></article></Link>}
         </div>
       </section>
     </main>
