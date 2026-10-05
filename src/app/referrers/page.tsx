@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { requirePermission } from "@/lib/auth";
+import { permissionSet, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { ClientReferrerForms } from "@/components/client-referrer-forms";
 
@@ -12,8 +12,9 @@ export default async function ReferrersPage({
 }) {
   const session = await requirePermission("referrers.view");
   const query = (await searchParams).q?.trim() || "";
+  const permissions = permissionSet(session);
 
-  const [clients, referrers] = await Promise.all([
+  const [clients, referrers, sources] = await Promise.all([
     prisma.client.findMany({
       where: {
         organizationId: session.user.organizationId,
@@ -28,6 +29,14 @@ export default async function ReferrersPage({
         ...(query ? { OR: [{ code: { contains: query } }, { nameEn: { contains: query } }, { nameAr: { contains: query } }, { licenseNumber: { contains: query } }] } : {}),
       },
       include: { client: true },
+      orderBy: { nameEn: "asc" },
+      take: 100,
+    }),
+    prisma.orderSource.findMany({
+      where: {
+        organizationId: session.user.organizationId,
+        ...(query ? { OR: [{ code: { contains: query } }, { category: { contains: query } }, { nameEn: { contains: query } }, { nameAr: { contains: query } }] } : {}),
+      },
       orderBy: { nameEn: "asc" },
       take: 100,
     }),
@@ -49,11 +58,11 @@ export default async function ReferrersPage({
       <Link className="secondary-link" href="/dashboard">Back to Dashboard</Link>
     </header>
 
-    <ClientReferrerForms clients={allClients} />
+    <ClientReferrerForms clients={allClients} canManageSources={permissions.has("sources.manage")} />
 
     <section className="table-card">
       <div className="table-toolbar">
-        <div><h2>Search</h2><span>{clients.length} clients · {referrers.length} referrers</span></div>
+        <div><h2>Search</h2><span>{clients.length} clients · {referrers.length} referrers · {sources.length} sources</span></div>
         <form className="inline-search" action="/referrers" method="get">
           <input name="q" defaultValue={query} placeholder="Code, name, license…" />
           <button className="secondary-button">Search</button>
@@ -86,6 +95,21 @@ export default async function ReferrersPage({
           </table>
         </div>
       </article>
+    </section>
+
+    <section className="table-card detail-section">
+      <div className="table-toolbar"><h2>Order Sources</h2><span>{sources.length} shown</span></div>
+      <div className="table-wrap"><table>
+        <thead><tr><th>Code</th><th>Name</th><th>Category</th><th>Status</th></tr></thead>
+        <tbody>{sources.length === 0 ? <tr><td colSpan={4} className="empty-state">No order sources.</td></tr> : sources.map(source =>
+          <tr key={source.id}>
+            <td><strong>{source.code}</strong></td>
+            <td>{source.nameEn}{source.nameAr ? <><br/><small dir="rtl">{source.nameAr}</small></> : null}</td>
+            <td>{source.category}</td>
+            <td>{source.status}</td>
+          </tr>
+        )}</tbody>
+      </table></div>
     </section>
   </main>;
 }
