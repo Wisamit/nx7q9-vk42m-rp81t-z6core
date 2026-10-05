@@ -454,6 +454,100 @@ enum SusceptibilityInterpretation {
   UNKNOWN
 }
 
+enum NonconformanceSeverity {
+  MINOR
+  MAJOR
+  CRITICAL
+}
+
+enum NonconformanceStatus {
+  OPEN
+  INVESTIGATING
+  ACTION_REQUIRED
+  CLOSED
+  CANCELLED
+}
+
+enum CapaStatus {
+  DRAFT
+  OPEN
+  IN_PROGRESS
+  EFFECTIVENESS_REVIEW
+  CLOSED
+  CANCELLED
+}
+
+enum CapaEffectiveness {
+  UNKNOWN
+  EFFECTIVE
+  PARTIALLY_EFFECTIVE
+  INEFFECTIVE
+}
+
+enum QualityDocumentType {
+  SOP
+  POLICY
+  WORK_INSTRUCTION
+  FORM
+  CHECKLIST
+  OTHER
+}
+
+enum QualityDocumentVersionStatus {
+  DRAFT
+  IN_REVIEW
+  APPROVED
+  EFFECTIVE
+  RETIRED
+}
+
+enum TrainingRecordStatus {
+  ASSIGNED
+  IN_PROGRESS
+  COMPLETED
+  EXPIRED
+  WAIVED
+}
+
+enum CompetencyAssessmentResult {
+  PASS
+  FAIL
+  CONDITIONAL
+}
+
+enum AnalyzerAuthorizationStatus {
+  ACTIVE
+  SUSPENDED
+  EXPIRED
+  REVOKED
+}
+
+enum QualityIndicatorDirection {
+  LOWER_IS_BETTER
+  HIGHER_IS_BETTER
+  TARGET_RANGE
+}
+
+enum InternalAuditStatus {
+  PLANNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum AuditFindingSeverity {
+  OBSERVATION
+  MINOR
+  MAJOR
+  CRITICAL
+}
+
+enum AuditFindingStatus {
+  OPEN
+  ACTION_REQUIRED
+  CLOSED
+}
+
 model Organization {
   id              String       @id @default(uuid()) @db.Char(36)
   code            String       @unique @db.VarChar(50)
@@ -519,6 +613,15 @@ model Organization {
   qcTargets QcTarget[]
   qcRuns QcRun[]
 
+  nonconformances Nonconformance[]
+  capas Capa[]
+  qualityDocuments QualityDocument[]
+  trainingRecords TrainingRecord[]
+  competencyAssessments CompetencyAssessment[]
+  analyzerAuthorizations AnalyzerAuthorization[]
+  qualityIndicators QualityIndicator[]
+  internalAudits InternalAudit[]
+
   @@map("organizations")
 }
 
@@ -579,6 +682,14 @@ model Branch {
   incomingInventoryTransfers InventoryTransfer[] @relation("InventoryTransferDestinationBranch")
   equipment Equipment[]
   qcRuns QcRun[]
+
+  nonconformances Nonconformance[]
+  capas Capa[]
+  qualityDocuments QualityDocument[]
+  trainingRecords TrainingRecord[]
+  competencyAssessments CompetencyAssessment[]
+  qualityIndicators QualityIndicator[]
+  internalAudits InternalAudit[]
 
   @@unique([organizationId, code])
   @@index([organizationId, status])
@@ -713,6 +824,26 @@ model User {
   approvedInventoryTransfers InventoryTransfer[] @relation("InventoryTransferApprover")
   dispatchedInventoryTransfers InventoryTransfer[] @relation("InventoryTransferDispatcher")
   receivedInventoryTransfers InventoryTransfer[] @relation("InventoryTransferReceiver")
+
+  reportedNonconformances Nonconformance[] @relation("NonconformanceReporter")
+  ownedNonconformances Nonconformance[] @relation("NonconformanceOwner")
+  closedNonconformances Nonconformance[] @relation("NonconformanceCloser")
+  ownedCapas Capa[] @relation("CapaOwner")
+  effectivenessReviewedCapas Capa[] @relation("CapaEffectivenessReviewer")
+  closedCapas Capa[] @relation("CapaCloser")
+  ownedQualityDocuments QualityDocument[] @relation("QualityDocumentOwner")
+  submittedQualityDocumentVersions QualityDocumentVersion[] @relation("QualityDocumentVersionSubmitter")
+  reviewedQualityDocumentVersions QualityDocumentVersion[] @relation("QualityDocumentVersionReviewer")
+  approvedQualityDocumentVersions QualityDocumentVersion[] @relation("QualityDocumentVersionApprover")
+  qualityTrainingRecords TrainingRecord[] @relation("TrainingSubject")
+  recordedTrainingRecords TrainingRecord[] @relation("TrainingRecorder")
+  competencyAssessments CompetencyAssessment[] @relation("CompetencySubject")
+  assessedCompetencies CompetencyAssessment[] @relation("CompetencyAssessor")
+  analyzerAuthorizations AnalyzerAuthorization[] @relation("AnalyzerAuthorizedUser")
+  approvedAnalyzerAuthorizations AnalyzerAuthorization[] @relation("AnalyzerAuthorizationApprover")
+  qualityIndicatorMeasurements QualityIndicatorMeasurement[] @relation("QualityIndicatorRecorder")
+  ledInternalAudits InternalAudit[] @relation("InternalAuditLead")
+  ownedAuditFindings InternalAuditFinding[] @relation("AuditFindingOwner")
 
   @@unique([organizationId, username])
   @@unique([organizationId, email])
@@ -2407,6 +2538,10 @@ model Analyzer {
   downtimeEvents EquipmentDowntime[]
   qcTargets QcTarget[]
   qcRuns QcRun[]
+
+  trainingRecords TrainingRecord[]
+  competencyAssessments CompetencyAssessment[]
+  authorizations AnalyzerAuthorization[]
 
   @@unique([organizationId, code])
   @@index([branchId, status])
