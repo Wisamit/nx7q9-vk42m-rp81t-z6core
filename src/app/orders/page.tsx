@@ -19,7 +19,25 @@ export default async function OrdersPage() {
     }),
     prisma.labTest.findMany({
       where: { organizationId: session.user.organizationId, status: "ACTIVE" },
-      select: { id: true, code: true, nameEn: true },
+      select: {
+        id: true,
+        code: true,
+        nameEn: true,
+        orderQuestions: {
+          where: { status: "ACTIVE" },
+          select: {
+            id: true,
+            code: true,
+            questionEn: true,
+            questionAr: true,
+            responseType: true,
+            required: true,
+            options: true,
+            displayOrder: true,
+          },
+          orderBy: [{ displayOrder: "asc" }, { code: "asc" }],
+        },
+      },
       orderBy: { nameEn: "asc" },
     }),
     prisma.client.findMany({
