@@ -19,6 +19,18 @@ enum UserStatus {
   DISABLED
 }
 
+enum PatientSex {
+  MALE
+  FEMALE
+  UNKNOWN
+}
+
+enum PatientIdentifierType {
+  NATIONAL_ID
+  PASSPORT
+  OTHER
+}
+
 model Organization {
   id              String       @id @default(uuid()) @db.Char(36)
   code            String       @unique @db.VarChar(50)
@@ -45,6 +57,8 @@ model Organization {
   testPanels TestPanel[]
   catalogImportBatches CatalogImportBatch[]
   catalogImportMappings CatalogImportMapping[]
+  patients Patient[]
+  patientIdentifiers PatientIdentifier[]
 
   @@map("organizations")
 }
@@ -652,4 +666,54 @@ model CatalogImportMapping {
   @@index([targetTestId])
   @@index([targetUnitId])
   @@map("catalog_import_mappings")
+}
+
+
+model Patient {
+  id              String       @id @default(uuid()) @db.Char(36)
+  organizationId  String       @map("organization_id") @db.Char(36)
+  patientNumber   String       @map("patient_number") @db.VarChar(40)
+  fullNameEn      String       @map("full_name_en") @db.VarChar(220)
+  fullNameAr      String?      @map("full_name_ar") @db.VarChar(220)
+  normalizedName  String       @map("normalized_name") @db.VarChar(220)
+  dateOfBirth     DateTime?    @map("date_of_birth") @db.Date
+  sexAtBirth      PatientSex   @default(UNKNOWN) @map("sex_at_birth")
+  phone           String?      @db.VarChar(50)
+  normalizedPhone String?      @map("normalized_phone") @db.VarChar(50)
+  email           String?      @db.VarChar(191)
+  nationalityCode String?      @map("nationality_code") @db.Char(2)
+  status          RecordStatus @default(ACTIVE)
+  createdAt       DateTime     @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt       DateTime     @updatedAt @map("updated_at") @db.DateTime(3)
+  deactivatedAt   DateTime?    @map("deactivated_at") @db.DateTime(3)
+
+  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  identifiers  PatientIdentifier[]
+
+  @@unique([organizationId, patientNumber])
+  @@index([organizationId, normalizedName])
+  @@index([organizationId, normalizedPhone])
+  @@index([organizationId, dateOfBirth])
+  @@map("patients")
+}
+
+model PatientIdentifier {
+  id              String                @id @default(uuid()) @db.Char(36)
+  organizationId  String                @map("organization_id") @db.Char(36)
+  patientId       String                @map("patient_id") @db.Char(36)
+  identifierType  PatientIdentifierType @map("identifier_type")
+  value           String                @db.VarChar(120)
+  normalizedValue String                @map("normalized_value") @db.VarChar(120)
+  issuingCountry  String?               @map("issuing_country") @db.Char(2)
+  isPrimary       Boolean               @default(false) @map("is_primary")
+  status          RecordStatus          @default(ACTIVE)
+  createdAt       DateTime              @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt       DateTime              @updatedAt @map("updated_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  patient      Patient      @relation(fields: [patientId], references: [id], onDelete: Restrict)
+
+  @@unique([organizationId, identifierType, normalizedValue])
+  @@index([patientId, status])
+  @@map("patient_identifiers")
 }
