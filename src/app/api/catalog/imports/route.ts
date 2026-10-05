@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import type { Prisma } from "../../../../../generated/prisma/client";
+import { allowedImportEntities, normalizeImportRow, rowValidationStatus, validateImportRow, type ImportInputRow } from "@/lib/catalog-import";
 
 type ImportEntity="TEST"|"PANEL"|"UNIT"|"CONTAINER"|"REFERENCE_INTERVAL";
 type InputRow={entityType:ImportEntity;legacyKey?:string;data:Prisma.InputJsonObject};
@@ -28,10 +29,10 @@ function issues(entityType:ImportEntity,n:Prisma.InputJsonObject){
 
 export async function POST(request:Request){
  const session=await requirePermission("catalog.manage"); const ctx=await requestContext();
- const payload=await request.json().catch(()=>null) as {sourceName?:string;rows?:InputRow[]}|null;
+ const payload=await request.json().catch(()=>null) as {sourceName?:string;rows?:ImportInputRow[]}|null;
  if(!payload?.sourceName||!Array.isArray(payload.rows)||payload.rows.length===0||payload.rows.length>20000)return NextResponse.json({error:"Invalid import payload."},{status:400});
- if(payload.rows.some(r=>!r||!allowed.has(r.entityType)||typeof r.data!=="object"))return NextResponse.json({error:"Unsupported import entity."},{status:400});
- const normalized=payload.rows.map((row,index)=>{const n=normalize(row);const v=issues(row.entityType,n);return {row,index,n,v,status:v.some(x=>x.severity==="ERROR")?"ERROR":v.length?"WARNING":"VALID"} as const});
+ if(payload.rows.some(r=>!r||!allowedImportEntities.has(r.entityType)||typeof r.data!=="object"))return NextResponse.json({error:"Unsupported import entity."},{status:400});
+ const normalized=payload.rows.map((row,index)=>{const n=normalizeImportRow(row);const v=validateImportRow(row.entityType,n);return {row,index,n,v,status:rowValidationStatus(v)} as const});
  const checksum=createHash("sha256").update(JSON.stringify(payload.rows)).digest("hex");
  const counts=normalized.reduce((a,r)=>({...a,[r.status]:(a[r.status]||0)+1}),{} as Record<string,number>);
  const batch=await prisma.$transaction(async tx=>{
