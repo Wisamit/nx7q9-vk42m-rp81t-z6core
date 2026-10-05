@@ -28,11 +28,13 @@ type ReportSnapshot = {
   };
   order: { accessionNumber: string; orderedAt: string };
   results: Array<{
+    testId: string;
     testCode: string;
     testNameEn: string;
     loincCode?: string | null;
     releasedAt: string | null;
     values: Array<{
+      componentId?: string | null;
       componentCode: string;
       componentNameEn: string;
       loincCode?: string | null;
