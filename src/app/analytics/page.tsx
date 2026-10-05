@@ -238,18 +238,31 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
   ]);
 
   const orderItemIds = orders.flatMap(order => order.items.map(item => item.id));
-  const consumptionMovements = orderItemIds.length === 0 ? [] : await prisma.stockMovement.findMany({
-    where: {
-      organizationId: session.user.organizationId,
-      branchId: { in: branchIds },
-      movementType: "CONSUMPTION",
-      referenceType: "ORDER_ITEM",
-      referenceId: { in: orderItemIds },
-      ...(periodWhere ? { occurredAt: periodWhere } : {}),
-    },
-    include: { lot: { select: { unitCost: true, currency: true } } },
-    take: 50000,
-  });
+  const [consumptionMovements, sendOutCosts] = orderItemIds.length === 0 ? [[], []] : await Promise.all([
+    prisma.stockMovement.findMany({
+      where: {
+        organizationId: session.user.organizationId,
+        branchId: { in: branchIds },
+        movementType: "CONSUMPTION",
+        referenceType: "ORDER_ITEM",
+        referenceId: { in: orderItemIds },
+      },
+      include: { lot: { select: { unitCost: true, currency: true } } },
+      take: 50000,
+    }),
+    prisma.sendOutReferral.findMany({
+      where: {
+        organizationId: session.user.organizationId,
+        branchId: { in: branchIds },
+        orderItemId: { in: orderItemIds },
+        status: { not: "CANCELLED" },
+        costAmount: { not: null },
+        costCurrency: { not: null },
+      },
+      select: { orderItemId: true, costAmount: true, costCurrency: true },
+      take: 20000,
+    }),
+  ]);
 
   const financeByCurrency = new Map<string, {
     gross: number;
@@ -313,6 +326,17 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
     const cost = movement.quantity.abs().mul(movement.lot.unitCost).toNumber();
     row.cost.set(movement.lot.currency, (row.cost.get(movement.lot.currency) || 0) + cost);
     row.costLinkedItems.add(movement.referenceId);
+  }
+
+  for (const sendOut of sendOutCosts) {
+    if (!sendOut.costAmount || !sendOut.costCurrency) continue;
+    const testId = orderItemToTest.get(sendOut.orderItemId);
+    if (!testId) continue;
+    const row = testMap.get(testId);
+    if (!row) continue;
+    const cost = sendOut.costAmount.toNumber();
+    row.cost.set(sendOut.costCurrency, (row.cost.get(sendOut.costCurrency) || 0) + cost);
+    row.costLinkedItems.add(sendOut.orderItemId);
   }
 
   const sourceMap = new Map<string, { name: string; orders: number; revenue: Map<string, number> }>();
@@ -515,9 +539,9 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
     </section>
 
     <section className="table-card detail-section">
-      <div className="table-toolbar"><h2>Test Revenue & Profitability Coverage</h2><span>Cost only from inventory consumption explicitly linked to ORDER_ITEM</span></div>
+      <div className="table-toolbar"><h2>Test Revenue & Profitability Coverage</h2><span>Cost from linked inventory consumption + recorded send-out laboratory cost</span></div>
       <div className="table-wrap"><table>
-        <thead><tr><th>Test</th><th>Volume</th><th>Revenue</th><th>Attributed consumable cost</th><th>Margin where comparable</th><th>Cost coverage</th></tr></thead>
+        <thead><tr><th>Test</th><th>Volume</th><th>Revenue</th><th>Attributed laboratory cost</th><th>Margin where comparable</th><th>Cost coverage</th></tr></thead>
         <tbody>{topTests.length === 0 ? <tr><td colSpan={6} className="empty-state">No test activity in the selected period.</td></tr> : topTests.map(test => {
           const revenueText = [...test.revenue.entries()].map(([currency, amount]) => money(amount, currency)).join(" · ");
           const costText = [...test.cost.entries()].map(([currency, amount]) => money(amount, currency)).join(" · ") || "No linked cost";
