@@ -3,6 +3,7 @@ import { permissionSet, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { AnalyzerManager } from "@/components/analyzer-manager";
 import { AnalyzerMessageReplayButton } from "@/components/analyzer-message-replay-button";
+import { AnalyzerClinicalImportButton } from "@/components/analyzer-clinical-import-button";
 
 export const dynamic = "force-dynamic";
 
@@ -72,6 +73,37 @@ export default async function AnalyzersPage() {
     }),
   ]);
 
+  const mappedGroups = new Map<string, {
+    analyzerCode: string;
+    analyzerName: string;
+    orderItemId: string;
+    testCode: string;
+    testName: string;
+    specimenId: string;
+    barcode: string;
+    importIds: string[];
+  }>();
+
+  for (const item of resultImports) {
+    if (item.status !== "MAPPED" || !item.orderItemId || !item.specimenId) continue;
+    const key = [item.analyzerId, item.orderItemId, item.specimenId].join(":");
+    const group = mappedGroups.get(key);
+    if (group) {
+      group.importIds.push(item.id);
+    } else {
+      mappedGroups.set(key, {
+        analyzerCode: item.analyzer.code,
+        analyzerName: item.analyzer.name,
+        orderItemId: item.orderItemId,
+        testCode: item.orderItem?.testCodeSnapshot || "—",
+        testName: item.orderItem?.testNameEnSnapshot || "—",
+        specimenId: item.specimenId,
+        barcode: item.barcodeSnapshot || "—",
+        importIds: [item.id],
+      });
+    }
+  }
+
   return <main className="catalog-shell">
     <header className="page-header">
       <div>
@@ -124,11 +156,25 @@ export default async function AnalyzersPage() {
     </section>
 
 
+    {permissions.has("analyzers.import") && mappedGroups.size > 0 && <section className="table-card detail-section">
+      <div className="table-toolbar"><h2>Ready for Clinical Import</h2><span>{mappedGroups.size} result group(s)</span></div>
+      <div className="table-wrap"><table>
+        <thead><tr><th>Analyzer</th><th>Test</th><th>Barcode</th><th>Observations</th><th>Action</th></tr></thead>
+        <tbody>{[...mappedGroups.values()].map(group => <tr key={group.analyzerCode + group.orderItemId + group.specimenId}>
+          <td>{group.analyzerCode} — {group.analyzerName}</td>
+          <td><strong>{group.testCode}</strong><br/><small>{group.testName}</small></td>
+          <td><strong>{group.barcode}</strong></td>
+          <td>{group.importIds.length}</td>
+          <td><AnalyzerClinicalImportButton importIds={group.importIds} /></td>
+        </tr>)}</tbody>
+      </table></div>
+    </section>}
+
     <section className="table-card detail-section">
       <div className="table-toolbar"><h2>Normalized Result Staging</h2><span>{resultImports.length} recent</span></div>
       <div className="table-wrap"><table>
-        <thead><tr><th>Created</th><th>Analyzer</th><th>Observation</th><th>Barcode</th><th>Analyzer code</th><th>LIS target</th><th>Raw value</th><th>Status</th><th>Error</th></tr></thead>
-        <tbody>{resultImports.length === 0 ? <tr><td colSpan={9} className="empty-state">No normalized analyzer observations staged.</td></tr> : resultImports.map(item => <tr key={item.id}>
+        <thead><tr><th>Created</th><th>Analyzer</th><th>Observation</th><th>Barcode</th><th>Analyzer code</th><th>LIS target</th><th>Raw value</th><th>Status</th><th>Error</th><th>Clinical result</th></tr></thead>
+        <tbody>{resultImports.length === 0 ? <tr><td colSpan={10} className="empty-state">No normalized analyzer observations staged.</td></tr> : resultImports.map(item => <tr key={item.id}>
           <td>{item.createdAt.toISOString().replace("T"," ").slice(0,19)}</td>
           <td>{item.analyzer.code}</td>
           <td>{item.bridgeObservationId}</td>
@@ -138,6 +184,7 @@ export default async function AnalyzersPage() {
           <td><strong>{item.rawValue}</strong>{item.rawUnit ? " " + item.rawUnit : ""}</td>
           <td>{item.status}</td>
           <td>{item.errorCode ? item.errorCode + (item.errorText ? " · " + item.errorText : "") : "—"}</td>
+          <td>{item.resultId && item.orderItemId ? <Link href={`/worklists/${item.orderItemId}`}>Open result</Link> : "—"}</td>
         </tr>)}</tbody>
       </table></div>
     </section>
