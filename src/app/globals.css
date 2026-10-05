@@ -197,3 +197,18 @@ html[data-density="compact"] :where(.detail-card,.dashboard-panel,.settings-card
 .table-subtext{display:block;margin-top:3px;font-size:9px;color:var(--fl-muted)}
 .compact-action{padding:7px 9px!important;font-size:10px!important}
 @media(max-width:900px){.permission-groups{grid-template-columns:1fr}}
+
+
+/* UX polish: dashboard icons, actions and responsive hierarchy */
+.kpi-icon svg,.quick-action>span svg{width:20px;height:20px}
+.quick-action>span{color:var(--fl-primary);background:var(--fl-primary-soft)}
+.quick-action:hover>span{transform:scale(1.04)}
+.management-link span{display:flex;align-items:center;gap:8px}
+.management-link span svg{color:var(--fl-primary)}
+.management-link.danger span svg{color:var(--fl-danger)}
+.system-nav-link,.quick-action,.management-link,.secondary-link,.secondary-button,.primary-button,.system-security-link,.system-theme-toggle,.system-locale-toggle{transition:background .16s ease,color .16s ease,border-color .16s ease,box-shadow .16s ease,transform .16s ease}
+.secondary-link:hover,.secondary-button:hover,.system-security-link:hover{transform:translateY(-1px)}
+.primary-button:hover{transform:translateY(-1px);box-shadow:0 8px 20px color-mix(in srgb,var(--fl-primary) 24%,transparent)}
+.detail-card,.table-card,.dashboard-panel,.settings-card{transition:border-color .16s ease,box-shadow .16s ease}
+.detail-card:hover,.settings-card:hover{border-color:color-mix(in srgb,var(--fl-primary) 20%,var(--fl-border))}
+.empty-state{padding:44px 18px;color:var(--fl-muted)}
