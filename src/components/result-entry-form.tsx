@@ -34,6 +34,8 @@ export function ResultEntryForm({
   comments,
   resultId,
   resultStatus,
+  resultSource,
+  analyzerLabel,
   canVerify,
   commentTemplates,
 }: {
@@ -44,6 +46,8 @@ export function ResultEntryForm({
   comments: string;
   resultId: string | null;
   resultStatus: string | null;
+  resultSource: string;
+  analyzerLabel?: string | null;
   canVerify: boolean;
   commentTemplates: CommentTemplateOption[];
 }) {
@@ -165,12 +169,14 @@ export function ResultEntryForm({
     setBusy("");
   }
 
-  const locked = ["VERIFIED", "RELEASED", "AMENDED", "CANCELLED"].includes(savedStatus || "");
+  const statusLocked = ["VERIFIED", "RELEASED", "AMENDED", "CANCELLED"].includes(savedStatus || "");
+  const sourceLocked = resultSource !== "MANUAL";
+  const locked = statusLocked || sourceLocked;
 
   return <form className="result-entry-form" onSubmit={save}>
     <div className="result-entry-header">
       <div><strong>Status</strong><span>{savedStatus || "NOT ENTERED"}</span></div>
-      <div><strong>Source</strong><span>MANUAL</span></div>
+      <div><strong>Source</strong><span>{resultSource}{analyzerLabel ? ` · ${analyzerLabel}` : ""}</span></div>
     </div>
 
     <div className="result-field-list">
@@ -213,8 +219,9 @@ export function ResultEntryForm({
 
     <div className="result-actions">
       {!locked && <button className="primary-button" disabled={busy !== ""}>{busy === "save" ? "Saving…" : "Save Result"}</button>}
-      {!locked && canVerify && savedResultId && complete && <button className="secondary-button" type="button" disabled={busy !== ""} onClick={() => void verify()}>{busy === "verify" ? "Verifying…" : "Verify Result"}</button>}
-      {locked && <span className="muted">Verified/released results are locked. Future edits must use an amendment workflow.</span>}
+      {!statusLocked && canVerify && savedResultId && complete && <button className="secondary-button" type="button" disabled={busy !== ""} onClick={() => void verify()}>{busy === "verify" ? "Verifying…" : "Verify Result"}</button>}
+      {statusLocked && <span className="muted">Verified/released results are locked. Future edits must use an amendment workflow.</span>}
+      {!statusLocked && sourceLocked && <span className="muted">Analyzer/import-origin values are read-only here. Use the analyzer integration workflow for additional observations or corrections.</span>}
     </div>
   </form>;
 }
