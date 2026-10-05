@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { PatientCreateForm } from "@/components/patient-create-form";
+import { SystemIcon } from "@/components/system-icon";
 
 export const dynamic = "force-dynamic";
 
@@ -36,19 +37,19 @@ export default async function PatientsPage({
     <header className="page-header">
       <div>
         <p className="eyebrow">Patient Registry</p>
-        <h1>Patients</h1>
+        <h1 className="page-title-with-icon"><SystemIcon name="patients" size={25} />Patients</h1>
         <p className="muted">Organization-wide patient identity shared across all branches, with duplicate protection and auditable identifiers.</p>
       </div>
-      <Link className="secondary-link" href="/dashboard">Back to Dashboard</Link>
+      <Link className="secondary-link" href="/dashboard"><SystemIcon name="dashboard" size={15} />Back to Dashboard</Link>
     </header>
 
     <section className="detail-grid">
       <article className="detail-card">
-        <h2>Register Patient</h2>
+        <h2 className="section-heading-icon"><SystemIcon name="patients" size={18} />Register Patient</h2>
         <PatientCreateForm />
       </article>
       <article className="detail-card">
-        <h2>Identity Rules</h2>
+        <h2 className="section-heading-icon"><SystemIcon name="security" size={18} />Identity Rules</h2>
         <dl>
           <dt>Scope</dt><dd>Organization-wide</dd>
           <dt>Patient number</dt><dd>Immutable internal identifier</dd>
@@ -63,7 +64,7 @@ export default async function PatientsPage({
         <div><h2>Patient Search</h2><span>{patients.length} shown</span></div>
         <form className="inline-search" action="/patients" method="get">
           <input name="q" defaultValue={query} placeholder="Patient #, name, phone, ID…" />
-          <button className="secondary-button">Search</button>
+          <button className="secondary-button"><SystemIcon name="search" size={15} />Search</button>
           {query && <Link className="secondary-link" href="/patients">Clear</Link>}
         </form>
       </div>
