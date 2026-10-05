@@ -240,3 +240,54 @@ export async function dispatchPendingNotifications(db: DbClient, limit = 50) {
 
   return results;
 }
+
+
+export async function notifyUsersWithPermission(db: DbClient, input: {
+  organizationId: string;
+  branchId: string;
+  permissionCode: string;
+  eventCode: string;
+  title: string;
+  body: string;
+  severity?: NotificationSeverity;
+  entityType?: string | null;
+  entityId?: string | null;
+  metadata?: Prisma.InputJsonValue;
+}) {
+  const users = await db.user.findMany({
+    where: {
+      organizationId: input.organizationId,
+      status: "ACTIVE",
+      branchScopes: { some: { branchId: input.branchId } },
+      roles: {
+        some: {
+          role: {
+            permissions: {
+              some: { permission: { code: input.permissionCode } },
+            },
+          },
+        },
+      },
+    },
+    select: { id: true },
+  });
+
+  for (const user of users) {
+    await enqueueNotification(db, {
+      organizationId: input.organizationId,
+      branchId: input.branchId,
+      eventCode: input.eventCode,
+      recipientType: NotificationRecipientType.USER,
+      recipientUserId: user.id,
+      title: input.title,
+      body: input.body,
+      severity: input.severity,
+      entityType: input.entityType,
+      entityId: input.entityId,
+      metadata: input.metadata,
+      channels: [NotificationChannel.IN_APP],
+    });
+  }
+
+  return users.length;
+}
