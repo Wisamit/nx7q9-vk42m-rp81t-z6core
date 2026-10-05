@@ -29,6 +29,7 @@ export function ReferenceRangeImportButton({ batchId }: { batchId: string }) {
   const [busy, setBusy] = useState(false);
   const [mappingBusy, setMappingBusy] = useState("");
   const [mappingTargets, setMappingTargets] = useState<Record<string, string>>({});
+  const [mappingSearch, setMappingSearch] = useState<Record<string, string>>({});
   const [message, setMessage] = useState("");
 
   async function loadPreview() {
@@ -104,6 +105,9 @@ export function ReferenceRangeImportButton({ batchId }: { batchId: string }) {
       {Object.entries(preview.reasons).sort((a,b) => b[1]-a[1]).map(([reason,count]) => <div key={reason}><span>{reason}</span><strong>{count}</strong></div>)}
     </div>}
 
+    <datalist id="test-mapping-options">{(preview.testOptions || []).map(test => <option key={test.id} value={`${test.code} — ${test.nameEn}`} />)}</datalist>
+    <datalist id="unit-mapping-options">{(preview.unitOptions || []).map(unit => <option key={unit.id} value={`${unit.symbol} (${unit.code})`} />)}</datalist>
+
     {preview.details && <div className="range-review-details">
       <section>
         <strong>Top unmatched test names</strong>
@@ -112,13 +116,21 @@ export function ReferenceRangeImportButton({ batchId }: { batchId: string }) {
           const mapKey = `TEST_ALIAS:${item.value}`;
           return <div className="mapping-row" key={item.value}>
             <div className="mapping-source"><span>{item.value}</span><strong>{item.count}</strong></div>
-            {item.suggestion && "nameEn" in item.suggestion && <button className="suggestion-button" type="button" onClick={() => setMappingTargets(v => ({ ...v, [mapKey]: item.suggestion!.id }))}>
+            {item.suggestion && "nameEn" in item.suggestion && <button className="suggestion-button" type="button" onClick={() => { const s = item.suggestion!; setMappingTargets(v => ({ ...v, [mapKey]: s.id })); setMappingSearch(v => ({ ...v, [mapKey]: `${s.code} — ${s.nameEn}` })); }}>
               Suggested: {item.suggestion.code} — {item.suggestion.nameEn} ({item.suggestion.score}%)
             </button>}
-            <select value={mappingTargets[mapKey] || ""} onChange={e => setMappingTargets(v => ({ ...v, [mapKey]: e.target.value }))}>
-              <option value="">Map to test…</option>
-              {(preview.testOptions || []).map(test => <option key={test.id} value={test.id}>{test.code} — {test.nameEn}</option>)}
-            </select>
+            <input
+              className="mapping-search-input"
+              list="test-mapping-options"
+              placeholder="Type test name or code…"
+              value={mappingSearch[mapKey] || ""}
+              onChange={e => {
+                const value = e.target.value;
+                setMappingSearch(v => ({ ...v, [mapKey]: value }));
+                const match = (preview.testOptions || []).find(test => `${test.code} — ${test.nameEn}` === value);
+                setMappingTargets(v => ({ ...v, [mapKey]: match?.id || "" }));
+              }}
+            />
             <button className="secondary-button" disabled={mappingBusy === mapKey} onClick={() => void saveMapping("TEST_ALIAS", item.value)}>{mappingBusy === mapKey ? "Saving…" : "Save"}</button>
           </div>;
         })}
@@ -131,13 +143,21 @@ export function ReferenceRangeImportButton({ batchId }: { batchId: string }) {
           const mapKey = `UNIT_ALIAS:${item.value}`;
           return <div className="mapping-row" key={item.value}>
             <div className="mapping-source"><span>{item.value}</span><strong>{item.count}</strong></div>
-            {item.suggestion && "symbol" in item.suggestion && <button className="suggestion-button" type="button" onClick={() => setMappingTargets(v => ({ ...v, [mapKey]: item.suggestion!.id }))}>
+            {item.suggestion && "symbol" in item.suggestion && <button className="suggestion-button" type="button" onClick={() => { const s = item.suggestion!; setMappingTargets(v => ({ ...v, [mapKey]: s.id })); setMappingSearch(v => ({ ...v, [mapKey]: `${s.symbol} (${s.code})` })); }}>
               Suggested: {item.suggestion.symbol} ({item.suggestion.code}) — {item.suggestion.score}%
             </button>}
-            <select value={mappingTargets[mapKey] || ""} onChange={e => setMappingTargets(v => ({ ...v, [mapKey]: e.target.value }))}>
-              <option value="">Map to unit…</option>
-              {(preview.unitOptions || []).map(unit => <option key={unit.id} value={unit.id}>{unit.symbol} ({unit.code})</option>)}
-            </select>
+            <input
+              className="mapping-search-input"
+              list="unit-mapping-options"
+              placeholder="Type unit symbol or code…"
+              value={mappingSearch[mapKey] || ""}
+              onChange={e => {
+                const value = e.target.value;
+                setMappingSearch(v => ({ ...v, [mapKey]: value }));
+                const match = (preview.unitOptions || []).find(unit => `${unit.symbol} (${unit.code})` === value);
+                setMappingTargets(v => ({ ...v, [mapKey]: match?.id || "" }));
+              }}
+            />
             <button className="secondary-button" disabled={mappingBusy === mapKey} onClick={() => void saveMapping("UNIT_ALIAS", item.value)}>{mappingBusy === mapKey ? "Saving…" : "Save"}</button>
           </div>;
         })}
