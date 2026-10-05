@@ -132,6 +132,7 @@ export async function POST(request: Request) {
         resultType: component.resultType,
         unitId: component.unitId,
         unitSnapshot: component.unit?.symbol || null,
+        decimalPrecision: component.decimalPrecision,
       }))
     : [{
         componentId: null,
@@ -141,6 +142,7 @@ export async function POST(request: Request) {
         resultType: orderItem.test.resultType,
         unitId: orderItem.test.defaultUnitId,
         unitSnapshot: orderItem.test.defaultUnit?.symbol || null,
+        decimalPrecision: orderItem.test.decimalPrecision,
       }];
 
   const valueByComponent = new Map((body.values || []).map((entry) => [entry.componentId || "__TEST__", entry.rawValue]));
@@ -161,6 +163,7 @@ export async function POST(request: Request) {
     calculationExpression: string | null;
     calculationInputs: Record<string, string> | null;
   }> = [];
+  const calculatedTargetIds = new Set(orderItem.test.calculatedRules.map(rule => rule.targetComponentId));
 
   try {
     for (const component of expected) {
