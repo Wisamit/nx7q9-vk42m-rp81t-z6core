@@ -45,7 +45,7 @@ export async function POST(request: Request) {
     prisma.patient.findFirst({ where: { id: patientId, organizationId: session.user.organizationId, status: "ACTIVE" }, select: { id: true, patientNumber: true, fullNameEn: true } }),
     prisma.labTest.findMany({
       where: { id: { in: testIds }, organizationId: session.user.organizationId, status: "ACTIVE" },
-      include: { defaultUnit: true },
+      include: { defaultUnit: true, branchAvailability: { where: { status: "ACTIVE" } } },
     }),
     referrerId ? prisma.referrer.findFirst({ where: { id: referrerId, organizationId: session.user.organizationId, status: "ACTIVE" }, select: { id: true, clientId: true } }) : null,
     clientId ? prisma.client.findFirst({ where: { id: clientId, organizationId: session.user.organizationId, status: "ACTIVE" }, select: { id: true } }) : null,
@@ -125,7 +125,7 @@ export async function POST(request: Request) {
           data: {
             orderId: order.id,
             testId: entry.test.id,
-            performedBranchId: branchId,
+            performedBranchId: entry.test.branchAvailability.some((availability) => availability.branchId === branchId && availability.performedHere) ? branchId : null,
             priceListItemId: price.priceListItemId,
             testCodeSnapshot: entry.test.code,
             testNameEnSnapshot: entry.test.nameEn,
