@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 
 type Branch = { id: string; code: string; nameEn: string };
 type ComponentOption = { id: string; code: string; nameEn: string; resultType: string };
-type TestOption = { id: string; code: string; nameEn: string; components: ComponentOption[] };
+type TestOption = { id: string; code: string; nameEn: string; resultType: string; components: ComponentOption[] };
 
 export function AdvancedClinicalRulesManager({
   tests,
@@ -17,14 +17,19 @@ export function AdvancedClinicalRulesManager({
   const router = useRouter();
   const [calcTestId, setCalcTestId] = useState("");
   const [reflexSourceTestId, setReflexSourceTestId] = useState("");
+  const [reflexSourceComponentId, setReflexSourceComponentId] = useState("");
   const [reflexTargetTestId, setReflexTargetTestId] = useState("");
   const [operator, setOperator] = useState("GT");
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
 
   const calcComponents = useMemo(() => tests.find(test => test.id === calcTestId)?.components || [], [tests, calcTestId]);
-  const sourceComponents = useMemo(() => tests.find(test => test.id === reflexSourceTestId)?.components || [], [tests, reflexSourceTestId]);
-  const numericOperator = ["LT","LTE","GT","GTE"].includes(operator);
+  const sourceTest = useMemo(() => tests.find(test => test.id === reflexSourceTestId) || null, [tests, reflexSourceTestId]);
+  const sourceComponents = sourceTest?.components || [];
+  const sourceComponent = sourceComponents.find(component => component.id === reflexSourceComponentId) || null;
+  const sourceResultType = sourceComponent?.resultType || (sourceComponents.length === 0 ? sourceTest?.resultType : null);
+  const numericOperator = ["LT","LTE","GT","GTE"].includes(operator)
+    || (["EQ","NE"].includes(operator) && sourceResultType === "NUMERIC");
 
   async function createCalculated(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -77,6 +82,7 @@ export function AdvancedClinicalRulesManager({
     if (response.ok) {
       event.currentTarget.reset();
       setReflexSourceTestId("");
+      setReflexSourceComponentId("");
       setReflexTargetTestId("");
       setOperator("GT");
       router.refresh();
@@ -109,10 +115,13 @@ export function AdvancedClinicalRulesManager({
       <h2>Create Reflex Recommendation Rule</h2>
       <p className="muted">A matching result creates a recommendation for review. It does not automatically add or bill a new test.</p>
       <form className="catalog-form" onSubmit={createReflex}>
-        <label>Source test<select name="sourceTestId" required value={reflexSourceTestId} onChange={event => setReflexSourceTestId(event.target.value)}>
+        <label>Source test<select name="sourceTestId" required value={reflexSourceTestId} onChange={event => {
+          setReflexSourceTestId(event.target.value);
+          setReflexSourceComponentId("");
+        }}>
           <option value="">Select source…</option>{tests.map(test => <option key={test.id} value={test.id}>{test.code} — {test.nameEn}</option>)}
         </select></label>
-        <label>Source component<select name="sourceComponentId" defaultValue="" disabled={!reflexSourceTestId || sourceComponents.length === 0}>
+        <label>Source component<select name="sourceComponentId" value={reflexSourceComponentId} onChange={event => setReflexSourceComponentId(event.target.value)} disabled={!reflexSourceTestId || sourceComponents.length === 0}>
           <option value="">{sourceComponents.length ? "Select component…" : "Simple test result"}</option>
           {sourceComponents.map(component => <option key={component.id} value={component.id}>{component.code} — {component.nameEn}</option>)}
         </select></label>

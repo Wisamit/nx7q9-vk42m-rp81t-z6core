@@ -78,6 +78,7 @@ export default async function ClinicalRulesPage() {
         id: test.id,
         code: test.code,
         nameEn: test.nameEn,
+        resultType: test.resultType,
         components: test.components.map(component => ({
           id: component.id,
           code: component.code,
