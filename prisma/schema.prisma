@@ -1557,6 +1557,7 @@ model LaboratoryResult {
   autoVerified       Boolean      @default(false) @map("auto_verified")
   autoverificationPolicyId String? @map("autoverification_policy_id") @db.Char(36)
   autoverificationDecisionSnapshot Json? @map("autoverification_decision_snapshot")
+  microbiologySnapshot Json? @map("microbiology_snapshot")
   createdAt          DateTime     @default(now()) @map("created_at") @db.DateTime(3)
   updatedAt          DateTime     @updatedAt @map("updated_at") @db.DateTime(3)
 
