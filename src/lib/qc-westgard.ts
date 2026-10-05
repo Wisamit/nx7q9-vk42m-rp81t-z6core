@@ -36,13 +36,29 @@ export function evaluateWestgard(input: {
     });
   }
 
-  if (enabled.has("2:2s") && input.previousZ.length >= 1) {
-    const pair = [input.previousZ[0], input.currentZ];
-    if (sameSide(pair) && pair.every(value => Math.abs(value) >= 2)) {
+  if (enabled.has("2:2s")) {
+    const consecutivePair = input.previousZ.length >= 1
+      ? [input.previousZ[0], input.currentZ]
+      : null;
+    const sameRunSibling = (input.siblingZ || []).find(value =>
+      Math.sign(value) === Math.sign(input.currentZ) &&
+      Math.abs(value) >= 2 &&
+      Math.abs(input.currentZ) >= 2
+    );
+    const sameRunPair = sameRunSibling === undefined ? null : [sameRunSibling, input.currentZ];
+    const violatingPair =
+      consecutivePair && sameSide(consecutivePair) && consecutivePair.every(value => Math.abs(value) >= 2)
+        ? consecutivePair
+        : sameRunPair;
+
+    if (violatingPair) {
       violations.push({
         ruleCode: "2:2s",
         severity: "BLOCK",
-        details: { zScores: pair },
+        details: {
+          zScores: violatingPair,
+          mode: sameRunPair === violatingPair ? "SAME_RUN_LEVELS" : "CONSECUTIVE_RUNS",
+        },
       });
     }
   }
