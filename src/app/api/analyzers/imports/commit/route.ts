@@ -449,6 +449,11 @@ export async function POST(request: Request) {
     || null;
 
   const saved = await prisma.$transaction(async tx => {
+    const stillMapped = await tx.analyzerResultImport.count({
+      where: { id: { in: importIds }, status: "MAPPED" },
+    });
+    if (stillMapped !== importIds.length) throw new Error("ANALYZER_IMPORT_CONCURRENT_STATE_CHANGE");
+
     const result = existing
       ? await tx.laboratoryResult.update({
           where: { id: existing.id },
@@ -809,7 +814,14 @@ export async function POST(request: Request) {
         validationHoldEvents: true,
       },
     });
-  }, { timeout: 30000 });
+  }, { timeout: 30000, isolationLevel: "Serializable" }).catch(error => {
+    if (error instanceof Error && error.message === "ANALYZER_IMPORT_CONCURRENT_STATE_CHANGE") return null;
+    throw error;
+  });
+
+  if (!saved) {
+    return NextResponse.json({ error: "analyzer_import_state_changed_retry" }, { status: 409 });
+  }
 
   return NextResponse.json({
     status: "ok",
