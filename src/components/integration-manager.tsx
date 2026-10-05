@@ -71,7 +71,7 @@ export function IntegrationManager({
     event.preventDefault();
     setSecret("");
     const form = new FormData(event.currentTarget);
-    const scopes = ["fhir.read","hl7.write","messages.read"].filter(scope => form.get("scope-" + scope) === "on");
+    const scopes = ["fhir.read","hl7.write","messages.read","messages.ack"].filter(scope => form.get("scope-" + scope) === "on");
     const result = await post("/api/integrations/api-keys", {
       endpointId: form.get("endpointId"), name: form.get("name"), scopes, expiresAt: form.get("expiresAt"),
     }, "key", "API key created. Copy the secret now.");
@@ -133,7 +133,7 @@ export function IntegrationManager({
         <label>Name<input name="name" required placeholder="Hospital integration key" /></label>
         <label>Expires<input name="expiresAt" type="date" /></label>
         <div className="form-span result-actions">
-          {["fhir.read","hl7.write","messages.read"].map(scope => <label key={scope}><input type="checkbox" name={"scope-" + scope} /> {scope}</label>)}
+          {["fhir.read","hl7.write","messages.read","messages.ack"].map(scope => <label key={scope}><input type="checkbox" name={"scope-" + scope} /> {scope}</label>)}
         </div>
         <button className="primary-button form-span" disabled={busy !== ""}>{busy === "key" ? "Creating…" : "Create API Key"}</button>
       </form>
