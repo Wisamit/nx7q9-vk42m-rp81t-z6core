@@ -97,6 +97,8 @@ const FOUNDATION_PERMISSIONS = [
   ["notifications.view", "notifications", "View personal and branch-scoped notifications"],
   ["notifications.manage", "notifications", "Manage notification templates and preferences"],
   ["notifications.dispatch", "notifications", "Dispatch and retry outbound notification deliveries"],
+  ["report_templates.view", "reporting", "View report template configuration and version history"],
+  ["report_templates.manage", "reporting", "Manage and approve versioned report templates"],
 ] as const;
 
 function text(value: unknown, max = 200) {
