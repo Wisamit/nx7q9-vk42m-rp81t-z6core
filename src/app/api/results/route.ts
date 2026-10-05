@@ -130,6 +130,9 @@ export async function POST(request: Request) {
   });
 
   if (!orderItem) return NextResponse.json({ error: "order_item_not_found" }, { status: 404 });
+  if (orderItem.test.workflowType === "MICROBIOLOGY") {
+    return NextResponse.json({ error: "microbiology_workflow_required" }, { status: 409 });
+  }
 
   const specimenLink = orderItem.specimenLinks[0];
   const specimen = specimenLink?.specimen;
