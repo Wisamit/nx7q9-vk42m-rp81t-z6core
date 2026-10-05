@@ -5,7 +5,7 @@ import {
   NotificationSeverity,
   Prisma,
   PrismaClient,
-} from "@prisma/client";
+} from "../../generated/prisma/client";
 
 type DbClient = PrismaClient | Prisma.TransactionClient;
 
