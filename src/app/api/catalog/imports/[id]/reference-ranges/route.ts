@@ -13,6 +13,51 @@ function looseKey(value: string) {
 function unitKey(value: string) {
   return value.trim().toUpperCase().replace(/[µμ]/g, "U").replace(/\s+/g, "").replace(/PER/g, "/");
 }
+function bigrams(value: string) {
+  const normalized = looseKey(value);
+  const result: string[] = [];
+  for (let i = 0; i < normalized.length - 1; i++) result.push(normalized.slice(i, i + 2));
+  return result;
+}
+function similarity(a: string, b: string) {
+  const left = looseKey(a);
+  const right = looseKey(b);
+  if (!left || !right) return 0;
+  if (left === right) return 1;
+  if (left.includes(right) || right.includes(left)) {
+    const ratio = Math.min(left.length, right.length) / Math.max(left.length, right.length);
+    return Math.min(0.96, 0.72 + ratio * 0.24);
+  }
+  const aPairs = bigrams(a);
+  const bPairs = bigrams(b);
+  if (!aPairs.length || !bPairs.length) return 0;
+  const pool = [...bPairs];
+  let intersection = 0;
+  for (const pair of aPairs) {
+    const index = pool.indexOf(pair);
+    if (index >= 0) {
+      intersection++;
+      pool.splice(index, 1);
+    }
+  }
+  return (2 * intersection) / (aPairs.length + bPairs.length);
+}
+function bestTestSuggestion(source: string, tests: Array<{ id: string; code: string; nameEn: string; abbreviation: string | null }>) {
+  let best: { id: string; code: string; nameEn: string; score: number } | null = null;
+  for (const test of tests) {
+    const score = Math.max(similarity(source, test.nameEn), similarity(source, test.code), test.abbreviation ? similarity(source, test.abbreviation) : 0);
+    if (!best || score > best.score) best = { id: test.id, code: test.code, nameEn: test.nameEn, score };
+  }
+  return best && best.score >= 0.58 ? { ...best, score: Math.round(best.score * 100) } : null;
+}
+function bestUnitSuggestion(source: string, units: Array<{ id: string; code: string; symbol: string }>) {
+  let best: { id: string; code: string; symbol: string; score: number } | null = null;
+  for (const unit of units) {
+    const score = Math.max(similarity(unitKey(source), unitKey(unit.symbol)), similarity(unitKey(source), unitKey(unit.code)));
+    if (!best || score > best.score) best = { id: unit.id, code: unit.code, symbol: unit.symbol, score };
+  }
+  return best && best.score >= 0.55 ? { ...best, score: Math.round(best.score * 100) } : null;
+}
 function decimal(value: unknown): string | null {
   if (value === null || value === undefined || value === "") return null;
   const s = String(value).trim();
@@ -161,14 +206,17 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
       .map(([value, count]) => ({ value, count }));
   };
 
+  const unmatchedTests = topValues("TEST_NOT_FOUND", (item) => item.testName).map((item) => ({ ...item, suggestion: bestTestSuggestion(item.value, analysis.tests) }));
+  const unmappedUnits = topValues("UNIT_NOT_MAPPED", (item) => item.rangeUnit).map((item) => ({ ...item, suggestion: bestUnitSuggestion(item.value, analysis.units) }));
+
   return NextResponse.json({
     total: analysis.total,
     safe: analysis.safe.length,
     review: analysis.review.length,
     reasons: analysis.reasons,
     details: {
-      unmatchedTests: topValues("TEST_NOT_FOUND", (item) => item.testName),
-      unmappedUnits: topValues("UNIT_NOT_MAPPED", (item) => item.rangeUnit),
+      unmatchedTests,
+      unmappedUnits,
       unitConflicts: topValues("TEST_UNIT_CONFLICT", (item) => `${item.testName} | ${item.rangeUnit}`),
       emptyIntervals: topValues("EMPTY_REFERENCE_INTERVAL", (item) => item.testName),
     },
