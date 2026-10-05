@@ -10,7 +10,7 @@ export default async function OrdersPage() {
 
   const accessibleBranchIds = session.user.branchScopes.map(scope => scope.branchId);
 
-  const [patients, tests, clients, referrers, branches, orders] = await Promise.all([
+  const [patients, tests, clients, referrers, sources, branches, orders] = await Promise.all([
     prisma.patient.findMany({
       where: { organizationId: session.user.organizationId, status: "ACTIVE" },
       select: { id: true, patientNumber: true, fullNameEn: true, phone: true },
@@ -32,6 +32,11 @@ export default async function OrdersPage() {
       select: { id: true, code: true, nameEn: true, clientId: true },
       orderBy: { nameEn: "asc" },
     }),
+    prisma.orderSource.findMany({
+      where: { organizationId: session.user.organizationId, status: "ACTIVE" },
+      select: { id: true, code: true, category: true, nameEn: true },
+      orderBy: [{ category: "asc" }, { nameEn: "asc" }],
+    }),
     prisma.branch.findMany({
       where: {
         id: { in: accessibleBranchIds },
@@ -48,6 +53,7 @@ export default async function OrdersPage() {
         orderingBranch: true,
         client: true,
         referrer: true,
+        source: true,
         items: true,
         invoices: { orderBy: { issuedAt: "desc" }, take: 1 },
       },
@@ -77,6 +83,7 @@ export default async function OrdersPage() {
         tests={tests}
         clients={clients}
         referrers={referrers}
+        sources={sources}
         branches={branches}
         activeBranchId={session.activeBranchId}
       />
@@ -86,15 +93,16 @@ export default async function OrdersPage() {
       <div className="table-toolbar"><h2>Recent Orders</h2><span>{orders.length} shown</span></div>
       <div className="table-wrap">
         <table>
-          <thead><tr><th>Accession</th><th>Patient</th><th>Branch</th><th>Priority</th><th>Tests</th><th>Client / Referrer</th><th>Invoice</th><th>Status</th></tr></thead>
+          <thead><tr><th>Accession</th><th>Patient</th><th>Branch</th><th>Source</th><th>Priority</th><th>Tests</th><th>Client / Referrer</th><th>Invoice</th><th>Status</th></tr></thead>
           <tbody>
-            {orders.length === 0 ? <tr><td colSpan={8} className="empty-state">No orders registered yet.</td></tr> :
+            {orders.length === 0 ? <tr><td colSpan={9} className="empty-state">No orders registered yet.</td></tr> :
               orders.map(order => {
                 const invoice = order.invoices[0];
                 return <tr key={order.id}>
                   <td><Link className="table-link" href={`/orders/${order.id}`}><strong>{order.accessionNumber}</strong></Link><br/><small>{order.orderedAt.toISOString().slice(0,16).replace("T"," ")}</small></td>
                   <td>{order.patient.patientNumber}<br/><small>{order.patient.fullNameEn}</small></td>
                   <td>{order.orderingBranch.code}</td>
+                  <td>{order.source?.nameEn || "Legacy / unspecified"}</td>
                   <td>{order.priority}</td>
                   <td>{order.items.length}</td>
                   <td>{order.client?.nameEn || order.referrer?.nameEn || "Patient / walk-in"}</td>
