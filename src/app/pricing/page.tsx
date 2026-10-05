@@ -8,15 +8,17 @@ export const dynamic = "force-dynamic";
 export default async function PricingPage() {
   const session = await requirePermission("pricing.view");
 
+  const accessibleBranchIds = session.user.branchScopes.map(scope => scope.branchId);
+
   const [priceLists, branches, clients, contracts, tests] = await Promise.all([
     prisma.priceList.findMany({
-      where: { organizationId: session.user.organizationId },
+      where: { organizationId: session.user.organizationId, OR: [{ scopeType: { not: "BRANCH" } }, { branchId: { in: accessibleBranchIds } }] },
       include: { _count: { select: { items: true } } },
       orderBy: [{ status: "asc" }, { priority: "desc" }, { nameEn: "asc" }],
       take: 200,
     }),
     prisma.branch.findMany({
-      where: { organizationId: session.user.organizationId, status: "ACTIVE" },
+      where: { organizationId: session.user.organizationId, id: { in: accessibleBranchIds }, status: "ACTIVE" },
       orderBy: { nameEn: "asc" },
     }),
     prisma.client.findMany({
