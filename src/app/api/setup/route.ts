@@ -22,6 +22,12 @@ const FOUNDATION_PERMISSIONS = [
   ["clients.manage", "clients", "Manage client accounts"],
   ["referrers.view", "referrers", "View referrers"],
   ["referrers.manage", "referrers", "Manage referrers"],
+  ["pricing.view", "billing", "View price lists"],
+  ["pricing.manage", "billing", "Manage effective-dated price lists"],
+  ["orders.view", "orders", "View laboratory orders"],
+  ["orders.create", "orders", "Create laboratory orders"],
+  ["billing.view", "billing", "View invoices and balances"],
+  ["billing.manage", "billing", "Manage invoices and payments"],
 ] as const;
 
 function text(value: unknown, max = 200) {

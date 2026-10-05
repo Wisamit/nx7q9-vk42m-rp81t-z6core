@@ -224,7 +224,7 @@ async function analyze(batchId: string, organizationId: string) {
     const normalText = text(s.Normal);
 
     let reason = "";
-    let test = matches.length === 1 ? matches[0] : undefined;
+    const test = matches.length === 1 ? matches[0] : undefined;
     const componentUnit = test?.components.length === 1 ? test.components[0].unit : undefined;
     const legacyTestUnit = test ? legacyUnitByTestId.get(test.id) : undefined;
     const trustedTestUnit = test?.defaultUnit || componentUnit || legacyTestUnit;

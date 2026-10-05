@@ -43,7 +43,12 @@ export function ReferenceRangeImportButton({ batchId }: { batchId: string }) {
   }
 
   useEffect(() => {
-    void loadPreview().catch(() => setPreview(null));
+    let active = true;
+    fetch(`/api/catalog/imports/${batchId}/reference-ranges`, { cache: "no-store" })
+      .then((response) => response.ok ? response.json() : null)
+      .then((data) => { if (active) setPreview(data); })
+      .catch(() => { if (active) setPreview(null); });
+    return () => { active = false; };
   }, [batchId]);
 
   async function resolveSafeLegacy() {
