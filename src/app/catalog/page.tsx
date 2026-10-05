@@ -10,7 +10,7 @@ export default async function CatalogPage() {
   const session = await requirePermission("catalog.view");
   const [tests, departments, specimens, containers, methods, units, panels] = await Promise.all([prisma.labTest.findMany({
     where: { organizationId: session.user.organizationId },
-    include: { department: true, specimenType: true, components: true },
+    include: { department: true, specimenType: true, components: { include: { unit: true, referenceIntervals: { orderBy: { effectiveFrom: "desc" }, take: 1 } }, orderBy: { displayOrder: "asc" } } },
     orderBy: { nameEn: "asc" },
   }), prisma.department.findMany({ where: { organizationId: session.user.organizationId, status: "ACTIVE" }, orderBy: { nameEn: "asc" } }), prisma.specimenType.findMany({ where: { organizationId: session.user.organizationId, status: "ACTIVE" }, orderBy: { nameEn: "asc" } }), prisma.container.findMany({ where: { organizationId: session.user.organizationId, status: "ACTIVE" }, orderBy: { nameEn: "asc" } }), prisma.method.findMany({ where: { organizationId: session.user.organizationId, status: "ACTIVE" }, orderBy: { nameEn: "asc" } }), prisma.unit.findMany({ where: { organizationId: session.user.organizationId, status: "ACTIVE" }, orderBy: { code: "asc" } }), prisma.testPanel.findMany({ where: { organizationId: session.user.organizationId }, include: { items: true }, orderBy: { nameEn: "asc" } })]);
 
@@ -23,7 +23,8 @@ export default async function CatalogPage() {
       <section className="catalog-stats">
         <article><strong>{tests.length}</strong><span>Tests</span></article>
         <article><strong>{tests.filter((test) => test.status === "ACTIVE").length}</strong><span>Active</span></article>
-        <article><strong>{tests.reduce((sum, test) => sum + test.components.length, 0)}</strong><span>Components</span></article>\n        <article><strong>{panels.length}</strong><span>Panels / Profiles</span></article>
+        <article><strong>{tests.reduce((sum, test) => sum + test.components.length, 0)}</strong><span>Components</span></article>
+        <article><strong>{panels.length}</strong><span>Panels / Profiles</span></article>
       </section>
       <section className="table-card">
         <div className="table-toolbar"><h2>Tests</h2><span>Legacy catalog import will be added through controlled validation.</span></div>
