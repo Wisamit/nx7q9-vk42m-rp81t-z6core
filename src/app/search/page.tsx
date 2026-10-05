@@ -103,7 +103,7 @@ export default async function GlobalSearchPage({
       orderBy: { nameEn: "asc" },
       take: 20,
     }) : Promise.resolve([]),
-    permissions.has("clients.view") ? prisma.client.findMany({
+    permissions.has("referrers.view") ? prisma.client.findMany({
       where: {
         organizationId: orgId,
         OR: [
