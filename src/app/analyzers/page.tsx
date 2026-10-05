@@ -2,6 +2,7 @@ import Link from "next/link";
 import { permissionSet, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { AnalyzerManager } from "@/components/analyzer-manager";
+import { AnalyzerMessageReplayButton } from "@/components/analyzer-message-replay-button";
 
 export const dynamic = "force-dynamic";
 
@@ -97,8 +98,8 @@ export default async function AnalyzersPage() {
     <section className="table-card detail-section">
       <div className="table-toolbar"><h2>Raw Message Inbox</h2><span>{messages.length} recent</span></div>
       <div className="table-wrap"><table>
-        <thead><tr><th>Received</th><th>Analyzer</th><th>Bridge message</th><th>Protocol</th><th>Status</th><th>Attempts</th><th>Error</th><th>Payload hash</th></tr></thead>
-        <tbody>{messages.length === 0 ? <tr><td colSpan={8} className="empty-state">No analyzer messages received.</td></tr> : messages.map(item => <tr key={item.id}>
+        <thead><tr><th>Received</th><th>Analyzer</th><th>Bridge message</th><th>Protocol</th><th>Status</th><th>Attempts</th><th>Error</th><th>Payload hash</th><th>Action</th></tr></thead>
+        <tbody>{messages.length === 0 ? <tr><td colSpan={9} className="empty-state">No analyzer messages received.</td></tr> : messages.map(item => <tr key={item.id}>
           <td>{item.receivedAt.toISOString().replace("T"," ").slice(0,19)}</td>
           <td>{item.analyzer.code} — {item.analyzer.name}</td>
           <td>{item.bridgeMessageId}</td>
@@ -107,6 +108,7 @@ export default async function AnalyzersPage() {
           <td>{item.attempts}</td>
           <td>{item.errorCode || item.errorText || "—"}</td>
           <td><code>{item.payloadHash.slice(0,16)}…</code></td>
+          <td>{permissions.has("analyzers.replay") && ["ERROR","DEAD_LETTER"].includes(item.status) ? <AnalyzerMessageReplayButton messageId={item.id} /> : "—"}</td>
         </tr>)}</tbody>
       </table></div>
     </section>
