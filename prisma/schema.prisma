@@ -266,6 +266,7 @@ model User {
   createdOrders LabOrder[] @relation("OrderCreator")
   createdInvoices Invoice[] @relation("InvoiceCreator")
   cashierPayments Payment[] @relation("PaymentCashier")
+  orderStatusChanges OrderStatusHistory[] @relation("OrderStatusChanger")
 
   @@unique([organizationId, username])
   @@unique([organizationId, email])
@@ -969,6 +970,7 @@ model LabOrder {
   createdBy     User         @relation("OrderCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
   items         OrderItem[]
   invoices      Invoice[]
+  statusHistory OrderStatusHistory[]
 
   @@unique([organizationId, accessionNumber])
   @@index([orderingBranchId, orderedAt])
@@ -1099,4 +1101,22 @@ model PaymentAllocation {
   @@id([paymentId, invoiceId])
   @@index([invoiceId])
   @@map("payment_allocations")
+}
+
+
+model OrderStatusHistory {
+  id              String      @id @default(uuid()) @db.Char(36)
+  orderId         String      @map("order_id") @db.Char(36)
+  fromStatus      OrderStatus? @map("from_status")
+  toStatus        OrderStatus @map("to_status")
+  reason          String?     @db.VarChar(500)
+  changedByUserId String      @map("changed_by_user_id") @db.Char(36)
+  changedAt       DateTime    @default(now()) @map("changed_at") @db.DateTime(3)
+
+  order     LabOrder @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  changedBy User     @relation("OrderStatusChanger", fields: [changedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([orderId, changedAt])
+  @@index([changedByUserId, changedAt])
+  @@map("order_status_history")
 }
