@@ -18,7 +18,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       client: true,
       createdBy: true,
       items: {
-        include: { test: true, performedBranch: true, priceListItem: { include: { priceList: true } } },
+        include: { test: true, performedBranch: true, priceListItem: { include: { priceList: true } }, results: { orderBy: { version: "desc" }, take: 1, include: { values: true } } },
         orderBy: { createdAt: "asc" },
       },
       invoices: {
@@ -68,7 +68,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       <div className="table-toolbar"><h2>Ordered Tests</h2><span>{order.items.length} item(s)</span></div>
       <div className="table-wrap">
         <table>
-          <thead><tr><th>Code snapshot</th><th>Name snapshot</th><th>Unit snapshot</th><th>Performed branch</th><th>Price source</th><th>Price snapshot</th><th>Status</th></tr></thead>
+          <thead><tr><th>Code snapshot</th><th>Name snapshot</th><th>Unit snapshot</th><th>Performed branch</th><th>Price source</th><th>Price snapshot</th><th>Result</th><th>Status</th></tr></thead>
           <tbody>{order.items.map(item => <tr key={item.id}>
             <td><strong>{item.testCodeSnapshot}</strong></td>
             <td>{item.testNameEnSnapshot}</td>
@@ -76,6 +76,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
             <td>{item.performedBranch?.nameEn || "—"}</td>
             <td>{item.priceListItem?.priceList.code || "—"}</td>
             <td>{item.finalPriceSnapshot.toString()} {item.currency}</td>
+            <td>{item.results[0] ? <Link className="table-link" href={`/worklists/${item.id}`}>{item.results[0].status}{item.results[0].values.some(value => value.isCritical) ? " · CRITICAL" : ""}</Link> : "—"}</td>
             <td>{item.status}</td>
           </tr>)}</tbody>
         </table>
