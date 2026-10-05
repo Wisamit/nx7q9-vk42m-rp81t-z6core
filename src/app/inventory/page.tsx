@@ -61,7 +61,12 @@ export default async function InventoryPage() {
         <h1>Inventory</h1>
         <p className="muted">Branch-specific stock with lot/expiry traceability, FEFO visibility and immutable stock movements.</p>
       </div>
-      <Link className="secondary-link" href="/dashboard">Back to Dashboard</Link>
+      <div className="result-actions">
+        <Link className="secondary-link" href="/inventory/procurement">Procurement</Link>
+        <Link className="secondary-link" href="/inventory/transfers">Stock Transfers</Link>
+        <Link className="secondary-link" href="/inventory/operations">Operations</Link>
+        <Link className="secondary-link" href="/dashboard">Back to Dashboard</Link>
+      </div>
     </header>
 
     <section className="detail-grid">
