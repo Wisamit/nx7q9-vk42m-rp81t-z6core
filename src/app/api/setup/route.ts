@@ -43,6 +43,9 @@ const FOUNDATION_PERMISSIONS = [
   ["results.amend", "results", "Initiate amendments for released results"],
   ["critical.communicate", "results", "Document critical result communication and acknowledgement"],
   ["reports.view", "reporting", "View diagnostic report versions"],
+  ["reports.deliver", "reporting", "Record and perform report delivery actions"],
+  ["clinical_rules.manage", "results", "Manage delta-check and other clinical rules"],
+  ["result_comments.manage", "results", "Manage reusable result comment templates"],
 ] as const;
 
 function text(value: unknown, max = 200) {
