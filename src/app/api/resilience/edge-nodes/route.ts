@@ -1,0 +1,71 @@
+import { NextResponse } from "next/server";
+import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
+import { prisma } from "@/lib/db";
+
+function text(value: unknown, max = 200) {
+  return typeof value === "string" ? value.trim().slice(0, max) : "";
+}
+
+export async function GET() {
+  const session = await requirePermission("resilience.view");
+  const branchIds = session.user.branchScopes.map(scope => scope.branchId);
+  const nodes = await prisma.edgeNode.findMany({
+    where: { organizationId: session.user.organizationId, branchId: { in: branchIds } },
+    include: {
+      branch: { select: { code: true, nameEn: true } },
+      _count: { select: { messages: true } },
+    },
+    orderBy: [{ branch: { nameEn: "asc" } }, { code: "asc" }],
+  });
+  return NextResponse.json({ nodes });
+}
+
+export async function POST(request: Request) {
+  const session = await requirePermission("resilience.manage");
+  const ctx = await requestContext();
+  const body = await request.json().catch(() => null);
+  if (!body) return NextResponse.json({ error: "invalid_request" }, { status: 400 });
+
+  const branchId = text(body.branchId, 36);
+  const code = text(body.code, 80).toUpperCase();
+  const name = text(body.name, 200);
+  const softwareVersion = text(body.softwareVersion, 80) || null;
+  if (!branchId || !code || !name) return NextResponse.json({ error: "missing_required_fields" }, { status: 400 });
+  if (!canAccessBranch(session, branchId)) return NextResponse.json({ error: "branch_forbidden" }, { status: 403 });
+  if (!/^[A-Z0-9._-]{2,80}$/.test(code)) return NextResponse.json({ error: "invalid_code" }, { status: 400 });
+
+  const policy = await prisma.branchContinuityPolicy.findUnique({ where: { branchId } });
+  if (!policy || policy.mode !== "BUFFER_NON_CLINICAL" || policy.offlineClinicalWritesAllowed) {
+    return NextResponse.json({ error: "branch_non_clinical_buffering_not_enabled" }, { status: 409 });
+  }
+
+  const node = await prisma.$transaction(async tx => {
+    const created = await tx.edgeNode.create({
+      data: {
+        organizationId: session.user.organizationId,
+        branchId,
+        code,
+        name,
+        softwareVersion,
+        createdByUserId: session.user.id,
+      },
+    });
+    await tx.auditEvent.create({
+      data: {
+        organizationId: session.user.organizationId,
+        branchId,
+        actorUserId: session.user.id,
+        action: "EDGE_NODE_CREATED",
+        entityType: "EdgeNode",
+        entityId: created.id,
+        newValues: { code, name, softwareVersion, mode: policy.mode },
+        reason: "Edge node may buffer non-clinical events only; offline clinical writes remain disabled.",
+        ipAddress: ctx.ipAddress,
+        userAgent: ctx.userAgent,
+      },
+    });
+    return created;
+  });
+
+  return NextResponse.json({ status: "ok", node }, { status: 201 });
+}
