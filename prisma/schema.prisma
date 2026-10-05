@@ -408,6 +408,7 @@ model Branch {
   departments Department[]
   workstations Workstation[]
   analyzers Analyzer[]
+  analyzerMessages AnalyzerMessage[]
   userScopes   UserBranchScope[]
   auditEvents  AuditEvent[]
   activeSessions UserSession[] @relation("ActiveBranchSessions")
