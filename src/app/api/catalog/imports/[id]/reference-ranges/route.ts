@@ -31,7 +31,7 @@ function ageUnit(value: unknown): "DAY" | "WEEK" | "MONTH" | "YEAR" | null {
 
 async function analyze(batchId: string, organizationId: string) {
   const [rows, tests, units] = await Promise.all([
-    prisma.catalogImportRow.findMany({ where: { batchId, entityType: "REFERENCE_INTERVAL" }, orderBy: { rowNumber: "asc" } }),
+    prisma.catalogImportRow.findMany({ where: { batchId, entityType: "REFERENCE_INTERVAL", status: { in: ["VALID", "WARNING"] } }, orderBy: { rowNumber: "asc" } }),
     prisma.labTest.findMany({ where: { organizationId }, include: { defaultUnit: true, components: { include: { unit: true } } } }),
     prisma.unit.findMany({ where: { organizationId } }),
   ]);
