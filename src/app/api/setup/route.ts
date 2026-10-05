@@ -99,6 +99,11 @@ const FOUNDATION_PERMISSIONS = [
   ["notifications.dispatch", "notifications", "Dispatch and retry outbound notification deliveries"],
   ["report_templates.view", "reporting", "View report template configuration and version history"],
   ["report_templates.manage", "reporting", "Manage and approve versioned report templates"],
+  ["sendouts.view", "laboratory", "View referral laboratory send-out cases"],
+  ["sendouts.manage", "laboratory", "Create and operate referral laboratory send-out cases"],
+  ["sendouts.verify", "laboratory", "Verify external laboratory results and complete referrals"],
+  ["attachments.view", "attachments", "View secure attachments within authorized records"],
+  ["attachments.upload", "attachments", "Upload secure attachments to authorized records"],
 ] as const;
 
 function text(value: unknown, max = 200) {

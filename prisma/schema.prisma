@@ -167,6 +167,27 @@ enum ResultRepeatType {
   REPEAT
 }
 
+enum SendOutStatus {
+  CREATED
+  DISPATCHED
+  RESULT_RECEIVED
+  VERIFIED
+  COMPLETED
+  CANCELLED
+}
+
+enum AttachmentTargetType {
+  PATIENT
+  ORDER
+  RESULT
+  SEND_OUT_REFERRAL
+  EQUIPMENT
+  MAINTENANCE
+  NONCONFORMANCE
+  CAPA
+  QUALITY_DOCUMENT_VERSION
+}
+
 enum AnalyzerProtocol {
   ASTM
   HL7_V2
@@ -782,6 +803,9 @@ model Organization {
   transferManifests SpecimenTransferManifest[]
   results LaboratoryResult[]
   resultRepeatEvents ResultRepeatEvent[]
+  externalLaboratories ExternalLaboratory[]
+  sendOutReferrals SendOutReferral[]
+  attachments Attachment[]
   diagnosticReports DiagnosticReport[]
   deltaRules DeltaRule[]
   resultCommentTemplates ResultCommentTemplate[]
@@ -884,6 +908,8 @@ model Branch {
   outgoingTransferManifests SpecimenTransferManifest[] @relation("TransferSourceBranch")
   incomingTransferManifests SpecimenTransferManifest[] @relation("TransferDestinationBranch")
   laboratoryResults LaboratoryResult[] @relation("ResultPerformingBranch")
+  sendOutReferrals SendOutReferral[]
+  attachments Attachment[]
   reportVersions DiagnosticReportVersion[] @relation("ReportVersionBranch")
   deltaRules DeltaRule[]
   reflexRules ReflexRule[]
@@ -1038,6 +1064,12 @@ model User {
   reportDeliveries ReportDeliveryEvent[]
   amendmentRequests LaboratoryResult[] @relation("ResultAmendmentRequestedBy")
   resultRepeatEvents ResultRepeatEvent[] @relation("ResultRepeatRequestedBy")
+  createdSendOutReferrals SendOutReferral[] @relation("SendOutCreatedBy")
+  dispatchedSendOutReferrals SendOutReferral[] @relation("SendOutDispatchedBy")
+  receivedSendOutReferrals SendOutReferral[] @relation("SendOutReceivedBy")
+  verifiedSendOutReferrals SendOutReferral[] @relation("SendOutVerifiedBy")
+  sendOutEvents SendOutEvent[] @relation("SendOutEventActor")
+  uploadedAttachments Attachment[] @relation("AttachmentUploader")
   reviewedReflexEvents ReflexRuleEvent[]
   reviewedValidationHoldEvents ValidationHoldEvent[] @relation("ValidationHoldReviewedBy")
   performedMaintenanceEvents MaintenanceEvent[] @relation("MaintenancePerformedBy")
@@ -2020,6 +2052,7 @@ model OrderItem {
   microbiologyCases MicrobiologyCase[]
   packageLinks     OrderPackageItem[]
   answers          OrderAnswer[]
+  sendOutReferrals SendOutReferral[]
 
   @@unique([orderId, testId])
   @@index([performedBranchId, status])
@@ -2186,6 +2219,7 @@ model Specimen {
   microbiologyCases MicrobiologyCase[]
   results          LaboratoryResult[]
   resultRepeatEvents ResultRepeatEvent[]
+  sendOutReferrals SendOutReferral[]
 
   @@unique([organizationId, barcode])
   @@unique([orderId, sequenceNumber])
@@ -2366,6 +2400,121 @@ model ResultRepeatEvent {
   @@index([resultId, requestedAt])
   @@index([specimenId, requestedAt])
   @@map("result_repeat_events")
+}
+
+model ExternalLaboratory {
+  id             String       @id @default(uuid()) @db.Char(36)
+  organizationId String       @map("organization_id") @db.Char(36)
+  code           String       @db.VarChar(80)
+  nameEn         String       @map("name_en") @db.VarChar(220)
+  nameAr         String?      @map("name_ar") @db.VarChar(220)
+  phone          String?      @db.VarChar(80)
+  email          String?      @db.VarChar(191)
+  address        String?      @db.Text
+  notes          String?      @db.Text
+  status         RecordStatus @default(ACTIVE)
+  createdAt      DateTime     @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt      DateTime     @updatedAt @map("updated_at") @db.DateTime(3)
+  deactivatedAt  DateTime?    @map("deactivated_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  referrals    SendOutReferral[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId, status])
+  @@map("external_laboratories")
+}
+
+model SendOutReferral {
+  id                 String        @id @default(uuid()) @db.Char(36)
+  organizationId     String        @map("organization_id") @db.Char(36)
+  branchId           String        @map("branch_id") @db.Char(36)
+  orderItemId        String        @map("order_item_id") @db.Char(36)
+  specimenId         String?       @map("specimen_id") @db.Char(36)
+  externalLaboratoryId String      @map("external_laboratory_id") @db.Char(36)
+  status             SendOutStatus @default(CREATED)
+  externalAccession  String?       @map("external_accession") @db.VarChar(120)
+  courier            String?       @db.VarChar(150)
+  trackingReference  String?       @map("tracking_reference") @db.VarChar(150)
+  costAmount         Decimal?      @map("cost_amount") @db.Decimal(18,4)
+  costCurrency       String?       @map("cost_currency") @db.Char(3)
+  expectedResultAt   DateTime?     @map("expected_result_at") @db.DateTime(3)
+  dispatchedByUserId String?       @map("dispatched_by_user_id") @db.Char(36)
+  dispatchedAt       DateTime?     @map("dispatched_at") @db.DateTime(3)
+  receivedByUserId   String?       @map("received_by_user_id") @db.Char(36)
+  resultReceivedAt   DateTime?     @map("result_received_at") @db.DateTime(3)
+  externalResultText String?       @map("external_result_text") @db.Text
+  verifiedByUserId   String?       @map("verified_by_user_id") @db.Char(36)
+  verifiedAt         DateTime?     @map("verified_at") @db.DateTime(3)
+  createdByUserId    String        @map("created_by_user_id") @db.Char(36)
+  createdAt          DateTime      @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt          DateTime      @updatedAt @map("updated_at") @db.DateTime(3)
+
+  organization       Organization       @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  branch             Branch             @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  orderItem          OrderItem          @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
+  specimen           Specimen?          @relation(fields: [specimenId], references: [id], onDelete: Restrict)
+  externalLaboratory ExternalLaboratory @relation(fields: [externalLaboratoryId], references: [id], onDelete: Restrict)
+  createdBy          User               @relation("SendOutCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  dispatchedBy       User?              @relation("SendOutDispatchedBy", fields: [dispatchedByUserId], references: [id], onDelete: Restrict)
+  receivedBy         User?              @relation("SendOutReceivedBy", fields: [receivedByUserId], references: [id], onDelete: Restrict)
+  verifiedBy         User?              @relation("SendOutVerifiedBy", fields: [verifiedByUserId], references: [id], onDelete: Restrict)
+  events             SendOutEvent[]
+
+  @@index([organizationId, status, createdAt])
+  @@index([branchId, status, expectedResultAt])
+  @@index([orderItemId, createdAt])
+  @@index([externalLaboratoryId, status])
+  @@map("send_out_referrals")
+}
+
+model SendOutEvent {
+  id            String        @id @default(uuid()) @db.Char(36)
+  referralId    String        @map("referral_id") @db.Char(36)
+  fromStatus    SendOutStatus? @map("from_status")
+  toStatus      SendOutStatus @map("to_status")
+  actorUserId   String        @map("actor_user_id") @db.Char(36)
+  note          String?       @db.VarChar(1000)
+  metadata      Json?
+  occurredAt    DateTime      @default(now()) @map("occurred_at") @db.DateTime(3)
+
+  referral SendOutReferral @relation(fields: [referralId], references: [id], onDelete: Restrict)
+  actor    User            @relation("SendOutEventActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([referralId, occurredAt])
+  @@map("send_out_events")
+}
+
+model Attachment {
+  id             String               @id @default(uuid()) @db.Char(36)
+  organizationId String               @map("organization_id") @db.Char(36)
+  branchId       String?              @map("branch_id") @db.Char(36)
+  targetType     AttachmentTargetType @map("target_type")
+  targetId       String               @map("target_id") @db.Char(36)
+  originalName   String               @map("original_name") @db.VarChar(255)
+  contentType    String               @map("content_type") @db.VarChar(120)
+  sizeBytes      Int                  @map("size_bytes")
+  sha256         String               @db.Char(64)
+  uploadedByUserId String             @map("uploaded_by_user_id") @db.Char(36)
+  createdAt      DateTime             @default(now()) @map("created_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  branch       Branch?      @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  uploadedBy   User         @relation("AttachmentUploader", fields: [uploadedByUserId], references: [id], onDelete: Restrict)
+  content      AttachmentContent?
+
+  @@index([organizationId, targetType, targetId, createdAt])
+  @@index([branchId, createdAt])
+  @@map("attachments")
+}
+
+model AttachmentContent {
+  attachmentId String @id @map("attachment_id") @db.Char(36)
+  data         Bytes  @db.MediumBlob
+
+  attachment Attachment @relation(fields: [attachmentId], references: [id], onDelete: Restrict)
+
+  @@map("attachment_contents")
 }
 
 model LaboratoryResultValue {
