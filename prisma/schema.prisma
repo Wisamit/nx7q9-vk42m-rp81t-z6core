@@ -233,7 +233,6 @@ model Branch {
   activeSessions UserSession[] @relation("ActiveBranchSessions")
   testAvailability TestBranchAvailability[]
   referenceIntervals ReferenceInterval[]
-  resultValues LaboratoryResultValue[]
   priceLists PriceList[]
   orders LabOrder[] @relation("OrderingBranchOrders")
   performedOrderItems OrderItem[] @relation("PerformedBranchOrderItems")
@@ -656,7 +655,6 @@ model LabTest {
   importMappings     CatalogImportMapping[]
   priceListItems     PriceListItem[]
   orderItems         OrderItem[]
-  results            LaboratoryResult[]
 
   @@unique([organizationId, code])
   @@index([organizationId, status])
