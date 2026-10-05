@@ -3095,7 +3095,6 @@ model QcLot {
   material     QcMaterial    @relation(fields: [materialId], references: [id], onDelete: Restrict)
   inventoryLot InventoryLot? @relation(fields: [inventoryLotId], references: [id], onDelete: Restrict)
   targets      QcTarget[]
-  runs         QcRun[]
 
   @@unique([organizationId, materialId, lotNumber])
   @@index([materialId, status, expiryDate])
@@ -3141,7 +3140,6 @@ model QcRun {
   organizationId String      @map("organization_id") @db.Char(36)
   branchId       String      @map("branch_id") @db.Char(36)
   analyzerId     String      @map("analyzer_id") @db.Char(36)
-  qcLotId        String      @map("qc_lot_id") @db.Char(36)
   status         QcRunStatus @default(PENDING)
   runAt          DateTime    @default(now()) @map("run_at") @db.DateTime(3)
   operatorUserId String      @map("operator_user_id") @db.Char(36)
@@ -3152,7 +3150,6 @@ model QcRun {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   branch       Branch       @relation(fields: [branchId], references: [id], onDelete: Restrict)
   analyzer     Analyzer     @relation(fields: [analyzerId], references: [id], onDelete: Restrict)
-  qcLot        QcLot        @relation(fields: [qcLotId], references: [id], onDelete: Restrict)
   operator     User         @relation("QcRunOperator", fields: [operatorUserId], references: [id], onDelete: Restrict)
   results      QcResult[]
   violations   QcRuleViolation[]
