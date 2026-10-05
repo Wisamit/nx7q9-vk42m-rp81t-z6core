@@ -17,52 +17,57 @@ type ShellUser = {
 
 type NavItem = {
   href: string;
-  label: string;
+  labelEn: string;
+  labelAr: string;
   short: string;
   permission?: string;
   permissionsAny?: string[];
 };
 
-const groups: Array<{ label: string; items: NavItem[] }> = [
+const groups: Array<{ labelEn: string; labelAr: string; items: NavItem[] }> = [
   {
-    label: "Reception",
+    labelEn: "Reception",
+    labelAr: "الاستقبال",
     items: [
-      { href: "/dashboard", label: "Dashboard", short: "DB" },
-      { href: "/patients", label: "Patients", short: "PT", permission: "patients.view" },
-      { href: "/orders", label: "Orders", short: "OR", permission: "orders.view" },
-      { href: "/billing", label: "Billing", short: "BI", permission: "billing.view" },
-      { href: "/digital-services", label: "Digital Services", short: "DS", permissionsAny: ["appointments.view","appointments.manage","home_collection.view","home_collection.manage","queue.view","queue.manage","portal_accounts.manage"] },
+      { href: "/dashboard", labelEn: "Dashboard", labelAr: "لوحة التحكم", short: "DB" },
+      { href: "/patients", labelEn: "Patients", labelAr: "المرضى", short: "PT", permission: "patients.view" },
+      { href: "/orders", labelEn: "Orders", labelAr: "الطلبات", short: "OR", permission: "orders.view" },
+      { href: "/billing", labelEn: "Billing", labelAr: "الفوترة", short: "BI", permission: "billing.view" },
+      { href: "/digital-services", labelEn: "Digital Services", labelAr: "الخدمات الرقمية", short: "DS", permissionsAny: ["appointments.view","appointments.manage","home_collection.view","home_collection.manage","queue.view","queue.manage","portal_accounts.manage"] },
     ],
   },
   {
-    label: "Laboratory",
+    labelEn: "Laboratory",
+    labelAr: "المختبر",
     items: [
-      { href: "/specimens", label: "Specimens", short: "SP", permission: "specimens.view" },
-      { href: "/transfers", label: "Transfers", short: "TR", permission: "transfers.view" },
-      { href: "/worklists", label: "Worklists", short: "WL", permission: "worklists.view" },
-      { href: "/reports", label: "Reports", short: "RP", permission: "reports.view" },
-      { href: "/critical-results", label: "Critical Results", short: "CR", permission: "critical.communicate" },
-      { href: "/microbiology", label: "Microbiology", short: "MB", permission: "microbiology.view" },
+      { href: "/specimens", labelEn: "Specimens", labelAr: "العينات", short: "SP", permission: "specimens.view" },
+      { href: "/transfers", labelEn: "Transfers", labelAr: "النقل بين الفروع", short: "TR", permission: "transfers.view" },
+      { href: "/worklists", labelEn: "Worklists", labelAr: "قوائم العمل", short: "WL", permission: "worklists.view" },
+      { href: "/reports", labelEn: "Reports", labelAr: "التقارير", short: "RP", permission: "reports.view" },
+      { href: "/critical-results", labelEn: "Critical Results", labelAr: "النتائج الحرجة", short: "CR", permission: "critical.communicate" },
+      { href: "/microbiology", labelEn: "Microbiology", labelAr: "الأحياء الدقيقة", short: "MB", permission: "microbiology.view" },
     ],
   },
   {
-    label: "Configuration",
+    labelEn: "Configuration",
+    labelAr: "الإعدادات",
     items: [
-      { href: "/catalog", label: "Test Catalog", short: "TC", permission: "catalog.view" },
-      { href: "/pricing", label: "Pricing", short: "PR", permission: "pricing.view" },
-      { href: "/referrers", label: "Referrers & Clients", short: "RC", permission: "referrers.view" },
-      { href: "/clinical-rules", label: "Clinical Rules", short: "CL", permission: "clinical_rules.manage" },
-      { href: "/analyzers", label: "Analyzers", short: "AN", permission: "analyzers.view" },
+      { href: "/catalog", labelEn: "Test Catalog", labelAr: "دليل الفحوصات", short: "TC", permission: "catalog.view" },
+      { href: "/pricing", labelEn: "Pricing", labelAr: "الأسعار", short: "PR", permission: "pricing.view" },
+      { href: "/referrers", labelEn: "Referrers & Clients", labelAr: "المحيلون والعملاء", short: "RC", permission: "referrers.view" },
+      { href: "/clinical-rules", labelEn: "Clinical Rules", labelAr: "القواعد السريرية", short: "CL", permission: "clinical_rules.manage" },
+      { href: "/analyzers", labelEn: "Analyzers", labelAr: "أجهزة التحليل", short: "AN", permission: "analyzers.view" },
     ],
   },
   {
-    label: "Operations",
+    labelEn: "Operations",
+    labelAr: "العمليات",
     items: [
-      { href: "/inventory", label: "Inventory", short: "IN", permission: "inventory.view" },
-      { href: "/equipment", label: "Equipment", short: "EQ", permission: "equipment.view" },
-      { href: "/qc", label: "Quality Control", short: "QC", permission: "qc.view" },
-      { href: "/quality", label: "Quality Management", short: "QM", permission: "quality.view" },
-      { href: "/analytics", label: "Analytics", short: "AI", permission: "analytics.view" },
+      { href: "/inventory", labelEn: "Inventory", labelAr: "المخزون", short: "IN", permission: "inventory.view" },
+      { href: "/equipment", labelEn: "Equipment", labelAr: "المعدات", short: "EQ", permission: "equipment.view" },
+      { href: "/qc", labelEn: "Quality Control", labelAr: "ضبط الجودة", short: "QC", permission: "qc.view" },
+      { href: "/quality", labelEn: "Quality Management", labelAr: "إدارة الجودة", short: "QM", permission: "quality.view" },
+      { href: "/analytics", labelEn: "Analytics", labelAr: "التحليلات", short: "AI", permission: "analytics.view" },
     ],
   },
 ];
@@ -78,6 +83,7 @@ export function SystemShell({ user, children }: { user: ShellUser; children: Rea
   const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [branchBusy, setBranchBusy] = useState(false);
+  const [localeBusy, setLocaleBusy] = useState(false);
   const permissionSet = useMemo(() => new Set(user.permissions), [user.permissions]);
 
   if (publicPrefixes.some(prefix => pathname === prefix || pathname.startsWith(prefix + "/"))) {
@@ -105,19 +111,32 @@ export function SystemShell({ user, children }: { user: ShellUser; children: Rea
     if (response.ok) router.refresh();
   }
 
+  async function switchLocale() {
+    const nextLocale = user.preferredLocale === "ar" ? "en" : "ar";
+    setLocaleBusy(true);
+    const response = await fetch("/api/session/locale", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ locale: nextLocale }),
+    });
+    setLocaleBusy(false);
+    if (response.ok) router.refresh();
+  }
+
   const locale = user.preferredLocale === "ar" ? "ar" : "en";
   const activeBranch = user.branches.find(branch => branch.id === user.activeBranchId) || null;
+  const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
 
   return <div className="system-shell" dir={locale === "ar" ? "rtl" : "ltr"}>
     <aside className={"system-sidebar" + (mobileOpen ? " open" : "")}>
       <div className="system-brand">
         <div className="system-brand-mark">FL</div>
-        <div><strong>Family Lab</strong><span>Laboratory Information System</span></div>
+        <div><strong>Family Lab</strong><span>{tr("Laboratory Information System", "نظام معلومات المختبر")}</span></div>
       </div>
 
-      <nav className="system-nav" aria-label="Primary navigation">
-        {visibleGroups.map(group => <div className="system-nav-group" key={group.label}>
-          <p>{group.label}</p>
+      <nav className="system-nav" aria-label={tr("Primary navigation", "التنقل الرئيسي")}>
+        {visibleGroups.map(group => <div className="system-nav-group" key={group.labelEn}>
+          <p>{tr(group.labelEn, group.labelAr)}</p>
           {group.items.map(item => {
             const active = item.href === "/dashboard"
               ? pathname === "/dashboard"
@@ -129,7 +148,7 @@ export function SystemShell({ user, children }: { user: ShellUser; children: Rea
               onClick={() => setMobileOpen(false)}
             >
               <span className="system-nav-icon">{item.short}</span>
-              <span>{item.label}</span>
+              <span>{tr(item.labelEn, item.labelAr)}</span>
             </Link>;
           })}
         </div>)}
@@ -137,31 +156,34 @@ export function SystemShell({ user, children }: { user: ShellUser; children: Rea
 
       <div className="system-sidebar-footer">
         <span>{user.organizationName}</span>
-        <small>{activeBranch ? activeBranch.code + " · " + activeBranch.name : "No active branch"}</small>
+        <small>{activeBranch ? activeBranch.code + " · " + activeBranch.name : tr("No active branch", "لا يوجد فرع نشط")}</small>
       </div>
     </aside>
 
-    {mobileOpen && <button className="system-sidebar-backdrop" aria-label="Close navigation" onClick={() => setMobileOpen(false)} />}
+    {mobileOpen && <button className="system-sidebar-backdrop" aria-label={tr("Close navigation", "إغلاق القائمة")} onClick={() => setMobileOpen(false)} />}
 
     <div className="system-main">
       <header className="system-topbar">
-        <button className="system-mobile-menu" type="button" onClick={() => setMobileOpen(value => !value)} aria-label="Toggle navigation">☰</button>
+        <button className="system-mobile-menu" type="button" onClick={() => setMobileOpen(value => !value)} aria-label={tr("Toggle navigation", "فتح القائمة")}>☰</button>
         <div className="system-page-context">
           <span className="system-context-dot" />
-          <div><small>Active workspace</small><strong>{activeBranch?.name || "Organization"}</strong></div>
+          <div><small>{tr("Active workspace", "مساحة العمل الحالية")}</small><strong>{activeBranch?.name || tr("Organization", "المؤسسة")}</strong></div>
         </div>
         <div className="system-topbar-actions">
           {user.branches.length > 1 && <label className="system-branch-select">
-            <span>Branch</span>
+            <span>{tr("Branch", "الفرع")}</span>
             <select value={user.activeBranchId || ""} disabled={branchBusy} onChange={event => void switchBranch(event.target.value)}>
               {user.branches.map(branch => <option value={branch.id} key={branch.id}>{branch.code} — {branch.name}</option>)}
             </select>
           </label>}
+          <button className="system-locale-toggle" type="button" disabled={localeBusy} onClick={() => void switchLocale()}>
+            {localeBusy ? "…" : locale === "ar" ? "EN" : "AR"}
+          </button>
           <div className="system-user">
             <span className="system-avatar">{initials(user.displayName)}</span>
             <div><strong>{user.displayName}</strong><small>{locale === "ar" ? "العربية" : "English"}</small></div>
           </div>
-          <LogoutButton />
+          <LogoutButton label={tr("Sign out", "تسجيل الخروج")} />
         </div>
       </header>
 
