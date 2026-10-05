@@ -138,6 +138,32 @@ enum TransferItemStatus {
   EXCEPTION
 }
 
+enum ResultStatus {
+  DRAFT
+  ENTERED
+  VERIFIED
+  RELEASED
+  AMENDED
+  CANCELLED
+}
+
+enum ResultSource {
+  MANUAL
+  ANALYZER
+  IMPORT
+  CALCULATED
+}
+
+enum ResultFlag {
+  NORMAL
+  LOW
+  HIGH
+  CRITICAL_LOW
+  CRITICAL_HIGH
+  ABNORMAL
+  UNKNOWN
+}
+
 model Organization {
   id              String       @id @default(uuid()) @db.Char(36)
   code            String       @unique @db.VarChar(50)
@@ -175,6 +201,7 @@ model Organization {
   payments Payment[]
   specimens Specimen[]
   transferManifests SpecimenTransferManifest[]
+  results LaboratoryResult[]
 
   @@map("organizations")
 }
@@ -206,6 +233,7 @@ model Branch {
   activeSessions UserSession[] @relation("ActiveBranchSessions")
   testAvailability TestBranchAvailability[]
   referenceIntervals ReferenceInterval[]
+  resultValues LaboratoryResultValue[]
   priceLists PriceList[]
   orders LabOrder[] @relation("OrderingBranchOrders")
   performedOrderItems OrderItem[] @relation("PerformedBranchOrderItems")
@@ -216,6 +244,7 @@ model Branch {
   specimenEvents SpecimenEvent[]
   outgoingTransferManifests SpecimenTransferManifest[] @relation("TransferSourceBranch")
   incomingTransferManifests SpecimenTransferManifest[] @relation("TransferDestinationBranch")
+  laboratoryResults LaboratoryResult[] @relation("ResultPerformingBranch")
 
   @@unique([organizationId, code])
   @@index([organizationId, status])
@@ -318,6 +347,8 @@ model User {
   dispatchedTransferManifests SpecimenTransferManifest[] @relation("TransferManifestDispatcher")
   receivedTransferManifests SpecimenTransferManifest[] @relation("TransferManifestReceiver")
   receivedTransferItems SpecimenTransferItem[] @relation("TransferItemReceiver")
+  enteredResults LaboratoryResult[] @relation("ResultEnteredBy")
+  verifiedResults LaboratoryResult[] @relation("ResultVerifiedBy")
 
   @@unique([organizationId, username])
   @@unique([organizationId, email])
@@ -623,6 +654,7 @@ model LabTest {
   importMappings     CatalogImportMapping[]
   priceListItems     PriceListItem[]
   orderItems         OrderItem[]
+  results            LaboratoryResult[]
 
   @@unique([organizationId, code])
   @@index([organizationId, status])
@@ -648,6 +680,7 @@ model TestComponent {
   test               LabTest @relation(fields: [testId], references: [id], onDelete: Restrict)
   unit               Unit? @relation(fields: [unitId], references: [id], onDelete: Restrict)
   referenceIntervals ReferenceInterval[]
+  resultValues LaboratoryResultValue[]
 
   @@unique([testId, code])
   @@index([testId, displayOrder])
@@ -1058,6 +1091,7 @@ model OrderItem {
   priceListItem   PriceListItem? @relation(fields: [priceListItemId], references: [id], onDelete: Restrict)
   invoiceLines    InvoiceLine[]
   specimenLinks   SpecimenOrderItem[]
+  results          LaboratoryResult[]
 
   @@unique([orderId, testId])
   @@index([performedBranchId, status])
@@ -1217,6 +1251,7 @@ model Specimen {
   orderItems       SpecimenOrderItem[]
   events           SpecimenEvent[]
   transferItems    SpecimenTransferItem[]
+  results          LaboratoryResult[]
 
   @@unique([organizationId, barcode])
   @@unique([orderId, sequenceNumber])
@@ -1312,4 +1347,82 @@ model SpecimenTransferItem {
   @@index([specimenId, status])
   @@index([receivedByUserId, receivedAt])
   @@map("specimen_transfer_items")
+}
+
+
+model LaboratoryResult {
+  id                 String       @id @default(uuid()) @db.Char(36)
+  organizationId     String       @map("organization_id") @db.Char(36)
+  orderItemId        String       @map("order_item_id") @db.Char(36)
+  specimenId         String?      @map("specimen_id") @db.Char(36)
+  performingBranchId String       @map("performing_branch_id") @db.Char(36)
+  methodId           String?      @map("method_id") @db.Char(36)
+  version            Int          @default(1)
+  status             ResultStatus @default(DRAFT)
+  source             ResultSource @default(MANUAL)
+  enteredByUserId    String       @map("entered_by_user_id") @db.Char(36)
+  enteredAt          DateTime     @default(now()) @map("entered_at") @db.DateTime(3)
+  verifiedByUserId   String?      @map("verified_by_user_id") @db.Char(36)
+  verifiedAt         DateTime?    @map("verified_at") @db.DateTime(3)
+  releasedAt         DateTime?    @map("released_at") @db.DateTime(3)
+  amendedFromId      String?      @map("amended_from_id") @db.Char(36)
+  amendmentReason    String?      @map("amendment_reason") @db.VarChar(1000)
+  comments           String?      @db.Text
+  createdAt          DateTime     @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt          DateTime     @updatedAt @map("updated_at") @db.DateTime(3)
+
+  organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  orderItem        OrderItem         @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
+  specimen         Specimen?         @relation(fields: [specimenId], references: [id], onDelete: Restrict)
+  performingBranch Branch            @relation("ResultPerformingBranch", fields: [performingBranchId], references: [id], onDelete: Restrict)
+  method           Method?           @relation(fields: [methodId], references: [id], onDelete: Restrict)
+  enteredBy        User              @relation("ResultEnteredBy", fields: [enteredByUserId], references: [id], onDelete: Restrict)
+  verifiedBy       User?             @relation("ResultVerifiedBy", fields: [verifiedByUserId], references: [id], onDelete: Restrict)
+  amendedFrom      LaboratoryResult? @relation("ResultAmendmentChain", fields: [amendedFromId], references: [id], onDelete: Restrict)
+  amendments       LaboratoryResult[] @relation("ResultAmendmentChain")
+  values           LaboratoryResultValue[]
+
+  @@unique([orderItemId, version])
+  @@index([performingBranchId, status, enteredAt])
+  @@index([specimenId, status])
+  @@index([orderItemId, status])
+  @@map("laboratory_results")
+}
+
+model LaboratoryResultValue {
+  id                       String      @id @default(uuid()) @db.Char(36)
+  resultId                 String      @map("result_id") @db.Char(36)
+  componentId              String?     @map("component_id") @db.Char(36)
+  componentCodeSnapshot    String      @map("component_code_snapshot") @db.VarChar(80)
+  componentNameEnSnapshot  String      @map("component_name_en_snapshot") @db.VarChar(220)
+  componentNameArSnapshot  String?     @map("component_name_ar_snapshot") @db.VarChar(220)
+  resultTypeSnapshot       ResultType  @map("result_type_snapshot")
+  valueNumeric             Decimal?    @map("value_numeric") @db.Decimal(24, 8)
+  valueText                String?     @map("value_text") @db.Text
+  valueBoolean             Boolean?    @map("value_boolean")
+  valueDate                DateTime?   @map("value_date") @db.DateTime(3)
+  displayValue             String      @map("display_value") @db.VarChar(1000)
+  unitId                   String?     @map("unit_id") @db.Char(36)
+  unitSnapshot             String?     @map("unit_snapshot") @db.VarChar(80)
+  referenceIntervalId      String?     @map("reference_interval_id") @db.Char(36)
+  referenceLowSnapshot     Decimal?    @map("reference_low_snapshot") @db.Decimal(18, 6)
+  referenceHighSnapshot    Decimal?    @map("reference_high_snapshot") @db.Decimal(18, 6)
+  referenceTextEnSnapshot  String?     @map("reference_text_en_snapshot") @db.VarChar(500)
+  referenceTextArSnapshot  String?     @map("reference_text_ar_snapshot") @db.VarChar(500)
+  criticalLowSnapshot      Decimal?    @map("critical_low_snapshot") @db.Decimal(18, 6)
+  criticalHighSnapshot     Decimal?    @map("critical_high_snapshot") @db.Decimal(18, 6)
+  flag                     ResultFlag  @default(UNKNOWN)
+  isCritical               Boolean     @default(false) @map("is_critical")
+  createdAt                DateTime    @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt                DateTime    @updatedAt @map("updated_at") @db.DateTime(3)
+
+  result            LaboratoryResult @relation(fields: [resultId], references: [id], onDelete: Restrict)
+  component         TestComponent?   @relation(fields: [componentId], references: [id], onDelete: Restrict)
+  unit              Unit?            @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  referenceInterval ReferenceInterval? @relation(fields: [referenceIntervalId], references: [id], onDelete: Restrict)
+
+  @@unique([resultId, componentCodeSnapshot])
+  @@index([componentId])
+  @@index([flag, isCritical])
+  @@map("laboratory_result_values")
 }
