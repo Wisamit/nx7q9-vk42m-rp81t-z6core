@@ -662,8 +662,6 @@ model Unit {
   components   TestComponent[]
   importMappings CatalogImportMapping[]
   resultValues LaboratoryResultValue[]
-  deltaRules DeltaRule[]
-  commentTemplates ResultCommentTemplate[]
 
   @@unique([organizationId, code])
   @@map("units")
