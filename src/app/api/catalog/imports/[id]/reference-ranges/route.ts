@@ -112,11 +112,15 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
 
   const analysis = await analyze(batch.id, session.user.organizationId);
   let imported = 0;
+  const componentByTestId = new Map<string, NonNullable<(typeof analysis.safe)[number]["test"]>["components"][number]>();
+  for (const item of analysis.safe) {
+    if (item.test?.components.length === 1) componentByTestId.set(item.test.id, item.test.components[0]);
+  }
 
   await prisma.$transaction(async (tx) => {
     for (const item of analysis.safe) {
       if (!item.test || !item.mappedUnit || !item.mappedSex) continue;
-      let component = item.test.components[0];
+      let component = componentByTestId.get(item.test.id);
       if (!component) {
         component = await tx.testComponent.create({
           data: {
@@ -131,6 +135,7 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
           },
           include: { unit: true },
         });
+        componentByTestId.set(item.test.id, component);
       }
 
       const interval = await tx.referenceInterval.create({
@@ -156,17 +161,6 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
       imported++;
     }
 
-    for (const item of analysis.review) {
-      const existing = Array.isArray(item.row.validationIssues) ? item.row.validationIssues : [];
-      await tx.catalogImportRow.update({
-        where: { id: item.row.id },
-        data: {
-          status: "WARNING",
-          validationIssues: [...existing, { severity: "WARNING", code: item.reason, message: "Reference interval requires manual review before import." }],
-        },
-      });
-    }
-
     await tx.auditEvent.create({
       data: {
         organizationId: session.user.organizationId,
@@ -180,7 +174,7 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
         userAgent: ctx.userAgent,
       },
     });
-  }, { timeout: 30000 });
+  }, { timeout: 60000 });
 
   return NextResponse.json({ status: "ok", total: analysis.total, imported, review: analysis.review.length, reasons: analysis.reasons });
 }
