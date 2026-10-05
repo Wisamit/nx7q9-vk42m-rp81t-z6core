@@ -1,0 +1,20 @@
+CREATE TABLE `catalog_import_mappings` (
+  `id` CHAR(36) NOT NULL,
+  `organization_id` CHAR(36) NOT NULL,
+  `mapping_type` ENUM('TEST_ALIAS','UNIT_ALIAS') NOT NULL,
+  `source_value` VARCHAR(255) NOT NULL,
+  `normalized_source_value` VARCHAR(255) NOT NULL,
+  `target_test_id` CHAR(36) NULL,
+  `target_unit_id` CHAR(36) NULL,
+  `created_by_user_id` CHAR(36) NOT NULL,
+  `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `updated_at` DATETIME(3) NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE INDEX `catalog_import_mappings_org_type_source_key`(`organization_id`,`mapping_type`,`normalized_source_value`),
+  INDEX `catalog_import_mappings_target_test_id_idx`(`target_test_id`),
+  INDEX `catalog_import_mappings_target_unit_id_idx`(`target_unit_id`),
+  CONSTRAINT `catalog_import_mappings_organization_id_fkey` FOREIGN KEY (`organization_id`) REFERENCES `organizations`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
+  CONSTRAINT `catalog_import_mappings_target_test_id_fkey` FOREIGN KEY (`target_test_id`) REFERENCES `lab_tests`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
+  CONSTRAINT `catalog_import_mappings_target_unit_id_fkey` FOREIGN KEY (`target_unit_id`) REFERENCES `units`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
+  CONSTRAINT `catalog_import_mappings_created_by_user_id_fkey` FOREIGN KEY (`created_by_user_id`) REFERENCES `users`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
