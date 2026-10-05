@@ -87,6 +87,10 @@ const FOUNDATION_PERMISSIONS = [
   ["sources.view", "referrers", "View order source master data"],
   ["sources.manage", "referrers", "Manage configurable order source master data"],
   ["analytics.view", "analytics", "View organization and branch analytics"],
+  ["integrations.view", "integrations", "View interoperability endpoints, mappings and message logs"],
+  ["integrations.manage", "integrations", "Manage interoperability endpoints, terminology mappings and webhook subscriptions"],
+  ["integrations.api_keys.manage", "integrations", "Create and revoke external integration API keys"],
+  ["integrations.replay", "integrations", "Retry failed outbound integration messages and webhook deliveries"],
 ] as const;
 
 function text(value: unknown, max = 200) {
