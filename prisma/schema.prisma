@@ -684,6 +684,7 @@ model Method {
   tests        LabTest[]
   referenceIntervals ReferenceInterval[]
   results LaboratoryResult[]
+  deltaRules DeltaRule[]
 
   @@unique([organizationId, code])
   @@map("methods")
@@ -729,6 +730,8 @@ model LabTest {
   importMappings     CatalogImportMapping[]
   priceListItems     PriceListItem[]
   orderItems         OrderItem[]
+  deltaRules         DeltaRule[]
+  commentTemplates   ResultCommentTemplate[]
 
   @@unique([organizationId, code])
   @@index([organizationId, status])
