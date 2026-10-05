@@ -83,6 +83,7 @@ export async function buildDiagnosticReportSnapshot(db: Prisma.TransactionClient
         referenceTextAr: value.referenceTextArSnapshot,
       })),
       comments: result!.comments,
+      microbiology: result!.microbiologySnapshot,
       verifiedBy: result!.verifiedBy ? {
         id: result!.verifiedBy.id,
         nameEn: result!.verifiedBy.displayNameEn,
