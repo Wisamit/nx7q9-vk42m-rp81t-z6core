@@ -26,6 +26,10 @@ export function evaluateAutoverification(input: {
   values: ValueForAutoverification[];
   pendingReflexCount: number;
   blockingHoldCount: number;
+  qcGate?: {
+    status: "PASS" | "WARN" | "BLOCK";
+    reasons: Array<{ code: string; detail?: string }>;
+  } | null;
 }) {
   const reasons: string[] = [];
   const policy = input.policy;
@@ -47,7 +51,17 @@ export function evaluateAutoverification(input: {
     if (input.values.some(value => value.deltaEvaluation === "EXCEEDED")) reasons.push("DELTA_LIMIT_EXCEEDED");
     if (input.pendingReflexCount > 0) reasons.push("PENDING_REFLEX_RECOMMENDATION");
     if (input.blockingHoldCount > 0) reasons.push("BLOCKING_VALIDATION_HOLD");
-    if (input.source === "ANALYZER") reasons.push("ANALYZER_QC_GATE_NOT_AVAILABLE");
+    if (input.source === "ANALYZER") {
+      if (!input.qcGate) {
+        reasons.push("ANALYZER_QC_GATE_NOT_EVALUATED");
+      } else if (input.qcGate.status === "BLOCK") {
+        reasons.push("ANALYZER_QC_BLOCKED");
+        for (const reason of input.qcGate.reasons) reasons.push("QC:" + reason.code);
+      } else if (input.qcGate.status === "WARN") {
+        reasons.push("ANALYZER_QC_WARNING_REQUIRES_REVIEW");
+        for (const reason of input.qcGate.reasons) reasons.push("QC:" + reason.code);
+      }
+    }
     if (policy.requireAllFlagsNormal && input.values.some(value => !["NORMAL", "UNKNOWN"].includes(value.flag))) {
       reasons.push("NON_NORMAL_FLAG_PRESENT");
     }
@@ -57,5 +71,6 @@ export function evaluateAutoverification(input: {
     eligible: reasons.length === 0,
     policyId: policy?.id || null,
     reasons,
+    qcGate: input.qcGate || null,
   };
 }

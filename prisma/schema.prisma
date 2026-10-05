@@ -335,6 +335,73 @@ enum GoodsReceiptStatus {
   CANCELLED
 }
 
+enum EquipmentStatus {
+  ACTIVE
+  OUT_OF_SERVICE
+  UNDER_MAINTENANCE
+  RETIRED
+}
+
+enum MaintenanceType {
+  PREVENTIVE
+  CORRECTIVE
+}
+
+enum MaintenanceEventStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum CalibrationStatus {
+  DUE
+  IN_PROGRESS
+  PASS
+  FAIL
+  CANCELLED
+}
+
+enum EquipmentDowntimeStatus {
+  OPEN
+  CLOSED
+}
+
+enum QcRunStatus {
+  PENDING
+  PASS
+  WARN
+  FAIL
+  CANCELLED
+}
+
+enum QcResultStatus {
+  PASS
+  WARN
+  FAIL
+}
+
+enum QcViolationSeverity {
+  WARNING
+  BLOCK
+}
+
+enum QcViolationStatus {
+  OPEN
+  RESOLVED
+  SUPERSEDED
+}
+
+enum QcActionType {
+  REPEAT_QC
+  RECALIBRATE
+  MAINTENANCE
+  REPLACE_REAGENT
+  REPLACE_CONTROL
+  INVESTIGATE
+  OTHER
+}
+
 enum ValidationHoldCondition {
   ALWAYS
   RESULT_SOURCE
@@ -446,6 +513,11 @@ model Organization {
   purchaseOrders PurchaseOrder[]
   goodsReceipts GoodsReceipt[]
   inventoryTransfers InventoryTransfer[]
+  equipment Equipment[]
+  qcMaterials QcMaterial[]
+  qcLots QcLot[]
+  qcTargets QcTarget[]
+  qcRuns QcRun[]
 
   @@map("organizations")
 }
@@ -505,6 +577,8 @@ model Branch {
   goodsReceipts GoodsReceipt[]
   outgoingInventoryTransfers InventoryTransfer[] @relation("InventoryTransferSourceBranch")
   incomingInventoryTransfers InventoryTransfer[] @relation("InventoryTransferDestinationBranch")
+  equipment Equipment[]
+  qcRuns QcRun[]
 
   @@unique([organizationId, code])
   @@index([organizationId, status])
@@ -543,6 +617,7 @@ model Department {
   analyzers Analyzer[]
   userScopes   UserDepartmentScope[]
   labTests      LabTest[]
+  equipment     Equipment[]
 
   @@unique([organizationId, code])
   @@index([organizationId, status])
@@ -618,6 +693,12 @@ model User {
   amendmentRequests LaboratoryResult[] @relation("ResultAmendmentRequestedBy")
   reviewedReflexEvents ReflexRuleEvent[]
   reviewedValidationHoldEvents ValidationHoldEvent[] @relation("ValidationHoldReviewedBy")
+  performedMaintenanceEvents MaintenanceEvent[] @relation("MaintenancePerformedBy")
+  approvedCalibrationEvents CalibrationEvent[] @relation("CalibrationApprovedBy")
+  performedCalibrationEvents CalibrationEvent[] @relation("CalibrationPerformedBy")
+  qcRuns QcRun[] @relation("QcRunOperator")
+  resolvedQcViolations QcRuleViolation[] @relation("QcViolationResolver")
+  qcActions QcAction[] @relation("QcActionPerformer")
   createdMicrobiologyCases MicrobiologyCase[] @relation("MicrobiologyCaseCreator")
   finalizedMicrobiologyCases MicrobiologyCase[] @relation("MicrobiologyCaseFinalizer")
   cultureObservations CultureObservation[]
@@ -955,6 +1036,7 @@ model LabTest {
   autoverificationPolicies AutoverificationPolicy[]
   validationHoldRules ValidationHoldRule[]
   criticalEscalationPolicies CriticalEscalationPolicy[]
+  qcTargets QcTarget[]
 
   @@unique([organizationId, code])
   @@index([organizationId, status])
@@ -986,6 +1068,7 @@ model TestComponent {
   calculatedTargetRules CalculatedResultRule[]
   reflexSourceRules ReflexRule[]
   analyzerMappings AnalyzerTestMapping[]
+  qcTargets QcTarget[]
 
   @@unique([testId, code])
   @@index([testId, displayOrder])
@@ -2318,6 +2401,12 @@ model Analyzer {
   messages     AnalyzerMessage[]
   resultImports AnalyzerResultImport[]
   results LaboratoryResult[]
+  equipment Equipment?
+  maintenanceEvents MaintenanceEvent[]
+  calibrationEvents CalibrationEvent[]
+  downtimeEvents EquipmentDowntime[]
+  qcTargets QcTarget[]
+  qcRuns QcRun[]
 
   @@unique([organizationId, code])
   @@index([branchId, status])
@@ -2539,6 +2628,7 @@ model InventoryLot {
   movements    StockMovement[]
   transferItems InventoryTransferItem[]
   goodsReceiptItems GoodsReceiptItem[]
+  qcLots QcLot[]
 
   @@unique([organizationId, itemId, lotNumber])
   @@index([itemId, expiryDate, status])
@@ -2813,4 +2903,322 @@ model GoodsReceiptItem {
   @@index([itemId, lotNumber])
   @@index([lotId])
   @@map("goods_receipt_items")
+}
+
+
+model Equipment {
+  id               String          @id @default(uuid()) @db.Char(36)
+  organizationId   String          @map("organization_id") @db.Char(36)
+  branchId         String          @map("branch_id") @db.Char(36)
+  departmentId     String?         @map("department_id") @db.Char(36)
+  analyzerId       String?         @unique @map("analyzer_id") @db.Char(36)
+  assetId          String          @map("asset_id") @db.VarChar(100)
+  name             String          @db.VarChar(220)
+  manufacturer     String?         @db.VarChar(150)
+  model            String?         @db.VarChar(150)
+  serialNumber     String?         @map("serial_number") @db.VarChar(150)
+  installationDate DateTime?       @map("installation_date") @db.Date
+  warrantyUntil    DateTime?       @map("warranty_until") @db.Date
+  serviceVendor    String?         @map("service_vendor") @db.VarChar(220)
+  locationText     String?         @map("location_text") @db.VarChar(220)
+  status           EquipmentStatus @default(ACTIVE)
+  notes            String?         @db.Text
+  createdAt        DateTime        @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt        DateTime        @updatedAt @map("updated_at") @db.DateTime(3)
+  deactivatedAt    DateTime?       @map("deactivated_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  branch       Branch       @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  department   Department?  @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  analyzer     Analyzer?    @relation(fields: [analyzerId], references: [id], onDelete: Restrict)
+  documents    EquipmentDocument[]
+  maintenancePlans MaintenancePlan[]
+  maintenanceEvents MaintenanceEvent[]
+  calibrationEvents CalibrationEvent[]
+  downtimeEvents EquipmentDowntime[]
+
+  @@unique([organizationId, assetId])
+  @@index([branchId, status])
+  @@index([departmentId, status])
+  @@map("equipment")
+}
+
+model EquipmentDocument {
+  id          String   @id @default(uuid()) @db.Char(36)
+  equipmentId String   @map("equipment_id") @db.Char(36)
+  documentType String  @map("document_type") @db.VarChar(80)
+  name        String   @db.VarChar(255)
+  storageKey  String?  @map("storage_key") @db.VarChar(500)
+  externalUrl String?  @map("external_url") @db.VarChar(1000)
+  expiresAt   DateTime? @map("expires_at") @db.Date
+  notes       String?  @db.VarChar(500)
+  createdAt   DateTime @default(now()) @map("created_at") @db.DateTime(3)
+
+  equipment Equipment @relation(fields: [equipmentId], references: [id], onDelete: Restrict)
+
+  @@index([equipmentId, documentType])
+  @@index([expiresAt])
+  @@map("equipment_documents")
+}
+
+model MaintenancePlan {
+  id            String       @id @default(uuid()) @db.Char(36)
+  equipmentId   String       @map("equipment_id") @db.Char(36)
+  name          String       @db.VarChar(220)
+  frequencyDays Int          @map("frequency_days")
+  nextDueAt     DateTime     @map("next_due_at") @db.Date
+  instructions  String?      @db.Text
+  status        RecordStatus @default(ACTIVE)
+  createdAt     DateTime     @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt     DateTime     @updatedAt @map("updated_at") @db.DateTime(3)
+  deactivatedAt DateTime?    @map("deactivated_at") @db.DateTime(3)
+
+  equipment Equipment @relation(fields: [equipmentId], references: [id], onDelete: Restrict)
+  events    MaintenanceEvent[]
+
+  @@index([equipmentId, status, nextDueAt])
+  @@map("maintenance_plans")
+}
+
+model MaintenanceEvent {
+  id                String                 @id @default(uuid()) @db.Char(36)
+  equipmentId       String                 @map("equipment_id") @db.Char(36)
+  analyzerId        String?                @map("analyzer_id") @db.Char(36)
+  maintenancePlanId String?                @map("maintenance_plan_id") @db.Char(36)
+  maintenanceType   MaintenanceType        @map("maintenance_type")
+  status            MaintenanceEventStatus @default(SCHEDULED)
+  scheduledAt       DateTime?              @map("scheduled_at") @db.DateTime(3)
+  startedAt         DateTime?              @map("started_at") @db.DateTime(3)
+  completedAt       DateTime?              @map("completed_at") @db.DateTime(3)
+  vendorEngineer    String?                @map("vendor_engineer") @db.VarChar(220)
+  workPerformed     String?                @map("work_performed") @db.Text
+  correctiveAction  String?                @map("corrective_action") @db.Text
+  cost              Decimal?               @db.Decimal(18, 4)
+  currency          String?                @db.Char(3)
+  performedByUserId String?                @map("performed_by_user_id") @db.Char(36)
+  createdAt         DateTime               @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt         DateTime               @updatedAt @map("updated_at") @db.DateTime(3)
+
+  equipment   Equipment       @relation(fields: [equipmentId], references: [id], onDelete: Restrict)
+  analyzer    Analyzer?       @relation(fields: [analyzerId], references: [id], onDelete: Restrict)
+  plan        MaintenancePlan? @relation(fields: [maintenancePlanId], references: [id], onDelete: Restrict)
+  performedBy User?           @relation("MaintenancePerformedBy", fields: [performedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([equipmentId, status, scheduledAt])
+  @@index([analyzerId, completedAt])
+  @@map("maintenance_events")
+}
+
+model CalibrationEvent {
+  id                String            @id @default(uuid()) @db.Char(36)
+  equipmentId       String            @map("equipment_id") @db.Char(36)
+  analyzerId        String?           @map("analyzer_id") @db.Char(36)
+  materialName      String?           @map("material_name") @db.VarChar(220)
+  materialLot       String?           @map("material_lot") @db.VarChar(120)
+  dueAt             DateTime?         @map("due_at") @db.Date
+  performedAt       DateTime?         @map("performed_at") @db.DateTime(3)
+  resultSummary     String?           @map("result_summary") @db.Text
+  status            CalibrationStatus @default(DUE)
+  performedByUserId String?           @map("performed_by_user_id") @db.Char(36)
+  approvedByUserId  String?           @map("approved_by_user_id") @db.Char(36)
+  approvedAt        DateTime?         @map("approved_at") @db.DateTime(3)
+  createdAt         DateTime          @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt         DateTime          @updatedAt @map("updated_at") @db.DateTime(3)
+
+  equipment   Equipment @relation(fields: [equipmentId], references: [id], onDelete: Restrict)
+  analyzer    Analyzer? @relation(fields: [analyzerId], references: [id], onDelete: Restrict)
+  performedBy User?     @relation("CalibrationPerformedBy", fields: [performedByUserId], references: [id], onDelete: Restrict)
+  approvedBy  User?     @relation("CalibrationApprovedBy", fields: [approvedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([equipmentId, status, dueAt])
+  @@index([analyzerId, status])
+  @@map("calibration_events")
+}
+
+model EquipmentDowntime {
+  id          String                  @id @default(uuid()) @db.Char(36)
+  equipmentId String                  @map("equipment_id") @db.Char(36)
+  analyzerId  String?                 @map("analyzer_id") @db.Char(36)
+  status      EquipmentDowntimeStatus @default(OPEN)
+  startedAt   DateTime                @map("started_at") @db.DateTime(3)
+  endedAt     DateTime?               @map("ended_at") @db.DateTime(3)
+  reason      String                  @db.VarChar(1000)
+  impact      String?                 @db.VarChar(1000)
+  resolution  String?                 @db.VarChar(1000)
+  createdAt   DateTime                @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt   DateTime                @updatedAt @map("updated_at") @db.DateTime(3)
+
+  equipment Equipment @relation(fields: [equipmentId], references: [id], onDelete: Restrict)
+  analyzer  Analyzer? @relation(fields: [analyzerId], references: [id], onDelete: Restrict)
+
+  @@index([equipmentId, status, startedAt])
+  @@index([analyzerId, status])
+  @@map("equipment_downtime")
+}
+
+model QcMaterial {
+  id             String       @id @default(uuid()) @db.Char(36)
+  organizationId String       @map("organization_id") @db.Char(36)
+  code           String       @db.VarChar(80)
+  nameEn         String       @map("name_en") @db.VarChar(220)
+  nameAr         String?      @map("name_ar") @db.VarChar(220)
+  manufacturer   String?      @db.VarChar(150)
+  levelName      String       @map("level_name") @db.VarChar(100)
+  status         RecordStatus @default(ACTIVE)
+  createdAt      DateTime     @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt      DateTime     @updatedAt @map("updated_at") @db.DateTime(3)
+  deactivatedAt  DateTime?    @map("deactivated_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  lots QcLot[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId, status])
+  @@map("qc_materials")
+}
+
+model QcLot {
+  id              String       @id @default(uuid()) @db.Char(36)
+  organizationId  String       @map("organization_id") @db.Char(36)
+  materialId      String       @map("material_id") @db.Char(36)
+  inventoryLotId  String?      @map("inventory_lot_id") @db.Char(36)
+  lotNumber       String       @map("lot_number") @db.VarChar(120)
+  receivedAt      DateTime?    @map("received_at") @db.Date
+  openedAt        DateTime?    @map("opened_at") @db.Date
+  expiryDate      DateTime?    @map("expiry_date") @db.Date
+  status          RecordStatus @default(ACTIVE)
+  createdAt       DateTime     @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt       DateTime     @updatedAt @map("updated_at") @db.DateTime(3)
+  deactivatedAt   DateTime?    @map("deactivated_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  material     QcMaterial    @relation(fields: [materialId], references: [id], onDelete: Restrict)
+  inventoryLot InventoryLot? @relation(fields: [inventoryLotId], references: [id], onDelete: Restrict)
+  targets      QcTarget[]
+
+  @@unique([organizationId, materialId, lotNumber])
+  @@index([materialId, status, expiryDate])
+  @@index([inventoryLotId])
+  @@map("qc_lots")
+}
+
+model QcTarget {
+  id             String       @id @default(uuid()) @db.Char(36)
+  organizationId String       @map("organization_id") @db.Char(36)
+  qcLotId        String       @map("qc_lot_id") @db.Char(36)
+  analyzerId     String       @map("analyzer_id") @db.Char(36)
+  testId         String       @map("test_id") @db.Char(36)
+  componentId    String?      @map("component_id") @db.Char(36)
+  targetMean     Decimal      @map("target_mean") @db.Decimal(24, 8)
+  targetSd       Decimal      @map("target_sd") @db.Decimal(24, 8)
+  targetCv       Decimal?     @map("target_cv") @db.Decimal(18, 6)
+  unitSnapshot   String?      @map("unit_snapshot") @db.VarChar(80)
+  enabledRules   Json         @map("enabled_rules")
+  qcValidHours   Int          @default(24) @map("qc_valid_hours")
+  effectiveFrom  DateTime     @map("effective_from") @db.DateTime(3)
+  effectiveTo    DateTime?    @map("effective_to") @db.DateTime(3)
+  status         RecordStatus @default(ACTIVE)
+  createdAt      DateTime     @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt      DateTime     @updatedAt @map("updated_at") @db.DateTime(3)
+  deactivatedAt  DateTime?    @map("deactivated_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  qcLot        QcLot        @relation(fields: [qcLotId], references: [id], onDelete: Restrict)
+  analyzer     Analyzer     @relation(fields: [analyzerId], references: [id], onDelete: Restrict)
+  test         LabTest      @relation(fields: [testId], references: [id], onDelete: Restrict)
+  component    TestComponent? @relation(fields: [componentId], references: [id], onDelete: Restrict)
+  results      QcResult[]
+  violations   QcRuleViolation[]
+
+  @@index([analyzerId, testId, componentId, status, effectiveFrom, effectiveTo])
+  @@index([qcLotId, status])
+  @@map("qc_targets")
+}
+
+model QcRun {
+  id             String      @id @default(uuid()) @db.Char(36)
+  organizationId String      @map("organization_id") @db.Char(36)
+  branchId       String      @map("branch_id") @db.Char(36)
+  analyzerId     String      @map("analyzer_id") @db.Char(36)
+  status         QcRunStatus @default(PENDING)
+  runAt          DateTime    @default(now()) @map("run_at") @db.DateTime(3)
+  operatorUserId String      @map("operator_user_id") @db.Char(36)
+  notes          String?     @db.Text
+  createdAt      DateTime    @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt      DateTime    @updatedAt @map("updated_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  branch       Branch       @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  analyzer     Analyzer     @relation(fields: [analyzerId], references: [id], onDelete: Restrict)
+  operator     User         @relation("QcRunOperator", fields: [operatorUserId], references: [id], onDelete: Restrict)
+  results      QcResult[]
+  violations   QcRuleViolation[]
+
+  @@index([analyzerId, runAt])
+  @@index([branchId, status, runAt])
+  @@map("qc_runs")
+}
+
+model QcResult {
+  id                 String         @id @default(uuid()) @db.Char(36)
+  qcRunId            String         @map("qc_run_id") @db.Char(36)
+  targetId           String         @map("target_id") @db.Char(36)
+  observedValue      Decimal        @map("observed_value") @db.Decimal(24, 8)
+  targetMeanSnapshot Decimal        @map("target_mean_snapshot") @db.Decimal(24, 8)
+  targetSdSnapshot   Decimal        @map("target_sd_snapshot") @db.Decimal(24, 8)
+  targetCvSnapshot   Decimal?       @map("target_cv_snapshot") @db.Decimal(18, 6)
+  zScore             Decimal        @map("z_score") @db.Decimal(18, 6)
+  status             QcResultStatus
+  evaluatedRules     Json           @map("evaluated_rules")
+  createdAt          DateTime       @default(now()) @map("created_at") @db.DateTime(3)
+
+  run    QcRun    @relation(fields: [qcRunId], references: [id], onDelete: Restrict)
+  target QcTarget @relation(fields: [targetId], references: [id], onDelete: Restrict)
+
+  @@unique([qcRunId, targetId])
+  @@index([targetId, createdAt])
+  @@index([status, createdAt])
+  @@map("qc_results")
+}
+
+model QcRuleViolation {
+  id               String              @id @default(uuid()) @db.Char(36)
+  qcRunId          String              @map("qc_run_id") @db.Char(36)
+  targetId         String              @map("target_id") @db.Char(36)
+  ruleCode         String              @map("rule_code") @db.VarChar(40)
+  severity         QcViolationSeverity
+  status           QcViolationStatus   @default(OPEN)
+  details          Json
+  detectedAt       DateTime            @default(now()) @map("detected_at") @db.DateTime(3)
+  resolvedByUserId String?             @map("resolved_by_user_id") @db.Char(36)
+  resolvedAt       DateTime?           @map("resolved_at") @db.DateTime(3)
+  resolutionNote   String?             @map("resolution_note") @db.VarChar(1000)
+  createdAt        DateTime            @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt        DateTime            @updatedAt @map("updated_at") @db.DateTime(3)
+
+  run        QcRun   @relation(fields: [qcRunId], references: [id], onDelete: Restrict)
+  target     QcTarget @relation(fields: [targetId], references: [id], onDelete: Restrict)
+  resolvedBy User?   @relation("QcViolationResolver", fields: [resolvedByUserId], references: [id], onDelete: Restrict)
+  actions     QcAction[]
+
+  @@unique([qcRunId, targetId, ruleCode])
+  @@index([targetId, status, detectedAt])
+  @@index([status, severity, detectedAt])
+  @@map("qc_rule_violations")
+}
+
+model QcAction {
+  id             String       @id @default(uuid()) @db.Char(36)
+  violationId    String       @map("violation_id") @db.Char(36)
+  actionType     QcActionType @map("action_type")
+  description    String       @db.VarChar(1000)
+  performedByUserId String    @map("performed_by_user_id") @db.Char(36)
+  performedAt    DateTime     @default(now()) @map("performed_at") @db.DateTime(3)
+  createdAt      DateTime     @default(now()) @map("created_at") @db.DateTime(3)
+
+  violation  QcRuleViolation @relation(fields: [violationId], references: [id], onDelete: Restrict)
+  performedBy User           @relation("QcActionPerformer", fields: [performedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([violationId, performedAt])
+  @@map("qc_actions")
 }

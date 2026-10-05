@@ -1,9 +1,13 @@
 import { NextResponse } from "next/server";
 import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { resolveAnalyzerQcGate } from "@/lib/qc-gate";
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const body = await request.json().catch(() => ({})) as { confirmDeltaWarnings?: boolean };
+  const body = await request.json().catch(() => ({})) as {
+    confirmDeltaWarnings?: boolean;
+    confirmQcWarnings?: boolean;
+  };
   const session = await requirePermission("results.verify");
   const ctx = await requestContext();
   const { id } = await params;
@@ -42,6 +46,32 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const blockingValidationHolds = result.validationHoldEvents.length;
   if (blockingValidationHolds > 0) {
     return NextResponse.json({ error: "validation_hold_review_required", blockingValidationHolds }, { status: 409 });
+  }
+
+  const qcGate = result.source === "ANALYZER" && result.analyzerId
+    ? await resolveAnalyzerQcGate(prisma, {
+        analyzerId: result.analyzerId,
+        testId: result.orderItem.testId,
+        componentIds: result.values
+          .filter(value => !value.isCalculated && value.analyzerImportId)
+          .map(value => value.componentId),
+        asOf: new Date(),
+      })
+    : null;
+
+  if (qcGate?.blocking) {
+    return NextResponse.json({
+      error: "qc_blocking_hold",
+      qcStatus: qcGate.status,
+      reasons: qcGate.reasons,
+    }, { status: 409 });
+  }
+  if (qcGate?.warning && body.confirmQcWarnings !== true) {
+    return NextResponse.json({
+      error: "qc_warning_confirmation_required",
+      qcStatus: qcGate.status,
+      reasons: qcGate.reasons,
+    }, { status: 409 });
   }
 
   const deltaExceeded = result.values.filter((value) => value.deltaEvaluation === "EXCEEDED");
@@ -182,6 +212,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           criticalCount: criticalValues.length,
           deltaExceededCount: deltaExceeded.length,
           blockingValidationHoldCount: blockingValidationHolds,
+          qcGateStatus: qcGate?.status || null,
+          qcGateReasons: qcGate?.reasons || [],
+          qcWarningConfirmed: qcGate?.warning ? body.confirmQcWarnings === true : false,
           criticalEscalationPolicyId: escalationPolicy?.id || null,
           criticalAcknowledgementDueAt: acknowledgementDueAt,
           orderItemId: result.orderItemId,

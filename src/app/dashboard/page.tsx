@@ -41,6 +41,8 @@ export default async function DashboardPage() {
           {permissions.has("microbiology.view") && <Link className="module-link" href="/microbiology"><article><span>16</span><h2>Microbiology</h2><p>Culture observations, organisms, isolates and antimicrobial susceptibility workflow.</p></article></Link>}
           {permissions.has("analyzers.view") && <Link className="module-link" href="/analyzers"><article><span>17</span><h2>Analyzers</h2><p>Analyzer registry, bridge credentials, mappings and raw interface message inbox.</p></article></Link>}
           {permissions.has("inventory.view") && <Link className="module-link" href="/inventory"><article><span>18</span><h2>Inventory</h2><p>Branch stock, lot and expiry traceability, FEFO, suppliers and procurement receiving.</p></article></Link>}
+          {permissions.has("equipment.view") && <Link className="module-link" href="/equipment"><article><span>19</span><h2>Equipment</h2><p>Asset register, maintenance, calibration, downtime and analyzer linkage.</p></article></Link>}
+          {permissions.has("qc.view") && <Link className="module-link" href="/qc"><article><span>20</span><h2>Quality Control</h2><p>QC materials, lots, Levey-Jennings trends, Westgard rules and analyzer QC gating.</p></article></Link>}
         </div>
       </section>
     </main>
