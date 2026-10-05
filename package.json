@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "prisma migrate deploy && prisma generate && next build",
+    "build": "prisma migrate resolve --rolled-back 20261006000500_equipment_qc_foundation || true && prisma migrate deploy && prisma generate && next build",
     "start": "next start",
     "lint": "eslint .",
     "db:generate": "prisma generate",
