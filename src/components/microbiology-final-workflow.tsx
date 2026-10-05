@@ -48,6 +48,25 @@ export function MicrobiologyFinalWorkflow({
     }
   }
 
+
+  async function withdraw() {
+    if (!resultId) return;
+    if (!confirm("Withdraw this unverified final submission for correction? The submitted result version will be preserved as CANCELLED.")) return;
+
+    setBusy("withdraw");
+    setMessage("");
+    const response = await fetch(`/api/microbiology/cases/${caseId}/withdraw-final`, { method: "POST" });
+    const body = await response.json().catch(() => ({}));
+    setBusy("");
+
+    if (response.ok) {
+      setMessage("Final submission withdrawn. Culture data is editable again; resubmission will create a new result version.");
+      router.refresh();
+    } else {
+      setMessage(body.error || "Could not withdraw microbiology submission.");
+    }
+  }
+
   async function verify() {
     if (!resultId) return;
     if (!confirm("Verify this microbiology result? Later changes must use an amendment workflow.")) return;
@@ -110,6 +129,10 @@ export function MicrobiologyFinalWorkflow({
     </div>
 
     <div className="result-actions">
+      {resultId && resultStatus === "ENTERED" && canEnter &&
+        <button className="secondary-button" type="button" disabled={busy !== ""} onClick={() => void withdraw()}>
+          {busy === "withdraw" ? "Withdrawing…" : "Withdraw for Correction"}
+        </button>}
       {resultId && resultStatus === "ENTERED" && canVerify &&
         <button className="secondary-button" type="button" disabled={busy !== ""} onClick={() => void verify()}>
           {busy === "verify" ? "Verifying…" : "Verify Microbiology Result"}
