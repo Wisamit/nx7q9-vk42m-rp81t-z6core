@@ -4,7 +4,7 @@ import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 
 type Branch = { id:string; code:string; name:string };
-type Template = { id:string; code:string; name:string; branchId:string|null; latestVersion:number|null; latestStatus:string|null };
+type Template = { id:string; code:string; name:string; branchId:string|null; latestVersion:number|null; latestStatus:string|null; latestVersionId:string|null };
 
 export function ReportTemplateManager({ branches, templates }: { branches:Branch[]; templates:Template[] }) {
   const router=useRouter();
@@ -89,7 +89,7 @@ export function ReportTemplateManager({ branches, templates }: { branches:Branch
       <div className="table-toolbar"><h2>Template Versions</h2><span>{templates.length} templates</span></div>
       <div className="table-wrap"><table><thead><tr><th>Template</th><th>Scope</th><th>Latest</th><th>Status</th><th></th></tr></thead><tbody>
         {templates.map(t=><tr key={t.id}><td><strong>{t.code}</strong><br/><small>{t.name}</small></td><td>{t.branchId?"Branch":"Organization"}</td><td>{t.latestVersion??"—"}</td><td>{t.latestStatus??"No version"}</td><td>{t.latestVersion&&["DRAFT","APPROVED"].includes(t.latestStatus||"")?<button className="secondary-button" type="button" disabled={busy.startsWith("activate:")} onClick={()=>{
-          const version=(t as Template & {latestVersionId?:string|null}).latestVersionId; if(version)void activate(t.id,version);
+          const version=t.latestVersionId; if(version)void activate(t.id,version);
         }}>Activate</button>:"—"}</td></tr>)}
       </tbody></table></div>
     </article>
