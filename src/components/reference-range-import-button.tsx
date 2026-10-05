@@ -3,7 +3,19 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
-type Preview = { total: number; safe: number; review: number; reasons: Record<string, number> };
+type DetailItem = { value: string; count: number };
+type Preview = {
+  total: number;
+  safe: number;
+  review: number;
+  reasons: Record<string, number>;
+  details?: {
+    unmatchedTests: DetailItem[];
+    unmappedUnits: DetailItem[];
+    unitConflicts: DetailItem[];
+    emptyIntervals: DetailItem[];
+  };
+};
 
 export function ReferenceRangeImportButton({ batchId }: { batchId: string }) {
   const router = useRouter();
@@ -27,7 +39,7 @@ export function ReferenceRangeImportButton({ batchId }: { batchId: string }) {
     const body = await response.json().catch(() => ({}));
     if (response.ok) {
       setMessage(`Imported ${body.imported} inactive reference intervals pending clinical approval; ${body.review} remain for mapping review.`);
-      setPreview({ total: body.total, safe: 0, review: body.review, reasons: body.reasons || {} });
+      setPreview({ total: body.total, safe: 0, review: body.review, reasons: body.reasons || {}, details: preview.details });
       router.refresh();
     } else {
       setMessage(body.error || "Reference range import failed.");
@@ -49,6 +61,11 @@ export function ReferenceRangeImportButton({ batchId }: { batchId: string }) {
     {preview.review > 0 && Object.keys(preview.reasons || {}).length > 0 && <div className="range-review-reasons">
       <strong>Review reasons</strong>
       {Object.entries(preview.reasons).sort((a,b) => b[1]-a[1]).map(([reason,count]) => <div key={reason}><span>{reason}</span><strong>{count}</strong></div>)}
+    </div>}
+    {preview.details && <div className="range-review-details">
+      <section><strong>Top unmatched test names</strong>{preview.details.unmatchedTests.map(item => <div key={item.value}><span>{item.value}</span><strong>{item.count}</strong></div>)}</section>
+      <section><strong>Top unmapped units</strong>{preview.details.unmappedUnits.map(item => <div key={item.value}><span>{item.value}</span><strong>{item.count}</strong></div>)}</section>
+      <section><strong>Top unit conflicts</strong>{preview.details.unitConflicts.map(item => <div key={item.value}><span>{item.value}</span><strong>{item.count}</strong></div>)}</section>
     </div>}
   </div>;
 }
