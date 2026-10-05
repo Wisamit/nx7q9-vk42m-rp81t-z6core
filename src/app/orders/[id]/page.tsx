@@ -17,6 +17,14 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       referrer: true,
       client: true,
       createdBy: true,
+      packages: {
+        include: {
+          package: true,
+          priceListPackageItem: { include: { priceList: true } },
+          items: { include: { orderItem: true } },
+        },
+        orderBy: { createdAt: "asc" },
+      },
       items: {
         include: {
           test: true,
@@ -37,6 +45,9 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   });
 
   if (!order || !canAccessBranch(session, order.orderingBranchId)) notFound();
+  const packageByOrderItemId = new Map(order.packages.flatMap(pkg =>
+    pkg.items.map(link => [link.orderItemId, pkg] as const)
+  ));
 
   return <main className="catalog-shell">
     <header className="page-header">
@@ -70,21 +81,37 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       </article>
     </section>
 
+    {order.packages.length > 0 && <section className="table-card detail-section">
+      <div className="table-toolbar"><h2>Commercial Packages</h2><span>Historical package and price snapshots</span></div>
+      <div className="table-wrap"><table>
+        <thead><tr><th>Package</th><th>Member tests</th><th>Price list</th><th>Price snapshot</th></tr></thead>
+        <tbody>{order.packages.map(pkg => <tr key={pkg.id}>
+          <td><strong>{pkg.packageCodeSnapshot}</strong><br/><small>{pkg.packageNameEnSnapshot}</small></td>
+          <td>{pkg.items.map(link => link.orderItem.testCodeSnapshot).join(", ")}</td>
+          <td>{pkg.priceListPackageItem?.priceList.code || "Historical / unavailable"}</td>
+          <td><strong>{pkg.finalPriceSnapshot.toString()} {pkg.currency}</strong></td>
+        </tr>)}</tbody>
+      </table></div>
+    </section>}
+
     <section className="table-card">
       <div className="table-toolbar"><h2>Ordered Tests</h2><span>{order.items.length} item(s)</span></div>
       <div className="table-wrap">
         <table>
           <thead><tr><th>Code snapshot</th><th>Name snapshot</th><th>Unit snapshot</th><th>Performed branch</th><th>Price source</th><th>Price snapshot</th><th>Result</th><th>Status</th></tr></thead>
-          <tbody>{order.items.map(item => <tr key={item.id}>
+          <tbody>{order.items.map(item => {
+            const packageSnapshot = packageByOrderItemId.get(item.id);
+            return <tr key={item.id}>
             <td><strong>{item.testCodeSnapshot}</strong></td>
             <td>{item.testNameEnSnapshot}</td>
             <td>{item.unitSnapshot || "—"}</td>
             <td>{item.performedBranch?.nameEn || "—"}</td>
-            <td>{item.priceListItem?.priceList.code || "—"}</td>
-            <td>{item.finalPriceSnapshot.toString()} {item.currency}</td>
+            <td>{packageSnapshot ? "Package " + packageSnapshot.packageCodeSnapshot : item.priceListItem?.priceList.code || "—"}</td>
+            <td>{packageSnapshot ? "Included in package" : item.finalPriceSnapshot.toString() + " " + item.currency}</td>
             <td>{item.results[0] ? <Link className="table-link" href={`/worklists/${item.id}`}>{item.results[0].status}{item.results[0].values.some(value => value.isCritical) ? " · CRITICAL" : ""}</Link> : "—"}</td>
             <td>{item.status}</td>
-          </tr>)}</tbody>
+          </tr>;
+          })}</tbody>
         </table>
       </div>
     </section>
