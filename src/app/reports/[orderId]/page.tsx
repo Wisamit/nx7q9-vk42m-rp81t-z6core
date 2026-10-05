@@ -70,6 +70,27 @@ type ReportResult = {
   amendmentReason: string | null;
 };
 
+type ReportTemplateSnapshot = {
+  templateId: string;
+  templateCode: string;
+  templateNameEn: string;
+  templateNameAr: string | null;
+  templateVersion: number;
+  configuration: {
+    languageMode: "BILINGUAL" | "ENGLISH" | "ARABIC";
+    logoUrl: string | null;
+    headerEn: string | null;
+    headerAr: string | null;
+    footerEn: string | null;
+    footerAr: string | null;
+    watermark: string | null;
+    showSignature: boolean;
+    showQr: boolean;
+    showPageNumbers: boolean;
+    columns: Array<"TEST" | "RESULT" | "FLAG" | "UNIT" | "REFERENCE">;
+  };
+};
+
 type Snapshot = {
   organization: { nameEn: string; nameAr: string | null; legalName: string | null };
   branch: {
@@ -138,6 +159,22 @@ export default async function DiagnosticReportPage({ params }: { params: Promise
   }
 
   const snapshot = latest.contentSnapshot as unknown as Snapshot;
+  const templateSnapshot = latest.templateSnapshot as unknown as ReportTemplateSnapshot | null;
+  const templateConfig = templateSnapshot?.configuration || {
+    languageMode: "BILINGUAL" as const,
+    logoUrl: null,
+    headerEn: null,
+    headerAr: null,
+    footerEn: null,
+    footerAr: null,
+    watermark: null,
+    showSignature: true,
+    showQr: true,
+    showPageNumbers: true,
+    columns: ["TEST","RESULT","FLAG","UNIT","REFERENCE"] as Array<"TEST"|"RESULT"|"FLAG"|"UNIT"|"REFERENCE">,
+  };
+  const reportColumns = new Set(templateConfig.columns);
+  const reportColumnCount = Math.max(1, templateConfig.columns.length);
   const headerStore = await headers();
   const host = headerStore.get("x-forwarded-host") || headerStore.get("host") || "";
   const protocol = headerStore.get("x-forwarded-proto") || "https";
@@ -151,7 +188,7 @@ export default async function DiagnosticReportPage({ params }: { params: Promise
       <div>
         <p className="eyebrow">Diagnostic Report</p>
         <h1>{snapshot.order.accessionNumber}</h1>
-        <p className="muted">Version {latest.version} · {latest.status}</p>
+        <p className="muted">Version {latest.version} · {latest.status}{templateSnapshot ? ` · Template ${templateSnapshot.templateCode} v${templateSnapshot.templateVersion}` : ""}</p>
       </div>
       <div className="header-actions">
         {permissions.has("reports.deliver") && <PrintReportButton reportVersionId={latest.id} canRecordDelivery />}
@@ -160,8 +197,15 @@ export default async function DiagnosticReportPage({ params }: { params: Promise
     </div>
 
     <article className="diagnostic-report professional-report">
+      {templateConfig.watermark && <div className="report-watermark" aria-hidden="true">{templateConfig.watermark}</div>}
       <header className="report-header">
-        <div>
+        <div className="report-brand-block">
+          {templateConfig.logoUrl && <>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img className="report-template-logo" src={templateConfig.logoUrl} alt="Laboratory logo" />
+          </>}
+          {templateConfig.headerEn && <p className="report-template-header">{templateConfig.headerEn}</p>}
+          {templateConfig.headerAr && <p className="report-template-header" dir="rtl">{templateConfig.headerAr}</p>}
           <h1>{snapshot.organization.nameEn}</h1>
           {snapshot.organization.nameAr && <h2 dir="rtl">{snapshot.organization.nameAr}</h2>}
           <p>{snapshot.branch.nameEn}{snapshot.branch.nameAr ? ` · ${snapshot.branch.nameAr}` : ""}</p>
@@ -169,11 +213,11 @@ export default async function DiagnosticReportPage({ params }: { params: Promise
           <p>{[snapshot.branch.phone, snapshot.branch.email].filter(Boolean).join(" · ")}</p>
         </div>
         <div className="report-version-stamp">
-          {qrDataUrl && <Image src={qrDataUrl} alt="Report verification QR code" width={104} height={104} unoptimized />}
+          {templateConfig.showQr && qrDataUrl && <Image src={qrDataUrl} alt="Report verification QR code" width={104} height={104} unoptimized />}
           <strong className={"status-badge status-" + latest.status.toLowerCase().replaceAll("_","-")}>{latest.status}</strong>
           <span>Report version {latest.version}</span>
           <span>Issued {latest.issuedAt.toISOString().replace("T"," ").slice(0,19)}</span>
-          <span>Scan QR to verify</span>
+          {templateConfig.showQr && <span>Scan QR to verify</span>}
         </div>
       </header>
 
@@ -196,29 +240,35 @@ export default async function DiagnosticReportPage({ params }: { params: Promise
       <section className="report-results">
         <table>
           <thead>
-            <tr><th>Test / Component</th><th>Result</th><th>Flag</th><th>Unit</th><th>Reference Range</th></tr>
+            <tr>
+              {reportColumns.has("TEST") && <th>Test / Component</th>}
+              {reportColumns.has("RESULT") && <th>Result</th>}
+              {reportColumns.has("FLAG") && <th>Flag</th>}
+              {reportColumns.has("UNIT") && <th>Unit</th>}
+              {reportColumns.has("REFERENCE") && <th>Reference Range</th>}
+            </tr>
           </thead>
           <tbody>
             {snapshot.results.map((result) => [
               <tr className="report-test-heading" key={`${result.testCode}-head`}>
-                <td colSpan={5}>
+                <td colSpan={reportColumnCount}>
                   <strong>{result.testCode} — {result.testNameEn}</strong>
                   {result.testNameAr && <span dir="rtl"> · {result.testNameAr}</span>}
                   <small> · {result.performingBranch.nameEn} · Result v{result.resultVersion}{result.analyzer ? ` · Analyzer: ${result.analyzer.code}${result.analyzer.name ? " — " + result.analyzer.name : ""}` : ""}</small>
                 </td>
               </tr>,
               ...result.values.map((value) => <tr key={`${result.testCode}-${value.componentCode}`} className={value.isCritical ? "report-critical-row" : ""}>
-                <td>
+                {reportColumns.has("TEST") && <td>
                   <strong>{value.componentNameEn}</strong>
                   {value.componentNameAr && <small dir="rtl">{value.componentNameAr}</small>}
-                </td>
-                <td><strong>{value.displayValue}</strong></td>
-                <td>{value.flag === "UNKNOWN" ? "—" : <span className={"result-flag-badge flag-" + value.flag.toLowerCase().replaceAll("_","-")}>{value.flag}</span>}</td>
-                <td>{value.unit || "—"}</td>
-                <td>{referenceText(value)}</td>
+                </td>}
+                {reportColumns.has("RESULT") && <td><strong>{value.displayValue}</strong></td>}
+                {reportColumns.has("FLAG") && <td>{value.flag === "UNKNOWN" ? "—" : <span className={"result-flag-badge flag-" + value.flag.toLowerCase().replaceAll("_","-")}>{value.flag}</span>}</td>}
+                {reportColumns.has("UNIT") && <td>{value.unit || "—"}</td>}
+                {reportColumns.has("REFERENCE") && <td>{referenceText(value)}</td>}
               </tr>),
               result.microbiology ? <tr key={`${result.testCode}-microbiology`}>
-                <td colSpan={5}>
+                <td colSpan={reportColumnCount}>
                   <div className="report-notes">
                     <p><strong>Culture status:</strong> {result.microbiology.cultureStatus.replaceAll("_", " ")}</p>
                     {result.microbiology.finalComment && <p><strong>Final interpretation:</strong> {result.microbiology.finalComment}</p>}
@@ -250,11 +300,11 @@ export default async function DiagnosticReportPage({ params }: { params: Promise
                   </div>
                 </td>
               </tr> : null,
-              result.comments && !result.microbiology ? <tr key={`${result.testCode}-comment`}><td colSpan={5}><strong>Comment:</strong> {result.comments}</td></tr> : null,
+              result.comments && !result.microbiology ? <tr key={`${result.testCode}-comment`}><td colSpan={reportColumnCount}><strong>Comment:</strong> {result.comments}</td></tr> : null,
               <tr className="report-result-meta" key={`${result.testCode}-meta`}>
-                <td colSpan={5}>
+                <td colSpan={reportColumnCount}>
                   Specimen: {result.specimen?.barcode || "—"} · Collected: {result.specimen?.collectedAt?.replace("T"," ").slice(0,19) || "—"} ·
-                  Verified: {result.verifiedBy?.nameEn || "—"} · Released: {result.releasedBy?.nameEn || "—"}
+                  {templateConfig.showSignature ? <>Verified: {result.verifiedBy?.nameEn || "—"} · Released: {result.releasedBy?.nameEn || "—"}</> : <>Released: {result.releasedAt?.replace("T"," ").slice(0,19) || "—"}</>}
                 </td>
               </tr>,
             ])}
@@ -267,6 +317,10 @@ export default async function DiagnosticReportPage({ params }: { params: Promise
         {snapshot.order.clinicalNotes && <p><strong>Clinical notes:</strong> {snapshot.order.clinicalNotes}</p>}
       </section>}
 
+      {(templateConfig.footerEn || templateConfig.footerAr) && <section className="report-template-footer">
+        {templateConfig.footerEn && <p>{templateConfig.footerEn}</p>}
+        {templateConfig.footerAr && <p dir="rtl">{templateConfig.footerAr}</p>}
+      </section>}
       <footer className="report-footer">
         <div>
           <strong>{snapshot.completeness.final ? "Final report" : "Partial report"}</strong>
@@ -289,10 +343,11 @@ export default async function DiagnosticReportPage({ params }: { params: Promise
       <div className="table-toolbar"><h2>Report Version History</h2><span>{report.versions.length} version(s)</span></div>
       <div className="table-wrap">
         <table>
-          <thead><tr><th>Version</th><th>Status</th><th>Issued</th><th>Issued by</th><th>Branch</th><th>Amendment reason</th></tr></thead>
+          <thead><tr><th>Version</th><th>Status</th><th>Template</th><th>Issued</th><th>Issued by</th><th>Branch</th><th>Amendment reason</th></tr></thead>
           <tbody>{report.versions.map(version => <tr key={version.id}>
             <td><strong>{version.version}</strong></td>
             <td>{version.status}</td>
+            <td>{version.reportTemplateVersionId ? "Versioned template" : "Legacy/default layout"}</td>
             <td>{version.issuedAt.toISOString().replace("T"," ").slice(0,19)}</td>
             <td>{version.issuedBy.displayNameEn}</td>
             <td>{version.branch.nameEn}</td>

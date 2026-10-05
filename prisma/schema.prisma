@@ -822,6 +822,7 @@ model Organization {
   notificationTemplates NotificationTemplate[]
   notificationPreferences NotificationPreference[]
   notifications Notification[]
+  reportTemplates ReportTemplate[]
 
   @@map("organizations")
 }
@@ -905,6 +906,7 @@ model Branch {
   edgeQueueMessages EdgeQueueMessage[]
 
   notifications Notification[]
+  reportTemplates ReportTemplate[]
 
   @@unique([organizationId, code])
   @@index([organizationId, status])
@@ -1080,6 +1082,9 @@ model User {
   notificationPreferences NotificationPreference[]
   notifications Notification[] @relation("NotificationRecipientUser")
   createdNotificationTemplates NotificationTemplate[] @relation("NotificationTemplateCreator")
+  createdReportTemplates ReportTemplate[] @relation("ReportTemplateCreator")
+  submittedReportTemplateVersions ReportTemplateVersion[] @relation("ReportTemplateVersionSubmitter")
+  approvedReportTemplateVersions ReportTemplateVersion[] @relation("ReportTemplateVersionApprover")
 
   @@unique([organizationId, username])
   @@unique([organizationId, email])
@@ -2360,9 +2365,14 @@ model DiagnosticReportVersion {
   integrationMessages IntegrationMessage[]
   webhookDeliveries WebhookDelivery[]
 
+  reportTemplateVersionId String? @map("report_template_version_id") @db.Char(36)
+  templateSnapshot Json? @map("template_snapshot")
+  reportTemplateVersion ReportTemplateVersion? @relation(fields: [reportTemplateVersionId], references: [id], onDelete: Restrict)
+
   @@unique([reportId, version])
   @@index([branchId, issuedAt])
   @@index([status, issuedAt])
+  @@index([reportTemplateVersionId])
   @@map("diagnostic_report_versions")
 }
 
@@ -4623,4 +4633,66 @@ model NotificationDelivery {
   @@index([status, nextAttemptAt, createdAt])
   @@index([notificationId, channel])
   @@map("notification_deliveries")
+}
+
+
+enum ReportTemplateVersionStatus {
+  DRAFT
+  APPROVED
+  EFFECTIVE
+  RETIRED
+}
+
+model ReportTemplate {
+  id              String       @id @default(uuid()) @db.Char(36)
+  organizationId  String       @map("organization_id") @db.Char(36)
+  branchId        String?      @map("branch_id") @db.Char(36)
+  code            String       @db.VarChar(100)
+  nameEn          String       @map("name_en") @db.VarChar(200)
+  nameAr          String?      @map("name_ar") @db.VarChar(200)
+  isDefault       Boolean      @default(false) @map("is_default")
+  status          RecordStatus @default(ACTIVE)
+  createdByUserId String       @map("created_by_user_id") @db.Char(36)
+  createdAt       DateTime     @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt       DateTime     @updatedAt @map("updated_at") @db.DateTime(3)
+  deactivatedAt   DateTime?    @map("deactivated_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  branch       Branch?      @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  createdBy    User         @relation("ReportTemplateCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  versions     ReportTemplateVersion[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId, branchId, status])
+  @@index([branchId, isDefault, status])
+  @@map("report_templates")
+}
+
+model ReportTemplateVersion {
+  id                  String                      @id @default(uuid()) @db.Char(36)
+  templateId          String                      @map("template_id") @db.Char(36)
+  version             Int
+  status              ReportTemplateVersionStatus @default(DRAFT)
+  configuration       Json
+  changeSummary       String                      @map("change_summary") @db.VarChar(1000)
+  submittedByUserId   String                      @map("submitted_by_user_id") @db.Char(36)
+  approvedByUserId    String?                     @map("approved_by_user_id") @db.Char(36)
+  approvedAt          DateTime?                   @map("approved_at") @db.DateTime(3)
+  effectiveFrom       DateTime?                   @map("effective_from") @db.DateTime(3)
+  effectiveTo         DateTime?                   @map("effective_to") @db.DateTime(3)
+  retiredAt           DateTime?                   @map("retired_at") @db.DateTime(3)
+  supersedesVersionId String?                     @map("supersedes_version_id") @db.Char(36)
+  createdAt           DateTime                    @default(now()) @map("created_at") @db.DateTime(3)
+
+  template     ReportTemplate @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  submittedBy  User           @relation("ReportTemplateVersionSubmitter", fields: [submittedByUserId], references: [id], onDelete: Restrict)
+  approvedBy   User?          @relation("ReportTemplateVersionApprover", fields: [approvedByUserId], references: [id], onDelete: Restrict)
+  supersedes   ReportTemplateVersion? @relation("ReportTemplateVersionSupersession", fields: [supersedesVersionId], references: [id], onDelete: Restrict)
+  supersededBy ReportTemplateVersion[] @relation("ReportTemplateVersionSupersession")
+  diagnosticReportVersions DiagnosticReportVersion[]
+
+  @@unique([templateId, version])
+  @@index([templateId, status, effectiveFrom])
+  @@index([status, effectiveFrom, effectiveTo])
+  @@map("report_template_versions")
 }
