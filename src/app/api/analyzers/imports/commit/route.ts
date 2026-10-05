@@ -9,6 +9,7 @@ import { evaluateFormula, formulaVariables } from "@/lib/formula-engine";
 import { reflexMatches } from "@/lib/reflex-rules";
 import { validationHoldMatches } from "@/lib/validation-holds";
 import { evaluateAutoverification } from "@/lib/autoverification";
+import { resolveAnalyzerQcGate } from "@/lib/qc-gate";
 
 function emptyDelta() {
   return {
@@ -705,6 +706,13 @@ export async function POST(request: Request) {
       tx.validationHoldEvent.count({ where: { resultId: result.id, status: "ACTIVE", severitySnapshot: "BLOCK" } }),
     ]);
 
+    const qcGate = await resolveAnalyzerQcGate(tx, {
+      analyzerId: analyzer.id,
+      testId: orderItem.testId,
+      componentIds: [...finalDirect.values()].map(value => value.componentId),
+      asOf: new Date(),
+    });
+
     const decision = evaluateAutoverification({
       policy: autoverificationPolicy,
       source: "ANALYZER",
@@ -712,17 +720,20 @@ export async function POST(request: Request) {
       values: holdValues,
       pendingReflexCount,
       blockingHoldCount,
+      qcGate,
     });
+    const finalResultStatus = decision.eligible ? "VERIFIED" : resultStatus;
+    const autoverifiedAt = decision.eligible ? new Date() : null;
 
     await tx.laboratoryResult.update({
       where: { id: result.id },
       data: {
-        status: resultStatus,
-        autoVerified: false,
+        status: finalResultStatus,
+        autoVerified: decision.eligible,
         autoverificationPolicyId: decision.policyId,
         autoverificationDecisionSnapshot: decision as Prisma.InputJsonValue,
         verifiedByUserId: null,
-        verifiedAt: null,
+        verifiedAt: autoverifiedAt,
       },
     });
 
@@ -736,7 +747,7 @@ export async function POST(request: Request) {
       where: { id: orderItem.id },
       data: {
         performedBranchId: analyzer.branchId,
-        status: "IN_PROGRESS",
+        status: decision.eligible ? "VERIFIED" : "IN_PROGRESS",
       },
     });
 
@@ -755,7 +766,30 @@ export async function POST(request: Request) {
       });
     }
 
-    if (["REGISTERED","COLLECTED"].includes(orderItem.order.status)) {
+    const remainingOrderItems = decision.eligible
+      ? await tx.orderItem.count({
+          where: {
+            orderId: orderItem.orderId,
+            status: { notIn: ["VERIFIED", "CANCELLED"] },
+          },
+        })
+      : null;
+
+    if (decision.eligible && remainingOrderItems === 0) {
+      const currentOrder = await tx.labOrder.findUnique({ where: { id: orderItem.orderId }, select: { status: true } });
+      if (currentOrder && currentOrder.status !== "COMPLETED") {
+        await tx.labOrder.update({ where: { id: orderItem.orderId }, data: { status: "COMPLETED" } });
+        await tx.orderStatusHistory.create({
+          data: {
+            orderId: orderItem.orderId,
+            fromStatus: currentOrder.status,
+            toStatus: "COMPLETED",
+            reason: "All non-cancelled order items verified; analyzer result autoverified with QC pass",
+            changedByUserId: session.user.id,
+          },
+        });
+      }
+    } else if (["REGISTERED","COLLECTED"].includes(orderItem.order.status)) {
       await tx.labOrder.update({ where: { id: orderItem.orderId }, data: { status: "IN_PROGRESS" } });
       await tx.orderStatusHistory.create({
         data: {
@@ -786,7 +820,7 @@ export async function POST(request: Request) {
           })),
         } : undefined,
         newValues: {
-          status: resultStatus,
+          status: finalResultStatus,
           analyzerId: analyzer.id,
           analyzerCode: analyzer.code,
           specimenId: specimen.id,
@@ -794,6 +828,8 @@ export async function POST(request: Request) {
           complete,
           autoverificationEligible: decision.eligible,
           autoverificationReasons: decision.reasons,
+          qcGateStatus: qcGate.status,
+          qcGateReasons: qcGate.reasons,
           values: incoming.map(item => ({
             componentCode: item.code,
             displayValue: item.parsed.displayValue,
@@ -805,6 +841,31 @@ export async function POST(request: Request) {
         userAgent: ctx.userAgent,
       },
     });
+
+    if (decision.eligible) {
+      await tx.auditEvent.create({
+        data: {
+          organizationId: session.user.organizationId,
+          branchId: analyzer.branchId,
+          actorUserId: session.user.id,
+          action: "RESULT_AUTOVERIFIED",
+          entityType: "LaboratoryResult",
+          entityId: result.id,
+          oldValues: { status: resultStatus },
+          newValues: {
+            status: "VERIFIED",
+            verifiedAt: autoverifiedAt,
+            policyId: decision.policyId,
+            analyzerId: analyzer.id,
+            qcGateStatus: qcGate.status,
+            qcGateReasons: qcGate.reasons,
+          },
+          reason: "Analyzer result met all autoverification rules and QC gate passed",
+          ipAddress: ctx.ipAddress,
+          userAgent: ctx.userAgent,
+        },
+      });
+    }
 
     return tx.laboratoryResult.findUnique({
       where: { id: result.id },
@@ -832,7 +893,7 @@ export async function POST(request: Request) {
     deltaExceededCount: saved?.values.filter(value => value.deltaEvaluation === "EXCEEDED").length || 0,
     pendingReflexCount: saved?.reflexEvents.filter(event => event.status === "PENDING").length || 0,
     blockingValidationHoldCount: saved?.validationHoldEvents.filter(event => event.status === "ACTIVE" && event.severitySnapshot === "BLOCK").length || 0,
-    autoVerified: false,
+    autoVerified: saved?.autoVerified || false,
     autoverificationDecision: saved?.autoverificationDecisionSnapshot || null,
   }, { status: existing ? 200 : 201 });
 }
