@@ -187,6 +187,20 @@ async function analyze(batchId: string, organizationId: string) {
     }
   }
 
+  const legacyUnitByTestId = new Map<string, typeof units[number]>();
+  for (const row of legacyTests) {
+    if (!row.importedEntityId) continue;
+    const source = object(row.sourceData);
+    const normalized = object(row.normalizedData);
+    const rawUnit = text(normalized.unit || source.unit || source.Unit || source["test unit"]);
+    if (!rawUnit) continue;
+    const mapped = reviewedUnitAliases.get(unitKey(rawUnit))
+      || unitMap.get(key(rawUnit))
+      || unitMap.get(unitKey(rawUnit))
+      || unitMap.get(canonicalUnitKey(rawUnit));
+    if (mapped) legacyUnitByTestId.set(row.importedEntityId, mapped);
+  }
+
   const analyzed = rows.map((row) => {
     const n = object(row.normalizedData);
     const s = object(row.sourceData);
@@ -212,7 +226,8 @@ async function analyze(batchId: string, organizationId: string) {
     let reason = "";
     let test = matches.length === 1 ? matches[0] : undefined;
     const componentUnit = test?.components.length === 1 ? test.components[0].unit : undefined;
-    const trustedTestUnit = test?.defaultUnit || componentUnit;
+    const legacyTestUnit = test ? legacyUnitByTestId.get(test.id) : undefined;
+    const trustedTestUnit = test?.defaultUnit || componentUnit || legacyTestUnit;
     const equivalentExplicitFallback = rangeUnit && trustedTestUnit &&
       [trustedTestUnit.symbol, trustedTestUnit.code].some((candidate) => canonicalUnitKey(candidate) === canonicalUnitKey(rangeUnit))
       ? trustedTestUnit : undefined;
@@ -305,6 +320,10 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
   await prisma.$transaction(async (tx) => {
     for (const item of analysis.safe) {
       if (!item.test || !item.mappedUnit || !item.mappedSex) continue;
+      if (!item.test.defaultUnitId && item.mappedUnit.id) {
+        await tx.labTest.update({ where: { id: item.test.id }, data: { defaultUnitId: item.mappedUnit.id } });
+      }
+
       let component = componentByTestId.get(item.test.id);
       if (!component) {
         component = await tx.testComponent.create({
