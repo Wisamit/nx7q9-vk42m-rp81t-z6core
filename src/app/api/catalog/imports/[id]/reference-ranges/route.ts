@@ -36,12 +36,13 @@ function ageUnit(value: unknown): "DAY" | "WEEK" | "MONTH" | "YEAR" | null {
 }
 
 async function analyze(batchId: string, organizationId: string) {
-  const [rows, tests, units, legacyTests, legacyUnits] = await Promise.all([
+  const [rows, tests, units, legacyTests, legacyUnits, reviewedMappings] = await Promise.all([
     prisma.catalogImportRow.findMany({ where: { batchId, entityType: "REFERENCE_INTERVAL", status: { in: ["VALID", "WARNING"] } }, orderBy: { rowNumber: "asc" } }),
     prisma.labTest.findMany({ where: { organizationId }, include: { defaultUnit: true, components: { include: { unit: true } } } }),
     prisma.unit.findMany({ where: { organizationId } }),
     prisma.catalogImportRow.findMany({ where: { batchId, entityType: "TEST", importedEntityId: { not: null } }, select: { importedEntityId: true, legacyKey: true, sourceData: true, normalizedData: true } }),
     prisma.catalogImportRow.findMany({ where: { batchId, entityType: "UNIT", importedEntityId: { not: null } }, select: { importedEntityId: true, legacyKey: true, sourceData: true, normalizedData: true } }),
+    prisma.catalogImportMapping.findMany({ where: { organizationId }, select: { mappingType: true, normalizedSourceValue: true, targetTestId: true, targetUnitId: true } }),
   ]);
 
   const testMap = new Map<string, typeof tests>();
@@ -87,15 +88,30 @@ async function analyze(batchId: string, organizationId: string) {
     }
   }
 
+  const reviewedTestAliases = new Map<string, typeof tests[number]>();
+  const reviewedUnitAliases = new Map<string, typeof units[number]>();
+  for (const mapping of reviewedMappings) {
+    if (mapping.mappingType === "TEST_ALIAS" && mapping.targetTestId) {
+      const target = testById.get(mapping.targetTestId);
+      if (target) reviewedTestAliases.set(mapping.normalizedSourceValue, target);
+    }
+    if (mapping.mappingType === "UNIT_ALIAS" && mapping.targetUnitId) {
+      const target = unitById.get(mapping.targetUnitId);
+      if (target) reviewedUnitAliases.set(mapping.normalizedSourceValue, target);
+    }
+  }
+
   const analyzed = rows.map((row) => {
     const n = object(row.normalizedData);
     const s = object(row.sourceData);
     const testName = text(n.testName || s["test name"] || s.Testname);
-    const exactMatches = testMap.get(key(testName)) || [];
-    const looseMatches = testMap.get(looseKey(testName)) || [];
+    const reviewedTest = reviewedTestAliases.get(looseKey(testName));
+    const exactMatches = reviewedTest ? [reviewedTest] : (testMap.get(key(testName)) || []);
+    const looseMatches = reviewedTest ? [reviewedTest] : (testMap.get(looseKey(testName)) || []);
     const matches = exactMatches.length ? exactMatches : looseMatches;
     const rangeUnit = text(n.unit || s["test unit"] || s.unit);
-    const explicitMappedUnit = rangeUnit ? (unitMap.get(key(rangeUnit)) || unitMap.get(unitKey(rangeUnit))) : undefined;
+    const reviewedUnit = rangeUnit ? reviewedUnitAliases.get(unitKey(rangeUnit)) : undefined;
+    const explicitMappedUnit = rangeUnit ? (reviewedUnit || unitMap.get(key(rangeUnit)) || unitMap.get(unitKey(rangeUnit))) : undefined;
     const mappedSex = sex(n.sex ?? s.sex);
     const from = decimal(n.ageFrom ?? s.agefrom);
     const to = decimal(n.ageTo ?? s.ageto);
@@ -156,6 +172,8 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
       unitConflicts: topValues("TEST_UNIT_CONFLICT", (item) => `${item.testName} | ${item.rangeUnit}`),
       emptyIntervals: topValues("EMPTY_REFERENCE_INTERVAL", (item) => item.testName),
     },
+    testOptions: tests.map((test) => ({ id: test.id, code: test.code, nameEn: test.nameEn })).sort((a,b) => a.nameEn.localeCompare(b.nameEn)),
+    unitOptions: units.map((unit) => ({ id: unit.id, code: unit.code, symbol: unit.symbol })).sort((a,b) => a.symbol.localeCompare(b.symbol)),
   });
 }
 
