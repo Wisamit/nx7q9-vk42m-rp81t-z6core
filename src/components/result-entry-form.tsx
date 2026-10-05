@@ -14,6 +14,15 @@ type ResultField = {
   currentFlag: string | null;
   referenceDisplay: string | null;
   critical: boolean;
+  deltaEvaluation: string | null;
+  deltaDisplay: string | null;
+};
+
+type CommentTemplateOption = {
+  id: string;
+  code: string;
+  nameEn: string;
+  textEn: string;
 };
 
 export function ResultEntryForm({
@@ -25,6 +34,7 @@ export function ResultEntryForm({
   resultId,
   resultStatus,
   canVerify,
+  commentTemplates,
 }: {
   orderItemId: string;
   specimenId: string;
@@ -34,6 +44,7 @@ export function ResultEntryForm({
   resultId: string | null;
   resultStatus: string | null;
   canVerify: boolean;
+  commentTemplates: CommentTemplateOption[];
 }) {
   const router = useRouter();
   const [values, setValues] = useState<Record<string, string>>(
@@ -144,12 +155,26 @@ export function ResultEntryForm({
           <div className="result-field-reference">
             <span>{field.referenceDisplay || "No active reference interval"}</span>
             {field.currentFlag && <strong>{field.currentFlag}</strong>}
+            {field.deltaEvaluation && field.deltaEvaluation !== "NOT_CONFIGURED" && <span className={field.deltaEvaluation === "EXCEEDED" ? "delta-exceeded" : "delta-ok"}>
+              Delta: {field.deltaDisplay || field.deltaEvaluation}
+            </span>}
           </div>
         </div>;
       })}
     </div>
 
     <label className="result-comments">Comments
+      {!locked && commentTemplates.length > 0 && <select
+        defaultValue=""
+        onChange={(event) => {
+          const template = commentTemplates.find((item) => item.id === event.target.value);
+          if (template) setNote((current) => current ? current + "\n" + template.textEn : template.textEn);
+          event.target.value = "";
+        }}
+      >
+        <option value="">Insert comment template…</option>
+        {commentTemplates.map((template) => <option key={template.id} value={template.id}>{template.code} — {template.nameEn}</option>)}
+      </select>}
       <textarea rows={3} value={note} onChange={(event) => setNote(event.target.value)} disabled={locked} />
     </label>
 

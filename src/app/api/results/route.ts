@@ -3,6 +3,7 @@ import { Prisma } from "../../../../generated/prisma/client";
 import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { numericFlag, resolveReferenceInterval } from "@/lib/result-reference";
+import { evaluateDelta } from "@/lib/delta-check";
 
 function text(value: unknown, max = 5000) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -136,6 +137,7 @@ export async function POST(request: Request) {
     parsed: NonNullable<ReturnType<typeof parseValue>>;
     interval: Awaited<ReturnType<typeof resolveReferenceInterval>> | null;
     flag: ReturnType<typeof numericFlag>;
+    delta: Awaited<ReturnType<typeof evaluateDelta>>;
   }> = [];
 
   try {
@@ -156,11 +158,32 @@ export async function POST(request: Request) {
         ? numericFlag(parsed.valueNumeric, interval)
         : { flag: "UNKNOWN" as const, isCritical: false };
 
+      const delta = parsed.valueNumeric !== null
+        ? await evaluateDelta(prisma, {
+            organizationId: session.user.organizationId,
+            patientId: orderItem.order.patientId,
+            testId: orderItem.testId,
+            componentId: component.componentId,
+            performingBranchId,
+            methodId: orderItem.test.methodId,
+            currentValue: parsed.valueNumeric,
+          })
+        : {
+            evaluation: "NOT_CONFIGURED" as const,
+            previousValue: null,
+            previousResultAt: null,
+            deltaAbsolute: null,
+            deltaPercent: null,
+            absoluteLimit: null,
+            percentLimit: null,
+          };
+
       prepared.push({
         ...component,
         parsed,
         interval,
         flag,
+        delta,
       });
     }
   } catch (error) {
@@ -231,6 +254,13 @@ export async function POST(request: Request) {
           criticalHighSnapshot: item.interval?.criticalHigh || null,
           flag: item.flag.flag,
           isCritical: item.flag.isCritical,
+          deltaEvaluation: item.delta.evaluation,
+          previousValueSnapshot: item.delta.previousValue,
+          previousResultAtSnapshot: item.delta.previousResultAt,
+          deltaAbsoluteSnapshot: item.delta.deltaAbsolute,
+          deltaPercentSnapshot: item.delta.deltaPercent,
+          deltaAbsoluteLimitSnapshot: item.delta.absoluteLimit,
+          deltaPercentLimitSnapshot: item.delta.percentLimit,
         },
       });
     }
@@ -299,6 +329,9 @@ export async function POST(request: Request) {
             flag: item.flag.flag,
             critical: item.flag.isCritical,
             referenceIntervalId: item.interval?.id || null,
+            deltaEvaluation: item.delta.evaluation,
+            deltaAbsolute: item.delta.deltaAbsolute?.toString() || null,
+            deltaPercent: item.delta.deltaPercent?.toString() || null,
           })),
         },
         ipAddress: ctx.ipAddress,

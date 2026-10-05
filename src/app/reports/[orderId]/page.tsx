@@ -1,6 +1,9 @@
 import Link from "next/link";
+import Image from "next/image";
+import QRCode from "qrcode";
+import { headers } from "next/headers";
 import { notFound } from "next/navigation";
-import { canAccessBranch, requirePermission } from "@/lib/auth";
+import { canAccessBranch, permissionSet, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { PrintReportButton } from "@/components/print-report-button";
 
@@ -78,13 +81,14 @@ function referenceText(value: ReportValue) {
 export default async function DiagnosticReportPage({ params }: { params: Promise<{ orderId: string }> }) {
   const session = await requirePermission("reports.view");
   const { orderId } = await params;
+  const permissions = permissionSet(session);
 
   const report = await prisma.diagnosticReport.findFirst({
     where: { orderId, organizationId: session.user.organizationId },
     include: {
       order: { include: { orderingBranch: true } },
       versions: {
-        include: { issuedBy: true, branch: true },
+        include: { issuedBy: true, branch: true, deliveries: { include: { performedBy: true }, orderBy: { occurredAt: "desc" } } },
         orderBy: { version: "desc" },
       },
     },
@@ -104,6 +108,13 @@ export default async function DiagnosticReportPage({ params }: { params: Promise
   }
 
   const snapshot = latest.contentSnapshot as unknown as Snapshot;
+  const headerStore = await headers();
+  const host = headerStore.get("x-forwarded-host") || headerStore.get("host") || "";
+  const protocol = headerStore.get("x-forwarded-proto") || "https";
+  const configuredBaseUrl = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "");
+  const baseUrl = configuredBaseUrl || (host ? protocol + "://" + host : "");
+  const verificationUrl = baseUrl ? `${baseUrl}/verify/report/${latest.verificationToken}` : "";
+  const qrDataUrl = verificationUrl ? await QRCode.toDataURL(verificationUrl, { width: 132, margin: 1 }) : "";
 
   return <main className="report-shell">
     <div className="report-toolbar no-print">
@@ -113,7 +124,7 @@ export default async function DiagnosticReportPage({ params }: { params: Promise
         <p className="muted">Version {latest.version} · {latest.status}</p>
       </div>
       <div className="header-actions">
-        <PrintReportButton />
+        {permissions.has("reports.deliver") && <PrintReportButton reportVersionId={latest.id} canRecordDelivery />}
         <Link className="secondary-link" href={`/orders/${orderId}`}>Back to Order</Link>
       </div>
     </div>
@@ -128,9 +139,11 @@ export default async function DiagnosticReportPage({ params }: { params: Promise
           <p>{[snapshot.branch.phone, snapshot.branch.email].filter(Boolean).join(" · ")}</p>
         </div>
         <div className="report-version-stamp">
+          {qrDataUrl && <Image src={qrDataUrl} alt="Report verification QR code" width={104} height={104} unoptimized />}
           <strong>{latest.status}</strong>
           <span>Report version {latest.version}</span>
           <span>Issued {latest.issuedAt.toISOString().replace("T"," ").slice(0,19)}</span>
+          <span>Scan QR to verify</span>
         </div>
       </header>
 
@@ -199,9 +212,15 @@ export default async function DiagnosticReportPage({ params }: { params: Promise
         <div>
           <span>Issued by: {latest.issuedBy.displayNameEn}</span>
           <span>Verification token: {latest.verificationToken.slice(0,16)}…</span>
+          {verificationUrl && <span className="verification-url">{verificationUrl}</span>}
         </div>
       </footer>
     </article>
+
+    {latest.deliveries.length > 0 && <section className="table-card report-history no-print">
+      <div className="table-toolbar"><h2>Delivery History</h2><span>{latest.deliveries.length} event(s)</span></div>
+      <div className="table-wrap"><table><thead><tr><th>Time</th><th>Channel</th><th>Status</th><th>Recipient</th><th>User</th></tr></thead><tbody>{latest.deliveries.map(event => <tr key={event.id}><td>{event.occurredAt.toISOString().replace("T"," ").slice(0,19)}</td><td>{event.channel}</td><td>{event.status}</td><td>{event.recipient || "—"}</td><td>{event.performedBy?.displayNameEn || "System"}</td></tr>)}</tbody></table></div>
+    </section>}
 
     <section className="table-card report-history no-print">
       <div className="table-toolbar"><h2>Report Version History</h2><span>{report.versions.length} version(s)</span></div>

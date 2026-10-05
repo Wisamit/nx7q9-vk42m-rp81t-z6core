@@ -82,6 +82,19 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
   if (!item) notFound();
 
   const latestResult = item.results[0] || null;
+  const commentTemplates = await prisma.resultCommentTemplate.findMany({
+    where: {
+      organizationId: session.user.organizationId,
+      status: "ACTIVE",
+      OR: [
+        { scope: "ORGANIZATION" },
+        { scope: "TEST", testId: item.testId },
+        { scope: "COMPONENT", testId: item.testId, componentId: { in: item.test.components.map(component => component.id) } },
+      ],
+    },
+    select: { id: true, code: true, nameEn: true, textEn: true },
+    orderBy: { nameEn: "asc" },
+  });
   const readySpecimen = latestResult?.specimen
     || item.specimenLinks.map(link => link.specimen).find(specimen =>
       ["RECEIVED","IN_PROCESS"].includes(specimen.status) &&
@@ -149,6 +162,13 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
       currentFlag: existing?.flag || null,
       referenceDisplay,
       critical: Boolean(existing?.isCritical),
+      deltaEvaluation: existing?.deltaEvaluation || null,
+      deltaDisplay: existing ? [
+        existing.previousValueSnapshot !== null ? "Prev " + existing.previousValueSnapshot.toString() : null,
+        existing.deltaAbsoluteSnapshot !== null ? "Δ " + existing.deltaAbsoluteSnapshot.toString() : null,
+        existing.deltaPercentSnapshot !== null ? existing.deltaPercentSnapshot.toString() + "%" : null,
+        existing.deltaEvaluation,
+      ].filter(Boolean).join(" · ") : null,
     };
   }));
 
@@ -198,6 +218,7 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
         resultId={latestResult?.id || null}
         resultStatus={latestResult?.status || null}
         canVerify={permissions.has("results.verify")}
+        commentTemplates={commentTemplates}
       />
     </section>
 
