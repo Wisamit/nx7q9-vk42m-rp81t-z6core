@@ -1,4 +1,4 @@
-CREATE TABLE `equipment` (
+CREATE TABLE IF NOT EXISTS `equipment` (
   `id` CHAR(36) NOT NULL,
   `organization_id` CHAR(36) NOT NULL,
   `branch_id` CHAR(36) NOT NULL,
@@ -29,7 +29,7 @@ CREATE TABLE `equipment` (
   CONSTRAINT `equipment_analyzer_fkey` FOREIGN KEY (`analyzer_id`) REFERENCES `analyzers`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
-CREATE TABLE `equipment_documents` (
+CREATE TABLE IF NOT EXISTS `equipment_documents` (
   `id` CHAR(36) NOT NULL,
   `equipment_id` CHAR(36) NOT NULL,
   `document_type` VARCHAR(80) NOT NULL,
@@ -45,7 +45,7 @@ CREATE TABLE `equipment_documents` (
   CONSTRAINT `equipment_documents_equipment_fkey` FOREIGN KEY (`equipment_id`) REFERENCES `equipment`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
-CREATE TABLE `maintenance_plans` (
+CREATE TABLE IF NOT EXISTS `maintenance_plans` (
   `id` CHAR(36) NOT NULL,
   `equipment_id` CHAR(36) NOT NULL,
   `name` VARCHAR(220) NOT NULL,
@@ -61,7 +61,7 @@ CREATE TABLE `maintenance_plans` (
   CONSTRAINT `maintenance_plans_equipment_fkey` FOREIGN KEY (`equipment_id`) REFERENCES `equipment`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
-CREATE TABLE `maintenance_events` (
+CREATE TABLE IF NOT EXISTS `maintenance_events` (
   `id` CHAR(36) NOT NULL,
   `equipment_id` CHAR(36) NOT NULL,
   `analyzer_id` CHAR(36) NULL,
@@ -88,7 +88,7 @@ CREATE TABLE `maintenance_events` (
   CONSTRAINT `maintenance_events_performed_by_fkey` FOREIGN KEY (`performed_by_user_id`) REFERENCES `users`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
-CREATE TABLE `calibration_events` (
+CREATE TABLE IF NOT EXISTS `calibration_events` (
   `id` CHAR(36) NOT NULL,
   `equipment_id` CHAR(36) NOT NULL,
   `analyzer_id` CHAR(36) NULL,
@@ -112,7 +112,7 @@ CREATE TABLE `calibration_events` (
   CONSTRAINT `calibration_events_approved_by_fkey` FOREIGN KEY (`approved_by_user_id`) REFERENCES `users`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
-CREATE TABLE `equipment_downtime` (
+CREATE TABLE IF NOT EXISTS `equipment_downtime` (
   `id` CHAR(36) NOT NULL,
   `equipment_id` CHAR(36) NOT NULL,
   `analyzer_id` CHAR(36) NULL,
@@ -131,7 +131,7 @@ CREATE TABLE `equipment_downtime` (
   CONSTRAINT `equipment_downtime_analyzer_fkey` FOREIGN KEY (`analyzer_id`) REFERENCES `analyzers`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
-CREATE TABLE `qc_materials` (
+CREATE TABLE IF NOT EXISTS `qc_materials` (
   `id` CHAR(36) NOT NULL,
   `organization_id` CHAR(36) NOT NULL,
   `code` VARCHAR(80) NOT NULL,
@@ -149,7 +149,7 @@ CREATE TABLE `qc_materials` (
   CONSTRAINT `qc_materials_org_fkey` FOREIGN KEY (`organization_id`) REFERENCES `organizations`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
-CREATE TABLE `qc_lots` (
+CREATE TABLE IF NOT EXISTS `qc_lots` (
   `id` CHAR(36) NOT NULL,
   `organization_id` CHAR(36) NOT NULL,
   `material_id` CHAR(36) NOT NULL,
@@ -171,9 +171,10 @@ CREATE TABLE `qc_lots` (
   CONSTRAINT `qc_lots_inventory_lot_fkey` FOREIGN KEY (`inventory_lot_id`) REFERENCES `inventory_lots`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
-CREATE TABLE `qc_targets` (
+CREATE TABLE IF NOT EXISTS `qc_targets` (
   `id` CHAR(36) NOT NULL,
   `organization_id` CHAR(36) NOT NULL,
+  `qc_lot_id` CHAR(36) NOT NULL,
   `analyzer_id` CHAR(36) NOT NULL,
   `test_id` CHAR(36) NOT NULL,
   `component_id` CHAR(36) NULL,
@@ -199,7 +200,7 @@ CREATE TABLE `qc_targets` (
   CONSTRAINT `qc_targets_component_fkey` FOREIGN KEY (`component_id`) REFERENCES `test_components`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
-CREATE TABLE `qc_runs` (
+CREATE TABLE IF NOT EXISTS `qc_runs` (
   `id` CHAR(36) NOT NULL,
   `organization_id` CHAR(36) NOT NULL,
   `branch_id` CHAR(36) NOT NULL,
@@ -219,7 +220,7 @@ CREATE TABLE `qc_runs` (
   CONSTRAINT `qc_runs_operator_fkey` FOREIGN KEY (`operator_user_id`) REFERENCES `users`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
-CREATE TABLE `qc_results` (
+CREATE TABLE IF NOT EXISTS `qc_results` (
   `id` CHAR(36) NOT NULL,
   `qc_run_id` CHAR(36) NOT NULL,
   `target_id` CHAR(36) NOT NULL,
@@ -239,7 +240,7 @@ CREATE TABLE `qc_results` (
   CONSTRAINT `qc_results_target_fkey` FOREIGN KEY (`target_id`) REFERENCES `qc_targets`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
-CREATE TABLE `qc_rule_violations` (
+CREATE TABLE IF NOT EXISTS `qc_rule_violations` (
   `id` CHAR(36) NOT NULL,
   `qc_run_id` CHAR(36) NOT NULL,
   `target_id` CHAR(36) NOT NULL,
@@ -262,7 +263,7 @@ CREATE TABLE `qc_rule_violations` (
   CONSTRAINT `qc_rule_violations_resolver_fkey` FOREIGN KEY (`resolved_by_user_id`) REFERENCES `users`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
-CREATE TABLE `qc_actions` (
+CREATE TABLE IF NOT EXISTS `qc_actions` (
   `id` CHAR(36) NOT NULL,
   `violation_id` CHAR(36) NOT NULL,
   `action_type` ENUM('REPEAT_QC','RECALIBRATE','MAINTENANCE','REPLACE_REAGENT','REPLACE_CONTROL','INVESTIGATE','OTHER') NOT NULL,
