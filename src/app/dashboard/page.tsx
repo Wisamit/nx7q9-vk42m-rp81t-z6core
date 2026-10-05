@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { LogoutButton } from "@/components/logout-button";
 import { permissionSet, requireSession } from "@/lib/auth";
 
@@ -25,7 +26,7 @@ export default async function DashboardPage() {
           <article><span>01</span><h2>Organization & Branches</h2><p>{permissions.has("branches.manage") ? "Manage branches and their settings." : "View authorized branches."}</p></article>
           <article><span>02</span><h2>Users & Permissions</h2><p>Role-based permissions and branch scopes.</p></article>
           <article><span>03</span><h2>Audit Log</h2><p>Track security events and significant changes.</p></article>
-          <article className="coming"><span>04</span><h2>Test Catalog</h2><p>Next phase: configuration-driven Test Catalog.</p></article>
+          <Link className="module-link" href="/catalog"><article><span>04</span><h2>Test Catalog</h2><p>Configuration-driven tests, components, specimens and ranges.</p></article></Link>
         </div>
       </section>
     </main>
