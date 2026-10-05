@@ -159,7 +159,7 @@ export default async function DiagnosticReportPage({ params }: { params: Promise
       </div>
     </div>
 
-    <article className="diagnostic-report">
+    <article className="diagnostic-report professional-report">
       <header className="report-header">
         <div>
           <h1>{snapshot.organization.nameEn}</h1>
@@ -170,7 +170,7 @@ export default async function DiagnosticReportPage({ params }: { params: Promise
         </div>
         <div className="report-version-stamp">
           {qrDataUrl && <Image src={qrDataUrl} alt="Report verification QR code" width={104} height={104} unoptimized />}
-          <strong>{latest.status}</strong>
+          <strong className={"status-badge status-" + latest.status.toLowerCase().replaceAll("_","-")}>{latest.status}</strong>
           <span>Report version {latest.version}</span>
           <span>Issued {latest.issuedAt.toISOString().replace("T"," ").slice(0,19)}</span>
           <span>Scan QR to verify</span>
@@ -213,7 +213,7 @@ export default async function DiagnosticReportPage({ params }: { params: Promise
                   {value.componentNameAr && <small dir="rtl">{value.componentNameAr}</small>}
                 </td>
                 <td><strong>{value.displayValue}</strong></td>
-                <td>{value.flag === "UNKNOWN" ? "—" : value.flag}</td>
+                <td>{value.flag === "UNKNOWN" ? "—" : <span className={"result-flag-badge flag-" + value.flag.toLowerCase().replaceAll("_","-")}>{value.flag}</span>}</td>
                 <td>{value.unit || "—"}</td>
                 <td>{referenceText(value)}</td>
               </tr>),
