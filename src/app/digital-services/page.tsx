@@ -1,13 +1,24 @@
 import Link from "next/link";
-import { permissionSet, requirePermission } from "@/lib/auth";
+import { redirect } from "next/navigation";
+import { permissionSet, requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { DigitalServicesConsole } from "@/components/digital-services-console";
 
 export const dynamic = "force-dynamic";
 
 export default async function DigitalServicesPage() {
-  const session = await requirePermission("appointments.view");
+  const session = await requireSession();
   const permissions = permissionSet(session);
+  const canOpen = [
+    "portal_accounts.manage",
+    "appointments.view",
+    "appointments.manage",
+    "home_collection.view",
+    "home_collection.manage",
+    "queue.view",
+    "queue.manage",
+  ].some(code => permissions.has(code));
+  if (!canOpen) redirect("/dashboard?forbidden=1");
   const branchIds = session.user.branchScopes.map(scope => scope.branchId);
   const now = new Date();
 
