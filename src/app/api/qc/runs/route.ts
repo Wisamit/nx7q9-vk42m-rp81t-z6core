@@ -18,7 +18,6 @@ export async function POST(request: Request) {
   const ctx = await requestContext();
   const body = await request.json().catch(() => null) as {
     analyzerId?: unknown;
-    qcLotId?: unknown;
     runAt?: unknown;
     notes?: unknown;
     results?: Array<{ targetId?: unknown; observedValue?: unknown }>;
@@ -29,9 +28,8 @@ export async function POST(request: Request) {
   }
 
   const analyzerId = text(body.analyzerId, 36);
-  const qcLotId = text(body.qcLotId, 36);
   const runAt = body.runAt ? new Date(String(body.runAt)) : new Date();
-  if (!analyzerId || !qcLotId || Number.isNaN(runAt.getTime())) {
+  if (!analyzerId || Number.isNaN(runAt.getTime())) {
     return NextResponse.json({ error: "missing_or_invalid_fields" }, { status: 400 });
   }
 
@@ -50,33 +48,38 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "invalid_qc_observed_value" }, { status: 400 });
   }
 
-  const [analyzer, lot, targets] = await Promise.all([
+  const [analyzer, targets] = await Promise.all([
     prisma.analyzer.findFirst({
       where: { id: analyzerId, organizationId: session.user.organizationId, status: "ACTIVE" },
       include: { equipment: true },
-    }),
-    prisma.qcLot.findFirst({
-      where: { id: qcLotId, organizationId: session.user.organizationId, status: "ACTIVE" },
     }),
     prisma.qcTarget.findMany({
       where: {
         id: { in: targetIds },
         organizationId: session.user.organizationId,
         analyzerId,
-        qcLotId,
         status: "ACTIVE",
         effectiveFrom: { lte: runAt },
         OR: [{ effectiveTo: null }, { effectiveTo: { gte: runAt } }],
       },
-      include: { test: true, component: true },
+      include: { test: true, component: true, qcLot: true },
     }),
   ]);
 
-  if (!analyzer || !lot) return NextResponse.json({ error: "analyzer_or_qc_lot_not_found" }, { status: 404 });
+  if (!analyzer) return NextResponse.json({ error: "analyzer_not_found" }, { status: 404 });
   if (!canAccessBranch(session, analyzer.branchId)) return NextResponse.json({ error: "branch_forbidden" }, { status: 403 });
   if (!analyzer.equipment) return NextResponse.json({ error: "analyzer_equipment_registration_required" }, { status: 409 });
   if (targets.length !== targetIds.length) return NextResponse.json({ error: "qc_target_not_found_or_inactive" }, { status: 404 });
-  if (lot.expiryDate && lot.expiryDate < runAt) return NextResponse.json({ error: "qc_lot_expired" }, { status: 409 });
+  const invalidLot = targets.find(target =>
+    target.qcLot.status !== "ACTIVE" || (target.qcLot.expiryDate && target.qcLot.expiryDate < runAt)
+  );
+  if (invalidLot) {
+    return NextResponse.json({
+      error: invalidLot.qcLot.status !== "ACTIVE" ? "qc_lot_not_active" : "qc_lot_expired",
+      qcLotId: invalidLot.qcLotId,
+      targetId: invalidLot.id,
+    }, { status: 409 });
+  }
 
   const targetById = new Map(targets.map(target => [target.id, target]));
 
@@ -87,7 +90,6 @@ export async function POST(request: Request) {
           organizationId: session.user.organizationId,
           branchId: analyzer.branchId,
           analyzerId,
-          qcLotId,
           runAt,
           operatorUserId: session.user.id,
           notes: text(body.notes) || null,
@@ -198,7 +200,7 @@ export async function POST(request: Request) {
           newValues: {
             analyzerId,
             equipmentId: analyzer.equipment?.id || null,
-            qcLotId,
+            qcLotIds: [...new Set(targets.map(target => target.qcLotId))],
             runAt,
             status: runStatus,
             results: evaluated.map(item => ({
