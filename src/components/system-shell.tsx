@@ -46,6 +46,7 @@ const groups: Array<{ labelEn: string; labelAr: string; items: NavItem[] }> = [
       { href: "/reports", labelEn: "Reports", labelAr: "التقارير", short: "RP", permission: "reports.view" },
       { href: "/critical-results", labelEn: "Critical Results", labelAr: "النتائج الحرجة", short: "CR", permission: "critical.communicate" },
       { href: "/microbiology", labelEn: "Microbiology", labelAr: "الأحياء الدقيقة", short: "MB", permission: "microbiology.view" },
+      { href: "/send-outs", labelEn: "Send-out Labs", labelAr: "المختبرات المرجعية", short: "SO", permission: "sendouts.view" },
     ],
   },
   {
