@@ -29,7 +29,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!canAccessBranch(session, microbiologyCase.performingBranchId)) {
     return NextResponse.json({ error: "branch_forbidden" }, { status: 403 });
   }
-  if (["FINAL","CANCELLED"].includes(microbiologyCase.status)) {
+  if (microbiologyCase.resultId || ["FINAL","CANCELLED"].includes(microbiologyCase.status)) {
     return NextResponse.json({ error: "microbiology_case_locked", status: microbiologyCase.status }, { status: 409 });
   }
 
