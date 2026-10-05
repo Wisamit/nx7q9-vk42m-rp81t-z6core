@@ -509,6 +509,7 @@ enum QualityDocumentType {
 enum QualityDocumentVersionStatus {
   DRAFT
   IN_REVIEW
+  REVIEWED
   APPROVED
   EFFECTIVE
   RETIRED
