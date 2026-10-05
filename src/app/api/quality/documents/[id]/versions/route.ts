@@ -31,7 +31,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (document.branchId && !canAccessBranch(session, document.branchId)) return NextResponse.json({ error: "branch_forbidden" }, { status: 403 });
 
   const latest = document.versions[0] || null;
-  if (latest && ["DRAFT","IN_REVIEW","APPROVED"].includes(latest.status)) {
+  if (latest && ["DRAFT","IN_REVIEW","REVIEWED","APPROVED"].includes(latest.status)) {
     return NextResponse.json({ error: "unreleased_document_version_exists", version: latest.version, status: latest.status }, { status: 409 });
   }
 
