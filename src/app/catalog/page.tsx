@@ -1,22 +1,23 @@
 import Link from "next/link";
 import { requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { CatalogManager } from "@/components/catalog-manager";
 
 export const dynamic = "force-dynamic";
 
 export default async function CatalogPage() {
   const session = await requirePermission("catalog.view");
-  const tests = await prisma.labTest.findMany({
+  const [tests, departments, specimens, containers, methods, units] = await Promise.all([prisma.labTest.findMany({
     where: { organizationId: session.user.organizationId },
     include: { department: true, specimenType: true, components: true },
     orderBy: { nameEn: "asc" },
-  });
+  }), prisma.department.findMany({ where: { organizationId: session.user.organizationId, status: "ACTIVE" }, orderBy: { nameEn: "asc" } }), prisma.specimenType.findMany({ where: { organizationId: session.user.organizationId, status: "ACTIVE" }, orderBy: { nameEn: "asc" } }), prisma.container.findMany({ where: { organizationId: session.user.organizationId, status: "ACTIVE" }, orderBy: { nameEn: "asc" } }), prisma.method.findMany({ where: { organizationId: session.user.organizationId, status: "ACTIVE" }, orderBy: { nameEn: "asc" } }), prisma.unit.findMany({ where: { organizationId: session.user.organizationId, status: "ACTIVE" }, orderBy: { code: "asc" } })]);
 
   return (
     <main className="catalog-shell">
       <header className="page-header">
         <div><p className="eyebrow">Master Data</p><h1>Test Catalog</h1><p className="muted">Configuration-driven tests, components, specimens, methods and reference intervals.</p></div>
-        <Link className="secondary-link" href="/dashboard">Back to Dashboard</Link>
+        <div className="header-actions"><CatalogManager departments={departments} specimens={specimens} containers={containers} methods={methods} units={units} /><Link className="secondary-link" href="/dashboard">Back to Dashboard</Link></div>
       </header>
       <section className="catalog-stats">
         <article><strong>{tests.length}</strong><span>Tests</span></article>
