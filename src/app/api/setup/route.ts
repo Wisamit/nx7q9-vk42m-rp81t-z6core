@@ -54,6 +54,7 @@ const FOUNDATION_PERMISSIONS = [
   ["analyzers.view", "integrations", "View analyzers, mappings and interface messages"],
   ["analyzers.manage", "integrations", "Manage analyzers, bridge credentials and mappings"],
   ["analyzers.replay", "integrations", "Replay analyzer interface messages and error queue items"],
+  ["analyzers.import", "integrations", "Import mapped analyzer observations into laboratory results"],
 ] as const;
 
 function text(value: unknown, max = 200) {
