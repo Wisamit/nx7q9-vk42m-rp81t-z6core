@@ -179,3 +179,21 @@ html[data-density="compact"] :where(.detail-card,.dashboard-panel,.settings-card
 
 @media(max-width:1180px){.system-clock{display:none}.system-security-link span{display:none}.system-security-link{width:36px;padding:0;justify-content:center}}
 @media(max-width:760px){.settings-grid,.branding-upload-grid,.theme-editor-grid,.color-grid{grid-template-columns:1fr}.settings-savebar{bottom:8px}.system-theme-toggle{display:none}}
+
+
+.admin-grid{display:grid;gap:16px}
+.admin-table-card{margin-top:0}
+.admin-checklist,.permission-group{border:1px solid var(--fl-border);border-radius:10px;padding:12px;background:var(--fl-bg)}
+.admin-checklist legend,.permission-group legend{padding:0 6px;font-size:11px;font-weight:800;color:var(--fl-muted);text-transform:uppercase;letter-spacing:.05em}
+.admin-checklist label{display:flex;align-items:center;gap:8px;padding:6px 0;font-size:12px;font-weight:600}
+.admin-checklist input,.permission-group input{width:auto!important}
+.permission-groups{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.permission-group{display:grid;gap:3px}
+.permission-group label{display:flex;align-items:flex-start;gap:8px;padding:7px 4px;border-bottom:1px solid var(--fl-border);font-weight:500}
+.permission-group label:last-child{border-bottom:0}
+.permission-group label>span{display:grid;gap:2px}
+.permission-group strong{font-size:10px;color:var(--fl-text);font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.permission-group small{font-size:9px;color:var(--fl-muted);line-height:1.4}
+.table-subtext{display:block;margin-top:3px;font-size:9px;color:var(--fl-muted)}
+.compact-action{padding:7px 9px!important;font-size:10px!important}
+@media(max-width:900px){.permission-groups{grid-template-columns:1fr}}
