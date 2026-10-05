@@ -4237,6 +4237,7 @@ model WebhookSubscription {
 
   organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   endpoint     IntegrationEndpoint @relation(fields: [endpointId], references: [id], onDelete: Restrict)
+  deliveries  WebhookDelivery[]
 
   @@unique([endpointId, eventType])
   @@index([organizationId, eventType, status])
