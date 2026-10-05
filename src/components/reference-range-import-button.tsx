@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
-type DetailItem = { value: string; count: number };
+type TestSuggestion = { id: string; code: string; nameEn: string; score: number };\ntype UnitSuggestion = { id: string; code: string; symbol: string; score: number };\ntype DetailItem = { value: string; count: number; suggestion?: TestSuggestion | UnitSuggestion | null };
 type TestOption = { id: string; code: string; nameEn: string };
 type UnitOption = { id: string; code: string; symbol: string };
 type Preview = {
@@ -110,6 +110,9 @@ export function ReferenceRangeImportButton({ batchId }: { batchId: string }) {
           const mapKey = `TEST_ALIAS:${item.value}`;
           return <div className="mapping-row" key={item.value}>
             <div className="mapping-source"><span>{item.value}</span><strong>{item.count}</strong></div>
+            {item.suggestion && "nameEn" in item.suggestion && <button className="suggestion-button" type="button" onClick={() => setMappingTargets(v => ({ ...v, [mapKey]: item.suggestion!.id }))}>
+              Suggested: {item.suggestion.code} — {item.suggestion.nameEn} ({item.suggestion.score}%)
+            </button>}
             <select value={mappingTargets[mapKey] || ""} onChange={e => setMappingTargets(v => ({ ...v, [mapKey]: e.target.value }))}>
               <option value="">Map to test…</option>
               {(preview.testOptions || []).map(test => <option key={test.id} value={test.id}>{test.code} — {test.nameEn}</option>)}
@@ -126,6 +129,9 @@ export function ReferenceRangeImportButton({ batchId }: { batchId: string }) {
           const mapKey = `UNIT_ALIAS:${item.value}`;
           return <div className="mapping-row" key={item.value}>
             <div className="mapping-source"><span>{item.value}</span><strong>{item.count}</strong></div>
+            {item.suggestion && "symbol" in item.suggestion && <button className="suggestion-button" type="button" onClick={() => setMappingTargets(v => ({ ...v, [mapKey]: item.suggestion!.id }))}>
+              Suggested: {item.suggestion.symbol} ({item.suggestion.code}) — {item.suggestion.score}%
+            </button>}
             <select value={mappingTargets[mapKey] || ""} onChange={e => setMappingTargets(v => ({ ...v, [mapKey]: e.target.value }))}>
               <option value="">Map to unit…</option>
               {(preview.unitOptions || []).map(unit => <option key={unit.id} value={unit.id}>{unit.symbol} ({unit.code})</option>)}
