@@ -6,6 +6,14 @@ function object(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 function text(value: unknown) { return typeof value === "string" ? value.trim() : ""; }
+function issueCodes(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return [];
+    const code = (item as Record<string, unknown>).code;
+    return typeof code === "string" ? [code] : [];
+  });
+}
 function key(value: string) { return value.trim().replace(/\s+/g, " ").toUpperCase(); }
 function looseKey(value: string) {
   return value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/[^A-Z0-9]+/g, "");
@@ -234,6 +242,14 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
   const batch = await prisma.catalogImportBatch.findFirst({ where: { id, organizationId: session.user.organizationId } });
   if (!batch) return NextResponse.json({ error: "batch_not_found" }, { status: 404 });
   const analysis = await analyze(batch.id, session.user.organizationId);
+  const generatedTestWarnings = await prisma.catalogImportRow.findMany({
+    where: { batchId: batch.id, entityType: "TEST", status: "WARNING" },
+    select: { validationIssues: true },
+  });
+  const generatedTestsRemaining = generatedTestWarnings.filter((row) => {
+    const codes = issueCodes(row.validationIssues);
+    return codes.length === 1 && codes[0] === "GENERATED_TEST_CODE";
+  }).length;
   const topValues = (reason: string, pick: (item: typeof analysis.review[number]) => string) => {
     const counts = new Map<string, number>();
     for (const item of analysis.review.filter((row) => row.reason === reason)) {
@@ -260,6 +276,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
     safe: analysis.safe.length,
     review: analysis.review.length,
     reasons: analysis.reasons,
+    generatedTestsRemaining,
     details: {
       unmatchedTests,
       unmappedUnits,
