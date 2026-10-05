@@ -3801,3 +3801,197 @@ model InternalAuditFinding {
   @@index([capaId])
   @@map("internal_audit_findings")
 }
+
+
+model PortalAccount {
+  id                  String              @id @default(uuid()) @db.Char(36)
+  organizationId      String              @map("organization_id") @db.Char(36)
+  type                PortalAccountType
+  patientId           String?             @unique @map("patient_id") @db.Char(36)
+  referrerId          String?             @unique @map("referrer_id") @db.Char(36)
+  clientId            String?             @unique @map("client_id") @db.Char(36)
+  email               String?             @db.VarChar(191)
+  normalizedEmail     String?             @map("normalized_email") @db.VarChar(191)
+  phone               String?             @db.VarChar(50)
+  normalizedPhone     String?             @map("normalized_phone") @db.VarChar(50)
+  passwordHash        String?             @map("password_hash") @db.VarChar(255)
+  preferredLocale     String              @default("en") @map("preferred_locale") @db.VarChar(10)
+  status              PortalAccountStatus @default(INVITED)
+  contactVerifiedAt   DateTime?           @map("contact_verified_at") @db.DateTime(3)
+  lastLoginAt         DateTime?           @map("last_login_at") @db.DateTime(3)
+  failedLoginAttempts Int                 @default(0) @map("failed_login_attempts")
+  lockedUntil         DateTime?           @map("locked_until") @db.DateTime(3)
+  createdAt           DateTime            @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt           DateTime            @updatedAt @map("updated_at") @db.DateTime(3)
+  deactivatedAt       DateTime?           @map("deactivated_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  patient      Patient?     @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  referrer     Referrer?    @relation(fields: [referrerId], references: [id], onDelete: Restrict)
+  client       Client?      @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  sessions     PortalSession[]
+  otpChallenges PortalOtpChallenge[]
+  createdAppointments Appointment[] @relation("PortalAppointmentCreator")
+
+  @@index([organizationId, type, status])
+  @@index([organizationId, normalizedEmail])
+  @@index([organizationId, normalizedPhone])
+  @@map("portal_accounts")
+}
+
+model PortalSession {
+  id              String    @id @default(uuid()) @db.Char(36)
+  portalAccountId String    @map("portal_account_id") @db.Char(36)
+  tokenHash       String    @unique @map("token_hash") @db.Char(64)
+  ipAddress       String?   @map("ip_address") @db.VarChar(64)
+  userAgent       String?   @map("user_agent") @db.VarChar(500)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.DateTime(3)
+  lastSeenAt      DateTime  @default(now()) @map("last_seen_at") @db.DateTime(3)
+  expiresAt       DateTime  @map("expires_at") @db.DateTime(3)
+  revokedAt       DateTime? @map("revoked_at") @db.DateTime(3)
+
+  portalAccount PortalAccount @relation(fields: [portalAccountId], references: [id], onDelete: Restrict)
+
+  @@index([portalAccountId, expiresAt, revokedAt])
+  @@map("portal_sessions")
+}
+
+model PortalOtpChallenge {
+  id              String           @id @default(uuid()) @db.Char(36)
+  portalAccountId String           @map("portal_account_id") @db.Char(36)
+  purpose         PortalOtpPurpose
+  destination     String           @db.VarChar(191)
+  codeHash        String           @map("code_hash") @db.Char(64)
+  attempts        Int              @default(0)
+  maxAttempts     Int              @default(5) @map("max_attempts")
+  requestedAt     DateTime         @default(now()) @map("requested_at") @db.DateTime(3)
+  expiresAt       DateTime         @map("expires_at") @db.DateTime(3)
+  consumedAt      DateTime?        @map("consumed_at") @db.DateTime(3)
+  requestIp       String?          @map("request_ip") @db.VarChar(64)
+
+  portalAccount PortalAccount @relation(fields: [portalAccountId], references: [id], onDelete: Restrict)
+
+  @@index([portalAccountId, purpose, requestedAt])
+  @@index([expiresAt, consumedAt])
+  @@map("portal_otp_challenges")
+}
+
+model CorporatePortalPatientAccess {
+  id             String       @id @default(uuid()) @db.Char(36)
+  clientId       String       @map("client_id") @db.Char(36)
+  patientId      String       @map("patient_id") @db.Char(36)
+  employeeNumber String?      @map("employee_number") @db.VarChar(100)
+  effectiveFrom  DateTime     @map("effective_from") @db.DateTime(3)
+  effectiveTo    DateTime?    @map("effective_to") @db.DateTime(3)
+  canViewReports Boolean      @default(false) @map("can_view_reports")
+  canBook        Boolean      @default(true) @map("can_book")
+  status         RecordStatus @default(ACTIVE)
+  createdAt      DateTime     @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt      DateTime     @updatedAt @map("updated_at") @db.DateTime(3)
+
+  client  Client  @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Restrict)
+
+  @@unique([clientId, patientId, effectiveFrom])
+  @@index([clientId, status, effectiveFrom, effectiveTo])
+  @@index([patientId, status])
+  @@map("corporate_portal_patient_access")
+}
+
+model Appointment {
+  id                   String            @id @default(uuid()) @db.Char(36)
+  organizationId       String            @map("organization_id") @db.Char(36)
+  branchId             String            @map("branch_id") @db.Char(36)
+  patientId            String            @map("patient_id") @db.Char(36)
+  portalAccountId      String?           @map("portal_account_id") @db.Char(36)
+  createdByUserId      String?           @map("created_by_user_id") @db.Char(36)
+  appointmentNumber    String            @map("appointment_number") @db.VarChar(60)
+  mode                 AppointmentMode   @default(ONSITE)
+  serviceCode          String?           @map("service_code") @db.VarChar(80)
+  serviceNameSnapshot  String            @map("service_name_snapshot") @db.VarChar(220)
+  scheduledStart       DateTime          @map("scheduled_start") @db.DateTime(3)
+  scheduledEnd         DateTime?         @map("scheduled_end") @db.DateTime(3)
+  status               AppointmentStatus @default(REQUESTED)
+  contactPhoneSnapshot String?           @map("contact_phone_snapshot") @db.VarChar(50)
+  addressSnapshot      String?           @map("address_snapshot") @db.Text
+  latitude             Decimal?          @db.Decimal(10, 7)
+  longitude            Decimal?          @db.Decimal(10, 7)
+  notes                String?           @db.Text
+  checkedInAt          DateTime?         @map("checked_in_at") @db.DateTime(3)
+  completedAt          DateTime?         @map("completed_at") @db.DateTime(3)
+  cancelledAt          DateTime?         @map("cancelled_at") @db.DateTime(3)
+  cancellationReason   String?           @map("cancellation_reason") @db.VarChar(1000)
+  createdAt            DateTime          @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt            DateTime          @updatedAt @map("updated_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  branch       Branch       @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  patient      Patient      @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  portalAccount PortalAccount? @relation("PortalAppointmentCreator", fields: [portalAccountId], references: [id], onDelete: Restrict)
+  createdBy    User?        @relation("AppointmentCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  homeCollectionVisit HomeCollectionVisit?
+  queueTicket QueueTicket?
+
+  @@unique([organizationId, appointmentNumber])
+  @@index([branchId, scheduledStart, status])
+  @@index([patientId, scheduledStart])
+  @@index([portalAccountId, createdAt])
+  @@map("appointments")
+}
+
+model HomeCollectionVisit {
+  id                      String               @id @default(uuid()) @db.Char(36)
+  appointmentId           String               @unique @map("appointment_id") @db.Char(36)
+  branchId                String               @map("branch_id") @db.Char(36)
+  assignedCollectorUserId String?              @map("assigned_collector_user_id") @db.Char(36)
+  status                  HomeCollectionStatus @default(SCHEDULED)
+  scheduledDepartureAt    DateTime?            @map("scheduled_departure_at") @db.DateTime(3)
+  dispatchedAt            DateTime?            @map("dispatched_at") @db.DateTime(3)
+  arrivedAt               DateTime?            @map("arrived_at") @db.DateTime(3)
+  collectionStartedAt     DateTime?            @map("collection_started_at") @db.DateTime(3)
+  collectedAt             DateTime?            @map("collected_at") @db.DateTime(3)
+  deliveredToBranchAt     DateTime?            @map("delivered_to_branch_at") @db.DateTime(3)
+  transportNotes          String?              @map("transport_notes") @db.Text
+  createdAt               DateTime             @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt               DateTime             @updatedAt @map("updated_at") @db.DateTime(3)
+
+  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Restrict)
+  branch Branch @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  assignedCollector User? @relation("HomeCollectionCollector", fields: [assignedCollectorUserId], references: [id], onDelete: Restrict)
+
+  @@index([branchId, status, scheduledDepartureAt])
+  @@index([assignedCollectorUserId, status])
+  @@map("home_collection_visits")
+}
+
+model QueueTicket {
+  id               String            @id @default(uuid()) @db.Char(36)
+  organizationId   String            @map("organization_id") @db.Char(36)
+  branchId         String            @map("branch_id") @db.Char(36)
+  patientId        String            @map("patient_id") @db.Char(36)
+  appointmentId    String?           @unique @map("appointment_id") @db.Char(36)
+  ticketNumber     String            @map("ticket_number") @db.VarChar(40)
+  stage            QueueStage
+  status           QueueTicketStatus @default(WAITING)
+  priority         Int               @default(0)
+  counterLabel     String?           @map("counter_label") @db.VarChar(80)
+  issuedByUserId   String?           @map("issued_by_user_id") @db.Char(36)
+  calledByUserId   String?           @map("called_by_user_id") @db.Char(36)
+  issuedAt         DateTime          @default(now()) @map("issued_at") @db.DateTime(3)
+  calledAt         DateTime?         @map("called_at") @db.DateTime(3)
+  serviceStartedAt DateTime?         @map("service_started_at") @db.DateTime(3)
+  completedAt      DateTime?         @map("completed_at") @db.DateTime(3)
+  createdAt        DateTime          @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt        DateTime          @updatedAt @map("updated_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  branch Branch @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  appointment Appointment? @relation(fields: [appointmentId], references: [id], onDelete: Restrict)
+  issuedBy User? @relation("QueueTicketIssuer", fields: [issuedByUserId], references: [id], onDelete: Restrict)
+  calledBy User? @relation("QueueTicketCaller", fields: [calledByUserId], references: [id], onDelete: Restrict)
+
+  @@index([branchId, stage, status, priority, issuedAt])
+  @@index([patientId, issuedAt])
+  @@map("queue_tickets")
+}
