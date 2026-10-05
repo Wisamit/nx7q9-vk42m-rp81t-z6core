@@ -22,7 +22,7 @@ export function normalizeReportTemplateConfiguration(value: unknown): ReportTemp
     ? String(input.languageMode) as ReportTemplateConfiguration["languageMode"]
     : "BILINGUAL";
   const allowedColumns = new Set(["TEST","RESULT","FLAG","UNIT","REFERENCE"]);
-  const columns = Array.isArray(input.columns)
+  const columns: ReportTemplateConfiguration["columns"] = Array.isArray(input.columns)
     ? input.columns.map(String).filter(item => allowedColumns.has(item)) as ReportTemplateConfiguration["columns"]
     : ["TEST","RESULT","FLAG","UNIT","REFERENCE"];
   const clean = (v: unknown, max: number) => typeof v === "string" && v.trim() ? v.trim().slice(0,max) : null;
