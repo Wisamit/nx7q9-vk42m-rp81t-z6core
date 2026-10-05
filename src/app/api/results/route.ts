@@ -134,7 +134,7 @@ export async function POST(request: Request) {
     unitId: string | null;
     unitSnapshot: string | null;
     parsed: NonNullable<ReturnType<typeof parseValue>>;
-    interval: Awaited<ReturnType<typeof resolveReferenceInterval>>;
+    interval: Awaited<ReturnType<typeof resolveReferenceInterval>> | null;
     flag: ReturnType<typeof numericFlag>;
   }> = [];
 
