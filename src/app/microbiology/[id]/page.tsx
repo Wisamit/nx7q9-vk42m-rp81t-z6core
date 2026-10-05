@@ -74,7 +74,7 @@ export default async function MicrobiologyCasePage({ params }: { params: Promise
     }),
   ]);
 
-  const locked = ["FINAL","CANCELLED"].includes(microbiologyCase.status);
+  const locked = ["FINAL","CANCELLED"].includes(microbiologyCase.status) || Boolean(microbiologyCase.result);
 
   return <main className="catalog-shell">
     <header className="page-header">
