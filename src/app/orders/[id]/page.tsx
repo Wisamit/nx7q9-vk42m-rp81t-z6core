@@ -26,6 +26,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         orderBy: { issuedAt: "desc" },
       },
       statusHistory: { include: { changedBy: true }, orderBy: { changedAt: "asc" } },
+      specimens: { include: { specimenType: true, container: true, currentBranch: true, orderItems: { include: { orderItem: true } } }, orderBy: { sequenceNumber: "asc" } },
     },
   });
 
@@ -76,6 +77,23 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
             <td>{item.priceListItem?.priceList.code || "—"}</td>
             <td>{item.finalPriceSnapshot.toString()} {item.currency}</td>
             <td>{item.status}</td>
+          </tr>)}</tbody>
+        </table>
+      </div>
+    </section>
+
+    <section className="table-card detail-section">
+      <div className="table-toolbar"><h2>Specimens</h2><span>{order.specimens.length} planned / historical</span></div>
+      <div className="table-wrap">
+        <table>
+          <thead><tr><th>Barcode</th><th>Specimen</th><th>Container</th><th>Tests</th><th>Current branch</th><th>Status</th></tr></thead>
+          <tbody>{order.specimens.length === 0 ? <tr><td colSpan={6} className="empty-state">No specimen plans.</td></tr> : order.specimens.map(specimen => <tr key={specimen.id}>
+            <td><Link className="table-link" href={`/specimens?q=${encodeURIComponent(specimen.barcode)}`}><strong>{specimen.barcode}</strong></Link></td>
+            <td>{specimen.specimenType?.nameEn || "Not configured"}</td>
+            <td>{specimen.container?.nameEn || "—"}</td>
+            <td>{specimen.orderItems.map(link => link.orderItem.testCodeSnapshot).join(", ")}</td>
+            <td>{specimen.currentBranch?.nameEn || "—"}</td>
+            <td>{specimen.status}</td>
           </tr>)}</tbody>
         </table>
       </div>
