@@ -269,7 +269,7 @@ export function QualityManagementConsole({
     if (!effectiveness || !["EFFECTIVE","PARTIALLY_EFFECTIVE","INEFFECTIVE"].includes(effectiveness)) return;
     const effectivenessReview = window.prompt("Document the effectiveness review:");
     if (!effectivenessReview?.trim()) return;
-    const close = effectiveness !== "INEFFECTIVE" && window.confirm("Close this CAPA after the effectiveness review?");
+    const close = effectiveness === "EFFECTIVE" && window.confirm("Close this CAPA after the effectiveness review?");
     await send(`/api/quality/capas/${capa.id}/review`, "POST", {
       effectiveness,
       effectivenessReview,
@@ -442,10 +442,31 @@ export function QualityManagementConsole({
     const description = window.prompt("Finding description:");
     if (!description?.trim()) return;
     const requirementRef = window.prompt("Requirement / SOP / clause reference (optional):") || "";
+    let capaId = "";
+    if (severity === "CRITICAL") {
+      const capaNumber = window.prompt("Critical findings require a linked open CAPA. Enter CAPA number:");
+      const capa = openCapas.find(item => item.capaNumber.toUpperCase() === capaNumber?.trim().toUpperCase());
+      if (!capa) {
+        setMessage("Critical finding was not saved: select an existing open CAPA first.");
+        return;
+      }
+      capaId = capa.id;
+    } else {
+      const capaNumber = window.prompt("Link an open CAPA number (optional):")?.trim();
+      if (capaNumber) {
+        const capa = openCapas.find(item => item.capaNumber.toUpperCase() === capaNumber.toUpperCase());
+        if (!capa) {
+          setMessage("CAPA number not found among open CAPA records.");
+          return;
+        }
+        capaId = capa.id;
+      }
+    }
     await send(`/api/quality/audits/${audit.id}/findings`, "POST", {
       severity,
       description,
       requirementRef,
+      capaId,
     }, "finding-create-" + audit.id, "Audit finding recorded.");
   }
 
