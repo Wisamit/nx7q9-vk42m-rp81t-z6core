@@ -27,6 +27,7 @@ export async function POST(request: Request) {
 
   const branchId = text(body.branchId, 36) || session.activeBranchId;
   const patientId = text(body.patientId, 36);
+  const sourceId = text(body.sourceId, 36);
   const referrerId = text(body.referrerId, 36) || null;
   const clientId = text(body.clientId, 36) || null;
   const testIds = uniqueIds(body.testIds);
@@ -36,23 +37,25 @@ export async function POST(request: Request) {
   const pregnancyInfo = text(body.pregnancyInfo, 500);
   const fasting = body.fasting === true ? true : body.fasting === false ? false : null;
 
-  if (!branchId || !patientId || testIds.length === 0) {
+  if (!branchId || !patientId || !sourceId || testIds.length === 0) {
     return NextResponse.json({ error: "missing_required_fields" }, { status: 400 });
   }
   if (!canAccessBranch(session, branchId)) return NextResponse.json({ error: "branch_forbidden" }, { status: 403 });
 
-  const [patient, tests, referrer, client] = await Promise.all([
+  const [patient, tests, source, referrer, client] = await Promise.all([
     prisma.patient.findFirst({ where: { id: patientId, organizationId: session.user.organizationId, status: "ACTIVE" }, select: { id: true, patientNumber: true, fullNameEn: true } }),
     prisma.labTest.findMany({
       where: { id: { in: testIds }, organizationId: session.user.organizationId, status: "ACTIVE" },
       include: { defaultUnit: true, specimenType: true, container: true, branchAvailability: { where: { status: "ACTIVE" } } },
     }),
+    prisma.orderSource.findFirst({ where: { id: sourceId, organizationId: session.user.organizationId, status: "ACTIVE" }, select: { id: true, code: true, category: true } }),
     referrerId ? prisma.referrer.findFirst({ where: { id: referrerId, organizationId: session.user.organizationId, status: "ACTIVE" }, select: { id: true, clientId: true } }) : null,
     clientId ? prisma.client.findFirst({ where: { id: clientId, organizationId: session.user.organizationId, status: "ACTIVE" }, select: { id: true } }) : null,
   ]);
 
   if (!patient) return NextResponse.json({ error: "patient_not_found" }, { status: 404 });
   if (tests.length !== testIds.length) return NextResponse.json({ error: "one_or_more_tests_not_found" }, { status: 404 });
+  if (!source) return NextResponse.json({ error: "source_not_found" }, { status: 404 });
   if (referrerId && !referrer) return NextResponse.json({ error: "referrer_not_found" }, { status: 404 });
   if (clientId && !client) return NextResponse.json({ error: "client_not_found" }, { status: 404 });
 
@@ -94,6 +97,7 @@ export async function POST(request: Request) {
           patientId,
           referrerId,
           clientId: effectiveClientId,
+          sourceId,
           priority,
           clinicalNotes: clinicalNotes || null,
           diagnosis: diagnosis || null,
@@ -242,6 +246,9 @@ export async function POST(request: Request) {
           newValues: {
             accessionNumber,
             patientId,
+            sourceId,
+            sourceCode: source.code,
+            sourceCategory: source.category,
             referrerId,
             clientId: effectiveClientId,
             priority,
