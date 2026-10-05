@@ -7,12 +7,12 @@ export async function GET() {
   if (!session) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   if (!permissionSet(session).has("catalog.view")) return NextResponse.json({ error: "forbidden" }, { status: 403 });
 
-  const tests = await prisma.labTest.findMany({
+  const [tests, departments, specimenTypes, containers, methods, units] = await Promise.all([prisma.labTest.findMany({
     where: { organizationId: session.user.organizationId },
     include: { department: true, specimenType: true, defaultUnit: true, components: { orderBy: { displayOrder: "asc" } } },
     orderBy: [{ status: "asc" }, { nameEn: "asc" }],
-  });
-  return NextResponse.json({ tests });
+  }), prisma.department.findMany({ where: { organizationId: session.user.organizationId, status: "ACTIVE" }, orderBy: { nameEn: "asc" } }), prisma.specimenType.findMany({ where: { organizationId: session.user.organizationId, status: "ACTIVE" }, orderBy: { nameEn: "asc" } }), prisma.container.findMany({ where: { organizationId: session.user.organizationId, status: "ACTIVE" }, orderBy: { nameEn: "asc" } }), prisma.method.findMany({ where: { organizationId: session.user.organizationId, status: "ACTIVE" }, orderBy: { nameEn: "asc" } }), prisma.unit.findMany({ where: { organizationId: session.user.organizationId, status: "ACTIVE" }, orderBy: { code: "asc" } })]);
+  return NextResponse.json({ tests, departments, specimenTypes, containers, methods, units });
 }
 
 export async function POST(request: NextRequest) {
