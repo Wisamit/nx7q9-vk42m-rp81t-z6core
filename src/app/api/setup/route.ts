@@ -51,6 +51,9 @@ const FOUNDATION_PERMISSIONS = [
   ["microbiology.view", "microbiology", "View microbiology cases and susceptibility results"],
   ["microbiology.enter", "microbiology", "Enter microbiology observations, isolates and susceptibility results"],
   ["microbiology.manage", "microbiology", "Manage microbiology organism and antibiotic master data"],
+  ["analyzers.view", "integrations", "View analyzers, mappings and interface messages"],
+  ["analyzers.manage", "integrations", "Manage analyzers, bridge credentials and mappings"],
+  ["analyzers.replay", "integrations", "Replay analyzer interface messages and error queue items"],
 ] as const;
 
 function text(value: unknown, max = 200) {

@@ -154,6 +154,43 @@ enum ResultSource {
   CALCULATED
 }
 
+enum AnalyzerProtocol {
+  ASTM
+  HL7_V2
+  FILE
+  CSV
+  HTTP
+}
+
+enum AnalyzerTransport {
+  SERIAL
+  TCP_CLIENT
+  TCP_SERVER
+  WATCH_FOLDER
+  HTTP
+}
+
+enum AnalyzerMessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum AnalyzerMessageStatus {
+  RECEIVED
+  PROCESSED
+  ERROR
+  DEAD_LETTER
+  IGNORED
+}
+
+enum AnalyzerImportStatus {
+  RECEIVED
+  MAPPED
+  IMPORTED
+  REJECTED
+  ERROR
+}
+
 enum ResultFlag {
   NORMAL
   LOW
@@ -339,6 +376,7 @@ model Organization {
   reflexRules ReflexRule[]
   autoverificationPolicies AutoverificationPolicy[]
   validationHoldRules ValidationHoldRule[]
+  analyzers Analyzer[]
   criticalEscalationPolicies CriticalEscalationPolicy[]
   microbiologyCases MicrobiologyCase[]
   organisms Organism[]
@@ -369,6 +407,8 @@ model Branch {
   settings     BranchSetting[]
   departments Department[]
   workstations Workstation[]
+  analyzers Analyzer[]
+  analyzerMessages AnalyzerMessage[]
   userScopes   UserBranchScope[]
   auditEvents  AuditEvent[]
   activeSessions UserSession[] @relation("ActiveBranchSessions")
@@ -427,6 +467,7 @@ model Department {
   organization Organization          @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   branch       Branch?               @relation(fields: [branchId], references: [id], onDelete: Restrict)
   workstations Workstation[]
+  analyzers Analyzer[]
   userScopes   UserDepartmentScope[]
   labTests      LabTest[]
 
@@ -827,6 +868,7 @@ model LabTest {
   calculatedRules    CalculatedResultRule[]
   sourceReflexRules  ReflexRule[] @relation("ReflexSourceTest")
   targetReflexRules  ReflexRule[] @relation("ReflexTargetTest")
+  analyzerMappings AnalyzerTestMapping[]
   autoverificationPolicies AutoverificationPolicy[]
   validationHoldRules ValidationHoldRule[]
   criticalEscalationPolicies CriticalEscalationPolicy[]
@@ -860,6 +902,7 @@ model TestComponent {
   commentTemplates ResultCommentTemplate[]
   calculatedTargetRules CalculatedResultRule[]
   reflexSourceRules ReflexRule[]
+  analyzerMappings AnalyzerTestMapping[]
 
   @@unique([testId, code])
   @@index([testId, displayOrder])
@@ -1273,6 +1316,7 @@ model OrderItem {
   invoiceLines    InvoiceLine[]
   specimenLinks   SpecimenOrderItem[]
   results          LaboratoryResult[]
+  analyzerResultImports AnalyzerResultImport[]
   microbiologyCases MicrobiologyCase[]
 
   @@unique([orderId, testId])
@@ -1423,6 +1467,7 @@ model Specimen {
   order            LabOrder      @relation(fields: [orderId], references: [id], onDelete: Restrict)
   parentSpecimen   Specimen?     @relation("SpecimenParentChild", fields: [parentSpecimenId], references: [id], onDelete: Restrict)
   childSpecimens   Specimen[]    @relation("SpecimenParentChild")
+  analyzerResultImports AnalyzerResultImport[]
   specimenType     SpecimenType? @relation(fields: [specimenTypeId], references: [id], onDelete: Restrict)
   container        Container?    @relation(fields: [containerId], references: [id], onDelete: Restrict)
   collectionBranch Branch?       @relation("SpecimenCollectionBranch", fields: [collectionBranchId], references: [id], onDelete: Restrict)
@@ -1578,6 +1623,7 @@ model LaboratoryResult {
   autoverificationPolicy AutoverificationPolicy? @relation(fields: [autoverificationPolicyId], references: [id], onDelete: Restrict)
   validationHoldEvents ValidationHoldEvent[]
   microbiologyCase MicrobiologyCase?
+  analyzerResultImports AnalyzerResultImport[]
 
   @@unique([orderItemId, version])
   @@index([performingBranchId, status, enteredAt])
@@ -2152,4 +2198,141 @@ model SusceptibilityResult {
   @@unique([susceptibilityTestId, antibioticId])
   @@index([antibioticId, interpretation])
   @@map("susceptibility_results")
+}
+
+
+model Analyzer {
+  id             String            @id @default(uuid()) @db.Char(36)
+  organizationId String            @map("organization_id") @db.Char(36)
+  branchId       String            @map("branch_id") @db.Char(36)
+  departmentId   String?           @map("department_id") @db.Char(36)
+  code           String            @db.VarChar(80)
+  name           String            @db.VarChar(200)
+  manufacturer   String?           @db.VarChar(150)
+  model          String?           @db.VarChar(150)
+  serialNumber   String?           @map("serial_number") @db.VarChar(150)
+  protocol       AnalyzerProtocol
+  transport      AnalyzerTransport
+  bridgeDeviceKey String?          @map("bridge_device_key") @db.VarChar(150)
+  status         RecordStatus      @default(ACTIVE)
+  createdAt      DateTime          @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt      DateTime          @updatedAt @map("updated_at") @db.DateTime(3)
+  deactivatedAt  DateTime?         @map("deactivated_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  branch       Branch       @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  department   Department?  @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  credentials  AnalyzerCredential[]
+  mappings     AnalyzerTestMapping[]
+  messages     AnalyzerMessage[]
+  resultImports AnalyzerResultImport[]
+
+  @@unique([organizationId, code])
+  @@index([branchId, status])
+  @@index([departmentId, status])
+  @@map("analyzers")
+}
+
+model AnalyzerCredential {
+  id         String       @id @default(uuid()) @db.Char(36)
+  analyzerId String       @map("analyzer_id") @db.Char(36)
+  name       String       @db.VarChar(150)
+  tokenPrefix String      @map("token_prefix") @db.VarChar(20)
+  tokenHash  String       @unique @map("token_hash") @db.Char(64)
+  status     RecordStatus @default(ACTIVE)
+  expiresAt  DateTime?    @map("expires_at") @db.DateTime(3)
+  lastUsedAt DateTime?    @map("last_used_at") @db.DateTime(3)
+  createdAt  DateTime     @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt  DateTime     @updatedAt @map("updated_at") @db.DateTime(3)
+  deactivatedAt DateTime? @map("deactivated_at") @db.DateTime(3)
+
+  analyzer Analyzer @relation(fields: [analyzerId], references: [id], onDelete: Restrict)
+
+  @@index([analyzerId, status])
+  @@map("analyzer_credentials")
+}
+
+model AnalyzerTestMapping {
+  id               String       @id @default(uuid()) @db.Char(36)
+  analyzerId       String       @map("analyzer_id") @db.Char(36)
+  analyzerTestCode String       @map("analyzer_test_code") @db.VarChar(120)
+  analyzerUnitCode String?      @map("analyzer_unit_code") @db.VarChar(80)
+  testId           String       @map("test_id") @db.Char(36)
+  componentId      String?      @map("component_id") @db.Char(36)
+  effectiveFrom    DateTime     @map("effective_from") @db.DateTime(3)
+  effectiveTo      DateTime?    @map("effective_to") @db.DateTime(3)
+  status           RecordStatus @default(ACTIVE)
+  createdAt        DateTime     @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt        DateTime     @updatedAt @map("updated_at") @db.DateTime(3)
+  deactivatedAt    DateTime?    @map("deactivated_at") @db.DateTime(3)
+
+  analyzer  Analyzer       @relation(fields: [analyzerId], references: [id], onDelete: Restrict)
+  test      LabTest        @relation(fields: [testId], references: [id], onDelete: Restrict)
+  component TestComponent? @relation(fields: [componentId], references: [id], onDelete: Restrict)
+  imports   AnalyzerResultImport[]
+
+  @@unique([analyzerId, analyzerTestCode, effectiveFrom])
+  @@index([testId, componentId, status, effectiveFrom, effectiveTo])
+  @@index([analyzerId, status, effectiveFrom, effectiveTo])
+  @@map("analyzer_test_mappings")
+}
+
+model AnalyzerMessage {
+  id              String                   @id @default(uuid()) @db.Char(36)
+  analyzerId      String                   @map("analyzer_id") @db.Char(36)
+  branchId        String                   @map("branch_id") @db.Char(36)
+  direction       AnalyzerMessageDirection @default(INBOUND)
+  protocol        AnalyzerProtocol
+  bridgeMessageId String                   @map("bridge_message_id") @db.VarChar(150)
+  payloadHash     String                   @map("payload_hash") @db.Char(64)
+  rawPayload      String                   @map("raw_payload") @db.LongText
+  status          AnalyzerMessageStatus    @default(RECEIVED)
+  attempts        Int                      @default(0)
+  errorCode       String?                  @map("error_code") @db.VarChar(120)
+  errorText       String?                  @map("error_text") @db.Text
+  receivedAt      DateTime                 @default(now()) @map("received_at") @db.DateTime(3)
+  processedAt     DateTime?                @map("processed_at") @db.DateTime(3)
+  createdAt       DateTime                 @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt       DateTime                 @updatedAt @map("updated_at") @db.DateTime(3)
+
+  analyzer Analyzer @relation(fields: [analyzerId], references: [id], onDelete: Restrict)
+  branch   Branch   @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  imports  AnalyzerResultImport[]
+
+  @@unique([analyzerId, bridgeMessageId])
+  @@index([branchId, status, receivedAt])
+  @@index([analyzerId, status, receivedAt])
+  @@map("analyzer_messages")
+}
+
+model AnalyzerResultImport {
+  id                 String               @id @default(uuid()) @db.Char(36)
+  messageId          String               @map("message_id") @db.Char(36)
+  analyzerId         String               @map("analyzer_id") @db.Char(36)
+  mappingId          String?              @map("mapping_id") @db.Char(36)
+  orderItemId        String?              @map("order_item_id") @db.Char(36)
+  specimenId         String?              @map("specimen_id") @db.Char(36)
+  resultId           String?              @map("result_id") @db.Char(36)
+  barcodeSnapshot    String?              @map("barcode_snapshot") @db.VarChar(80)
+  analyzerTestCode   String               @map("analyzer_test_code") @db.VarChar(120)
+  rawValue           String               @map("raw_value") @db.VarChar(1000)
+  rawUnit            String?              @map("raw_unit") @db.VarChar(80)
+  status             AnalyzerImportStatus @default(RECEIVED)
+  errorText          String?              @map("error_text") @db.Text
+  importedAt         DateTime?            @map("imported_at") @db.DateTime(3)
+  createdAt          DateTime             @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt          DateTime             @updatedAt @map("updated_at") @db.DateTime(3)
+
+  message   AnalyzerMessage     @relation(fields: [messageId], references: [id], onDelete: Restrict)
+  analyzer  Analyzer            @relation(fields: [analyzerId], references: [id], onDelete: Restrict)
+  mapping   AnalyzerTestMapping? @relation(fields: [mappingId], references: [id], onDelete: Restrict)
+  orderItem OrderItem?          @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
+  specimen  Specimen?           @relation(fields: [specimenId], references: [id], onDelete: Restrict)
+  result    LaboratoryResult?   @relation(fields: [resultId], references: [id], onDelete: Restrict)
+
+  @@index([messageId, status])
+  @@index([analyzerId, status, createdAt])
+  @@index([orderItemId, status])
+  @@index([specimenId, status])
+  @@map("analyzer_result_imports")
 }

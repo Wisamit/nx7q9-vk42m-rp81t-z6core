@@ -39,6 +39,7 @@ export default async function DashboardPage() {
           {permissions.has("clinical_rules.manage") && <Link className="module-link" href="/clinical-rules"><article><span>14</span><h2>Clinical Rules</h2><p>Calculated results, reflex, validation holds, autoverification, escalation and delta policies.</p></article></Link>}
           {permissions.has("critical.communicate") && <Link className="module-link" href="/critical-results"><article><span>15</span><h2>Critical Results</h2><p>Open critical values, acknowledgement deadlines and escalation tracking.</p></article></Link>}
           {permissions.has("microbiology.view") && <Link className="module-link" href="/microbiology"><article><span>16</span><h2>Microbiology</h2><p>Culture observations, organisms, isolates and antimicrobial susceptibility workflow.</p></article></Link>}
+          {permissions.has("analyzers.view") && <Link className="module-link" href="/analyzers"><article><span>17</span><h2>Analyzers</h2><p>Analyzer registry, bridge credentials, mappings and raw interface message inbox.</p></article></Link>}
         </div>
       </section>
     </main>
