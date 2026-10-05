@@ -40,7 +40,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const [test, existing] = await Promise.all([
     prisma.labTest.findFirst({
       where: { id: testId, organizationId: session.user.organizationId, status: "ACTIVE" },
-      include: { components: { where: { status: "ACTIVE" } } },
+      include: {
+        components: { where: { status: "ACTIVE" } },
+        calculatedRules: {
+          where: {
+            status: "ACTIVE",
+            effectiveFrom: { lte: effectiveFrom },
+            OR: [{ effectiveTo: null }, { effectiveTo: { gte: effectiveFrom } }],
+          },
+        },
+      },
     }),
     prisma.analyzerTestMapping.findMany({
       where: { analyzerId: analyzer.id, analyzerTestCode, status: "ACTIVE" },
@@ -50,6 +59,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!test) return NextResponse.json({ error: "test_not_found" }, { status: 404 });
   if (componentId && !test.components.some(component => component.id === componentId)) {
     return NextResponse.json({ error: "component_not_found_for_test" }, { status: 409 });
+  }
+  if (componentId && test.calculatedRules.some(rule => rule.targetComponentId === componentId)) {
+    return NextResponse.json({ error: "analyzer_mapping_cannot_target_calculated_component" }, { status: 409 });
   }
   if (test.components.length > 0 && !componentId) {
     return NextResponse.json({ error: "component_required_for_multi_component_test" }, { status: 409 });
