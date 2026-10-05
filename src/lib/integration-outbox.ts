@@ -60,6 +60,48 @@ export async function queueReportIntegrations(tx: Prisma.TransactionClient, inpu
     });
   }
 
+  const testIds = [...new Set(input.snapshot.results.map(result => result.testId))];
+  const componentIds = [...new Set(input.snapshot.results.flatMap(result =>
+    result.values.map(value => value.componentId).filter((id): id is string => Boolean(id))
+  ))];
+  const loincMappings = await tx.terminologyMapping.findMany({
+    where: {
+      organizationId: input.organizationId,
+      system: "LOINC",
+      status: "ACTIVE",
+      isPrimary: true,
+      effectiveFrom: { lte: input.issuedAt },
+      OR: [{ effectiveTo: null }, { effectiveTo: { gte: input.issuedAt } }],
+      AND: [{
+        OR: [
+          { testId: { in: testIds }, componentId: null },
+          ...(componentIds.length ? [{ componentId: { in: componentIds } }] : []),
+        ],
+      }],
+    },
+    orderBy: { effectiveFrom: "desc" },
+  });
+  const testLoinc = new Map<string,string>();
+  const componentLoinc = new Map<string,string>();
+  for (const mapping of loincMappings) {
+    if (mapping.componentId) {
+      if (!componentLoinc.has(mapping.componentId)) componentLoinc.set(mapping.componentId, mapping.code);
+    } else if (!testLoinc.has(mapping.testId)) {
+      testLoinc.set(mapping.testId, mapping.code);
+    }
+  }
+  const hl7Snapshot: Snapshot = {
+    ...input.snapshot,
+    results: input.snapshot.results.map(result => ({
+      ...result,
+      loincCode: testLoinc.get(result.testId) || null,
+      values: result.values.map(value => ({
+        ...value,
+        loincCode: value.componentId ? componentLoinc.get(value.componentId) || null : testLoinc.get(result.testId) || null,
+      })),
+    })),
+  };
+
   const hl7Endpoints = await tx.integrationEndpoint.findMany({
     where: {
       organizationId: input.organizationId,
@@ -72,7 +114,7 @@ export async function queueReportIntegrations(tx: Prisma.TransactionClient, inpu
 
   for (const endpoint of hl7Endpoints) {
     const controlId = `RPT-${input.reportVersionId}`;
-    const payload = buildHl7OruR01(input.snapshot, controlId, input.issuedAt);
+    const payload = buildHl7OruR01(hl7Snapshot, controlId, input.issuedAt);
     const payloadHash = createHash("sha256").update(payload).digest("hex");
     await tx.integrationMessage.create({
       data: {
