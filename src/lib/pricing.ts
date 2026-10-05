@@ -67,8 +67,12 @@ export async function resolveTestPrice(
 
   const ranked = priceLists
     .filter((list) => list.items.length > 0)
-    .map((list) => ({ list, rank: scopeRank[list.scopeType] + list.priority }))
-    .sort((a, b) => b.rank - a.rank || b.list.effectiveFrom.getTime() - a.list.effectiveFrom.getTime());
+    .map((list) => ({ list, scopeRank: scopeRank[list.scopeType] }))
+    .sort((a, b) =>
+      b.scopeRank - a.scopeRank ||
+      b.list.priority - a.list.priority ||
+      b.list.effectiveFrom.getTime() - a.list.effectiveFrom.getTime()
+    );
 
   const selected = ranked[0]?.list;
   const item = selected?.items[0];
