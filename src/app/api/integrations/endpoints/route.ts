@@ -38,6 +38,9 @@ export async function POST(request: Request) {
   if (baseUrl && !validUrl(baseUrl)) {
     return NextResponse.json({ error: "https_endpoint_required" }, { status: 400 });
   }
+  if (authType !== "NONE" && (!secretReference || !secretReference.startsWith("env:"))) {
+    return NextResponse.json({ error: "env_secret_reference_required" }, { status: 400 });
+  }
   if (!Number.isInteger(timeoutSeconds) || timeoutSeconds < 1 || timeoutSeconds > 60) {
     return NextResponse.json({ error: "invalid_timeout" }, { status: 400 });
   }
