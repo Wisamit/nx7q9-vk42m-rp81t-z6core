@@ -105,6 +105,7 @@ export default async function DigitalServicesPage() {
       </div>
       <div className="result-actions">
         <Link className="secondary-link" href="/portal/login">Portal sign-in</Link>
+        {branches.slice(0,3).map(branch => <Link key={branch.id} className="secondary-link" href={"/queue-display/" + branch.id}>{branch.code} Queue Display</Link>)}
         <Link className="secondary-link" href="/dashboard">Back to Dashboard</Link>
       </div>
     </header>
