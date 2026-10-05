@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { requirePermission } from "@/lib/auth";
+import { permissionSet, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { MicrobiologyManager } from "@/components/microbiology-manager";
 
@@ -7,6 +7,7 @@ export const dynamic = "force-dynamic";
 
 export default async function MicrobiologyPage() {
   const session = await requirePermission("microbiology.view");
+  const permissions = permissionSet(session);
   const branchIds = session.user.branchScopes.map(scope => scope.branchId);
 
   const [cases, orderItems, organismCount, antibioticCount] = await Promise.all([
@@ -86,7 +87,11 @@ export default async function MicrobiologyPage() {
       <article className="detail-card"><h2>Antibiotics</h2><strong>{antibioticCount}</strong></article>
     </section>
 
-    {session.permissions.some(permission => permission.permission.code === "microbiology.manage") && <MicrobiologyManager candidates={candidates} />}
+    {(permissions.has("microbiology.enter") || permissions.has("microbiology.manage")) && <MicrobiologyManager
+      candidates={candidates}
+      canEnter={permissions.has("microbiology.enter")}
+      canManage={permissions.has("microbiology.manage")}
+    />}
 
     <section className="table-card detail-section">
       <div className="table-toolbar"><h2>Microbiology Cases</h2><span>{cases.length} shown</span></div>
