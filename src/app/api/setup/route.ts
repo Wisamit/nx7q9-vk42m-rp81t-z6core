@@ -36,6 +36,9 @@ const FOUNDATION_PERMISSIONS = [
   ["transfers.create", "specimens", "Create inter-branch specimen manifests"],
   ["transfers.dispatch", "specimens", "Dispatch specimen manifests"],
   ["transfers.receive", "specimens", "Receive specimen manifests and items"],
+  ["worklists.view", "laboratory", "View laboratory worklists"],
+  ["results.enter", "results", "Enter and save laboratory results"],
+  ["results.verify", "results", "Verify laboratory results"],
 ] as const;
 
 function text(value: unknown, max = 200) {
