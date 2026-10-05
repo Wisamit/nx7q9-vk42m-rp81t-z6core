@@ -3,16 +3,17 @@ import { requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { CatalogManager } from "@/components/catalog-manager";
 import { ClinicalCatalogManager } from "@/components/clinical-catalog-manager";
+import { LegacyImportBatches } from "@/components/legacy-import-batches";
 
 export const dynamic = "force-dynamic";
 
 export default async function CatalogPage() {
   const session = await requirePermission("catalog.view");
-  const [tests, departments, specimens, containers, methods, units, panels] = await Promise.all([prisma.labTest.findMany({
+  const [tests, departments, specimens, containers, methods, units, panels, importBatches] = await Promise.all([prisma.labTest.findMany({
     where: { organizationId: session.user.organizationId },
     include: { department: true, specimenType: true, components: { include: { unit: true, referenceIntervals: { orderBy: { effectiveFrom: "desc" }, take: 1 } }, orderBy: { displayOrder: "asc" } } },
     orderBy: { nameEn: "asc" },
-  }), prisma.department.findMany({ where: { organizationId: session.user.organizationId, status: "ACTIVE" }, orderBy: { nameEn: "asc" } }), prisma.specimenType.findMany({ where: { organizationId: session.user.organizationId, status: "ACTIVE" }, orderBy: { nameEn: "asc" } }), prisma.container.findMany({ where: { organizationId: session.user.organizationId, status: "ACTIVE" }, orderBy: { nameEn: "asc" } }), prisma.method.findMany({ where: { organizationId: session.user.organizationId, status: "ACTIVE" }, orderBy: { nameEn: "asc" } }), prisma.unit.findMany({ where: { organizationId: session.user.organizationId, status: "ACTIVE" }, orderBy: { code: "asc" } }), prisma.testPanel.findMany({ where: { organizationId: session.user.organizationId }, include: { items: true }, orderBy: { nameEn: "asc" } })]);
+  }), prisma.department.findMany({ where: { organizationId: session.user.organizationId, status: "ACTIVE" }, orderBy: { nameEn: "asc" } }), prisma.specimenType.findMany({ where: { organizationId: session.user.organizationId, status: "ACTIVE" }, orderBy: { nameEn: "asc" } }), prisma.container.findMany({ where: { organizationId: session.user.organizationId, status: "ACTIVE" }, orderBy: { nameEn: "asc" } }), prisma.method.findMany({ where: { organizationId: session.user.organizationId, status: "ACTIVE" }, orderBy: { nameEn: "asc" } }), prisma.unit.findMany({ where: { organizationId: session.user.organizationId, status: "ACTIVE" }, orderBy: { code: "asc" } }), prisma.testPanel.findMany({ where: { organizationId: session.user.organizationId }, include: { items: true }, orderBy: { nameEn: "asc" } }), prisma.catalogImportBatch.findMany({ where: { organizationId: session.user.organizationId }, include: { _count: { select: { rows: true } } }, orderBy: { createdAt: "desc" }, take: 10 })]);
 
   return (
     <main className="catalog-shell">
@@ -26,6 +27,7 @@ export default async function CatalogPage() {
         <article><strong>{tests.reduce((sum, test) => sum + test.components.length, 0)}</strong><span>Components</span></article>
         <article><strong>{panels.length}</strong><span>Panels / Profiles</span></article>
       </section>
+      <LegacyImportBatches batches={importBatches.map(batch => ({ id: batch.id, sourceName: batch.sourceName, sourceType: batch.sourceType, status: batch.status, rows: batch._count.rows, createdAt: batch.createdAt.toISOString() }))} />
       <section className="table-card">
         <div className="table-toolbar"><h2>Tests</h2><span>Legacy catalog import will be added through controlled validation.</span></div>
         <div className="table-wrap">
