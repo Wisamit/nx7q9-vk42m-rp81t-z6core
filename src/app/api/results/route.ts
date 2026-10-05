@@ -356,6 +356,10 @@ export async function POST(request: Request) {
           deltaPercentSnapshot: item.delta.deltaPercent,
           deltaAbsoluteLimitSnapshot: item.delta.absoluteLimit,
           deltaPercentLimitSnapshot: item.delta.percentLimit,
+          isCalculated: item.isCalculated,
+          calculatedRuleId: item.calculatedRuleId,
+          calculationExpressionSnapshot: item.calculationExpression,
+          calculationInputsSnapshot: item.calculationInputs,
         },
       });
     }
@@ -427,6 +431,8 @@ export async function POST(request: Request) {
             deltaEvaluation: item.delta.evaluation,
             deltaAbsolute: item.delta.deltaAbsolute?.toString() || null,
             deltaPercent: item.delta.deltaPercent?.toString() || null,
+            calculated: item.isCalculated,
+            calculatedRuleId: item.calculatedRuleId,
           })),
         },
         ipAddress: ctx.ipAddress,
