@@ -102,7 +102,7 @@ model Department {
   workstations Workstation[]
   userScopes   UserDepartmentScope[]
 
-  @@unique([organizationId, branchId, code])
+  @@unique([organizationId, code])
   @@index([organizationId, status])
   @@index([branchId, status])
   @@map("departments")
