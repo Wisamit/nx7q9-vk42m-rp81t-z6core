@@ -10,10 +10,10 @@ export default async function PricingPage() {
 
   const accessibleBranchIds = session.user.branchScopes.map(scope => scope.branchId);
 
-  const [priceLists, branches, clients, contracts, tests] = await Promise.all([
+  const [priceLists, branches, clients, contracts, tests, packages] = await Promise.all([
     prisma.priceList.findMany({
       where: { organizationId: session.user.organizationId, OR: [{ scopeType: { not: "BRANCH" } }, { branchId: { in: accessibleBranchIds } }] },
-      include: { _count: { select: { items: true } } },
+      include: { _count: { select: { items: true, packageItems: true } } },
       orderBy: [{ status: "asc" }, { priority: "desc" }, { nameEn: "asc" }],
       take: 200,
     }),
@@ -30,6 +30,11 @@ export default async function PricingPage() {
       orderBy: { nameEn: "asc" },
     }),
     prisma.labTest.findMany({
+      where: { organizationId: session.user.organizationId, status: "ACTIVE" },
+      select: { id: true, code: true, nameEn: true },
+      orderBy: { nameEn: "asc" },
+    }),
+    prisma.commercialPackage.findMany({
       where: { organizationId: session.user.organizationId, status: "ACTIVE" },
       select: { id: true, code: true, nameEn: true },
       orderBy: { nameEn: "asc" },
@@ -51,6 +56,7 @@ export default async function PricingPage() {
       clients={clients.map(x => ({ id: x.id, code: x.code, nameEn: x.nameEn }))}
       contracts={contracts.map(x => ({ id: x.id, code: x.code, nameEn: x.nameEn, clientId: x.clientId }))}
       tests={tests}
+      packages={packages}
       priceLists={priceLists.map(x => ({ id: x.id, code: x.code, nameEn: x.nameEn, currency: x.currency }))}
       defaultCurrency={session.user.organization.defaultCurrency}
     />
@@ -69,7 +75,7 @@ export default async function PricingPage() {
                 <td>{list.currency}</td>
                 <td>{list.priority}</td>
                 <td>{list.effectiveFrom.toISOString().slice(0,10)} → {list.effectiveTo ? list.effectiveTo.toISOString().slice(0,10) : "Open"}</td>
-                <td>{list._count.items}</td>
+                <td>{list._count.items} tests · {list._count.packageItems} packages</td>
                 <td>{list.status}</td>
               </tr>)
             }

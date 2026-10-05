@@ -87,3 +87,88 @@ export async function resolveTestPrice(
     unitPrice: item.unitPrice,
   };
 }
+
+
+export async function resolvePackagePrice(
+  db: DbClient,
+  input: {
+    organizationId: string;
+    branchId: string;
+    clientId?: string | null;
+    packageId: string;
+    at?: Date;
+  },
+) {
+  const at = input.at ?? new Date();
+
+  const activeContracts = input.clientId ? await db.contract.findMany({
+    where: {
+      organizationId: input.organizationId,
+      clientId: input.clientId,
+      status: "ACTIVE",
+      effectiveFrom: { lte: at },
+      OR: [{ effectiveTo: null }, { effectiveTo: { gte: at } }],
+    },
+    select: { id: true },
+  }) : [];
+  const contractIds = activeContracts.map((x) => x.id);
+
+  const priceLists = await db.priceList.findMany({
+    where: {
+      organizationId: input.organizationId,
+      status: "ACTIVE",
+      effectiveFrom: { lte: at },
+      OR: [{ effectiveTo: null }, { effectiveTo: { gte: at } }],
+      AND: [{
+        OR: [
+          { scopeType: "ORGANIZATION" },
+          { scopeType: "BRANCH", branchId: input.branchId },
+          ...(input.clientId ? [{ scopeType: "CLIENT" as const, clientId: input.clientId }] : []),
+          ...(contractIds.length ? [{ scopeType: "CONTRACT" as const, contractId: { in: contractIds } }] : []),
+        ],
+      }],
+      packageItems: {
+        some: {
+          packageId: input.packageId,
+          status: "ACTIVE",
+          effectiveFrom: { lte: at },
+          OR: [{ effectiveTo: null }, { effectiveTo: { gte: at } }],
+        },
+      },
+    },
+    include: {
+      packageItems: {
+        where: {
+          packageId: input.packageId,
+          status: "ACTIVE",
+          effectiveFrom: { lte: at },
+          OR: [{ effectiveTo: null }, { effectiveTo: { gte: at } }],
+        },
+        orderBy: { effectiveFrom: "desc" },
+        take: 1,
+      },
+    },
+  });
+
+  const ranked = priceLists
+    .filter((list) => list.packageItems.length > 0)
+    .map((list) => ({ list, scopeRank: scopeRank[list.scopeType] }))
+    .sort((a, b) =>
+      b.scopeRank - a.scopeRank ||
+      b.list.priority - a.list.priority ||
+      b.list.effectiveFrom.getTime() - a.list.effectiveFrom.getTime()
+    );
+
+  const selected = ranked[0]?.list;
+  const item = selected?.packageItems[0];
+  if (!selected || !item) return null;
+
+  return {
+    priceListId: selected.id,
+    priceListPackageItemId: item.id,
+    priceListCode: selected.code,
+    scopeType: selected.scopeType,
+    currency: selected.currency,
+    unitPrice: item.unitPrice,
+  };
+}

@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { Prisma } from "../../../../generated/prisma/client";
 import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { resolveTestPrice } from "@/lib/pricing";
+import { resolvePackagePrice, resolveTestPrice } from "@/lib/pricing";
 
 function text(value: unknown, max = 500) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -30,22 +30,61 @@ export async function POST(request: Request) {
   const sourceId = text(body.sourceId, 36);
   const referrerId = text(body.referrerId, 36) || null;
   const clientId = text(body.clientId, 36) || null;
-  const testIds = uniqueIds(body.testIds);
+  const directTestIds = uniqueIds(body.testIds);
+  const packageIds = uniqueIds(body.packageIds);
   const priority = ["ROUTINE", "URGENT", "STAT"].includes(body.priority) ? body.priority : "ROUTINE";
   const clinicalNotes = text(body.clinicalNotes, 5000);
   const diagnosis = text(body.diagnosis, 500);
   const pregnancyInfo = text(body.pregnancyInfo, 500);
   const fasting = body.fasting === true ? true : body.fasting === false ? false : null;
 
-  if (!branchId || !patientId || !sourceId || testIds.length === 0) {
+  if (!branchId || !patientId || !sourceId || (directTestIds.length === 0 && packageIds.length === 0)) {
     return NextResponse.json({ error: "missing_required_fields" }, { status: 400 });
   }
   if (!canAccessBranch(session, branchId)) return NextResponse.json({ error: "branch_forbidden" }, { status: 403 });
 
+  const packages = packageIds.length ? await prisma.commercialPackage.findMany({
+    where: {
+      id: { in: packageIds },
+      organizationId: session.user.organizationId,
+      status: "ACTIVE",
+    },
+    include: {
+      items: {
+        include: { test: { select: { id: true, status: true } } },
+        orderBy: { displayOrder: "asc" },
+      },
+    },
+  }) : [];
+  if (packages.length !== packageIds.length) {
+    return NextResponse.json({ error: "one_or_more_packages_not_found" }, { status: 404 });
+  }
+
+  const packageTestOwner = new Map<string, string>();
+  for (const pkg of packages) {
+    for (const item of pkg.items) {
+      if (item.test.status !== "ACTIVE") {
+        return NextResponse.json({ error: "package_contains_inactive_test", packageCode: pkg.code }, { status: 409 });
+      }
+      const existingPackageId = packageTestOwner.get(item.testId);
+      if (existingPackageId && existingPackageId !== pkg.id) {
+        return NextResponse.json({ error: "package_test_overlap", testId: item.testId }, { status: 409 });
+      }
+      packageTestOwner.set(item.testId, pkg.id);
+    }
+  }
+  const directOverlap = directTestIds.find(testId => packageTestOwner.has(testId));
+  if (directOverlap) {
+    return NextResponse.json({ error: "package_direct_test_overlap", testId: directOverlap }, { status: 409 });
+  }
+
+  const packageTestIds = [...packageTestOwner.keys()];
+  const allTestIds = [...directTestIds, ...packageTestIds];
+
   const [patient, tests, source, referrer, client] = await Promise.all([
     prisma.patient.findFirst({ where: { id: patientId, organizationId: session.user.organizationId, status: "ACTIVE" }, select: { id: true, patientNumber: true, fullNameEn: true } }),
     prisma.labTest.findMany({
-      where: { id: { in: testIds }, organizationId: session.user.organizationId, status: "ACTIVE" },
+      where: { id: { in: allTestIds }, organizationId: session.user.organizationId, status: "ACTIVE" },
       include: {
         defaultUnit: true,
         specimenType: true,
@@ -60,7 +99,7 @@ export async function POST(request: Request) {
   ]);
 
   if (!patient) return NextResponse.json({ error: "patient_not_found" }, { status: 404 });
-  if (tests.length !== testIds.length) return NextResponse.json({ error: "one_or_more_tests_not_found" }, { status: 404 });
+  if (tests.length !== allTestIds.length) return NextResponse.json({ error: "one_or_more_tests_not_found" }, { status: 404 });
   if (!source) return NextResponse.json({ error: "source_not_found" }, { status: 404 });
   if (referrerId && !referrer) return NextResponse.json({ error: "referrer_not_found" }, { status: 404 });
   if (clientId && !client) return NextResponse.json({ error: "client_not_found" }, { status: 404 });
@@ -144,8 +183,10 @@ export async function POST(request: Request) {
   }
 
   const effectiveClientId = clientId || referrer?.clientId || null;
+  const directTestIdSet = new Set(directTestIds);
+  const directTests = tests.filter(test => directTestIdSet.has(test.id));
 
-  const prices = await Promise.all(tests.map(async (test) => ({
+  const directPrices = await Promise.all(directTests.map(async test => ({
     test,
     price: await resolveTestPrice(prisma, {
       organizationId: session.user.organizationId,
@@ -155,16 +196,44 @@ export async function POST(request: Request) {
     }),
   })));
 
-  const missingPrices = prices.filter(x => !x.price).map(x => ({ id: x.test.id, code: x.test.code, name: x.test.nameEn }));
+  const packagePrices = await Promise.all(packages.map(async pkg => ({
+    package: pkg,
+    price: await resolvePackagePrice(prisma, {
+      organizationId: session.user.organizationId,
+      branchId,
+      clientId: effectiveClientId,
+      packageId: pkg.id,
+    }),
+  })));
+
+  const missingPrices = directPrices.filter(entry => !entry.price).map(entry => ({
+    id: entry.test.id,
+    code: entry.test.code,
+    name: entry.test.nameEn,
+  }));
   if (missingPrices.length > 0) {
     return NextResponse.json({ error: "missing_prices", tests: missingPrices }, { status: 409 });
   }
 
-  const currencies = [...new Set(prices.map(x => x.price!.currency))];
+  const missingPackagePrices = packagePrices.filter(entry => !entry.price).map(entry => ({
+    id: entry.package.id,
+    code: entry.package.code,
+    name: entry.package.nameEn,
+  }));
+  if (missingPackagePrices.length > 0) {
+    return NextResponse.json({ error: "missing_package_prices", packages: missingPackagePrices }, { status: 409 });
+  }
+
+  const currencies = [...new Set([
+    ...directPrices.map(entry => entry.price!.currency),
+    ...packagePrices.map(entry => entry.price!.currency),
+  ])];
   if (currencies.length !== 1) {
     return NextResponse.json({ error: "mixed_currencies_not_allowed", currencies }, { status: 409 });
   }
   const currency = currencies[0];
+  const directPriceMap = new Map(directPrices.map(entry => [entry.test.id, entry.price!]));
+  const packagePriceMap = new Map(packagePrices.map(entry => [entry.package.id, entry.price!]));
 
   try {
     const result = await prisma.$transaction(async (tx) => {
@@ -201,24 +270,31 @@ export async function POST(request: Request) {
         },
       });
 
-      const createdItems = [];
+      const createdItems: Array<{
+        item: { id: string };
+        test: (typeof tests)[number];
+        unitPrice: Prisma.Decimal;
+        packageId: string | null;
+      }> = [];
       let subtotal = new Prisma.Decimal(0);
+      const createdOrderPackages = new Map<string, {
+        id: string;
+        package: (typeof packages)[number];
+        unitPrice: Prisma.Decimal;
+      }>();
 
-      for (const entry of prices) {
-        const price = entry.price!;
+      for (const pkg of packages) {
+        const price = packagePriceMap.get(pkg.id)!;
         const unitPrice = new Prisma.Decimal(price.unitPrice);
         subtotal = subtotal.add(unitPrice);
-
-        const item = await tx.orderItem.create({
+        const orderPackage = await tx.orderPackage.create({
           data: {
             orderId: order.id,
-            testId: entry.test.id,
-            performedBranchId: entry.test.branchAvailability.some((availability) => availability.branchId === branchId && availability.performedHere) ? branchId : null,
-            priceListItemId: price.priceListItemId,
-            testCodeSnapshot: entry.test.code,
-            testNameEnSnapshot: entry.test.nameEn,
-            testNameArSnapshot: entry.test.nameAr,
-            unitSnapshot: entry.test.defaultUnit?.symbol || null,
+            packageId: pkg.id,
+            priceListPackageItemId: price.priceListPackageItemId,
+            packageCodeSnapshot: pkg.code,
+            packageNameEnSnapshot: pkg.nameEn,
+            packageNameArSnapshot: pkg.nameAr,
             unitPriceSnapshot: unitPrice,
             discountAmountSnapshot: new Prisma.Decimal(0),
             taxAmountSnapshot: new Prisma.Decimal(0),
@@ -226,7 +302,44 @@ export async function POST(request: Request) {
             currency,
           },
         });
-        for (const question of entry.test.orderQuestions) {
+        createdOrderPackages.set(pkg.id, { id: orderPackage.id, package: pkg, unitPrice });
+      }
+
+      for (const test of tests) {
+        const packageId = packageTestOwner.get(test.id) || null;
+        const directPrice = packageId ? null : directPriceMap.get(test.id);
+        if (!packageId && !directPrice) throw new Error("DIRECT_PRICE_RESOLUTION_MISSING");
+        const unitPrice = packageId ? new Prisma.Decimal(0) : new Prisma.Decimal(directPrice!.unitPrice);
+        if (!packageId) subtotal = subtotal.add(unitPrice);
+
+        const item = await tx.orderItem.create({
+          data: {
+            orderId: order.id,
+            testId: test.id,
+            performedBranchId: test.branchAvailability.some((availability) => availability.branchId === branchId && availability.performedHere) ? branchId : null,
+            priceListItemId: packageId ? null : directPrice!.priceListItemId,
+            testCodeSnapshot: test.code,
+            testNameEnSnapshot: test.nameEn,
+            testNameArSnapshot: test.nameAr,
+            unitSnapshot: test.defaultUnit?.symbol || null,
+            unitPriceSnapshot: unitPrice,
+            discountAmountSnapshot: new Prisma.Decimal(0),
+            taxAmountSnapshot: new Prisma.Decimal(0),
+            finalPriceSnapshot: unitPrice,
+            currency,
+          },
+          select: { id: true },
+        });
+
+        if (packageId) {
+          const orderPackage = createdOrderPackages.get(packageId);
+          if (!orderPackage) throw new Error("ORDER_PACKAGE_MISSING");
+          await tx.orderPackageItem.create({
+            data: { orderPackageId: orderPackage.id, orderItemId: item.id },
+          });
+        }
+
+        for (const question of test.orderQuestions) {
           const answer = preparedAnswers.get(question.id);
           if (!answer) continue;
           await tx.orderAnswer.create({
@@ -249,7 +362,7 @@ export async function POST(request: Request) {
           });
         }
 
-        createdItems.push({ item, test: entry.test, unitPrice });
+        createdItems.push({ item, test, unitPrice, packageId });
       }
 
       const specimenGroups = new Map<string, typeof createdItems>();
@@ -326,6 +439,7 @@ export async function POST(request: Request) {
       });
 
       for (const entry of createdItems) {
+        if (entry.packageId) continue;
         await tx.invoiceLine.create({
           data: {
             invoiceId: invoice.id,
@@ -338,6 +452,23 @@ export async function POST(request: Request) {
             discountAmount: new Prisma.Decimal(0),
             taxAmount: new Prisma.Decimal(0),
             lineTotal: entry.unitPrice,
+          },
+        });
+      }
+
+      for (const orderPackage of createdOrderPackages.values()) {
+        await tx.invoiceLine.create({
+          data: {
+            invoiceId: invoice.id,
+            orderPackageId: orderPackage.id,
+            description: orderPackage.package.nameEn,
+            testCodeSnapshot: orderPackage.package.code,
+            testNameEnSnapshot: orderPackage.package.nameEn,
+            quantity: new Prisma.Decimal(1),
+            unitPrice: orderPackage.unitPrice,
+            discountAmount: new Prisma.Decimal(0),
+            taxAmount: new Prisma.Decimal(0),
+            lineTotal: orderPackage.unitPrice,
           },
         });
       }
@@ -359,7 +490,9 @@ export async function POST(request: Request) {
             referrerId,
             clientId: effectiveClientId,
             priority,
-            testIds,
+            directTestIds,
+            packageIds,
+            expandedTestIds: allTestIds,
             answeredOrderQuestionCodes: questions
               .filter(entry => preparedAnswers.has(entry.question.id))
               .map(entry => entry.question.code),

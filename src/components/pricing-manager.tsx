@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 type Option = { id: string; code: string; nameEn: string };
 type ContractOption = Option & { clientId: string };
 type TestOption = { id: string; code: string; nameEn: string };
+type PackageOption = { id: string; code: string; nameEn: string };
 type PriceListOption = { id: string; code: string; nameEn: string; currency: string };
 
 export function PricingManager({
@@ -13,6 +14,7 @@ export function PricingManager({
   clients,
   contracts,
   tests,
+  packages,
   priceLists,
   defaultCurrency,
 }: {
@@ -20,20 +22,27 @@ export function PricingManager({
   clients: Option[];
   contracts: ContractOption[];
   tests: TestOption[];
+  packages: PackageOption[];
   priceLists: PriceListOption[];
   defaultCurrency: string;
 }) {
   const router = useRouter();
   const [scopeType, setScopeType] = useState("ORGANIZATION");
   const [message, setMessage] = useState("");
-  const [busy, setBusy] = useState<"contract" | "list" | "item" | "">("");
+  const [busy, setBusy] = useState<"contract" | "list" | "item" | "package" | "">("");
   const [testSearch, setTestSearch] = useState("");
   const [testId, setTestId] = useState("");
+  const [packageSearch, setPackageSearch] = useState("");
+  const [packageId, setPackageId] = useState("");
 
   const testOptions = useMemo(() => tests.map((test) => ({
     ...test,
     label: `${test.code} — ${test.nameEn}`,
   })), [tests]);
+  const packageOptions = useMemo(() => packages.map((pkg) => ({
+    ...pkg,
+    label: `${pkg.code} — ${pkg.nameEn}`,
+  })), [packages]);
 
   async function createContract(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -118,6 +127,32 @@ export function PricingManager({
     setBusy("");
   }
 
+  async function addPackagePrice(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    if (!packageId) { setMessage("Select a valid package."); return; }
+    setBusy("package"); setMessage("");
+    const response = await fetch("/api/pricing/package-items", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        priceListId: form.get("priceListId"),
+        packageId,
+        unitPrice: Number(form.get("unitPrice")),
+        effectiveFrom: form.get("effectiveFrom"),
+        effectiveTo: form.get("effectiveTo"),
+      }),
+    });
+    const body = await response.json().catch(() => ({}));
+    if (response.ok) {
+      setMessage("Package price added.");
+      setPackageId(""); setPackageSearch("");
+      event.currentTarget.reset();
+      router.refresh();
+    } else setMessage(body.error || "Could not add package price.");
+    setBusy("");
+  }
+
   return <div className="detail-grid">
     <article className="detail-card">
       <h2>Create Client Contract</h2>
@@ -176,6 +211,33 @@ export function PricingManager({
         <button className="primary-button form-span" disabled={busy === "item"}>{busy === "item" ? "Saving…" : "Add Test Price"}</button>
       </form>
       {message && <p className="form-success">{message}</p>}
+    </article>
+
+    <article className="detail-card">
+      <h2>Add Package Price</h2>
+      <p className="muted">Package pricing is independent from member test prices and is snapshotted when ordered.</p>
+      <form className="catalog-form" onSubmit={addPackagePrice}>
+        <label className="form-span">Price list<select name="priceListId" required><option value="">Select price list…</option>{priceLists.map(x => <option key={x.id} value={x.id}>{x.code} — {x.nameEn} ({x.currency})</option>)}</select></label>
+        <label className="form-span">Commercial package
+          <input
+            list="pricing-package-options"
+            placeholder="Type package code or name…"
+            value={packageSearch}
+            onChange={e => {
+              const value = e.target.value;
+              setPackageSearch(value);
+              const match = packageOptions.find(x => x.label === value);
+              setPackageId(match?.id || "");
+            }}
+            required
+          />
+          <datalist id="pricing-package-options">{packageOptions.map(pkg => <option key={pkg.id} value={pkg.label} />)}</datalist>
+        </label>
+        <label>Package price<input name="unitPrice" type="number" step="0.0001" min="0" required /></label>
+        <label>Effective from<input name="effectiveFrom" type="date" required defaultValue={new Date().toISOString().slice(0,10)} /></label>
+        <label>Effective to<input name="effectiveTo" type="date" /></label>
+        <button className="primary-button form-span" disabled={busy === "package"}>{busy === "package" ? "Saving…" : "Add Package Price"}</button>
+      </form>
     </article>
   </div>;
 }

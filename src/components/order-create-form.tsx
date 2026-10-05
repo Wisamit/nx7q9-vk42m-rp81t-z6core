@@ -15,6 +15,7 @@ type OrderQuestionOption = {
   displayOrder: number;
 };
 type TestOption = { id: string; code: string; nameEn: string; orderQuestions: OrderQuestionOption[] };
+type PackageOption = { id: string; code: string; nameEn: string; testIds: string[] };
 type SimpleOption = { id: string; code: string; nameEn: string };
 type ReferrerOption = SimpleOption & { clientId: string | null };
 type SourceOption = SimpleOption & { category: string };
@@ -23,6 +24,7 @@ type BranchOption = SimpleOption;
 export function OrderCreateForm({
   patients,
   tests,
+  packages,
   clients,
   referrers,
   sources,
@@ -31,6 +33,7 @@ export function OrderCreateForm({
 }: {
   patients: PatientOption[];
   tests: TestOption[];
+  packages: PackageOption[];
   clients: SimpleOption[];
   referrers: ReferrerOption[];
   sources: SourceOption[];
@@ -42,6 +45,8 @@ export function OrderCreateForm({
   const [patientId, setPatientId] = useState("");
   const [testSearch, setTestSearch] = useState("");
   const [selectedTestIds, setSelectedTestIds] = useState<string[]>([]);
+  const [packageSearch, setPackageSearch] = useState("");
+  const [selectedPackageIds, setSelectedPackageIds] = useState<string[]>([]);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -51,7 +56,11 @@ export function OrderCreateForm({
   })), [patients]);
 
   const testOptions = useMemo(() => tests.map(t => ({ ...t, label: `${t.code} — ${t.nameEn}` })), [tests]);
-  const selectedTests = selectedTestIds.map(id => tests.find(t => t.id === id)).filter((x): x is TestOption => Boolean(x));
+  const packageOptions = useMemo(() => packages.map(pkg => ({ ...pkg, label: `${pkg.code} — ${pkg.nameEn}` })), [packages]);
+  const selectedPackages = selectedPackageIds.map(id => packages.find(pkg => pkg.id === id)).filter((x): x is PackageOption => Boolean(x));
+  const packageTestIds = useMemo(() => [...new Set(selectedPackages.flatMap(pkg => pkg.testIds))], [selectedPackages]);
+  const effectiveTestIds = useMemo(() => [...new Set([...selectedTestIds, ...packageTestIds])], [selectedTestIds, packageTestIds]);
+  const selectedTests = effectiveTestIds.map(id => tests.find(t => t.id === id)).filter((x): x is TestOption => Boolean(x));
 
   function addTest() {
     const match = testOptions.find(t => t.label === testSearch);
@@ -59,15 +68,39 @@ export function OrderCreateForm({
       setMessage("Select a valid test from the search suggestions.");
       return;
     }
+    if (packageTestIds.includes(match.id)) {
+      setMessage("This test is already included in a selected commercial package.");
+      return;
+    }
     setSelectedTestIds(ids => ids.includes(match.id) ? ids : [...ids, match.id]);
     setTestSearch("");
+    setMessage("");
+  }
+
+  function addPackage() {
+    const match = packageOptions.find(pkg => pkg.label === packageSearch);
+    if (!match) {
+      setMessage("Select a valid commercial package from the suggestions.");
+      return;
+    }
+    if (selectedTestIds.some(testId => match.testIds.includes(testId))) {
+      setMessage("Remove directly selected tests that are already included in this package.");
+      return;
+    }
+    const otherPackageTests = new Set(selectedPackages.flatMap(pkg => pkg.testIds));
+    if (match.testIds.some(testId => otherPackageTests.has(testId))) {
+      setMessage("Selected packages cannot contain overlapping tests.");
+      return;
+    }
+    setSelectedPackageIds(ids => ids.includes(match.id) ? ids : [...ids, match.id]);
+    setPackageSearch("");
     setMessage("");
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!patientId) { setMessage("Select a valid patient."); return; }
-    if (selectedTestIds.length === 0) { setMessage("Add at least one test."); return; }
+    if (effectiveTestIds.length === 0) { setMessage("Add at least one test or commercial package."); return; }
 
     const form = new FormData(event.currentTarget);
     setBusy(true);
@@ -95,6 +128,7 @@ export function OrderCreateForm({
         clinicalNotes: form.get("clinicalNotes"),
         pregnancyInfo: form.get("pregnancyInfo"),
         testIds: selectedTestIds,
+        packageIds: selectedPackageIds,
         answers,
       }),
     });
@@ -105,13 +139,20 @@ export function OrderCreateForm({
       setPatientId("");
       setPatientSearch("");
       setSelectedTestIds([]);
+      setSelectedPackageIds([]);
+      setPackageSearch("");
       event.currentTarget.reset();
       router.refresh();
     } else if (body.error === "missing_prices") {
       const codes = Array.isArray(body.tests) ? body.tests.map((x: { code?: string }) => x.code).filter(Boolean).join(", ") : "";
       setMessage(`Missing active prices for: ${codes || "selected tests"}. Configure Pricing first.`);
+    } else if (body.error === "missing_package_prices") {
+      const codes = Array.isArray(body.packages) ? body.packages.map((x: { code?: string }) => x.code).filter(Boolean).join(", ") : "";
+      setMessage(`Missing active package prices for: ${codes || "selected packages"}. Configure Pricing first.`);
+    } else if (body.error === "package_test_overlap" || body.error === "package_direct_test_overlap") {
+      setMessage("Commercial packages and directly selected tests must not overlap.");
     } else if (body.error === "mixed_currencies_not_allowed") {
-      setMessage("Selected tests resolve to different currencies. One order invoice must use a single currency.");
+      setMessage("Selected tests/packages resolve to different currencies. One order invoice must use a single currency.");
     } else {
       setMessage(body.error || "Could not create order.");
     }
@@ -172,6 +213,27 @@ export function OrderCreateForm({
       <label className="form-span">Pregnancy information<input name="pregnancyInfo" maxLength={500} /></label>
       <label className="form-span">Clinical notes<textarea name="clinicalNotes" rows={3} /></label>
 
+      {packages.length > 0 && <div className="form-span order-test-picker">
+        <label>Commercial packages
+          <div className="inline-search">
+            <input
+              list="order-package-options"
+              placeholder="Type package code or name…"
+              value={packageSearch}
+              onChange={e => setPackageSearch(e.target.value)}
+            />
+            <button className="secondary-button" type="button" onClick={addPackage}>Add Package</button>
+          </div>
+          <datalist id="order-package-options">{packageOptions.map(pkg => <option key={pkg.id} value={pkg.label} />)}</datalist>
+        </label>
+        <div className="selected-test-list">
+          {selectedPackages.length === 0 ? <span className="muted">No packages selected.</span> :
+            selectedPackages.map(pkg => <span className="selected-test-chip package-chip" key={pkg.id}>{pkg.code} — {pkg.nameEn} · {pkg.testIds.length} tests<button type="button" onClick={() => setSelectedPackageIds(ids => ids.filter(id => id !== pkg.id))}>×</button></span>)
+          }
+        </div>
+        <p className="muted package-helper">Package members are ordered as individual clinical tests, while billing keeps the package price as one historical commercial snapshot.</p>
+      </div>}
+
       <div className="form-span order-test-picker">
         <label>Tests
           <div className="inline-search">
@@ -187,7 +249,13 @@ export function OrderCreateForm({
         </label>
         <div className="selected-test-list">
           {selectedTests.length === 0 ? <span className="muted">No tests selected.</span> :
-            selectedTests.map(test => <span className="selected-test-chip" key={test.id}>{test.code} — {test.nameEn}<button type="button" onClick={() => setSelectedTestIds(ids => ids.filter(id => id !== test.id))}>×</button></span>)
+            selectedTests.map(test => {
+              const fromPackage = packageTestIds.includes(test.id);
+              return <span className={"selected-test-chip" + (fromPackage ? " package-member-chip" : "")} key={test.id}>
+                {test.code} — {test.nameEn}{fromPackage ? " · package" : ""}
+                {!fromPackage && <button type="button" onClick={() => setSelectedTestIds(ids => ids.filter(id => id !== test.id))}>×</button>}
+              </span>;
+            })
           }
         </div>
       </div>

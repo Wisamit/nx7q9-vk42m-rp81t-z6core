@@ -10,7 +10,7 @@ export default async function OrdersPage() {
 
   const accessibleBranchIds = session.user.branchScopes.map(scope => scope.branchId);
 
-  const [patients, tests, clients, referrers, sources, branches, orders] = await Promise.all([
+  const [patients, tests, packages, clients, referrers, sources, branches, orders] = await Promise.all([
     prisma.patient.findMany({
       where: { organizationId: session.user.organizationId, status: "ACTIVE" },
       select: { id: true, patientNumber: true, fullNameEn: true, phone: true },
@@ -36,6 +36,19 @@ export default async function OrdersPage() {
             displayOrder: true,
           },
           orderBy: [{ displayOrder: "asc" }, { code: "asc" }],
+        },
+      },
+      orderBy: { nameEn: "asc" },
+    }),
+    prisma.commercialPackage.findMany({
+      where: { organizationId: session.user.organizationId, status: "ACTIVE" },
+      select: {
+        id: true,
+        code: true,
+        nameEn: true,
+        items: {
+          select: { testId: true },
+          orderBy: { displayOrder: "asc" },
         },
       },
       orderBy: { nameEn: "asc" },
@@ -119,6 +132,7 @@ export default async function OrdersPage() {
               : [],
           })),
         }))}
+        packages={packages.map(pkg => ({ id: pkg.id, code: pkg.code, nameEn: pkg.nameEn, testIds: pkg.items.map(item => item.testId) }))}
         clients={clients}
         referrers={referrers}
         sources={sources}
