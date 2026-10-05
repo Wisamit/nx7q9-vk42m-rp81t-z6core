@@ -27,7 +27,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!effectiveness || !effectivenessReview) return NextResponse.json({ error: "effectiveness_review_required" }, { status: 400 });
   const openActions = capa.actions.filter(action => !["COMPLETED","CANCELLED"].includes(action.status));
   if (openActions.length > 0) return NextResponse.json({ error: "open_capa_actions", count: openActions.length }, { status: 409 });
-  if (close && effectiveness === "INEFFECTIVE") return NextResponse.json({ error: "ineffective_capa_cannot_close" }, { status: 409 });
+  if (close && effectiveness !== "EFFECTIVE") {
+    return NextResponse.json({ error: "capa_must_be_effective_before_closure" }, { status: 409 });
+  }
 
   const now = new Date();
   const saved = await prisma.$transaction(async tx => {
