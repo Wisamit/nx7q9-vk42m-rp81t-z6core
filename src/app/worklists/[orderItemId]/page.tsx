@@ -6,6 +6,7 @@ import { resolveReferenceInterval } from "@/lib/result-reference";
 import { ResultEntryForm } from "@/components/result-entry-form";
 import { ResultWorkflowActions } from "@/components/result-workflow-actions";
 import { ReflexReviewPanel } from "@/components/reflex-review-panel";
+import { ValidationHoldPanel } from "@/components/validation-hold-panel";
 
 export const dynamic = "force-dynamic";
 
@@ -84,6 +85,13 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
           reflexEvents: {
             include: {
               rule: { include: { targetTest: true } },
+              reviewedBy: true,
+            },
+            orderBy: { createdAt: "asc" },
+          },
+          validationHoldEvents: {
+            include: {
+              rule: true,
               reviewedBy: true,
             },
             orderBy: { createdAt: "asc" },
@@ -253,6 +261,21 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
           reviewNote: event.reviewNote,
         }))}
       />}
+
+      {latestResult && <ValidationHoldPanel
+        resultId={latestResult.id}
+        canReview={permissions.has("validation_holds.review")}
+        events={latestResult.validationHoldEvents.map(event => ({
+          id: event.id,
+          status: event.status,
+          severity: event.severitySnapshot,
+          reasonEn: event.reasonEnSnapshot,
+          reasonAr: event.reasonArSnapshot,
+          reviewedBy: event.reviewedBy?.displayNameEn || null,
+          reviewedAt: event.reviewedAt?.toISOString() || null,
+          reviewNote: event.reviewNote,
+        }))}
+      />}
     </section>
 
     {latestResult && <section className="detail-card detail-section">
@@ -287,7 +310,8 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
         <dt>Source</dt><dd>{latestResult.source}</dd>
         <dt>Entered by</dt><dd>{latestResult.enteredBy.displayNameEn}</dd>
         <dt>Entered at</dt><dd>{latestResult.enteredAt.toISOString().replace("T"," ").slice(0,19)}</dd>
-        <dt>Verified by</dt><dd>{latestResult.verifiedBy?.displayNameEn || "—"}</dd>
+        <dt>Verification mode</dt><dd>{latestResult.autoVerified ? "AUTOVERIFICATION" : "MANUAL"}</dd>
+        <dt>Verified by</dt><dd>{latestResult.autoVerified ? "System policy" : latestResult.verifiedBy?.displayNameEn || "—"}</dd>
         <dt>Verified at</dt><dd>{latestResult.verifiedAt?.toISOString().replace("T"," ").slice(0,19) || "—"}</dd>
         <dt>Released by</dt><dd>{latestResult.releasedBy?.displayNameEn || "—"}</dd>
         <dt>Released at</dt><dd>{latestResult.releasedAt?.toISOString().replace("T"," ").slice(0,19) || "—"}</dd>
