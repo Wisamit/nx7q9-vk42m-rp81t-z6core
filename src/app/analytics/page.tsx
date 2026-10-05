@@ -162,7 +162,12 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
         order: { orderingBranchId: { in: branchIds } },
         ...(periodWhere ? { createdAt: periodWhere } : {}),
       },
-      select: { id: true, status: true, rejectionReasonCode: true },
+      select: {
+        id: true,
+        status: true,
+        rejectionReasonCode: true,
+        order: { select: { orderingBranchId: true } },
+      },
       take: 30000,
     }),
     prisma.orderItem.findMany({
@@ -377,14 +382,10 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
   }
 
   for (const specimen of specimens) {
-    const orderBranchId = orders.find(order => order.id === (specimen as { orderId?: string }).orderId)?.orderingBranchId;
-    if (orderBranchId) {
-      const row = branchMap.get(orderBranchId);
-      if (row) {
-        row.specimens++;
-        if (specimen.status === "REJECTED") row.rejectedSpecimens++;
-      }
-    }
+    const row = branchMap.get(specimen.order.orderingBranchId);
+    if (!row) continue;
+    row.specimens++;
+    if (specimen.status === "REJECTED") row.rejectedSpecimens++;
   }
 
   // Specimen query intentionally omits patient/order details; derive branch counts with a separate compact query.
@@ -496,7 +497,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
     <section className="table-card detail-section">
       <div className="table-toolbar"><h2>Branch Comparison</h2><span>{branchMap.size} branches</span></div>
       <div className="table-wrap"><table>
-        <thead><tr><th>Branch</th><th>Orders</th><th>Completed</th><th>Completion</th><th>Avg TAT</th><th>Revenue</th><th>Collected</th></tr></thead>
+        <thead><tr><th>Branch</th><th>Orders</th><th>Completed</th><th>Completion</th><th>Avg TAT</th><th>Specimen rejection</th><th>Revenue</th><th>Collected</th></tr></thead>
         <tbody>{[...branchMap.values()].map(branch => {
           const avg = branch.tatMinutes.length ? branch.tatMinutes.reduce((a,b) => a+b,0) / branch.tatMinutes.length : null;
           return <tr key={branch.id}>
@@ -505,6 +506,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
             <td>{branch.completed}</td>
             <td>{branch.orders ? (branch.completed / branch.orders * 100).toFixed(1) + "%" : "—"}</td>
             <td>{minuteLabel(avg)}</td>
+            <td>{branch.specimens ? (branch.rejectedSpecimens / branch.specimens * 100).toFixed(2) + "%" : "—"}</td>
             <td>{[...branch.revenue.entries()].map(([currency, amount]) => money(amount, currency)).join(" · ") || "—"}</td>
             <td>{[...branch.collected.entries()].map(([currency, amount]) => money(amount, currency)).join(" · ") || "—"}</td>
           </tr>;
