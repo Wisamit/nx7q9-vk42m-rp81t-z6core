@@ -53,7 +53,7 @@ export function PaymentForm({ invoices }: { invoices: InvoiceOption[] }) {
       </select>
     </label>
     <label>Amount<input name="amount" type="number" min="0.0001" step="0.0001" required /></label>
-    <label>Method<select name="method" defaultValue="CASH"><option>CASH</option><option>CARD</option><option>BANK_TRANSFER</option><option>ONLINE</option><option>CREDIT_ACCOUNT</option><option>OTHER</option></select></label>
+    <label>Method<select name="method" defaultValue="CASH"><option>CASH</option><option>CARD</option><option>BANK_TRANSFER</option><option>ONLINE</option><option>OTHER</option></select></label>
     <label className="form-span">Reference<input name="reference" maxLength={150} placeholder="Receipt / transaction / bank reference" /></label>
     <button className="primary-button form-span" disabled={busy}>{busy ? "Posting…" : "Post Payment"}</button>
     {message && <div className="form-success form-span">{message}</div>}
