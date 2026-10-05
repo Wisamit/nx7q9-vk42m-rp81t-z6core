@@ -15,7 +15,15 @@ type Candidate = {
   branchName: string;
 };
 
-export function MicrobiologyManager({ candidates }: { candidates: Candidate[] }) {
+export function MicrobiologyManager({
+  candidates,
+  canEnter,
+  canManage,
+}: {
+  candidates: Candidate[];
+  canEnter: boolean;
+  canManage: boolean;
+}) {
   const router = useRouter();
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState("");
@@ -68,7 +76,7 @@ export function MicrobiologyManager({ candidates }: { candidates: Candidate[] })
   }
 
   return <>
-    <section className="detail-grid detail-section">
+    {canManage && <section className="detail-grid detail-section">
       <article className="detail-card">
         <h2>Add Organism</h2>
         <form className="catalog-form" onSubmit={event => void createMaster(event, "ORGANISM")}>
@@ -89,11 +97,11 @@ export function MicrobiologyManager({ candidates }: { candidates: Candidate[] })
           <button className="primary-button form-span" disabled={busy !== ""}>{busy === "ANTIBIOTIC" ? "Saving…" : "Add Antibiotic"}</button>
         </form>
       </article>
-    </section>
+    </section>}
 
     {message && <p className="form-success">{message}</p>}
 
-    <section className="table-card detail-section">
+    {canEnter && <section className="table-card detail-section">
       <div className="table-toolbar"><h2>Ready Microbiology Work</h2><span>{candidates.length} ready specimen(s)</span></div>
       <div className="table-wrap"><table>
         <thead><tr><th>Accession / Patient</th><th>Test</th><th>Specimen</th><th>Branch</th><th>Action</th></tr></thead>
@@ -108,6 +116,6 @@ export function MicrobiologyManager({ candidates }: { candidates: Candidate[] })
           </tr>;
         })}</tbody>
       </table></div>
-    </section>
+    </section>}
   </>;
 }
