@@ -364,6 +364,57 @@ export async function POST(request: Request) {
       });
     }
 
+    for (const rule of orderItem.test.sourceReflexRules) {
+      if (rule.branchId && rule.branchId !== performingBranchId) continue;
+
+      const source = prepared.find(item =>
+        rule.sourceComponentId ? item.componentId === rule.sourceComponentId : item.componentId === null
+      );
+      if (!source) continue;
+
+      const matched = reflexMatches(
+        rule.operator,
+        {
+          numericValue: source.parsed.valueNumeric,
+          textValue: source.parsed.valueText,
+          displayValue: source.parsed.displayValue,
+        },
+        {
+          numericThreshold: rule.numericThreshold,
+          textThreshold: rule.textThreshold,
+        },
+      );
+
+      if (matched) {
+        await tx.reflexRuleEvent.upsert({
+          where: { resultId_ruleId: { resultId: result.id, ruleId: rule.id } },
+          update: {
+            status: "PENDING",
+            triggerValueSnapshot: source.parsed.displayValue,
+            targetTestCodeSnapshot: rule.targetTest.code,
+            targetTestNameEnSnapshot: rule.targetTest.nameEn,
+            targetTestNameArSnapshot: rule.targetTest.nameAr,
+            reviewedByUserId: null,
+            reviewedAt: null,
+            reviewNote: null,
+          },
+          create: {
+            resultId: result.id,
+            ruleId: rule.id,
+            triggerValueSnapshot: source.parsed.displayValue,
+            targetTestCodeSnapshot: rule.targetTest.code,
+            targetTestNameEnSnapshot: rule.targetTest.nameEn,
+            targetTestNameArSnapshot: rule.targetTest.nameAr,
+          },
+        });
+      } else {
+        await tx.reflexRuleEvent.updateMany({
+          where: { resultId: result.id, ruleId: rule.id, status: "PENDING" },
+          data: { status: "SUPERSEDED" },
+        });
+      }
+    }
+
     await tx.orderItem.update({
       where: { id: orderItemId },
       data: {
@@ -442,7 +493,7 @@ export async function POST(request: Request) {
 
     return tx.laboratoryResult.findUnique({
       where: { id: result.id },
-      include: { values: { orderBy: { componentCodeSnapshot: "asc" } } },
+      include: { values: { orderBy: { componentCodeSnapshot: "asc" } }, reflexEvents: true },
     });
   }, { timeout: 30000 });
 
@@ -451,5 +502,7 @@ export async function POST(request: Request) {
     result: saved,
     complete,
     criticalCount: saved?.values.filter((value) => value.isCritical).length || 0,
+    deltaExceededCount: saved?.values.filter((value) => value.deltaEvaluation === "EXCEEDED").length || 0,
+    pendingReflexCount: saved?.reflexEvents.filter((event) => event.status === "PENDING").length || 0,
   }, { status: existing ? 200 : 201 });
 }
