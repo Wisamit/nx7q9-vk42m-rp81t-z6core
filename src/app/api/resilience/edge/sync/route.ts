@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
+import type { Prisma } from "../../../../../../generated/prisma/client";
 import { IntegrationAuthError, requireIntegrationApiKey } from "@/lib/integration-auth";
 import { prisma } from "@/lib/db";
 
@@ -92,7 +93,7 @@ export async function POST(request: Request) {
             direction: "TO_CENTRAL",
             eventType: item.eventType,
             idempotencyKey: item.idempotencyKey,
-            payload: item.payload as never,
+            payload: item.payload as Prisma.InputJsonValue,
             payloadHash: item.payloadHash,
             status: "RECEIVED",
             attemptCount: 1,
