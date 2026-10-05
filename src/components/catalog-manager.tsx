@@ -40,6 +40,7 @@ export function CatalogManager({ departments, specimens, containers, methods, un
         <label>Arabic name<input name="nameAr" dir="rtl" /></label>
         <label>Abbreviation<input name="abbreviation" /></label>
         <label>Result type<select name="resultType" defaultValue="NUMERIC"><option>NUMERIC</option><option>TEXT</option><option>QUALITATIVE</option><option>BOOLEAN</option><option>DATE</option></select></label>
+        <label>Workflow<select name="workflowType" defaultValue="GENERAL"><option value="GENERAL">General laboratory</option><option value="MICROBIOLOGY">Microbiology / culture</option></select></label>
         <label>Department<select name="departmentId"><option value="">—</option>{departments.map(x => <option key={x.id} value={x.id}>{x.nameEn || x.code}</option>)}</select></label>
         <label>Specimen<select name="specimenTypeId"><option value="">—</option>{specimens.map(x => <option key={x.id} value={x.id}>{x.nameEn || x.code}</option>)}</select></label>
         <label>Container / tube<select name="containerId"><option value="">—</option>{containers.map(x => <option key={x.id} value={x.id}>{x.nameEn || x.code}</option>)}</select></label>
