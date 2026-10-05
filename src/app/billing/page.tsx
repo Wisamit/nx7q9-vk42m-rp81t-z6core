@@ -8,9 +8,11 @@ export const dynamic = "force-dynamic";
 export default async function BillingPage() {
   const session = await requirePermission("billing.view");
 
+  const accessibleBranchIds = session.user.branchScopes.map(scope => scope.branchId);
+
   const [invoices, recentPayments] = await Promise.all([
     prisma.invoice.findMany({
-      where: { organizationId: session.user.organizationId },
+      where: { organizationId: session.user.organizationId, branchId: { in: accessibleBranchIds } },
       include: {
         order: { include: { patient: true } },
         client: true,
@@ -20,7 +22,7 @@ export default async function BillingPage() {
       take: 200,
     }),
     prisma.payment.findMany({
-      where: { organizationId: session.user.organizationId },
+      where: { organizationId: session.user.organizationId, branchId: { in: accessibleBranchIds } },
       include: {
         branch: true,
         cashier: true,
