@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 
-export async function POST(_: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const body = await request.json().catch(() => ({})) as { confirmDeltaWarnings?: boolean };
   const session = await requirePermission("results.verify");
   const ctx = await requestContext();
   const { id } = await params;
@@ -13,6 +14,7 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
       values: true,
       performingBranch: true,
       specimen: true,
+      reflexEvents: { where: { status: "PENDING" } },
       orderItem: {
         include: {
           test: { include: { components: { where: { status: "ACTIVE" } } } },
@@ -29,6 +31,26 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
   const expectedCount = Math.max(1, result.orderItem.test.components.length);
   if (result.values.length !== expectedCount) {
     return NextResponse.json({ error: "result_incomplete", expectedCount, enteredCount: result.values.length }, { status: 409 });
+  }
+
+  const pendingReflex = result.reflexEvents.length;
+  if (pendingReflex > 0) {
+    return NextResponse.json({ error: "reflex_review_required", pendingReflex }, { status: 409 });
+  }
+
+  const deltaExceeded = result.values.filter((value) => value.deltaEvaluation === "EXCEEDED");
+  if (deltaExceeded.length > 0 && body.confirmDeltaWarnings !== true) {
+    return NextResponse.json({
+      error: "delta_review_confirmation_required",
+      deltaExceededCount: deltaExceeded.length,
+      components: deltaExceeded.map((value) => ({
+        code: value.componentCodeSnapshot,
+        value: value.displayValue,
+        previousValue: value.previousValueSnapshot?.toString() || null,
+        deltaAbsolute: value.deltaAbsoluteSnapshot?.toString() || null,
+        deltaPercent: value.deltaPercentSnapshot?.toString() || null,
+      })),
+    }, { status: 409 });
   }
 
   const verifiedAt = new Date();
@@ -116,6 +138,7 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
           status: "VERIFIED",
           verifiedAt,
           criticalCount: criticalValues.length,
+          deltaExceededCount: deltaExceeded.length,
           orderItemId: result.orderItemId,
           specimenId: result.specimenId,
         },
@@ -132,6 +155,7 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
     resultId: updated.id,
     resultStatus: updated.status,
     criticalCount: criticalValues.length,
+    deltaExceededCount: deltaExceeded.length,
     releaseBlockedUntilCriticalAcknowledgement: criticalValues.length > 0,
   });
 }
