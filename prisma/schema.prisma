@@ -714,6 +714,19 @@ enum BranchContinuityMode {
   BUFFER_NON_CLINICAL
 }
 
+enum EdgeQueueDirection {
+  TO_CENTRAL
+  TO_EDGE
+}
+
+enum EdgeQueueStatus {
+  QUEUED
+  RECEIVED
+  ACKNOWLEDGED
+  FAILED
+  DEAD_LETTER
+}
+
 model Organization {
   id              String       @id @default(uuid()) @db.Char(36)
   code            String       @unique @db.VarChar(50)
@@ -803,6 +816,8 @@ model Organization {
   retentionPolicies RetentionPolicy[]
   backupVerifications BackupVerification[]
   disasterRecoveryDrills DisasterRecoveryDrill[]
+  edgeNodes EdgeNode[]
+  edgeQueueMessages EdgeQueueMessage[]
 
   @@map("organizations")
 }
@@ -882,6 +897,8 @@ model Branch {
   continuityPolicy BranchContinuityPolicy?
   backupVerifications BackupVerification[]
   disasterRecoveryDrills DisasterRecoveryDrill[]
+  edgeNodes EdgeNode[]
+  edgeQueueMessages EdgeQueueMessage[]
 
   @@unique([organizationId, code])
   @@index([organizationId, status])
@@ -1052,6 +1069,7 @@ model User {
   ownedDisasterRecoveryDrills DisasterRecoveryDrill[] @relation("DisasterRecoveryDrillOwner")
   recordedDisasterRecoveryDrills DisasterRecoveryDrill[] @relation("DisasterRecoveryDrillRecorder")
   updatedContinuityPolicies BranchContinuityPolicy[] @relation("BranchContinuityPolicyUpdater")
+  createdEdgeNodes EdgeNode[] @relation("EdgeNodeCreator")
 
   @@unique([organizationId, username])
   @@unique([organizationId, email])
@@ -4416,4 +4434,59 @@ model BranchContinuityPolicy {
 
   @@index([mode])
   @@map("branch_continuity_policies")
+}
+
+model EdgeNode {
+  id              String       @id @default(uuid()) @db.Char(36)
+  organizationId  String       @map("organization_id") @db.Char(36)
+  branchId        String       @map("branch_id") @db.Char(36)
+  code            String       @db.VarChar(80)
+  name            String       @db.VarChar(200)
+  status          RecordStatus @default(ACTIVE)
+  softwareVersion String?      @map("software_version") @db.VarChar(80)
+  lastHeartbeatAt DateTime?    @map("last_heartbeat_at") @db.DateTime(3)
+  lastSyncAt      DateTime?    @map("last_sync_at") @db.DateTime(3)
+  createdByUserId String       @map("created_by_user_id") @db.Char(36)
+  createdAt       DateTime     @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt       DateTime     @updatedAt @map("updated_at") @db.DateTime(3)
+  deactivatedAt   DateTime?    @map("deactivated_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  branch       Branch       @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  createdBy    User         @relation("EdgeNodeCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  messages     EdgeQueueMessage[]
+
+  @@unique([organizationId, code])
+  @@index([branchId, status])
+  @@index([lastHeartbeatAt])
+  @@map("edge_nodes")
+}
+
+model EdgeQueueMessage {
+  id             String             @id @default(uuid()) @db.Char(36)
+  organizationId String             @map("organization_id") @db.Char(36)
+  branchId       String             @map("branch_id") @db.Char(36)
+  edgeNodeId     String             @map("edge_node_id") @db.Char(36)
+  direction      EdgeQueueDirection
+  eventType      String             @map("event_type") @db.VarChar(120)
+  idempotencyKey String             @map("idempotency_key") @db.VarChar(160)
+  payload        Json
+  payloadHash    String             @map("payload_hash") @db.Char(64)
+  status         EdgeQueueStatus    @default(QUEUED)
+  attemptCount   Int                @default(0) @map("attempt_count")
+  lastError      String?            @map("last_error") @db.Text
+  receivedAt     DateTime?          @map("received_at") @db.DateTime(3)
+  acknowledgedAt DateTime?          @map("acknowledged_at") @db.DateTime(3)
+  createdAt      DateTime           @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt      DateTime           @updatedAt @map("updated_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  branch       Branch       @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  edgeNode     EdgeNode     @relation(fields: [edgeNodeId], references: [id], onDelete: Restrict)
+
+  @@unique([edgeNodeId, direction, idempotencyKey])
+  @@index([organizationId, status, createdAt])
+  @@index([branchId, status, createdAt])
+  @@index([edgeNodeId, status, createdAt])
+  @@map("edge_queue_messages")
 }
