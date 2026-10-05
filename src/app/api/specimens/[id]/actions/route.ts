@@ -219,6 +219,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         organizationId: specimen.organizationId,
         orderId: specimen.orderId,
         parentSpecimenId: specimen.id,
+        kind: "RECOLLECTION",
         specimenTypeId: specimen.specimenTypeId,
         containerId: specimen.containerId,
         barcode: replacementBarcode,
