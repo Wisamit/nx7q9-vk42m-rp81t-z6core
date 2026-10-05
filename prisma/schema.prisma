@@ -677,6 +677,43 @@ enum WebhookDeliveryStatus {
   DEAD_LETTER
 }
 
+enum RetentionDataClass {
+  ANALYZER_MESSAGES
+  INTEGRATION_MESSAGES
+  WEBHOOK_DELIVERIES
+  PORTAL_SESSIONS
+  USER_SESSIONS
+  AUDIT_EVENTS
+  CLINICAL_RESULTS
+  DIAGNOSTIC_REPORTS
+}
+
+enum RetentionAction {
+  ARCHIVE
+  PURGE
+  RETAIN_ONLY
+}
+
+enum BackupVerificationStatus {
+  RECORDED
+  VERIFIED
+  FAILED
+}
+
+enum DisasterRecoveryDrillStatus {
+  PLANNED
+  IN_PROGRESS
+  PASSED
+  FAILED
+  CANCELLED
+}
+
+enum BranchContinuityMode {
+  CENTRAL_ONLY
+  READ_ONLY_CACHE
+  BUFFER_NON_CLINICAL
+}
+
 model Organization {
   id              String       @id @default(uuid()) @db.Char(36)
   code            String       @unique @db.VarChar(50)
@@ -763,6 +800,10 @@ model Organization {
   webhookSubscriptions WebhookSubscription[]
   webhookDeliveries WebhookDelivery[]
 
+  retentionPolicies RetentionPolicy[]
+  backupVerifications BackupVerification[]
+  disasterRecoveryDrills DisasterRecoveryDrill[]
+
   @@map("organizations")
 }
 
@@ -837,6 +878,10 @@ model Branch {
 
   integrationEndpoints IntegrationEndpoint[]
   integrationMessages IntegrationMessage[]
+
+  continuityPolicy BranchContinuityPolicy?
+  backupVerifications BackupVerification[]
+  disasterRecoveryDrills DisasterRecoveryDrill[]
 
   @@unique([organizationId, code])
   @@index([organizationId, status])
@@ -1001,6 +1046,12 @@ model User {
   createdTerminologyMappings TerminologyMapping[] @relation("TerminologyMappingCreator")
   createdIntegrationEndpoints IntegrationEndpoint[] @relation("IntegrationEndpointCreator")
   createdIntegrationApiKeys IntegrationApiKey[] @relation("IntegrationApiKeyCreator")
+
+  createdRetentionPolicies RetentionPolicy[] @relation("RetentionPolicyCreator")
+  recordedBackupVerifications BackupVerification[] @relation("BackupVerificationRecorder")
+  ownedDisasterRecoveryDrills DisasterRecoveryDrill[] @relation("DisasterRecoveryDrillOwner")
+  recordedDisasterRecoveryDrills DisasterRecoveryDrill[] @relation("DisasterRecoveryDrillRecorder")
+  updatedContinuityPolicies BranchContinuityPolicy[] @relation("BranchContinuityPolicyUpdater")
 
   @@unique([organizationId, username])
   @@unique([organizationId, email])
@@ -4269,4 +4320,100 @@ model WebhookDelivery {
   @@index([subscriptionId, createdAt])
   @@index([reportVersionId, createdAt])
   @@map("webhook_deliveries")
+}
+
+
+model RetentionPolicy {
+  id              String             @id @default(uuid()) @db.Char(36)
+  organizationId  String             @map("organization_id") @db.Char(36)
+  dataClass       RetentionDataClass @map("data_class")
+  action          RetentionAction    @default(RETAIN_ONLY)
+  retainDays      Int?               @map("retain_days")
+  archiveAfterDays Int?              @map("archive_after_days")
+  enabled         Boolean            @default(false)
+  notes           String?            @db.VarChar(1000)
+  createdByUserId String             @map("created_by_user_id") @db.Char(36)
+  createdAt       DateTime           @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt       DateTime           @updatedAt @map("updated_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  createdBy    User         @relation("RetentionPolicyCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([organizationId, dataClass])
+  @@index([organizationId, enabled])
+  @@map("retention_policies")
+}
+
+model BackupVerification {
+  id               String                   @id @default(uuid()) @db.Char(36)
+  organizationId   String                   @map("organization_id") @db.Char(36)
+  branchId         String?                  @map("branch_id") @db.Char(36)
+  provider         String                   @db.VarChar(160)
+  backupReference  String                   @map("backup_reference") @db.VarChar(500)
+  backupCreatedAt  DateTime                 @map("backup_created_at") @db.DateTime(3)
+  status           BackupVerificationStatus @default(RECORDED)
+  restoreTestedAt  DateTime?                @map("restore_tested_at") @db.DateTime(3)
+  restoreDurationMinutes Int?               @map("restore_duration_minutes")
+  evidenceReference String?                 @map("evidence_reference") @db.VarChar(1000)
+  notes            String?                  @db.Text
+  recordedByUserId String                   @map("recorded_by_user_id") @db.Char(36)
+  createdAt        DateTime                 @default(now()) @map("created_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  branch       Branch?      @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  recordedBy   User         @relation("BackupVerificationRecorder", fields: [recordedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, backupCreatedAt])
+  @@index([branchId, backupCreatedAt])
+  @@index([status, restoreTestedAt])
+  @@map("backup_verifications")
+}
+
+model DisasterRecoveryDrill {
+  id                  String                      @id @default(uuid()) @db.Char(36)
+  organizationId      String                      @map("organization_id") @db.Char(36)
+  branchId            String?                     @map("branch_id") @db.Char(36)
+  title               String                      @db.VarChar(255)
+  status              DisasterRecoveryDrillStatus @default(PLANNED)
+  targetRpoMinutes    Int                         @map("target_rpo_minutes")
+  targetRtoMinutes    Int                         @map("target_rto_minutes")
+  actualRpoMinutes    Int?                        @map("actual_rpo_minutes")
+  actualRtoMinutes    Int?                        @map("actual_rto_minutes")
+  scheduledAt         DateTime                    @map("scheduled_at") @db.DateTime(3)
+  startedAt           DateTime?                   @map("started_at") @db.DateTime(3)
+  completedAt         DateTime?                   @map("completed_at") @db.DateTime(3)
+  ownerUserId         String                      @map("owner_user_id") @db.Char(36)
+  recordedByUserId    String                      @map("recorded_by_user_id") @db.Char(36)
+  evidenceReference   String?                     @map("evidence_reference") @db.VarChar(1000)
+  findings            String?                     @db.Text
+  correctiveActions   String?                     @map("corrective_actions") @db.Text
+  createdAt           DateTime                    @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt           DateTime                    @updatedAt @map("updated_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  branch       Branch?      @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  owner        User         @relation("DisasterRecoveryDrillOwner", fields: [ownerUserId], references: [id], onDelete: Restrict)
+  recordedBy   User         @relation("DisasterRecoveryDrillRecorder", fields: [recordedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, status, scheduledAt])
+  @@index([branchId, status, scheduledAt])
+  @@map("disaster_recovery_drills")
+}
+
+model BranchContinuityPolicy {
+  id              String               @id @default(uuid()) @db.Char(36)
+  branchId        String               @unique @map("branch_id") @db.Char(36)
+  mode            BranchContinuityMode @default(CENTRAL_ONLY)
+  offlineClinicalWritesAllowed Boolean @default(false) @map("offline_clinical_writes_allowed")
+  localBufferMinutes Int?              @map("local_buffer_minutes")
+  notes           String?              @db.VarChar(1000)
+  updatedByUserId String               @map("updated_by_user_id") @db.Char(36)
+  createdAt       DateTime             @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt       DateTime             @updatedAt @map("updated_at") @db.DateTime(3)
+
+  branch    Branch @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  updatedBy User   @relation("BranchContinuityPolicyUpdater", fields: [updatedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([mode])
+  @@map("branch_continuity_policies")
 }
