@@ -167,6 +167,8 @@ export async function POST(request: Request) {
 
   try {
     for (const component of expected) {
+      if (component.componentId && calculatedTargetIds.has(component.componentId)) continue;
+
       const raw = valueByComponent.get(component.componentId || "__TEST__");
       const parsed = parseValue(component.resultType, raw);
       if (!parsed) continue;
@@ -209,6 +211,10 @@ export async function POST(request: Request) {
         interval,
         flag,
         delta,
+        isCalculated: false,
+        calculatedRuleId: null,
+        calculationExpression: null,
+        calculationInputs: null,
       });
     }
   } catch (error) {
