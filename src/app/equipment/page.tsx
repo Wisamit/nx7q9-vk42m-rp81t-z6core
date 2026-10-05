@@ -68,7 +68,18 @@ export default async function EquipmentPage() {
       branches={branches}
       departments={departments}
       analyzers={analyzers}
-      equipment={equipment.map(item => ({ id: item.id, assetId: item.assetId, name: item.name, status: item.status, analyzerId: item.analyzerId }))}
+      equipment={equipment.map(item => ({
+        id: item.id,
+        assetId: item.assetId,
+        name: item.name,
+        status: item.status,
+        analyzerId: item.analyzerId,
+        maintenancePlans: item.maintenancePlans.map(plan => ({
+          id: plan.id,
+          name: plan.name,
+          nextDueAt: plan.nextDueAt.toISOString().slice(0,10),
+        })),
+      }))}
       canManage={permissions.has("equipment.manage")}
     />
 
