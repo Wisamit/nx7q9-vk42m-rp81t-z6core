@@ -46,9 +46,9 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
     const code = typeof item.normalized.code === "string" ? item.normalized.code.trim().toUpperCase() : "";
     if (code && (testCodeCounts.get(code) || 0) > 1) {
       item.issues.push({
-        severity: "ERROR",
+        severity: "WARNING",
         code: "DUPLICATE_TEST_CODE",
-        message: "More than one staged test resolves to the same code and requires review.",
+        message: "More than one staged test resolves to the same code. These rows will remain excluded from safe import until reviewed.",
       });
     }
   }
