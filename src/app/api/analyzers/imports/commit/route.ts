@@ -305,9 +305,9 @@ export async function POST(request: Request) {
     valueNumeric: Prisma.Decimal | null;
     valueText: string | null;
     displayValue: string;
-    flag: typeof incoming[number]["flag"]["flag"];
+    flag: "NORMAL" | "LOW" | "HIGH" | "CRITICAL_LOW" | "CRITICAL_HIGH" | "ABNORMAL" | "UNKNOWN";
     isCritical: boolean;
-    deltaEvaluation: typeof incoming[number]["delta"]["evaluation"];
+    deltaEvaluation: "NOT_CONFIGURED" | "NO_PREVIOUS_RESULT" | "WITHIN_LIMIT" | "EXCEEDED";
   }>();
 
   for (const value of existingDirect) {
@@ -412,9 +412,9 @@ export async function POST(request: Request) {
     numericValue: Prisma.Decimal | null;
     textValue: string | null;
     displayValue: string;
-    flag: typeof incoming[number]["flag"]["flag"];
+    flag: "NORMAL" | "LOW" | "HIGH" | "CRITICAL_LOW" | "CRITICAL_HIGH" | "ABNORMAL" | "UNKNOWN";
     isCritical: boolean;
-    deltaEvaluation: typeof incoming[number]["delta"]["evaluation"];
+    deltaEvaluation: "NOT_CONFIGURED" | "NO_PREVIOUS_RESULT" | "WITHIN_LIMIT" | "EXCEEDED";
   }>();
 
   for (const item of finalDirect.values()) {
