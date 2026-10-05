@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { requirePermission } from "@/lib/auth";
+import { permissionSet, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { AnalyzerManager } from "@/components/analyzer-manager";
 
@@ -7,6 +7,7 @@ export const dynamic = "force-dynamic";
 
 export default async function AnalyzersPage() {
   const session = await requirePermission("analyzers.view");
+  const permissions = permissionSet(session);
   const branchIds = session.user.branchScopes.map(scope => scope.branchId);
 
   const [analyzers, branches, departments, tests, messages] = await Promise.all([
@@ -70,12 +71,12 @@ export default async function AnalyzersPage() {
       <Link className="secondary-link" href="/dashboard">Back to Dashboard</Link>
     </header>
 
-    <AnalyzerManager
+    {permissions.has("analyzers.manage") && <AnalyzerManager
       branches={branches}
       departments={departments}
       tests={tests}
       analyzers={analyzers.map(item => ({ id: item.id, code: item.code, name: item.name, branchId: item.branchId }))}
-    />
+    />}
 
     <section className="table-card detail-section">
       <div className="table-toolbar"><h2>Analyzer Registry</h2><span>{analyzers.length} analyzer(s)</span></div>
