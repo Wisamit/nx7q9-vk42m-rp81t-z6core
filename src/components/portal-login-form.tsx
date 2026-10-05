@@ -17,6 +17,7 @@ export function PortalLoginForm() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        organizationCode: form.get("organizationCode"),
         login: form.get("login"),
         password: form.get("password"),
       }),
@@ -34,6 +35,7 @@ export function PortalLoginForm() {
   }
 
   return <form className="catalog-form" onSubmit={submit}>
+    <label className="form-span">Laboratory code<input name="organizationCode" autoCapitalize="characters" required placeholder="FAMILY_LAB" /></label>
     <label className="form-span">Email or phone<input name="login" autoComplete="username" required /></label>
     <label className="form-span">Password<input name="password" type="password" autoComplete="current-password" required /></label>
     <button className="primary-button form-span" disabled={busy}>{busy ? "Signing in…" : "Sign in"}</button>
