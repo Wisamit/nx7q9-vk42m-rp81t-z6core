@@ -115,6 +115,11 @@ export function DigitalServicesConsole({
     if (ok) event.currentTarget.reset();
   }
 
+  async function setPortalStatus(accountId: string, status: "ACTIVE" | "DISABLED") {
+    if (!window.confirm(status === "DISABLED" ? "Disable this portal account and revoke active sessions?" : "Reactivate this portal account?")) return;
+    await send(`/api/portal-accounts/${accountId}/status`, "POST", { status }, "portal-status-" + accountId, status === "DISABLED" ? "Portal account disabled." : "Portal account reactivated.");
+  }
+
   async function setTemporaryPassword(accountId: string) {
     const temporaryPassword = window.prompt("Enter a temporary password of at least 12 characters. The portal user will be forced to change it on first login.");
     if (!temporaryPassword) return;
@@ -261,7 +266,12 @@ export function DigitalServicesConsole({
         <thead><tr><th>Type</th><th>Subject</th><th>Contact</th><th>Status</th><th>First login</th><th></th></tr></thead>
         <tbody>{portalAccounts.length === 0 ? <tr><td colSpan={6} className="empty-state">No portal accounts.</td></tr> : portalAccounts.map(item => <tr key={item.id}>
           <td>{item.type}</td><td>{item.subject}</td><td>{item.contact}</td><td>{item.status}</td><td>{item.mustChangePassword ? "Password change required" : "Complete"}</td>
-          <td>{permissions.portalAccounts && <button className="secondary-button" type="button" disabled={busy !== ""} onClick={() => void setTemporaryPassword(item.id)}>Set temp password</button>}</td>
+          <td>{permissions.portalAccounts && <div className="result-actions">
+            <button className="secondary-button" type="button" disabled={busy !== ""} onClick={() => void setTemporaryPassword(item.id)}>Set temp password</button>
+            {item.status === "DISABLED"
+              ? <button className="secondary-button" type="button" disabled={busy !== ""} onClick={() => void setPortalStatus(item.id,"ACTIVE")}>Reactivate</button>
+              : <button className="secondary-button" type="button" disabled={busy !== ""} onClick={() => void setPortalStatus(item.id,"DISABLED")}>Disable</button>}
+          </div>}</td>
         </tr>)}</tbody>
       </table></div>
     </article>
