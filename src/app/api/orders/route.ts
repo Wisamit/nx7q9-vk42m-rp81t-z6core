@@ -183,8 +183,10 @@ export async function POST(request: Request) {
   }
 
   const effectiveClientId = clientId || referrer?.clientId || null;
+  const directTestIdSet = new Set(directTestIds);
+  const directTests = tests.filter(test => directTestIdSet.has(test.id));
 
-  const prices = await Promise.all(tests.map(async (test) => ({
+  const directPrices = await Promise.all(directTests.map(async test => ({
     test,
     price: await resolveTestPrice(prisma, {
       organizationId: session.user.organizationId,
@@ -194,16 +196,44 @@ export async function POST(request: Request) {
     }),
   })));
 
-  const missingPrices = prices.filter(x => !x.price).map(x => ({ id: x.test.id, code: x.test.code, name: x.test.nameEn }));
+  const packagePrices = await Promise.all(packages.map(async pkg => ({
+    package: pkg,
+    price: await resolvePackagePrice(prisma, {
+      organizationId: session.user.organizationId,
+      branchId,
+      clientId: effectiveClientId,
+      packageId: pkg.id,
+    }),
+  })));
+
+  const missingPrices = directPrices.filter(entry => !entry.price).map(entry => ({
+    id: entry.test.id,
+    code: entry.test.code,
+    name: entry.test.nameEn,
+  }));
   if (missingPrices.length > 0) {
     return NextResponse.json({ error: "missing_prices", tests: missingPrices }, { status: 409 });
   }
 
-  const currencies = [...new Set(prices.map(x => x.price!.currency))];
+  const missingPackagePrices = packagePrices.filter(entry => !entry.price).map(entry => ({
+    id: entry.package.id,
+    code: entry.package.code,
+    name: entry.package.nameEn,
+  }));
+  if (missingPackagePrices.length > 0) {
+    return NextResponse.json({ error: "missing_package_prices", packages: missingPackagePrices }, { status: 409 });
+  }
+
+  const currencies = [...new Set([
+    ...directPrices.map(entry => entry.price!.currency),
+    ...packagePrices.map(entry => entry.price!.currency),
+  ])];
   if (currencies.length !== 1) {
     return NextResponse.json({ error: "mixed_currencies_not_allowed", currencies }, { status: 409 });
   }
   const currency = currencies[0];
+  const directPriceMap = new Map(directPrices.map(entry => [entry.test.id, entry.price!]));
+  const packagePriceMap = new Map(packagePrices.map(entry => [entry.package.id, entry.price!]));
 
   try {
     const result = await prisma.$transaction(async (tx) => {
