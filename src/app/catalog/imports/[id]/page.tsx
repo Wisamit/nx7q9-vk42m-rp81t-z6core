@@ -4,6 +4,7 @@ import { requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { SafeImportButton } from "@/components/safe-import-button";
 import { RevalidateImportButton } from "@/components/revalidate-import-button";
+import { ReferenceRangeImportButton } from "@/components/reference-range-import-button";
 
 export const dynamic = "force-dynamic";
 
@@ -66,6 +67,8 @@ export default async function ImportBatchPage({
     return acc;
   }, {} as Record<string, number>);
 
+  const safeMasterRemaining = groups.filter((row) => row.status === "VALID" && row.entityType !== "REFERENCE_INTERVAL").reduce((sum, row) => sum + row._count._all, 0);
+
   const issueSummary = issueRows.flatMap((row) => issueCodes(row.validationIssues)).reduce((acc, code) => {
     acc[code] = (acc[code] || 0) + 1;
     return acc;
@@ -109,6 +112,12 @@ export default async function ImportBatchPage({
       </article>
     </section>
 
+    <section className="detail-card range-import-card">
+      <h2>Reference Range Migration</h2>
+      <p className="muted">Only exact test matches with mapped units and unambiguous age/sex context are eligible for automatic import. Ambiguous rows remain staged for review.</p>
+      <ReferenceRangeImportButton batchId={batch.id} />
+    </section>
+
     <section className="table-card">
       <div className="table-toolbar">
         <div><h2>Validation Review</h2><span>Status: {batch.status} · showing {rows.length}{status ? ` ${status.toLowerCase()}` : ""} row(s)</span></div>
@@ -118,7 +127,7 @@ export default async function ImportBatchPage({
           <Link className={status === "WARNING" ? "filter-chip active" : "filter-chip"} href={`/catalog/imports/${batch.id}?status=WARNING`}>Warnings ({counts.WARNING || 0})</Link>
           <Link className={status === "VALID" ? "filter-chip active" : "filter-chip"} href={`/catalog/imports/${batch.id}?status=VALID`}>Valid ({counts.VALID || 0})</Link>
           {batch.status === "DRAFT" && <RevalidateImportButton batchId={batch.id} />}
-          {batch.status === "VALIDATED" && <SafeImportButton batchId={batch.id} />}
+          {batch.status === "VALIDATED" && safeMasterRemaining > 0 && <SafeImportButton batchId={batch.id} />}
         </div>
       </div>
       <div className="table-wrap">
