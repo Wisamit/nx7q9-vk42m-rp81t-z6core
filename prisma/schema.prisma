@@ -3129,6 +3129,7 @@ model QcTarget {
   test         LabTest      @relation(fields: [testId], references: [id], onDelete: Restrict)
   component    TestComponent? @relation(fields: [componentId], references: [id], onDelete: Restrict)
   results      QcResult[]
+  violations   QcRuleViolation[]
 
   @@index([analyzerId, testId, componentId, status, effectiveFrom, effectiveTo])
   @@index([qcLotId, status])
