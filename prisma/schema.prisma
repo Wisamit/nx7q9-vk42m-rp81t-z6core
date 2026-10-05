@@ -225,6 +225,23 @@ enum CommentTemplateScope {
   COMPONENT
 }
 
+enum ReflexOperator {
+  LT
+  LTE
+  GT
+  GTE
+  EQ
+  NE
+  CONTAINS
+}
+
+enum ReflexEventStatus {
+  PENDING
+  ACKNOWLEDGED
+  DISMISSED
+  SUPERSEDED
+}
+
 model Organization {
   id              String       @id @default(uuid()) @db.Char(36)
   code            String       @unique @db.VarChar(50)
@@ -266,6 +283,8 @@ model Organization {
   diagnosticReports DiagnosticReport[]
   deltaRules DeltaRule[]
   resultCommentTemplates ResultCommentTemplate[]
+  calculatedResultRules CalculatedResultRule[]
+  reflexRules ReflexRule[]
 
   @@map("organizations")
 }
@@ -310,6 +329,7 @@ model Branch {
   laboratoryResults LaboratoryResult[] @relation("ResultPerformingBranch")
   reportVersions DiagnosticReportVersion[] @relation("ReportVersionBranch")
   deltaRules DeltaRule[]
+  reflexRules ReflexRule[]
 
   @@unique([organizationId, code])
   @@index([organizationId, status])
@@ -420,6 +440,7 @@ model User {
   reportVersions DiagnosticReportVersion[] @relation("ReportVersionIssuer")
   reportDeliveries ReportDeliveryEvent[]
   amendmentRequests LaboratoryResult[] @relation("ResultAmendmentRequestedBy")
+  reviewedReflexEvents ReflexRuleEvent[]
 
   @@unique([organizationId, username])
   @@unique([organizationId, email])
@@ -730,6 +751,9 @@ model LabTest {
   orderItems         OrderItem[]
   deltaRules         DeltaRule[]
   commentTemplates   ResultCommentTemplate[]
+  calculatedRules    CalculatedResultRule[]
+  sourceReflexRules  ReflexRule[] @relation("ReflexSourceTest")
+  targetReflexRules  ReflexRule[] @relation("ReflexTargetTest")
 
   @@unique([organizationId, code])
   @@index([organizationId, status])
@@ -758,6 +782,8 @@ model TestComponent {
   resultValues LaboratoryResultValue[]
   deltaRules DeltaRule[]
   commentTemplates ResultCommentTemplate[]
+  calculatedTargetRules CalculatedResultRule[]
+  reflexSourceRules ReflexRule[]
 
   @@unique([testId, code])
   @@index([testId, displayOrder])
@@ -1466,6 +1492,7 @@ model LaboratoryResult {
   amendments       LaboratoryResult[] @relation("ResultAmendmentChain")
   values           LaboratoryResultValue[]
   criticalEvents   CriticalResultEvent[]
+  reflexEvents      ReflexRuleEvent[]
 
   @@unique([orderItemId, version])
   @@index([performingBranchId, status, enteredAt])
@@ -1505,6 +1532,10 @@ model LaboratoryResultValue {
   deltaPercentSnapshot      Decimal?    @map("delta_percent_snapshot") @db.Decimal(18, 6)
   deltaAbsoluteLimitSnapshot Decimal?   @map("delta_absolute_limit_snapshot") @db.Decimal(24, 8)
   deltaPercentLimitSnapshot Decimal?    @map("delta_percent_limit_snapshot") @db.Decimal(18, 6)
+  isCalculated              Boolean     @default(false) @map("is_calculated")
+  calculatedRuleId          String?     @map("calculated_rule_id") @db.Char(36)
+  calculationExpressionSnapshot String? @map("calculation_expression_snapshot") @db.VarChar(1000)
+  calculationInputsSnapshot Json?       @map("calculation_inputs_snapshot")
   createdAt                DateTime    @default(now()) @map("created_at") @db.DateTime(3)
   updatedAt                DateTime    @updatedAt @map("updated_at") @db.DateTime(3)
 
@@ -1512,10 +1543,12 @@ model LaboratoryResultValue {
   component         TestComponent?   @relation(fields: [componentId], references: [id], onDelete: Restrict)
   unit              Unit?            @relation(fields: [unitId], references: [id], onDelete: Restrict)
   referenceInterval ReferenceInterval? @relation(fields: [referenceIntervalId], references: [id], onDelete: Restrict)
+  calculatedRule    CalculatedResultRule? @relation(fields: [calculatedRuleId], references: [id], onDelete: Restrict)
 
   @@unique([resultId, componentCodeSnapshot])
   @@index([componentId])
   @@index([flag, isCritical])
+  @@index([calculatedRuleId])
   @@map("laboratory_result_values")
 }
 
@@ -1681,4 +1714,86 @@ model ReportDeliveryEvent {
   @@index([reportVersionId, occurredAt])
   @@index([performedByUserId, occurredAt])
   @@map("report_delivery_events")
+}
+
+
+model CalculatedResultRule {
+  id                String       @id @default(uuid()) @db.Char(36)
+  organizationId    String       @map("organization_id") @db.Char(36)
+  testId            String       @map("test_id") @db.Char(36)
+  targetComponentId String       @map("target_component_id") @db.Char(36)
+  expression        String       @db.VarChar(1000)
+  decimalPrecision  Int?         @map("decimal_precision")
+  effectiveFrom     DateTime     @map("effective_from") @db.DateTime(3)
+  effectiveTo       DateTime?    @map("effective_to") @db.DateTime(3)
+  status            RecordStatus @default(ACTIVE)
+  createdAt         DateTime     @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt         DateTime     @updatedAt @map("updated_at") @db.DateTime(3)
+  deactivatedAt     DateTime?    @map("deactivated_at") @db.DateTime(3)
+
+  organization    Organization  @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  test            LabTest       @relation(fields: [testId], references: [id], onDelete: Restrict)
+  targetComponent TestComponent @relation(fields: [targetComponentId], references: [id], onDelete: Restrict)
+  resultValues    LaboratoryResultValue[]
+
+  @@index([testId, status, effectiveFrom, effectiveTo])
+  @@index([targetComponentId, status])
+  @@map("calculated_result_rules")
+}
+
+model ReflexRule {
+  id                String         @id @default(uuid()) @db.Char(36)
+  organizationId    String         @map("organization_id") @db.Char(36)
+  sourceTestId      String         @map("source_test_id") @db.Char(36)
+  sourceComponentId String?        @map("source_component_id") @db.Char(36)
+  branchId          String?        @map("branch_id") @db.Char(36)
+  operator          ReflexOperator
+  numericThreshold  Decimal?       @map("numeric_threshold") @db.Decimal(24, 8)
+  textThreshold     String?        @map("text_threshold") @db.VarChar(500)
+  targetTestId      String         @map("target_test_id") @db.Char(36)
+  noteEn            String?        @map("note_en") @db.VarChar(500)
+  noteAr            String?        @map("note_ar") @db.VarChar(500)
+  effectiveFrom     DateTime       @map("effective_from") @db.DateTime(3)
+  effectiveTo       DateTime?      @map("effective_to") @db.DateTime(3)
+  status            RecordStatus   @default(ACTIVE)
+  createdAt         DateTime       @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt         DateTime       @updatedAt @map("updated_at") @db.DateTime(3)
+  deactivatedAt     DateTime?      @map("deactivated_at") @db.DateTime(3)
+
+  organization    Organization   @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  sourceTest      LabTest        @relation("ReflexSourceTest", fields: [sourceTestId], references: [id], onDelete: Restrict)
+  sourceComponent TestComponent? @relation(fields: [sourceComponentId], references: [id], onDelete: Restrict)
+  branch          Branch?        @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  targetTest      LabTest        @relation("ReflexTargetTest", fields: [targetTestId], references: [id], onDelete: Restrict)
+  events          ReflexRuleEvent[]
+
+  @@index([sourceTestId, sourceComponentId, status, effectiveFrom, effectiveTo])
+  @@index([branchId, status])
+  @@index([targetTestId, status])
+  @@map("reflex_rules")
+}
+
+model ReflexRuleEvent {
+  id                      String            @id @default(uuid()) @db.Char(36)
+  resultId                String            @map("result_id") @db.Char(36)
+  ruleId                  String            @map("rule_id") @db.Char(36)
+  status                  ReflexEventStatus @default(PENDING)
+  triggerValueSnapshot    String            @map("trigger_value_snapshot") @db.VarChar(1000)
+  targetTestCodeSnapshot  String            @map("target_test_code_snapshot") @db.VarChar(80)
+  targetTestNameEnSnapshot String           @map("target_test_name_en_snapshot") @db.VarChar(220)
+  targetTestNameArSnapshot String?          @map("target_test_name_ar_snapshot") @db.VarChar(220)
+  reviewedByUserId        String?           @map("reviewed_by_user_id") @db.Char(36)
+  reviewedAt              DateTime?         @map("reviewed_at") @db.DateTime(3)
+  reviewNote              String?           @map("review_note") @db.VarChar(1000)
+  createdAt               DateTime          @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt               DateTime          @updatedAt @map("updated_at") @db.DateTime(3)
+
+  result     LaboratoryResult @relation(fields: [resultId], references: [id], onDelete: Restrict)
+  rule       ReflexRule       @relation(fields: [ruleId], references: [id], onDelete: Restrict)
+  reviewedBy User?            @relation(fields: [reviewedByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([resultId, ruleId])
+  @@index([status, createdAt])
+  @@index([reviewedByUserId, reviewedAt])
+  @@map("reflex_rule_events")
 }

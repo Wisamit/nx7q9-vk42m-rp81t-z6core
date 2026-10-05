@@ -2,13 +2,14 @@ import Link from "next/link";
 import { requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { ClinicalRulesManager } from "@/components/clinical-rules-manager";
+import { AdvancedClinicalRulesManager } from "@/components/advanced-clinical-rules-manager";
 
 export const dynamic = "force-dynamic";
 
 export default async function ClinicalRulesPage() {
   const session = await requirePermission("clinical_rules.manage");
 
-  const [tests, branches, methods, deltaRules, commentTemplates] = await Promise.all([
+  const [tests, branches, methods, deltaRules, commentTemplates, calculatedRules, reflexRules] = await Promise.all([
     prisma.labTest.findMany({
       where: { organizationId: session.user.organizationId, status: "ACTIVE" },
       include: { components: { where: { status: "ACTIVE" }, orderBy: { displayOrder: "asc" } } },
@@ -36,14 +37,26 @@ export default async function ClinicalRulesPage() {
       orderBy: { createdAt: "desc" },
       take: 200,
     }),
+    prisma.calculatedResultRule.findMany({
+      where: { organizationId: session.user.organizationId },
+      include: { test: true, targetComponent: true },
+      orderBy: { createdAt: "desc" },
+      take: 200,
+    }),
+    prisma.reflexRule.findMany({
+      where: { organizationId: session.user.organizationId },
+      include: { sourceTest: true, sourceComponent: true, targetTest: true, branch: true },
+      orderBy: { createdAt: "desc" },
+      take: 200,
+    }),
   ]);
 
   return <main className="catalog-shell">
     <header className="page-header">
       <div>
         <p className="eyebrow">Advanced Clinical Rules</p>
-        <h1>Delta Checks & Result Comments</h1>
-        <p className="muted">Effective-dated delta rules compare current numeric values with prior released results. Reusable comments stay configuration-driven.</p>
+        <h1>Clinical Rules</h1>
+        <p className="muted">Calculated results, reflex recommendations, delta checks and reusable comments are configuration-driven and effective-dated.</p>
       </div>
       <Link className="secondary-link" href="/dashboard">Back to Dashboard</Link>
     </header>
@@ -59,6 +72,53 @@ export default async function ClinicalRulesPage() {
       branches={branches}
       methods={methods}
     />
+
+    <AdvancedClinicalRulesManager
+      tests={tests.map(test => ({
+        id: test.id,
+        code: test.code,
+        nameEn: test.nameEn,
+        components: test.components.map(component => ({
+          id: component.id,
+          code: component.code,
+          nameEn: component.nameEn,
+          resultType: component.resultType,
+        })),
+      }))}
+      branches={branches}
+    />
+
+    <section className="detail-grid detail-section">
+      <article className="table-card">
+        <div className="table-toolbar"><h2>Calculated Result Rules</h2><span>{calculatedRules.length} shown</span></div>
+        <div className="table-wrap"><table>
+          <thead><tr><th>Test</th><th>Target</th><th>Expression</th><th>Precision</th><th>Effective</th><th>Status</th></tr></thead>
+          <tbody>{calculatedRules.length === 0 ? <tr><td colSpan={6} className="empty-state">No calculated result rules configured.</td></tr> : calculatedRules.map(rule => <tr key={rule.id}>
+            <td><strong>{rule.test.code}</strong><br/><small>{rule.test.nameEn}</small></td>
+            <td>{rule.targetComponent.code} — {rule.targetComponent.nameEn}</td>
+            <td><code>{rule.expression}</code></td>
+            <td>{rule.decimalPrecision ?? "Component default"}</td>
+            <td>{rule.effectiveFrom.toISOString().slice(0,10)} → {rule.effectiveTo?.toISOString().slice(0,10) || "Open"}</td>
+            <td>{rule.status}</td>
+          </tr>)}</tbody>
+        </table></div>
+      </article>
+
+      <article className="table-card">
+        <div className="table-toolbar"><h2>Reflex Recommendation Rules</h2><span>{reflexRules.length} shown</span></div>
+        <div className="table-wrap"><table>
+          <thead><tr><th>Source</th><th>Condition</th><th>Recommended test</th><th>Branch</th><th>Effective</th><th>Status</th></tr></thead>
+          <tbody>{reflexRules.length === 0 ? <tr><td colSpan={6} className="empty-state">No reflex rules configured.</td></tr> : reflexRules.map(rule => <tr key={rule.id}>
+            <td><strong>{rule.sourceTest.code}</strong>{rule.sourceComponent ? <><br/><small>{rule.sourceComponent.code} — {rule.sourceComponent.nameEn}</small></> : null}</td>
+            <td>{rule.operator} {rule.numericThreshold?.toString() || rule.textThreshold || "—"}</td>
+            <td>{rule.targetTest.code} — {rule.targetTest.nameEn}</td>
+            <td>{rule.branch?.nameEn || "All branches"}</td>
+            <td>{rule.effectiveFrom.toISOString().slice(0,10)} → {rule.effectiveTo?.toISOString().slice(0,10) || "Open"}</td>
+            <td>{rule.status}</td>
+          </tr>)}</tbody>
+        </table></div>
+      </article>
+    </section>
 
     <section className="detail-grid detail-section">
       <article className="table-card">

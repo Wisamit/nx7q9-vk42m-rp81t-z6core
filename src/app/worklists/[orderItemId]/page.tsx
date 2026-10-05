@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { resolveReferenceInterval } from "@/lib/result-reference";
 import { ResultEntryForm } from "@/components/result-entry-form";
 import { ResultWorkflowActions } from "@/components/result-workflow-actions";
+import { ReflexReviewPanel } from "@/components/reflex-review-panel";
 
 export const dynamic = "force-dynamic";
 
@@ -49,6 +50,13 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
             include: { unit: true },
             orderBy: [{ displayOrder: "asc" }, { code: "asc" }],
           },
+          calculatedRules: {
+            where: {
+              status: "ACTIVE",
+              effectiveFrom: { lte: new Date() },
+              OR: [{ effectiveTo: null }, { effectiveTo: { gte: new Date() } }],
+            },
+          },
         },
       },
       specimenLinks: {
@@ -72,6 +80,13 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
                 orderBy: { communicatedAt: "desc" },
               },
             },
+          },
+          reflexEvents: {
+            include: {
+              rule: { include: { targetTest: true } },
+              reviewedBy: true,
+            },
+            orderBy: { createdAt: "asc" },
           },
           specimen: { include: { currentBranch: true, specimenType: true, container: true } },
         },
@@ -116,6 +131,7 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
   }
 
   const existingByCode = new Map((latestResult?.values || []).map(value => [value.componentCodeSnapshot, value]));
+  const calculatedTargetIds = new Set(item.test.calculatedRules.map(rule => rule.targetComponentId));
   const componentDefinitions = item.test.components.length > 0
     ? item.test.components.map(component => ({
         componentId: component.id,
@@ -163,6 +179,7 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
       referenceDisplay,
       critical: Boolean(existing?.isCritical),
       deltaEvaluation: existing?.deltaEvaluation || null,
+      calculated: Boolean(component.componentId && calculatedTargetIds.has(component.componentId)),
       deltaDisplay: existing ? [
         existing.previousValueSnapshot !== null ? "Prev " + existing.previousValueSnapshot.toString() : null,
         existing.deltaAbsoluteSnapshot !== null ? "Δ " + existing.deltaAbsoluteSnapshot.toString() : null,
@@ -220,6 +237,22 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
         canVerify={permissions.has("results.verify")}
         commentTemplates={commentTemplates}
       />
+
+      {latestResult && <ReflexReviewPanel
+        resultId={latestResult.id}
+        canReview={permissions.has("reflex.review")}
+        events={latestResult.reflexEvents.map(event => ({
+          id: event.id,
+          status: event.status,
+          triggerValue: event.triggerValueSnapshot,
+          targetTestCode: event.targetTestCodeSnapshot,
+          targetTestName: event.targetTestNameEnSnapshot,
+          noteEn: event.rule.noteEn,
+          reviewedBy: event.reviewedBy?.displayNameEn || null,
+          reviewedAt: event.reviewedAt?.toISOString() || null,
+          reviewNote: event.reviewNote,
+        }))}
+      />}
     </section>
 
     {latestResult && <section className="detail-card detail-section">

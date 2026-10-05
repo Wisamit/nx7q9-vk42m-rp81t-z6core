@@ -4,6 +4,8 @@ import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { numericFlag, resolveReferenceInterval } from "@/lib/result-reference";
 import { evaluateDelta } from "@/lib/delta-check";
+import { evaluateFormula, formulaVariables } from "@/lib/formula-engine";
+import { reflexMatches } from "@/lib/reflex-rules";
 
 function text(value: unknown, max = 5000) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -77,6 +79,22 @@ export async function POST(request: Request) {
             include: { unit: true },
             orderBy: [{ displayOrder: "asc" }, { code: "asc" }],
           },
+          calculatedRules: {
+            where: {
+              status: "ACTIVE",
+              effectiveFrom: { lte: new Date() },
+              OR: [{ effectiveTo: null }, { effectiveTo: { gte: new Date() } }],
+            },
+            include: { targetComponent: true },
+          },
+          sourceReflexRules: {
+            where: {
+              status: "ACTIVE",
+              effectiveFrom: { lte: new Date() },
+              OR: [{ effectiveTo: null }, { effectiveTo: { gte: new Date() } }],
+            },
+            include: { targetTest: true },
+          },
         },
       },
       specimenLinks: {
@@ -114,6 +132,7 @@ export async function POST(request: Request) {
         resultType: component.resultType,
         unitId: component.unitId,
         unitSnapshot: component.unit?.symbol || null,
+        decimalPrecision: component.decimalPrecision,
       }))
     : [{
         componentId: null,
@@ -123,6 +142,7 @@ export async function POST(request: Request) {
         resultType: orderItem.test.resultType,
         unitId: orderItem.test.defaultUnitId,
         unitSnapshot: orderItem.test.defaultUnit?.symbol || null,
+        decimalPrecision: orderItem.test.decimalPrecision,
       }];
 
   const valueByComponent = new Map((body.values || []).map((entry) => [entry.componentId || "__TEST__", entry.rawValue]));
@@ -138,10 +158,17 @@ export async function POST(request: Request) {
     interval: Awaited<ReturnType<typeof resolveReferenceInterval>> | null;
     flag: ReturnType<typeof numericFlag>;
     delta: Awaited<ReturnType<typeof evaluateDelta>>;
+    isCalculated: boolean;
+    calculatedRuleId: string | null;
+    calculationExpression: string | null;
+    calculationInputs: Record<string, string> | null;
   }> = [];
+  const calculatedTargetIds = new Set(orderItem.test.calculatedRules.map(rule => rule.targetComponentId));
 
   try {
     for (const component of expected) {
+      if (component.componentId && calculatedTargetIds.has(component.componentId)) continue;
+
       const raw = valueByComponent.get(component.componentId || "__TEST__");
       const parsed = parseValue(component.resultType, raw);
       if (!parsed) continue;
@@ -184,11 +211,79 @@ export async function POST(request: Request) {
         interval,
         flag,
         delta,
+        isCalculated: false,
+        calculatedRuleId: null,
+        calculationExpression: null,
+        calculationInputs: null,
+      });
+    }
+
+    const numericInputs: Record<string, Prisma.Decimal> = {};
+    for (const item of prepared) {
+      if (item.parsed.valueNumeric !== null) numericInputs[item.code.toUpperCase()] = item.parsed.valueNumeric;
+    }
+
+    for (const rule of orderItem.test.calculatedRules) {
+      const target = expected.find(component => component.componentId === rule.targetComponentId);
+      if (!target) continue;
+
+      const variables = formulaVariables(rule.expression);
+      if (variables.some(variable => numericInputs[variable] === undefined)) continue;
+
+      const calculationInputs = Object.fromEntries(
+        variables.map(variable => [variable, numericInputs[variable].toString()]),
+      );
+      const precision = rule.decimalPrecision ?? target.decimalPrecision ?? 4;
+      const calculated = evaluateFormula(rule.expression, numericInputs).toDecimalPlaces(precision);
+      const parsed = {
+        valueNumeric: calculated,
+        valueText: null,
+        valueBoolean: null,
+        valueDate: null,
+        displayValue: calculated.toFixed(precision),
+      };
+
+      const interval = await resolveReferenceInterval(prisma, {
+        componentId: rule.targetComponentId,
+        branchId: performingBranchId,
+        methodId: orderItem.test.methodId,
+        patientSex: orderItem.order.patient.sexAtBirth,
+        dateOfBirth: orderItem.order.patient.dateOfBirth,
+      });
+      const flag = numericFlag(calculated, interval);
+      const delta = await evaluateDelta(prisma, {
+        organizationId: session.user.organizationId,
+        patientId: orderItem.order.patientId,
+        testId: orderItem.testId,
+        componentId: rule.targetComponentId,
+        performingBranchId,
+        methodId: orderItem.test.methodId,
+        currentValue: calculated,
+      });
+
+      prepared.push({
+        ...target,
+        parsed,
+        interval,
+        flag,
+        delta,
+        isCalculated: true,
+        calculatedRuleId: rule.id,
+        calculationExpression: rule.expression,
+        calculationInputs,
       });
     }
   } catch (error) {
     if (error instanceof Error && error.message.startsWith("INVALID_")) {
       return NextResponse.json({ error: error.message.toLowerCase() }, { status: 400 });
+    }
+    if (error instanceof Error && (
+      error.message.startsWith("FORMULA_") ||
+      error.message.startsWith("MISSING_FORMULA_") ||
+      error.message.startsWith("UNEXPECTED_FORMULA_") ||
+      error.message.startsWith("TRAILING_FORMULA_")
+    )) {
+      return NextResponse.json({ error: "calculated_result_failed", detail: error.message }, { status: 409 });
     }
     throw error;
   }
@@ -261,8 +356,63 @@ export async function POST(request: Request) {
           deltaPercentSnapshot: item.delta.deltaPercent,
           deltaAbsoluteLimitSnapshot: item.delta.absoluteLimit,
           deltaPercentLimitSnapshot: item.delta.percentLimit,
+          isCalculated: item.isCalculated,
+          calculatedRuleId: item.calculatedRuleId,
+          calculationExpressionSnapshot: item.calculationExpression,
+          calculationInputsSnapshot: item.calculationInputs ? item.calculationInputs as Prisma.InputJsonValue : undefined,
         },
       });
+    }
+
+    for (const rule of orderItem.test.sourceReflexRules) {
+      if (rule.branchId && rule.branchId !== performingBranchId) continue;
+
+      const source = prepared.find(item =>
+        rule.sourceComponentId ? item.componentId === rule.sourceComponentId : item.componentId === null
+      );
+      if (!source) continue;
+
+      const matched = reflexMatches(
+        rule.operator,
+        {
+          numericValue: source.parsed.valueNumeric,
+          textValue: source.parsed.valueText,
+          displayValue: source.parsed.displayValue,
+        },
+        {
+          numericThreshold: rule.numericThreshold,
+          textThreshold: rule.textThreshold,
+        },
+      );
+
+      if (matched) {
+        await tx.reflexRuleEvent.upsert({
+          where: { resultId_ruleId: { resultId: result.id, ruleId: rule.id } },
+          update: {
+            status: "PENDING",
+            triggerValueSnapshot: source.parsed.displayValue,
+            targetTestCodeSnapshot: rule.targetTest.code,
+            targetTestNameEnSnapshot: rule.targetTest.nameEn,
+            targetTestNameArSnapshot: rule.targetTest.nameAr,
+            reviewedByUserId: null,
+            reviewedAt: null,
+            reviewNote: null,
+          },
+          create: {
+            resultId: result.id,
+            ruleId: rule.id,
+            triggerValueSnapshot: source.parsed.displayValue,
+            targetTestCodeSnapshot: rule.targetTest.code,
+            targetTestNameEnSnapshot: rule.targetTest.nameEn,
+            targetTestNameArSnapshot: rule.targetTest.nameAr,
+          },
+        });
+      } else {
+        await tx.reflexRuleEvent.updateMany({
+          where: { resultId: result.id, ruleId: rule.id, status: "PENDING" },
+          data: { status: "SUPERSEDED" },
+        });
+      }
     }
 
     await tx.orderItem.update({
@@ -332,6 +482,8 @@ export async function POST(request: Request) {
             deltaEvaluation: item.delta.evaluation,
             deltaAbsolute: item.delta.deltaAbsolute?.toString() || null,
             deltaPercent: item.delta.deltaPercent?.toString() || null,
+            calculated: item.isCalculated,
+            calculatedRuleId: item.calculatedRuleId,
           })),
         },
         ipAddress: ctx.ipAddress,
@@ -341,7 +493,7 @@ export async function POST(request: Request) {
 
     return tx.laboratoryResult.findUnique({
       where: { id: result.id },
-      include: { values: { orderBy: { componentCodeSnapshot: "asc" } } },
+      include: { values: { orderBy: { componentCodeSnapshot: "asc" } }, reflexEvents: true },
     });
   }, { timeout: 30000 });
 
@@ -350,5 +502,7 @@ export async function POST(request: Request) {
     result: saved,
     complete,
     criticalCount: saved?.values.filter((value) => value.isCritical).length || 0,
+    deltaExceededCount: saved?.values.filter((value) => value.deltaEvaluation === "EXCEEDED").length || 0,
+    pendingReflexCount: saved?.reflexEvents.filter((event) => event.status === "PENDING").length || 0,
   }, { status: existing ? 200 : 201 });
 }
