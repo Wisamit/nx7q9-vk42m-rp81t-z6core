@@ -774,6 +774,7 @@ model Organization {
   updatedAt       DateTime     @updatedAt @map("updated_at") @db.DateTime(3)
   deactivatedAt   DateTime?    @map("deactivated_at") @db.DateTime(3)
 
+  organizationSetting OrganizationSetting?
   branches    Branch[]
   users       User[]
   roles       Role[]
@@ -866,6 +867,32 @@ model Organization {
   reportTemplates ReportTemplate[]
 
   @@map("organizations")
+}
+
+
+model OrganizationSetting {
+  id               String   @id @default(uuid()) @db.Char(36)
+  organizationId   String   @unique @map("organization_id") @db.Char(36)
+  systemNameEn     String?  @map("system_name_en") @db.VarChar(200)
+  systemNameAr     String?  @map("system_name_ar") @db.VarChar(200)
+  logoDataUrl      String?  @map("logo_data_url") @db.MediumText
+  faviconDataUrl   String?  @map("favicon_data_url") @db.MediumText
+  defaultTheme     String   @default("SYSTEM") @map("default_theme") @db.VarChar(20)
+  dateFormat       String   @default("DD/MM/YYYY") @map("date_format") @db.VarChar(40)
+  timeFormat       String   @default("12") @map("time_format") @db.VarChar(10)
+  showSeconds      Boolean  @default(false) @map("show_seconds")
+  defaultLocale    String   @default("en") @map("default_locale") @db.VarChar(10)
+  weekStartsOn     Int      @default(1) @map("week_starts_on")
+  density          String   @default("COMFORTABLE") @db.VarChar(20)
+  lightTheme       Json?    @map("light_theme")
+  darkTheme        Json?    @map("dark_theme")
+  developerCredit  String?  @map("developer_credit") @db.VarChar(200)
+  createdAt        DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt        DateTime @updatedAt @map("updated_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+
+  @@map("organization_settings")
 }
 
 model Branch {
