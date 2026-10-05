@@ -29,6 +29,17 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (status === "CLOSED" && (!rootCause || !closureSummary)) {
     return NextResponse.json({ error: "root_cause_and_closure_required" }, { status: 409 });
   }
+  if (status === "CLOSED") {
+    const openCapaCount = await prisma.capa.count({
+      where: {
+        nonconformanceId: record.id,
+        status: { notIn: ["CLOSED", "CANCELLED"] },
+      },
+    });
+    if (openCapaCount > 0) {
+      return NextResponse.json({ error: "open_capa_blocks_nonconformance_closure", openCapaCount }, { status: 409 });
+    }
+  }
   if (ownerUserId) {
     const owner = await prisma.user.findFirst({ where: { id: ownerUserId, organizationId: session.user.organizationId, status: "ACTIVE" } });
     if (!owner) return NextResponse.json({ error: "owner_not_found" }, { status: 404 });
