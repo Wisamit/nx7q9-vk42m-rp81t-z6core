@@ -144,10 +144,9 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
           highValue: item.high,
           normalTextEn: item.normalText || null,
           effectiveFrom: new Date(),
-          approvedByUserId: session.user.id,
-          approvedAt: new Date(),
+          status: "INACTIVE",
           source: "Legacy Family Lab MDB / normal",
-          notes: "Migrated through validated legacy reference-range import.",
+          notes: "Migrated through validated legacy reference-range import; pending clinical approval before activation.",
         },
       });
       await tx.catalogImportRow.update({
