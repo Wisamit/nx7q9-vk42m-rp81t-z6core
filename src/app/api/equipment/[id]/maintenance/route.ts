@@ -27,6 +27,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!canAccessBranch(session, equipment.branchId)) return NextResponse.json({ error: "branch_forbidden" }, { status: 403 });
 
   const maintenanceType = ["PREVENTIVE","CORRECTIVE"].includes(body.maintenanceType) ? body.maintenanceType : null;
+  const maintenancePlanId = text(body.maintenancePlanId, 36) || null;
   const status = ["SCHEDULED","IN_PROGRESS","COMPLETED"].includes(body.status) ? body.status : "SCHEDULED";
   if (!maintenanceType) return NextResponse.json({ error: "maintenance_type_required" }, { status: 400 });
 
@@ -39,6 +40,22 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     completedAt = date(body.completedAt);
   } catch {
     return NextResponse.json({ error: "invalid_date" }, { status: 400 });
+  }
+
+  const maintenancePlan = maintenancePlanId
+    ? await prisma.maintenancePlan.findFirst({
+        where: {
+          id: maintenancePlanId,
+          equipmentId: equipment.id,
+          status: "ACTIVE",
+        },
+      })
+    : null;
+  if (maintenancePlanId && !maintenancePlan) {
+    return NextResponse.json({ error: "maintenance_plan_not_found" }, { status: 404 });
+  }
+  if (maintenancePlan && maintenanceType !== "PREVENTIVE") {
+    return NextResponse.json({ error: "maintenance_plan_requires_preventive_type" }, { status: 409 });
   }
 
   let cost: Prisma.Decimal | null = null;
@@ -55,6 +72,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       data: {
         equipmentId: equipment.id,
         analyzerId: equipment.analyzerId,
+        maintenancePlanId,
         maintenanceType,
         status,
         scheduledAt,
@@ -68,6 +86,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         performedByUserId: status === "COMPLETED" ? session.user.id : null,
       },
     });
+
+    if (status === "COMPLETED" && maintenancePlan) {
+      const base = created.completedAt || new Date();
+      const nextDueAt = new Date(base.getTime() + maintenancePlan.frequencyDays * 24 * 60 * 60_000);
+      await tx.maintenancePlan.update({
+        where: { id: maintenancePlan.id },
+        data: { nextDueAt },
+      });
+    }
 
     if (status === "IN_PROGRESS") {
       await tx.equipment.update({ where: { id: equipment.id }, data: { status: "UNDER_MAINTENANCE" } });
@@ -85,6 +112,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         entityId: created.id,
         newValues: {
           equipmentId: equipment.id,
+          maintenancePlanId,
           maintenanceType,
           status,
           scheduledAt,
