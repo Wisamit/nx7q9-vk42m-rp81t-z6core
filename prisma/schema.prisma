@@ -42,7 +42,6 @@ model Organization {
   units Unit[]
   methods Method[]
   labTests LabTest[]
-  testBranchAvailability TestBranchAvailability[]
 
   @@map("organizations")
 }
