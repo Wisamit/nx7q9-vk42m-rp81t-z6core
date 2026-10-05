@@ -61,7 +61,7 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
           performingBranch: true,
           enteredBy: true,
           verifiedBy: true,
-          specimen: true,
+          specimen: { include: { currentBranch: true, specimenType: true, container: true } },
         },
       },
     },
