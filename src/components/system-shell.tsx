@@ -69,6 +69,7 @@ const groups: Array<{ labelEn: string; labelAr: string; items: NavItem[] }> = [
       { href: "/qc", labelEn: "Quality Control", labelAr: "ضبط الجودة", short: "QC", permission: "qc.view" },
       { href: "/quality", labelEn: "Quality Management", labelAr: "إدارة الجودة", short: "QM", permission: "quality.view" },
       { href: "/analytics", labelEn: "Analytics", labelAr: "التحليلات", short: "AI", permission: "analytics.view" },
+      { href: "/notifications", labelEn: "Notifications", labelAr: "الإشعارات", short: "NT", permission: "notifications.view" },
       { href: "/resilience", labelEn: "Resilience", labelAr: "الاستمرارية والتعافي", short: "RS", permission: "resilience.view" },
     ],
   },

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { resolveAnalyzerQcGate } from "@/lib/qc-gate";
+import { notifyUsersWithPermission } from "@/lib/notifications";
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const body = await request.json().catch(() => ({})) as {
@@ -173,6 +174,25 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
             criticalLow: value.criticalLowSnapshot?.toString() || null,
             criticalHigh: value.criticalHighSnapshot?.toString() || null,
           })),
+        },
+      });
+
+      await notifyUsersWithPermission(tx, {
+        organizationId: session.user.organizationId,
+        branchId: result.performingBranchId,
+        permissionCode: "critical.communicate",
+        eventCode: "CRITICAL_RESULT_OPENED",
+        title: "Critical result requires acknowledgement",
+        body: `${result.orderItem.order.accessionNumber} · ${result.orderItem.test.code} has ${criticalValues.length} critical value(s) requiring communication and acknowledgement.`,
+        severity: "CRITICAL",
+        entityType: "LaboratoryResult",
+        entityId: result.id,
+        metadata: {
+          orderId: result.orderItem.orderId,
+          orderItemId: result.orderItemId,
+          testCode: result.orderItem.test.code,
+          criticalCount: criticalValues.length,
+          acknowledgementDueAt: acknowledgementDueAt?.toISOString() || null,
         },
       });
     }

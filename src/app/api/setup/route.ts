@@ -94,6 +94,9 @@ const FOUNDATION_PERMISSIONS = [
   ["resilience.view", "operations", "View resilience, backup, retention and recovery status"],
   ["resilience.manage", "operations", "Manage resilience policies, backup verification and disaster recovery drills"],
   ["resilience.archive", "operations", "Execute approved technical-log archive and purge operations"],
+  ["notifications.view", "notifications", "View personal and branch-scoped notifications"],
+  ["notifications.manage", "notifications", "Manage notification templates and preferences"],
+  ["notifications.dispatch", "notifications", "Dispatch and retry outbound notification deliveries"],
 ] as const;
 
 function text(value: unknown, max = 200) {
