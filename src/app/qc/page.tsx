@@ -33,18 +33,15 @@ export default async function QcPage() {
     }),
     prisma.labTest.findMany({
       where: { organizationId: session.user.organizationId, status: "ACTIVE" },
-      include: {
+      select: {
+        id: true,
+        code: true,
+        nameEn: true,
         components: {
           where: { status: "ACTIVE" },
           select: { id: true, code: true, nameEn: true },
           orderBy: { displayOrder: "asc" },
         },
-      },
-      select: {
-        id: true,
-        code: true,
-        nameEn: true,
-        components: true,
       },
       orderBy: { nameEn: "asc" },
     }),
