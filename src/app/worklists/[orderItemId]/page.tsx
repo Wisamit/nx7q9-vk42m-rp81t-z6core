@@ -200,7 +200,7 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
   return <main className="catalog-shell">
     <header className="page-header">
       <div>
-        <p className="eyebrow">Manual Result Entry</p>
+        <p className="eyebrow">{latestResult?.source === "ANALYZER" ? "Analyzer Result Review" : "Manual Result Entry"}</p>
         <h1>{item.testCodeSnapshot} — {item.testNameEnSnapshot}</h1>
         <p className="muted">{item.order.accessionNumber} · {item.order.patient.patientNumber} · {item.order.patient.fullNameEn}</p>
       </div>
@@ -242,6 +242,10 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
         comments={latestResult?.comments || ""}
         resultId={latestResult?.id || null}
         resultStatus={latestResult?.status || null}
+        resultSource={latestResult?.source || "MANUAL"}
+        analyzerLabel={latestResult?.analyzerCodeSnapshot
+          ? latestResult.analyzerCodeSnapshot + (latestResult.analyzerNameSnapshot ? " — " + latestResult.analyzerNameSnapshot : "")
+          : null}
         canVerify={permissions.has("results.verify")}
         commentTemplates={commentTemplates}
       />
@@ -312,7 +316,7 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
       <h2>Result Audit Context</h2>
       <dl>
         <dt>Version</dt><dd>{latestResult.version}</dd>
-        <dt>Source</dt><dd>{latestResult.source}</dd>
+        <dt>Source</dt><dd>{latestResult.source}{latestResult.analyzerCodeSnapshot ? " · " + latestResult.analyzerCodeSnapshot + (latestResult.analyzerNameSnapshot ? " — " + latestResult.analyzerNameSnapshot : "") : ""}</dd>
         <dt>Entered by</dt><dd>{latestResult.enteredBy.displayNameEn}</dd>
         <dt>Entered at</dt><dd>{latestResult.enteredAt.toISOString().replace("T"," ").slice(0,19)}</dd>
         <dt>Verification mode</dt><dd>{latestResult.autoVerified ? "AUTOVERIFICATION" : "MANUAL"}</dd>
