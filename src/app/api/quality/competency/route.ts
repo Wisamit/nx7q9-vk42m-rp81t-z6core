@@ -42,6 +42,13 @@ export async function POST(request: Request) {
   if (documentVersionId && !documentVersion) return NextResponse.json({ error: "effective_document_version_required" }, { status: 409 });
   if (branchId && analyzer && analyzer.branchId !== branchId) return NextResponse.json({ error: "analyzer_branch_mismatch" }, { status: 409 });
 
+  const activeAuthorizations = analyzerId && result !== "PASS"
+    ? await prisma.analyzerAuthorization.findMany({
+        where: { organizationId: session.user.organizationId, userId, analyzerId, status: "ACTIVE" },
+        select: { id: true },
+      })
+    : [];
+
   const assessment = await prisma.$transaction(async tx => {
     const created = await tx.competencyAssessment.create({
       data: {
@@ -60,11 +67,28 @@ export async function POST(request: Request) {
         notes,
       },
     });
-    if (analyzerId && result !== "PASS") {
+    if (activeAuthorizations.length > 0) {
       await tx.analyzerAuthorization.updateMany({
-        where: { organizationId: session.user.organizationId, userId, analyzerId, status: "ACTIVE" },
+        where: { id: { in: activeAuthorizations.map(item => item.id) } },
         data: { status: "SUSPENDED" },
       });
+      for (const authorization of activeAuthorizations) {
+        await tx.auditEvent.create({
+          data: {
+            organizationId: session.user.organizationId,
+            branchId: analyzer?.branchId || branchId || session.activeBranchId,
+            actorUserId: session.user.id,
+            action: "ANALYZER_AUTHORIZATION_AUTO_SUSPENDED",
+            entityType: "AnalyzerAuthorization",
+            entityId: authorization.id,
+            oldValues: { status: "ACTIVE" },
+            newValues: { status: "SUSPENDED", competencyAssessmentId: created.id, competencyResult: result },
+            reason: "Analyzer authorization suspended because the latest competency assessment is not PASS",
+            ipAddress: ctx.ipAddress,
+            userAgent: ctx.userAgent,
+          },
+        });
+      }
     }
     await tx.auditEvent.create({
       data: {
