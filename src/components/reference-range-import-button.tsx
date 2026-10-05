@@ -20,13 +20,13 @@ export function ReferenceRangeImportButton({ batchId }: { batchId: string }) {
 
   async function run() {
     if (!preview?.safe) return;
-    if (!confirm(`Import ${preview.safe} reference intervals that have an exact test match, mapped unit and unambiguous clinical context? ${preview.review} rows will remain for manual review.`)) return;
+    if (!confirm(`Import ${preview.safe} reference intervals with exact test/unit/context mapping as INACTIVE records pending clinical approval? ${preview.review} rows will remain for manual review.`)) return;
     setBusy(true);
     setMessage("");
     const response = await fetch(`/api/catalog/imports/${batchId}/reference-ranges`, { method: "POST" });
     const body = await response.json().catch(() => ({}));
     if (response.ok) {
-      setMessage(`Imported ${body.imported} reference intervals; ${body.review} remain for review.`);
+      setMessage(`Imported ${body.imported} inactive reference intervals pending clinical approval; ${body.review} remain for mapping review.`);
       setPreview({ total: body.total, safe: 0, review: body.review, reasons: body.reasons || {} });
       router.refresh();
     } else {
