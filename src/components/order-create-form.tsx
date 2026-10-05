@@ -4,7 +4,17 @@ import { FormEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 type PatientOption = { id: string; patientNumber: string; fullNameEn: string; phone: string | null };
-type TestOption = { id: string; code: string; nameEn: string };
+type OrderQuestionOption = {
+  id: string;
+  code: string;
+  questionEn: string;
+  questionAr: string | null;
+  responseType: "TEXT" | "NUMERIC" | "BOOLEAN" | "DATE" | "SINGLE_CHOICE";
+  required: boolean;
+  options: string[];
+  displayOrder: number;
+};
+type TestOption = { id: string; code: string; nameEn: string; orderQuestions: OrderQuestionOption[] };
 type SimpleOption = { id: string; code: string; nameEn: string };
 type ReferrerOption = SimpleOption & { clientId: string | null };
 type SourceOption = SimpleOption & { category: string };
@@ -65,6 +75,10 @@ export function OrderCreateForm({
 
     const fastingValue = form.get("fasting");
     const fasting = fastingValue === "YES" ? true : fastingValue === "NO" ? false : null;
+    const answers = selectedTests.flatMap(test => test.orderQuestions.map(question => ({
+      questionId: question.id,
+      value: form.get("question_" + question.id),
+    })));
 
     const response = await fetch("/api/orders", {
       method: "POST",
@@ -81,6 +95,7 @@ export function OrderCreateForm({
         clinicalNotes: form.get("clinicalNotes"),
         pregnancyInfo: form.get("pregnancyInfo"),
         testIds: selectedTestIds,
+        answers,
       }),
     });
 
@@ -176,6 +191,29 @@ export function OrderCreateForm({
           }
         </div>
       </div>
+
+
+      {selectedTests.some(test => test.orderQuestions.length > 0) && <div className="form-span order-question-panel">
+        <div className="section-title-row">
+          <div><p className="eyebrow">Clinical context</p><h3>Test-specific Questions</h3></div>
+          <span className="keyboard-hint">Answers are saved with the ordered test</span>
+        </div>
+        <div className="order-question-grid">
+          {selectedTests.flatMap(test => test.orderQuestions.map(question => <label key={question.id}>
+            <span>{test.code} · {question.questionEn}{question.required ? " *" : ""}</span>
+            {question.questionAr && <small dir="rtl">{question.questionAr}</small>}
+            {question.responseType === "TEXT" && <input name={"question_" + question.id} required={question.required} />}
+            {question.responseType === "NUMERIC" && <input name={"question_" + question.id} type="number" step="any" required={question.required} />}
+            {question.responseType === "DATE" && <input name={"question_" + question.id} type="date" required={question.required} />}
+            {question.responseType === "BOOLEAN" && <select name={"question_" + question.id} required={question.required} defaultValue="">
+              <option value="">Select…</option><option value="true">Yes</option><option value="false">No</option>
+            </select>}
+            {question.responseType === "SINGLE_CHOICE" && <select name={"question_" + question.id} required={question.required} defaultValue="">
+              <option value="">Select…</option>{question.options.map(option => <option key={option} value={option}>{option}</option>)}
+            </select>}
+          </label>))}
+        </div>
+      </div>}
 
       {message && <div className="form-success form-span">{message}</div>}
       <button className="primary-button form-span" disabled={busy}>{busy ? "Creating order…" : "Register Order & Invoice"}</button>
