@@ -125,7 +125,18 @@ export async function POST(request: Request) {
       }];
 
   const valueByComponent = new Map((body.values || []).map((entry) => [entry.componentId || "__TEST__", entry.rawValue]));
-  const prepared = [];
+  const prepared: Array<{
+    componentId: string | null;
+    code: string;
+    nameEn: string;
+    nameAr: string | null;
+    resultType: "NUMERIC" | "TEXT" | "QUALITATIVE" | "BOOLEAN" | "DATE";
+    unitId: string | null;
+    unitSnapshot: string | null;
+    parsed: NonNullable<ReturnType<typeof parseValue>>;
+    interval: Awaited<ReturnType<typeof resolveReferenceInterval>>;
+    flag: ReturnType<typeof numericFlag>;
+  }> = [];
 
   try {
     for (const component of expected) {
@@ -227,7 +238,7 @@ export async function POST(request: Request) {
     await tx.orderItem.update({
       where: { id: orderItemId },
       data: {
-        performedBranchId,
+        performedBranchId: performingBranchId,
         status: "IN_PROGRESS",
       },
     });
