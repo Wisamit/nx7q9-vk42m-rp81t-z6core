@@ -5,8 +5,17 @@ import { prisma } from "@/lib/db";
 function text(value: unknown, max = 100) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
 }
-function startOfUtcDay(value = new Date()) {
-  return new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()));
+function branchLocalDate(timezone: string, value = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(value);
+  const year = Number(parts.find(part => part.type === "year")?.value);
+  const month = Number(parts.find(part => part.type === "month")?.value);
+  const day = Number(parts.find(part => part.type === "day")?.value);
+  return new Date(Date.UTC(year, month - 1, day));
 }
 
 export async function POST(request: Request) {
@@ -34,7 +43,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "queue_context_not_found" }, { status: 404 });
   }
 
-  const queueDate = startOfUtcDay();
+  const queueDate = branchLocalDate(branch.timezone);
   const prefix = stage === "PHLEBOTOMY" ? "P" : "R";
 
   for (let attempt = 0; attempt < 5; attempt += 1) {
