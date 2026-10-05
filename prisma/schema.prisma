@@ -466,6 +466,7 @@ model Department {
   organization Organization          @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   branch       Branch?               @relation(fields: [branchId], references: [id], onDelete: Restrict)
   workstations Workstation[]
+  analyzers Analyzer[]
   userScopes   UserDepartmentScope[]
   labTests      LabTest[]
 
