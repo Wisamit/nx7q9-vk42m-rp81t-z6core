@@ -620,6 +620,63 @@ enum QueueTicketStatus {
   NO_SHOW
 }
 
+enum TerminologySystem {
+  LOINC
+  SNOMED_CT
+  ICD10
+  LOCAL
+}
+
+enum TerminologyMappingScope {
+  TEST
+  COMPONENT
+}
+
+enum IntegrationEndpointType {
+  FHIR_R4
+  HL7_V2
+  REST
+  WEBHOOK
+}
+
+enum IntegrationDirection {
+  INBOUND
+  OUTBOUND
+  BIDIRECTIONAL
+}
+
+enum IntegrationAuthType {
+  NONE
+  API_KEY
+  BEARER
+  BASIC
+  HMAC
+}
+
+enum IntegrationMessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum IntegrationMessageStatus {
+  QUEUED
+  SENT
+  ACKNOWLEDGED
+  RECEIVED
+  PROCESSED
+  REJECTED
+  FAILED
+  DEAD_LETTER
+}
+
+enum WebhookDeliveryStatus {
+  QUEUED
+  SENT
+  DELIVERED
+  FAILED
+  DEAD_LETTER
+}
+
 model Organization {
   id              String       @id @default(uuid()) @db.Char(36)
   code            String       @unique @db.VarChar(50)
@@ -699,6 +756,13 @@ model Organization {
 
   sources OrderSource[]
 
+  terminologyMappings TerminologyMapping[]
+  integrationEndpoints IntegrationEndpoint[]
+  integrationApiKeys IntegrationApiKey[]
+  integrationMessages IntegrationMessage[]
+  webhookSubscriptions WebhookSubscription[]
+  webhookDeliveries WebhookDelivery[]
+
   @@map("organizations")
 }
 
@@ -770,6 +834,9 @@ model Branch {
   appointments Appointment[]
   homeCollectionVisits HomeCollectionVisit[]
   queueTickets QueueTicket[]
+
+  integrationEndpoints IntegrationEndpoint[]
+  integrationMessages IntegrationMessage[]
 
   @@unique([organizationId, code])
   @@index([organizationId, status])
@@ -930,6 +997,10 @@ model User {
   assignedHomeCollections HomeCollectionVisit[] @relation("HomeCollectionCollector")
   issuedQueueTickets QueueTicket[] @relation("QueueTicketIssuer")
   calledQueueTickets QueueTicket[] @relation("QueueTicketCaller")
+
+  createdTerminologyMappings TerminologyMapping[] @relation("TerminologyMappingCreator")
+  createdIntegrationEndpoints IntegrationEndpoint[] @relation("IntegrationEndpointCreator")
+  createdIntegrationApiKeys IntegrationApiKey[] @relation("IntegrationApiKeyCreator")
 
   @@unique([organizationId, username])
   @@unique([organizationId, email])
@@ -1255,6 +1326,8 @@ model LabTest {
   criticalEscalationPolicies CriticalEscalationPolicy[]
   qcTargets QcTarget[]
 
+  terminologyMappings TerminologyMapping[]
+
   @@unique([organizationId, code])
   @@index([organizationId, status])
   @@index([departmentId, status])
@@ -1286,6 +1359,8 @@ model TestComponent {
   reflexSourceRules ReflexRule[]
   analyzerMappings AnalyzerTestMapping[]
   qcTargets QcTarget[]
+
+  terminologyMappings TerminologyMapping[]
 
   @@unique([testId, code])
   @@index([testId, displayOrder])
@@ -1697,6 +1772,8 @@ model LabOrder {
   statusHistory OrderStatusHistory[]
   specimens     Specimen[]
   diagnosticReport DiagnosticReport?
+
+  integrationMessages IntegrationMessage[]
 
   @@unique([organizationId, accessionNumber])
   @@index([orderingBranchId, orderedAt])
@@ -2200,6 +2277,9 @@ model DiagnosticReportVersion {
   supersedes  DiagnosticReportVersion? @relation("ReportVersionSupersession", fields: [supersedesVersionId], references: [id], onDelete: Restrict)
   supersededBy DiagnosticReportVersion[] @relation("ReportVersionSupersession")
   deliveries   ReportDeliveryEvent[]
+
+  integrationMessages IntegrationMessage[]
+  webhookDeliveries WebhookDelivery[]
 
   @@unique([reportId, version])
   @@index([branchId, issuedAt])
@@ -4024,4 +4104,168 @@ model QueueTicket {
   @@index([branchId, stage, queueDate, status, priority, issuedAt])
   @@index([patientId, issuedAt])
   @@map("queue_tickets")
+}
+
+
+model TerminologyMapping {
+  id             String                  @id @default(uuid()) @db.Char(36)
+  organizationId String                  @map("organization_id") @db.Char(36)
+  scope          TerminologyMappingScope
+  testId         String                  @map("test_id") @db.Char(36)
+  componentId    String?                 @map("component_id") @db.Char(36)
+  system         TerminologySystem       @default(LOINC)
+  code           String                  @db.VarChar(80)
+  display        String?                 @db.VarChar(255)
+  systemVersion  String?                 @map("system_version") @db.VarChar(80)
+  isPrimary      Boolean                 @default(true) @map("is_primary")
+  effectiveFrom  DateTime                @map("effective_from") @db.DateTime(3)
+  effectiveTo    DateTime?               @map("effective_to") @db.DateTime(3)
+  status         RecordStatus            @default(ACTIVE)
+  createdByUserId String                 @map("created_by_user_id") @db.Char(36)
+  createdAt      DateTime                @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt      DateTime                @updatedAt @map("updated_at") @db.DateTime(3)
+  deactivatedAt  DateTime?               @map("deactivated_at") @db.DateTime(3)
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  test         LabTest       @relation(fields: [testId], references: [id], onDelete: Restrict)
+  component    TestComponent? @relation(fields: [componentId], references: [id], onDelete: Restrict)
+  createdBy    User          @relation("TerminologyMappingCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, system, code, status])
+  @@index([testId, componentId, system, status, effectiveFrom, effectiveTo])
+  @@map("terminology_mappings")
+}
+
+model IntegrationEndpoint {
+  id             String                   @id @default(uuid()) @db.Char(36)
+  organizationId String                   @map("organization_id") @db.Char(36)
+  branchId       String?                  @map("branch_id") @db.Char(36)
+  code           String                   @db.VarChar(80)
+  name           String                   @db.VarChar(220)
+  endpointType   IntegrationEndpointType  @map("endpoint_type")
+  direction      IntegrationDirection
+  baseUrl        String?                  @map("base_url") @db.VarChar(1000)
+  authType       IntegrationAuthType      @default(NONE) @map("auth_type")
+  secretReference String?                 @map("secret_reference") @db.VarChar(500)
+  timeoutSeconds Int                      @default(15) @map("timeout_seconds")
+  maxAttempts    Int                      @default(5) @map("max_attempts")
+  status         RecordStatus             @default(ACTIVE)
+  createdByUserId String                  @map("created_by_user_id") @db.Char(36)
+  createdAt      DateTime                 @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt      DateTime                 @updatedAt @map("updated_at") @db.DateTime(3)
+  deactivatedAt  DateTime?                @map("deactivated_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  branch       Branch?      @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  createdBy    User         @relation("IntegrationEndpointCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  apiKeys      IntegrationApiKey[]
+  messages     IntegrationMessage[]
+  webhookSubscriptions WebhookSubscription[]
+
+  @@unique([organizationId, code])
+  @@index([branchId, endpointType, status])
+  @@map("integration_endpoints")
+}
+
+model IntegrationApiKey {
+  id             String       @id @default(uuid()) @db.Char(36)
+  organizationId String       @map("organization_id") @db.Char(36)
+  endpointId     String       @map("endpoint_id") @db.Char(36)
+  name           String       @db.VarChar(160)
+  keyPrefix      String       @unique @map("key_prefix") @db.VarChar(32)
+  keyHash        String       @map("key_hash") @db.Char(64)
+  scopes         Json
+  expiresAt      DateTime?    @map("expires_at") @db.DateTime(3)
+  lastUsedAt     DateTime?    @map("last_used_at") @db.DateTime(3)
+  revokedAt      DateTime?    @map("revoked_at") @db.DateTime(3)
+  createdByUserId String      @map("created_by_user_id") @db.Char(36)
+  createdAt      DateTime     @default(now()) @map("created_at") @db.DateTime(3)
+
+  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  endpoint     IntegrationEndpoint @relation(fields: [endpointId], references: [id], onDelete: Restrict)
+  createdBy    User               @relation("IntegrationApiKeyCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+
+  @@index([endpointId, revokedAt, expiresAt])
+  @@map("integration_api_keys")
+}
+
+model IntegrationMessage {
+  id             String                      @id @default(uuid()) @db.Char(36)
+  organizationId String                      @map("organization_id") @db.Char(36)
+  branchId       String?                     @map("branch_id") @db.Char(36)
+  endpointId     String                      @map("endpoint_id") @db.Char(36)
+  direction      IntegrationMessageDirection
+  messageType    String                      @map("message_type") @db.VarChar(100)
+  controlId      String?                     @map("control_id") @db.VarChar(120)
+  orderId        String?                     @map("order_id") @db.Char(36)
+  reportVersionId String?                    @map("report_version_id") @db.Char(36)
+  payloadText    String?                     @map("payload_text") @db.LongText
+  payloadJson    Json?                       @map("payload_json")
+  payloadHash    String                      @map("payload_hash") @db.Char(64)
+  status         IntegrationMessageStatus    @default(QUEUED)
+  attemptCount   Int                         @default(0) @map("attempt_count")
+  nextAttemptAt  DateTime?                   @map("next_attempt_at") @db.DateTime(3)
+  acknowledgementCode String?                @map("acknowledgement_code") @db.VarChar(40)
+  acknowledgementPayload String?             @map("acknowledgement_payload") @db.Text
+  lastError      String?                     @map("last_error") @db.Text
+  receivedAt     DateTime?                   @map("received_at") @db.DateTime(3)
+  processedAt    DateTime?                   @map("processed_at") @db.DateTime(3)
+  createdAt      DateTime                    @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt      DateTime                    @updatedAt @map("updated_at") @db.DateTime(3)
+
+  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  branch       Branch?            @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  endpoint     IntegrationEndpoint @relation(fields: [endpointId], references: [id], onDelete: Restrict)
+  order        LabOrder?          @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  reportVersion DiagnosticReportVersion? @relation(fields: [reportVersionId], references: [id], onDelete: Restrict)
+
+  @@index([endpointId, status, createdAt])
+  @@index([orderId, createdAt])
+  @@index([reportVersionId, createdAt])
+  @@index([controlId])
+  @@map("integration_messages")
+}
+
+model WebhookSubscription {
+  id             String       @id @default(uuid()) @db.Char(36)
+  organizationId String       @map("organization_id") @db.Char(36)
+  endpointId     String       @map("endpoint_id") @db.Char(36)
+  eventType      String       @map("event_type") @db.VarChar(120)
+  status         RecordStatus @default(ACTIVE)
+  createdAt      DateTime     @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt      DateTime     @updatedAt @map("updated_at") @db.DateTime(3)
+
+  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  endpoint     IntegrationEndpoint @relation(fields: [endpointId], references: [id], onDelete: Restrict)
+
+  @@unique([endpointId, eventType])
+  @@index([organizationId, eventType, status])
+  @@map("webhook_subscriptions")
+}
+
+model WebhookDelivery {
+  id               String                @id @default(uuid()) @db.Char(36)
+  organizationId   String                @map("organization_id") @db.Char(36)
+  subscriptionId   String                @map("subscription_id") @db.Char(36)
+  reportVersionId  String?               @map("report_version_id") @db.Char(36)
+  eventType        String                @map("event_type") @db.VarChar(120)
+  payload          Json
+  payloadHash      String                @map("payload_hash") @db.Char(64)
+  status           WebhookDeliveryStatus @default(QUEUED)
+  attemptCount     Int                   @default(0) @map("attempt_count")
+  nextAttemptAt    DateTime?             @map("next_attempt_at") @db.DateTime(3)
+  lastHttpStatus   Int?                  @map("last_http_status")
+  lastError        String?               @map("last_error") @db.Text
+  deliveredAt      DateTime?             @map("delivered_at") @db.DateTime(3)
+  createdAt        DateTime              @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt        DateTime              @updatedAt @map("updated_at") @db.DateTime(3)
+
+  organization Organization            @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  subscription WebhookSubscription     @relation(fields: [subscriptionId], references: [id], onDelete: Restrict)
+  reportVersion DiagnosticReportVersion? @relation(fields: [reportVersionId], references: [id], onDelete: Restrict)
+
+  @@index([status, nextAttemptAt, createdAt])
+  @@index([subscriptionId, createdAt])
+  @@index([reportVersionId, createdAt])
+  @@map("webhook_deliveries")
 }
