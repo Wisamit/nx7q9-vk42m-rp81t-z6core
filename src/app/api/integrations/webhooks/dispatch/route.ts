@@ -9,13 +9,12 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => null) as { deliveryId?: unknown } | null;
   const deliveryId = typeof body?.deliveryId === "string" ? body.deliveryId.trim() : "";
 
-  const where = {
-    organizationId: session.user.organizationId,
-    status: { in: ["QUEUED","FAILED"] as const },
-    ...(deliveryId ? { id: deliveryId } : {}),
-  };
   const deliveries = await prisma.webhookDelivery.findMany({
-    where,
+    where: {
+      organizationId: session.user.organizationId,
+      status: { in: ["QUEUED","FAILED"] },
+      ...(deliveryId ? { id: deliveryId } : {}),
+    },
     include: { subscription: { include: { endpoint: true } } },
     orderBy: { createdAt: "asc" },
     take: deliveryId ? 1 : 20,
