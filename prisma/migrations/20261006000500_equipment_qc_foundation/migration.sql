@@ -204,7 +204,6 @@ CREATE TABLE `qc_runs` (
   `organization_id` CHAR(36) NOT NULL,
   `branch_id` CHAR(36) NOT NULL,
   `analyzer_id` CHAR(36) NOT NULL,
-  `qc_lot_id` CHAR(36) NOT NULL,
   `status` ENUM('PENDING','PASS','WARN','FAIL','CANCELLED') NOT NULL DEFAULT 'PENDING',
   `run_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   `operator_user_id` CHAR(36) NOT NULL,
