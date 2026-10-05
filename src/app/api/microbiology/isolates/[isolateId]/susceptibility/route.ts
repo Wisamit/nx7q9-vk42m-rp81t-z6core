@@ -37,7 +37,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ iso
   if (!canAccessBranch(session, isolate.case.performingBranchId)) {
     return NextResponse.json({ error: "branch_forbidden" }, { status: 403 });
   }
-  if (["FINAL","CANCELLED"].includes(isolate.case.status)) {
+  if (isolate.case.resultId || ["FINAL","CANCELLED"].includes(isolate.case.status)) {
     return NextResponse.json({ error: "microbiology_case_locked", status: isolate.case.status }, { status: 409 });
   }
 
