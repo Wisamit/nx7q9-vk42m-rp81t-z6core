@@ -60,9 +60,11 @@ export async function requireSession() {
 
 export function permissionSet(session: NonNullable<Awaited<ReturnType<typeof getCurrentSession>>>) {
   return new Set(
-    session.user.roles.flatMap((assignment) =>
-      assignment.role.permissions.map((grant) => grant.permission.code),
-    ),
+    session.user.roles
+      .filter((assignment) => assignment.role.status === "ACTIVE")
+      .flatMap((assignment) =>
+        assignment.role.permissions.map((grant) => grant.permission.code),
+      ),
   );
 }
 
