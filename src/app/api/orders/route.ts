@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { Prisma } from "../../../../generated/prisma/client";
 import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { resolveTestPrice } from "@/lib/pricing";
+import { resolvePackagePrice, resolveTestPrice } from "@/lib/pricing";
 
 function text(value: unknown, max = 500) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -30,22 +30,61 @@ export async function POST(request: Request) {
   const sourceId = text(body.sourceId, 36);
   const referrerId = text(body.referrerId, 36) || null;
   const clientId = text(body.clientId, 36) || null;
-  const testIds = uniqueIds(body.testIds);
+  const directTestIds = uniqueIds(body.testIds);
+  const packageIds = uniqueIds(body.packageIds);
   const priority = ["ROUTINE", "URGENT", "STAT"].includes(body.priority) ? body.priority : "ROUTINE";
   const clinicalNotes = text(body.clinicalNotes, 5000);
   const diagnosis = text(body.diagnosis, 500);
   const pregnancyInfo = text(body.pregnancyInfo, 500);
   const fasting = body.fasting === true ? true : body.fasting === false ? false : null;
 
-  if (!branchId || !patientId || !sourceId || testIds.length === 0) {
+  if (!branchId || !patientId || !sourceId || (directTestIds.length === 0 && packageIds.length === 0)) {
     return NextResponse.json({ error: "missing_required_fields" }, { status: 400 });
   }
   if (!canAccessBranch(session, branchId)) return NextResponse.json({ error: "branch_forbidden" }, { status: 403 });
 
+  const packages = packageIds.length ? await prisma.commercialPackage.findMany({
+    where: {
+      id: { in: packageIds },
+      organizationId: session.user.organizationId,
+      status: "ACTIVE",
+    },
+    include: {
+      items: {
+        include: { test: { select: { id: true, status: true } } },
+        orderBy: { displayOrder: "asc" },
+      },
+    },
+  }) : [];
+  if (packages.length !== packageIds.length) {
+    return NextResponse.json({ error: "one_or_more_packages_not_found" }, { status: 404 });
+  }
+
+  const packageTestOwner = new Map<string, string>();
+  for (const pkg of packages) {
+    for (const item of pkg.items) {
+      if (item.test.status !== "ACTIVE") {
+        return NextResponse.json({ error: "package_contains_inactive_test", packageCode: pkg.code }, { status: 409 });
+      }
+      const existingPackageId = packageTestOwner.get(item.testId);
+      if (existingPackageId && existingPackageId !== pkg.id) {
+        return NextResponse.json({ error: "package_test_overlap", testId: item.testId }, { status: 409 });
+      }
+      packageTestOwner.set(item.testId, pkg.id);
+    }
+  }
+  const directOverlap = directTestIds.find(testId => packageTestOwner.has(testId));
+  if (directOverlap) {
+    return NextResponse.json({ error: "package_direct_test_overlap", testId: directOverlap }, { status: 409 });
+  }
+
+  const packageTestIds = [...packageTestOwner.keys()];
+  const allTestIds = [...directTestIds, ...packageTestIds];
+
   const [patient, tests, source, referrer, client] = await Promise.all([
     prisma.patient.findFirst({ where: { id: patientId, organizationId: session.user.organizationId, status: "ACTIVE" }, select: { id: true, patientNumber: true, fullNameEn: true } }),
     prisma.labTest.findMany({
-      where: { id: { in: testIds }, organizationId: session.user.organizationId, status: "ACTIVE" },
+      where: { id: { in: allTestIds }, organizationId: session.user.organizationId, status: "ACTIVE" },
       include: {
         defaultUnit: true,
         specimenType: true,
@@ -60,7 +99,7 @@ export async function POST(request: Request) {
   ]);
 
   if (!patient) return NextResponse.json({ error: "patient_not_found" }, { status: 404 });
-  if (tests.length !== testIds.length) return NextResponse.json({ error: "one_or_more_tests_not_found" }, { status: 404 });
+  if (tests.length !== allTestIds.length) return NextResponse.json({ error: "one_or_more_tests_not_found" }, { status: 404 });
   if (!source) return NextResponse.json({ error: "source_not_found" }, { status: 404 });
   if (referrerId && !referrer) return NextResponse.json({ error: "referrer_not_found" }, { status: 404 });
   if (clientId && !client) return NextResponse.json({ error: "client_not_found" }, { status: 404 });
