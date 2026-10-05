@@ -2,6 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
+import { branchScopeAllows } from "@/lib/clinical-safety";
 
 export const SESSION_COOKIE = "family_lab_session";
 const SESSION_DAYS = 7;
@@ -76,5 +77,8 @@ export function canAccessBranch(
   session: NonNullable<Awaited<ReturnType<typeof getCurrentSession>>>,
   branchId: string,
 ) {
-  return session.user.branchScopes.some((scope) => scope.branchId === branchId && scope.branch.status === "ACTIVE");
+  return branchScopeAllows(
+    session.user.branchScopes.filter(scope => scope.branch.status === "ACTIVE").map(scope => scope.branchId),
+    branchId,
+  );
 }
