@@ -116,7 +116,7 @@ export function ReferenceRangeImportButton({ batchId }: { batchId: string }) {
           const mapKey = `TEST_ALIAS:${item.value}`;
           return <div className="mapping-row" key={item.value}>
             <div className="mapping-source"><span>{item.value}</span><strong>{item.count}</strong></div>
-            {item.suggestion && "nameEn" in item.suggestion && <button className="suggestion-button" type="button" onClick={() => { const s = item.suggestion!; setMappingTargets(v => ({ ...v, [mapKey]: s.id })); setMappingSearch(v => ({ ...v, [mapKey]: `${s.code} — ${s.nameEn}` })); }}>
+            {item.suggestion && "nameEn" in item.suggestion && <button className="suggestion-button" type="button" onClick={() => { const s = item.suggestion as TestSuggestion; setMappingTargets(v => ({ ...v, [mapKey]: s.id })); setMappingSearch(v => ({ ...v, [mapKey]: `${s.code} — ${s.nameEn}` })); }}>
               Suggested: {item.suggestion.code} — {item.suggestion.nameEn} ({item.suggestion.score}%)
             </button>}
             <input
@@ -143,7 +143,7 @@ export function ReferenceRangeImportButton({ batchId }: { batchId: string }) {
           const mapKey = `UNIT_ALIAS:${item.value}`;
           return <div className="mapping-row" key={item.value}>
             <div className="mapping-source"><span>{item.value}</span><strong>{item.count}</strong></div>
-            {item.suggestion && "symbol" in item.suggestion && <button className="suggestion-button" type="button" onClick={() => { const s = item.suggestion!; setMappingTargets(v => ({ ...v, [mapKey]: s.id })); setMappingSearch(v => ({ ...v, [mapKey]: `${s.symbol} (${s.code})` })); }}>
+            {item.suggestion && "symbol" in item.suggestion && <button className="suggestion-button" type="button" onClick={() => { const s = item.suggestion as UnitSuggestion; setMappingTargets(v => ({ ...v, [mapKey]: s.id })); setMappingSearch(v => ({ ...v, [mapKey]: `${s.symbol} (${s.code})` })); }}>
               Suggested: {item.suggestion.symbol} ({item.suggestion.code}) — {item.suggestion.score}%
             </button>}
             <input
