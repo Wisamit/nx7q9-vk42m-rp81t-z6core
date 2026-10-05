@@ -118,32 +118,19 @@ export async function POST(request: Request) {
           take: 9,
         });
 
-        const recentSibling = await tx.qcResult.findMany({
-          where: {
-            targetId: { not: item.target.id },
-            target: {
-              analyzerId,
-              testId: item.target.testId,
-              componentId: item.target.componentId,
-              status: "ACTIVE",
-            },
-            run: {
-              runAt: {
-                gte: new Date(runAt.getTime() - 60 * 60_000),
-                lte: runAt,
-              },
-              status: { not: "CANCELLED" },
-            },
-          },
-          orderBy: { createdAt: "desc" },
-          take: 6,
-        });
+        const siblingZ = computed
+          .filter(other =>
+            other.target.id !== item.target.id &&
+            other.target.testId === item.target.testId &&
+            other.target.componentId === item.target.componentId
+          )
+          .map(other => other.zScore.toNumber());
 
         const enabledRules = normalizeWestgardRules(item.target.enabledRules);
         const violations = evaluateWestgard({
           currentZ: item.zScore.toNumber(),
           previousZ: history.map(result => result.zScore.toNumber()),
-          siblingZ: recentSibling.map(result => result.zScore.toNumber()),
+          siblingZ,
           enabledRules,
         });
         const status: "PASS" | "WARN" | "FAIL" = violations.some(v => v.severity === "BLOCK")
