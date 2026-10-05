@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { buildDiagnosticReportSnapshot } from "@/lib/report-snapshot";
 import { resolveAnalyzerQcGate } from "@/lib/qc-gate";
 import { queueReportIntegrations } from "@/lib/integration-outbox";
+import { resolveEffectiveReportTemplate } from "@/lib/report-template";
 
 export async function POST(_: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await requirePermission("results.release");
@@ -112,6 +113,11 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
     });
 
     const snapshot = await buildDiagnosticReportSnapshot(tx, result.orderItem.orderId);
+    const effectiveTemplate = await resolveEffectiveReportTemplate(tx, {
+      organizationId: session.user.organizationId,
+      branchId: result.orderItem.order.orderingBranchId,
+      asOf: releasedAt,
+    });
     const version = (previousVersion?.version || 0) + 1;
     const reportStatus = result.amendedFromId
       ? "AMENDED"
@@ -125,6 +131,15 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
         branchId: result.orderItem.order.orderingBranchId,
         contentSnapshot: snapshot.contentSnapshot,
         resultVersionSnapshot: snapshot.resultVersionSnapshot,
+        reportTemplateVersionId: effectiveTemplate?.version.id || null,
+        templateSnapshot: effectiveTemplate ? {
+          templateId: effectiveTemplate.template.id,
+          templateCode: effectiveTemplate.template.code,
+          templateNameEn: effectiveTemplate.template.nameEn,
+          templateNameAr: effectiveTemplate.template.nameAr,
+          templateVersion: effectiveTemplate.version.version,
+          configuration: effectiveTemplate.configuration,
+        } : undefined,
         verificationToken: randomBytes(32).toString("hex"),
         issuedByUserId: session.user.id,
         issuedAt: releasedAt,
@@ -165,6 +180,8 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
           reportVersionId: reportVersion.id,
           reportVersion: version,
           reportStatus,
+          reportTemplateVersionId: effectiveTemplate?.version.id || null,
+          reportTemplateCode: effectiveTemplate?.template.code || null,
           amendedFromId: result.amendedFromId,
           microbiologyCaseId: result.microbiologyCase?.id || null,
           qcGateStatus: qcGate?.status || null,
