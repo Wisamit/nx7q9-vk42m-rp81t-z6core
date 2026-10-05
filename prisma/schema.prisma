@@ -562,6 +562,64 @@ enum AuditFindingStatus {
   CLOSED
 }
 
+enum PortalAccountType {
+  PATIENT
+  DOCTOR
+  CORPORATE
+}
+
+enum PortalAccountStatus {
+  INVITED
+  ACTIVE
+  LOCKED
+  DISABLED
+}
+
+enum PortalOtpPurpose {
+  LOGIN
+  VERIFY_CONTACT
+  RESET_ACCESS
+}
+
+enum AppointmentMode {
+  ONSITE
+  HOME_COLLECTION
+}
+
+enum AppointmentStatus {
+  REQUESTED
+  CONFIRMED
+  CHECKED_IN
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+enum HomeCollectionStatus {
+  SCHEDULED
+  ASSIGNED
+  EN_ROUTE
+  ARRIVED
+  COLLECTING
+  COLLECTED
+  DELIVERED
+  CANCELLED
+}
+
+enum QueueStage {
+  RECEPTION
+  PHLEBOTOMY
+}
+
+enum QueueTicketStatus {
+  WAITING
+  CALLED
+  SERVING
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
 model Organization {
   id              String       @id @default(uuid()) @db.Char(36)
   code            String       @unique @db.VarChar(50)
@@ -635,6 +693,10 @@ model Organization {
   qualityIndicators QualityIndicator[]
   internalAudits InternalAudit[]
 
+  portalAccounts PortalAccount[]
+  appointments Appointment[]
+  queueTickets QueueTicket[]
+
   @@map("organizations")
 }
 
@@ -702,6 +764,10 @@ model Branch {
   competencyAssessments CompetencyAssessment[]
   qualityIndicators QualityIndicator[]
   internalAudits InternalAudit[]
+
+  appointments Appointment[]
+  homeCollectionVisits HomeCollectionVisit[]
+  queueTickets QueueTicket[]
 
   @@unique([organizationId, code])
   @@index([organizationId, status])
@@ -857,6 +923,11 @@ model User {
   ledInternalAudits InternalAudit[] @relation("InternalAuditLead")
   ownedAuditFindings InternalAuditFinding[] @relation("AuditFindingOwner")
   closedAuditFindings InternalAuditFinding[] @relation("AuditFindingCloser")
+
+  createdAppointments Appointment[] @relation("AppointmentCreator")
+  assignedHomeCollections HomeCollectionVisit[] @relation("HomeCollectionCollector")
+  issuedQueueTickets QueueTicket[] @relation("QueueTicketIssuer")
+  calledQueueTickets QueueTicket[] @relation("QueueTicketCaller")
 
   @@unique([organizationId, username])
   @@unique([organizationId, email])
@@ -1399,6 +1470,11 @@ model Patient {
   identifiers  PatientIdentifier[]
   orders        LabOrder[]
 
+  portalAccount PortalAccount?
+  appointments Appointment[]
+  queueTickets QueueTicket[]
+  corporatePortalAccess CorporatePortalPatientAccess[]
+
   @@unique([organizationId, patientNumber])
   @@index([organizationId, normalizedName])
   @@index([organizationId, normalizedPhone])
@@ -1452,6 +1528,9 @@ model Client {
   orders        LabOrder[]
   invoices      Invoice[]
 
+  portalAccount PortalAccount?
+  corporatePortalPatientAccess CorporatePortalPatientAccess[]
+
   @@unique([organizationId, code])
   @@index([organizationId, nameEn])
   @@map("clients")
@@ -1476,6 +1555,8 @@ model Referrer {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   client       Client?      @relation(fields: [clientId], references: [id], onDelete: Restrict)
   orders       LabOrder[]
+
+  portalAccount PortalAccount?
 
   @@unique([organizationId, code])
   @@index([organizationId, nameEn])
