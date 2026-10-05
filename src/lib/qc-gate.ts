@@ -45,7 +45,10 @@ export async function resolveAnalyzerQcGate(
 
   const equipment = await client.equipment.findFirst({
     where: { analyzerId: input.analyzerId },
-    include: { downtimeEvents: { where: { status: "OPEN" }, take: 1 } },
+    include: {
+      downtimeEvents: { where: { status: "OPEN" }, take: 1 },
+      calibrationEvents: { orderBy: { createdAt: "desc" }, take: 1 },
+    },
   });
 
   if (!equipment) {
@@ -57,6 +60,17 @@ export async function resolveAnalyzerQcGate(
   }
   if (equipment.downtimeEvents.length > 0) {
     reasons.push({ code: "EQUIPMENT_DOWNTIME_OPEN", componentId: null, detail: equipment.downtimeEvents[0].id });
+  }
+  const latestCalibration = equipment.calibrationEvents[0] || null;
+  if (latestCalibration?.status === "FAIL") {
+    reasons.push({ code: "CALIBRATION_FAILED", componentId: null, detail: latestCalibration.id });
+  } else if (latestCalibration?.status === "IN_PROGRESS") {
+    reasons.push({ code: "CALIBRATION_IN_PROGRESS", componentId: null, detail: latestCalibration.id });
+  } else if (
+    latestCalibration?.status === "DUE" &&
+    (!latestCalibration.dueAt || latestCalibration.dueAt <= asOf)
+  ) {
+    reasons.push({ code: "CALIBRATION_DUE", componentId: null, detail: latestCalibration.id });
   }
 
   const targets = await client.qcTarget.findMany({
@@ -150,6 +164,9 @@ export async function resolveAnalyzerQcGate(
     "ANALYZER_EQUIPMENT_NOT_REGISTERED",
     "EQUIPMENT_NOT_ACTIVE",
     "EQUIPMENT_DOWNTIME_OPEN",
+    "CALIBRATION_FAILED",
+    "CALIBRATION_IN_PROGRESS",
+    "CALIBRATION_DUE",
     "QC_TARGET_NOT_CONFIGURED",
     "QC_LOT_NOT_ACTIVE",
     "QC_LOT_EXPIRED",
