@@ -31,6 +31,17 @@ type HomeCollection = {
   status: string;
   scheduledStart: string;
 };
+type CorporateAccess = {
+  id: string;
+  client: string;
+  patient: string;
+  employeeNumber: string | null;
+  canBook: boolean;
+  canViewReports: boolean;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+  status: string;
+};
 type QueueTicket = {
   id: string;
   ticketNumber: string;
@@ -51,6 +62,7 @@ export function DigitalServicesConsole({
   clients,
   users,
   portalAccounts,
+  corporateAccess,
   appointments,
   homeCollections,
   queueTickets,
@@ -62,6 +74,7 @@ export function DigitalServicesConsole({
   clients: Option[];
   users: Option[];
   portalAccounts: PortalAccount[];
+  corporateAccess: CorporateAccess[];
   appointments: Appointment[];
   homeCollections: HomeCollection[];
   queueTickets: QueueTicket[];
@@ -105,6 +118,21 @@ export function DigitalServicesConsole({
     const temporaryPassword = window.prompt("Enter a temporary password of at least 12 characters. The portal user will be forced to change it on first login.");
     if (!temporaryPassword) return;
     await send(`/api/portal-accounts/${accountId}/temporary-password`, "POST", { temporaryPassword }, "portal-password-" + accountId, "Temporary password set and existing portal sessions revoked.");
+  }
+
+  async function createCorporateAccess(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const ok = await send("/api/corporate-portal-access", "POST", {
+      clientId: form.get("clientId"),
+      patientId: form.get("patientId"),
+      employeeNumber: form.get("employeeNumber"),
+      effectiveFrom: form.get("effectiveFrom"),
+      effectiveTo: form.get("effectiveTo"),
+      canBook: form.get("canBook") === "on",
+      canViewReports: form.get("canViewReports") === "on",
+    }, "corporate-access", "Corporate portal patient access created.");
+    if (ok) event.currentTarget.reset();
   }
 
   async function createAppointment(event: FormEvent<HTMLFormElement>) {
@@ -180,6 +208,22 @@ export function DigitalServicesConsole({
       </form>
     </article>}
 
+
+    {permissions.portalAccounts && <article className="detail-card">
+      <h2>Corporate Patient Access</h2>
+      <p className="muted">Explicitly authorize which employees/patients a corporate portal may book for and which reports it may view.</p>
+      <form className="catalog-form" onSubmit={createCorporateAccess}>
+        <label>Corporate client<select name="clientId" required defaultValue=""><option value="">Select…</option>{clients.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
+        <label>Patient<select name="patientId" required defaultValue=""><option value="">Select…</option>{patients.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
+        <label>Employee number<input name="employeeNumber" /></label>
+        <label>Effective from<input name="effectiveFrom" type="date" required /></label>
+        <label>Effective to<input name="effectiveTo" type="date" /></label>
+        <label><input name="canBook" type="checkbox" defaultChecked /> Can book</label>
+        <label><input name="canViewReports" type="checkbox" /> Can view reports</label>
+        <button className="primary-button form-span" disabled={busy !== ""}>{busy === "corporate-access" ? "Saving…" : "Add Corporate Access"}</button>
+      </form>
+    </article>}
+
     {permissions.appointments && <article className="detail-card">
       <h2>Create Appointment</h2>
       <form className="catalog-form" onSubmit={createAppointment}>
@@ -217,6 +261,18 @@ export function DigitalServicesConsole({
         <tbody>{portalAccounts.length === 0 ? <tr><td colSpan={6} className="empty-state">No portal accounts.</td></tr> : portalAccounts.map(item => <tr key={item.id}>
           <td>{item.type}</td><td>{item.subject}</td><td>{item.contact}</td><td>{item.status}</td><td>{item.mustChangePassword ? "Password change required" : "Complete"}</td>
           <td>{permissions.portalAccounts && <button className="secondary-button" type="button" disabled={busy !== ""} onClick={() => void setTemporaryPassword(item.id)}>Set temp password</button>}</td>
+        </tr>)}</tbody>
+      </table></div>
+    </article>
+
+
+    <article className="table-card form-span">
+      <div className="table-toolbar"><h2>Corporate Portal Access</h2><span>{corporateAccess.length} shown</span></div>
+      <div className="table-wrap"><table>
+        <thead><tr><th>Client</th><th>Patient</th><th>Employee #</th><th>Booking</th><th>Reports</th><th>Effective</th><th>Status</th></tr></thead>
+        <tbody>{corporateAccess.length === 0 ? <tr><td colSpan={7} className="empty-state">No corporate patient access configured.</td></tr> : corporateAccess.map(item => <tr key={item.id}>
+          <td>{item.client}</td><td>{item.patient}</td><td>{item.employeeNumber || "—"}</td><td>{item.canBook ? "YES" : "NO"}</td><td>{item.canViewReports ? "YES" : "NO"}</td>
+          <td>{item.effectiveFrom.slice(0,10)} → {item.effectiveTo?.slice(0,10) || "Open"}</td><td>{item.status}</td>
         </tr>)}</tbody>
       </table></div>
     </article>
