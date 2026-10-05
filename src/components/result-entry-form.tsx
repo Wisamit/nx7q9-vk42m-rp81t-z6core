@@ -16,6 +16,7 @@ type ResultField = {
   critical: boolean;
   deltaEvaluation: string | null;
   deltaDisplay: string | null;
+  calculated: boolean;
 };
 
 type CommentTemplateOption = {
@@ -59,6 +60,8 @@ export function ResultEntryForm({
 
   function fieldInput(field: ResultField) {
     const key = field.componentId || "__TEST__";
+    if (field.calculated) return <div className="calculated-value-box"><strong>{values[key] || "Calculated on save"}</strong><small>Derived from configured formula</small></div>;
+
     const common = {
       value: values[key] || "",
       onChange: (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
@@ -103,8 +106,12 @@ export function ResultEntryForm({
       setSavedResultId(body.result?.id || null);
       setSavedStatus(body.result?.status || null);
       setComplete(Boolean(body.complete));
-      setMessage(body.criticalCount > 0
-        ? `Saved. ${body.criticalCount} critical value(s) detected; release will require critical-result acknowledgement.`
+      const notices = [];
+      if (body.criticalCount > 0) notices.push(`${body.criticalCount} critical value(s)`);
+      if (body.deltaExceededCount > 0) notices.push(`${body.deltaExceededCount} delta warning(s)`);
+      if (body.pendingReflexCount > 0) notices.push(`${body.pendingReflexCount} reflex recommendation(s)`);
+      setMessage(notices.length
+        ? `Saved with ${notices.join(", ")}. Review validation items before verification.`
         : body.complete ? "Result saved and ready for verification." : "Draft saved. Complete all required result fields before verification.");
       router.refresh();
     } else {
@@ -119,8 +126,24 @@ export function ResultEntryForm({
 
     setBusy("verify");
     setMessage("");
-    const response = await fetch(`/api/results/${savedResultId}/verify`, { method: "POST" });
-    const body = await response.json().catch(() => ({}));
+    let response = await fetch(`/api/results/${savedResultId}/verify`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ confirmDeltaWarnings: false }),
+    });
+    let body = await response.json().catch(() => ({}));
+
+    if (!response.ok && body.error === "delta_review_confirmation_required") {
+      const confirmed = confirm(`${body.deltaExceededCount} delta-check warning(s) exceeded configured limits. Confirm that you reviewed these warnings and continue verification?`);
+      if (confirmed) {
+        response = await fetch(`/api/results/${savedResultId}/verify`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ confirmDeltaWarnings: true }),
+        });
+        body = await response.json().catch(() => ({}));
+      }
+    }
 
     if (response.ok) {
       setSavedStatus(body.resultStatus);
@@ -128,6 +151,8 @@ export function ResultEntryForm({
         ? "Result verified. Critical result acknowledgement/communication is required before release."
         : "Result verified successfully.");
       router.refresh();
+    } else if (body.error === "reflex_review_required") {
+      setMessage("Verification blocked: review all pending reflex recommendations first.");
     } else {
       setMessage(body.error || "Result verification failed.");
     }
