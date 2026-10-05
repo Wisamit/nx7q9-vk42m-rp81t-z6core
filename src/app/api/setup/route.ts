@@ -18,6 +18,10 @@ const FOUNDATION_PERMISSIONS = [
   ["catalog.reference_ranges.manage", "catalog", "Manage reference intervals and critical limits"],
   ["patients.view", "patients", "View patients"],
   ["patients.manage", "patients", "Create and update patients"],
+  ["clients.view", "clients", "View client accounts"],
+  ["clients.manage", "clients", "Manage client accounts"],
+  ["referrers.view", "referrers", "View referrers"],
+  ["referrers.manage", "referrers", "Manage referrers"],
 ] as const;
 
 function text(value: unknown, max = 200) {
