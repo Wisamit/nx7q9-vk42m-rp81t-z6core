@@ -296,6 +296,7 @@ export async function POST(request: Request) {
       ? await tx.laboratoryResult.update({
           where: { id: existing.id },
           data: {
+            specimenId,
             performingBranchId,
             methodId: orderItem.test.methodId,
             status: resultStatus,
