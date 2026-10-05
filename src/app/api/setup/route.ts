@@ -91,6 +91,9 @@ const FOUNDATION_PERMISSIONS = [
   ["integrations.manage", "integrations", "Manage interoperability endpoints, terminology mappings and webhook subscriptions"],
   ["integrations.api_keys.manage", "integrations", "Create and revoke external integration API keys"],
   ["integrations.replay", "integrations", "Retry failed outbound integration messages and webhook deliveries"],
+  ["resilience.view", "operations", "View resilience, backup, retention and recovery status"],
+  ["resilience.manage", "operations", "Manage resilience policies, backup verification and disaster recovery drills"],
+  ["resilience.archive", "operations", "Execute approved technical-log archive and purge operations"],
 ] as const;
 
 function text(value: unknown, max = 200) {
