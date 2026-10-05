@@ -77,6 +77,13 @@ const FOUNDATION_PERMISSIONS = [
   ["quality.training.manage", "quality", "Manage training, competency and analyzer authorization"],
   ["quality.indicators.manage", "quality", "Manage quality indicators and measurements"],
   ["quality.audits.manage", "quality", "Manage internal audits and findings"],
+  ["portal_accounts.manage", "digital_services", "Provision and manage external portal accounts"],
+  ["appointments.view", "digital_services", "View appointments and bookings"],
+  ["appointments.manage", "digital_services", "Create and manage appointments"],
+  ["home_collection.view", "digital_services", "View home collection visits"],
+  ["home_collection.manage", "digital_services", "Assign and manage home collection visits"],
+  ["queue.view", "digital_services", "View branch queue tickets"],
+  ["queue.manage", "digital_services", "Issue and operate branch queue tickets"],
 ] as const;
 
 function text(value: unknown, max = 200) {
