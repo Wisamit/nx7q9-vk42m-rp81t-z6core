@@ -62,6 +62,11 @@ export default async function OrdersPage() {
     }),
   ]);
 
+  const todayStart = new Date(); todayStart.setHours(0,0,0,0);
+  const todayOrders = orders.filter(order => order.orderedAt >= todayStart);
+  const urgentOrders = orders.filter(order => ["URGENT","STAT"].includes(order.priority) && order.status !== "COMPLETED" && order.status !== "CANCELLED");
+  const openOrders = orders.filter(order => !["COMPLETED","CANCELLED"].includes(order.status));
+
   return <main className="catalog-shell">
     <header className="page-header">
       <div>
@@ -76,8 +81,15 @@ export default async function OrdersPage() {
       </div>
     </header>
 
-    <section className="detail-card">
-      <h2>New Order</h2>
+    <section className="workflow-summary">
+      <article><span>Today</span><strong>{todayOrders.length}</strong><small>orders registered</small></article>
+      <article><span>Open</span><strong>{openOrders.length}</strong><small>awaiting completion</small></article>
+      <article className={urgentOrders.length ? "summary-attention" : ""}><span>Urgent / STAT</span><strong>{urgentOrders.length}</strong><small>active priority orders</small></article>
+      <article><span>Sources</span><strong>{sources.length}</strong><small>active acquisition sources</small></article>
+    </section>
+
+    <section className="detail-card workflow-entry-card">
+      <div className="section-title-row"><div><p className="eyebrow">Reception workflow</p><h2>New Order</h2></div><span className="keyboard-hint">Search patient → select tests → register</span></div>
       <OrderCreateForm
         patients={patients}
         tests={tests}
@@ -103,11 +115,11 @@ export default async function OrdersPage() {
                   <td>{order.patient.patientNumber}<br/><small>{order.patient.fullNameEn}</small></td>
                   <td>{order.orderingBranch.code}</td>
                   <td>{order.source?.nameEn || "Legacy / unspecified"}</td>
-                  <td>{order.priority}</td>
+                  <td><span className={"status-badge priority-" + order.priority.toLowerCase()}>{order.priority}</span></td>
                   <td>{order.items.length}</td>
                   <td>{order.client?.nameEn || order.referrer?.nameEn || "Patient / walk-in"}</td>
                   <td>{invoice ? <>{invoice.invoiceNumber}<br/><small>{invoice.total.toString()} {invoice.currency}</small></> : "—"}</td>
-                  <td>{order.status}</td>
+                  <td><span className={"status-badge status-" + order.status.toLowerCase().replaceAll("_","-")}>{order.status}</span></td>
                 </tr>;
               })
             }
