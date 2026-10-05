@@ -6,6 +6,19 @@ function asObject(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 function text(value: unknown) { return typeof value === "string" ? value.trim() : ""; }
+function issueCodes(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return [];
+    const code = (item as Record<string, unknown>).code;
+    return typeof code === "string" ? [code] : [];
+  });
+}
+function isEligibleGeneratedTest(row: { entityType: string; status: string; validationIssues: unknown }) {
+  if (row.entityType !== "TEST" || row.status !== "WARNING") return false;
+  const codes = issueCodes(row.validationIssues);
+  return codes.length === 1 && codes[0] === "GENERATED_TEST_CODE";
+}
 
 export async function POST(_: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await requirePermission("catalog.manage");
@@ -19,7 +32,10 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
   if (!batch) return NextResponse.json({ error: "batch_not_found" }, { status: 404 });
   if (batch.status !== "VALIDATED") return NextResponse.json({ error: "batch_not_validated" }, { status: 409 });
 
-  const safeRows = batch.rows.filter(row => row.status === "VALID" && ["UNIT", "CONTAINER", "TEST", "PANEL"].includes(row.entityType));
+  const safeRows = batch.rows.filter(row =>
+    (row.status === "VALID" && ["UNIT", "CONTAINER", "TEST", "PANEL"].includes(row.entityType)) ||
+    isEligibleGeneratedTest(row)
+  );
   const results = { imported: 0, skipped: 0, deferred: batch.rows.filter(row => row.entityType === "REFERENCE_INTERVAL").length };
 
   await prisma.$transaction(async tx => {
