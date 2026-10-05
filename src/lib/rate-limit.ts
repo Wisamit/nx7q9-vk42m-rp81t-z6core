@@ -1,5 +1,4 @@
 import { createHash } from "node:crypto";
-import { Prisma } from "../../generated/prisma/client";
 import { prisma } from "@/lib/db";
 
 export type RateLimitDecision = {
@@ -35,7 +34,7 @@ export async function checkRateLimit(input: {
         });
         return row.count;
       } catch (error) {
-        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") return apply();
+        if (typeof error === "object" && error !== null && "code" in error && error.code === "P2002") return apply();
         throw error;
       }
     }
