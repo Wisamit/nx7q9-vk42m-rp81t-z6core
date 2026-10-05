@@ -57,6 +57,10 @@ export function ReferenceRangeImportButton({ batchId }: { batchId: string }) {
         if (!masters.ok) throw new Error(masterBody.error || "Safe master recovery failed.");
       }
 
+      const units = await fetch(`/api/catalog/imports/${batchId}/prepare-units`, { method: "POST" });
+      const unitBody = await units.json().catch(() => ({}));
+      if (!units.ok) throw new Error(unitBody.error || "Legacy unit preparation failed.");
+
       const ranges = await fetch(`/api/catalog/imports/${batchId}/reference-ranges`, { method: "POST" });
       const rangeBody = await ranges.json().catch(() => ({}));
       if (!ranges.ok) throw new Error(rangeBody.error || "Reference range resolution failed.");
