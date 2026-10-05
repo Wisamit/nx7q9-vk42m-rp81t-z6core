@@ -1,6 +1,6 @@
-import type { PrismaClient } from "../../generated/prisma/client";
+import type { Prisma, PrismaClient } from "../../generated/prisma/client";
 
-type DbClient = PrismaClient | Parameters<Parameters<PrismaClient["$transaction"]>[0]>[0];
+type DbClient = PrismaClient | Prisma.TransactionClient;
 
 const scopeRank = { CONTRACT: 400, CLIENT: 300, BRANCH: 200, ORGANIZATION: 100 } as const;
 
