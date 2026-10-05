@@ -84,6 +84,9 @@ const FOUNDATION_PERMISSIONS = [
   ["home_collection.manage", "digital_services", "Assign and manage home collection visits"],
   ["queue.view", "digital_services", "View branch queue tickets"],
   ["queue.manage", "digital_services", "Issue and operate branch queue tickets"],
+  ["sources.view", "referrers", "View order source master data"],
+  ["sources.manage", "referrers", "Manage configurable order source master data"],
+  ["analytics.view", "analytics", "View organization and branch analytics"],
 ] as const;
 
 function text(value: unknown, max = 200) {

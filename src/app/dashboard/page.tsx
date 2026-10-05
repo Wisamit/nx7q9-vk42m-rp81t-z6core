@@ -45,6 +45,7 @@ export default async function DashboardPage() {
           {permissions.has("qc.view") && <Link className="module-link" href="/qc"><article><span>20</span><h2>Quality Control</h2><p>QC materials, lots, Levey-Jennings trends, Westgard rules and analyzer QC gating.</p></article></Link>}
           {permissions.has("quality.view") && <Link className="module-link" href="/quality"><article><span>21</span><h2>Quality Management</h2><p>Nonconformance, CAPA, controlled documents, training, competency, indicators and internal audits.</p></article></Link>}
           {["portal_accounts.manage","appointments.view","appointments.manage","home_collection.view","home_collection.manage","queue.view","queue.manage"].some(code => permissions.has(code)) && <Link className="module-link" href="/digital-services"><article><span>22</span><h2>Digital Services</h2><p>Patient, doctor and corporate portals, appointments, home collection and branch queue.</p></article></Link>}
+          {permissions.has("analytics.view") && <Link className="module-link" href="/analytics"><article><span>23</span><h2>Analytics</h2><p>Branch comparison, TAT, finance, source/referrer, profitability and quality KPIs.</p></article></Link>}
         </div>
       </section>
     </main>

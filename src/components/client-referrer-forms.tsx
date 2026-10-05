@@ -5,11 +5,12 @@ import { useRouter } from "next/navigation";
 
 type ClientOption = { id: string; code: string; nameEn: string };
 
-export function ClientReferrerForms({ clients }: { clients: ClientOption[] }) {
+export function ClientReferrerForms({ clients, canManageSources = false }: { clients: ClientOption[]; canManageSources?: boolean }) {
   const router = useRouter();
   const [clientMessage, setClientMessage] = useState("");
   const [referrerMessage, setReferrerMessage] = useState("");
-  const [busy, setBusy] = useState<"client" | "referrer" | "">("");
+  const [sourceMessage, setSourceMessage] = useState("");
+  const [busy, setBusy] = useState<"client" | "referrer" | "source" | "">("");
 
   async function submitClient(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -64,6 +65,30 @@ export function ClientReferrerForms({ clients }: { clients: ClientOption[] }) {
     setBusy("");
   }
 
+
+  async function submitSource(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    setBusy("source"); setSourceMessage("");
+    const response = await fetch("/api/sources", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        code: form.get("code"),
+        category: form.get("category"),
+        nameEn: form.get("nameEn"),
+        nameAr: form.get("nameAr"),
+      }),
+    });
+    const body = await response.json().catch(() => ({}));
+    if (response.ok) {
+      setSourceMessage(`Source created: ${body.source.code}`);
+      event.currentTarget.reset();
+      router.refresh();
+    } else setSourceMessage(body.error || "Source creation failed.");
+    setBusy("");
+  }
+
   return <div className="detail-grid">
     <article className="detail-card">
       <h2>Add Client</h2>
@@ -95,5 +120,18 @@ export function ClientReferrerForms({ clients }: { clients: ClientOption[] }) {
         {referrerMessage && <div className="form-success form-span">{referrerMessage}</div>}
       </form>
     </article>
+
+    {canManageSources && <article className="detail-card">
+      <h2>Add Order Source</h2>
+      <p className="muted">Configurable acquisition/source categories used by orders and management analytics.</p>
+      <form className="catalog-form" onSubmit={submitSource}>
+        <label>Code<input name="code" required placeholder="WALK_IN / CAMPAIGN / INSURANCE" /></label>
+        <label>Category<input name="category" required placeholder="WALK_IN / DOCTOR / CORPORATE" /></label>
+        <label>Name (English)<input name="nameEn" required /></label>
+        <label dir="rtl">الاسم بالعربية<input name="nameAr" dir="rtl" /></label>
+        <button className="primary-button form-span" disabled={busy === "source"}>{busy === "source" ? "Saving…" : "Create Source"}</button>
+        {sourceMessage && <div className="form-success form-span">{sourceMessage}</div>}
+      </form>
+    </article>}
   </div>;
 }

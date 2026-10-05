@@ -7,6 +7,7 @@ type PatientOption = { id: string; patientNumber: string; fullNameEn: string; ph
 type TestOption = { id: string; code: string; nameEn: string };
 type SimpleOption = { id: string; code: string; nameEn: string };
 type ReferrerOption = SimpleOption & { clientId: string | null };
+type SourceOption = SimpleOption & { category: string };
 type BranchOption = SimpleOption;
 
 export function OrderCreateForm({
@@ -14,6 +15,7 @@ export function OrderCreateForm({
   tests,
   clients,
   referrers,
+  sources,
   branches,
   activeBranchId,
 }: {
@@ -21,6 +23,7 @@ export function OrderCreateForm({
   tests: TestOption[];
   clients: SimpleOption[];
   referrers: ReferrerOption[];
+  sources: SourceOption[];
   branches: BranchOption[];
   activeBranchId: string | null;
 }) {
@@ -69,6 +72,7 @@ export function OrderCreateForm({
       body: JSON.stringify({
         branchId: form.get("branchId"),
         patientId,
+        sourceId: form.get("sourceId"),
         referrerId: form.get("referrerId"),
         clientId: form.get("clientId"),
         priority: form.get("priority"),
@@ -127,6 +131,12 @@ export function OrderCreateForm({
         <datalist id="order-patient-options">{patientOptions.map(p => <option key={p.id} value={p.label} />)}</datalist>
       </label>
 
+      <label>Source
+        <select name="sourceId" required defaultValue="">
+          <option value="">Select source…</option>
+          {sources.map(x => <option key={x.id} value={x.id}>{x.code} — {x.nameEn}</option>)}
+        </select>
+      </label>
       <label>Referrer
         <select name="referrerId" defaultValue="">
           <option value="">No referrer</option>
