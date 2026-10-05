@@ -113,7 +113,7 @@ CREATE TABLE `quality_document_versions` (
   `id` CHAR(36) NOT NULL,
   `document_id` CHAR(36) NOT NULL,
   `version` INT NOT NULL,
-  `status` ENUM('DRAFT','IN_REVIEW','APPROVED','EFFECTIVE','RETIRED') NOT NULL DEFAULT 'DRAFT',
+  `status` ENUM('DRAFT','IN_REVIEW','REVIEWED','APPROVED','EFFECTIVE','RETIRED') NOT NULL DEFAULT 'DRAFT',
   `content_snapshot` JSON NULL,
   `storage_key` VARCHAR(500) NULL,
   `external_url` VARCHAR(1000) NULL,
