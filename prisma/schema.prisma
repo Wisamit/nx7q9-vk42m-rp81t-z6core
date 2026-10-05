@@ -43,6 +43,7 @@ model Organization {
   methods Method[]
   labTests LabTest[]
   testPanels TestPanel[]
+  catalogImportBatches CatalogImportBatch[]
 
   @@map("organizations")
 }
@@ -326,6 +327,22 @@ enum AgeUnit {
   YEAR
 }
 
+enum ImportBatchStatus {
+  DRAFT
+  VALIDATED
+  IMPORTED
+  FAILED
+}
+
+enum ImportRowStatus {
+  PENDING
+  VALID
+  WARNING
+  ERROR
+  IMPORTED
+  SKIPPED
+}
+
 model SpecimenType {
   id             String       @id @default(uuid()) @db.Char(36)
   organizationId String       @map("organization_id") @db.Char(36)
@@ -558,4 +575,48 @@ model TestPanelItem {
   @@id([panelId, testId])
   @@index([testId])
   @@map("test_panel_items")
+}
+
+
+model CatalogImportBatch {
+  id             String            @id @default(uuid()) @db.Char(36)
+  organizationId String            @map("organization_id") @db.Char(36)
+  sourceType     String            @map("source_type") @db.VarChar(40)
+  sourceName     String            @map("source_name") @db.VarChar(255)
+  sourceChecksum String?           @map("source_checksum") @db.Char(64)
+  status         ImportBatchStatus @default(DRAFT)
+  summary        Json?
+  createdByUserId String           @map("created_by_user_id") @db.Char(36)
+  validatedAt    DateTime?         @map("validated_at") @db.DateTime(3)
+  importedAt     DateTime?         @map("imported_at") @db.DateTime(3)
+  createdAt      DateTime          @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt      DateTime          @updatedAt @map("updated_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  rows         CatalogImportRow[]
+
+  @@index([organizationId, createdAt])
+  @@map("catalog_import_batches")
+}
+
+model CatalogImportRow {
+  id              String          @id @default(uuid()) @db.Char(36)
+  batchId         String          @map("batch_id") @db.Char(36)
+  rowNumber       Int             @map("row_number")
+  entityType      String          @map("entity_type") @db.VarChar(40)
+  legacyKey       String?         @map("legacy_key") @db.VarChar(255)
+  status          ImportRowStatus @default(PENDING)
+  sourceData      Json            @map("source_data")
+  normalizedData  Json?           @map("normalized_data")
+  validationIssues Json?          @map("validation_issues")
+  importedEntityId String?        @map("imported_entity_id") @db.Char(36)
+  createdAt       DateTime        @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt       DateTime        @updatedAt @map("updated_at") @db.DateTime(3)
+
+  batch CatalogImportBatch @relation(fields: [batchId], references: [id], onDelete: Restrict)
+
+  @@unique([batchId, rowNumber])
+  @@index([batchId, status])
+  @@index([entityType, legacyKey])
+  @@map("catalog_import_rows")
 }
