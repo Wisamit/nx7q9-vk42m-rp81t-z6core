@@ -14,7 +14,8 @@ export async function POST(request: Request) {
   if (!body) return NextResponse.json({ error: "invalid_request" }, { status: 400 });
 
   const invoiceId = text(body.invoiceId, 36);
-  const method = ["CASH","CARD","BANK_TRANSFER","ONLINE","CREDIT_ACCOUNT","OTHER"].includes(body.method) ? body.method : null;
+  if (body.method === "CREDIT_ACCOUNT") return NextResponse.json({ error: "credit_account_is_not_settlement" }, { status: 400 });
+  const method = ["CASH","CARD","BANK_TRANSFER","ONLINE","OTHER"].includes(body.method) ? body.method : null;
   const reference = text(body.reference, 150);
   const amountText = typeof body.amount === "string" || typeof body.amount === "number" ? String(body.amount) : "";
 
