@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { Prisma } from "../../../../../../generated/prisma/client";
 import { requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 
@@ -41,7 +42,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ ver
         status: status as "RECORDED" | "QUEUED" | "SENT" | "DELIVERED" | "FAILED",
         recipient: text(body.recipient) || null,
         externalRef: text(body.externalRef) || null,
-        details: body.details && typeof body.details === "object" ? body.details as object : undefined,
+        details: body.details && typeof body.details === "object" ? body.details as Prisma.InputJsonValue : undefined,
         performedByUserId: session.user.id,
       },
     });
