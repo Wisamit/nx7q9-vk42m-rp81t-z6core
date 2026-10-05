@@ -30,6 +30,7 @@ const groups: Array<{ labelEn: string; labelAr: string; items: NavItem[] }> = [
     labelAr: "الاستقبال",
     items: [
       { href: "/dashboard", labelEn: "Dashboard", labelAr: "لوحة التحكم", short: "DB" },
+      { href: "/notifications", labelEn: "Notifications", labelAr: "الإشعارات", short: "NT", permission: "notifications.view" },
       { href: "/patients", labelEn: "Patients", labelAr: "المرضى", short: "PT", permission: "patients.view" },
       { href: "/orders", labelEn: "Orders", labelAr: "الطلبات", short: "OR", permission: "orders.view" },
       { href: "/billing", labelEn: "Billing", labelAr: "الفوترة", short: "BI", permission: "billing.view" },
