@@ -306,6 +306,7 @@ model Organization {
   reflexRules ReflexRule[]
   autoverificationPolicies AutoverificationPolicy[]
   validationHoldRules ValidationHoldRule[]
+  criticalEscalationPolicies CriticalEscalationPolicy[]
 
   @@map("organizations")
 }
@@ -353,6 +354,7 @@ model Branch {
   reflexRules ReflexRule[]
   autoverificationPolicies AutoverificationPolicy[]
   validationHoldRules ValidationHoldRule[]
+  criticalEscalationPolicies CriticalEscalationPolicy[]
 
   @@unique([organizationId, code])
   @@index([organizationId, status])
@@ -780,6 +782,7 @@ model LabTest {
   targetReflexRules  ReflexRule[] @relation("ReflexTargetTest")
   autoverificationPolicies AutoverificationPolicy[]
   validationHoldRules ValidationHoldRule[]
+  criticalEscalationPolicies CriticalEscalationPolicy[]
 
   @@unique([organizationId, code])
   @@index([organizationId, status])
@@ -1594,14 +1597,24 @@ model CriticalResultEvent {
   acknowledgedAt        DateTime?           @map("acknowledged_at") @db.DateTime(3)
   acknowledgedByUserId  String?             @map("acknowledged_by_user_id") @db.Char(36)
   closedAt              DateTime?           @map("closed_at") @db.DateTime(3)
+  escalationPolicyId     String?             @map("escalation_policy_id") @db.Char(36)
+  acknowledgementDueAt  DateTime?           @map("acknowledgement_due_at") @db.DateTime(3)
+  escalationLevel       Int                 @default(0) @map("escalation_level")
+  nextEscalationDueAt   DateTime?           @map("next_escalation_due_at") @db.DateTime(3)
+  maxEscalationLevelSnapshot Int?            @map("max_escalation_level_snapshot")
+  escalationIntervalMinutesSnapshot Int?     @map("escalation_interval_minutes_snapshot")
+  requireReadBackSnapshot Boolean            @default(false) @map("require_read_back_snapshot")
   createdAt             DateTime            @default(now()) @map("created_at") @db.DateTime(3)
   updatedAt             DateTime            @updatedAt @map("updated_at") @db.DateTime(3)
 
   result          LaboratoryResult @relation(fields: [resultId], references: [id], onDelete: Restrict)
   acknowledgedBy  User?            @relation("CriticalEventAcknowledgedBy", fields: [acknowledgedByUserId], references: [id], onDelete: Restrict)
   communications  CriticalResultCommunication[]
+  escalationPolicy CriticalEscalationPolicy? @relation(fields: [escalationPolicyId], references: [id], onDelete: Restrict)
 
   @@unique([resultId])
+  @@index([escalationPolicyId])
+  @@index([status, acknowledgementDueAt])
   @@index([status, detectedAt])
   @@map("critical_result_events")
 }
@@ -1911,4 +1924,31 @@ model ValidationHoldEvent {
   @@index([status, severitySnapshot, createdAt])
   @@index([reviewedByUserId, reviewedAt])
   @@map("validation_hold_events")
+}
+
+
+model CriticalEscalationPolicy {
+  id                        String       @id @default(uuid()) @db.Char(36)
+  organizationId            String       @map("organization_id") @db.Char(36)
+  testId                    String       @map("test_id") @db.Char(36)
+  branchId                  String?      @map("branch_id") @db.Char(36)
+  acknowledgementMinutes    Int          @default(30) @map("acknowledgement_minutes")
+  escalationIntervalMinutes Int          @default(15) @map("escalation_interval_minutes")
+  maxEscalationLevel        Int          @default(3) @map("max_escalation_level")
+  requireReadBack           Boolean      @default(true) @map("require_read_back")
+  effectiveFrom             DateTime     @map("effective_from") @db.DateTime(3)
+  effectiveTo               DateTime?    @map("effective_to") @db.DateTime(3)
+  status                    RecordStatus @default(ACTIVE)
+  createdAt                 DateTime     @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt                 DateTime     @updatedAt @map("updated_at") @db.DateTime(3)
+  deactivatedAt             DateTime?    @map("deactivated_at") @db.DateTime(3)
+
+  organization Organization          @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  test         LabTest               @relation(fields: [testId], references: [id], onDelete: Restrict)
+  branch       Branch?               @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  events       CriticalResultEvent[]
+
+  @@index([testId, branchId, status, effectiveFrom, effectiveTo])
+  @@index([organizationId, status])
+  @@map("critical_escalation_policies")
 }

@@ -285,6 +285,11 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
         resultStatus={latestResult.status}
         criticalCount={latestResult.values.filter(value => value.isCritical).length}
         criticalEventStatus={latestResult.criticalEvents[0]?.status || null}
+        criticalAcknowledgementDueAt={latestResult.criticalEvents[0]?.acknowledgementDueAt?.toISOString() || null}
+        criticalEscalationLevel={latestResult.criticalEvents[0]?.escalationLevel || 0}
+        criticalMaxEscalationLevel={latestResult.criticalEvents[0]?.maxEscalationLevelSnapshot ?? null}
+        criticalNextEscalationDueAt={latestResult.criticalEvents[0]?.nextEscalationDueAt?.toISOString() || null}
+        criticalRequireReadBack={latestResult.criticalEvents[0]?.requireReadBackSnapshot || false}
         communications={(latestResult.criticalEvents[0]?.communications || []).map(item => ({
           id: item.id,
           method: item.method,

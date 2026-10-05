@@ -61,6 +61,28 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const verifiedAt = new Date();
   const criticalValues = result.values.filter((value) => value.isCritical);
+  const escalationPolicies = criticalValues.length > 0
+    ? await prisma.criticalEscalationPolicy.findMany({
+        where: {
+          organizationId: session.user.organizationId,
+          testId: result.orderItem.testId,
+          status: "ACTIVE",
+          effectiveFrom: { lte: verifiedAt },
+          AND: [
+            { OR: [{ effectiveTo: null }, { effectiveTo: { gte: verifiedAt } }] },
+            { OR: [{ branchId: null }, { branchId: result.performingBranchId }] },
+          ],
+        },
+        orderBy: { createdAt: "desc" },
+      })
+    : [];
+  const escalationPolicy =
+    escalationPolicies.find(policy => policy.branchId === result.performingBranchId)
+    || escalationPolicies.find(policy => policy.branchId === null)
+    || null;
+  const acknowledgementDueAt = escalationPolicy
+    ? new Date(verifiedAt.getTime() + escalationPolicy.acknowledgementMinutes * 60_000)
+    : null;
 
   const updated = await prisma.$transaction(async (tx) => {
     const verified = await tx.laboratoryResult.update({
@@ -94,10 +116,24 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           acknowledgedAt: null,
           acknowledgedByUserId: null,
           closedAt: null,
+          escalationPolicyId: escalationPolicy?.id || null,
+          acknowledgementDueAt,
+          escalationLevel: 0,
+          nextEscalationDueAt: acknowledgementDueAt,
+          maxEscalationLevelSnapshot: escalationPolicy?.maxEscalationLevel || null,
+          escalationIntervalMinutesSnapshot: escalationPolicy?.escalationIntervalMinutes || null,
+          requireReadBackSnapshot: escalationPolicy?.requireReadBack || false,
         },
         create: {
           resultId: result.id,
           status: "OPEN",
+          escalationPolicyId: escalationPolicy?.id || null,
+          acknowledgementDueAt,
+          escalationLevel: 0,
+          nextEscalationDueAt: acknowledgementDueAt,
+          maxEscalationLevelSnapshot: escalationPolicy?.maxEscalationLevel || null,
+          escalationIntervalMinutesSnapshot: escalationPolicy?.escalationIntervalMinutes || null,
+          requireReadBackSnapshot: escalationPolicy?.requireReadBack || false,
           criticalValueSnapshot: criticalValues.map((value) => ({
             componentCode: value.componentCodeSnapshot,
             componentName: value.componentNameEnSnapshot,
@@ -146,6 +182,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           criticalCount: criticalValues.length,
           deltaExceededCount: deltaExceeded.length,
           blockingValidationHoldCount: blockingValidationHolds,
+          criticalEscalationPolicyId: escalationPolicy?.id || null,
+          criticalAcknowledgementDueAt: acknowledgementDueAt,
           orderItemId: result.orderItemId,
           specimenId: result.specimenId,
         },

@@ -53,9 +53,20 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const event = result.criticalEvents[0];
   if (!event) return NextResponse.json({ error: "critical_event_not_found" }, { status: 404 });
+  if (outcome === "ACKNOWLEDGED" && event.requireReadBackSnapshot && !readBackConfirmed) {
+    return NextResponse.json({ error: "read_back_confirmation_required" }, { status: 400 });
+  }
+  if (outcome === "ESCALATED" && event.maxEscalationLevelSnapshot !== null && event.escalationLevel >= event.maxEscalationLevelSnapshot) {
+    return NextResponse.json({ error: "critical_escalation_limit_reached", escalationLevel: event.escalationLevel }, { status: 409 });
+  }
 
   const communicatedAt = new Date();
   const acknowledged = outcome === "ACKNOWLEDGED" && acknowledgementConfirmed;
+  const escalated = outcome === "ESCALATED";
+  const nextEscalationLevel = escalated ? event.escalationLevel + 1 : event.escalationLevel;
+  const nextEscalationDueAt = escalated && event.escalationIntervalMinutesSnapshot
+    ? new Date(communicatedAt.getTime() + event.escalationIntervalMinutesSnapshot * 60_000)
+    : event.nextEscalationDueAt;
 
   const communication = await prisma.$transaction(async (tx) => {
     const created = await tx.criticalResultCommunication.create({
@@ -81,6 +92,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           status: "ACKNOWLEDGED",
           acknowledgedAt: communicatedAt,
           acknowledgedByUserId: session.user.id,
+          nextEscalationDueAt: null,
+        },
+      });
+    } else if (escalated) {
+      await tx.criticalResultEvent.update({
+        where: { id: event.id },
+        data: {
+          escalationLevel: nextEscalationLevel,
+          nextEscalationDueAt,
         },
       });
     }
@@ -101,6 +121,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           recipientRole: recipientRole || null,
           acknowledgementConfirmed,
           readBackConfirmed,
+          escalationLevel: nextEscalationLevel,
+          nextEscalationDueAt,
           communicatedAt,
         },
         ipAddress: ctx.ipAddress,
@@ -115,5 +137,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     status: "ok",
     communicationId: communication.id,
     criticalEventStatus: acknowledged ? "ACKNOWLEDGED" : event.status,
+    escalationLevel: nextEscalationLevel,
+    nextEscalationDueAt,
   }, { status: 201 });
 }

@@ -20,6 +20,11 @@ export function ResultWorkflowActions({
   resultStatus,
   criticalCount,
   criticalEventStatus,
+  criticalAcknowledgementDueAt,
+  criticalEscalationLevel,
+  criticalMaxEscalationLevel,
+  criticalNextEscalationDueAt,
+  criticalRequireReadBack,
   communications,
   canCommunicate,
   canRelease,
@@ -29,6 +34,11 @@ export function ResultWorkflowActions({
   resultStatus: string;
   criticalCount: number;
   criticalEventStatus: string | null;
+  criticalAcknowledgementDueAt: string | null;
+  criticalEscalationLevel: number;
+  criticalMaxEscalationLevel: number | null;
+  criticalNextEscalationDueAt: string | null;
+  criticalRequireReadBack: boolean;
   communications: Communication[];
   canCommunicate: boolean;
   canRelease: boolean;
@@ -66,6 +76,10 @@ export function ResultWorkflowActions({
       setMessage("Critical result communication recorded.");
       setShowCommunication(false);
       router.refresh();
+    } else if (body.error === "read_back_confirmation_required") {
+      setMessage("Acknowledgement requires read-back confirmation under the active critical escalation policy.");
+    } else if (body.error === "critical_escalation_limit_reached") {
+      setMessage("Maximum configured critical escalation level has been reached.");
     } else {
       setMessage(body.error || "Could not record communication.");
     }
@@ -126,6 +140,9 @@ export function ResultWorkflowActions({
       <div><span>Result status</span><strong>{resultStatus}</strong></div>
       <div><span>Critical values</span><strong>{criticalCount}</strong></div>
       <div><span>Critical communication</span><strong>{criticalCount === 0 ? "Not required" : criticalEventStatus || "OPEN"}</strong></div>
+      {criticalCount > 0 && <div><span>Acknowledgement due</span><strong>{criticalAcknowledgementDueAt ? criticalAcknowledgementDueAt.replace("T"," ").slice(0,19) : "No policy"}</strong></div>}
+      {criticalCount > 0 && <div><span>Escalation level</span><strong>{criticalEscalationLevel}{criticalMaxEscalationLevel !== null ? ` / ${criticalMaxEscalationLevel}` : ""}</strong></div>}
+      {criticalCount > 0 && <div><span>Next escalation due</span><strong>{criticalNextEscalationDueAt ? criticalNextEscalationDueAt.replace("T"," ").slice(0,19) : "—"}</strong></div>}
     </div>
 
     <div className="result-actions">
@@ -159,7 +176,7 @@ export function ResultWorkflowActions({
       <label>Recipient role<input name="recipientRole" maxLength={150} placeholder="Physician / nurse / patient / other" /></label>
       <label className="form-span">Recipient contact<input name="recipientContact" maxLength={200} /></label>
       <label className="check-line"><input type="checkbox" name="acknowledgementConfirmed" /> Acknowledgement confirmed</label>
-      <label className="check-line"><input type="checkbox" name="readBackConfirmed" /> Read-back confirmed</label>
+      <label className="check-line"><input type="checkbox" name="readBackConfirmed" /> Read-back confirmed{criticalRequireReadBack ? " (required for acknowledgement)" : ""}</label>
       <label className="form-span">Notes<textarea name="notes" rows={2} /></label>
       <button className="primary-button form-span" disabled={busy === "communication"}>{busy === "communication" ? "Saving…" : "Save Communication"}</button>
     </form>}
