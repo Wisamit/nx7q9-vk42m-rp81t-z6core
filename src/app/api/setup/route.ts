@@ -64,6 +64,12 @@ const FOUNDATION_PERMISSIONS = [
   ["procurement.manage", "inventory", "Create and manage procurement documents"],
   ["procurement.approve", "inventory", "Approve purchase requests and purchase orders"],
   ["procurement.receive", "inventory", "Receive and post supplier goods into inventory"],
+  ["equipment.view", "equipment", "View equipment, maintenance, calibration and downtime"],
+  ["equipment.manage", "equipment", "Manage equipment register and service events"],
+  ["qc.view", "quality", "View quality control configuration, runs and violations"],
+  ["qc.manage", "quality", "Manage QC materials, lots, targets and rules"],
+  ["qc.enter", "quality", "Enter and evaluate quality control runs"],
+  ["qc.resolve", "quality", "Document QC corrective actions and resolve violations"],
 ] as const;
 
 function text(value: unknown, max = 200) {
