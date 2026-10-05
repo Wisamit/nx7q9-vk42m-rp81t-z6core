@@ -658,6 +658,11 @@ enum ResultType {
   DATE
 }
 
+enum TestWorkflowType {
+  GENERAL
+  MICROBIOLOGY
+}
+
 enum SexApplicability {
   ANY
   MALE
@@ -789,6 +794,7 @@ model LabTest {
   methodId               String?      @map("method_id") @db.Char(36)
   defaultUnitId          String?      @map("default_unit_id") @db.Char(36)
   resultType             ResultType   @default(NUMERIC) @map("result_type")
+  workflowType           TestWorkflowType @default(GENERAL) @map("workflow_type")
   decimalPrecision       Int?         @map("decimal_precision")
   minimumVolume          Decimal?     @map("minimum_volume") @db.Decimal(10, 3)
   minimumVolumeUnit      String?      @map("minimum_volume_unit") @db.VarChar(30)
