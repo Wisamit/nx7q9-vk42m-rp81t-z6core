@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SystemIcon, type SystemIconName } from "@/components/system-icon";
 import { permissionSet, requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 
@@ -70,19 +71,19 @@ export default async function DashboardPage() {
     finance.set(invoice.currency, row);
   }
 
-  const quickActions = [
-    permissions.has("orders.create") ? { href: "/orders", label: "New Order", description: "Register patient tests and billing", key: "OR" } : null,
-    permissions.has("specimens.view") ? { href: "/specimens", label: "Specimen Desk", description: "Collect, receive and trace samples", key: "SP" } : null,
-    permissions.has("worklists.view") ? { href: "/worklists", label: "Worklists", description: "Enter and verify laboratory results", key: "WL" } : null,
-    permissions.has("reports.view") ? { href: "/reports", label: "Reports", description: "Review released diagnostic reports", key: "RP" } : null,
-  ].filter((item): item is NonNullable<typeof item> => Boolean(item));
+  const quickActions: Array<{ href: string; label: string; description: string; icon: SystemIconName } | null> = [
+    permissions.has("orders.create") ? { href: "/orders", label: "New Order", description: "Register patient tests and billing", icon: "orders" } : null,
+    permissions.has("specimens.view") ? { href: "/specimens", label: "Specimen Desk", description: "Collect, receive and trace samples", icon: "specimen" } : null,
+    permissions.has("worklists.view") ? { href: "/worklists", label: "Worklists", description: "Enter and verify laboratory results", icon: "worklist" } : null,
+    permissions.has("reports.view") ? { href: "/reports", label: "Reports", description: "Review released diagnostic reports", icon: "report" } : null,
+  ];
 
-  const managementLinks = [
-    permissions.has("critical.communicate") ? { href: "/critical-results", label: "Critical Results", value: openCritical, tone: openCritical > 0 ? "danger" : "neutral" } : null,
-    permissions.has("qc.view") ? { href: "/qc", label: "Quality Control", value: "QC", tone: "neutral" } : null,
-    permissions.has("quality.view") ? { href: "/quality", label: "Quality Management", value: "QMS", tone: "neutral" } : null,
-    permissions.has("analytics.view") ? { href: "/analytics", label: "Management Analytics", value: "KPI", tone: "neutral" } : null,
-  ].filter((item): item is NonNullable<typeof item> => Boolean(item));
+  const managementLinks: Array<{ href: string; label: string; value: number | string; tone: string; icon: SystemIconName } | null> = [
+    permissions.has("critical.communicate") ? { href: "/critical-results", label: "Critical Results", value: openCritical, tone: openCritical > 0 ? "danger" : "neutral", icon: "critical" } : null,
+    permissions.has("qc.view") ? { href: "/qc", label: "Quality Control", value: "QC", tone: "neutral", icon: "qc" } : null,
+    permissions.has("quality.view") ? { href: "/quality", label: "Quality Management", value: "QMS", tone: "neutral", icon: "quality" } : null,
+    permissions.has("analytics.view") ? { href: "/analytics", label: "Management Analytics", value: "KPI", tone: "neutral", icon: "analytics" } : null,
+  ];
 
   return <main className="dashboard-home">
     <section className="dashboard-hero">
@@ -98,18 +99,18 @@ export default async function DashboardPage() {
     </section>
 
     <section className="dashboard-kpis">
-      <article><div className="kpi-icon">OR</div><div><span>Orders today</span><strong>{todayOrders}</strong><small>Registered at this branch</small></div></article>
-      <article><div className="kpi-icon">SP</div><div><span>Active specimens</span><strong>{activeSpecimens}</strong><small>Received / in process / transit</small></div></article>
-      <article className={openCritical > 0 ? "kpi-alert" : ""}><div className="kpi-icon">CR</div><div><span>Open critical</span><strong>{openCritical}</strong><small>Require communication / acknowledgement</small></div></article>
-      <article><div className="kpi-icon">QU</div><div><span>Waiting queue</span><strong>{waitingQueue}</strong><small>Reception and phlebotomy</small></div></article>
+      <article><div className="kpi-icon"><SystemIcon name="orders" size={20} /></div><div><span>Orders today</span><strong>{todayOrders}</strong><small>Registered at this branch</small></div></article>
+      <article><div className="kpi-icon"><SystemIcon name="specimen" size={20} /></div><div><span>Active specimens</span><strong>{activeSpecimens}</strong><small>Received / in process / transit</small></div></article>
+      <article className={openCritical > 0 ? "kpi-alert" : ""}><div className="kpi-icon"><SystemIcon name="critical" size={20} /></div><div><span>Open critical</span><strong>{openCritical}</strong><small>Require communication / acknowledgement</small></div></article>
+      <article><div className="kpi-icon"><SystemIcon name="digital" size={20} /></div><div><span>Waiting queue</span><strong>{waitingQueue}</strong><small>Reception and phlebotomy</small></div></article>
     </section>
 
     <section className="dashboard-layout">
       <div className="dashboard-panel">
         <div className="dashboard-panel-head"><div><p className="eyebrow">Fast workflow</p><h2>Quick Actions</h2></div></div>
         <div className="quick-action-grid">
-          {quickActions.map(action => <Link href={action.href} className="quick-action" key={action.href}>
-            <span>{action.key}</span>
+          {quickActions.filter((action): action is NonNullable<typeof action> => Boolean(action)).map(action => <Link href={action.href} className="quick-action" key={action.href}>
+            <span><SystemIcon name={action.icon} size={18} /></span>
             <div><strong>{action.label}</strong><small>{action.description}</small></div>
             <b>→</b>
           </Link>)}
@@ -127,11 +128,11 @@ export default async function DashboardPage() {
       </aside>
     </section>
 
-    {managementLinks.length > 0 && <section className="dashboard-panel dashboard-management">
+    {managementLinks.some(Boolean) && <section className="dashboard-panel dashboard-management">
       <div className="dashboard-panel-head"><div><p className="eyebrow">Management & Quality</p><h2>Attention & Insights</h2></div></div>
       <div className="management-links">
-        {managementLinks.map(item => <Link href={item.href} className={"management-link " + item.tone} key={item.href}>
-          <span>{item.label}</span><strong>{item.value}</strong>
+        {managementLinks.filter((item): item is NonNullable<typeof item> => Boolean(item)).map(item => <Link href={item.href} className={"management-link " + item.tone} key={item.href}>
+          <span><SystemIcon name={item.icon} size={17} />{item.label}</span><strong>{item.value}</strong>
         </Link>)}
       </div>
     </section>}
