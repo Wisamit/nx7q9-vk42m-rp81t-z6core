@@ -212,3 +212,14 @@ html[data-density="compact"] :where(.detail-card,.dashboard-panel,.settings-card
 .detail-card,.table-card,.dashboard-panel,.settings-card{transition:border-color .16s ease,box-shadow .16s ease}
 .detail-card:hover,.settings-card:hover{border-color:color-mix(in srgb,var(--fl-primary) 20%,var(--fl-border))}
 .empty-state{padding:44px 18px;color:var(--fl-muted)}
+
+
+/* Core workflow page icon treatment */
+.page-title-with-icon{display:flex;align-items:center;gap:10px}
+.page-title-with-icon>svg{color:var(--fl-primary);flex:0 0 auto}
+.section-heading-icon{display:flex;align-items:center;gap:8px!important}
+.section-heading-icon>svg{color:var(--fl-secondary);flex:0 0 auto}
+.secondary-link,.secondary-button,.primary-button{align-items:center;justify-content:center;gap:7px}
+.secondary-link svg,.secondary-button svg,.primary-button svg{flex:0 0 auto}
+.inline-search .secondary-button{display:inline-flex}
+.header-actions .secondary-link{display:inline-flex}
