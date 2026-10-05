@@ -32,9 +32,11 @@ export default async function EquipmentPage() {
         branch: true,
         department: true,
         analyzer: true,
+        maintenancePlans: { where: { status: "ACTIVE" }, orderBy: { nextDueAt: "asc" }, take: 1 },
         maintenanceEvents: { orderBy: { createdAt: "desc" }, take: 1 },
         calibrationEvents: { orderBy: { createdAt: "desc" }, take: 1 },
         downtimeEvents: { orderBy: { startedAt: "desc" }, take: 1 },
+        documents: { orderBy: { createdAt: "desc" }, take: 5 },
       },
       orderBy: [{ branch: { nameEn: "asc" } }, { name: "asc" }],
     }),
@@ -73,15 +75,19 @@ export default async function EquipmentPage() {
     <section className="table-card detail-section">
       <div className="table-toolbar"><h2>Equipment Register</h2><span>{equipment.length} assets</span></div>
       <div className="table-wrap"><table>
-        <thead><tr><th>Asset</th><th>Branch</th><th>Department</th><th>Analyzer</th><th>Status</th><th>Last maintenance</th><th>Last calibration</th><th>Downtime</th></tr></thead>
-        <tbody>{equipment.length === 0 ? <tr><td colSpan={8} className="empty-state">No equipment registered.</td></tr> : equipment.map(item => <tr key={item.id}>
+        <thead><tr><th>Asset</th><th>Branch</th><th>Department</th><th>Analyzer</th><th>Status</th><th>Maintenance</th><th>Calibration</th><th>Documents</th><th>Downtime</th></tr></thead>
+        <tbody>{equipment.length === 0 ? <tr><td colSpan={9} className="empty-state">No equipment registered.</td></tr> : equipment.map(item => <tr key={item.id}>
           <td><strong>{item.assetId}</strong><br/><small>{item.name}{item.serialNumber ? " · " + item.serialNumber : ""}</small></td>
           <td>{item.branch.code} — {item.branch.nameEn}</td>
           <td>{item.department?.nameEn || "—"}</td>
           <td>{item.analyzer ? item.analyzer.code + " — " + item.analyzer.name : "—"}</td>
           <td>{item.status}</td>
-          <td>{item.maintenanceEvents[0] ? item.maintenanceEvents[0].maintenanceType + " · " + item.maintenanceEvents[0].status : "—"}</td>
+          <td>
+            {item.maintenanceEvents[0] ? item.maintenanceEvents[0].maintenanceType + " · " + item.maintenanceEvents[0].status : "—"}
+            {item.maintenancePlans[0] ? <><br/><small>Next: {item.maintenancePlans[0].nextDueAt.toISOString().slice(0,10)}</small></> : null}
+          </td>
           <td>{item.calibrationEvents[0] ? item.calibrationEvents[0].status + (item.calibrationEvents[0].performedAt ? " · " + item.calibrationEvents[0].performedAt.toISOString().slice(0,10) : "") : "—"}</td>
+          <td>{item.documents.length}</td>
           <td>{item.downtimeEvents[0]?.status === "OPEN" ? <strong className="critical-text">OPEN</strong> : "—"}</td>
         </tr>)}</tbody>
       </table></div>
