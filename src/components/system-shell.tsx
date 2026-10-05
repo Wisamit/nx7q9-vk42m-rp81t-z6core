@@ -95,6 +95,8 @@ const groups: Array<{ labelEn: string; labelAr: string; items: NavItem[] }> = [
     labelAr: "الإدارة",
     items: [
       { href: "/settings", labelEn: "System Settings", labelAr: "إعدادات النظام", icon: "settings", permission: "settings.manage" },
+      { href: "/users", labelEn: "Users", labelAr: "المستخدمون", icon: "users", permission: "users.view" },
+      { href: "/roles", labelEn: "Roles & Permissions", labelAr: "الأدوار والصلاحيات", icon: "roles", permission: "roles.view" },
     ],
   },
 ];
