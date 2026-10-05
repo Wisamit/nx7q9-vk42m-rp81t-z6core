@@ -7,6 +7,12 @@ function object(value: unknown): Record<string, unknown> {
 }
 function text(value: unknown) { return typeof value === "string" ? value.trim() : ""; }
 function key(value: string) { return value.trim().replace(/\s+/g, " ").toUpperCase(); }
+function looseKey(value: string) {
+  return value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/[^A-Z0-9]+/g, "");
+}
+function unitKey(value: string) {
+  return value.trim().toUpperCase().replace(/[µμ]/g, "U").replace(/\s+/g, "").replace(/PER/g, "/");
+}
 function decimal(value: unknown): string | null {
   if (value === null || value === undefined || value === "") return null;
   const s = String(value).trim();
@@ -30,35 +36,66 @@ function ageUnit(value: unknown): "DAY" | "WEEK" | "MONTH" | "YEAR" | null {
 }
 
 async function analyze(batchId: string, organizationId: string) {
-  const [rows, tests, units] = await Promise.all([
+  const [rows, tests, units, legacyTests, legacyUnits] = await Promise.all([
     prisma.catalogImportRow.findMany({ where: { batchId, entityType: "REFERENCE_INTERVAL", status: { in: ["VALID", "WARNING"] } }, orderBy: { rowNumber: "asc" } }),
     prisma.labTest.findMany({ where: { organizationId }, include: { defaultUnit: true, components: { include: { unit: true } } } }),
     prisma.unit.findMany({ where: { organizationId } }),
+    prisma.catalogImportRow.findMany({ where: { batchId, entityType: "TEST", importedEntityId: { not: null } }, select: { importedEntityId: true, legacyKey: true, sourceData: true, normalizedData: true } }),
+    prisma.catalogImportRow.findMany({ where: { batchId, entityType: "UNIT", importedEntityId: { not: null } }, select: { importedEntityId: true, legacyKey: true, sourceData: true, normalizedData: true } }),
   ]);
 
   const testMap = new Map<string, typeof tests>();
-  for (const test of tests) {
-    for (const name of [test.nameEn, test.abbreviation, test.code]) {
-      if (!name) continue;
-      const k = key(name);
+  function addTestAlias(alias: string, test: typeof tests[number]) {
+    for (const k of [key(alias), looseKey(alias)]) {
+      if (!k) continue;
       const list = testMap.get(k) || [];
       if (!list.some((existing) => existing.id === test.id)) list.push(test);
       testMap.set(k, list);
     }
   }
+  for (const test of tests) {
+    for (const name of [test.nameEn, test.abbreviation, test.code]) if (name) addTestAlias(name, test);
+  }
+  const testById = new Map(tests.map((test) => [test.id, test]));
+  for (const row of legacyTests) {
+    const test = row.importedEntityId ? testById.get(row.importedEntityId) : undefined;
+    if (!test) continue;
+    const source = object(row.sourceData);
+    const normalized = object(row.normalizedData);
+    for (const alias of [
+      text(normalized.nameEn), text(normalized.code), text(source.Testname), text(source["test name"]),
+      text(source.Abrev), text(source.Abre), text(row.legacyKey?.split("|").pop())
+    ]) if (alias) addTestAlias(alias, test);
+  }
+
   const unitMap = new Map<string, typeof units[number]>();
+  function addUnitAlias(alias: string, unit: typeof units[number]) {
+    for (const k of [key(alias), unitKey(alias)]) if (k) unitMap.set(k, unit);
+  }
   for (const unit of units) {
-    unitMap.set(key(unit.code), unit);
-    unitMap.set(key(unit.symbol), unit);
+    addUnitAlias(unit.code, unit);
+    addUnitAlias(unit.symbol, unit);
+  }
+  const unitById = new Map(units.map((unit) => [unit.id, unit]));
+  for (const row of legacyUnits) {
+    const unit = row.importedEntityId ? unitById.get(row.importedEntityId) : undefined;
+    if (!unit) continue;
+    const source = object(row.sourceData);
+    const normalized = object(row.normalizedData);
+    for (const alias of [text(normalized.code), text(normalized.symbol), text(source.unit), text(source.Unit), text(row.legacyKey)]) {
+      if (alias) addUnitAlias(alias, unit);
+    }
   }
 
   const analyzed = rows.map((row) => {
     const n = object(row.normalizedData);
     const s = object(row.sourceData);
     const testName = text(n.testName || s["test name"] || s.Testname);
-    const matches = testMap.get(key(testName)) || [];
+    const exactMatches = testMap.get(key(testName)) || [];
+    const looseMatches = testMap.get(looseKey(testName)) || [];
+    const matches = exactMatches.length ? exactMatches : looseMatches;
     const rangeUnit = text(n.unit || s["test unit"] || s.unit);
-    const mappedUnit = rangeUnit ? unitMap.get(key(rangeUnit)) : undefined;
+    const mappedUnit = rangeUnit ? (unitMap.get(key(rangeUnit)) || unitMap.get(unitKey(rangeUnit))) : undefined;
     const mappedSex = sex(n.sex ?? s.sex);
     const from = decimal(n.ageFrom ?? s.agefrom);
     const to = decimal(n.ageTo ?? s.ageto);
