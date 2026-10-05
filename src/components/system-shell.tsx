@@ -54,6 +54,7 @@ const groups: Array<{ labelEn: string; labelAr: string; items: NavItem[] }> = [
     items: [
       { href: "/catalog", labelEn: "Test Catalog", labelAr: "دليل الفحوصات", short: "TC", permission: "catalog.view" },
       { href: "/pricing", labelEn: "Pricing", labelAr: "الأسعار", short: "PR", permission: "pricing.view" },
+      { href: "/report-templates", labelEn: "Report Templates", labelAr: "قوالب التقارير", short: "RT", permission: "report_templates.view" },
       { href: "/referrers", labelEn: "Referrers & Clients", labelAr: "المحيلون والعملاء", short: "RC", permission: "referrers.view" },
       { href: "/clinical-rules", labelEn: "Clinical Rules", labelAr: "القواعد السريرية", short: "CL", permission: "clinical_rules.manage" },
       { href: "/analyzers", labelEn: "Analyzers", labelAr: "أجهزة التحليل", short: "AN", permission: "analyzers.view" },
