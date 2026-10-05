@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requirePortalSession } from "@/lib/portal-auth";
 import { prisma } from "@/lib/db";
 import { PortalLogoutButton } from "@/components/portal-logout-button";
+import { PortalBookingForm } from "@/components/portal-booking-form";
 
 export const dynamic = "force-dynamic";
 
@@ -48,7 +49,7 @@ export default async function PortalPage() {
       ? { organizationId: account.organizationId, patientId: { in: allowedPatientIds } }
       : { organizationId: account.organizationId, id: "__none__" };
 
-  const [orders, reports, appointments, invoices] = await Promise.all([
+  const [orders, reports, appointments, invoices, bookingBranches, bookingPatients] = await Promise.all([
     prisma.labOrder.findMany({
       where: orderWhere,
       include: {
@@ -89,6 +90,25 @@ export default async function PortalPage() {
             take: 100,
           })
         : Promise.resolve([]),
+    account.type === "DOCTOR"
+      ? Promise.resolve([])
+      : prisma.branch.findMany({
+          where: { organizationId: account.organizationId, status: "ACTIVE" },
+          select: { id: true, nameEn: true, nameAr: true },
+          orderBy: { nameEn: "asc" },
+        }),
+    account.type === "PATIENT"
+      ? prisma.patient.findMany({
+          where: { id: account.patientId!, organizationId: account.organizationId, status: "ACTIVE" },
+          select: { id: true, patientNumber: true, fullNameEn: true },
+        })
+      : account.type === "CORPORATE"
+        ? prisma.patient.findMany({
+            where: { id: { in: allowedPatientIds }, organizationId: account.organizationId, status: "ACTIVE" },
+            select: { id: true, patientNumber: true, fullNameEn: true },
+            orderBy: { fullNameEn: "asc" },
+          })
+        : Promise.resolve([]),
   ]);
 
   const identity =
@@ -112,6 +132,11 @@ export default async function PortalPage() {
       {account.type !== "DOCTOR" && <article className="detail-card"><h2>Appointments</h2><strong>{appointments.length}</strong><p className="muted">Onsite and home collection bookings.</p></article>}
       {account.type !== "DOCTOR" && <article className="detail-card"><h2>Invoices</h2><strong>{invoices.length}</strong><p className="muted">Financial records within portal scope.</p></article>}
     </section>
+
+    {account.type !== "DOCTOR" && <PortalBookingForm
+      branches={bookingBranches.map(branch => ({ id: branch.id, name: branch.nameEn || branch.nameAr || "Branch" }))}
+      patients={bookingPatients.map(patient => ({ id: patient.id, label: patient.patientNumber + " — " + patient.fullNameEn }))}
+    />}
 
     <section className="table-card detail-section">
       <div className="table-toolbar"><h2>Orders & Status</h2><span>{orders.length} shown</span></div>
