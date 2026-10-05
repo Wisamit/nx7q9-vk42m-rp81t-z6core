@@ -174,7 +174,6 @@ CREATE TABLE `qc_lots` (
 CREATE TABLE `qc_targets` (
   `id` CHAR(36) NOT NULL,
   `organization_id` CHAR(36) NOT NULL,
-  `qc_lot_id` CHAR(36) NOT NULL,
   `analyzer_id` CHAR(36) NOT NULL,
   `test_id` CHAR(36) NOT NULL,
   `component_id` CHAR(36) NULL,
@@ -218,7 +217,6 @@ CREATE TABLE `qc_runs` (
   CONSTRAINT `qc_runs_org_fkey` FOREIGN KEY (`organization_id`) REFERENCES `organizations`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
   CONSTRAINT `qc_runs_branch_fkey` FOREIGN KEY (`branch_id`) REFERENCES `branches`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
   CONSTRAINT `qc_runs_analyzer_fkey` FOREIGN KEY (`analyzer_id`) REFERENCES `analyzers`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
-  CONSTRAINT `qc_runs_lot_fkey` FOREIGN KEY (`qc_lot_id`) REFERENCES `qc_lots`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
   CONSTRAINT `qc_runs_operator_fkey` FOREIGN KEY (`operator_user_id`) REFERENCES `users`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
