@@ -1892,8 +1892,8 @@ model PriceListPackageItem {
   package       CommercialPackage  @relation(fields: [packageId], references: [id], onDelete: Restrict)
   orderPackages OrderPackage[]
 
-  @@unique([priceListId, packageId, effectiveFrom])
-  @@index([packageId, status, effectiveFrom, effectiveTo])
+  @@unique([priceListId, packageId, effectiveFrom], map: "pl_pkg_item_effective_uq")
+  @@index([packageId, status, effectiveFrom, effectiveTo], map: "pl_pkg_item_effective_idx")
   @@map("price_list_package_items")
 }
 
