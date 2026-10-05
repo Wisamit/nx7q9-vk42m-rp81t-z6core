@@ -171,6 +171,10 @@ export function SystemShell({ user, children }: { user: ShellUser; children: Rea
           <span className="system-context-dot" />
           <div><small>{tr("Active workspace", "مساحة العمل الحالية")}</small><strong>{activeBranch?.name || tr("Organization", "المؤسسة")}</strong></div>
         </div>
+        <form className="system-global-search" action="/search" method="get">
+          <span aria-hidden="true">⌕</span>
+          <input name="q" placeholder={tr("Search patient, accession, barcode…", "ابحث عن مريض، طلب، باركود…")} aria-label={tr("Global search", "البحث الشامل")} />
+        </form>
         <div className="system-topbar-actions">
           {user.branches.length > 1 && <label className="system-branch-select">
             <span>{tr("Branch", "الفرع")}</span>
