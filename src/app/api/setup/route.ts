@@ -96,7 +96,7 @@ export async function POST(request: NextRequest) {
           passwordHash,
           displayNameEn,
           displayNameAr: displayNameAr || null,
-          preferredLocale: "ar",
+          preferredLocale: "en",
           status: "ACTIVE",
           passwordChangedAt: new Date(),
           roles: { create: { roleId: role.id } },
