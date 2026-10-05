@@ -15,6 +15,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       performingBranch: true,
       specimen: true,
       reflexEvents: { where: { status: "PENDING" } },
+      validationHoldEvents: { where: { status: "ACTIVE", severitySnapshot: "BLOCK" } },
       orderItem: {
         include: {
           test: { include: { components: { where: { status: "ACTIVE" } } } },
@@ -36,6 +37,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const pendingReflex = result.reflexEvents.length;
   if (pendingReflex > 0) {
     return NextResponse.json({ error: "reflex_review_required", pendingReflex }, { status: 409 });
+  }
+
+  const blockingValidationHolds = result.validationHoldEvents.length;
+  if (blockingValidationHolds > 0) {
+    return NextResponse.json({ error: "validation_hold_review_required", blockingValidationHolds }, { status: 409 });
   }
 
   const deltaExceeded = result.values.filter((value) => value.deltaEvaluation === "EXCEEDED");
@@ -139,6 +145,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           verifiedAt,
           criticalCount: criticalValues.length,
           deltaExceededCount: deltaExceeded.length,
+          blockingValidationHoldCount: blockingValidationHolds,
           orderItemId: result.orderItemId,
           specimenId: result.specimenId,
         },
