@@ -56,6 +56,15 @@ export async function POST(request: Request) {
 
   try {
     const lines = body.items.map(line => ({ itemId: text(line.itemId, 36), orderedQty: positive(line.orderedQty), unitCost: positive(line.unitCost) }));
+    if (purchaseRequest) {
+      for (const line of lines) {
+        const requested = purchaseRequest.items.find(item => item.itemId === line.itemId);
+        if (!requested) return NextResponse.json({ error: "purchase_order_item_not_in_approved_request", itemId: line.itemId }, { status: 409 });
+        if (line.orderedQty.gt(requested.requestedQty)) {
+          return NextResponse.json({ error: "purchase_order_quantity_exceeds_approved_request", itemId: line.itemId }, { status: 409 });
+        }
+      }
+    }
     const created = await prisma.$transaction(async tx => {
       const po = await tx.purchaseOrder.create({
         data: {
