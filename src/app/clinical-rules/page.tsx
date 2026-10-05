@@ -90,6 +90,38 @@ export default async function ClinicalRulesPage() {
 
     <section className="detail-grid detail-section">
       <article className="table-card">
+        <div className="table-toolbar"><h2>Calculated Result Rules</h2><span>{calculatedRules.length} shown</span></div>
+        <div className="table-wrap"><table>
+          <thead><tr><th>Test</th><th>Target</th><th>Expression</th><th>Precision</th><th>Effective</th><th>Status</th></tr></thead>
+          <tbody>{calculatedRules.length === 0 ? <tr><td colSpan={6} className="empty-state">No calculated result rules configured.</td></tr> : calculatedRules.map(rule => <tr key={rule.id}>
+            <td><strong>{rule.test.code}</strong><br/><small>{rule.test.nameEn}</small></td>
+            <td>{rule.targetComponent.code} — {rule.targetComponent.nameEn}</td>
+            <td><code>{rule.expression}</code></td>
+            <td>{rule.decimalPrecision ?? "Component default"}</td>
+            <td>{rule.effectiveFrom.toISOString().slice(0,10)} → {rule.effectiveTo?.toISOString().slice(0,10) || "Open"}</td>
+            <td>{rule.status}</td>
+          </tr>)}</tbody>
+        </table></div>
+      </article>
+
+      <article className="table-card">
+        <div className="table-toolbar"><h2>Reflex Recommendation Rules</h2><span>{reflexRules.length} shown</span></div>
+        <div className="table-wrap"><table>
+          <thead><tr><th>Source</th><th>Condition</th><th>Recommended test</th><th>Branch</th><th>Effective</th><th>Status</th></tr></thead>
+          <tbody>{reflexRules.length === 0 ? <tr><td colSpan={6} className="empty-state">No reflex rules configured.</td></tr> : reflexRules.map(rule => <tr key={rule.id}>
+            <td><strong>{rule.sourceTest.code}</strong>{rule.sourceComponent ? <><br/><small>{rule.sourceComponent.code} — {rule.sourceComponent.nameEn}</small></> : null}</td>
+            <td>{rule.operator} {rule.numericThreshold?.toString() || rule.textThreshold || "—"}</td>
+            <td>{rule.targetTest.code} — {rule.targetTest.nameEn}</td>
+            <td>{rule.branch?.nameEn || "All branches"}</td>
+            <td>{rule.effectiveFrom.toISOString().slice(0,10)} → {rule.effectiveTo?.toISOString().slice(0,10) || "Open"}</td>
+            <td>{rule.status}</td>
+          </tr>)}</tbody>
+        </table></div>
+      </article>
+    </section>
+
+    <section className="detail-grid detail-section">
+      <article className="table-card">
         <div className="table-toolbar"><h2>Delta Rules</h2><span>{deltaRules.length} shown</span></div>
         <div className="table-wrap">
           <table>
