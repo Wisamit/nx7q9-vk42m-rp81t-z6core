@@ -462,6 +462,8 @@ export async function POST(request: Request) {
         entityId: result.id,
         oldValues: existing ? {
           status: existing.status,
+          specimenId: existing.specimenId,
+          performingBranchId: existing.performingBranchId,
           values: existing.values.map((value) => ({
             componentCode: value.componentCodeSnapshot,
             displayValue: value.displayValue,
