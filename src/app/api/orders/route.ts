@@ -103,6 +103,16 @@ export async function POST(request: Request) {
         },
       });
 
+      await tx.orderStatusHistory.create({
+        data: {
+          orderId: order.id,
+          fromStatus: null,
+          toStatus: "REGISTERED",
+          reason: "Initial order registration",
+          changedByUserId: session.user.id,
+        },
+      });
+
       const createdItems = [];
       let subtotal = new Prisma.Decimal(0);
 
