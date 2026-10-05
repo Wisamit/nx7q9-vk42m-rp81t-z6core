@@ -26,7 +26,7 @@ export function PricingManager({
   const router = useRouter();
   const [scopeType, setScopeType] = useState("ORGANIZATION");
   const [message, setMessage] = useState("");
-  const [busy, setBusy] = useState<"list" | "item" | "">("");
+  const [busy, setBusy] = useState<"contract" | "list" | "item" | "">("");
   const [testSearch, setTestSearch] = useState("");
   const [testId, setTestId] = useState("");
 
@@ -34,6 +34,32 @@ export function PricingManager({
     ...test,
     label: `${test.code} — ${test.nameEn}`,
   })), [tests]);
+
+  async function createContract(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    setBusy("contract"); setMessage("");
+    const response = await fetch("/api/pricing/contracts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        code: form.get("code"),
+        clientId: form.get("clientId"),
+        nameEn: form.get("nameEn"),
+        nameAr: form.get("nameAr"),
+        currency: form.get("currency"),
+        effectiveFrom: form.get("effectiveFrom"),
+        effectiveTo: form.get("effectiveTo"),
+      }),
+    });
+    const body = await response.json().catch(() => ({}));
+    if (response.ok) {
+      setMessage(`Contract created: ${body.contract.code}`);
+      event.currentTarget.reset();
+      router.refresh();
+    } else setMessage(body.error || "Could not create contract.");
+    setBusy("");
+  }
 
   async function createList(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -93,6 +119,20 @@ export function PricingManager({
   }
 
   return <div className="detail-grid">
+    <article className="detail-card">
+      <h2>Create Client Contract</h2>
+      <form className="catalog-form" onSubmit={createContract}>
+        <label>Code<input name="code" placeholder="Optional; generated from name" /></label>
+        <label>Client<select name="clientId" required><option value="">Select client…</option>{clients.map(x => <option key={x.id} value={x.id}>{x.code} — {x.nameEn}</option>)}</select></label>
+        <label>Name (English)<input name="nameEn" required /></label>
+        <label dir="rtl">الاسم بالعربية<input name="nameAr" dir="rtl" /></label>
+        <label>Currency<input name="currency" required maxLength={3} defaultValue={defaultCurrency} /></label>
+        <label>Effective from<input name="effectiveFrom" type="date" required defaultValue={new Date().toISOString().slice(0,10)} /></label>
+        <label>Effective to<input name="effectiveTo" type="date" /></label>
+        <button className="primary-button form-span" disabled={busy === "contract"}>{busy === "contract" ? "Saving…" : "Create Contract"}</button>
+      </form>
+    </article>
+
     <article className="detail-card">
       <h2>Create Price List</h2>
       <form className="catalog-form" onSubmit={createList}>
