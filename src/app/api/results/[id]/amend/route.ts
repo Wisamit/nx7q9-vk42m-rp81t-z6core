@@ -73,7 +73,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         amendmentRequestedByUserId: session.user.id,
         amendmentRequestedAt: new Date(),
         comments: original.comments,
-        microbiologySnapshot: original.microbiologySnapshot,
       },
     });
 
