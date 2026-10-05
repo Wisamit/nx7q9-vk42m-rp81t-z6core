@@ -2077,6 +2077,9 @@ model MicrobiologyIsolate {
   id             String   @id @default(uuid()) @db.Char(36)
   caseId         String   @map("case_id") @db.Char(36)
   organismId     String   @map("organism_id") @db.Char(36)
+  organismCodeSnapshot String @map("organism_code_snapshot") @db.VarChar(80)
+  organismNameEnSnapshot String @map("organism_name_en_snapshot") @db.VarChar(220)
+  organismNameArSnapshot String? @map("organism_name_ar_snapshot") @db.VarChar(220)
   sequenceNumber Int      @default(1) @map("sequence_number")
   quantityText   String?  @map("quantity_text") @db.VarChar(200)
   colonyNotes    String?  @map("colony_notes") @db.Text
