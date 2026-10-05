@@ -38,6 +38,7 @@ export async function POST(request: NextRequest) {
           nameAr: nameAr || null,
           abbreviation: typeof body.abbreviation === "string" ? body.abbreviation.trim().slice(0, 80) || null : null,
           resultType: body.resultType === "TEXT" || body.resultType === "QUALITATIVE" || body.resultType === "BOOLEAN" || body.resultType === "DATE" ? body.resultType : "NUMERIC",
+          workflowType: body.workflowType === "MICROBIOLOGY" ? "MICROBIOLOGY" : "GENERAL",
           departmentId: body.departmentId || null,
           specimenTypeId: body.specimenTypeId || null,
           containerId: body.containerId || null,
@@ -61,7 +62,7 @@ export async function POST(request: NextRequest) {
           action: "CATALOG_TEST_CREATED",
           entityType: "LabTest",
           entityId: created.id,
-          newValues: { code: created.code, nameEn: created.nameEn, nameAr: created.nameAr },
+          newValues: { code: created.code, nameEn: created.nameEn, nameAr: created.nameAr, workflowType: created.workflowType },
         },
       });
       return created;
