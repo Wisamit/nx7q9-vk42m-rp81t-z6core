@@ -70,6 +70,7 @@ export default async function SpecimensPage({
       </div>
       <div className="header-actions">
         <Link className="secondary-link" href="/orders">Orders</Link>
+        <Link className="secondary-link" href="/transfers">Transfers</Link>
         <Link className="secondary-link" href="/dashboard">Back to Dashboard</Link>
       </div>
     </header>
