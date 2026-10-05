@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { buildDiagnosticReportSnapshot } from "@/lib/report-snapshot";
+import { resolveAnalyzerQcGate } from "@/lib/qc-gate";
 
 export async function POST(_: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await requirePermission("results.release");
@@ -25,6 +26,25 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
   }
   if (result.status !== "VERIFIED") {
     return NextResponse.json({ error: "result_not_releasable", status: result.status }, { status: 409 });
+  }
+
+  const qcGate = result.source === "ANALYZER" && result.analyzerId
+    ? await resolveAnalyzerQcGate(prisma, {
+        analyzerId: result.analyzerId,
+        testId: result.orderItem.testId,
+        componentIds: result.values
+          .filter(value => !value.isCalculated && value.analyzerImportId)
+          .map(value => value.componentId),
+        asOf: new Date(),
+      })
+    : null;
+
+  if (qcGate?.blocking) {
+    return NextResponse.json({
+      error: "qc_release_blocked",
+      qcStatus: qcGate.status,
+      reasons: qcGate.reasons,
+    }, { status: 409 });
   }
 
   const criticalValues = result.values.filter((value) => value.isCritical);
@@ -135,6 +155,8 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
           reportStatus,
           amendedFromId: result.amendedFromId,
           microbiologyCaseId: result.microbiologyCase?.id || null,
+          qcGateStatus: qcGate?.status || null,
+          qcGateReasons: qcGate?.reasons || [],
         },
         reason: result.amendmentReason || null,
         ipAddress: ctx.ipAddress,
