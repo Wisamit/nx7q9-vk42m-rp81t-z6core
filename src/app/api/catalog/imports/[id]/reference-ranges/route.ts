@@ -117,7 +117,7 @@ async function analyze(batchId: string, organizationId: string) {
     else if (test?.components.length === 1 && test.components[0].unitId && test.components[0].unitId !== mappedUnit.id) reason = "COMPONENT_UNIT_CONFLICT";
     else if (test?.defaultUnitId && test.defaultUnitId !== mappedUnit.id) reason = "TEST_UNIT_CONFLICT";
 
-    return { row, test, mappedUnit, mappedSex, mappedAgeUnit, from, to, low, high, normalText, reason };
+    return { row, test, testName, rangeUnit, mappedUnit, mappedSex, mappedAgeUnit, from, to, low, high, normalText, reason };
   });
 
   const safe = analyzed.filter(x => !x.reason);
@@ -132,11 +132,29 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
   const batch = await prisma.catalogImportBatch.findFirst({ where: { id, organizationId: session.user.organizationId } });
   if (!batch) return NextResponse.json({ error: "batch_not_found" }, { status: 404 });
   const analysis = await analyze(batch.id, session.user.organizationId);
+  const topValues = (reason: string, pick: (item: typeof analysis.review[number]) => string) => {
+    const counts = new Map<string, number>();
+    for (const item of analysis.review.filter((row) => row.reason === reason)) {
+      const value = pick(item) || "(blank)";
+      counts.set(value, (counts.get(value) || 0) + 1);
+    }
+    return [...counts.entries()]
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .slice(0, 20)
+      .map(([value, count]) => ({ value, count }));
+  };
+
   return NextResponse.json({
     total: analysis.total,
     safe: analysis.safe.length,
     review: analysis.review.length,
     reasons: analysis.reasons,
+    details: {
+      unmatchedTests: topValues("TEST_NOT_FOUND", (item) => item.testName),
+      unmappedUnits: topValues("UNIT_NOT_MAPPED", (item) => item.rangeUnit),
+      unitConflicts: topValues("TEST_UNIT_CONFLICT", (item) => `${item.testName} | ${item.rangeUnit}`),
+      emptyIntervals: topValues("EMPTY_REFERENCE_INTERVAL", (item) => item.testName),
+    },
   });
 }
 
