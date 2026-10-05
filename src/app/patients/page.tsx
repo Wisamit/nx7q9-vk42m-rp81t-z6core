@@ -5,11 +5,29 @@ import { PatientCreateForm } from "@/components/patient-create-form";
 
 export const dynamic = "force-dynamic";
 
-export default async function PatientsPage() {
+export default async function PatientsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string }>;
+}) {
   const session = await requirePermission("patients.view");
+  const query = (await searchParams).q?.trim() || "";
+
   const patients = await prisma.patient.findMany({
-    where: { organizationId: session.user.organizationId },
-    include: { identifiers: { where: { status: "ACTIVE" }, take: 2 } },
+    where: {
+      organizationId: session.user.organizationId,
+      ...(query ? {
+        OR: [
+          { patientNumber: { contains: query } },
+          { fullNameEn: { contains: query } },
+          { fullNameAr: { contains: query } },
+          { phone: { contains: query } },
+          { email: { contains: query } },
+          { identifiers: { some: { value: { contains: query }, status: "ACTIVE" } } },
+        ],
+      } : {}),
+    },
+    include: { identifiers: { where: { status: "ACTIVE" }, take: 3 } },
     orderBy: { createdAt: "desc" },
     take: 100,
   });
@@ -35,21 +53,28 @@ export default async function PatientsPage() {
           <dt>Scope</dt><dd>Organization-wide</dd>
           <dt>Patient number</dt><dd>Immutable internal identifier</dd>
           <dt>Duplicate checks</dt><dd>Name + DOB/phone and national ID</dd>
-          <dt>History</dt><dd>Patient creation is audited</dd>
+          <dt>History</dt><dd>Creation and identity changes are audited</dd>
         </dl>
       </article>
     </section>
 
     <section className="table-card">
-      <div className="table-toolbar"><h2>Recent Patients</h2><span>{patients.length} shown</span></div>
+      <div className="table-toolbar">
+        <div><h2>Patient Search</h2><span>{patients.length} shown</span></div>
+        <form className="inline-search" action="/patients" method="get">
+          <input name="q" defaultValue={query} placeholder="Patient #, name, phone, ID…" />
+          <button className="secondary-button">Search</button>
+          {query && <Link className="secondary-link" href="/patients">Clear</Link>}
+        </form>
+      </div>
       <div className="table-wrap">
         <table>
           <thead><tr><th>Patient #</th><th>Name</th><th>Date of birth</th><th>Sex</th><th>Phone</th><th>National ID</th><th>Status</th></tr></thead>
           <tbody>
-            {patients.length === 0 ? <tr><td colSpan={7} className="empty-state">No patients registered yet.</td></tr> :
+            {patients.length === 0 ? <tr><td colSpan={7} className="empty-state">No matching patients.</td></tr> :
               patients.map(patient => <tr key={patient.id}>
-                <td><strong>{patient.patientNumber}</strong></td>
-                <td>{patient.fullNameEn}{patient.fullNameAr ? <><br/><small dir="rtl">{patient.fullNameAr}</small></> : null}</td>
+                <td><Link className="table-link" href={`/patients/${patient.id}`}><strong>{patient.patientNumber}</strong></Link></td>
+                <td><Link className="table-link" href={`/patients/${patient.id}`}>{patient.fullNameEn}</Link>{patient.fullNameAr ? <><br/><small dir="rtl">{patient.fullNameAr}</small></> : null}</td>
                 <td>{patient.dateOfBirth ? patient.dateOfBirth.toISOString().slice(0,10) : "—"}</td>
                 <td>{patient.sexAtBirth}</td>
                 <td>{patient.phone || "—"}</td>

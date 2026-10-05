@@ -31,6 +31,22 @@ enum PatientIdentifierType {
   OTHER
 }
 
+enum ClientType {
+  INDIVIDUAL
+  CLINIC
+  HOSPITAL
+  COMPANY
+  INSURANCE
+  OTHER
+}
+
+enum ReferrerType {
+  PHYSICIAN
+  CLINIC
+  HOSPITAL
+  OTHER
+}
+
 model Organization {
   id              String       @id @default(uuid()) @db.Char(36)
   code            String       @unique @db.VarChar(50)
@@ -59,6 +75,8 @@ model Organization {
   catalogImportMappings CatalogImportMapping[]
   patients Patient[]
   patientIdentifiers PatientIdentifier[]
+  clients Client[]
+  referrers Referrer[]
 
   @@map("organizations")
 }
@@ -716,4 +734,55 @@ model PatientIdentifier {
   @@unique([organizationId, identifierType, normalizedValue])
   @@index([patientId, status])
   @@map("patient_identifiers")
+}
+
+
+model Client {
+  id             String       @id @default(uuid()) @db.Char(36)
+  organizationId String       @map("organization_id") @db.Char(36)
+  code           String       @db.VarChar(60)
+  type           ClientType   @default(OTHER)
+  nameEn         String       @map("name_en") @db.VarChar(220)
+  nameAr         String?      @map("name_ar") @db.VarChar(220)
+  phone          String?      @db.VarChar(50)
+  email          String?      @db.VarChar(191)
+  addressEn      String?      @map("address_en") @db.Text
+  addressAr      String?      @map("address_ar") @db.Text
+  paymentTermsDays Int?       @map("payment_terms_days")
+  status         RecordStatus @default(ACTIVE)
+  createdAt      DateTime     @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt      DateTime     @updatedAt @map("updated_at") @db.DateTime(3)
+  deactivatedAt  DateTime?    @map("deactivated_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  referrers     Referrer[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId, nameEn])
+  @@map("clients")
+}
+
+model Referrer {
+  id             String       @id @default(uuid()) @db.Char(36)
+  organizationId String       @map("organization_id") @db.Char(36)
+  clientId       String?      @map("client_id") @db.Char(36)
+  code           String       @db.VarChar(60)
+  type           ReferrerType @default(PHYSICIAN)
+  nameEn         String       @map("name_en") @db.VarChar(220)
+  nameAr         String?      @map("name_ar") @db.VarChar(220)
+  phone          String?      @db.VarChar(50)
+  email          String?      @db.VarChar(191)
+  licenseNumber  String?      @map("license_number") @db.VarChar(100)
+  status         RecordStatus @default(ACTIVE)
+  createdAt      DateTime     @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt      DateTime     @updatedAt @map("updated_at") @db.DateTime(3)
+  deactivatedAt  DateTime?    @map("deactivated_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  client       Client?      @relation(fields: [clientId], references: [id], onDelete: Restrict)
+
+  @@unique([organizationId, code])
+  @@index([organizationId, nameEn])
+  @@index([clientId, status])
+  @@map("referrers")
 }

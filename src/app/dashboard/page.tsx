@@ -28,6 +28,7 @@ export default async function DashboardPage() {
           <article><span>03</span><h2>Audit Log</h2><p>Track security events and significant changes.</p></article>
           <Link className="module-link" href="/catalog"><article><span>04</span><h2>Test Catalog</h2><p>Configuration-driven tests, components, specimens and ranges.</p></article></Link>
           {permissions.has("patients.view") && <Link className="module-link" href="/patients"><article><span>05</span><h2>Patients</h2><p>Central patient identity, identifiers and duplicate protection across branches.</p></article></Link>}
+          {permissions.has("referrers.view") && <Link className="module-link" href="/referrers"><article><span>06</span><h2>Referrers & Clients</h2><p>Referral sources and commercial accounts kept as linked but separate master data.</p></article></Link>}
         </div>
       </section>
     </main>
