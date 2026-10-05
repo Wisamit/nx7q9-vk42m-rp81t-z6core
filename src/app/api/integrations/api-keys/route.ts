@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 
-const ALLOWED_SCOPES = new Set(["fhir.read","hl7.write","messages.read"]);
+const ALLOWED_SCOPES = new Set(["fhir.read","hl7.write","messages.read","messages.ack"]);
 
 function text(value: unknown, max = 160) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
