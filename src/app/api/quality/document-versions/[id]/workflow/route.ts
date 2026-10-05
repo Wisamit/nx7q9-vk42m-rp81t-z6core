@@ -8,7 +8,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const { id } = await params;
   const body = await request.json().catch(() => null) as { action?: string; effectiveFrom?: string } | null;
   const action = body?.action;
-  if (!["SUBMIT_REVIEW","APPROVE","MAKE_EFFECTIVE"].includes(action || "")) {
+  if (!["SUBMIT_REVIEW","COMPLETE_REVIEW","APPROVE","MAKE_EFFECTIVE"].includes(action || "")) {
     return NextResponse.json({ error: "invalid_action" }, { status: 400 });
   }
 
@@ -20,7 +20,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (version.document.branchId && !canAccessBranch(session, version.document.branchId)) return NextResponse.json({ error: "branch_forbidden" }, { status: 403 });
 
   if (action === "SUBMIT_REVIEW" && version.status !== "DRAFT") return NextResponse.json({ error: "draft_version_required" }, { status: 409 });
-  if (action === "APPROVE" && version.status !== "IN_REVIEW") return NextResponse.json({ error: "version_in_review_required" }, { status: 409 });
+  if (action === "COMPLETE_REVIEW" && version.status !== "IN_REVIEW") return NextResponse.json({ error: "version_in_review_required" }, { status: 409 });
+  if (action === "APPROVE" && version.status !== "REVIEWED") return NextResponse.json({ error: "reviewed_version_required" }, { status: 409 });
   if (action === "MAKE_EFFECTIVE" && version.status !== "APPROVED") return NextResponse.json({ error: "approved_version_required" }, { status: 409 });
 
   const now = new Date();
@@ -33,7 +34,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (action === "SUBMIT_REVIEW") {
       updated = await tx.qualityDocumentVersion.update({
         where: { id },
-        data: { status: "IN_REVIEW", reviewedByUserId: session.user.id, reviewedAt: now },
+        data: { status: "IN_REVIEW" },
+      });
+    } else if (action === "COMPLETE_REVIEW") {
+      updated = await tx.qualityDocumentVersion.update({
+        where: { id },
+        data: { status: "REVIEWED", reviewedByUserId: session.user.id, reviewedAt: now },
       });
     } else if (action === "APPROVE") {
       updated = await tx.qualityDocumentVersion.update({
