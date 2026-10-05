@@ -819,6 +819,11 @@ model Organization {
   edgeNodes EdgeNode[]
   edgeQueueMessages EdgeQueueMessage[]
 
+  notificationTemplates NotificationTemplate[]
+  notificationEvents NotificationEvent[]
+  notificationDeliveries NotificationDelivery[]
+  notificationPreferences NotificationPreference[]
+
   @@map("organizations")
 }
 
@@ -899,6 +904,9 @@ model Branch {
   disasterRecoveryDrills DisasterRecoveryDrill[]
   edgeNodes EdgeNode[]
   edgeQueueMessages EdgeQueueMessage[]
+
+  notificationTemplates NotificationTemplate[]
+  notificationEvents NotificationEvent[]
 
   @@unique([organizationId, code])
   @@index([organizationId, status])
@@ -1070,6 +1078,9 @@ model User {
   recordedDisasterRecoveryDrills DisasterRecoveryDrill[] @relation("DisasterRecoveryDrillRecorder")
   updatedContinuityPolicies BranchContinuityPolicy[] @relation("BranchContinuityPolicyUpdater")
   createdEdgeNodes EdgeNode[] @relation("EdgeNodeCreator")
+  createdNotificationTemplates NotificationTemplate[] @relation("NotificationTemplateCreator")
+  createdNotificationEvents NotificationEvent[] @relation("NotificationEventCreator")
+  notificationDeliveries NotificationDelivery[] @relation("NotificationDeliveryUser")
 
   @@unique([organizationId, username])
   @@unique([organizationId, email])
@@ -1211,6 +1222,36 @@ model UserSession {
   @@map("user_sessions")
 }
 
+
+enum NotificationChannel {
+  IN_APP
+  EMAIL
+  SMS
+  WHATSAPP
+}
+
+enum NotificationDeliveryStatus {
+  QUEUED
+  SENT
+  DELIVERED
+  FAILED
+  SKIPPED
+}
+
+enum NotificationRecipientType {
+  USER
+  PORTAL_ACCOUNT
+  PATIENT
+  REFERRER
+  CLIENT
+  EXTERNAL
+}
+
+enum NotificationSeverity {
+  INFO
+  WARNING
+  CRITICAL
+}
 
 enum ResultType {
   NUMERIC
@@ -4489,4 +4530,114 @@ model EdgeQueueMessage {
   @@index([branchId, status, createdAt])
   @@index([edgeNodeId, status, createdAt])
   @@map("edge_queue_messages")
+}
+
+
+model NotificationTemplate {
+  id              String              @id @default(uuid()) @db.Char(36)
+  organizationId  String              @map("organization_id") @db.Char(36)
+  branchId        String?             @map("branch_id") @db.Char(36)
+  code            String              @db.VarChar(100)
+  eventType       String              @map("event_type") @db.VarChar(120)
+  channel         NotificationChannel
+  locale          String              @default("en") @db.VarChar(10)
+  version         Int                 @default(1)
+  subjectTemplate String?             @map("subject_template") @db.VarChar(500)
+  bodyTemplate    String              @map("body_template") @db.Text
+  status          RecordStatus        @default(ACTIVE)
+  effectiveFrom   DateTime            @default(now()) @map("effective_from") @db.DateTime(3)
+  effectiveTo     DateTime?           @map("effective_to") @db.DateTime(3)
+  createdByUserId String              @map("created_by_user_id") @db.Char(36)
+  createdAt       DateTime            @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt       DateTime            @updatedAt @map("updated_at") @db.DateTime(3)
+  deactivatedAt   DateTime?           @map("deactivated_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  branch       Branch?      @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  createdBy    User         @relation("NotificationTemplateCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  deliveries   NotificationDelivery[]
+
+  @@unique([organizationId, code, version, channel, locale])
+  @@index([organizationId, eventType, channel, locale, status, effectiveFrom, effectiveTo])
+  @@index([branchId, eventType, status])
+  @@map("notification_templates")
+}
+
+model NotificationEvent {
+  id              String               @id @default(uuid()) @db.Char(36)
+  organizationId  String               @map("organization_id") @db.Char(36)
+  branchId        String?              @map("branch_id") @db.Char(36)
+  eventType       String               @map("event_type") @db.VarChar(120)
+  entityType      String               @map("entity_type") @db.VarChar(100)
+  entityId        String               @map("entity_id") @db.Char(36)
+  severity        NotificationSeverity @default(INFO)
+  payload         Json
+  createdByUserId String?              @map("created_by_user_id") @db.Char(36)
+  occurredAt      DateTime             @default(now()) @map("occurred_at") @db.DateTime(3)
+  createdAt       DateTime             @default(now()) @map("created_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  branch       Branch?      @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  createdBy    User?        @relation("NotificationEventCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  deliveries   NotificationDelivery[]
+
+  @@index([organizationId, eventType, occurredAt])
+  @@index([branchId, eventType, occurredAt])
+  @@index([entityType, entityId])
+  @@map("notification_events")
+}
+
+model NotificationDelivery {
+  id                  String                     @id @default(uuid()) @db.Char(36)
+  organizationId      String                     @map("organization_id") @db.Char(36)
+  eventId             String                     @map("event_id") @db.Char(36)
+  templateId          String?                    @map("template_id") @db.Char(36)
+  recipientType       NotificationRecipientType  @map("recipient_type")
+  recipientId         String?                    @map("recipient_id") @db.Char(36)
+  recipientUserId     String?                    @map("recipient_user_id") @db.Char(36)
+  recipientAddress    String?                    @map("recipient_address") @db.VarChar(255)
+  channel             NotificationChannel
+  locale              String                     @default("en") @db.VarChar(10)
+  subject             String?                    @db.VarChar(500)
+  body                String                     @db.Text
+  status              NotificationDeliveryStatus @default(QUEUED)
+  attemptCount        Int                        @default(0) @map("attempt_count")
+  nextAttemptAt       DateTime?                  @map("next_attempt_at") @db.DateTime(3)
+  lastAttemptAt       DateTime?                  @map("last_attempt_at") @db.DateTime(3)
+  sentAt              DateTime?                  @map("sent_at") @db.DateTime(3)
+  deliveredAt         DateTime?                  @map("delivered_at") @db.DateTime(3)
+  readAt              DateTime?                  @map("read_at") @db.DateTime(3)
+  providerMessageId   String?                    @map("provider_message_id") @db.VarChar(255)
+  lastError           String?                    @map("last_error") @db.Text
+  createdAt           DateTime                   @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt           DateTime                   @updatedAt @map("updated_at") @db.DateTime(3)
+
+  organization  Organization          @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  event         NotificationEvent     @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  template      NotificationTemplate? @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  recipientUser User?                 @relation("NotificationDeliveryUser", fields: [recipientUserId], references: [id], onDelete: Restrict)
+
+  @@unique([eventId, channel, recipientType, recipientId])
+  @@index([organizationId, channel, status, nextAttemptAt])
+  @@index([recipientUserId, channel, readAt, createdAt])
+  @@index([recipientType, recipientId, channel, status])
+  @@map("notification_deliveries")
+}
+
+model NotificationPreference {
+  id             String                    @id @default(uuid()) @db.Char(36)
+  organizationId String                    @map("organization_id") @db.Char(36)
+  recipientType  NotificationRecipientType @map("recipient_type")
+  recipientId    String                    @map("recipient_id") @db.Char(36)
+  eventType      String                    @map("event_type") @db.VarChar(120)
+  channel        NotificationChannel
+  enabled        Boolean                   @default(true)
+  createdAt      DateTime                  @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt      DateTime                  @updatedAt @map("updated_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+
+  @@unique([organizationId, recipientType, recipientId, eventType, channel])
+  @@index([organizationId, eventType, channel, enabled])
+  @@map("notification_preferences")
 }
