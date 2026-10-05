@@ -1,8 +1,7 @@
 import type { Prisma, PrismaClient } from "../../generated/prisma/client";
+import { comparePricingCandidates } from "@/lib/pricing-policy";
 
 type DbClient = PrismaClient | Prisma.TransactionClient;
-
-const scopeRank = { CONTRACT: 400, CLIENT: 300, BRANCH: 200, ORGANIZATION: 100 } as const;
 
 export async function resolveTestPrice(
   db: DbClient,
@@ -67,12 +66,8 @@ export async function resolveTestPrice(
 
   const ranked = priceLists
     .filter((list) => list.items.length > 0)
-    .map((list) => ({ list, scopeRank: scopeRank[list.scopeType] }))
-    .sort((a, b) =>
-      b.scopeRank - a.scopeRank ||
-      b.list.priority - a.list.priority ||
-      b.list.effectiveFrom.getTime() - a.list.effectiveFrom.getTime()
-    );
+    .map((list) => ({ list }))
+    .sort((a, b) => comparePricingCandidates(a.list, b.list));
 
   const selected = ranked[0]?.list;
   const item = selected?.items[0];
@@ -152,12 +147,8 @@ export async function resolvePackagePrice(
 
   const ranked = priceLists
     .filter((list) => list.packageItems.length > 0)
-    .map((list) => ({ list, scopeRank: scopeRank[list.scopeType] }))
-    .sort((a, b) =>
-      b.scopeRank - a.scopeRank ||
-      b.list.priority - a.list.priority ||
-      b.list.effectiveFrom.getTime() - a.list.effectiveFrom.getTime()
-    );
+    .map((list) => ({ list }))
+    .sort((a, b) => comparePricingCandidates(a.list, b.list));
 
   const selected = ranked[0]?.list;
   const item = selected?.packageItems[0];

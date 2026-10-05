@@ -6,6 +6,7 @@ import { buildDiagnosticReportSnapshot } from "@/lib/report-snapshot";
 import { resolveAnalyzerQcGate } from "@/lib/qc-gate";
 import { queueReportIntegrations } from "@/lib/integration-outbox";
 import { resolveEffectiveReportTemplate } from "@/lib/report-template";
+import { releaseEligibility } from "@/lib/clinical-safety";
 
 export async function POST(_: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await requirePermission("results.release");
@@ -26,10 +27,6 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
   if (!canAccessBranch(session, result.performingBranchId)) {
     return NextResponse.json({ error: "branch_forbidden" }, { status: 403 });
   }
-  if (result.status !== "VERIFIED") {
-    return NextResponse.json({ error: "result_not_releasable", status: result.status }, { status: 409 });
-  }
-
   const qcGate = result.source === "ANALYZER" && result.analyzerId
     ? await resolveAnalyzerQcGate(prisma, {
         analyzerId: result.analyzerId,
@@ -41,21 +38,29 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
       })
     : null;
 
-  if (qcGate?.blocking) {
-    return NextResponse.json({
-      error: "qc_release_blocked",
-      qcStatus: qcGate.status,
-      reasons: qcGate.reasons,
-    }, { status: 409 });
-  }
-
   const criticalValues = result.values.filter((value) => value.isCritical);
   const criticalEvent = result.criticalEvents[0] || null;
-  if (criticalValues.length > 0 && criticalEvent?.status !== "ACKNOWLEDGED") {
-    return NextResponse.json({
-      error: "critical_acknowledgement_required",
-      criticalCount: criticalValues.length,
-    }, { status: 409 });
+  const eligibility = releaseEligibility({
+    resultStatus: result.status,
+    qcBlocking: Boolean(qcGate?.blocking),
+    criticalCount: criticalValues.length,
+    criticalEventStatus: criticalEvent?.status || null,
+  });
+  if (!eligibility.allowed) {
+    if (eligibility.error === "qc_release_blocked") {
+      return NextResponse.json({
+        error: eligibility.error,
+        qcStatus: qcGate?.status || "BLOCK",
+        reasons: qcGate?.reasons || [],
+      }, { status: 409 });
+    }
+    if (eligibility.error === "critical_acknowledgement_required") {
+      return NextResponse.json({
+        error: eligibility.error,
+        criticalCount: criticalValues.length,
+      }, { status: 409 });
+    }
+    return NextResponse.json({ error: eligibility.error, status: result.status }, { status: 409 });
   }
 
   const releasedAt = new Date();

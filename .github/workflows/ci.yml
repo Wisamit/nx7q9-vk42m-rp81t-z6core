@@ -37,5 +37,6 @@ jobs:
       - run: npm install
       - run: npx prisma migrate deploy
       - run: npx prisma generate
+      - run: npm run test:safety
       - run: npx tsc --noEmit
       - run: npm run lint

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { amendmentEligibility } from "@/lib/clinical-safety";
 
 function text(value: unknown, max = 1000) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -27,16 +28,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!canAccessBranch(session, original.performingBranchId)) {
     return NextResponse.json({ error: "branch_forbidden" }, { status: 403 });
   }
-  if (original.status !== "RELEASED") {
-    return NextResponse.json({ error: "only_released_results_can_be_amended", status: original.status }, { status: 409 });
-  }
-  if (original.microbiologySnapshot) {
-    return NextResponse.json({
-      error: "microbiology_requires_dedicated_amendment_workflow",
-      resultId: original.id,
-    }, { status: 409 });
-  }
-
   const newer = await prisma.laboratoryResult.findFirst({
     where: {
       orderItemId: original.orderItemId,
@@ -45,13 +36,24 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     },
     orderBy: { version: "desc" },
   });
-  if (newer) {
-    return NextResponse.json({
-      error: "newer_result_version_already_exists",
-      resultId: newer.id,
-      version: newer.version,
-      status: newer.status,
-    }, { status: 409 });
+  const eligibility = amendmentEligibility({
+    resultStatus: original.status,
+    hasMicrobiologySnapshot: Boolean(original.microbiologySnapshot),
+    newerResultExists: Boolean(newer),
+  });
+  if (!eligibility.allowed) {
+    if (eligibility.error === "microbiology_requires_dedicated_amendment_workflow") {
+      return NextResponse.json({ error: eligibility.error, resultId: original.id }, { status: 409 });
+    }
+    if (eligibility.error === "newer_result_version_already_exists" && newer) {
+      return NextResponse.json({
+        error: eligibility.error,
+        resultId: newer.id,
+        version: newer.version,
+        status: newer.status,
+      }, { status: 409 });
+    }
+    return NextResponse.json({ error: eligibility.error, status: original.status }, { status: 409 });
   }
 
   const amended = await prisma.$transaction(async (tx) => {
