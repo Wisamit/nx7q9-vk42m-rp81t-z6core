@@ -10,6 +10,7 @@ CREATE TABLE `portal_accounts` (
   `phone` VARCHAR(50) NULL,
   `normalized_phone` VARCHAR(50) NULL,
   `password_hash` VARCHAR(255) NULL,
+  `must_change_password` BOOLEAN NOT NULL DEFAULT true,
   `preferred_locale` VARCHAR(10) NOT NULL DEFAULT 'en',
   `status` ENUM('INVITED','ACTIVE','LOCKED','DISABLED') NOT NULL DEFAULT 'INVITED',
   `contact_verified_at` DATETIME(3) NULL,
