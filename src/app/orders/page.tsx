@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { OrderCreateForm } from "@/components/order-create-form";
+import { SystemIcon } from "@/components/system-icon";
 
 export const dynamic = "force-dynamic";
 
@@ -102,13 +103,13 @@ export default async function OrdersPage() {
     <header className="page-header">
       <div>
         <p className="eyebrow">Order Entry</p>
-        <h1>Orders</h1>
+        <h1 className="page-title-with-icon"><SystemIcon name="orders" size={25} />Orders</h1>
         <p className="muted">Register laboratory orders with branch, patient, referral source and effective-dated price snapshots.</p>
       </div>
       <div className="header-actions">
-        <Link className="secondary-link" href="/pricing">Pricing</Link>
-        <Link className="secondary-link" href="/billing">Billing</Link>
-        <Link className="secondary-link" href="/dashboard">Back to Dashboard</Link>
+        <Link className="secondary-link" href="/pricing"><SystemIcon name="pricing" size={15} />Pricing</Link>
+        <Link className="secondary-link" href="/billing"><SystemIcon name="billing" size={15} />Billing</Link>
+        <Link className="secondary-link" href="/dashboard"><SystemIcon name="dashboard" size={15} />Back to Dashboard</Link>
       </div>
     </header>
 
@@ -120,7 +121,7 @@ export default async function OrdersPage() {
     </section>
 
     <section className="detail-card workflow-entry-card">
-      <div className="section-title-row"><div><p className="eyebrow">Reception workflow</p><h2>New Order</h2></div><span className="keyboard-hint">Search patient → select tests → register</span></div>
+      <div className="section-title-row"><div><p className="eyebrow">Reception workflow</p><h2 className="section-heading-icon"><SystemIcon name="orders" size={18} />New Order</h2></div><span className="keyboard-hint">Search patient → select tests → register</span></div>
       <OrderCreateForm
         patients={patients}
         tests={tests.map(test => ({
