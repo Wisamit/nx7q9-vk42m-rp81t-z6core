@@ -34,6 +34,15 @@ export default async function BillingPage() {
   ]);
 
   const openInvoices = invoices.filter(invoice => invoice.status === "ISSUED" || invoice.status === "PARTIALLY_PAID");
+  const totals = new Map<string, { invoiced: number; paid: number; balance: number }>();
+  for (const invoice of invoices) {
+    if (invoice.status === "VOID") continue;
+    const row = totals.get(invoice.currency) || { invoiced: 0, paid: 0, balance: 0 };
+    row.invoiced += invoice.total.toNumber();
+    row.paid += invoice.paidAmount.toNumber();
+    row.balance += invoice.balanceAmount.toNumber();
+    totals.set(invoice.currency, row);
+  }
 
   return <main className="catalog-shell">
     <header className="page-header">
@@ -48,6 +57,17 @@ export default async function BillingPage() {
         <Link className="secondary-link" href="/dashboard">Back to Dashboard</Link>
       </div>
     </header>
+
+    <section className="finance-kpi-grid">
+      {[...totals.entries()].map(([currency, row]) => <article key={currency}>
+        <div><span>{currency}</span><small>Current invoice set</small></div>
+        <dl>
+          <div><dt>Invoiced</dt><dd>{row.invoiced.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</dd></div>
+          <div><dt>Paid</dt><dd>{row.paid.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</dd></div>
+          <div><dt>Outstanding</dt><dd className={row.balance > 0 ? "finance-due" : ""}>{row.balance.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</dd></div>
+        </dl>
+      </article>)}
+    </section>
 
     <section className="detail-grid">
       <article className="detail-card">
@@ -86,7 +106,7 @@ export default async function BillingPage() {
                 <td>{invoice.total.toString()} {invoice.currency}</td>
                 <td>{invoice.paidAmount.toString()} {invoice.currency}</td>
                 <td>{invoice.balanceAmount.toString()} {invoice.currency}</td>
-                <td>{invoice.status}</td>
+                <td><span className={"status-badge status-" + invoice.status.toLowerCase().replaceAll("_","-")}>{invoice.status}</span></td>
               </tr>)
             }
           </tbody>
@@ -108,7 +128,7 @@ export default async function BillingPage() {
                 <td>{payment.method}</td>
                 <td>{payment.reference || "—"}</td>
                 <td>{payment.cashier.displayNameEn}</td>
-                <td>{payment.status}</td>
+                <td><span className={"status-badge status-" + payment.status.toLowerCase().replaceAll("_","-")}>{payment.status}</span></td>
               </tr>)
             }
           </tbody>

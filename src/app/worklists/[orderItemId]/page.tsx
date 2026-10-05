@@ -126,7 +126,7 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
     );
 
   if (!readySpecimen || !readySpecimen.currentBranchId || !branchIds.includes(readySpecimen.currentBranchId)) {
-    return <main className="catalog-shell">
+    return <main className="catalog-shell result-workspace">
       <header className="page-header">
         <div><p className="eyebrow">Result Entry</p><h1>{item.testCodeSnapshot} — {item.testNameEnSnapshot}</h1></div>
         <Link className="secondary-link" href="/worklists">Back to Worklists</Link>
@@ -207,7 +207,15 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
       <Link className="secondary-link" href="/worklists">Back to Worklists</Link>
     </header>
 
-    <section className="detail-grid">
+    <section className="result-context-strip">
+      <div><span>Accession</span><strong>{item.order.accessionNumber}</strong></div>
+      <div><span>Patient</span><strong>{item.order.patient.patientNumber}</strong><small>{item.order.patient.fullNameEn}</small></div>
+      <div><span>Specimen</span><strong className="barcode-text">{readySpecimen.barcode}</strong><small>{readySpecimen.status}</small></div>
+      <div><span>Priority</span><strong className={"status-badge priority-" + item.order.priority.toLowerCase()}>{item.order.priority}</strong></div>
+      <div><span>Result</span><strong className={"status-badge status-" + (latestResult?.status || "DRAFT").toLowerCase().replaceAll("_","-")}>{latestResult?.status || "DRAFT"}</strong></div>
+    </section>
+
+    <section className="detail-grid result-context-cards">
       <article className="detail-card">
         <h2>Patient & Order</h2>
         <dl>
@@ -231,8 +239,8 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
       </article>
     </section>
 
-    <section className="detail-card detail-section">
-      <h2>Result Values</h2>
+    <section className="detail-card detail-section result-entry-surface">
+      <div className="section-title-row"><div><p className="eyebrow">Analytical workflow</p><h2>Result Values</h2></div><span className="keyboard-hint">Enter values → review flags → verify</span></div>
       <p className="muted">Reference intervals are matched by effective date, branch, method, sex and patient age when configured. The matched values are snapshotted with the result.</p>
       <ResultEntryForm
         orderItemId={item.id}
