@@ -11,7 +11,7 @@ export default async function DigitalServicesPage() {
   const branchIds = session.user.branchScopes.map(scope => scope.branchId);
   const now = new Date();
 
-  const [branches, patients, referrers, clients, users, portalAccounts, appointments, homeCollections, queueTickets] = await Promise.all([
+  const [branches, patients, referrers, clients, users, portalAccounts, corporateAccess, appointments, homeCollections, queueTickets] = await Promise.all([
     prisma.branch.findMany({
       where: { organizationId: session.user.organizationId, id: { in: branchIds }, status: "ACTIVE" },
       select: { id: true, code: true, nameEn: true },
@@ -50,6 +50,12 @@ export default async function DigitalServicesPage() {
       include: { patient: true, referrer: true, client: true },
       orderBy: { createdAt: "desc" },
       take: 250,
+    }),
+    prisma.corporatePortalPatientAccess.findMany({
+      where: { client: { organizationId: session.user.organizationId } },
+      include: { client: true, patient: true },
+      orderBy: { createdAt: "desc" },
+      take: 500,
     }),
     prisma.appointment.findMany({
       where: { organizationId: session.user.organizationId, branchId: { in: branchIds } },
@@ -118,6 +124,17 @@ export default async function DigitalServicesPage() {
         contact: item.email || item.phone || "—",
         status: item.status,
         mustChangePassword: item.mustChangePassword,
+      }))}
+      corporateAccess={corporateAccess.map(item => ({
+        id: item.id,
+        client: item.client.code + " — " + item.client.nameEn,
+        patient: item.patient.patientNumber + " — " + item.patient.fullNameEn,
+        employeeNumber: item.employeeNumber,
+        canBook: item.canBook,
+        canViewReports: item.canViewReports,
+        effectiveFrom: item.effectiveFrom.toISOString(),
+        effectiveTo: item.effectiveTo?.toISOString() || null,
+        status: item.status,
       }))}
       appointments={appointments.map(item => ({
         id: item.id,
