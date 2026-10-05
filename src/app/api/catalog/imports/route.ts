@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import type { Prisma } from "@/generated/prisma/client";
+import type { Prisma } from "../../../../../generated/prisma/client";
 
 type ImportEntity="TEST"|"PANEL"|"UNIT"|"CONTAINER"|"REFERENCE_INTERVAL";
 type InputRow={entityType:ImportEntity;legacyKey?:string;data:Prisma.InputJsonObject};
