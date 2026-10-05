@@ -217,9 +217,73 @@ export async function POST(request: Request) {
         calculationInputs: null,
       });
     }
+
+    const numericInputs: Record<string, Prisma.Decimal> = {};
+    for (const item of prepared) {
+      if (item.parsed.valueNumeric !== null) numericInputs[item.code.toUpperCase()] = item.parsed.valueNumeric;
+    }
+
+    for (const rule of orderItem.test.calculatedRules) {
+      const target = expected.find(component => component.componentId === rule.targetComponentId);
+      if (!target) continue;
+
+      const variables = formulaVariables(rule.expression);
+      if (variables.some(variable => numericInputs[variable] === undefined)) continue;
+
+      const calculationInputs = Object.fromEntries(
+        variables.map(variable => [variable, numericInputs[variable].toString()]),
+      );
+      const precision = rule.decimalPrecision ?? target.decimalPrecision ?? 4;
+      const calculated = evaluateFormula(rule.expression, numericInputs).toDecimalPlaces(precision);
+      const parsed = {
+        valueNumeric: calculated,
+        valueText: null,
+        valueBoolean: null,
+        valueDate: null,
+        displayValue: calculated.toFixed(precision),
+      };
+
+      const interval = await resolveReferenceInterval(prisma, {
+        componentId: rule.targetComponentId,
+        branchId: performingBranchId,
+        methodId: orderItem.test.methodId,
+        patientSex: orderItem.order.patient.sexAtBirth,
+        dateOfBirth: orderItem.order.patient.dateOfBirth,
+      });
+      const flag = numericFlag(calculated, interval);
+      const delta = await evaluateDelta(prisma, {
+        organizationId: session.user.organizationId,
+        patientId: orderItem.order.patientId,
+        testId: orderItem.testId,
+        componentId: rule.targetComponentId,
+        performingBranchId,
+        methodId: orderItem.test.methodId,
+        currentValue: calculated,
+      });
+
+      prepared.push({
+        ...target,
+        parsed,
+        interval,
+        flag,
+        delta,
+        isCalculated: true,
+        calculatedRuleId: rule.id,
+        calculationExpression: rule.expression,
+        calculationInputs,
+      });
+    }
   } catch (error) {
     if (error instanceof Error && error.message.startsWith("INVALID_")) {
       return NextResponse.json({ error: error.message.toLowerCase() }, { status: 400 });
+    }
+    if (error instanceof Error && (
+      error.message.startsWith("FORMULA_") ||
+      error.message.startsWith("MISSING_FORMULA_") ||
+      error.message.startsWith("UNEXPECTED_FORMULA_") ||
+      error.message.startsWith("TRAILING_FORMULA_")
+    )) {
+      return NextResponse.json({ error: "calculated_result_failed", detail: error.message }, { status: 409 });
     }
     throw error;
   }
