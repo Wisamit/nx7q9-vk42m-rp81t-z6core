@@ -1,0 +1,297 @@
+import { NextResponse } from "next/server";
+import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
+import { prisma } from "@/lib/db";
+
+function text(value: unknown, max = 500) {
+  return typeof value === "string" ? value.trim().slice(0, max) : "";
+}
+
+export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const body = await request.json().catch(() => null) as {
+    action?: "COLLECT" | "RECEIVE" | "REJECT";
+    branchId?: string;
+    volume?: string | number;
+    volumeUnit?: string;
+    notes?: string;
+    rejectionReasonCode?: string;
+    rejectionReasonText?: string;
+  } | null;
+
+  if (!body?.action) return NextResponse.json({ error: "invalid_action" }, { status: 400 });
+
+  const permission =
+    body.action === "COLLECT" ? "specimens.collect" :
+    body.action === "RECEIVE" ? "specimens.receive" :
+    "specimens.reject";
+
+  const session = await requirePermission(permission);
+  const ctx = await requestContext();
+  const branchId = text(body.branchId, 36) || session.activeBranchId;
+  if (!branchId || !canAccessBranch(session, branchId)) {
+    return NextResponse.json({ error: "branch_forbidden" }, { status: 403 });
+  }
+
+  const specimen = await prisma.specimen.findFirst({
+    where: { id, organizationId: session.user.organizationId },
+    include: {
+      order: true,
+      orderItems: { include: { orderItem: true } },
+      specimenType: true,
+      container: true,
+    },
+  });
+  if (!specimen) return NextResponse.json({ error: "specimen_not_found" }, { status: 404 });
+
+  if (body.action === "COLLECT") {
+    if (specimen.status !== "PLANNED") return NextResponse.json({ error: "specimen_not_collectable", status: specimen.status }, { status: 409 });
+    if (!specimen.specimenTypeId) return NextResponse.json({ error: "specimen_type_required_before_collection" }, { status: 409 });
+
+    const volumeText = body.volume == null || body.volume === "" ? "" : String(body.volume);
+    const volume = volumeText ? Number(volumeText) : null;
+    if (volume !== null && (!Number.isFinite(volume) || volume < 0)) {
+      return NextResponse.json({ error: "invalid_volume" }, { status: 400 });
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      const updated = await tx.specimen.update({
+        where: { id: specimen.id },
+        data: {
+          status: "COLLECTED",
+          collectionBranchId: branchId,
+          currentBranchId: branchId,
+          collectedByUserId: session.user.id,
+          collectedAt: new Date(),
+          volume: volume === null ? null : volume.toFixed(3),
+          volumeUnit: text(body.volumeUnit, 30) || null,
+          notes: text(body.notes, 5000) || null,
+        },
+      });
+
+      const linkedIds = specimen.orderItems.map((link) => link.orderItemId);
+      if (linkedIds.length) {
+        await tx.orderItem.updateMany({
+          where: { id: { in: linkedIds }, status: "ORDERED" },
+          data: { status: "COLLECTED" },
+        });
+      }
+
+      const remaining = await tx.orderItem.count({ where: { orderId: specimen.orderId, status: "ORDERED" } });
+      if (remaining === 0 && specimen.order.status === "REGISTERED") {
+        await tx.labOrder.update({ where: { id: specimen.orderId }, data: { status: "COLLECTED" } });
+        await tx.orderStatusHistory.create({
+          data: {
+            orderId: specimen.orderId,
+            fromStatus: "REGISTERED",
+            toStatus: "COLLECTED",
+            reason: "All currently required specimen plans collected",
+            changedByUserId: session.user.id,
+          },
+        });
+      }
+
+      await tx.specimenEvent.create({
+        data: {
+          specimenId: specimen.id,
+          eventType: "COLLECTED",
+          branchId,
+          actorUserId: session.user.id,
+          fromStatus: "PLANNED",
+          toStatus: "COLLECTED",
+          details: {
+            volume: volume === null ? null : volume.toFixed(3),
+            volumeUnit: text(body.volumeUnit, 30) || null,
+            notes: text(body.notes, 5000) || null,
+          },
+        },
+      });
+
+      await tx.auditEvent.create({
+        data: {
+          organizationId: session.user.organizationId,
+          branchId,
+          actorUserId: session.user.id,
+          action: "SPECIMEN_COLLECTED",
+          entityType: "Specimen",
+          entityId: specimen.id,
+          newValues: { barcode: specimen.barcode, status: "COLLECTED", collectionBranchId: branchId },
+          ipAddress: ctx.ipAddress,
+          userAgent: ctx.userAgent,
+        },
+      });
+
+      return updated;
+    });
+
+    return NextResponse.json({ status: "ok", specimen: result });
+  }
+
+  if (body.action === "RECEIVE") {
+    if (!["COLLECTED", "IN_TRANSIT"].includes(specimen.status)) {
+      return NextResponse.json({ error: "specimen_not_receivable", status: specimen.status }, { status: 409 });
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      const updated = await tx.specimen.update({
+        where: { id: specimen.id },
+        data: {
+          status: "RECEIVED",
+          currentBranchId: branchId,
+          receivedByUserId: session.user.id,
+          receivedAt: new Date(),
+        },
+      });
+
+      await tx.specimenEvent.create({
+        data: {
+          specimenId: specimen.id,
+          eventType: "RECEIVED",
+          branchId,
+          actorUserId: session.user.id,
+          fromStatus: specimen.status,
+          toStatus: "RECEIVED",
+          details: { previousBranchId: specimen.currentBranchId },
+        },
+      });
+
+      await tx.auditEvent.create({
+        data: {
+          organizationId: session.user.organizationId,
+          branchId,
+          actorUserId: session.user.id,
+          action: "SPECIMEN_RECEIVED",
+          entityType: "Specimen",
+          entityId: specimen.id,
+          newValues: { barcode: specimen.barcode, status: "RECEIVED", currentBranchId: branchId },
+          ipAddress: ctx.ipAddress,
+          userAgent: ctx.userAgent,
+        },
+      });
+
+      return updated;
+    });
+
+    return NextResponse.json({ status: "ok", specimen: result });
+  }
+
+  if (!["COLLECTED", "RECEIVED"].includes(specimen.status)) {
+    return NextResponse.json({ error: "specimen_not_rejectable", status: specimen.status }, { status: 409 });
+  }
+
+  const reasonCode = text(body.rejectionReasonCode, 80);
+  const reasonText = text(body.rejectionReasonText, 500);
+  if (!reasonCode || !reasonText) return NextResponse.json({ error: "rejection_reason_required" }, { status: 400 });
+
+  const result = await prisma.$transaction(async (tx) => {
+    await tx.specimen.update({
+      where: { id: specimen.id },
+      data: {
+        status: "REJECTED",
+        currentBranchId: branchId,
+        rejectedByUserId: session.user.id,
+        rejectedAt: new Date(),
+        rejectionReasonCode: reasonCode,
+        rejectionReasonText: reasonText,
+      },
+    });
+
+    await tx.specimenEvent.create({
+      data: {
+        specimenId: specimen.id,
+        eventType: "REJECTED",
+        branchId,
+        actorUserId: session.user.id,
+        fromStatus: specimen.status,
+        toStatus: "REJECTED",
+        details: { reasonCode, reasonText },
+      },
+    });
+
+    const maxSequence = await tx.specimen.aggregate({
+      where: { orderId: specimen.orderId },
+      _max: { sequenceNumber: true },
+    });
+    const nextSequence = (maxSequence._max.sequenceNumber || 0) + 1;
+    const replacementBarcode = `${specimen.order.accessionNumber}-${String(nextSequence).padStart(2, "0")}`;
+
+    const replacement = await tx.specimen.create({
+      data: {
+        organizationId: specimen.organizationId,
+        orderId: specimen.orderId,
+        parentSpecimenId: specimen.id,
+        specimenTypeId: specimen.specimenTypeId,
+        containerId: specimen.containerId,
+        barcode: replacementBarcode,
+        sequenceNumber: nextSequence,
+        currentBranchId: specimen.order.orderingBranchId,
+        notes: `Recollection after rejection of ${specimen.barcode}`,
+      },
+    });
+
+    const linkedIds = specimen.orderItems.map((link) => link.orderItemId);
+    if (linkedIds.length) {
+      await tx.specimenOrderItem.createMany({
+        data: linkedIds.map((orderItemId) => ({ specimenId: replacement.id, orderItemId })),
+      });
+      await tx.orderItem.updateMany({
+        where: { id: { in: linkedIds }, status: { not: "CANCELLED" } },
+        data: { status: "ORDERED" },
+      });
+    }
+
+    await tx.specimenEvent.create({
+      data: {
+        specimenId: replacement.id,
+        eventType: "CREATED",
+        branchId: specimen.order.orderingBranchId,
+        actorUserId: session.user.id,
+        fromStatus: null,
+        toStatus: "PLANNED",
+        details: { recollectionForSpecimenId: specimen.id, rejectedBarcode: specimen.barcode },
+      },
+    });
+
+    if (specimen.order.status !== "CANCELLED" && specimen.order.status !== "REGISTERED") {
+      await tx.labOrder.update({ where: { id: specimen.orderId }, data: { status: "REGISTERED" } });
+      await tx.orderStatusHistory.create({
+        data: {
+          orderId: specimen.orderId,
+          fromStatus: specimen.order.status,
+          toStatus: "REGISTERED",
+          reason: `Recollection required: ${reasonCode}`,
+          changedByUserId: session.user.id,
+        },
+      });
+    }
+
+    await tx.auditEvent.create({
+      data: {
+        organizationId: session.user.organizationId,
+        branchId,
+        actorUserId: session.user.id,
+        action: "SPECIMEN_REJECTED",
+        entityType: "Specimen",
+        entityId: specimen.id,
+        oldValues: { status: specimen.status },
+        newValues: {
+          status: "REJECTED",
+          reasonCode,
+          reasonText,
+          replacementSpecimenId: replacement.id,
+          replacementBarcode,
+        },
+        ipAddress: ctx.ipAddress,
+        userAgent: ctx.userAgent,
+      },
+    });
+
+    return replacement;
+  }, { timeout: 30000 });
+
+  return NextResponse.json({
+    status: "ok",
+    rejectedSpecimenId: specimen.id,
+    replacementSpecimenId: result.id,
+    replacementBarcode: result.barcode,
+  });
+}
