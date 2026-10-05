@@ -92,7 +92,7 @@ export default async function OrdersPage() {
               orders.map(order => {
                 const invoice = order.invoices[0];
                 return <tr key={order.id}>
-                  <td><strong>{order.accessionNumber}</strong><br/><small>{order.orderedAt.toISOString().slice(0,16).replace("T"," ")}</small></td>
+                  <td><Link className="table-link" href={`/orders/${order.id}`}><strong>{order.accessionNumber}</strong></Link><br/><small>{order.orderedAt.toISOString().slice(0,16).replace("T"," ")}</small></td>
                   <td>{order.patient.patientNumber}<br/><small>{order.patient.fullNameEn}</small></td>
                   <td>{order.orderingBranch.code}</td>
                   <td>{order.priority}</td>
