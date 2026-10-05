@@ -69,6 +69,7 @@ These require explicit accounting policy review before implementation because in
 - **Implemented/Infrastructure** — staff MFA is implemented; production must configure a strong `APP_ENCRYPTION_KEY` before MFA enrollment is allowed.
 - **Implemented** — database-backed rate limiting protects staff and portal login across application instances.
 - **Implemented/Infrastructure** — application security headers and production HSTS are configured; TLS termination and secret-management policy must be verified in the hosting environment.
+- **Partial** — high-risk electronic approvals can record approver/audit context, but per-action re-authentication/MFA enforcement is not yet universal across all approval workflows.
 - **Acceptance** — security review, authorization/branch-isolation tests and recovery-code operational procedure remain required.
 
 ### Configuration and migration
