@@ -590,6 +590,7 @@ model Unit {
   tests        LabTest[]
   components   TestComponent[]
   importMappings CatalogImportMapping[]
+  resultValues LaboratoryResultValue[]
 
   @@unique([organizationId, code])
   @@map("units")
@@ -609,6 +610,7 @@ model Method {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   tests        LabTest[]
   referenceIntervals ReferenceInterval[]
+  results LaboratoryResult[]
 
   @@unique([organizationId, code])
   @@map("methods")
@@ -732,6 +734,7 @@ model ReferenceInterval {
   branch    Branch? @relation(fields: [branchId], references: [id], onDelete: Restrict)
   method    Method? @relation(fields: [methodId], references: [id], onDelete: Restrict)
   approvedBy User? @relation("ReferenceIntervalApprover", fields: [approvedByUserId], references: [id], onDelete: Restrict)
+  resultValues LaboratoryResultValue[]
 
   @@index([componentId, effectiveFrom, effectiveTo])
   @@index([branchId, status])
