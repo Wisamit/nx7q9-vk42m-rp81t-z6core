@@ -110,7 +110,15 @@ export default async function OrdersPage() {
       <div className="section-title-row"><div><p className="eyebrow">Reception workflow</p><h2>New Order</h2></div><span className="keyboard-hint">Search patient → select tests → register</span></div>
       <OrderCreateForm
         patients={patients}
-        tests={tests}
+        tests={tests.map(test => ({
+          ...test,
+          orderQuestions: test.orderQuestions.map(question => ({
+            ...question,
+            options: Array.isArray(question.options)
+              ? question.options.filter((item): item is string => typeof item === "string")
+              : [],
+          })),
+        }))}
         clients={clients}
         referrers={referrers}
         sources={sources}
