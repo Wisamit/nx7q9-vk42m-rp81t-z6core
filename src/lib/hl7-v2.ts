@@ -30,10 +30,12 @@ type ReportSnapshot = {
   results: Array<{
     testCode: string;
     testNameEn: string;
+    loincCode?: string | null;
     releasedAt: string | null;
     values: Array<{
       componentCode: string;
       componentNameEn: string;
+      loincCode?: string | null;
       displayValue: string;
       unit: string | null;
       flag: string;
@@ -55,14 +57,20 @@ export function buildHl7OruR01(snapshot: ReportSnapshot, controlId: string, issu
   let obx = 0;
   for (const result of snapshot.results) {
     obr++;
-    segments.push(`OBR|${obr}|${esc(snapshot.order.accessionNumber)}|${esc(snapshot.order.accessionNumber)}|${esc(result.testCode)}^${esc(result.testNameEn)}|||||||||||||||||||||${result.releasedAt ? dt(result.releasedAt) : dt(issuedAt)}`);
+    const obrCode = result.loincCode
+      ? `${esc(result.loincCode)}^${esc(result.testNameEn)}^LN`
+      : `${esc(result.testCode)}^${esc(result.testNameEn)}^99FAMILYLAB`;
+    segments.push(`OBR|${obr}|${esc(snapshot.order.accessionNumber)}|${esc(snapshot.order.accessionNumber)}|${obrCode}|||||||||||||||||||||${result.releasedAt ? dt(result.releasedAt) : dt(issuedAt)}`);
     for (const value of result.values) {
       obx++;
       const range = value.referenceTextEn || [value.referenceLow,value.referenceHigh].filter(Boolean).join("-");
       const abnormal = value.flag === "HIGH" || value.flag === "CRITICAL_HIGH" ? "H" :
         value.flag === "LOW" || value.flag === "CRITICAL_LOW" ? "L" :
         value.flag === "ABNORMAL" ? "A" : "N";
-      segments.push(`OBX|${obx}|ST|${esc(value.componentCode)}^${esc(value.componentNameEn)}||${esc(value.displayValue)}|${esc(value.unit)}|${esc(range)}|${abnormal}|||F`);
+      const obxCode = value.loincCode
+        ? `${esc(value.loincCode)}^${esc(value.componentNameEn)}^LN`
+        : `${esc(value.componentCode)}^${esc(value.componentNameEn)}^99FAMILYLAB`;
+      segments.push(`OBX|${obx}|ST|${obxCode}||${esc(value.displayValue)}|${esc(value.unit)}|${esc(range)}|${abnormal}|||F`);
     }
   }
   return segments.join("\r") + "\r";
