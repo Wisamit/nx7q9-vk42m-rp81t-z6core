@@ -123,6 +123,21 @@ enum SpecimenEventType {
   DISPOSED
 }
 
+enum TransferManifestStatus {
+  DRAFT
+  DISPATCHED
+  PARTIALLY_RECEIVED
+  RECEIVED
+  CANCELLED
+}
+
+enum TransferItemStatus {
+  PLANNED
+  DISPATCHED
+  RECEIVED
+  EXCEPTION
+}
+
 model Organization {
   id              String       @id @default(uuid()) @db.Char(36)
   code            String       @unique @db.VarChar(50)
@@ -159,6 +174,7 @@ model Organization {
   invoices Invoice[]
   payments Payment[]
   specimens Specimen[]
+  transferManifests SpecimenTransferManifest[]
 
   @@map("organizations")
 }
@@ -198,6 +214,8 @@ model Branch {
   collectedSpecimens Specimen[] @relation("SpecimenCollectionBranch")
   currentSpecimens Specimen[] @relation("SpecimenCurrentBranch")
   specimenEvents SpecimenEvent[]
+  outgoingTransferManifests SpecimenTransferManifest[] @relation("TransferSourceBranch")
+  incomingTransferManifests SpecimenTransferManifest[] @relation("TransferDestinationBranch")
 
   @@unique([organizationId, code])
   @@index([organizationId, status])
@@ -296,6 +314,10 @@ model User {
   receivedSpecimens Specimen[] @relation("SpecimenReceiver")
   rejectedSpecimens Specimen[] @relation("SpecimenRejector")
   specimenEvents SpecimenEvent[] @relation("SpecimenEventActor")
+  createdTransferManifests SpecimenTransferManifest[] @relation("TransferManifestCreator")
+  dispatchedTransferManifests SpecimenTransferManifest[] @relation("TransferManifestDispatcher")
+  receivedTransferManifests SpecimenTransferManifest[] @relation("TransferManifestReceiver")
+  receivedTransferItems SpecimenTransferItem[] @relation("TransferItemReceiver")
 
   @@unique([organizationId, username])
   @@unique([organizationId, email])
@@ -1194,6 +1216,7 @@ model Specimen {
   rejectedBy       User?         @relation("SpecimenRejector", fields: [rejectedByUserId], references: [id], onDelete: Restrict)
   orderItems       SpecimenOrderItem[]
   events           SpecimenEvent[]
+  transferItems    SpecimenTransferItem[]
 
   @@unique([organizationId, barcode])
   @@unique([orderId, sequenceNumber])
@@ -1235,4 +1258,58 @@ model SpecimenEvent {
   @@index([specimenId, occurredAt])
   @@index([branchId, occurredAt])
   @@map("specimen_events")
+}
+
+
+model SpecimenTransferManifest {
+  id                  String                 @id @default(uuid()) @db.Char(36)
+  organizationId      String                 @map("organization_id") @db.Char(36)
+  manifestNumber      String                 @map("manifest_number") @db.VarChar(60)
+  sourceBranchId      String                 @map("source_branch_id") @db.Char(36)
+  destinationBranchId String                 @map("destination_branch_id") @db.Char(36)
+  status              TransferManifestStatus @default(DRAFT)
+  transportMode       String?                @map("transport_mode") @db.VarChar(80)
+  courierName         String?                @map("courier_name") @db.VarChar(150)
+  packageCount        Int?                   @map("package_count")
+  notes               String?                @db.Text
+  createdByUserId     String                 @map("created_by_user_id") @db.Char(36)
+  dispatchedByUserId  String?                @map("dispatched_by_user_id") @db.Char(36)
+  dispatchedAt        DateTime?              @map("dispatched_at") @db.DateTime(3)
+  receivedByUserId    String?                @map("received_by_user_id") @db.Char(36)
+  receivedAt          DateTime?              @map("received_at") @db.DateTime(3)
+  createdAt           DateTime               @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt           DateTime               @updatedAt @map("updated_at") @db.DateTime(3)
+
+  organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  sourceBranch      Branch       @relation("TransferSourceBranch", fields: [sourceBranchId], references: [id], onDelete: Restrict)
+  destinationBranch Branch       @relation("TransferDestinationBranch", fields: [destinationBranchId], references: [id], onDelete: Restrict)
+  createdBy         User         @relation("TransferManifestCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  dispatchedBy      User?        @relation("TransferManifestDispatcher", fields: [dispatchedByUserId], references: [id], onDelete: Restrict)
+  receivedBy        User?        @relation("TransferManifestReceiver", fields: [receivedByUserId], references: [id], onDelete: Restrict)
+  items             SpecimenTransferItem[]
+
+  @@unique([organizationId, manifestNumber])
+  @@index([sourceBranchId, status, createdAt])
+  @@index([destinationBranchId, status, createdAt])
+  @@map("specimen_transfer_manifests")
+}
+
+model SpecimenTransferItem {
+  manifestId      String             @map("manifest_id") @db.Char(36)
+  specimenId      String             @map("specimen_id") @db.Char(36)
+  barcodeSnapshot String             @map("barcode_snapshot") @db.VarChar(80)
+  status          TransferItemStatus @default(PLANNED)
+  receivedByUserId String?           @map("received_by_user_id") @db.Char(36)
+  receivedAt      DateTime?          @map("received_at") @db.DateTime(3)
+  exceptionText   String?            @map("exception_text") @db.VarChar(500)
+  createdAt       DateTime           @default(now()) @map("created_at") @db.DateTime(3)
+
+  manifest   SpecimenTransferManifest @relation(fields: [manifestId], references: [id], onDelete: Restrict)
+  specimen   Specimen                 @relation(fields: [specimenId], references: [id], onDelete: Restrict)
+  receivedBy User?                    @relation("TransferItemReceiver", fields: [receivedByUserId], references: [id], onDelete: Restrict)
+
+  @@id([manifestId, specimenId])
+  @@index([specimenId, status])
+  @@index([receivedByUserId, receivedAt])
+  @@map("specimen_transfer_items")
 }
