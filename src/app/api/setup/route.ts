@@ -32,6 +32,8 @@ const FOUNDATION_PERMISSIONS = [
   ["specimens.collect", "specimens", "Collect and label specimens"],
   ["specimens.receive", "specimens", "Receive specimens into laboratory custody"],
   ["specimens.reject", "specimens", "Reject unsuitable specimens with reason"],
+  ["specimens.aliquot", "specimens", "Create and manage specimen aliquots"],
+  ["specimens.use", "specimens", "Record specimen and aliquot usage"],
   ["transfers.view", "specimens", "View inter-branch specimen manifests"],
   ["transfers.create", "specimens", "Create inter-branch specimen manifests"],
   ["transfers.dispatch", "specimens", "Dispatch specimen manifests"],
