@@ -67,6 +67,8 @@ export default async function ImportBatchPage({
     return acc;
   }, {} as Record<string, number>);
 
+  const safeMasterRemaining = groups.filter((row) => row.status === "VALID" && row.entityType !== "REFERENCE_INTERVAL").reduce((sum, row) => sum + row._count._all, 0);
+
   const issueSummary = issueRows.flatMap((row) => issueCodes(row.validationIssues)).reduce((acc, code) => {
     acc[code] = (acc[code] || 0) + 1;
     return acc;
@@ -125,7 +127,7 @@ export default async function ImportBatchPage({
           <Link className={status === "WARNING" ? "filter-chip active" : "filter-chip"} href={`/catalog/imports/${batch.id}?status=WARNING`}>Warnings ({counts.WARNING || 0})</Link>
           <Link className={status === "VALID" ? "filter-chip active" : "filter-chip"} href={`/catalog/imports/${batch.id}?status=VALID`}>Valid ({counts.VALID || 0})</Link>
           {batch.status === "DRAFT" && <RevalidateImportButton batchId={batch.id} />}
-          {batch.status === "VALIDATED" && <SafeImportButton batchId={batch.id} />}
+          {batch.status === "VALIDATED" && safeMasterRemaining > 0 && <SafeImportButton batchId={batch.id} />}
         </div>
       </div>
       <div className="table-wrap">
