@@ -1131,7 +1131,6 @@ model OrderItem {
   invoiceLines    InvoiceLine[]
   specimenLinks   SpecimenOrderItem[]
   results          LaboratoryResult[]
-  criticalEvents   CriticalResultEvent[]
 
   @@unique([orderId, testId])
   @@index([performedBranchId, status])
