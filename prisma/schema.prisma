@@ -42,6 +42,7 @@ model Organization {
   units Unit[]
   methods Method[]
   labTests LabTest[]
+  testPanels TestPanel[]
 
   @@map("organizations")
 }
