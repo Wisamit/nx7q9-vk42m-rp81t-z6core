@@ -81,7 +81,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
 
   const latestResult = microbiologyCase.orderItem.results[0] || null;
-  if (latestResult && (!linkedResult || latestResult.id !== linkedResult.id)) {
+  if (latestResult && (!linkedResult || latestResult.id !== linkedResult.id) && latestResult.status !== "CANCELLED") {
     return NextResponse.json({
       error: "order_item_already_has_separate_result_version",
       resultId: latestResult.id,
@@ -89,6 +89,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       status: latestResult.status,
     }, { status: 409 });
   }
+  const nextVersion = linkedResult?.version || ((latestResult?.version || 0) + 1);
 
   const snapshot = {
     schemaVersion: 1,
@@ -167,7 +168,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
             specimenId: microbiologyCase.specimenId,
             performingBranchId: microbiologyCase.performingBranchId,
             methodId: microbiologyCase.orderItem.test.methodId,
-            version: 1,
+            version: nextVersion,
             status: "ENTERED",
             source: "MANUAL",
             enteredByUserId: session.user.id,
