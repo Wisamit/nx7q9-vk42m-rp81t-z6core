@@ -1,3 +1,13 @@
-export default function Home() {
-  return <main className="shell"><section className="card"><span className="badge">Family Lab</span><h1>Laboratory Information System</h1><p>Deployment foundation is ready. Multi-branch LIS implementation starts from this baseline.</p><div className="status"><span />System bootstrap ready</div></section></main>;
+import { redirect } from "next/navigation";
+import { getCurrentSession } from "@/lib/auth";
+import { prisma } from "@/lib/db";
+
+export const dynamic = "force-dynamic";
+
+export default async function Home() {
+  const session = await getCurrentSession();
+  if (session) redirect("/dashboard");
+
+  const hasUsers = (await prisma.user.count()) > 0;
+  redirect(hasUsers ? "/login" : "/setup");
 }

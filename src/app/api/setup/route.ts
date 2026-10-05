@@ -1,0 +1,132 @@
+import { hash } from "bcryptjs";
+import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@/lib/db";
+
+const FOUNDATION_PERMISSIONS = [
+  ["organization.view", "organization", "View organization settings"],
+  ["organization.manage", "organization", "Manage organization settings"],
+  ["branches.view", "organization", "View branches"],
+  ["branches.manage", "organization", "Manage branches"],
+  ["users.view", "identity", "View users"],
+  ["users.manage", "identity", "Manage users"],
+  ["roles.view", "identity", "View roles and permissions"],
+  ["roles.manage", "identity", "Manage roles and permissions"],
+  ["audit.view", "audit", "View audit events"],
+  ["settings.manage", "organization", "Manage operational settings"],
+] as const;
+
+function text(value: unknown, max = 200) {
+  return typeof value === "string" ? value.trim().slice(0, max) : "";
+}
+
+export async function GET() {
+  const userCount = await prisma.user.count();
+  return NextResponse.json({ setupRequired: userCount === 0 });
+}
+
+export async function POST(request: NextRequest) {
+  const body = await request.json().catch(() => null);
+  if (!body) return NextResponse.json({ error: "invalid_request" }, { status: 400 });
+
+  const organizationNameEn = text(body.organizationNameEn);
+  const organizationNameAr = text(body.organizationNameAr);
+  const branchNameEn = text(body.branchNameEn);
+  const branchNameAr = text(body.branchNameAr);
+  const displayNameEn = text(body.displayNameEn);
+  const displayNameAr = text(body.displayNameAr);
+  const username = text(body.username, 100).toLowerCase();
+  const password = typeof body.password === "string" ? body.password : "";
+
+  if (!organizationNameEn || !branchNameEn || !displayNameEn || !username || password.length < 12) {
+    return NextResponse.json({ error: "missing_or_invalid_fields" }, { status: 400 });
+  }
+  if (!/^[a-z0-9._-]{3,100}$/.test(username)) {
+    return NextResponse.json({ error: "invalid_username" }, { status: 400 });
+  }
+
+  const passwordHash = await hash(password, 12);
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      if (await tx.user.count()) throw new Error("SETUP_ALREADY_COMPLETED");
+
+      const organization = await tx.organization.create({
+        data: {
+          code: "FAMILY_LAB",
+          nameEn: organizationNameEn,
+          nameAr: organizationNameAr || null,
+        },
+      });
+
+      const branch = await tx.branch.create({
+        data: {
+          organizationId: organization.id,
+          code: "MAIN",
+          nameEn: branchNameEn,
+          nameAr: branchNameAr || null,
+          isCentralLab: true,
+        },
+      });
+
+      await tx.permission.createMany({
+        data: FOUNDATION_PERMISSIONS.map(([code, module, description]) => ({ code, module, description })),
+        skipDuplicates: true,
+      });
+      const permissions = await tx.permission.findMany({
+        where: { code: { in: FOUNDATION_PERMISSIONS.map(([code]) => code) } },
+      });
+
+      const role = await tx.role.create({
+        data: {
+          organizationId: organization.id,
+          code: "SYSTEM_ADMIN",
+          nameEn: "System Administrator",
+          nameAr: "مدير النظام",
+          isSystem: true,
+          permissions: {
+            create: permissions.map((permission) => ({ permissionId: permission.id })),
+          },
+        },
+      });
+
+      const user = await tx.user.create({
+        data: {
+          organizationId: organization.id,
+          username,
+          passwordHash,
+          displayNameEn,
+          displayNameAr: displayNameAr || null,
+          preferredLocale: "ar",
+          status: "ACTIVE",
+          passwordChangedAt: new Date(),
+          roles: { create: { roleId: role.id } },
+          branchScopes: { create: { branchId: branch.id } },
+        },
+      });
+
+      await tx.auditEvent.create({
+        data: {
+          organizationId: organization.id,
+          branchId: branch.id,
+          actorUserId: user.id,
+          action: "SYSTEM_BOOTSTRAPPED",
+          entityType: "Organization",
+          entityId: organization.id,
+          newValues: {
+            organizationCode: organization.code,
+            branchCode: branch.code,
+            adminUsername: username,
+          },
+          reason: "Initial production setup",
+        },
+      });
+    }, { isolationLevel: "Serializable" });
+
+    return NextResponse.json({ status: "ok" }, { status: 201 });
+  } catch (error) {
+    if (error instanceof Error && error.message === "SETUP_ALREADY_COMPLETED") {
+      return NextResponse.json({ error: "setup_already_completed" }, { status: 409 });
+    }
+    return NextResponse.json({ error: "setup_failed" }, { status: 500 });
+  }
+}

@@ -65,6 +65,7 @@ model Branch {
   workstations Workstation[]
   userScopes   UserBranchScope[]
   auditEvents  AuditEvent[]
+  activeSessions UserSession[] @relation("ActiveBranchSessions")
 
   @@unique([organizationId, code])
   @@index([organizationId, status])
@@ -139,6 +140,9 @@ model User {
   preferredLocale String    @default("en") @map("preferred_locale") @db.VarChar(10)
   status         UserStatus @default(INVITED)
   lastLoginAt    DateTime?  @map("last_login_at") @db.DateTime(3)
+  failedLoginAttempts Int    @default(0) @map("failed_login_attempts")
+  lockedUntil     DateTime?  @map("locked_until") @db.DateTime(3)
+  passwordChangedAt DateTime? @map("password_changed_at") @db.DateTime(3)
   createdAt      DateTime   @default(now()) @map("created_at") @db.DateTime(3)
   updatedAt      DateTime   @updatedAt @map("updated_at") @db.DateTime(3)
   deactivatedAt  DateTime?  @map("deactivated_at") @db.DateTime(3)
@@ -148,6 +152,7 @@ model User {
   branchScopes     UserBranchScope[]
   departmentScopes UserDepartmentScope[]
   auditEvents      AuditEvent[]          @relation("AuditActor")
+  sessions         UserSession[]
 
   @@unique([organizationId, username])
   @@unique([organizationId, email])
@@ -267,4 +272,24 @@ model AuditEvent {
   @@index([actorUserId, occurredAt])
   @@index([entityType, entityId, occurredAt])
   @@map("audit_events")
+}
+
+model UserSession {
+  id             String   @id @default(uuid()) @db.Char(36)
+  userId         String   @map("user_id") @db.Char(36)
+  activeBranchId String?  @map("active_branch_id") @db.Char(36)
+  tokenHash      String   @unique @map("token_hash") @db.Char(64)
+  expiresAt      DateTime @map("expires_at") @db.DateTime(3)
+  revokedAt      DateTime? @map("revoked_at") @db.DateTime(3)
+  lastSeenAt     DateTime @default(now()) @map("last_seen_at") @db.DateTime(3)
+  ipAddress      String?  @map("ip_address") @db.VarChar(45)
+  userAgent      String?  @map("user_agent") @db.VarChar(500)
+  createdAt      DateTime @default(now()) @map("created_at") @db.DateTime(3)
+
+  user         User    @relation(fields: [userId], references: [id], onDelete: Restrict)
+  activeBranch Branch? @relation("ActiveBranchSessions", fields: [activeBranchId], references: [id], onDelete: Restrict)
+
+  @@index([userId, expiresAt])
+  @@index([activeBranchId])
+  @@map("user_sessions")
 }
