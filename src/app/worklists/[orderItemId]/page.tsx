@@ -7,6 +7,7 @@ import { ResultEntryForm } from "@/components/result-entry-form";
 import { ResultWorkflowActions } from "@/components/result-workflow-actions";
 import { ReflexReviewPanel } from "@/components/reflex-review-panel";
 import { ValidationHoldPanel } from "@/components/validation-hold-panel";
+import { ResultRepeatPanel } from "@/components/result-repeat-panel";
 
 export const dynamic = "force-dynamic";
 
@@ -95,6 +96,10 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
               reviewedBy: true,
             },
             orderBy: { createdAt: "asc" },
+          },
+          repeatEvents: {
+            include: { requestedBy: true },
+            orderBy: { requestedAt: "desc" },
           },
           specimen: { include: { currentBranch: true, specimenType: true, container: true } },
         },
@@ -257,6 +262,17 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
         canVerify={permissions.has("results.verify")}
         commentTemplates={commentTemplates}
       />
+
+      {latestResult && <ResultRepeatPanel
+        resultId={latestResult.id}
+        events={latestResult.repeatEvents.map(event => ({
+          id: event.id,
+          type: event.type,
+          reason: event.reason,
+          requestedAt: event.requestedAt.toISOString(),
+          requestedBy: event.requestedBy.displayNameEn,
+        }))}
+      />}
 
       {latestResult && <ReflexReviewPanel
         resultId={latestResult.id}
