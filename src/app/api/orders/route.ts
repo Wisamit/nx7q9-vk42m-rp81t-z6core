@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { NextResponse } from "next/server";
-import { Prisma } from "../../../../../generated/prisma/client";
+import { Prisma } from "../../../../generated/prisma/client";
 import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { resolveTestPrice } from "@/lib/pricing";
