@@ -1,8 +1,8 @@
 # Family Lab LIS — Pilot & Acceptance Execution
 
 Date: 2026-10-05  
-Baseline: `main` @ `47e1346e1302fd707d1b42a1a69b419a8e19c44d`  
-PR baseline: #65 merged  
+Baseline: `main` @ `2425f8a7d1d1784a98e3cb2ed55a6727e639e2b4`  
+PR baseline: #66 merged  
 Purpose: move from technical production readiness to controlled pilot acceptance without expanding functional scope.
 
 ## Acceptance status vocabulary
@@ -17,15 +17,15 @@ Purpose: move from technical production readiness to controlled pilot acceptance
 
 | ID | Acceptance item | Status | Evidence |
 |---|---|---|---|
-| BASE-01 | `main` equals production-readiness merge commit | PASS-AUTO | Git compare: no commits ahead/behind |
-| BASE-02 | PR #65 merged | PASS-AUTO | PR #65 merged into `main` |
+| BASE-01 | `main` equals pilot-acceptance baseline merge commit | PASS-AUTO | Git history: `2425f8a7d1d1784a98e3cb2ed55a6727e639e2b4` is current baseline |
+| BASE-02 | PR #66 merged | PASS-AUTO | Pilot acceptance baseline merged into `main` |
 | BASE-03 | MariaDB migration chain | PASS-AUTO | CI run #210 completed successfully |
 | BASE-04 | Prisma generation | PASS-AUTO | CI run #210 completed successfully |
 | BASE-05 | Safety-critical tests | PASS-AUTO | CI run #210 completed successfully |
 | BASE-06 | TypeScript | PASS-AUTO | CI run #210 completed successfully |
 | BASE-07 | ESLint | PASS-AUTO | CI run #210 completed successfully |
-| BASE-08 | Full Next.js production build | PENDING-RUNTIME | Added as a CI release gate in this pilot branch |
-| BASE-09 | `prisma migrate status` after deploy | PENDING-RUNTIME | Added as a CI release gate in this pilot branch |
+| BASE-08 | Full Next.js production build | PASS-AUTO | CI run #212 completed successfully with `npx next build` |
+| BASE-09 | `prisma migrate status` after deploy | PASS-AUTO | CI run #212 completed successfully |
 
 ## Pilot scenarios
 
@@ -219,11 +219,22 @@ Warnings must remain distinguishable from blocks.
 
 **Current status:** PASS-CODE / PENDING-RUNTIME
 
-## Environment blocker recorded during this execution
+## Pilot runtime environment
 
-The connected Vercel account currently returns **0 teams and 0 projects**, so no live Vercel deployment can be used as acceptance evidence from this session.
+The controlled pilot runtime is the existing Hostinger Business Web Hosting deployment:
 
-This is not treated as a product defect. GitHub/CI remains the authoritative automated gate until a reachable pilot deployment is available.
+- **Application URL:** `https://familylab.wisamai.com`
+- **Primary pilot path:** `https://familylab.wisamai.com/dashboard`
+- **Source repository:** `Wisamit/family-lab-lis`
+- **Production branch:** `main`
+- **Runtime stack:** Next.js / Node.js with Hostinger MySQL/MariaDB
+- **Data state:** no official laboratory production data has been entered yet, so representative pilot records may be created for acceptance testing.
+
+Vercel is **not** part of the target deployment path and must not be treated as a pilot prerequisite.
+
+### Current execution limitation
+
+The assistant's current tool environment cannot directly reach the Hostinger application URL or hPanel, so runtime evidence that requires browser interaction must be executed on the Hostinger deployment and recorded against PA-001 through PA-016. GitHub/CI remains the authoritative automated gate for source, migration, build, lint, type and safety checks.
 
 ## Production approval rule
 
