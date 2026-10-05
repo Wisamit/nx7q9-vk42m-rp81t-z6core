@@ -3971,6 +3971,8 @@ model QueueTicket {
   patientId        String            @map("patient_id") @db.Char(36)
   appointmentId    String?           @unique @map("appointment_id") @db.Char(36)
   ticketNumber     String            @map("ticket_number") @db.VarChar(40)
+  queueDate        DateTime          @map("queue_date") @db.Date
+  sequence         Int
   stage            QueueStage
   status           QueueTicketStatus @default(WAITING)
   priority         Int               @default(0)
@@ -3991,7 +3993,8 @@ model QueueTicket {
   issuedBy User? @relation("QueueTicketIssuer", fields: [issuedByUserId], references: [id], onDelete: Restrict)
   calledBy User? @relation("QueueTicketCaller", fields: [calledByUserId], references: [id], onDelete: Restrict)
 
-  @@index([branchId, stage, status, priority, issuedAt])
+  @@unique([branchId, stage, queueDate, sequence])
+  @@index([branchId, stage, queueDate, status, priority, issuedAt])
   @@index([patientId, issuedAt])
   @@map("queue_tickets")
 }
