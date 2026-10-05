@@ -75,6 +75,25 @@ export async function POST(request: Request) {
             actorUserId: session.user.id,
           },
         });
+        await tx.auditEvent.create({
+          data: {
+            organizationId: session.user.organizationId,
+            branchId,
+            actorUserId: session.user.id,
+            action: "INVENTORY_STOCK_ADJUSTED",
+            entityType: "InventoryItem",
+            entityId: itemId,
+            newValues: {
+              lotId,
+              movementType,
+              quantity: quantity.toString(),
+              balanceAfter: nextBranch.quantityOnHand.toString(),
+            },
+            reason,
+            ipAddress: ctx.ipAddress,
+            userAgent: ctx.userAgent,
+          },
+        });
         return { movement, balance: nextBranch.quantityOnHand };
       }
 
@@ -99,28 +118,27 @@ export async function POST(request: Request) {
           actorUserId: session.user.id,
         },
       });
+      await tx.auditEvent.create({
+        data: {
+          organizationId: session.user.organizationId,
+          branchId,
+          actorUserId: session.user.id,
+          action: "INVENTORY_STOCK_ADJUSTED",
+          entityType: "InventoryItem",
+          entityId: itemId,
+          newValues: {
+            lotId,
+            movementType,
+            quantity: quantity.toString(),
+            balanceAfter: nextBalance.toString(),
+          },
+          reason,
+          ipAddress: ctx.ipAddress,
+          userAgent: ctx.userAgent,
+        },
+      });
       return { movement, balance: nextBalance };
     }, { isolationLevel: "Serializable", timeout: 30000 });
-
-    await prisma.auditEvent.create({
-      data: {
-        organizationId: session.user.organizationId,
-        branchId,
-        actorUserId: session.user.id,
-        action: "INVENTORY_STOCK_ADJUSTED",
-        entityType: "InventoryItem",
-        entityId: itemId,
-        newValues: {
-          lotId,
-          movementType,
-          quantity: quantity.toString(),
-          balanceAfter: result.balance.toString(),
-        },
-        reason,
-        ipAddress: ctx.ipAddress,
-        userAgent: ctx.userAgent,
-      },
-    });
 
     return NextResponse.json({ status: "ok", movement: result.movement, balanceAfter: result.balance.toString() });
   } catch (error) {
