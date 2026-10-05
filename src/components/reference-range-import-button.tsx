@@ -46,5 +46,9 @@ export function ReferenceRangeImportButton({ batchId }: { batchId: string }) {
     </div>
     {preview.safe > 0 && <button className="primary-button" disabled={busy} onClick={run}>{busy ? "Importing ranges…" : "Import Safe Reference Ranges"}</button>}
     {message && <span className="range-import-message">{message}</span>}
+    {preview.review > 0 && Object.keys(preview.reasons || {}).length > 0 && <div className="range-review-reasons">
+      <strong>Review reasons</strong>
+      {Object.entries(preview.reasons).sort((a,b) => b[1]-a[1]).map(([reason,count]) => <div key={reason}><span>{reason}</span><strong>{count}</strong></div>)}
+    </div>}
   </div>;
 }
