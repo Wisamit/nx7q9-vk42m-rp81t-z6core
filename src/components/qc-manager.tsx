@@ -50,7 +50,6 @@ export function QcManager({
   const [message, setMessage] = useState("");
   const [targetTestId, setTargetTestId] = useState("");
   const [runAnalyzerId, setRunAnalyzerId] = useState("");
-  const [runLotId, setRunLotId] = useState("");
 
   const selectedTest = useMemo(
     () => tests.find(test => test.id === targetTestId) || null,
@@ -124,9 +123,7 @@ export function QcManager({
   async function createRun(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
-    const runTargets = targets.filter(target =>
-      target.analyzerId === runAnalyzerId && target.qcLotId === runLotId
-    );
+    const runTargets = targets.filter(target => target.analyzerId === runAnalyzerId);
     const results = runTargets
       .map(target => ({
         targetId: target.id,
@@ -134,20 +131,18 @@ export function QcManager({
       }))
       .filter(item => item.observedValue !== "");
 
-    if (!runAnalyzerId || !runLotId || results.length === 0) {
-      setMessage("Select an analyzer and QC lot, then enter at least one observed value.");
+    if (!runAnalyzerId || results.length === 0) {
+      setMessage("Select an analyzer, then enter at least one observed QC value.");
       return;
     }
 
     await submit("/api/qc/runs", {
       analyzerId: runAnalyzerId,
-      qcLotId: runLotId,
       runAt: form.get("runAt"),
       notes: form.get("notes"),
       results,
     }, "run", "QC run evaluated.", event.currentTarget);
     setRunAnalyzerId("");
-    setRunLotId("");
   }
 
   async function resolveViolation(violationId: string) {
@@ -235,29 +230,20 @@ export function QcManager({
       <h2>Enter QC Run</h2>
       <p className="muted">Enter multiple control levels in the same run when available so multi-level rules such as R:4s are evaluated within the same QC event.</p>
       <form className="catalog-form" onSubmit={createRun}>
-        <label>Analyzer<select required value={runAnalyzerId} onChange={event => {
-          setRunAnalyzerId(event.target.value);
-          setRunLotId("");
-        }}>
+        <label>Analyzer<select required value={runAnalyzerId} onChange={event => setRunAnalyzerId(event.target.value)}>
           <option value="">Select analyzer…</option>
           {analyzers.map(item => <option key={item.id} value={item.id}>{item.code} — {item.name}</option>)}
         </select></label>
-        <label>QC lot<select required value={runLotId} onChange={event => setRunLotId(event.target.value)} disabled={!runAnalyzerId}>
-          <option value="">Select lot…</option>
-          {lots.filter(lot => targets.some(target => target.analyzerId === runAnalyzerId && target.qcLotId === lot.id)).map(lot =>
-            <option key={lot.id} value={lot.id}>{lot.label}</option>
-          )}
-        </select></label>
         <label>Run at<input name="runAt" type="datetime-local" /></label>
         <div className="form-span result-field-list">
-          {targets.filter(target => target.analyzerId === runAnalyzerId && target.qcLotId === runLotId).map(target =>
+          {targets.filter(target => target.analyzerId === runAnalyzerId).map(target =>
             <label className="result-field-row" key={target.id}>
               <span>{target.label}</span>
               <input name={"observed-" + target.id} inputMode="decimal" placeholder="Observed value" />
             </label>
           )}
-          {runAnalyzerId && runLotId && !targets.some(target => target.analyzerId === runAnalyzerId && target.qcLotId === runLotId) &&
-            <p className="muted">No active QC targets for this analyzer and lot.</p>}
+          {runAnalyzerId && !targets.some(target => target.analyzerId === runAnalyzerId) &&
+            <p className="muted">No active QC targets for this analyzer.</p>}
         </div>
         <label className="form-span">Notes<textarea name="notes" rows={2} /></label>
         <button className="primary-button form-span" disabled={busy !== ""}>{busy === "run" ? "Evaluating…" : "Save & Evaluate QC"}</button>
