@@ -439,6 +439,7 @@ export async function POST(request: Request) {
       });
 
       for (const entry of createdItems) {
+        if (entry.packageId) continue;
         await tx.invoiceLine.create({
           data: {
             invoiceId: invoice.id,
@@ -451,6 +452,23 @@ export async function POST(request: Request) {
             discountAmount: new Prisma.Decimal(0),
             taxAmount: new Prisma.Decimal(0),
             lineTotal: entry.unitPrice,
+          },
+        });
+      }
+
+      for (const orderPackage of createdOrderPackages.values()) {
+        await tx.invoiceLine.create({
+          data: {
+            invoiceId: invoice.id,
+            orderPackageId: orderPackage.id,
+            description: orderPackage.package.nameEn,
+            testCodeSnapshot: orderPackage.package.code,
+            testNameEnSnapshot: orderPackage.package.nameEn,
+            quantity: new Prisma.Decimal(1),
+            unitPrice: orderPackage.unitPrice,
+            discountAmount: new Prisma.Decimal(0),
+            taxAmount: new Prisma.Decimal(0),
+            lineTotal: orderPackage.unitPrice,
           },
         });
       }
@@ -472,7 +490,9 @@ export async function POST(request: Request) {
             referrerId,
             clientId: effectiveClientId,
             priority,
-            testIds,
+            directTestIds,
+            packageIds,
+            expandedTestIds: allTestIds,
             answeredOrderQuestionCodes: questions
               .filter(entry => preparedAnswers.has(entry.question.id))
               .map(entry => entry.question.code),
