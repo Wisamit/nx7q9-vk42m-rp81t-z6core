@@ -146,6 +146,8 @@ export async function POST(request: NextRequest) {
           code: "FAMILY_LAB",
           nameEn: organizationNameEn,
           nameAr: organizationNameAr || null,
+          defaultCurrency: "EGP",
+          defaultTimezone: "Africa/Cairo",
         },
       });
 
