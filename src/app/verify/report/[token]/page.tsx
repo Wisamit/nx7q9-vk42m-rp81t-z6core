@@ -1,3 +1,4 @@
+import Image from "next/image";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { OrganizationThemeOverride } from "@/components/organization-theme-override";
@@ -31,6 +32,7 @@ export default async function VerifyReportPage({ params }: { params: Promise<{ t
 
   return <><OrganizationThemeOverride settings={settings} /><main className="verify-report-shell">
     <section className="verify-report-card">
+      {settings.logoDataUrl && <Image className="public-brand-logo" src={settings.logoDataUrl} alt={settings.systemNameEn} width={180} height={80} unoptimized priority />}
       <div className="verification-badge">VALID REPORT</div>
       <h1>Diagnostic Report Verification</h1>
       <p className="muted">This verification record was found in the issuing laboratory system.</p>
