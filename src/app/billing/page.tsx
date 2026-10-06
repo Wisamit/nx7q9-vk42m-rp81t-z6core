@@ -1,9 +1,11 @@
 import Link from "next/link";
-import { requirePermission } from "@/lib/auth";
+import { permissionSet, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { PaymentCreateModal } from "@/components/payment-create-modal";
 import { SystemIcon } from "@/components/system-icon";
 import { statusLabel, tr } from "@/lib/ui-i18n";
+import { DiscountApprovalManager } from "@/components/discount-approval-manager";
+import { effectiveDiscountLimit } from "@/lib/discount-policy";
 
 export const dynamic = "force-dynamic";
 
@@ -12,14 +14,22 @@ export default async function BillingPage() {
   const locale = session.user.preferredLocale === "ar" ? "ar" : "en";
 
   const accessibleBranchIds = session.user.branchScopes.map(scope => scope.branchId);
+  const canApproveDiscounts = permissionSet(session).has("billing.discount.approve");
+  const approverLimitPercent = effectiveDiscountLimit({
+    userOverride: session.user.discountLimitPercent,
+    roleLimits: session.user.roles
+      .filter(assignment => assignment.role.status === "ACTIVE")
+      .map(assignment => assignment.role.discountLimitPercent),
+  });
 
-  const [invoices, recentPayments] = await Promise.all([
+  const [invoices, recentPayments, discountApprovals] = await Promise.all([
     prisma.invoice.findMany({
       where: { organizationId: session.user.organizationId, branchId: { in: accessibleBranchIds } },
       include: {
         order: { include: { patient: true } },
         client: true,
         branch: true,
+        discountApprovedBy: true,
       },
       orderBy: { issuedAt: "desc" },
       take: 200,
@@ -34,6 +44,20 @@ export default async function BillingPage() {
       orderBy: { receivedAt: "desc" },
       take: 100,
     }),
+    canApproveDiscounts ? prisma.discountApprovalRequest.findMany({
+      where: {
+        organizationId: session.user.organizationId,
+        branchId: { in: accessibleBranchIds },
+        status: "PENDING",
+        expiresAt: { gt: new Date() },
+      },
+      include: {
+        branch: true,
+        requestedBy: true,
+      },
+      orderBy: { requestedAt: "asc" },
+      take: 100,
+    }) : Promise.resolve([]),
   ]);
 
   const openInvoices = invoices.filter(invoice => invoice.status === "ISSUED" || invoice.status === "PARTIALLY_PAID");
@@ -78,18 +102,39 @@ export default async function BillingPage() {
       </article>)}
     </section>
 
+    {canApproveDiscounts && <DiscountApprovalManager
+      locale={locale}
+      approverLimitPercent={approverLimitPercent}
+      approvals={discountApprovals.map(item => ({
+        id: item.id,
+        branchCode: item.branch.code,
+        branchName: locale === "ar" ? item.branch.nameAr || item.branch.nameEn : item.branch.nameEn,
+        requesterName: locale === "ar" ? item.requestedBy.displayNameAr || item.requestedBy.displayNameEn : item.requestedBy.displayNameEn,
+        discountPercent: item.discountPercent.toString(),
+        reason: item.reason,
+        currency: item.currency,
+        subtotal: item.subtotalSnapshot.toString(),
+        discountTotal: item.discountTotalSnapshot.toString(),
+        finalTotal: item.finalTotalSnapshot.toString(),
+        requestedAt: item.requestedAt.toISOString(),
+        expiresAt: item.expiresAt.toISOString(),
+      }))}
+    />}
+
     <section className="table-card">
       <div className="table-toolbar"><h2>{tr(locale, "Invoices", "الفواتير")}</h2><span>{invoices.length} {tr(locale, "shown", "معروضة")}</span></div>
       <div className="table-wrap">
         <table>
-          <thead><tr><th>{tr(locale, "Invoice", "الفاتورة")}</th><th>{tr(locale, "Order", "الطلب")}</th><th>{tr(locale, "Patient / Client", "المريض / العميل")}</th><th>{tr(locale, "Branch", "الفرع")}</th><th>{tr(locale, "Total", "الإجمالي")}</th><th>{tr(locale, "Paid", "المدفوع")}</th><th>{tr(locale, "Balance", "الرصيد")}</th><th>{tr(locale, "Status", "الحالة")}</th></tr></thead>
+          <thead><tr><th>{tr(locale, "Invoice", "الفاتورة")}</th><th>{tr(locale, "Order", "الطلب")}</th><th>{tr(locale, "Patient / Client", "المريض / العميل")}</th><th>{tr(locale, "Branch", "الفرع")}</th><th>{tr(locale, "Subtotal", "الإجمالي قبل الخصم")}</th><th>{tr(locale, "Discount", "الخصم")}</th><th>{tr(locale, "Total", "الإجمالي")}</th><th>{tr(locale, "Paid", "المدفوع")}</th><th>{tr(locale, "Balance", "الرصيد")}</th><th>{tr(locale, "Status", "الحالة")}</th></tr></thead>
           <tbody>
-            {invoices.length === 0 ? <tr><td colSpan={8} className="empty-state">{tr(locale, "No invoices yet.", "لا توجد فواتير بعد.")}</td></tr> :
+            {invoices.length === 0 ? <tr><td colSpan={10} className="empty-state">{tr(locale, "No invoices yet.", "لا توجد فواتير بعد.")}</td></tr> :
               invoices.map(invoice => <tr key={invoice.id}>
                 <td><strong>{invoice.invoiceNumber}</strong><br/><small>{invoice.issuedAt.toISOString().slice(0,16).replace("T"," ")}</small></td>
                 <td>{invoice.order?.accessionNumber || "—"}</td>
                 <td>{invoice.client?.nameEn || invoice.order?.patient.fullNameEn || "—"}</td>
                 <td>{invoice.branch.code}</td>
+                <td>{invoice.subtotal.toString()} {invoice.currency}</td>
+                <td>{invoice.discountTotal.toNumber() > 0 ? <><strong>{invoice.discountTotal.toString()} {invoice.currency}</strong><br/><small>{invoice.discountPercent.toString()}% · {invoice.discountReason || "—"}{invoice.discountApprovedBy ? " · " + (locale === "ar" ? invoice.discountApprovedBy.displayNameAr || invoice.discountApprovedBy.displayNameEn : invoice.discountApprovedBy.displayNameEn) : ""}</small></> : "—"}</td>
                 <td>{invoice.total.toString()} {invoice.currency}</td>
                 <td>{invoice.paidAmount.toString()} {invoice.currency}</td>
                 <td>{invoice.balanceAmount.toString()} {invoice.currency}</td>
