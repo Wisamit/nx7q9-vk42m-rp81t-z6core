@@ -69,7 +69,8 @@ export async function GET() {
 export async function POST(request: Request) {
   const session = await getCurrentSession();
   if (!session) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  if (!permissionSet(session).has("users.manage")) return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  const permissions = permissionSet(session);
+  if (!permissions.has("users.manage")) return NextResponse.json({ error: "forbidden" }, { status: 403 });
 
   const body = await request.json().catch(() => null) as Record<string, unknown> | null;
   if (!body) return NextResponse.json({ error: "invalid_request" }, { status: 400 });
@@ -85,6 +86,9 @@ export async function POST(request: Request) {
   const branchIds = ids(body.branchIds);
   const departmentIds = ids(body.departmentIds);
   const discountLimitPercent = optionalDiscountPercent(body.discountLimitPercent);
+  if (body.discountLimitPercent !== undefined && body.discountLimitPercent !== null && body.discountLimitPercent !== "" && !permissions.has("billing.discount.limits.manage")) {
+    return NextResponse.json({ error: "discount_limit_forbidden" }, { status: 403 });
+  }
 
   if (!/^[a-z0-9._-]{3,100}$/.test(username) || !displayNameEn || password.length < 12 || roleIds.length === 0 || branchIds.length === 0 || discountLimitPercent === undefined) {
     return NextResponse.json({ error: "invalid_fields" }, { status: 400 });
