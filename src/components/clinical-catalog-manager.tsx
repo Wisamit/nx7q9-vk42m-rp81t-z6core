@@ -1,19 +1,93 @@
 "use client";
+
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 
-type Unit={id:string;code:string;symbol:string}; type Method={id:string;nameEn:string}; type Branch={id:string;nameEn:string}; type Component={id:string;code:string;nameEn:string}; type Test={id:string;code:string;nameEn:string;components:Component[]};
+type Unit = { id: string; code: string; symbol: string };
+type Method = { id: string; nameEn: string; nameAr?: string | null };
+type Branch = { id: string; nameEn: string; nameAr?: string | null };
+type Component = { id: string; code: string; nameEn: string; nameAr?: string | null };
+type Test = { id: string; code: string; nameEn: string; nameAr?: string | null; components: Component[] };
 
-export function ClinicalCatalogManager({tests,units,methods,branches}:{tests:Test[];units:Unit[];methods:Method[];branches:Branch[]}){
- const router=useRouter(); const [mode,setMode]=useState<"component"|"panel"|"range"|null>(null); const [testId,setTestId]=useState(tests[0]?.id||""); const [message,setMessage]=useState(""); const [saving,setSaving]=useState(false);
- const components=tests.find(t=>t.id===testId)?.components||[];
- async function send(event:FormEvent<HTMLFormElement>,url:string,extra:Record<string,unknown>={}){event.preventDefault();setSaving(true);setMessage("");const raw=Object.fromEntries(new FormData(event.currentTarget).entries());const body={...raw,...extra};["decimalPrecision","displayOrder"].forEach(k=>{if(body[k as keyof typeof body]!=="") (body as Record<string,unknown>)[k]=Number(body[k as keyof typeof body]);});const r=await fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});if(r.ok){setMode(null);router.refresh()}else setMessage("Could not save. Review the values and try again.");setSaving(false)}
- return <div className="catalog-actions">
-  <button className="secondary-button" onClick={()=>setMode("component")}>Add Component</button><button className="secondary-button" onClick={()=>setMode("panel")}>Add Panel / Profile</button><button className="secondary-button" onClick={()=>setMode("range")}>Add Reference Range</button>
-  {mode&&<div className="modal-backdrop" onMouseDown={()=>setMode(null)}><section className="modal-card" onMouseDown={e=>e.stopPropagation()}><div className="modal-head"><div><p className="eyebrow">Clinical Configuration</p><h2>{mode==="component"?"Test Component":mode==="panel"?"Panel / Profile":"Reference Range & Critical Limits"}</h2></div><button className="icon-button" onClick={()=>setMode(null)}>×</button></div>
-  {mode==="component"&&<form className="catalog-form" onSubmit={e=>send(e,"/api/catalog/components")}><label>Test<select name="testId" required value={testId} onChange={e=>setTestId(e.target.value)}>{tests.map(t=><option key={t.id} value={t.id}>{t.code} — {t.nameEn}</option>)}</select></label><label>Component code<input name="code" required/></label><label>English name<input name="nameEn" required/></label><label>Arabic name<input name="nameAr" dir="rtl"/></label><label>Result type<select name="resultType"><option>NUMERIC</option><option>TEXT</option><option>QUALITATIVE</option><option>BOOLEAN</option><option>DATE</option></select></label><label>Unit<select name="unitId"><option value="">—</option>{units.map(u=><option key={u.id} value={u.id}>{u.symbol} ({u.code})</option>)}</select></label><label>Decimal precision<input name="decimalPrecision" type="number" min="0" max="8"/></label><label>Display order<input name="displayOrder" type="number" min="0" defaultValue="0"/></label>{message&&<p className="form-error form-span">{message}</p>}<button className="primary-button form-span" disabled={saving}>Save Component</button></form>}
-  {mode==="panel"&&<form className="catalog-form" onSubmit={e=>{const form=e.currentTarget;const ids=Array.from(form.querySelectorAll<HTMLInputElement>('input[name="testIds"]:checked')).map(x=>x.value);send(e,"/api/catalog/panels",{testIds:ids})}}><label>Panel code<input name="code" required/></label><label>English name<input name="nameEn" required/></label><label>Arabic name<input name="nameAr" dir="rtl"/></label><fieldset className="test-picker form-span"><legend>Included tests</legend>{tests.map(t=><label key={t.id} className="check-row"><input type="checkbox" name="testIds" value={t.id}/><span>{t.code} — {t.nameEn}</span></label>)}</fieldset>{message&&<p className="form-error form-span">{message}</p>}<button className="primary-button form-span" disabled={saving}>Save Panel / Profile</button></form>}
-  {mode==="range"&&<form className="catalog-form" onSubmit={e=>send(e,"/api/catalog/reference-intervals")}><label>Test<select value={testId} onChange={e=>setTestId(e.target.value)}>{tests.map(t=><option key={t.id} value={t.id}>{t.code} — {t.nameEn}</option>)}</select></label><label>Component<select name="componentId" required><option value="">Select component</option>{components.map(x=><option key={x.id} value={x.id}>{x.code} — {x.nameEn}</option>)}</select></label><label>Sex<select name="sex"><option>ANY</option><option>MALE</option><option>FEMALE</option></select></label><label>Age unit<select name="ageUnit"><option value="">Any age</option><option>DAY</option><option>WEEK</option><option>MONTH</option><option>YEAR</option></select></label><label>Age from<input name="ageFrom" inputMode="decimal"/></label><label>Age to<input name="ageTo" inputMode="decimal"/></label><label>Normal low<input name="lowValue" inputMode="decimal"/></label><label>Normal high<input name="highValue" inputMode="decimal"/></label><label>Critical low<input name="criticalLow" inputMode="decimal"/></label><label>Critical high<input name="criticalHigh" inputMode="decimal"/></label><label>Branch<select name="branchId"><option value="">Organization default</option>{branches.map(b=><option key={b.id} value={b.id}>{b.nameEn}</option>)}</select></label><label>Method<select name="methodId"><option value="">Any / default method</option>{methods.map(m=><option key={m.id} value={m.id}>{m.nameEn}</option>)}</select></label><label>Effective from<input name="effectiveFrom" type="date" required defaultValue={new Date().toISOString().slice(0,10)}/></label><label>Source<input name="source"/></label><label>Normal text (EN)<input name="normalTextEn"/></label><label>Normal text (AR)<input name="normalTextAr" dir="rtl"/></label>{message&&<p className="form-error form-span">{message}</p>}<button className="primary-button form-span" disabled={saving}>Save Reference Range</button></form>}
-  </section></div>}
- </div>
+export function ClinicalCatalogManager({ tests, units, methods, branches, locale }: { tests: Test[]; units: Unit[]; methods: Method[]; branches: Branch[]; locale: "ar" | "en" }) {
+  const router = useRouter();
+  const [mode, setMode] = useState<"component" | "panel" | "range" | null>(null);
+  const [testId, setTestId] = useState(tests[0]?.id || "");
+  const [message, setMessage] = useState("");
+  const [saving, setSaving] = useState(false);
+  const components = tests.find(t => t.id === testId)?.components || [];
+  const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
+  const name = (item: { nameEn: string; nameAr?: string | null }) => locale === "ar" ? item.nameAr || item.nameEn : item.nameEn;
+
+  async function send(event: FormEvent<HTMLFormElement>, url: string, extra: Record<string, unknown> = {}) {
+    event.preventDefault();
+    setSaving(true);
+    setMessage("");
+    const raw = Object.fromEntries(new FormData(event.currentTarget).entries());
+    const body = { ...raw, ...extra };
+    ["decimalPrecision", "displayOrder"].forEach(key => {
+      if (body[key as keyof typeof body] !== "") (body as Record<string, unknown>)[key] = Number(body[key as keyof typeof body]);
+    });
+    const response = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    if (response.ok) { setMode(null); router.refresh(); }
+    else setMessage(tr("Could not save. Review the values and try again.", "تعذر الحفظ. راجع القيم وحاول مرة أخرى."));
+    setSaving(false);
+  }
+
+  return <div className="catalog-actions">
+    <button className="secondary-button" onClick={() => setMode("component")}>{tr("Add Component", "إضافة مكوّن")}</button>
+    <button className="secondary-button" onClick={() => setMode("panel")}>{tr("Add Panel / Profile", "إضافة باقة / ملف")}</button>
+    <button className="secondary-button" onClick={() => setMode("range")}>{tr("Add Reference Range", "إضافة مجال مرجعي")}</button>
+
+    {mode && <div className="modal-backdrop" onMouseDown={() => setMode(null)}><section className="modal-card" onMouseDown={e => e.stopPropagation()}>
+      <div className="modal-head"><div><p className="eyebrow">{tr("Clinical Configuration", "الإعدادات السريرية")}</p><h2>{mode === "component" ? tr("Test Component", "مكوّن الفحص") : mode === "panel" ? tr("Panel / Profile", "الباقة / الملف") : tr("Reference Range & Critical Limits", "المجال المرجعي والحدود الحرجة")}</h2></div><button className="icon-button" onClick={() => setMode(null)}>×</button></div>
+
+      {mode === "component" && <form className="catalog-form" onSubmit={e => send(e, "/api/catalog/components")}>
+        <label>{tr("Test", "الفحص")}<select name="testId" required value={testId} onChange={e => setTestId(e.target.value)}>{tests.map(t => <option key={t.id} value={t.id}>{t.code} — {name(t)}</option>)}</select></label>
+        <label>{tr("Component code", "رمز المكوّن")}<input name="code" required /></label>
+        <label>{tr("English name", "الاسم بالإنجليزية")}<input name="nameEn" required /></label>
+        <label>{tr("Arabic name", "الاسم بالعربية")}<input name="nameAr" dir="rtl" /></label>
+        <label>{tr("Result type", "نوع النتيجة")}<select name="resultType"><option value="NUMERIC">{tr("Numeric", "رقمية")}</option><option value="TEXT">{tr("Text", "نصية")}</option><option value="QUALITATIVE">{tr("Qualitative", "نوعية")}</option><option value="BOOLEAN">{tr("Boolean", "نعم / لا")}</option><option value="DATE">{tr("Date", "تاريخ")}</option></select></label>
+        <label>{tr("Unit", "الوحدة")}<select name="unitId"><option value="">—</option>{units.map(u => <option key={u.id} value={u.id}>{u.symbol} ({u.code})</option>)}</select></label>
+        <label>{tr("Decimal precision", "عدد المنازل العشرية")}<input name="decimalPrecision" type="number" min="0" max="8" /></label>
+        <label>{tr("Display order", "ترتيب العرض")}<input name="displayOrder" type="number" min="0" defaultValue="0" /></label>
+        {message && <p className="form-error form-span">{message}</p>}
+        <button className="primary-button form-span" disabled={saving}>{saving ? tr("Saving…", "جارٍ الحفظ…") : tr("Save Component", "حفظ المكوّن")}</button>
+      </form>}
+
+      {mode === "panel" && <form className="catalog-form" onSubmit={e => {
+        const form = e.currentTarget;
+        const ids = Array.from(form.querySelectorAll<HTMLInputElement>('input[name="testIds"]:checked')).map(x => x.value);
+        void send(e, "/api/catalog/panels", { testIds: ids });
+      }}>
+        <label>{tr("Panel code", "رمز الباقة")}<input name="code" required /></label>
+        <label>{tr("English name", "الاسم بالإنجليزية")}<input name="nameEn" required /></label>
+        <label>{tr("Arabic name", "الاسم بالعربية")}<input name="nameAr" dir="rtl" /></label>
+        <fieldset className="test-picker form-span"><legend>{tr("Included tests", "الفحوصات المشمولة")}</legend>{tests.map(t => <label key={t.id} className="check-row"><input type="checkbox" name="testIds" value={t.id} /><span>{t.code} — {name(t)}</span></label>)}</fieldset>
+        {message && <p className="form-error form-span">{message}</p>}
+        <button className="primary-button form-span" disabled={saving}>{saving ? tr("Saving…", "جارٍ الحفظ…") : tr("Save Panel / Profile", "حفظ الباقة / الملف")}</button>
+      </form>}
+
+      {mode === "range" && <form className="catalog-form" onSubmit={e => send(e, "/api/catalog/reference-intervals")}>
+        <label>{tr("Test", "الفحص")}<select value={testId} onChange={e => setTestId(e.target.value)}>{tests.map(t => <option key={t.id} value={t.id}>{t.code} — {name(t)}</option>)}</select></label>
+        <label>{tr("Component", "المكوّن")}<select name="componentId" required><option value="">{tr("Select component", "اختر المكوّن")}</option>{components.map(x => <option key={x.id} value={x.id}>{x.code} — {name(x)}</option>)}</select></label>
+        <label>{tr("Sex", "الجنس")}<select name="sex"><option value="ANY">{tr("Any", "أي")}</option><option value="MALE">{tr("Male", "ذكر")}</option><option value="FEMALE">{tr("Female", "أنثى")}</option></select></label>
+        <label>{tr("Age unit", "وحدة العمر")}<select name="ageUnit"><option value="">{tr("Any age", "أي عمر")}</option><option value="DAY">{tr("Day", "يوم")}</option><option value="WEEK">{tr("Week", "أسبوع")}</option><option value="MONTH">{tr("Month", "شهر")}</option><option value="YEAR">{tr("Year", "سنة")}</option></select></label>
+        <label>{tr("Age from", "العمر من")}<input name="ageFrom" inputMode="decimal" /></label>
+        <label>{tr("Age to", "العمر إلى")}<input name="ageTo" inputMode="decimal" /></label>
+        <label>{tr("Normal low", "الحد الطبيعي الأدنى")}<input name="lowValue" inputMode="decimal" /></label>
+        <label>{tr("Normal high", "الحد الطبيعي الأعلى")}<input name="highValue" inputMode="decimal" /></label>
+        <label>{tr("Critical low", "الحد الحرج الأدنى")}<input name="criticalLow" inputMode="decimal" /></label>
+        <label>{tr("Critical high", "الحد الحرج الأعلى")}<input name="criticalHigh" inputMode="decimal" /></label>
+        <label>{tr("Branch", "الفرع")}<select name="branchId"><option value="">{tr("Organization default", "افتراضي المؤسسة")}</option>{branches.map(b => <option key={b.id} value={b.id}>{name(b)}</option>)}</select></label>
+        <label>{tr("Method", "الطريقة")}<select name="methodId"><option value="">{tr("Any / default method", "أي طريقة / الافتراضية")}</option>{methods.map(m => <option key={m.id} value={m.id}>{name(m)}</option>)}</select></label>
+        <label>{tr("Effective from", "ساري من")}<input name="effectiveFrom" type="date" required defaultValue={new Date().toISOString().slice(0, 10)} /></label>
+        <label>{tr("Source", "المصدر")}<input name="source" /></label>
+        <label>{tr("Normal text (EN)", "النص الطبيعي (EN)")}<input name="normalTextEn" /></label>
+        <label>{tr("Normal text (AR)", "النص الطبيعي (AR)")}<input name="normalTextAr" dir="rtl" /></label>
+        {message && <p className="form-error form-span">{message}</p>}
+        <button className="primary-button form-span" disabled={saving}>{saving ? tr("Saving…", "جارٍ الحفظ…") : tr("Save Reference Range", "حفظ المجال المرجعي")}</button>
+      </form>}
+    </section></div>}
+  </div>;
 }
