@@ -63,16 +63,20 @@ export default async function MicrobiologyPage() {
     prisma.antibiotic.count({ where: { organizationId: session.user.organizationId, status: "ACTIVE" } }),
   ]);
 
+  const patientName = (item: { fullNameEn: string; fullNameAr?: string | null }) => locale === "ar" ? item.fullNameAr || item.fullNameEn : item.fullNameEn;
+  const localizedName = (item: { nameEn: string; nameAr?: string | null }) => locale === "ar" ? item.nameAr || item.nameEn : item.nameEn;
+  const cultureLabel = (value: string) => value === "PENDING" ? tr(locale, "Pending", "قيد الانتظار") : value === "NO_GROWTH" ? tr(locale, "No growth", "لا يوجد نمو") : value === "GROWTH" ? tr(locale, "Growth", "نمو") : value === "MIXED_GROWTH" ? tr(locale, "Mixed growth", "نمو مختلط") : value === "CONTAMINATED" ? tr(locale, "Contaminated", "ملوث") : value;
+
   const candidates = orderItems.flatMap(item => item.specimenLinks.map(link => ({
     orderItemId: item.id,
     specimenId: link.specimen.id,
     performingBranchId: link.specimen.currentBranchId!,
     accession: item.order.accessionNumber,
-    patient: item.order.patient.fullNameEn,
+    patient: patientName(item.order.patient),
     testCode: item.test.code,
-    testName: item.test.nameEn,
+    testName: locale === "ar" ? item.testNameArSnapshot || item.testNameEnSnapshot : item.testNameEnSnapshot,
     barcode: link.specimen.barcode,
-    branchName: link.specimen.currentBranch?.nameEn || "—",
+    branchName: link.specimen.currentBranch ? localizedName(link.specimen.currentBranch) : "—",
   })));
 
   return <main className="catalog-shell">
@@ -95,17 +99,18 @@ export default async function MicrobiologyPage() {
       candidates={candidates}
       canEnter={permissions.has("microbiology.enter")}
       canManage={permissions.has("microbiology.manage")}
+      locale={locale}
     />}
 
     <section className="table-card detail-section">
-      <div className="table-toolbar"><h2>{tr(locale, "Microbiology Cases", "حالات الأحياء الدقيقة")}</h2><span>{cases.length} shown</span></div>
+      <div className="table-toolbar"><h2>{tr(locale, "Microbiology Cases", "حالات الأحياء الدقيقة")}</h2><span>{cases.length} {tr(locale, "shown", "معروضة")}</span></div>
       <div className="table-wrap"><table>
-        <thead><tr><th>Accession / Patient</th><th>Test</th><th>Specimen</th><th>Culture</th><th>Case status</th><th>Content</th><th>Action</th></tr></thead>
+        <thead><tr><th>{tr(locale, "Accession / Patient", "رقم الطلب / المريض")}</th><th>{tr(locale, "Test", "الفحص")}</th><th>{tr(locale, "Specimen", "العينة")}</th><th>{tr(locale, "Culture", "الزرع")}</th><th>{tr(locale, "Case status", "حالة الحالة")}</th><th>{tr(locale, "Content", "المحتوى")}</th><th>{tr(locale, "Action", "الإجراء")}</th></tr></thead>
         <tbody>{cases.length === 0 ? <tr><td colSpan={7} className="empty-state">{tr(locale, "No microbiology cases yet.", "لا توجد حالات أحياء دقيقة بعد.")}</td></tr> : cases.map(item => <tr key={item.id}>
-          <td><strong>{item.orderItem.order.accessionNumber}</strong><br/><small>{item.orderItem.order.patient.fullNameEn}</small></td>
-          <td>{item.orderItem.test.code} — {item.orderItem.test.nameEn}</td>
-          <td>{item.specimen.barcode}<br/><small>{item.performingBranch.nameEn}</small></td>
-          <td>{item.cultureStatus}</td>
+          <td><strong>{item.orderItem.order.accessionNumber}</strong><br/><small>{patientName(item.orderItem.order.patient)}</small></td>
+          <td>{item.orderItem.testCodeSnapshot} — {locale === "ar" ? item.orderItem.testNameArSnapshot || item.orderItem.testNameEnSnapshot : item.orderItem.testNameEnSnapshot}</td>
+          <td>{item.specimen.barcode}<br/><small>{localizedName(item.performingBranch)}</small></td>
+          <td>{cultureLabel(item.cultureStatus)}</td>
           <td>{statusLabel(locale, item.status)}</td>
           <td>{item._count.observations} {tr(locale, "observation(s)", "ملاحظة")} · {item._count.isolates} {tr(locale, "isolate(s)", "عزلة")}</td>
           <td><Link className="secondary-link" href={`/microbiology/${item.id}`}>{tr(locale, "Open Case", "فتح الحالة")}</Link></td>
