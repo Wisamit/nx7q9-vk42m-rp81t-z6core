@@ -5,7 +5,8 @@ import { CrudModal } from "@/components/crud-modal";
 import { PatientCreateForm } from "@/components/patient-create-form";
 import { SystemIcon } from "@/components/system-icon";
 
-export function PatientCreateModal() {
+export function PatientCreateModal({ locale }: { locale: "ar" | "en" }) {
+  const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
   const [open, setOpen] = useState(false);
   const [notice, setNotice] = useState("");
 
@@ -13,17 +14,17 @@ export function PatientCreateModal() {
     <div className="crud-trigger-row">
       {notice && <span className="crud-success-toast">{notice}</span>}
       <button type="button" className="primary-button" onClick={() => setOpen(true)}>
-        <SystemIcon name="plus" size={16} /> New Patient
+        <SystemIcon name="plus" size={16} />{tr("New Patient", "مريض جديد")}
       </button>
     </div>
     <CrudModal
       open={open}
       onClose={() => setOpen(false)}
-      title="Register Patient"
-      description="Create a central patient record shared across all branches."
+      title={tr("Register Patient", "تسجيل مريض")}
+      description={tr("Create a central patient record shared across all branches.", "إنشاء سجل مركزي للمريض مشترك بين جميع الفروع.")}
       size="lg"
     >
-      <PatientCreateForm onSuccess={message => {
+      <PatientCreateForm locale={locale} onSuccess={message => {
         setNotice(message);
         setOpen(false);
       }} />
