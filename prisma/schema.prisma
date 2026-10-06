@@ -2175,6 +2175,7 @@ model DiscountApprovalRequest {
   branch       Branch       @relation(fields: [branchId], references: [id], onDelete: Restrict)
   requestedBy  User         @relation("DiscountApprovalRequester", fields: [requestedByUserId], references: [id], onDelete: Restrict)
   approvedBy   User?        @relation("DiscountApprovalApprover", fields: [approvedByUserId], references: [id], onDelete: Restrict)
+  invoice      Invoice?      @relation("InvoiceDiscountApprovalRequest")
 
   @@index([organizationId, status, requestedAt])
   @@index([branchId, status, expiresAt])
@@ -2200,6 +2201,7 @@ model Invoice {
   discountApprovalMethod DiscountApprovalMethod? @map("discount_approval_method")
   discountApprovedByUserId String? @map("discount_approved_by_user_id") @db.Char(36)
   discountApprovedAt DateTime? @map("discount_approved_at") @db.DateTime(3)
+  discountApprovalRequestId String? @unique @map("discount_approval_request_id") @db.Char(36)
   taxTotal        Decimal       @default(0) @map("tax_total") @db.Decimal(18, 4)
   total           Decimal       @default(0) @db.Decimal(18, 4)
   paidAmount      Decimal       @default(0) @map("paid_amount") @db.Decimal(18, 4)
@@ -2215,6 +2217,7 @@ model Invoice {
   client       Client?      @relation(fields: [clientId], references: [id], onDelete: Restrict)
   createdBy    User         @relation("InvoiceCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
   discountApprovedBy User?   @relation("InvoiceDiscountApprover", fields: [discountApprovedByUserId], references: [id], onDelete: Restrict)
+  discountApprovalRequest DiscountApprovalRequest? @relation("InvoiceDiscountApprovalRequest", fields: [discountApprovalRequestId], references: [id], onDelete: Restrict)
   lines        InvoiceLine[]
   allocations  PaymentAllocation[]
 
