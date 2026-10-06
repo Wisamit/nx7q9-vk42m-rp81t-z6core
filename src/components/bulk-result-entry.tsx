@@ -136,7 +136,7 @@ export function BulkResultEntry({ rows, locale }: { rows: BulkRow[]; locale: "ar
                 return <label key={key}><span>{field.code}</span>{inputFor(field, values[row.orderItemId]?.[key] || "", value => setValues(current => ({
                   ...current,
                   [row.orderItemId]: { ...(current[row.orderItemId] || {}), [key]: value },
-                }))), locale)}</label>;
+                })), locale)}</label>;
               })}
               <label className="bulk-comment"><span>{tr("Comment","تعليق")}</span><input value={comments[row.orderItemId] || ""} onChange={event => setComments(current => ({ ...current, [row.orderItemId]: event.target.value }))} /></label>
             </div>
