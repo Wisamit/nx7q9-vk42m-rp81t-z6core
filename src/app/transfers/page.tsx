@@ -2,11 +2,13 @@ import Link from "next/link";
 import { requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { TransferManager } from "@/components/transfer-manager";
+import { getUiLocale, tr } from "@/lib/ui-i18n";
 
 export const dynamic = "force-dynamic";
 
 export default async function TransfersPage() {
   const session = await requirePermission("transfers.view");
+  const locale = getUiLocale(session.user.preferredLocale);
   const branchIds = session.user.branchScopes.map(scope => scope.branchId);
 
   const [branches, sourceBranches, specimens, manifests] = await Promise.all([
@@ -78,13 +80,13 @@ export default async function TransfersPage() {
   return <main className="catalog-shell">
     <header className="page-header">
       <div>
-        <p className="eyebrow">Inter-Branch Logistics</p>
-        <h1>Specimen Transfers</h1>
-        <p className="muted">Create shipment manifests, dispatch specimens into transit, and receive each barcode at the destination with custody traceability.</p>
+        <p className="eyebrow">{tr(locale, "Inter-Branch Logistics", "اللوجستيات بين الفروع")}</p>
+        <h1>{tr(locale, "Specimen Transfers", "نقل العينات بين الفروع")}</h1>
+        <p className="muted">{tr(locale, "Create shipment manifests, dispatch specimens into transit, and receive each barcode at the destination with custody traceability.", "إنشاء بيانات الشحن وإرسال العينات واستلام كل باركود في الفرع الوجهة مع تتبع كامل لسلسلة الحيازة.")}</p>
       </div>
       <div className="header-actions">
-        <Link className="secondary-link" href="/specimens">Specimens</Link>
-        <Link className="secondary-link" href="/dashboard">Back to Dashboard</Link>
+        <Link className="secondary-link" href="/specimens">{tr(locale, "Specimens", "العينات")}</Link>
+        <Link className="secondary-link" href="/dashboard">{tr(locale, "Back to Dashboard", "العودة للوحة التحكم")}</Link>
       </div>
     </header>
 
