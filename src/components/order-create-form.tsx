@@ -235,7 +235,7 @@ export function OrderCreateForm({
         </label>
         <div className="selected-test-list">
           {selectedPackages.length === 0 ? <span className="muted">{tr("No packages selected.", "لم يتم اختيار باقات.")}</span> :
-            selectedPackages.map(pkg => <span className="selected-test-chip package-chip" key={pkg.id}>{pkg.code} — {pkg.nameEn} · {pkg.testIds.length} tests<button type="button" onClick={() => setSelectedPackageIds(ids => ids.filter(id => id !== pkg.id))}>×</button></span>)
+            selectedPackages.map(pkg => <span className="selected-test-chip package-chip" key={pkg.id}>{pkg.code} — {pkg.nameEn} · {pkg.testIds.length} {tr("tests","فحوصات")}<button type="button" onClick={() => setSelectedPackageIds(ids => ids.filter(id => id !== pkg.id))}>×</button></span>)
           }
         </div>
         <p className="muted package-helper">{tr("Package members are ordered as individual clinical tests, while billing keeps the package price as one historical commercial snapshot.", "يتم طلب فحوصات الباقة كفحوصات سريرية منفصلة، بينما تحتفظ الفوترة بسعر الباقة كسجل تجاري تاريخي واحد.")}</p>

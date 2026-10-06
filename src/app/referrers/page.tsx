@@ -44,6 +44,10 @@ export default async function ReferrersPage({
     }),
   ]);
 
+  const localizedName = (item: { nameEn: string; nameAr?: string | null }) => locale === "ar" ? item.nameAr || item.nameEn : item.nameEn;
+  const clientTypeLabel = (value: string) => ({ INDIVIDUAL: tr(locale,"Individual","فرد"), CLINIC: tr(locale,"Clinic","عيادة"), HOSPITAL: tr(locale,"Hospital","مستشفى"), COMPANY: tr(locale,"Company","شركة"), INSURANCE: tr(locale,"Insurance","تأمين"), OTHER: tr(locale,"Other","أخرى") }[value] || value);
+  const referrerTypeLabel = (value: string) => ({ PHYSICIAN: tr(locale,"Physician","طبيب"), CLINIC: tr(locale,"Clinic","عيادة"), HOSPITAL: tr(locale,"Hospital","مستشفى"), OTHER: tr(locale,"Other","أخرى") }[value] || value);
+
   const allClients = query ? await prisma.client.findMany({
     where: { organizationId: session.user.organizationId, status: "ACTIVE" },
     select: { id: true, code: true, nameEn: true },
@@ -64,7 +68,7 @@ export default async function ReferrersPage({
 
     <section className="table-card">
       <div className="table-toolbar">
-        <div><h2>{tr(locale, "Search", "بحث")}</h2><span>{clients.length} clients · {referrers.length} referrers · {sources.length} sources</span></div>
+        <div><h2>{tr(locale, "Search", "بحث")}</h2><span>{clients.length} {tr(locale,"clients","عميل")} · {referrers.length} {tr(locale,"referrers","محيل")} · {sources.length} {tr(locale,"sources","مصدر")}</span></div>
         <form className="inline-search" action="/referrers" method="get">
           <input name="q" defaultValue={query} placeholder={tr(locale, "Code, name, license…", "رمز، اسم، رقم ترخيص…")} />
           <button className="secondary-button">{tr(locale, "Search", "بحث")}</button>
@@ -75,24 +79,24 @@ export default async function ReferrersPage({
 
     <section className="detail-grid">
       <article className="table-card">
-        <div className="table-toolbar"><h2>{tr(locale, "Clients", "العملاء")}</h2><span>{clients.length} shown</span></div>
+        <div className="table-toolbar"><h2>{tr(locale, "Clients", "العملاء")}</h2><span>{clients.length} {tr(locale,"shown","معروض")}</span></div>
         <div className="table-wrap">
           <table>
             <thead><tr><th>{tr(locale, "Code", "الرمز")}</th><th>{tr(locale, "Name", "الاسم")}</th><th>{tr(locale, "Type", "النوع")}</th><th>{tr(locale, "Terms", "الشروط")}</th><th>{tr(locale, "Status", "الحالة")}</th></tr></thead>
             <tbody>{clients.length === 0 ? <tr><td colSpan={5} className="empty-state">{tr(locale, "No clients.", "لا يوجد عملاء.")}</td></tr> : clients.map(client =>
-              <tr key={client.id}><td><strong>{client.code}</strong></td><td>{client.nameEn}{client.nameAr ? <><br/><small dir="rtl">{client.nameAr}</small></> : null}</td><td>{client.type}</td><td>{client.paymentTermsDays == null ? "—" : `${client.paymentTermsDays} ${tr(locale, "days", "يوم")}`}</td><td>{statusLabel(locale, client.status)}</td></tr>
+              <tr key={client.id}><td><strong>{client.code}</strong></td><td>{localizedName(client)}{locale !== "ar" && client.nameAr ? <><br/><small dir="rtl">{client.nameAr}</small></> : null}</td><td>{clientTypeLabel(client.type)}</td><td>{client.paymentTermsDays == null ? "—" : `${client.paymentTermsDays} ${tr(locale, "days", "يوم")}`}</td><td>{statusLabel(locale, client.status)}</td></tr>
             )}</tbody>
           </table>
         </div>
       </article>
 
       <article className="table-card">
-        <div className="table-toolbar"><h2>{tr(locale, "Referrers", "المحيلون")}</h2><span>{referrers.length} shown</span></div>
+        <div className="table-toolbar"><h2>{tr(locale, "Referrers", "المحيلون")}</h2><span>{referrers.length} {tr(locale,"shown","معروض")}</span></div>
         <div className="table-wrap">
           <table>
             <thead><tr><th>{tr(locale, "Code", "الرمز")}</th><th>{tr(locale, "Name", "الاسم")}</th><th>{tr(locale, "Type", "النوع")}</th><th>{tr(locale, "License", "الترخيص")}</th><th>{tr(locale, "Client", "العميل")}</th></tr></thead>
             <tbody>{referrers.length === 0 ? <tr><td colSpan={5} className="empty-state">{tr(locale, "No referrers.", "لا يوجد محيلون.")}</td></tr> : referrers.map(referrer =>
-              <tr key={referrer.id}><td><strong>{referrer.code}</strong></td><td>{referrer.nameEn}{referrer.nameAr ? <><br/><small dir="rtl">{referrer.nameAr}</small></> : null}</td><td>{referrer.type}</td><td>{referrer.licenseNumber || "—"}</td><td>{referrer.client?.nameEn || "—"}</td></tr>
+              <tr key={referrer.id}><td><strong>{referrer.code}</strong></td><td>{localizedName(referrer)}{locale !== "ar" && referrer.nameAr ? <><br/><small dir="rtl">{referrer.nameAr}</small></> : null}</td><td>{referrerTypeLabel(referrer.type)}</td><td>{referrer.licenseNumber || "—"}</td><td>{referrer.client?.nameEn || "—"}</td></tr>
             )}</tbody>
           </table>
         </div>
@@ -100,13 +104,13 @@ export default async function ReferrersPage({
     </section>
 
     <section className="table-card detail-section">
-      <div className="table-toolbar"><h2>{tr(locale, "Order Sources", "مصادر الطلبات")}</h2><span>{sources.length} shown</span></div>
+      <div className="table-toolbar"><h2>{tr(locale, "Order Sources", "مصادر الطلبات")}</h2><span>{sources.length} {tr(locale, "shown", "معروض")}</span></div>
       <div className="table-wrap"><table>
         <thead><tr><th>{tr(locale, "Code", "الرمز")}</th><th>{tr(locale, "Name", "الاسم")}</th><th>{tr(locale, "Category", "الفئة")}</th><th>{tr(locale, "Status", "الحالة")}</th></tr></thead>
         <tbody>{sources.length === 0 ? <tr><td colSpan={4} className="empty-state">{tr(locale, "No order sources.", "لا توجد مصادر طلبات.")}</td></tr> : sources.map(source =>
           <tr key={source.id}>
             <td><strong>{source.code}</strong></td>
-            <td>{source.nameEn}{source.nameAr ? <><br/><small dir="rtl">{source.nameAr}</small></> : null}</td>
+            <td>{localizedName(source)}{locale !== "ar" && source.nameAr ? <><br/><small dir="rtl">{source.nameAr}</small></> : null}</td>
             <td>{source.category}</td>
             <td>{source.status}</td>
           </tr>

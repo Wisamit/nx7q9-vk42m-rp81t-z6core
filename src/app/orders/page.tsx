@@ -142,7 +142,7 @@ export default async function OrdersPage() {
     </section>
 
     <section className="table-card detail-section">
-      <div className="table-toolbar"><h2>{tr(locale, "Recent Orders", "أحدث الطلبات")}</h2><span>{orders.length} shown</span></div>
+      <div className="table-toolbar"><h2>{tr(locale, "Recent Orders", "أحدث الطلبات")}</h2><span>{orders.length} {tr(locale, "shown", "معروضة")}</span></div>
       <div className="table-wrap">
         <table>
           <thead><tr><th>{tr(locale, "Accession", "رقم الطلب")}</th><th>{tr(locale, "Patient", "المريض")}</th><th>{tr(locale, "Branch", "الفرع")}</th><th>{tr(locale, "Source", "المصدر")}</th><th>{tr(locale, "Priority", "الأولوية")}</th><th>{tr(locale, "Tests", "الفحوصات")}</th><th>{tr(locale, "Client / Referrer", "العميل / المحيل")}</th><th>{tr(locale, "Invoice", "الفاتورة")}</th><th>{tr(locale, "Status", "الحالة")}</th></tr></thead>

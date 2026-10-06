@@ -176,7 +176,7 @@ export function MicrobiologyCaseEditor({
           <option value="">{tr("Select organism…", "اختر الكائن الدقيق…")}</option>
           {organisms.map(item => <option key={item.id} value={item.id}>{item.code} — {locale === "ar" ? item.nameAr || item.nameEn : item.nameEn}</option>)}
         </select></label>
-        <label>{tr("Quantity / growth", "الكمية / النمو")}<input name="quantityText" placeholder="e.g. Heavy growth / 10^5 CFU/mL" /></label>
+        <label>{tr("Quantity / growth", "الكمية / النمو")}<input name="quantityText" placeholder={tr("e.g. Heavy growth / 10^5 CFU/mL","مثال: نمو كثيف / 10^5 CFU/mL")} /></label>
         <label className="form-span">{tr("Colony notes", "ملاحظات المستعمرات")}<textarea name="colonyNotes" rows={2} /></label>
         <button className="primary-button form-span" disabled={busy !== "" || organisms.length === 0}>{busy === "isolate" ? tr("Saving…", "جارٍ الحفظ…") : tr("Add Isolate", "إضافة العزلة")}</button>
       </form>
@@ -189,7 +189,7 @@ export function MicrobiologyCaseEditor({
           <option value="">{tr("Select isolate…", "اختر العزلة…")}</option>
           {isolates.map(item => <option key={item.id} value={item.id}>#{item.sequenceNumber} · {item.organismCode} — {item.organismName}</option>)}
         </select></label>
-        <label>{tr("Method", "الطريقة")}<input name="method" placeholder="Disk diffusion / MIC / automated" /></label>
+        <label>{tr("Method", "الطريقة")}<input name="method" placeholder={tr("Disk diffusion / MIC / automated","الانتشار بالقرص / MIC / آلي")} /></label>
 
         <div className="form-span">
           {rows.map(row => <div className="catalog-form" key={row.key}>

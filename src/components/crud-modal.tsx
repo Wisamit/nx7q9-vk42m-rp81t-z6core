@@ -43,7 +43,7 @@ export function CrudModal({
           <h2 id="crud-modal-title">{title}</h2>
           {description && <p>{description}</p>}
         </div>
-        <button type="button" className="icon-button" aria-label="Close" onClick={onClose}><SystemIcon name="close" size={18} /></button>
+        <button type="button" className="icon-button" aria-label="Close / إغلاق" onClick={onClose}><SystemIcon name="close" size={18} /></button>
       </header>
       <div className="crud-modal-body">{children}</div>
     </section>

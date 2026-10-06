@@ -79,7 +79,7 @@ export default async function BillingPage() {
     </section>
 
     <section className="table-card">
-      <div className="table-toolbar"><h2>{tr(locale, "Invoices", "الفواتير")}</h2><span>{invoices.length} shown</span></div>
+      <div className="table-toolbar"><h2>{tr(locale, "Invoices", "الفواتير")}</h2><span>{invoices.length} {tr(locale, "shown", "معروضة")}</span></div>
       <div className="table-wrap">
         <table>
           <thead><tr><th>{tr(locale, "Invoice", "الفاتورة")}</th><th>{tr(locale, "Order", "الطلب")}</th><th>{tr(locale, "Patient / Client", "المريض / العميل")}</th><th>{tr(locale, "Branch", "الفرع")}</th><th>{tr(locale, "Total", "الإجمالي")}</th><th>{tr(locale, "Paid", "المدفوع")}</th><th>{tr(locale, "Balance", "الرصيد")}</th><th>{tr(locale, "Status", "الحالة")}</th></tr></thead>
@@ -102,7 +102,7 @@ export default async function BillingPage() {
     </section>
 
     <section className="table-card detail-section">
-      <div className="table-toolbar"><h2>{tr(locale, "Recent Payments", "أحدث المدفوعات")}</h2><span>{recentPayments.length} shown</span></div>
+      <div className="table-toolbar"><h2>{tr(locale, "Recent Payments", "أحدث المدفوعات")}</h2><span>{recentPayments.length} {tr(locale, "shown", "معروضة")}</span></div>
       <div className="table-wrap">
         <table>
           <thead><tr><th>{tr(locale, "Date", "التاريخ")}</th><th>{tr(locale, "Invoice(s)", "الفاتورة/الفواتير")}</th><th>{tr(locale, "Amount", "المبلغ")}</th><th>{tr(locale, "Method", "الطريقة")}</th><th>{tr(locale, "Reference", "المرجع")}</th><th>{tr(locale, "Cashier", "أمين الصندوق")}</th><th>{tr(locale, "Status", "الحالة")}</th></tr></thead>

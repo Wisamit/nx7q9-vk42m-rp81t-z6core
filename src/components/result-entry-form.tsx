@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
+import { statusLabel as sharedStatusLabel } from "@/lib/ui-i18n";
 
 type ResultField = {
   componentId: string | null;
@@ -54,6 +55,32 @@ export function ResultEntryForm({
   locale: "ar" | "en";
 }) {
   const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
+  const resultTypeLabel = (value: string) => ({
+    NUMERIC: tr("Numeric", "رقمي"),
+    TEXT: tr("Text", "نصي"),
+    QUALITATIVE: tr("Qualitative", "نوعي"),
+    BOOLEAN: tr("Yes / No", "نعم / لا"),
+    DATE: tr("Date", "تاريخ"),
+  }[value] || value);
+  const sourceLabel = (value: string) => ({
+    MANUAL: tr("Manual", "يدوي"),
+    ANALYZER: tr("Analyzer", "جهاز تحليل"),
+    IMPORT: tr("Import", "استيراد"),
+    CALCULATED: tr("Calculated", "محسوب"),
+  }[value] || value);
+  const flagLabel = (value: string) => ({
+    NORMAL: tr("Normal", "طبيعي"),
+    LOW: tr("Low", "منخفض"),
+    HIGH: tr("High", "مرتفع"),
+    CRITICAL_LOW: tr("Critical low", "منخفض حرج"),
+    CRITICAL_HIGH: tr("Critical high", "مرتفع حرج"),
+    ABNORMAL: tr("Abnormal", "غير طبيعي"),
+  }[value] || value);
+  const deltaLabel = (value: string) => ({
+    NO_PREVIOUS_RESULT: tr("No previous result", "لا توجد نتيجة سابقة"),
+    WITHIN_LIMIT: tr("Within limit", "ضمن الحد"),
+    EXCEEDED: tr("Exceeded", "متجاوز"),
+  }[value] || value);
   const router = useRouter();
   const [values, setValues] = useState<Record<string, string>>(
     Object.fromEntries(fields.map((field) => [field.componentId || "__TEST__", field.currentValue])),
@@ -155,7 +182,7 @@ export function ResultEntryForm({
         const reasons = Array.isArray(body.reasons)
           ? body.reasons.map((reason) => typeof reason === "object" && reason && "code" in reason ? String(reason.code) : "").filter(Boolean).join(", ")
           : "";
-        const confirmed = confirm(`QC has warning-level conditions${reasons ? ": " + reasons : ""}. Confirm that you reviewed QC and continue verification?`);
+        const confirmed = confirm(tr(`QC has warning-level conditions${reasons ? ": " + reasons : ""}. Confirm that you reviewed QC and continue verification?`, `توجد حالات تحذير في QC${reasons ? ": " + reasons : ""}. أكد أنك راجعت ضبط الجودة وتريد متابعة التحقق.`));
         if (!confirmed) break;
         confirmQcWarnings = true;
         continue;
@@ -163,7 +190,7 @@ export function ResultEntryForm({
 
       if (body.error === "delta_review_confirmation_required" && !confirmDeltaWarnings) {
         const count = typeof body.deltaExceededCount === "number" ? body.deltaExceededCount : 0;
-        const confirmed = confirm(`${count} delta-check warning(s) exceeded configured limits. Confirm that you reviewed these warnings and continue verification?`);
+        const confirmed = confirm(tr(`${count} delta-check warning(s) exceeded configured limits. Confirm that you reviewed these warnings and continue verification?`, `${count} تحذير دلتا تجاوز الحدود المهيأة. أكد أنك راجعت هذه التحذيرات وتريد متابعة التحقق.`));
         if (!confirmed) break;
         confirmDeltaWarnings = true;
         continue;
@@ -177,17 +204,17 @@ export function ResultEntryForm({
       const criticalCount = typeof body.criticalCount === "number" ? body.criticalCount : 0;
       setSavedStatus(resultStatus);
       setMessage(criticalCount > 0
-        ? "Result verified. Critical result acknowledgement/communication is required before release."
-        : "Result verified successfully.");
+        ? tr("Result verified. Critical result acknowledgement/communication is required before release.", "تم التحقق من النتيجة. يلزم توثيق التواصل والإقرار بالنتيجة الحرجة قبل الإصدار.")
+        : tr("Result verified successfully.", "تم التحقق من النتيجة بنجاح."));
       router.refresh();
     } else if (body.error === "reflex_review_required") {
-      setMessage("Verification blocked: review all pending reflex recommendations first.");
+      setMessage(tr("Verification blocked: review all pending reflex recommendations first.", "التحقق محظور: راجع أولاً جميع توصيات الفحوص الانعكاسية المعلقة."));
     } else if (body.error === "validation_hold_review_required") {
-      setMessage("Verification blocked: resolve all active blocking validation holds first.");
+      setMessage(tr("Verification blocked: resolve all active blocking validation holds first.", "التحقق محظور: عالج أولاً جميع حجوزات التحقق المانعة النشطة."));
     } else if (body.error === "qc_blocking_hold") {
-      setMessage("Verification blocked: analyzer QC is not currently acceptable. Review QC status and open QC violations.");
+      setMessage(tr("Verification blocked: analyzer QC is not currently acceptable. Review QC status and open QC violations.", "التحقق محظور: حالة ضبط الجودة للجهاز غير مقبولة حالياً. راجع حالة QC والمخالفات المفتوحة."));
     } else {
-      setMessage(typeof body.error === "string" ? body.error : "Result verification failed.");
+      setMessage(tr("Result verification failed.", "فشل التحقق من النتيجة."));
     }
     setBusy("");
   }
@@ -198,8 +225,8 @@ export function ResultEntryForm({
 
   return <form className="result-entry-form" onSubmit={save}>
     <div className="result-entry-header">
-      <div><strong>{tr("Status", "الحالة")}</strong><span>{savedStatus || tr("NOT ENTERED", "غير مدخل")}</span></div>
-      <div><strong>{tr("Source", "المصدر")}</strong><span>{resultSource}{analyzerLabel ? ` · ${analyzerLabel}` : ""}</span></div>
+      <div><strong>{tr("Status", "الحالة")}</strong><span>{savedStatus ? sharedStatusLabel(locale, savedStatus) : tr("Not entered", "غير مدخل")}</span></div>
+      <div><strong>{tr("Source", "المصدر")}</strong><span>{sourceLabel(resultSource)}{analyzerLabel ? ` · ${analyzerLabel}` : ""}</span></div>
     </div>
 
     <div className="result-field-list">
@@ -207,23 +234,23 @@ export function ResultEntryForm({
         const key = field.componentId || "__TEST__";
         return <div className={`result-field-row ${field.critical ? "result-critical" : ""}`} key={key}>
           <div className="result-field-name">
-            <strong>{field.code} — {field.nameEn}</strong>
-            {field.nameAr && <small dir="rtl">{field.nameAr}</small>}
-            <small>{field.resultType}{field.unit ? ` · ${field.unit}` : ""}</small>
+            <strong>{field.code} — {locale === "ar" ? field.nameAr || field.nameEn : field.nameEn}</strong>
+            {locale !== "ar" && field.nameAr && <small dir="rtl">{field.nameAr}</small>}
+            <small>{resultTypeLabel(field.resultType)}{field.unit ? ` · ${field.unit}` : ""}</small>
           </div>
           <div className="result-field-input">{locked ? <strong>{values[key] || "—"}</strong> : fieldInput(field)}</div>
           <div className="result-field-reference">
-            <span>{field.referenceDisplay || "No active reference interval"}</span>
-            {field.currentFlag && <strong>{field.currentFlag}</strong>}
+            <span>{field.referenceDisplay || tr("No active reference interval", "لا يوجد مدى مرجعي نشط")}</span>
+            {field.currentFlag && <strong>{flagLabel(field.currentFlag)}</strong>}
             {field.deltaEvaluation && field.deltaEvaluation !== "NOT_CONFIGURED" && <span className={field.deltaEvaluation === "EXCEEDED" ? "delta-exceeded" : "delta-ok"}>
-              Delta: {field.deltaDisplay || field.deltaEvaluation}
+              {tr("Delta", "دلتا")}: {field.deltaDisplay || deltaLabel(field.deltaEvaluation)}
             </span>}
           </div>
         </div>;
       })}
     </div>
 
-    <label className="result-comments">Comments
+    <label className="result-comments">{tr("Comments", "التعليقات")}
       {!locked && commentTemplates.length > 0 && <select
         defaultValue=""
         onChange={(event) => {
@@ -244,7 +271,7 @@ export function ResultEntryForm({
       {!locked && <button className="primary-button" disabled={busy !== ""}>{busy === "save" ? tr("Saving…", "جارٍ الحفظ…") : tr("Save Result", "حفظ النتيجة")}</button>}
       {!statusLocked && canVerify && savedResultId && complete && <button className="secondary-button" type="button" disabled={busy !== ""} onClick={() => void verify()}>{busy === "verify" ? tr("Verifying…", "جارٍ التحقق…") : tr("Verify Result", "التحقق من النتيجة")}</button>}
       {statusLocked && <span className="muted">{tr("Verified/released results are locked. Future edits must use an amendment workflow.", "النتائج التي تم التحقق منها أو إصدارها مقفلة، وأي تعديل لاحق يجب أن يتم عبر مسار التعديل الرسمي.")}</span>}
-      {!statusLocked && sourceLocked && <span className="muted">Analyzer/import-origin values are read-only here. Use the analyzer integration workflow for additional observations or corrections.</span>}
+      {!statusLocked && sourceLocked && <span className="muted">{tr("Analyzer/import-origin values are read-only here. Use the analyzer integration workflow for additional observations or corrections.", "القيم الواردة من الجهاز أو الاستيراد للقراءة فقط هنا. استخدم مسار تكامل أجهزة التحليل لإضافة مشاهدات أو تصحيحات.")}</span>}
     </div>
   </form>;
 }
