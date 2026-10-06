@@ -282,7 +282,7 @@ export default async function DiagnosticReportPage({ params }: { params: Promise
                       )}</ul>
                     </div>}
                     {result.microbiology.isolates.map(isolate => <div key={isolate.sequenceNumber} className="detail-section">
-                      <p><strong>Isolate #{isolate.sequenceNumber}: {isolate.organism.code} — {isolate.organism.nameEn}</strong>
+                      <p><strong>{tr(locale, "Isolate", "العزلة")} #{isolate.sequenceNumber}: {isolate.organism.code} — {locale === "ar" ? isolate.organism.nameAr || isolate.organism.nameEn : isolate.organism.nameEn}</strong>
                         {isolate.quantityText ? ` · ${isolate.quantityText}` : ""}</p>
                       {isolate.colonyNotes && <p>{isolate.colonyNotes}</p>}
                       {isolate.susceptibilityTests.map((panel, panelIndex) => <div key={panelIndex}>
