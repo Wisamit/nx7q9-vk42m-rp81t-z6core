@@ -53,12 +53,13 @@ CREATE TABLE `discount_approval_requests` (
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 INSERT IGNORE INTO `permissions` (`id`,`code`,`module`,`description`,`created_at`) VALUES
-(UUID(),'billing.discount.approve','billing','Approve order discounts above the requester limit',CURRENT_TIMESTAMP(3));
+(UUID(),'billing.discount.approve','billing','Approve order discounts above the requester limit',CURRENT_TIMESTAMP(3)),
+(UUID(),'billing.discount.limits.manage','billing','Configure role and user discount limits',CURRENT_TIMESTAMP(3));
 
 INSERT IGNORE INTO `role_permissions` (`role_id`,`permission_id`,`granted_at`)
 SELECT r.id,p.id,CURRENT_TIMESTAMP(3)
 FROM `roles` r
-JOIN `permissions` p ON p.code='billing.discount.approve'
+JOIN `permissions` p ON p.code IN ('billing.discount.approve','billing.discount.limits.manage')
 WHERE r.code='SYSTEM_ADMIN';
 
 UPDATE `roles`
