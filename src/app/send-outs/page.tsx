@@ -1,12 +1,14 @@
 import { permissionSet, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { SendOutManager } from "@/components/send-out-manager";
+import { getUiLocale, tr } from "@/lib/ui-i18n";
 
 export const dynamic = "force-dynamic";
 
 export default async function SendOutsPage() {
   const session = await requirePermission("sendouts.view");
   const permissions = permissionSet(session);
+  const locale = getUiLocale(session.user.preferredLocale);
   const branchIds = session.user.branchScopes.filter(scope => scope.branch.status === "ACTIVE").map(scope => scope.branchId);
 
   const [laboratories, orderItems, referrals] = await Promise.all([
@@ -90,17 +92,17 @@ export default async function SendOutsPage() {
   return <main className="catalog-shell">
     <header className="page-header">
       <div>
-        <p className="eyebrow">Referral Laboratory Workflow</p>
-        <h1>Send-out Laboratories</h1>
-        <p className="muted">Track external laboratory referral, specimen dispatch, cost, expected TAT, external reports, verification and chain of custody.</p>
+        <p className="eyebrow">{tr(locale, "Referral Laboratory Workflow", "مسار المختبرات المرجعية")}</p>
+        <h1>{tr(locale, "Send-out Laboratories", "المختبرات المرجعية الخارجية")}</h1>
+        <p className="muted">{tr(locale, "Track external laboratory referral, specimen dispatch, cost, expected TAT, external reports, verification and chain of custody.", "تتبع إحالة المختبر الخارجي وإرسال العينات والتكلفة والوقت المتوقع والنتائج الخارجية والتحقق وسلسلة الحيازة.")}</p>
       </div>
     </header>
 
     <section className="workflow-summary">
-      <article><span>Active labs</span><strong>{laboratories.length}</strong><small>configured referral laboratories</small></article>
-      <article><span>Open referrals</span><strong>{referrals.filter(row => !["COMPLETED","CANCELLED"].includes(row.status)).length}</strong><small>not yet completed</small></article>
-      <article><span>Awaiting result</span><strong>{referrals.filter(row => row.status === "DISPATCHED").length}</strong><small>specimens dispatched</small></article>
-      <article><span>Awaiting verification</span><strong>{referrals.filter(row => row.status === "RESULT_RECEIVED").length}</strong><small>external result received</small></article>
+      <article><span>{tr(locale, "Active labs", "مختبرات نشطة")}</span><strong>{laboratories.length}</strong><small>{tr(locale, "configured referral laboratories", "مختبرات مرجعية مهيأة")}</small></article>
+      <article><span>{tr(locale, "Open referrals", "إحالات مفتوحة")}</span><strong>{referrals.filter(row => !["COMPLETED","CANCELLED"].includes(row.status)).length}</strong><small>{tr(locale, "not yet completed", "غير مكتملة بعد")}</small></article>
+      <article><span>{tr(locale, "Awaiting result", "بانتظار النتيجة")}</span><strong>{referrals.filter(row => row.status === "DISPATCHED").length}</strong><small>{tr(locale, "specimens dispatched", "عينات تم إرسالها")}</small></article>
+      <article><span>{tr(locale, "Awaiting verification", "بانتظار التحقق")}</span><strong>{referrals.filter(row => row.status === "RESULT_RECEIVED").length}</strong><small>{tr(locale, "external result received", "تم استلام النتيجة الخارجية")}</small></article>
     </section>
 
     <SendOutManager
