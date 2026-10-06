@@ -178,8 +178,8 @@ test("highest active role discount limit is used when user has no override", () 
   }), 12.5);
 });
 
-test("discount above requester limit requires approver re-authentication", () => {
-  assert.equal(discountApprovalMode({ requestedPercent: 6, requesterLimitPercent: 5 }), "APPROVER_REAUTH");
+test("discount above requester limit requires approval workflow", () => {
+  assert.equal(discountApprovalMode({ requestedPercent: 6, requesterLimitPercent: 5 }), "APPROVAL_WORKFLOW");
   assert.equal(discountApprovalMode({ requestedPercent: 5, requesterLimitPercent: 5 }), "SELF_LIMIT");
   assert.equal(discountApprovalMode({ requestedPercent: 0, requesterLimitPercent: 0 }), "NONE");
 });
