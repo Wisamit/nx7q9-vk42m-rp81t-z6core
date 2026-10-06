@@ -464,70 +464,70 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
   return <main className="catalog-shell">
     <header className="page-header">
       <div>
-        <p className="eyebrow">Analytics & Management</p>
-        <h1>Management Analytics</h1>
-        <p className="muted">Branch-scoped operational, financial, TAT, source/referrer, test profitability and quality KPIs. Money is never combined across currencies.</p>
+        <p className="eyebrow">{tr(locale, "Analytics & Management", "التحليلات والإدارة")}</p>
+        <h1>{tr(locale, "Management Analytics", "التحليلات الإدارية")}</h1>
+        <p className="muted">{tr(locale, "Branch-scoped operational, financial, TAT, source/referrer, test profitability and quality KPIs. Money is never combined across currencies.", "مؤشرات تشغيلية ومالية وزمن الإنجاز والمصادر والمحيلين وربحية الفحوصات والجودة ضمن نطاق الفروع المصرح بها. لا يتم جمع الأموال بين عملات مختلفة.")}</p>
       </div>
-      <div className="result-actions"><Link className="secondary-link" href="/dashboard">Back to Dashboard</Link></div>
+      <div className="result-actions"><Link className="secondary-link" href="/dashboard">{tr(locale, "Back to Dashboard", "العودة إلى لوحة التحكم")}</Link></div>
     </header>
 
     <form className="filter-bar" method="get">
-      <label>Period<select name="period" defaultValue={period}>
-        <option value="7d">Last 7 days</option>
-        <option value="30d">Last 30 days</option>
-        <option value="90d">Last 90 days</option>
-        <option value="365d">Last 12 months</option>
-        <option value="all">All time</option>
-        <option value="custom">Custom</option>
+      <label>{tr(locale, "Period", "الفترة")}<select name="period" defaultValue={period}>
+        <option value="7d">{tr(locale, "Last 7 days", "آخر 7 أيام")}</option>
+        <option value="30d">{tr(locale, "Last 30 days", "آخر 30 يوماً")}</option>
+        <option value="90d">{tr(locale, "Last 90 days", "آخر 90 يوماً")}</option>
+        <option value="365d">{tr(locale, "Last 12 months", "آخر 12 شهراً")}</option>
+        <option value="all">{tr(locale, "All time", "كل الوقت")}</option>
+        <option value="custom">{tr(locale, "Custom", "مخصص")}</option>
       </select></label>
-      <label>Branch<select name="branchId" defaultValue={selectedBranchId || ""}>
-        <option value="">All authorized branches</option>
-        {branches.map(branch => <option key={branch.id} value={branch.id}>{branch.code} — {branch.nameEn}</option>)}
+      <label>{tr(locale, "Branch", "الفرع")}<select name="branchId" defaultValue={selectedBranchId || ""}>
+        <option value="">{tr(locale, "All authorized branches", "كل الفروع المصرح بها")}</option>
+        {branches.map(branch => <option key={branch.id} value={branch.id}>{branch.code} — {localizedName(branch)}</option>)}
       </select></label>
-      <label>From<input type="date" name="from" defaultValue={first(params.from) || ""} /></label>
-      <label>To<input type="date" name="to" defaultValue={first(params.to) || ""} /></label>
-      <button className="secondary-button" type="submit">Apply</button>
+      <label>{tr(locale, "From", "من")}<input type="date" name="from" defaultValue={first(params.from) || ""} /></label>
+      <label>{tr(locale, "To", "إلى")}<input type="date" name="to" defaultValue={first(params.to) || ""} /></label>
+      <button className="secondary-button" type="submit">{tr(locale, "Apply", "تطبيق")}</button>
       <span className="muted">{periodLabel}</span>
     </form>
 
     <section className="detail-grid">
-      <article className="detail-card"><h2>Orders</h2><strong>{orders.length.toLocaleString()}</strong><p className="muted">{completionRate.toFixed(1)}% completed · {uniquePatients.toLocaleString()} unique patients.</p></article>
-      <article className="detail-card"><h2>Average TAT</h2><strong>{minuteLabel(avgTat, locale)}</strong><p className="muted">Order registration to latest released result.</p></article>
-      <article className="detail-card"><h2>P90 TAT</h2><strong>{minuteLabel(p90Tat, locale)}</strong><p className="muted">90% of released test items completed within this time.</p></article>
-      <article className="detail-card"><h2>Specimen Rejection</h2><strong>{rejectionRate.toFixed(2)}%</strong><p className="muted">{rejectedSpecimens} rejected of {totalSpecimens} specimens.</p></article>
-      <article className="detail-card"><h2>Open Critical</h2><strong>{openCritical}</strong><p className="muted">Average acknowledgement: {minuteLabel(avgCriticalAck, locale)}.</p></article>
-      <article className="detail-card"><h2>Open QC Blocks</h2><strong>{openQcBlocks}</strong><p className="muted">Unresolved blocking Westgard/QC violations.</p></article>
+      <article className="detail-card"><h2>{tr(locale, "Orders", "الطلبات")}</h2><strong>{orders.length.toLocaleString()}</strong><p className="muted">{completionRate.toFixed(1)}% {tr(locale, "completed", "مكتملة")} · {uniquePatients.toLocaleString()} {tr(locale, "unique patients", "مريض مختلف")}.</p></article>
+      <article className="detail-card"><h2>{tr(locale, "Average TAT", "متوسط زمن الإنجاز TAT")}</h2><strong>{minuteLabel(avgTat, locale)}</strong><p className="muted">{tr(locale, "Order registration to latest released result.", "من تسجيل الطلب حتى أحدث نتيجة صادرة.")}</p></article>
+      <article className="detail-card"><h2>{tr(locale, "P90 TAT", "زمن الإنجاز P90")}</h2><strong>{minuteLabel(p90Tat, locale)}</strong><p className="muted">{tr(locale, "90% of released test items completed within this time.", "اكتمل 90% من عناصر الفحوصات الصادرة ضمن هذا الزمن.")}</p></article>
+      <article className="detail-card"><h2>{tr(locale, "Specimen Rejection", "رفض العينات")}</h2><strong>{rejectionRate.toFixed(2)}%</strong><p className="muted">{rejectedSpecimens} {tr(locale, "rejected of", "مرفوضة من أصل")} {totalSpecimens} {tr(locale, "specimens", "عينة")}.</p></article>
+      <article className="detail-card"><h2>{tr(locale, "Open Critical", "نتائج حرجة مفتوحة")}</h2><strong>{openCritical}</strong><p className="muted">{tr(locale, "Average acknowledgement:", "متوسط زمن الإقرار:")} {minuteLabel(avgCriticalAck, locale)}.</p></article>
+      <article className="detail-card"><h2>{tr(locale, "Open QC Blocks", "حالات حظر QC المفتوحة")}</h2><strong>{openQcBlocks}</strong><p className="muted">{tr(locale, "Unresolved blocking Westgard/QC violations.", "مخالفات Westgard/QC الحاجبة التي لم تُحل بعد.")}</p></article>
     </section>
 
     <section className="detail-section">
-      <div className="table-toolbar"><h2>Financial Summary</h2><span>Per currency</span></div>
+      <div className="table-toolbar"><h2>{tr(locale, "Financial Summary", "الملخص المالي")}</h2><span>{tr(locale, "Per currency", "حسب كل عملة")}</span></div>
       <div className="detail-grid">
         {[...financeByCurrency.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([currency, row]) => <article className="detail-card" key={currency}>
           <h2>{currency}</h2>
           <dl className="compact-kpis">
-            <div><dt>Gross</dt><dd>{money(row.gross, currency)}</dd></div>
-            <div><dt>Discounts</dt><dd>{money(row.discount, currency)}</dd></div>
-            <div><dt>Tax</dt><dd>{money(row.tax, currency)}</dd></div>
-            <div><dt>Invoiced</dt><dd>{money(row.invoiced, currency)}</dd></div>
-            <div><dt>Collected</dt><dd>{money(row.collected, currency)}</dd></div>
-            <div><dt>Outstanding</dt><dd>{money(row.outstanding, currency)}</dd></div>
+            <div><dt>{tr(locale, "Gross", "الإجمالي قبل الخصومات")}</dt><dd>{money(row.gross, currency)}</dd></div>
+            <div><dt>{tr(locale, "Discounts", "الخصومات")}</dt><dd>{money(row.discount, currency)}</dd></div>
+            <div><dt>{tr(locale, "Tax", "الضريبة")}</dt><dd>{money(row.tax, currency)}</dd></div>
+            <div><dt>{tr(locale, "Invoiced", "المفوتر")}</dt><dd>{money(row.invoiced, currency)}</dd></div>
+            <div><dt>{tr(locale, "Collected", "المحصّل")}</dt><dd>{money(row.collected, currency)}</dd></div>
+            <div><dt>{tr(locale, "Outstanding", "المستحق")}</dt><dd>{money(row.outstanding, currency)}</dd></div>
           </dl>
         </article>)}
-        {financeByCurrency.size === 0 && <article className="detail-card"><p className="muted">No financial activity in the selected period.</p></article>}
+        {financeByCurrency.size === 0 && <article className="detail-card"><p className="muted">{tr(locale, "No financial activity in the selected period.", "لا توجد حركة مالية ضمن الفترة المحددة.")}</p></article>}
       </div>
     </section>
 
     <section className="detail-grid detail-section">
-      <AnalyticsBars title="Top Tests by Volume" items={topTests.map(test => ({ label: test.code + " — " + test.name, value: test.volume }))} />
-      <AnalyticsBars title="Top Sources" items={topSources.map(source => ({ label: source.name, value: source.orders }))} />
-      <AnalyticsBars title="Top Referrers" items={topReferrers.map(referrer => ({ label: referrer.name, value: referrer.orders }))} />
-      <AnalyticsBars title="Slowest Tests by Average TAT" items={slowestTests.map(test => ({ label: test.label, value: test.average, displayValue: minuteLabel(test.average, locale) + " · n=" + test.count }))} />
+      <AnalyticsBars title={tr(locale, "Top Tests by Volume", "أكثر الفحوصات حسب العدد")} emptyText={tr(locale, "No data for the selected period.", "لا توجد بيانات ضمن الفترة المحددة.")} items={topTests.map(test => ({ label: test.code + " — " + test.name, value: test.volume }))} />
+      <AnalyticsBars title={tr(locale, "Top Sources", "أعلى المصادر")} emptyText={tr(locale, "No data for the selected period.", "لا توجد بيانات ضمن الفترة المحددة.")} items={topSources.map(source => ({ label: source.name, value: source.orders }))} />
+      <AnalyticsBars title={tr(locale, "Top Referrers", "أعلى المحيلين")} emptyText={tr(locale, "No data for the selected period.", "لا توجد بيانات ضمن الفترة المحددة.")} items={topReferrers.map(referrer => ({ label: referrer.name, value: referrer.orders }))} />
+      <AnalyticsBars title={tr(locale, "Slowest Tests by Average TAT", "أبطأ الفحوصات حسب متوسط TAT")} emptyText={tr(locale, "No data for the selected period.", "لا توجد بيانات ضمن الفترة المحددة.")} items={slowestTests.map(test => ({ label: test.label, value: test.average, displayValue: minuteLabel(test.average, locale) + " · " + tr(locale, "n=", "عدد=") + test.count }))} />
     </section>
 
     <section className="table-card detail-section">
-      <div className="table-toolbar"><h2>Branch Comparison</h2><span>{branchMap.size} branches</span></div>
+      <div className="table-toolbar"><h2>{tr(locale, "Branch Comparison", "مقارنة الفروع")}</h2><span>{branchMap.size} {tr(locale, "branches", "فروع")}</span></div>
       <div className="table-wrap"><table>
-        <thead><tr><th>Branch</th><th>Orders</th><th>Completed</th><th>Completion</th><th>Avg TAT</th><th>Specimen rejection</th><th>Revenue</th><th>Collected</th></tr></thead>
+        <thead><tr><th>{tr(locale, "Branch", "الفرع")}</th><th>{tr(locale, "Orders", "الطلبات")}</th><th>{tr(locale, "Completed", "المكتملة")}</th><th>{tr(locale, "Completion", "نسبة الإكمال")}</th><th>{tr(locale, "Avg TAT", "متوسط TAT")}</th><th>{tr(locale, "Specimen rejection", "رفض العينات")}</th><th>{tr(locale, "Revenue", "الإيراد")}</th><th>{tr(locale, "Collected", "المحصّل")}</th></tr></thead>
         <tbody>{[...branchMap.values()].map(branch => {
           const avg = branch.tatMinutes.length ? branch.tatMinutes.reduce((a,b) => a+b,0) / branch.tatMinutes.length : null;
           return <tr key={branch.id}>
@@ -545,12 +545,12 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
     </section>
 
     <section className="table-card detail-section">
-      <div className="table-toolbar"><h2>Test Revenue & Profitability Coverage</h2><span>Cost from linked inventory consumption + recorded send-out laboratory cost</span></div>
+      <div className="table-toolbar"><h2>{tr(locale, "Test Revenue & Profitability Coverage", "إيرادات الفحوصات وتغطية الربحية")}</h2><span>{tr(locale, "Cost from linked inventory consumption + recorded send-out laboratory cost", "التكلفة من استهلاك المخزون المرتبط + تكلفة المختبر الخارجي المسجلة")}</span></div>
       <div className="table-wrap"><table>
-        <thead><tr><th>Test</th><th>Volume</th><th>Revenue</th><th>Attributed laboratory cost</th><th>Margin where comparable</th><th>Cost coverage</th></tr></thead>
-        <tbody>{topTests.length === 0 ? <tr><td colSpan={6} className="empty-state">No test activity in the selected period.</td></tr> : topTests.map(test => {
+        <thead><tr><th>{tr(locale, "Test", "الفحص")}</th><th>{tr(locale, "Volume", "العدد")}</th><th>{tr(locale, "Revenue", "الإيراد")}</th><th>{tr(locale, "Attributed laboratory cost", "تكلفة المختبر المنسوبة")}</th><th>{tr(locale, "Margin where comparable", "الهامش عند إمكانية المقارنة")}</th><th>{tr(locale, "Cost coverage", "تغطية التكلفة")}</th></tr></thead>
+        <tbody>{topTests.length === 0 ? <tr><td colSpan={6} className="empty-state">{tr(locale, "No test activity in the selected period.", "لا توجد حركة فحوصات ضمن الفترة المحددة.")}</td></tr> : topTests.map(test => {
           const revenueText = [...test.revenue.entries()].map(([currency, amount]) => money(amount, currency)).join(" · ");
-          const costText = [...test.cost.entries()].map(([currency, amount]) => money(amount, currency)).join(" · ") || "No linked cost";
+          const costText = [...test.cost.entries()].map(([currency, amount]) => money(amount, currency)).join(" · ") || tr(locale, "No linked cost", "لا توجد تكلفة مرتبطة");
           const margins = [...test.revenue.entries()].flatMap(([currency, revenue]) => {
             const cost = test.cost.get(currency);
             return cost === undefined ? [] : [money(revenue - cost, currency)];
@@ -561,7 +561,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
             <td>{test.volume}</td>
             <td>{revenueText || "—"}</td>
             <td>{costText}</td>
-            <td>{margins.join(" · ") || "Insufficient linked cost data"}</td>
+            <td>{margins.join(" · ") || tr(locale, "Insufficient linked cost data", "بيانات التكلفة المرتبطة غير كافية")}</td>
             <td>{coverage.toFixed(1)}%</td>
           </tr>;
         })}</tbody>
@@ -570,26 +570,26 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
 
     <section className="detail-grid detail-section">
       <article className="table-card">
-        <div className="table-toolbar"><h2>Source Analytics</h2><span>{sourceMap.size}</span></div>
+        <div className="table-toolbar"><h2>{tr(locale, "Source Analytics", "تحليلات المصادر")}</h2><span>{sourceMap.size}</span></div>
         <div className="table-wrap"><table>
-          <thead><tr><th>Source</th><th>Orders</th><th>Revenue</th></tr></thead>
-          <tbody>{topSources.map(source => <tr key={source.name}><td>{source.name}</td><td>{source.orders}</td><td>{[...source.revenue.entries()].map(([currency, amount]) => money(amount, currency)).join(" · ") || "—"}</td></tr>)}</tbody>
+          <thead><tr><th>{tr(locale, "Source", "المصدر")}</th><th>{tr(locale, "Orders", "الطلبات")}</th><th>{tr(locale, "Revenue", "الإيراد")}</th></tr></thead>
+          <tbody>{topSources.length === 0 ? <tr><td colSpan={3} className="empty-state">{tr(locale, "No source-linked orders.", "لا توجد طلبات مرتبطة بمصدر.")}</td></tr> : topSources.map(source => <tr key={source.name}><td>{source.name}</td><td>{source.orders}</td><td>{[...source.revenue.entries()].map(([currency, amount]) => money(amount, currency)).join(" · ") || "—"}</td></tr>)}</tbody>
         </table></div>
       </article>
       <article className="table-card">
-        <div className="table-toolbar"><h2>Referrer Analytics</h2><span>{referrerMap.size}</span></div>
+        <div className="table-toolbar"><h2>{tr(locale, "Referrer Analytics", "تحليلات المحيلين")}</h2><span>{referrerMap.size}</span></div>
         <div className="table-wrap"><table>
-          <thead><tr><th>Referrer</th><th>Orders</th><th>Revenue</th></tr></thead>
-          <tbody>{topReferrers.length === 0 ? <tr><td colSpan={3} className="empty-state">No referrer-linked orders.</td></tr> : topReferrers.map(referrer => <tr key={referrer.name}><td>{referrer.name}</td><td>{referrer.orders}</td><td>{[...referrer.revenue.entries()].map(([currency, amount]) => money(amount, currency)).join(" · ") || "—"}</td></tr>)}</tbody>
+          <thead><tr><th>{tr(locale, "Referrer", "المحيل")}</th><th>{tr(locale, "Orders", "الطلبات")}</th><th>{tr(locale, "Revenue", "الإيراد")}</th></tr></thead>
+          <tbody>{topReferrers.length === 0 ? <tr><td colSpan={3} className="empty-state">{tr(locale, "No referrer-linked orders.", "لا توجد طلبات مرتبطة بمحيل.")}</td></tr> : topReferrers.map(referrer => <tr key={referrer.name}><td>{referrer.name}</td><td>{referrer.orders}</td><td>{[...referrer.revenue.entries()].map(([currency, amount]) => money(amount, currency)).join(" · ") || "—"}</td></tr>)}</tbody>
         </table></div>
       </article>
     </section>
 
     <section className="table-card detail-section">
-      <div className="table-toolbar"><h2>Quality KPIs</h2><span>Latest measurement in selected period</span></div>
+      <div className="table-toolbar"><h2>{tr(locale, "Quality KPIs", "مؤشرات الجودة الرئيسية")}</h2><span>{tr(locale, "Latest measurement in selected period", "أحدث قياس ضمن الفترة المحددة")}</span></div>
       <div className="table-wrap"><table>
-        <thead><tr><th>Indicator</th><th>Scope</th><th>Value</th><th>Target</th><th>Period</th></tr></thead>
-        <tbody>{qualityIndicators.length === 0 ? <tr><td colSpan={5} className="empty-state">No quality indicators configured.</td></tr> : qualityIndicators.map(indicator => {
+        <thead><tr><th>{tr(locale, "Indicator", "المؤشر")}</th><th>{tr(locale, "Scope", "النطاق")}</th><th>{tr(locale, "Value", "القيمة")}</th><th>{tr(locale, "Target", "الهدف")}</th><th>{tr(locale, "Period", "الفترة")}</th></tr></thead>
+        <tbody>{qualityIndicators.length === 0 ? <tr><td colSpan={5} className="empty-state">{tr(locale, "No quality indicators configured.", "لا توجد مؤشرات جودة مهيأة.")}</td></tr> : qualityIndicators.map(indicator => {
           const measurement = indicator.measurements[0];
           const target = indicator.direction === "TARGET_RANGE"
             ? (indicator.targetMin?.toString() || "—") + " – " + (indicator.targetMax?.toString() || "—")
@@ -597,8 +597,8 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
               ? "≤ " + (indicator.targetMax?.toString() || "—")
               : "≥ " + (indicator.targetMin?.toString() || "—");
           return <tr key={indicator.id}>
-            <td><strong>{indicator.code}</strong><br/><small>{indicator.nameEn}</small></td>
-            <td>{indicator.branch ? indicator.branch.code + " — " + indicator.branch.nameEn : "Organization"}</td>
+            <td><strong>{indicator.code}</strong><br/><small>{localizedName(indicator)}</small></td>
+            <td>{indicator.branch ? indicator.branch.code + " — " + localizedName(indicator.branch) : tr(locale, "Organization", "المؤسسة")}</td>
             <td>{measurement ? measurement.value.toString() + (indicator.unit ? " " + indicator.unit : "") : "—"}</td>
             <td>{target}</td>
             <td>{measurement ? measurement.periodStart.toISOString().slice(0,10) + " → " + measurement.periodEnd.toISOString().slice(0,10) : "—"}</td>
