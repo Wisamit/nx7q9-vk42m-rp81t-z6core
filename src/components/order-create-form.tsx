@@ -299,6 +299,53 @@ export function OrderCreateForm({
       </div>
 
 
+      <div className="form-span order-question-panel">
+        <div className="section-title-row">
+          <div>
+            <p className="eyebrow">{tr("Billing control", "ضبط الفوترة")}</p>
+            <h3>{tr("Order Discount", "خصم الطلب")}</h3>
+          </div>
+          <span className="keyboard-hint">{tr("Your self-approval limit", "حد الخصم المسموح لك")}: {discountLimitPercent.toFixed(2)}%</span>
+        </div>
+        <div className="form-grid">
+          <label>{tr("Discount (%)", "الخصم (%)")}
+            <input
+              name="discountPercent"
+              type="number"
+              min="0"
+              max="100"
+              step="0.01"
+              value={discountPercent}
+              onChange={event => {
+                const value = Number(event.target.value);
+                setDiscountPercent(Number.isFinite(value) ? value : 0);
+                setDiscountApprovalRequestId("");
+                setMessage("");
+              }}
+            />
+          </label>
+          {discountPercent > 0 && <label className="form-span">{tr("Discount reason", "سبب الخصم")}
+            <input
+              name="discountReason"
+              maxLength={1000}
+              required
+              onChange={() => {
+                if (discountApprovalRequestId) setDiscountApprovalRequestId("");
+              }}
+              placeholder={tr("Required for audit and approval", "مطلوب للتدقيق والاعتماد")}
+            />
+          </label>}
+        </div>
+        {discountPercent > discountLimitPercent && <div className="form-warning">
+          <strong>{tr("Manager approval required", "مطلوب اعتماد مدير")}</strong>
+          <p>{tr(
+            "Submitting will create an approval request without creating the order. After an authorized manager approves it in Billing, submit the unchanged order again.",
+            "عند الإرسال سيتم إنشاء طلب اعتماد دون إنشاء الطلب. بعد أن يعتمد مدير مخول الطلب من شاشة الفوترة، أعد إرسال الطلب نفسه دون تغيير.",
+          )}</p>
+          {discountApprovalRequestId && <small>{tr("Approval request", "طلب الاعتماد")}: {discountApprovalRequestId}</small>}
+        </div>}
+      </div>
+
       {selectedTests.some(test => test.orderQuestions.length > 0) && <div className="form-span order-question-panel">
         <div className="section-title-row">
           <div><p className="eyebrow">{tr("Clinical context", "السياق السريري")}</p><h3>{tr("Test-specific Questions", "أسئلة خاصة بالفحص")}</h3></div>
