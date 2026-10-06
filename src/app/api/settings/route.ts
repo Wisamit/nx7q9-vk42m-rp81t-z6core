@@ -13,7 +13,7 @@ const DATE_FORMATS = new Set(["DD/MM/YYYY", "MM/DD/YYYY", "YYYY-MM-DD", "DD MMM 
 const TIME_FORMATS = new Set(["12", "24"]);
 const THEMES = new Set(["LIGHT", "DARK", "SYSTEM"]);
 const DENSITIES = new Set(["COMFORTABLE", "COMPACT"]);
-const TIMEZONES = new Set(["Asia/Dubai", "Asia/Riyadh", "Asia/Beirut", "Asia/Damascus", "Europe/Istanbul", "UTC"]);
+const TIMEZONES = new Set(["Africa/Cairo", "Asia/Dubai", "Asia/Riyadh", "Asia/Beirut", "Asia/Damascus", "Europe/Istanbul", "UTC"]);
 
 function text(value: unknown, max = 200) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -40,7 +40,6 @@ export async function PUT(request: Request) {
   const organizationNameAr = text(body.organizationNameAr);
   const systemNameEn = text(body.systemNameEn);
   const systemNameAr = text(body.systemNameAr);
-  const developerCredit = text(body.developerCredit);
   const timezone = typeof body.timezone === "string" && TIMEZONES.has(body.timezone) ? body.timezone : null;
   const defaultTheme = typeof body.defaultTheme === "string" && THEMES.has(body.defaultTheme) ? body.defaultTheme : null;
   const dateFormat = typeof body.dateFormat === "string" && DATE_FORMATS.has(body.dateFormat) ? body.dateFormat : null;
@@ -83,7 +82,6 @@ export async function PUT(request: Request) {
         density,
         lightTheme,
         darkTheme,
-        developerCredit: developerCredit || null,
       },
       update: {
         systemNameEn,
@@ -99,7 +97,6 @@ export async function PUT(request: Request) {
         density,
         lightTheme,
         darkTheme,
-        developerCredit: developerCredit || null,
       },
     });
     await tx.auditEvent.create({
@@ -127,7 +124,6 @@ export async function PUT(request: Request) {
           darkTheme: before.darkTheme,
           logoConfigured: Boolean(before.logoDataUrl),
           faviconConfigured: Boolean(before.faviconDataUrl),
-          developerCredit: before.developerCredit,
         },
         newValues: {
           organizationNameEn,
@@ -146,7 +142,6 @@ export async function PUT(request: Request) {
           darkTheme,
           logoConfigured: Boolean(logoDataUrl),
           faviconConfigured: Boolean(faviconDataUrl),
-          developerCredit: developerCredit || null,
         },
         ipAddress: ctx.ipAddress,
         userAgent: ctx.userAgent,
