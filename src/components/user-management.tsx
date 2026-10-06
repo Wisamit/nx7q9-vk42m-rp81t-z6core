@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { SystemIcon } from "@/components/system-icon";
+import { CrudModal } from "@/components/crud-modal";
 
 type Role = { id: string; code: string; nameEn: string; nameAr: string | null; isSystem: boolean };
 type Branch = { id: string; code: string; nameEn: string; nameAr: string | null };
@@ -17,6 +18,7 @@ export function UserManagement({ locale }: { locale: "ar" | "en" }) {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [createOpen, setCreateOpen] = useState(false);
   const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
 
   async function load() {
@@ -61,6 +63,7 @@ export function UserManagement({ locale }: { locale: "ar" | "en" }) {
     if (response.ok) {
       event.currentTarget.reset();
       setMessage(tr("User created successfully.", "تم إنشاء المستخدم بنجاح."));
+      setCreateOpen(false);
       await load();
     } else {
       setMessage(body.error === "invalid_scope" ? tr("Select valid roles and branches.", "اختر أدوارًا وفروعًا صحيحة.") : tr("Unable to create user. Username may already exist.", "تعذر إنشاء المستخدم. قد يكون اسم المستخدم مستخدمًا."));
@@ -81,8 +84,20 @@ export function UserManagement({ locale }: { locale: "ar" | "en" }) {
   }
 
   return <div className="admin-grid">
-    <section className="settings-card">
-      <div className="settings-card-title"><SystemIcon name="users" /><div><h2>{tr("Create staff user", "إنشاء مستخدم موظف")}</h2><p>{tr("Assign roles and explicit branch scopes at creation.", "حدد الأدوار والفروع المسموح بها عند الإنشاء.")}</p></div></div>
+    <div className="admin-page-actions">
+      {message && <span className="crud-success-toast">{message}</span>}
+      <button type="button" className="primary-button" onClick={() => { setMessage(""); setCreateOpen(true); }}>
+        <SystemIcon name="plus" size={16} />{tr("Add User", "إضافة مستخدم")}
+      </button>
+    </div>
+
+    <CrudModal
+      open={createOpen}
+      onClose={() => setCreateOpen(false)}
+      title={tr("Create staff user", "إنشاء مستخدم موظف")}
+      description={tr("Assign role-based permissions and explicit branch access.", "حدد الدور والصلاحيات والفروع المسموح بها.")}
+      size="lg"
+    >
       <form className="settings-grid" onSubmit={createUser}>
         <label>{tr("English display name", "الاسم بالإنجليزية")}<input name="displayNameEn" required /></label>
         <label>{tr("Arabic display name", "الاسم بالعربية")}<input name="displayNameAr" /></label>
@@ -93,9 +108,9 @@ export function UserManagement({ locale }: { locale: "ar" | "en" }) {
         <fieldset className="admin-checklist"><legend>{tr("Roles", "الأدوار")}</legend>{data.roles.map(role => <label key={role.id}><input type="checkbox" name="roleIds" value={role.id} />{locale === "ar" ? role.nameAr || role.nameEn : role.nameEn}</label>)}</fieldset>
         <fieldset className="admin-checklist"><legend>{tr("Branch access", "صلاحية الفروع")}</legend>{data.branches.map(branch => <label key={branch.id}><input type="checkbox" name="branchIds" value={branch.id} />{branch.code} — {locale === "ar" ? branch.nameAr || branch.nameEn : branch.nameEn}</label>)}</fieldset>
         <button className="primary-button form-span" disabled={busy}>{busy ? tr("Saving…", "جارٍ الحفظ…") : tr("Create user", "إنشاء المستخدم")}</button>
+        {message && <div className="form-success form-span">{message}</div>}
       </form>
-      {message && <p className="form-success">{message}</p>}
-    </section>
+    </CrudModal>
 
     <section className="table-card admin-table-card">
       <div className="table-toolbar"><div><h2>{tr("Staff users", "المستخدمون")}</h2><span>{tr("Roles, branches, MFA and account state", "الأدوار والفروع وMFA وحالة الحساب")}</span></div><span>{data.users.length}</span></div>
