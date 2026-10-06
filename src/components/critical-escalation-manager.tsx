@@ -3,19 +3,23 @@
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 
-type Option = { id: string; code: string; nameEn: string };
-type Branch = { id: string; code: string; nameEn: string };
+type Option = { id: string; code: string; nameEn: string; nameAr?: string | null };
+type Branch = { id: string; code: string; nameEn: string; nameAr?: string | null };
 
 export function CriticalEscalationManager({
   tests,
   branches,
+  locale,
 }: {
   tests: Option[];
   branches: Branch[];
+  locale: "ar" | "en";
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
+  const localizedName = (item: { nameEn: string; nameAr?: string | null }) => locale === "ar" ? item.nameAr || item.nameEn : item.nameEn;
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -37,8 +41,7 @@ export function CriticalEscalationManager({
         effectiveTo: form.get("effectiveTo"),
       }),
     });
-    const body = await response.json().catch(() => ({}));
-    setMessage(response.ok ? "Critical escalation policy created." : body.error || "Could not create critical escalation policy.");
+    setMessage(response.ok ? tr("Critical escalation policy created.", "تم إنشاء سياسة تصعيد النتائج الحرجة.") : tr("Could not create critical escalation policy.", "تعذر إنشاء سياسة تصعيد النتائج الحرجة."));
     setBusy(false);
     if (response.ok) {
       event.currentTarget.reset();
@@ -47,24 +50,24 @@ export function CriticalEscalationManager({
   }
 
   return <section className="detail-card detail-section">
-    <h2>Create Critical Escalation Policy</h2>
-    <p className="muted">Controls acknowledgement deadline, escalation cadence, maximum escalation level and mandatory read-back for critical results.</p>
+    <h2>{tr("Create Critical Escalation Policy", "إنشاء سياسة تصعيد للنتائج الحرجة")}</h2>
+    <p className="muted">{tr("Controls acknowledgement deadline, escalation cadence, maximum escalation level and mandatory read-back for critical results.", "تحدد مهلة الإقرار ودورية التصعيد وأقصى مستوى للتصعيد ومتطلبات إعادة القراءة للنتائج الحرجة.")}</p>
     <form className="catalog-form" onSubmit={submit}>
-      <label>Test<select name="testId" required defaultValue="">
-        <option value="">Select test…</option>
-        {tests.map(test => <option key={test.id} value={test.id}>{test.code} — {test.nameEn}</option>)}
+      <label>{tr("Test", "الفحص")}<select name="testId" required defaultValue="">
+        <option value="">{tr("Select test…", "اختر الفحص…")}</option>
+        {tests.map(test => <option key={test.id} value={test.id}>{test.code} — {localizedName(test)}</option>)}
       </select></label>
-      <label>Branch<select name="branchId" defaultValue="">
-        <option value="">All branches</option>
-        {branches.map(branch => <option key={branch.id} value={branch.id}>{branch.code} — {branch.nameEn}</option>)}
+      <label>{tr("Branch", "الفرع")}<select name="branchId" defaultValue="">
+        <option value="">{tr("All branches", "كل الفروع")}</option>
+        {branches.map(branch => <option key={branch.id} value={branch.id}>{branch.code} — {localizedName(branch)}</option>)}
       </select></label>
-      <label>Acknowledgement deadline (minutes)<input name="acknowledgementMinutes" type="number" min="1" max="1440" defaultValue="30" required /></label>
-      <label>Escalation interval (minutes)<input name="escalationIntervalMinutes" type="number" min="1" max="1440" defaultValue="15" required /></label>
-      <label>Maximum escalation level<input name="maxEscalationLevel" type="number" min="1" max="10" defaultValue="3" required /></label>
-      <label className="check-line"><input name="requireReadBack" type="checkbox" defaultChecked /> Require read-back on acknowledgement</label>
-      <label>Effective from<input name="effectiveFrom" type="date" defaultValue={new Date().toISOString().slice(0,10)} required /></label>
-      <label>Effective to<input name="effectiveTo" type="date" /></label>
-      <button className="primary-button form-span" disabled={busy}>{busy ? "Saving…" : "Create Critical Escalation Policy"}</button>
+      <label>{tr("Acknowledgement deadline (minutes)", "مهلة الإقرار (بالدقائق)")}<input name="acknowledgementMinutes" type="number" min="1" max="1440" defaultValue="30" required /></label>
+      <label>{tr("Escalation interval (minutes)", "فاصل التصعيد (بالدقائق)")}<input name="escalationIntervalMinutes" type="number" min="1" max="1440" defaultValue="15" required /></label>
+      <label>{tr("Maximum escalation level", "أقصى مستوى للتصعيد")}<input name="maxEscalationLevel" type="number" min="1" max="10" defaultValue="3" required /></label>
+      <label className="check-line"><input name="requireReadBack" type="checkbox" defaultChecked /> {tr("Require read-back on acknowledgement", "اشتراط إعادة القراءة عند الإقرار")}</label>
+      <label>{tr("Effective from", "ساري من")}<input name="effectiveFrom" type="date" defaultValue={new Date().toISOString().slice(0,10)} required /></label>
+      <label>{tr("Effective to", "ساري حتى")}<input name="effectiveTo" type="date" /></label>
+      <button className="primary-button form-span" disabled={busy}>{busy ? tr("Saving…", "جارٍ الحفظ…") : tr("Create Critical Escalation Policy", "إنشاء سياسة التصعيد")}</button>
     </form>
     {message && <p className="form-success">{message}</p>}
   </section>;
