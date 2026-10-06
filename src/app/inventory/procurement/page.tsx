@@ -3,18 +3,20 @@ import { permissionSet, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { ProcurementManager } from "@/components/procurement-manager";
 import { ProcurementActionButton } from "@/components/procurement-action-button";
+import { getUiLocale, statusLabel, tr } from "@/lib/ui-i18n";
 
 export const dynamic = "force-dynamic";
 
 export default async function ProcurementPage() {
   const session = await requirePermission("procurement.view");
   const permissions = permissionSet(session);
+  const locale = getUiLocale(session.user.preferredLocale);
   const branchIds = session.user.branchScopes.map(scope => scope.branchId);
 
   const [branches, items, suppliers, purchaseRequests, purchaseOrders] = await Promise.all([
     prisma.branch.findMany({
       where: { organizationId: session.user.organizationId, id: { in: branchIds }, status: "ACTIVE" },
-      select: { id: true, code: true, nameEn: true },
+      select: { id: true, code: true, nameEn: true, nameAr: true },
       orderBy: { nameEn: "asc" },
     }),
     prisma.inventoryItem.findMany({
@@ -24,7 +26,7 @@ export default async function ProcurementPage() {
     }),
     prisma.supplier.findMany({
       where: { organizationId: session.user.organizationId, status: "ACTIVE" },
-      select: { id: true, code: true, nameEn: true },
+      select: { id: true, code: true, nameEn: true, nameAr: true },
       orderBy: { nameEn: "asc" },
     }),
     prisma.purchaseRequest.findMany({
@@ -54,21 +56,24 @@ export default async function ProcurementPage() {
   ]);
 
   const approvedRequests = purchaseRequests.filter(request => request.status === "APPROVED");
+  const localizedName = (item: { nameEn: string; nameAr?: string | null }) => locale === "ar" ? item.nameAr || item.nameEn : item.nameEn;
+  const userName = (item: { displayNameEn: string; displayNameAr?: string | null }) => locale === "ar" ? item.displayNameAr || item.displayNameEn : item.displayNameEn;
 
   return <main className="catalog-shell">
     <header className="page-header">
       <div>
-        <p className="eyebrow">Inventory Procurement</p>
-        <h1>Purchase Requests & Orders</h1>
-        <p className="muted">Branch-scoped procurement documents with approval history and quantity/cost snapshots.</p>
+        <p className="eyebrow">{tr(locale, "Inventory Procurement", "مشتريات المخزون")}</p>
+        <h1>{tr(locale, "Purchase Requests & Orders", "طلبات وأوامر الشراء")}</h1>
+        <p className="muted">{tr(locale, "Branch-scoped procurement documents with approval history and quantity/cost snapshots.", "مستندات مشتريات ضمن نطاق الفروع مع سجل الموافقات ولقطات محفوظة للكميات والتكاليف.")}</p>
       </div>
       <div className="result-actions">
-        <Link className="secondary-link" href="/inventory">Inventory</Link>
-        <Link className="secondary-link" href="/inventory/transfers">Stock Transfers</Link>
+        <Link className="secondary-link" href="/inventory">{tr(locale, "Inventory", "المخزون")}</Link>
+        <Link className="secondary-link" href="/inventory/transfers">{tr(locale, "Stock Transfers", "نقل المخزون")}</Link>
       </div>
     </header>
 
     <ProcurementManager
+      locale={locale}
       items={items}
       branches={branches}
       suppliers={suppliers}
@@ -83,35 +88,35 @@ export default async function ProcurementPage() {
 
     <section className="detail-grid detail-section">
       <article className="table-card">
-        <div className="table-toolbar"><h2>Purchase Requests</h2><span>{purchaseRequests.length} shown</span></div>
+        <div className="table-toolbar"><h2>{tr(locale, "Purchase Requests", "طلبات الشراء")}</h2><span>{purchaseRequests.length} {tr(locale, "shown", "معروضة")}</span></div>
         <div className="table-wrap"><table>
-          <thead><tr><th>Request</th><th>Branch</th><th>Status</th><th>Requested by</th><th>Items</th><th>Approval</th></tr></thead>
-          <tbody>{purchaseRequests.length === 0 ? <tr><td colSpan={6} className="empty-state">No purchase requests.</td></tr> : purchaseRequests.map(request => <tr key={request.id}>
+          <thead><tr><th>{tr(locale, "Request", "الطلب")}</th><th>{tr(locale, "Branch", "الفرع")}</th><th>{tr(locale, "Status", "الحالة")}</th><th>{tr(locale, "Requested by", "مقدم الطلب")}</th><th>{tr(locale, "Items", "الأصناف")}</th><th>{tr(locale, "Approval", "الموافقة")}</th></tr></thead>
+          <tbody>{purchaseRequests.length === 0 ? <tr><td colSpan={6} className="empty-state">{tr(locale, "No purchase requests.", "لا توجد طلبات شراء.")}</td></tr> : purchaseRequests.map(request => <tr key={request.id}>
             <td><strong>{request.requestNumber}</strong><br/><small>{request.requestedAt.toISOString().slice(0,10)}</small></td>
             <td>{request.branch.code}</td>
-            <td>{request.status}</td>
-            <td>{request.requestedBy.displayNameEn}</td>
+            <td>{statusLabel(locale, request.status)}</td>
+            <td>{userName(request.requestedBy)}</td>
             <td>{request.items.map(line => line.item.code + " × " + line.requestedQty.toString()).join(", ")}</td>
             <td>{permissions.has("procurement.approve") && ["DRAFT","SUBMITTED"].includes(request.status)
-              ? <ProcurementActionButton endpoint={`/api/inventory/purchase-requests/${request.id}/approve`} label="Approve" confirmText="Approve this purchase request?" />
-              : request.approvedBy?.displayNameEn || "—"}</td>
+              ? <ProcurementActionButton locale={locale} endpoint={`/api/inventory/purchase-requests/${request.id}/approve`} label={tr(locale, "Approve", "موافقة")} confirmText={tr(locale, "Approve this purchase request?", "هل تريد الموافقة على طلب الشراء؟")} />
+              : request.approvedBy ? userName(request.approvedBy) : "—"}</td>
           </tr>)}</tbody>
         </table></div>
       </article>
 
       <article className="table-card">
-        <div className="table-toolbar"><h2>Purchase Orders</h2><span>{purchaseOrders.length} shown</span></div>
+        <div className="table-toolbar"><h2>{tr(locale, "Purchase Orders", "أوامر الشراء")}</h2><span>{purchaseOrders.length} {tr(locale, "shown", "معروضة")}</span></div>
         <div className="table-wrap"><table>
-          <thead><tr><th>PO</th><th>Branch</th><th>Supplier</th><th>Status</th><th>Items</th><th>Approval</th></tr></thead>
-          <tbody>{purchaseOrders.length === 0 ? <tr><td colSpan={6} className="empty-state">No purchase orders.</td></tr> : purchaseOrders.map(order => <tr key={order.id}>
+          <thead><tr><th>{tr(locale, "PO", "أمر الشراء")}</th><th>{tr(locale, "Branch", "الفرع")}</th><th>{tr(locale, "Supplier", "المورد")}</th><th>{tr(locale, "Status", "الحالة")}</th><th>{tr(locale, "Items", "الأصناف")}</th><th>{tr(locale, "Approval", "الموافقة")}</th></tr></thead>
+          <tbody>{purchaseOrders.length === 0 ? <tr><td colSpan={6} className="empty-state">{tr(locale, "No purchase orders.", "لا توجد أوامر شراء.")}</td></tr> : purchaseOrders.map(order => <tr key={order.id}>
             <td><strong>{order.poNumber}</strong><br/><small>{order.currency}{order.purchaseRequest ? " · " + order.purchaseRequest.requestNumber : ""}</small></td>
             <td>{order.branch.code}</td>
-            <td>{order.supplier.nameEn}</td>
-            <td>{order.status}</td>
+            <td>{localizedName(order.supplier)}</td>
+            <td>{statusLabel(locale, order.status)}</td>
             <td>{order.items.map(line => line.item.code + " × " + line.orderedQty.toString() + " @ " + line.unitCost.toString()).join(", ")}</td>
             <td>{permissions.has("procurement.approve") && order.status === "DRAFT"
-              ? <ProcurementActionButton endpoint={`/api/inventory/purchase-orders/${order.id}/approve`} label="Approve" confirmText="Approve this purchase order?" />
-              : order.approvedBy?.displayNameEn || "—"}</td>
+              ? <ProcurementActionButton locale={locale} endpoint={`/api/inventory/purchase-orders/${order.id}/approve`} label={tr(locale, "Approve", "موافقة")} confirmText={tr(locale, "Approve this purchase order?", "هل تريد الموافقة على أمر الشراء؟")} />
+              : order.approvedBy ? userName(order.approvedBy) : "—"}</td>
           </tr>)}</tbody>
         </table></div>
       </article>
