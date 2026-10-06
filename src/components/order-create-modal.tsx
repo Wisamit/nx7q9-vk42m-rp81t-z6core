@@ -27,7 +27,9 @@ export function OrderCreateModal(props: {
   sources: SourceOption[];
   branches: BranchOption[];
   activeBranchId: string | null;
+  locale: "ar" | "en";
 }) {
+  const tr = <T,>(en: T, ar: T) => props.locale === "ar" ? ar : en;
   const [open, setOpen] = useState(false);
   const [notice, setNotice] = useState("");
 
@@ -35,17 +37,17 @@ export function OrderCreateModal(props: {
     <div className="crud-trigger-row">
       {notice && <span className="crud-success-toast">{notice}</span>}
       <button type="button" className="primary-button" onClick={() => setOpen(true)}>
-        <SystemIcon name="plus" size={16} /> New Order
+        <SystemIcon name="plus" size={16} />{tr("New Order", "طلب جديد")}
       </button>
     </div>
     <CrudModal
       open={open}
       onClose={() => setOpen(false)}
-      title="New Laboratory Order"
-      description="Select patient, tests, source and billing context. The invoice is created from effective pricing snapshots."
+      title={tr("New Laboratory Order", "طلب مختبر جديد")}
+      description={tr("Select patient, tests, source and billing context. The invoice is created from effective pricing snapshots.", "اختر المريض والفحوصات والمصدر وبيانات الفوترة. يتم إنشاء الفاتورة من الأسعار الفعالة المحفوظة.")}
       size="full"
     >
-      <OrderCreateForm {...props} onSuccess={message => {
+      <OrderCreateForm {...props} locale={props.locale} onSuccess={message => {
         setNotice(message);
         setOpen(false);
       }} />

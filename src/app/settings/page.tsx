@@ -1,6 +1,8 @@
 import { requirePermission } from "@/lib/auth";
 import { getOrganizationSystemSettings } from "@/lib/system-settings";
+import Link from "next/link";
 import { SystemSettingsForm } from "@/components/system-settings-form";
+import { SystemIcon } from "@/components/system-icon";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +19,9 @@ export default async function SettingsPage() {
         <p className="muted">{locale === "ar"
           ? "إدارة هوية المركز، المظهر، المنطقة الزمنية، تنسيقات التاريخ والوقت والإعدادات العامة."
           : "Manage center identity, appearance, timezone, date/time formats and system-wide defaults."}</p>
+      </div>
+      <div className="header-actions">
+        <Link className="secondary-link" href="/security"><SystemIcon name="security" size={15} />{locale === "ar" ? "الأمان والملف الشخصي" : "Security & Profile"}</Link>
       </div>
     </header>
     <SystemSettingsForm initial={settings} locale={locale} />

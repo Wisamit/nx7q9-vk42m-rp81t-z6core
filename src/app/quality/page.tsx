@@ -2,12 +2,14 @@ import Link from "next/link";
 import { permissionSet, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { QualityManagementConsole } from "@/components/quality-management-console";
+import { getUiLocale, tr } from "@/lib/ui-i18n";
 
 export const dynamic = "force-dynamic";
 
 export default async function QualityPage() {
   const session = await requirePermission("quality.view");
   const permissions = permissionSet(session);
+  const locale = getUiLocale(session.user.preferredLocale);
   const branchIds = session.user.branchScopes.map(scope => scope.branchId);
 
   const scopedBranch = {
@@ -142,22 +144,22 @@ export default async function QualityPage() {
   return <main className="catalog-shell">
     <header className="page-header">
       <div>
-        <p className="eyebrow">Quality Management</p>
-        <h1>QMS Workspace</h1>
-        <p className="muted">Nonconformance, CAPA, controlled documents, training, competency, quality indicators and internal audits with branch scope and audit history.</p>
+        <p className="eyebrow">{tr(locale, "Quality Management", "إدارة الجودة")}</p>
+        <h1>{tr(locale, "QMS Workspace", "مساحة إدارة الجودة")}</h1>
+        <p className="muted">{tr(locale, "Nonconformance, CAPA, controlled documents, training, competency, quality indicators and internal audits with branch scope and audit history.", "عدم المطابقة وCAPA والوثائق المضبوطة والتدريب والكفاءة ومؤشرات الجودة والتدقيق الداخلي مع نطاق الفروع وسجل تدقيق كامل.")}</p>
       </div>
       <div className="result-actions">
         {permissions.has("qc.view") && <Link className="secondary-link" href="/qc">QC</Link>}
-        <Link className="secondary-link" href="/dashboard">Back to Dashboard</Link>
+        <Link className="secondary-link" href="/dashboard">{tr(locale, "Back to Dashboard", "العودة للوحة التحكم")}</Link>
       </div>
     </header>
 
     <section className="detail-grid">
-      <article className="detail-card"><h2>Open Nonconformances</h2><strong>{openNc}</strong><p className="muted">Cases requiring investigation, action or closure.</p></article>
-      <article className="detail-card"><h2>Overdue CAPA</h2><strong>{overdueCapas}</strong><p className="muted">Open CAPA beyond due date.</p></article>
-      <article className="detail-card"><h2>Document Reviews Due</h2><strong>{documentReviewsDue}</strong><p className="muted">Effective controlled documents past review date.</p></article>
-      <article className="detail-card"><h2>Competency Due</h2><strong>{competencyDue}</strong><p className="muted">Assessments past their next-due date.</p></article>
-      <article className="detail-card"><h2>Open Audit Findings</h2><strong>{openFindings}</strong><p className="muted">Findings that must be addressed before audit closure.</p></article>
+      <article className="detail-card"><h2>{tr(locale, "Open Nonconformances", "حالات عدم المطابقة المفتوحة")}</h2><strong>{openNc}</strong><p className="muted">{tr(locale, "Cases requiring investigation, action or closure.", "حالات تحتاج إلى تحقيق أو إجراء أو إغلاق.")}</p></article>
+      <article className="detail-card"><h2>{tr(locale, "Overdue CAPA", "CAPA متأخرة")}</h2><strong>{overdueCapas}</strong><p className="muted">{tr(locale, "Open CAPA beyond due date.", "إجراءات CAPA مفتوحة تجاوزت تاريخ الاستحقاق.")}</p></article>
+      <article className="detail-card"><h2>{tr(locale, "Document Reviews Due", "مراجعات وثائق مستحقة")}</h2><strong>{documentReviewsDue}</strong><p className="muted">{tr(locale, "Effective controlled documents past review date.", "وثائق مضبوطة سارية تجاوزت موعد المراجعة.")}</p></article>
+      <article className="detail-card"><h2>{tr(locale, "Competency Due", "تقييمات كفاءة مستحقة")}</h2><strong>{competencyDue}</strong><p className="muted">{tr(locale, "Assessments past their next-due date.", "تقييمات تجاوزت موعدها التالي.")}</p></article>
+      <article className="detail-card"><h2>{tr(locale, "Open Audit Findings", "ملاحظات تدقيق مفتوحة")}</h2><strong>{openFindings}</strong><p className="muted">{tr(locale, "Findings that must be addressed before audit closure.", "ملاحظات يجب معالجتها قبل إغلاق التدقيق.")}</p></article>
     </section>
 
     <QualityManagementConsole

@@ -1050,6 +1050,7 @@ model User {
   passwordHash   String?    @map("password_hash") @db.VarChar(255)
   displayNameEn  String     @map("display_name_en") @db.VarChar(200)
   displayNameAr  String?    @map("display_name_ar") @db.VarChar(200)
+  avatarDataUrl  String?    @map("avatar_data_url") @db.MediumText
   preferredLocale String    @default("en") @map("preferred_locale") @db.VarChar(10)
   status         UserStatus @default(INVITED)
   lastLoginAt    DateTime?  @map("last_login_at") @db.DateTime(3)

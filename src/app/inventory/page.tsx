@@ -2,12 +2,14 @@ import Link from "next/link";
 import { permissionSet, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { InventoryManager } from "@/components/inventory-manager";
+import { getUiLocale, tr } from "@/lib/ui-i18n";
 
 export const dynamic = "force-dynamic";
 
 export default async function InventoryPage() {
   const session = await requirePermission("inventory.view");
   const permissions = permissionSet(session);
+  const locale = getUiLocale(session.user.preferredLocale);
   const branchIds = session.user.branchScopes.map(scope => scope.branchId);
 
   const [categories, suppliers, items, branches, branchStocks, lotStocks, receipts] = await Promise.all([
@@ -57,23 +59,23 @@ export default async function InventoryPage() {
   return <main className="catalog-shell">
     <header className="page-header">
       <div>
-        <p className="eyebrow">Inventory & Procurement</p>
-        <h1>Inventory</h1>
-        <p className="muted">Branch-specific stock with lot/expiry traceability, FEFO visibility and immutable stock movements.</p>
+        <p className="eyebrow">{tr(locale, "Inventory & Procurement", "المخزون والمشتريات")}</p>
+        <h1>{tr(locale, "Inventory", "المخزون")}</h1>
+        <p className="muted">{tr(locale, "Branch-specific stock with lot/expiry traceability, FEFO visibility and immutable stock movements.", "مخزون خاص بكل فرع مع تتبع التشغيلات وتواريخ الانتهاء وسياسة FEFO وحركات مخزون غير قابلة للتلاعب.")}</p>
       </div>
       <div className="result-actions">
-        <Link className="secondary-link" href="/inventory/procurement">Procurement</Link>
-        <Link className="secondary-link" href="/inventory/transfers">Stock Transfers</Link>
-        <Link className="secondary-link" href="/inventory/operations">Operations</Link>
-        <Link className="secondary-link" href="/dashboard">Back to Dashboard</Link>
+        <Link className="secondary-link" href="/inventory/procurement">{tr(locale, "Procurement", "المشتريات")}</Link>
+        <Link className="secondary-link" href="/inventory/transfers">{tr(locale, "Stock Transfers", "نقل المخزون")}</Link>
+        <Link className="secondary-link" href="/inventory/operations">{tr(locale, "Operations", "العمليات")}</Link>
+        <Link className="secondary-link" href="/dashboard">{tr(locale, "Back to Dashboard", "العودة للوحة التحكم")}</Link>
       </div>
     </header>
 
     <section className="detail-grid">
-      <article className="detail-card"><h2>Items</h2><strong>{items.length}</strong><p className="muted">Active inventory master records.</p></article>
-      <article className="detail-card"><h2>Low Stock</h2><strong>{lowStock.length}</strong><p className="muted">Branch/item balances at or below configured minimum.</p></article>
-      <article className="detail-card"><h2>Lots in Stock</h2><strong>{fefoLots.length}</strong><p className="muted">Positive lot balances across your authorized branches.</p></article>
-      <article className="detail-card"><h2>Recent Receipts</h2><strong>{receipts.length}</strong><p className="muted">Latest supplier receipt documents shown.</p></article>
+      <article className="detail-card"><h2>{tr(locale, "Items", "الأصناف")}</h2><strong>{items.length}</strong><p className="muted">{tr(locale, "Active inventory master records.", "سجلات الأصناف النشطة.")}</p></article>
+      <article className="detail-card"><h2>{tr(locale, "Low Stock", "مخزون منخفض")}</h2><strong>{lowStock.length}</strong><p className="muted">{tr(locale, "Branch/item balances at or below configured minimum.", "أرصدة الفروع/الأصناف عند أو أقل من الحد الأدنى المحدد.")}</p></article>
+      <article className="detail-card"><h2>{tr(locale, "Lots in Stock", "التشغيلات بالمخزون")}</h2><strong>{fefoLots.length}</strong><p className="muted">{tr(locale, "Positive lot balances across your authorized branches.", "تشغيلات ذات رصيد موجب ضمن الفروع المصرح لك بها.")}</p></article>
+      <article className="detail-card"><h2>{tr(locale, "Recent Receipts", "أحدث الاستلامات")}</h2><strong>{receipts.length}</strong><p className="muted">{tr(locale, "Latest supplier receipt documents shown.", "أحدث مستندات استلام الموردين.")}</p></article>
     </section>
 
     <InventoryManager
@@ -87,17 +89,17 @@ export default async function InventoryPage() {
 
     <section className="detail-grid detail-section">
       <article className="table-card">
-        <div className="table-toolbar"><h2>Branch Stock</h2><span>{branchStocks.length} balances</span></div>
+        <div className="table-toolbar"><h2>{tr(locale, "Branch Stock", "مخزون الفروع")}</h2><span>{branchStocks.length} balances</span></div>
         <div className="table-wrap"><table>
           <thead><tr><th>Branch</th><th>Item</th><th>Type</th><th>On hand</th><th>Reserved</th><th>Minimum</th><th>Status</th></tr></thead>
-          <tbody>{branchStocks.length === 0 ? <tr><td colSpan={7} className="empty-state">No stock posted yet.</td></tr> : branchStocks.map(stock => <tr key={stock.id}>
+          <tbody>{branchStocks.length === 0 ? <tr><td colSpan={7} className="empty-state">{tr(locale, "No stock posted yet.", "لا توجد حركات مخزون بعد.")}</td></tr> : branchStocks.map(stock => <tr key={stock.id}>
             <td>{stock.branch.code} — {stock.branch.nameEn}</td>
             <td><strong>{stock.item.code}</strong><br/><small>{stock.item.nameEn}</small></td>
             <td>{stock.item.itemType}</td>
             <td>{stock.quantityOnHand.toString()} {stock.item.stockUnit}</td>
             <td>{stock.reservedQty.toString()}</td>
             <td>{stock.item.minimumStockQty.toString()}</td>
-            <td>{stock.quantityOnHand.lte(stock.item.minimumStockQty) ? <strong className="critical-text">LOW</strong> : "OK"}</td>
+            <td>{stock.quantityOnHand.lte(stock.item.minimumStockQty) ? <strong className="critical-text">{tr(locale, "LOW", "منخفض")}</strong> : "OK"}</td>
           </tr>)}</tbody>
         </table></div>
       </article>

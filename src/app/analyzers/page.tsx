@@ -4,12 +4,14 @@ import { prisma } from "@/lib/db";
 import { AnalyzerManager } from "@/components/analyzer-manager";
 import { AnalyzerMessageReplayButton } from "@/components/analyzer-message-replay-button";
 import { AnalyzerClinicalImportButton } from "@/components/analyzer-clinical-import-button";
+import { getUiLocale, statusLabel, tr } from "@/lib/ui-i18n";
 
 export const dynamic = "force-dynamic";
 
 export default async function AnalyzersPage() {
   const session = await requirePermission("analyzers.view");
   const permissions = permissionSet(session);
+  const locale = getUiLocale(session.user.preferredLocale);
   const branchIds = session.user.branchScopes.map(scope => scope.branchId);
 
   const [analyzers, branches, departments, tests, messages, resultImports] = await Promise.all([
@@ -107,11 +109,11 @@ export default async function AnalyzersPage() {
   return <main className="catalog-shell">
     <header className="page-header">
       <div>
-        <p className="eyebrow">Analyzer Integration</p>
-        <h1>Analyzers & Interface Inbox</h1>
-        <p className="muted">The core LIS receives authenticated raw messages from a separately deployable Analyzer Bridge. Device serial/TCP logic stays outside the web application.</p>
+        <p className="eyebrow">{tr(locale, "Analyzer Integration", "تكامل أجهزة التحليل")}</p>
+        <h1>{tr(locale, "Analyzers & Interface Inbox", "أجهزة التحليل وصندوق رسائل الربط")}</h1>
+        <p className="muted">{tr(locale, "The core LIS receives authenticated raw messages from a separately deployable Analyzer Bridge. Device serial/TCP logic stays outside the web application.", "يستقبل نظام LIS الرسائل الخام الموثقة من Analyzer Bridge منفصل، بينما تبقى اتصالات الأجهزة التسلسلية وTCP خارج تطبيق الويب.")}</p>
       </div>
-      <Link className="secondary-link" href="/dashboard">Back to Dashboard</Link>
+      <Link className="secondary-link" href="/dashboard">{tr(locale, "Back to Dashboard", "العودة للوحة التحكم")}</Link>
     </header>
 
     {permissions.has("analyzers.manage") && <AnalyzerManager
@@ -122,31 +124,31 @@ export default async function AnalyzersPage() {
     />}
 
     <section className="table-card detail-section">
-      <div className="table-toolbar"><h2>Analyzer Registry</h2><span>{analyzers.length} analyzer(s)</span></div>
+      <div className="table-toolbar"><h2>{tr(locale, "Analyzer Registry", "سجل أجهزة التحليل")}</h2><span>{analyzers.length} analyzer(s)</span></div>
       <div className="table-wrap"><table>
         <thead><tr><th>Analyzer</th><th>Branch</th><th>Protocol</th><th>Transport</th><th>Credentials</th><th>Mappings</th><th>Status</th></tr></thead>
-        <tbody>{analyzers.length === 0 ? <tr><td colSpan={7} className="empty-state">No analyzers registered.</td></tr> : analyzers.map(item => <tr key={item.id}>
-          <td><strong>{item.code} — {item.name}</strong><br/><small>{[item.manufacturer, item.model, item.serialNumber].filter(Boolean).join(" · ") || "No device metadata"}</small></td>
+        <tbody>{analyzers.length === 0 ? <tr><td colSpan={7} className="empty-state">{tr(locale, "No analyzers registered.", "لا توجد أجهزة تحليل مسجلة.")}</td></tr> : analyzers.map(item => <tr key={item.id}>
+          <td><strong>{item.code} — {item.name}</strong><br/><small>{[item.manufacturer, item.model, item.serialNumber].filter(Boolean).join(" · ") || tr(locale, "No device metadata", "لا توجد بيانات للجهاز")}</small></td>
           <td>{item.branch.nameEn}{item.department ? " · " + item.department.nameEn : ""}</td>
           <td>{item.protocol}</td>
           <td>{item.transport}</td>
-          <td>{item.credentials.filter(credential => credential.status === "ACTIVE").length} active</td>
-          <td>{item.mappings.filter(mapping => mapping.status === "ACTIVE").length} shown active</td>
-          <td>{item.status}</td>
+          <td>{item.credentials.filter(credential => credential.status === "ACTIVE").length} {tr(locale, "active", "نشط")}</td>
+          <td>{item.mappings.filter(mapping => mapping.status === "ACTIVE").length} {tr(locale, "shown active", "نشط ظاهر")}</td>
+          <td>{statusLabel(locale, item.status)}</td>
         </tr>)}</tbody>
       </table></div>
     </section>
 
     <section className="table-card detail-section">
-      <div className="table-toolbar"><h2>Raw Message Inbox</h2><span>{messages.length} recent</span></div>
+      <div className="table-toolbar"><h2>{tr(locale, "Raw Message Inbox", "صندوق الرسائل الخام")}</h2><span>{messages.length} recent</span></div>
       <div className="table-wrap"><table>
         <thead><tr><th>Received</th><th>Analyzer</th><th>Bridge message</th><th>Protocol</th><th>Status</th><th>Attempts</th><th>Error</th><th>Payload hash</th><th>Action</th></tr></thead>
-        <tbody>{messages.length === 0 ? <tr><td colSpan={9} className="empty-state">No analyzer messages received.</td></tr> : messages.map(item => <tr key={item.id}>
+        <tbody>{messages.length === 0 ? <tr><td colSpan={9} className="empty-state">{tr(locale, "No analyzer messages received.", "لم يتم استلام رسائل من أجهزة التحليل.")}</td></tr> : messages.map(item => <tr key={item.id}>
           <td>{item.receivedAt.toISOString().replace("T"," ").slice(0,19)}</td>
           <td>{item.analyzer.code} — {item.analyzer.name}</td>
           <td>{item.bridgeMessageId}</td>
           <td>{item.protocol}</td>
-          <td>{item.status}</td>
+          <td>{statusLabel(locale, item.status)}</td>
           <td>{item.attempts}</td>
           <td>{item.errorCode || item.errorText || "—"}</td>
           <td><code>{item.payloadHash.slice(0,16)}…</code></td>
@@ -182,7 +184,7 @@ export default async function AnalyzersPage() {
           <td>{item.analyzerTestCode}</td>
           <td>{item.mapping ? item.mapping.test.code + (item.mapping.component ? " · " + item.mapping.component.code : "") : "—"}</td>
           <td><strong>{item.rawValue}</strong>{item.rawUnit ? " " + item.rawUnit : ""}</td>
-          <td>{item.status}</td>
+          <td>{statusLabel(locale, item.status)}</td>
           <td>{item.errorCode ? item.errorCode + (item.errorText ? " · " + item.errorText : "") : "—"}</td>
           <td>{item.resultId && item.orderItemId ? <Link href={`/worklists/${item.orderItemId}`}>Open result</Link> : "—"}</td>
         </tr>)}</tbody>
