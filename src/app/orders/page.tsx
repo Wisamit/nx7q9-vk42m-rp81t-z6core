@@ -126,6 +126,7 @@ export default async function OrdersPage() {
           sources={sources}
           branches={branches}
           activeBranchId={session.activeBranchId}
+          locale={locale}
         />
         <Link className="secondary-link" href="/pricing"><SystemIcon name="pricing" size={15} />{tr(locale, "Pricing", "الأسعار")}</Link>
         <Link className="secondary-link" href="/billing"><SystemIcon name="billing" size={15} />{tr(locale, "Billing", "الفوترة")}</Link>
