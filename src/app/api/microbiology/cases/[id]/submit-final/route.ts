@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { Prisma } from "../../../../../../../generated/prisma/client";
-import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
+import { canAccessBranch, canAccessDepartment, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { validationHoldMatches } from "@/lib/validation-holds";
 
@@ -60,6 +60,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!microbiologyCase) return NextResponse.json({ error: "microbiology_case_not_found" }, { status: 404 });
   if (!canAccessBranch(session, microbiologyCase.performingBranchId)) {
     return NextResponse.json({ error: "branch_forbidden" }, { status: 403 });
+  }
+  if (!canAccessDepartment(session, microbiologyCase.orderItem.test.departmentId)) {
+    return NextResponse.json({ error: "department_forbidden" }, { status: 403 });
   }
   if (microbiologyCase.status === "CANCELLED") {
     return NextResponse.json({ error: "microbiology_case_cancelled" }, { status: 409 });
