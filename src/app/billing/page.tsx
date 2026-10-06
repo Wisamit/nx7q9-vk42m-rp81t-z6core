@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { PaymentForm } from "@/components/payment-form";
+import { PaymentCreateModal } from "@/components/payment-create-modal";
 import { SystemIcon } from "@/components/system-icon";
 
 export const dynamic = "force-dynamic";
@@ -53,6 +53,12 @@ export default async function BillingPage() {
         <p className="muted">Historical invoice values are stored as immutable snapshots. Payments are allocated separately and support partial settlement.</p>
       </div>
       <div className="header-actions">
+        <PaymentCreateModal invoices={openInvoices.map(invoice => ({
+          id: invoice.id,
+          invoiceNumber: invoice.invoiceNumber,
+          currency: invoice.currency,
+          balanceAmount: invoice.balanceAmount.toString(),
+        }))} />
         <Link className="secondary-link" href="/orders"><SystemIcon name="orders" size={15} />Orders</Link>
         <Link className="secondary-link" href="/pricing"><SystemIcon name="pricing" size={15} />Pricing</Link>
         <Link className="secondary-link" href="/dashboard"><SystemIcon name="dashboard" size={15} />Back to Dashboard</Link>
@@ -68,28 +74,6 @@ export default async function BillingPage() {
           <div><dt>Outstanding</dt><dd className={row.balance > 0 ? "finance-due" : ""}>{row.balance.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</dd></div>
         </dl>
       </article>)}
-    </section>
-
-    <section className="detail-grid">
-      <article className="detail-card">
-        <h2 className="section-heading-icon"><SystemIcon name="billing" size={18} />Post Payment</h2>
-        <PaymentForm invoices={openInvoices.map(invoice => ({
-          id: invoice.id,
-          invoiceNumber: invoice.invoiceNumber,
-          currency: invoice.currency,
-          balanceAmount: invoice.balanceAmount.toString(),
-        }))} />
-      </article>
-      <article className="detail-card">
-        <h2 className="section-heading-icon"><SystemIcon name="security" size={18} />Billing Rules</h2>
-        <dl>
-          <dt>Money</dt><dd>DECIMAL snapshots</dd>
-          <dt>Currency</dt><dd>Explicit per invoice and payment</dd>
-          <dt>Partial payment</dt><dd>Supported</dd>
-          <dt>Allocation</dt><dd>Payment → invoice allocation</dd>
-          <dt>History</dt><dd>Original order and invoice prices retained</dd>
-        </dl>
-      </article>
     </section>
 
     <section className="table-card">
