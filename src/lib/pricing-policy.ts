@@ -1,8 +1,9 @@
-export type PricingScopeType = "ORGANIZATION" | "BRANCH" | "CLIENT" | "CONTRACT";
+export type PricingScopeType = "ORGANIZATION" | "BRANCH" | "SOURCE" | "CLIENT" | "CONTRACT";
 
 const scopeRank: Record<PricingScopeType, number> = {
-  CONTRACT: 400,
-  CLIENT: 300,
+  CONTRACT: 500,
+  CLIENT: 400,
+  SOURCE: 300,
   BRANCH: 200,
   ORGANIZATION: 100,
 };
