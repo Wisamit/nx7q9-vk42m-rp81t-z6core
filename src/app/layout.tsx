@@ -2,7 +2,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 import packageJson from "../../package.json";
 import { SystemShell } from "@/components/system-shell";
+import { UiLocaleProvider } from "@/components/ui-locale-provider";
 import { getCurrentSession, permissionSet } from "@/lib/auth";
+import { getCurrentPortalSession } from "@/lib/portal-auth";
 import { buildThemeCss, getOrganizationSystemSettings, SYSTEM_DEVELOPER_CREDIT } from "@/lib/system-settings";
 
 export const metadata: Metadata = {
@@ -15,7 +17,8 @@ export const metadata: Metadata = {
 
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const session = await getCurrentSession();
-  const locale = session?.user.preferredLocale === "ar" ? "ar" : "en";
+  const portalSession = session ? null : await getCurrentPortalSession();
+  const locale = session?.user.preferredLocale === "ar" || portalSession?.portalAccount.preferredLocale === "ar" ? "ar" : "en";
   const direction = locale === "ar" ? "rtl" : "ltr";
   const settings = session ? await getOrganizationSystemSettings(session.user.organizationId) : null;
   const initialTheme = settings?.defaultTheme === "DARK" ? "dark" : "light";
@@ -67,6 +70,6 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
       <link rel="icon" href={settings?.faviconDataUrl || "/favicon.ico"} />
       <meta name="application-name" content={systemName} />
     </head>
-    <body>{body}</body>
+    <body><UiLocaleProvider locale={locale}>{body}</UiLocaleProvider></body>
   </html>;
 }
