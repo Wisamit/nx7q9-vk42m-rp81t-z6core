@@ -38,6 +38,7 @@ export function ResultEntryForm({
   analyzerLabel,
   canVerify,
   commentTemplates,
+  locale,
 }: {
   orderItemId: string;
   specimenId: string;
@@ -50,7 +51,9 @@ export function ResultEntryForm({
   analyzerLabel?: string | null;
   canVerify: boolean;
   commentTemplates: CommentTemplateOption[];
+  locale: "ar" | "en";
 }) {
+  const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
   const router = useRouter();
   const [values, setValues] = useState<Record<string, string>>(
     Object.fromEntries(fields.map((field) => [field.componentId || "__TEST__", field.currentValue])),
@@ -64,7 +67,7 @@ export function ResultEntryForm({
 
   function fieldInput(field: ResultField) {
     const key = field.componentId || "__TEST__";
-    if (field.calculated) return <div className="calculated-value-box"><strong>{values[key] || "Calculated on save"}</strong><small>Derived from configured formula</small></div>;
+    if (field.calculated) return <div className="calculated-value-box"><strong>{values[key] || tr("Calculated on save", "يُحسب عند الحفظ")}</strong><small>{tr("Derived from configured formula", "مشتق من معادلة مهيأة")}</small></div>;
 
     const common = {
       value: values[key] || "",
@@ -75,14 +78,14 @@ export function ResultEntryForm({
     if (field.resultType === "BOOLEAN") {
       return <select {...common}>
         <option value="">—</option>
-        <option value="true">True</option>
-        <option value="false">False</option>
+        <option value="true">{tr("True", "نعم")}</option>
+        <option value="false">{tr("False", "لا")}</option>
       </select>;
     }
     if (field.resultType === "DATE") return <input type="date" {...common} />;
-    if (field.resultType === "NUMERIC") return <input inputMode="decimal" placeholder="Numeric result" {...common} />;
-    if (field.resultType === "TEXT") return <textarea rows={2} placeholder="Result text" {...common} />;
-    return <input placeholder="Qualitative result" {...common} />;
+    if (field.resultType === "NUMERIC") return <input inputMode="decimal" placeholder={tr("Numeric result", "نتيجة رقمية")} {...common} />;
+    if (field.resultType === "TEXT") return <textarea rows={2} placeholder={tr("Result text", "نص النتيجة")} {...common} />;
+    return <input placeholder={tr("Qualitative result", "نتيجة وصفية")} {...common} />;
   }
 
   async function save(event: FormEvent<HTMLFormElement>) {
@@ -111,26 +114,26 @@ export function ResultEntryForm({
       setSavedStatus(body.result?.status || null);
       setComplete(Boolean(body.complete));
       const notices = [];
-      if (body.criticalCount > 0) notices.push(`${body.criticalCount} critical value(s)`);
-      if (body.deltaExceededCount > 0) notices.push(`${body.deltaExceededCount} delta warning(s)`);
-      if (body.pendingReflexCount > 0) notices.push(`${body.pendingReflexCount} reflex recommendation(s)`);
-      if (body.blockingValidationHoldCount > 0) notices.push(`${body.blockingValidationHoldCount} blocking validation hold(s)`);
-      if (body.warningValidationHoldCount > 0) notices.push(`${body.warningValidationHoldCount} validation warning(s)`);
+      if (body.criticalCount > 0) notices.push(`${body.criticalCount} ${tr("critical value(s)", "قيمة حرجة")}`);
+      if (body.deltaExceededCount > 0) notices.push(`${body.deltaExceededCount} ${tr("delta warning(s)", "تحذير فرق")}`);
+      if (body.pendingReflexCount > 0) notices.push(`${body.pendingReflexCount} ${tr("reflex recommendation(s)", "توصية فحص انعكاسي")}`);
+      if (body.blockingValidationHoldCount > 0) notices.push(`${body.blockingValidationHoldCount} ${tr("blocking validation hold(s)", "حجز تحقق مانع")}`);
+      if (body.warningValidationHoldCount > 0) notices.push(`${body.warningValidationHoldCount} ${tr("validation warning(s)", "تحذير تحقق")}`);
       setMessage(body.autoVerified
-        ? "Result saved and autoverified by the active clinical policy. Release remains a separate controlled action."
+        ? tr("Result saved and autoverified by the active clinical policy. Release remains a separate controlled action.", "تم حفظ النتيجة والتحقق منها تلقائيًا حسب السياسة السريرية الفعالة. يبقى الإصدار إجراءً مستقلاً ومضبوطًا.")
         : notices.length
-          ? `Saved with ${notices.join(", ")}. Review validation items before verification.`
-          : body.complete ? "Result saved and ready for verification." : "Draft saved. Complete all required result fields before verification.");
+          ? `${tr("Saved with", "تم الحفظ مع")}: ${notices.join(", ")}. ${tr("Review validation items before verification.", "راجع عناصر التحقق قبل اعتماد النتيجة.")}`
+          : body.complete ? tr("Result saved and ready for verification.", "تم حفظ النتيجة وهي جاهزة للتحقق.") : tr("Draft saved. Complete all required result fields before verification.", "تم حفظ المسودة. أكمل جميع حقول النتيجة المطلوبة قبل التحقق."));
       router.refresh();
     } else {
-      setMessage(body.error || "Result could not be saved.");
+      setMessage(body.error || tr("Result could not be saved.", "تعذر حفظ النتيجة."));
     }
     setBusy("");
   }
 
   async function verify() {
     if (!savedResultId) return;
-    if (!confirm("Verify this result? Verified values become locked and later changes require an amendment.")) return;
+    if (!confirm(tr("Verify this result? Verified values become locked and later changes require an amendment.", "هل تريد التحقق من هذه النتيجة؟ بعد التحقق تُقفل القيم وأي تغيير لاحق يتطلب تعديلًا موثقًا."))) return;
 
     setBusy("verify");
     setMessage("");
@@ -229,7 +232,7 @@ export function ResultEntryForm({
           event.target.value = "";
         }}
       >
-        <option value="">Insert comment template…</option>
+        <option value="">{tr("Insert comment template…", "إدراج قالب تعليق…")}</option>
         {commentTemplates.map((template) => <option key={template.id} value={template.id}>{template.code} — {template.nameEn}</option>)}
       </select>}
       <textarea rows={3} value={note} onChange={(event) => setNote(event.target.value)} disabled={locked} />
@@ -238,9 +241,9 @@ export function ResultEntryForm({
     {message && <div className="form-success">{message}</div>}
 
     <div className="result-actions">
-      {!locked && <button className="primary-button" disabled={busy !== ""}>{busy === "save" ? "Saving…" : "Save Result"}</button>}
-      {!statusLocked && canVerify && savedResultId && complete && <button className="secondary-button" type="button" disabled={busy !== ""} onClick={() => void verify()}>{busy === "verify" ? "Verifying…" : "Verify Result"}</button>}
-      {statusLocked && <span className="muted">Verified/released results are locked. Future edits must use an amendment workflow.</span>}
+      {!locked && <button className="primary-button" disabled={busy !== ""}>{busy === "save" ? tr("Saving…", "جارٍ الحفظ…") : tr("Save Result", "حفظ النتيجة")}</button>}
+      {!statusLocked && canVerify && savedResultId && complete && <button className="secondary-button" type="button" disabled={busy !== ""} onClick={() => void verify()}>{busy === "verify" ? tr("Verifying…", "جارٍ التحقق…") : tr("Verify Result", "التحقق من النتيجة")}</button>}
+      {statusLocked && <span className="muted">{tr("Verified/released results are locked. Future edits must use an amendment workflow.", "النتائج التي تم التحقق منها أو إصدارها مقفلة، وأي تعديل لاحق يجب أن يتم عبر مسار التعديل الرسمي.")}</span>}
       {!statusLocked && sourceLocked && <span className="muted">Analyzer/import-origin values are read-only here. Use the analyzer integration workflow for additional observations or corrections.</span>}
     </div>
   </form>;
