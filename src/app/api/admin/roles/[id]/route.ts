@@ -23,7 +23,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   const organizationId = session.user.organizationId;
   const current = await prisma.role.findFirst({
     where: { id, organizationId },
-    include: { permissions: true, _count: { select: { users: true } } },
+    include: { permissions: { include: { permission: true } }, _count: { select: { users: true } } },
   });
   if (!current) return NextResponse.json({ error: "not_found" }, { status: 404 });
   if (current.isSystem) return NextResponse.json({ error: "system_role_locked" }, { status: 409 });
@@ -42,8 +42,21 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     ? Number(current.discountLimitPercent.toString())
     : discountPercent(body.discountLimitPercent);
   if (!nameEn || permissionIds.length === 0 || discountLimitPercent === null) return NextResponse.json({ error: "invalid_fields" }, { status: 400 });
-  const permissionCount = await prisma.permission.count({ where: { id: { in: permissionIds } } });
-  if (permissionCount !== permissionIds.length) return NextResponse.json({ error: "invalid_permissions" }, { status: 400 });
+  const selectedPermissions = await prisma.permission.findMany({
+    where: { id: { in: permissionIds } },
+    select: { id: true, code: true },
+  });
+  if (selectedPermissions.length !== permissionIds.length) return NextResponse.json({ error: "invalid_permissions" }, { status: 400 });
+
+  const currentCanApproveDiscounts = current.permissions.some(grant => grant.permission.code === "billing.discount.approve");
+  const desiredCanApproveDiscounts = selectedPermissions.some(permission => permission.code === "billing.discount.approve");
+  const financialAuthorityChanged = currentCanApproveDiscounts !== desiredCanApproveDiscounts;
+  const financialRoleReactivated = current.status !== "ACTIVE"
+    && status === "ACTIVE"
+    && (Number(current.discountLimitPercent.toString()) > 0 || currentCanApproveDiscounts);
+  if ((financialAuthorityChanged || financialRoleReactivated) && !permissions.has("billing.discount.limits.manage")) {
+    return NextResponse.json({ error: "discount_authority_forbidden" }, { status: 403 });
+  }
 
   const ctx = await requestContext();
   await prisma.$transaction(async tx => {
