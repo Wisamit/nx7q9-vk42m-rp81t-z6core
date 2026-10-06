@@ -128,12 +128,12 @@ export default async function AnalyzersPage() {
       <div className="table-wrap"><table>
         <thead><tr><th>Analyzer</th><th>Branch</th><th>Protocol</th><th>Transport</th><th>Credentials</th><th>Mappings</th><th>Status</th></tr></thead>
         <tbody>{analyzers.length === 0 ? <tr><td colSpan={7} className="empty-state">{tr(locale, "No analyzers registered.", "لا توجد أجهزة تحليل مسجلة.")}</td></tr> : analyzers.map(item => <tr key={item.id}>
-          <td><strong>{item.code} — {item.name}</strong><br/><small>{[item.manufacturer, item.model, item.serialNumber].filter(Boolean).join(" · ") || "{tr(locale, "No device metadata", "لا توجد بيانات للجهاز")}"}</small></td>
+          <td><strong>{item.code} — {item.name}</strong><br/><small>{[item.manufacturer, item.model, item.serialNumber].filter(Boolean).join(" · ") || tr(locale, "No device metadata", "لا توجد بيانات للجهاز")}</small></td>
           <td>{item.branch.nameEn}{item.department ? " · " + item.department.nameEn : ""}</td>
           <td>{item.protocol}</td>
           <td>{item.transport}</td>
           <td>{item.credentials.filter(credential => credential.status === "ACTIVE").length} {tr(locale, "active", "نشط")}</td>
-          <td>{item.mappings.filter(mapping => mapping.status === "ACTIVE").length} shown {tr(locale, "active", "نشط")}</td>
+          <td>{item.mappings.filter(mapping => mapping.status === "ACTIVE").length} {tr(locale, "shown active", "نشط ظاهر")}</td>
           <td>{statusLabel(locale, item.status)}</td>
         </tr>)}</tbody>
       </table></div>
