@@ -179,7 +179,7 @@ export function ResultWorkflowActions({
       <label>{tr("Recipient role", "صفة المستلم")}<input name="recipientRole" maxLength={150} placeholder={tr("Physician / nurse / patient / other", "طبيب / ممرض / مريض / أخرى")} /></label>
       <label className="form-span">{tr("Recipient contact", "بيانات تواصل المستلم")}<input name="recipientContact" maxLength={200} /></label>
       <label className="check-line"><input type="checkbox" name="acknowledgementConfirmed" /> {tr("Acknowledgement confirmed", "تم تأكيد الإقرار")}</label>
-      <label className="check-line"><input type="checkbox" name="readBackConfirmed" /> {tr("Read-back confirmed", "تم تأكيد إعادة القراءة")}{criticalRequireReadBack ? " {tr("(required for acknowledgement)", "(مطلوب للإقرار)")}" : ""}</label>
+      <label className="check-line"><input type="checkbox" name="readBackConfirmed" /> {tr("Read-back confirmed", "تم تأكيد إعادة القراءة")}{criticalRequireReadBack ? ` ${tr("(required for acknowledgement)", "(مطلوب للإقرار)")}` : ""}</label>
       <label className="form-span">{tr("Notes", "ملاحظات")}<textarea name="notes" rows={2} /></label>
       <button className="primary-button form-span" disabled={busy === "communication"}>{busy === "communication" ? tr("Saving…", "جارٍ الحفظ…") : tr("Save Communication", "حفظ التواصل")}</button>
     </form>}
