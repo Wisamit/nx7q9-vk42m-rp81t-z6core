@@ -496,6 +496,7 @@ export async function POST(request: Request) {
         invoiceNumber = documentNumber("INV");
       }
 
+      const finalTotal = subtotal.sub(discountTotal);
       const invoice = await tx.invoice.create({
         data: {
           organizationId: session.user.organizationId,
@@ -505,11 +506,16 @@ export async function POST(request: Request) {
           invoiceNumber,
           currency,
           subtotal,
-          discountTotal: new Prisma.Decimal(0),
+          discountTotal,
+          discountPercent: requestedDiscountPercent.toFixed(2),
+          discountReason: requestedDiscountPercent > 0 ? discountReason : null,
+          discountApprovalMethod,
+          discountApprovedByUserId,
+          discountApprovedAt: requestedDiscountPercent > 0 ? new Date() : null,
           taxTotal: new Prisma.Decimal(0),
-          total: subtotal,
+          total: finalTotal,
           paidAmount: new Prisma.Decimal(0),
-          balanceAmount: subtotal,
+          balanceAmount: finalTotal,
           createdByUserId: session.user.id,
         },
       });
@@ -525,9 +531,9 @@ export async function POST(request: Request) {
             testNameEnSnapshot: entry.test.nameEn,
             quantity: new Prisma.Decimal(1),
             unitPrice: entry.unitPrice,
-            discountAmount: new Prisma.Decimal(0),
+            discountAmount: entry.discountAmount,
             taxAmount: new Prisma.Decimal(0),
-            lineTotal: entry.unitPrice,
+            lineTotal: entry.finalPrice,
           },
         });
       }
@@ -542,9 +548,35 @@ export async function POST(request: Request) {
             testNameEnSnapshot: orderPackage.package.nameEn,
             quantity: new Prisma.Decimal(1),
             unitPrice: orderPackage.unitPrice,
-            discountAmount: new Prisma.Decimal(0),
+            discountAmount: orderPackage.discountAmount,
             taxAmount: new Prisma.Decimal(0),
-            lineTotal: orderPackage.unitPrice,
+            lineTotal: orderPackage.finalPrice,
+          },
+        });
+      }
+
+      if (requestedDiscountPercent > 0 && discountApprovedByUserId && discountApprovalMethod) {
+        await tx.auditEvent.create({
+          data: {
+            organizationId: session.user.organizationId,
+            branchId,
+            actorUserId: discountApprovedByUserId,
+            action: "ORDER_DISCOUNT_APPROVED",
+            entityType: "Invoice",
+            entityId: invoice.id,
+            reason: discountReason,
+            newValues: {
+              invoiceNumber,
+              orderId: order.id,
+              requestedByUserId: session.user.id,
+              discountPercent: requestedDiscountPercent.toFixed(2),
+              originalSubtotal: subtotal.toString(),
+              discountTotal: discountTotal.toString(),
+              finalTotal: finalTotal.toString(),
+              approvalMethod: discountApprovalMethod,
+            },
+            ipAddress: ctx.ipAddress,
+            userAgent: ctx.userAgent,
           },
         });
       }
@@ -574,14 +606,20 @@ export async function POST(request: Request) {
               .map(entry => entry.question.code),
             invoiceNumber,
             currency,
-            total: subtotal.toString(),
+            subtotal: subtotal.toString(),
+            discountPercent: requestedDiscountPercent.toFixed(2),
+            discountTotal: discountTotal.toString(),
+            discountReason: requestedDiscountPercent > 0 ? discountReason : null,
+            discountApprovalMethod,
+            discountApprovedByUserId,
+            total: finalTotal.toString(),
           },
           ipAddress: ctx.ipAddress,
           userAgent: ctx.userAgent,
         },
       });
 
-      return { order, invoice, total: subtotal.toString() };
+      return { order, invoice, subtotal: subtotal.toString(), discountTotal: discountTotal.toString(), total: finalTotal.toString() };
     }, { timeout: 30000 });
 
     return NextResponse.json({
@@ -591,6 +629,9 @@ export async function POST(request: Request) {
       invoiceId: result.invoice.id,
       invoiceNumber: result.invoice.invoiceNumber,
       currency,
+      subtotal: result.subtotal,
+      discountPercent: requestedDiscountPercent.toFixed(2),
+      discountTotal: result.discountTotal,
       total: result.total,
     }, { status: 201 });
   } catch {
