@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { permissionSet, requirePermission } from "@/lib/auth";
+import { canAccessDepartment, permissionSet, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { resolveReferenceInterval } from "@/lib/result-reference";
 import { ResultEntryForm } from "@/components/result-entry-form";
@@ -107,7 +107,7 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
     },
   });
 
-  if (!item) notFound();
+  if (!item || !canAccessDepartment(session, item.test.departmentId)) notFound();
 
   const latestResult = item.results[0] || null;
   const commentTemplates = await prisma.resultCommentTemplate.findMany({
