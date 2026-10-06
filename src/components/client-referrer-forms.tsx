@@ -137,7 +137,7 @@ export function ClientReferrerForms({
 
     <CrudModal open={open === "referrer"} onClose={() => setOpen("")} title={tr("Add Referrer", "إضافة محيل")} description={tr("Create a doctor, clinic or hospital referral source.", "إنشاء مصدر إحالة لطبيب أو عيادة أو مستشفى.")} size="lg">
       <form className="catalog-form" onSubmit={submitReferrer}>
-        <label>{tr("Code", "الرمز")}<input name="code" placeholder="Optional; generated from name" /></label>
+        <label>{tr("Code", "الرمز")}<input name="code" placeholder={tr("Optional; generated from name","اختياري؛ يتم توليده من الاسم")} /></label>
         <label>{tr("Type", "النوع")}<select name="type" defaultValue="PHYSICIAN"><option value="PHYSICIAN">{referrerTypeLabel("PHYSICIAN")}</option><option value="CLINIC">{referrerTypeLabel("CLINIC")}</option><option value="HOSPITAL">{referrerTypeLabel("HOSPITAL")}</option><option value="OTHER">{referrerTypeLabel("OTHER")}</option></select></label>
         <label>{tr("Name (English)", "الاسم بالإنجليزية")}<input name="nameEn" required /></label>
         <label dir="rtl">الاسم بالعربية<input name="nameAr" dir="rtl" /></label>
