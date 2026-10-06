@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
+import { canAccessBranch, canAccessDepartment, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { resolveAnalyzerQcGate } from "@/lib/qc-gate";
 import { notifyUsersWithPermission } from "@/lib/notifications";
@@ -32,6 +32,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   if (!result) return NextResponse.json({ error: "result_not_found" }, { status: 404 });
   if (!canAccessBranch(session, result.performingBranchId)) return NextResponse.json({ error: "branch_forbidden" }, { status: 403 });
+  if (!canAccessDepartment(session, result.orderItem.test.departmentId)) return NextResponse.json({ error: "department_forbidden" }, { status: 403 });
   if (!["DRAFT", "ENTERED"].includes(result.status)) return NextResponse.json({ error: "result_not_verifiable", status: result.status }, { status: 409 });
 
   const expectedCount = result.microbiologySnapshot ? 1 : Math.max(1, result.orderItem.test.components.length);
