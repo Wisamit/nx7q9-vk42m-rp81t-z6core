@@ -2,6 +2,7 @@ import Link from "next/link";
 import { AnalyticsBars } from "@/components/analytics-bars";
 import { requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { tr } from "@/lib/ui-i18n";
 
 export const dynamic = "force-dynamic";
 
@@ -64,14 +65,15 @@ function money(value: number, currency: string) {
   return currency + " " + value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-function minuteLabel(value: number | null) {
+function minuteLabel(value: number | null, locale: "ar" | "en") {
   if (value === null || !Number.isFinite(value)) return "—";
-  if (value < 60) return Math.round(value) + " min";
-  return (value / 60).toFixed(1) + " h";
+  if (value < 60) return Math.round(value) + (locale === "ar" ? " دقيقة" : " min");
+  return (value / 60).toFixed(1) + (locale === "ar" ? " ساعة" : " h");
 }
 
 export default async function AnalyticsPage({ searchParams }: { searchParams: SearchParams }) {
   const session = await requirePermission("analytics.view");
+  const locale = session.user.preferredLocale === "ar" ? "ar" : "en";
   const params = await searchParams;
   const { period, start, end } = resolvePeriod(params);
   const authorizedBranchIds = session.user.branchScopes.map(scope => scope.branchId);
@@ -99,7 +101,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
         id: { in: authorizedBranchIds },
         status: "ACTIVE",
       },
-      select: { id: true, code: true, nameEn: true },
+      select: { id: true, code: true, nameEn: true, nameAr: true },
       orderBy: { nameEn: "asc" },
     }),
     prisma.labOrder.findMany({
@@ -109,15 +111,16 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
         ...(periodWhere ? { orderedAt: periodWhere } : {}),
       },
       include: {
-        orderingBranch: { select: { id: true, code: true, nameEn: true } },
-        source: { select: { id: true, code: true, nameEn: true, category: true } },
-        referrer: { select: { id: true, code: true, nameEn: true } },
+        orderingBranch: { select: { id: true, code: true, nameEn: true, nameAr: true } },
+        source: { select: { id: true, code: true, nameEn: true, nameAr: true, category: true } },
+        referrer: { select: { id: true, code: true, nameEn: true, nameAr: true } },
         items: {
           select: {
             id: true,
             testId: true,
             testCodeSnapshot: true,
             testNameEnSnapshot: true,
+            testNameArSnapshot: true,
             finalPriceSnapshot: true,
             currency: true,
           },
@@ -183,6 +186,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
         testId: true,
         testCodeSnapshot: true,
         testNameEnSnapshot: true,
+        testNameArSnapshot: true,
         order: { select: { orderedAt: true, orderingBranchId: true } },
         results: {
           where: { releasedAt: { not: null }, status: { in: ["RELEASED", "AMENDED"] } },
@@ -222,7 +226,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
         status: "ACTIVE",
       },
       include: {
-        branch: { select: { code: true, nameEn: true } },
+        branch: { select: { code: true, nameEn: true, nameAr: true } },
         measurements: {
           where: {
             ...(start ? { periodEnd: { gte: start } } : {}),
@@ -236,6 +240,8 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
       take: 500,
     }),
   ]);
+
+  const localizedName = (item: { nameEn: string; nameAr?: string | null }) => locale === "ar" ? item.nameAr || item.nameEn : item.nameEn;
 
   const orderItemIds = orders.flatMap(order => order.items.map(item => item.id));
   const [consumptionMovements, sendOutCosts] = orderItemIds.length === 0 ? [[], []] : await Promise.all([
@@ -304,7 +310,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
       orderItemToTest.set(item.id, item.testId);
       const row = testMap.get(item.testId) || {
         code: item.testCodeSnapshot,
-        name: item.testNameEnSnapshot,
+        name: locale === "ar" ? item.testNameArSnapshot || item.testNameEnSnapshot : item.testNameEnSnapshot,
         volume: 0,
         revenue: new Map<string, number>(),
         cost: new Map<string, number>(),
@@ -348,13 +354,13 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
     }
 
     const sourceKey = order.source?.id || "UNSPECIFIED";
-    const sourceRow = sourceMap.get(sourceKey) || { name: order.source?.nameEn || "Unspecified", orders: 0, revenue: new Map<string, number>() };
+    const sourceRow = sourceMap.get(sourceKey) || { name: order.source ? localizedName(order.source) : tr(locale, "Unspecified", "غير محدد"), orders: 0, revenue: new Map<string, number>() };
     sourceRow.orders++;
     for (const [currency, amount] of orderRevenue) sourceRow.revenue.set(currency, (sourceRow.revenue.get(currency) || 0) + amount);
     sourceMap.set(sourceKey, sourceRow);
 
     if (order.referrer) {
-      const refRow = referrerMap.get(order.referrer.id) || { name: order.referrer.nameEn, orders: 0, revenue: new Map<string, number>() };
+      const refRow = referrerMap.get(order.referrer.id) || { name: localizedName(order.referrer), orders: 0, revenue: new Map<string, number>() };
       refRow.orders++;
       for (const [currency, amount] of orderRevenue) refRow.revenue.set(currency, (refRow.revenue.get(currency) || 0) + amount);
       referrerMap.set(order.referrer.id, refRow);
@@ -364,7 +370,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
   const branchMap = new Map(branches.map(branch => [branch.id, {
     id: branch.id,
     code: branch.code,
-    name: branch.nameEn,
+    name: localizedName(branch),
     orders: 0,
     completed: 0,
     revenue: new Map<string, number>(),
@@ -400,7 +406,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
     tatMinutes.push(minutes);
     const branchRow = branchMap.get(item.order.orderingBranchId);
     branchRow?.tatMinutes.push(minutes);
-    const row = tatByTest.get(item.testId) || { label: item.testCodeSnapshot + " — " + item.testNameEnSnapshot, values: [] };
+    const row = tatByTest.get(item.testId) || { label: item.testCodeSnapshot + " — " + (locale === "ar" ? item.testNameArSnapshot || item.testNameEnSnapshot : item.testNameEnSnapshot), values: [] };
     row.values.push(minutes);
     tatByTest.set(item.testId, row);
   }
@@ -452,8 +458,8 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
     .slice(0, 10);
 
   const periodLabel = start || end
-    ? (start ? start.toISOString().slice(0, 10) : "Beginning") + " → " + (end ? end.toISOString().slice(0, 10) : "Now")
-    : "All time";
+    ? (start ? start.toISOString().slice(0, 10) : tr(locale, "Beginning", "البداية")) + " → " + (end ? end.toISOString().slice(0, 10) : tr(locale, "Now", "الآن"))
+    : tr(locale, "All time", "كل الوقت");
 
   return <main className="catalog-shell">
     <header className="page-header">
@@ -486,10 +492,10 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
 
     <section className="detail-grid">
       <article className="detail-card"><h2>Orders</h2><strong>{orders.length.toLocaleString()}</strong><p className="muted">{completionRate.toFixed(1)}% completed · {uniquePatients.toLocaleString()} unique patients.</p></article>
-      <article className="detail-card"><h2>Average TAT</h2><strong>{minuteLabel(avgTat)}</strong><p className="muted">Order registration to latest released result.</p></article>
-      <article className="detail-card"><h2>P90 TAT</h2><strong>{minuteLabel(p90Tat)}</strong><p className="muted">90% of released test items completed within this time.</p></article>
+      <article className="detail-card"><h2>Average TAT</h2><strong>{minuteLabel(avgTat, locale)}</strong><p className="muted">Order registration to latest released result.</p></article>
+      <article className="detail-card"><h2>P90 TAT</h2><strong>{minuteLabel(p90Tat, locale)}</strong><p className="muted">90% of released test items completed within this time.</p></article>
       <article className="detail-card"><h2>Specimen Rejection</h2><strong>{rejectionRate.toFixed(2)}%</strong><p className="muted">{rejectedSpecimens} rejected of {totalSpecimens} specimens.</p></article>
-      <article className="detail-card"><h2>Open Critical</h2><strong>{openCritical}</strong><p className="muted">Average acknowledgement: {minuteLabel(avgCriticalAck)}.</p></article>
+      <article className="detail-card"><h2>Open Critical</h2><strong>{openCritical}</strong><p className="muted">Average acknowledgement: {minuteLabel(avgCriticalAck, locale)}.</p></article>
       <article className="detail-card"><h2>Open QC Blocks</h2><strong>{openQcBlocks}</strong><p className="muted">Unresolved blocking Westgard/QC violations.</p></article>
     </section>
 
@@ -515,7 +521,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
       <AnalyticsBars title="Top Tests by Volume" items={topTests.map(test => ({ label: test.code + " — " + test.name, value: test.volume }))} />
       <AnalyticsBars title="Top Sources" items={topSources.map(source => ({ label: source.name, value: source.orders }))} />
       <AnalyticsBars title="Top Referrers" items={topReferrers.map(referrer => ({ label: referrer.name, value: referrer.orders }))} />
-      <AnalyticsBars title="Slowest Tests by Average TAT" items={slowestTests.map(test => ({ label: test.label, value: test.average, displayValue: minuteLabel(test.average) + " · n=" + test.count }))} />
+      <AnalyticsBars title="Slowest Tests by Average TAT" items={slowestTests.map(test => ({ label: test.label, value: test.average, displayValue: minuteLabel(test.average, locale) + " · n=" + test.count }))} />
     </section>
 
     <section className="table-card detail-section">
@@ -529,7 +535,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
             <td>{branch.orders}</td>
             <td>{branch.completed}</td>
             <td>{branch.orders ? (branch.completed / branch.orders * 100).toFixed(1) + "%" : "—"}</td>
-            <td>{minuteLabel(avg)}</td>
+            <td>{minuteLabel(avg, locale)}</td>
             <td>{branch.specimens ? (branch.rejectedSpecimens / branch.specimens * 100).toFixed(2) + "%" : "—"}</td>
             <td>{[...branch.revenue.entries()].map(([currency, amount]) => money(amount, currency)).join(" · ") || "—"}</td>
             <td>{[...branch.collected.entries()].map(([currency, amount]) => money(amount, currency)).join(" · ") || "—"}</td>
