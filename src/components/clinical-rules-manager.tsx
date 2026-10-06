@@ -3,19 +3,21 @@
 import { FormEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
-type Branch = { id: string; code: string; nameEn: string };
-type Method = { id: string; code: string; nameEn: string };
-type ComponentOption = { id: string; code: string; nameEn: string };
-type TestOption = { id: string; code: string; nameEn: string; methodId: string | null; components: ComponentOption[] };
+type Branch = { id: string; code: string; nameEn: string; nameAr?: string | null };
+type Method = { id: string; code: string; nameEn: string; nameAr?: string | null };
+type ComponentOption = { id: string; code: string; nameEn: string; nameAr?: string | null };
+type TestOption = { id: string; code: string; nameEn: string; nameAr?: string | null; methodId: string | null; components: ComponentOption[] };
 
 export function ClinicalRulesManager({
   tests,
   branches,
   methods,
+  locale,
 }: {
   tests: TestOption[];
   branches: Branch[];
   methods: Method[];
+  locale: "ar" | "en";
 }) {
   const router = useRouter();
   const [deltaTestId, setDeltaTestId] = useState("");
@@ -23,13 +25,15 @@ export function ClinicalRulesManager({
   const [commentScope, setCommentScope] = useState("ORGANIZATION");
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
+  const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
+  const localizedName = (item: { nameEn: string; nameAr?: string | null }) => locale === "ar" ? item.nameAr || item.nameEn : item.nameEn;
 
   const deltaComponents = useMemo(
-    () => tests.find((test) => test.id === deltaTestId)?.components || [],
+    () => tests.find(test => test.id === deltaTestId)?.components || [],
     [tests, deltaTestId],
   );
   const commentComponents = useMemo(
-    () => tests.find((test) => test.id === commentTestId)?.components || [],
+    () => tests.find(test => test.id === commentTestId)?.components || [],
     [tests, commentTestId],
   );
 
@@ -52,13 +56,12 @@ export function ClinicalRulesManager({
         effectiveTo: form.get("effectiveTo"),
       }),
     });
-    const body = await response.json().catch(() => ({}));
     if (response.ok) {
-      setMessage("Delta rule created.");
+      setMessage(tr("Delta rule created.", "تم إنشاء قاعدة الفرق بنجاح."));
       event.currentTarget.reset();
       setDeltaTestId("");
       router.refresh();
-    } else setMessage(body.error || "Could not create delta rule.");
+    } else setMessage(tr("Could not create delta rule.", "تعذر إنشاء قاعدة الفرق."));
     setBusy("");
   }
 
@@ -80,55 +83,58 @@ export function ClinicalRulesManager({
         textAr: form.get("textAr"),
       }),
     });
-    const body = await response.json().catch(() => ({}));
     if (response.ok) {
-      setMessage("Comment template created.");
+      setMessage(tr("Comment template created.", "تم إنشاء قالب التعليق بنجاح."));
       event.currentTarget.reset();
       setCommentScope("ORGANIZATION");
       setCommentTestId("");
       router.refresh();
-    } else setMessage(body.error || "Could not create comment template.");
+    } else setMessage(tr("Could not create comment template.", "تعذر إنشاء قالب التعليق."));
     setBusy("");
   }
 
   return <div className="detail-grid">
     <article className="detail-card">
-      <h2>Create Delta Rule</h2>
-      <p className="muted">Compare a new numeric result against the patient&apos;s prior released value. Exceeding either configured threshold is flagged for review.</p>
+      <h2>{tr("Create Delta Rule", "إنشاء قاعدة مقارنة سابقة")}</h2>
+      <p className="muted">{tr("Compare a new numeric result against the patient's prior released value. Exceeding either configured threshold is flagged for review.", "تقارن النتيجة الرقمية الجديدة بآخر نتيجة صادرة للمريض، ويؤدي تجاوز أي حد مُهيأ إلى وضع علامة للمراجعة.")}</p>
       <form className="catalog-form" onSubmit={createDelta}>
-        <label>Test<select name="testId" required value={deltaTestId} onChange={(e) => setDeltaTestId(e.target.value)}>
-          <option value="">Select test…</option>
-          {tests.map(test => <option key={test.id} value={test.id}>{test.code} — {test.nameEn}</option>)}
+        <label>{tr("Test", "الفحص")}<select name="testId" required value={deltaTestId} onChange={e => setDeltaTestId(e.target.value)}>
+          <option value="">{tr("Select test…", "اختر الفحص…")}</option>
+          {tests.map(test => <option key={test.id} value={test.id}>{test.code} — {localizedName(test)}</option>)}
         </select></label>
-        <label>Component<select name="componentId" defaultValue="" disabled={!deltaTestId}>
-          <option value="">Whole/simple test</option>
-          {deltaComponents.map(component => <option key={component.id} value={component.id}>{component.code} — {component.nameEn}</option>)}
+        <label>{tr("Component", "المكوّن")}<select name="componentId" defaultValue="" disabled={!deltaTestId}>
+          <option value="">{tr("Whole/simple test", "الفحص الكامل / البسيط")}</option>
+          {deltaComponents.map(component => <option key={component.id} value={component.id}>{component.code} — {localizedName(component)}</option>)}
         </select></label>
-        <label>Branch<select name="branchId" defaultValue=""><option value="">All branches</option>{branches.map(branch => <option key={branch.id} value={branch.id}>{branch.code} — {branch.nameEn}</option>)}</select></label>
-        <label>Method<select name="methodId" defaultValue=""><option value="">All methods</option>{methods.map(method => <option key={method.id} value={method.id}>{method.code} — {method.nameEn}</option>)}</select></label>
-        <label>Absolute limit<input name="absoluteLimit" type="number" min="0" step="0.00000001" /></label>
-        <label>Percent limit<input name="percentLimit" type="number" min="0" step="0.000001" /></label>
-        <label>Lookback days<input name="lookbackDays" type="number" min="1" max="3650" defaultValue="365" required /></label>
-        <label>Effective from<input name="effectiveFrom" type="date" defaultValue={new Date().toISOString().slice(0,10)} required /></label>
-        <label>Effective to<input name="effectiveTo" type="date" /></label>
-        <button className="primary-button form-span" disabled={busy === "delta"}>{busy === "delta" ? "Saving…" : "Create Delta Rule"}</button>
+        <label>{tr("Branch", "الفرع")}<select name="branchId" defaultValue=""><option value="">{tr("All branches", "كل الفروع")}</option>{branches.map(branch => <option key={branch.id} value={branch.id}>{branch.code} — {localizedName(branch)}</option>)}</select></label>
+        <label>{tr("Method", "الطريقة")}<select name="methodId" defaultValue=""><option value="">{tr("All methods", "كل الطرق")}</option>{methods.map(method => <option key={method.id} value={method.id}>{method.code} — {localizedName(method)}</option>)}</select></label>
+        <label>{tr("Absolute limit", "الحد المطلق")}<input name="absoluteLimit" type="number" min="0" step="0.00000001" /></label>
+        <label>{tr("Percent limit", "حد النسبة المئوية")}<input name="percentLimit" type="number" min="0" step="0.000001" /></label>
+        <label>{tr("Lookback days", "أيام الرجوع للخلف")}<input name="lookbackDays" type="number" min="1" max="3650" defaultValue="365" required /></label>
+        <label>{tr("Effective from", "ساري من")}<input name="effectiveFrom" type="date" defaultValue={new Date().toISOString().slice(0,10)} required /></label>
+        <label>{tr("Effective to", "ساري حتى")}<input name="effectiveTo" type="date" /></label>
+        <button className="primary-button form-span" disabled={busy === "delta"}>{busy === "delta" ? tr("Saving…", "جارٍ الحفظ…") : tr("Create Delta Rule", "إنشاء قاعدة الفرق")}</button>
       </form>
     </article>
 
     <article className="detail-card">
-      <h2>Create Result Comment Template</h2>
+      <h2>{tr("Create Result Comment Template", "إنشاء قالب تعليق للنتيجة")}</h2>
       <form className="catalog-form" onSubmit={createComment}>
-        <label>Scope<select value={commentScope} onChange={(e) => setCommentScope(e.target.value)}><option>ORGANIZATION</option><option>TEST</option><option>COMPONENT</option></select></label>
-        <label>Code<input name="code" placeholder="Optional; generated from name" /></label>
-        {commentScope !== "ORGANIZATION" && <label>Test<select name="testId" required value={commentTestId} onChange={(e) => setCommentTestId(e.target.value)}>
-          <option value="">Select test…</option>{tests.map(test => <option key={test.id} value={test.id}>{test.code} — {test.nameEn}</option>)}
+        <label>{tr("Scope", "النطاق")}<select value={commentScope} onChange={e => setCommentScope(e.target.value)}>
+          <option value="ORGANIZATION">{tr("Organization", "المؤسسة")}</option>
+          <option value="TEST">{tr("Test", "الفحص")}</option>
+          <option value="COMPONENT">{tr("Component", "المكوّن")}</option>
+        </select></label>
+        <label>{tr("Code", "الرمز")}<input name="code" placeholder={tr("Optional; generated from name", "اختياري؛ يُنشأ من الاسم عند تركه فارغًا")} /></label>
+        {commentScope !== "ORGANIZATION" && <label>{tr("Test", "الفحص")}<select name="testId" required value={commentTestId} onChange={e => setCommentTestId(e.target.value)}>
+          <option value="">{tr("Select test…", "اختر الفحص…")}</option>{tests.map(test => <option key={test.id} value={test.id}>{test.code} — {localizedName(test)}</option>)}
         </select></label>}
-        {commentScope === "COMPONENT" && <label>Component<select name="componentId" required defaultValue=""><option value="">Select component…</option>{commentComponents.map(component => <option key={component.id} value={component.id}>{component.code} — {component.nameEn}</option>)}</select></label>}
-        <label>Name (English)<input name="nameEn" required /></label>
-        <label dir="rtl">الاسم بالعربية<input name="nameAr" dir="rtl" /></label>
-        <label className="form-span">Comment (English)<textarea name="textEn" rows={3} required /></label>
-        <label className="form-span" dir="rtl">التعليق بالعربية<textarea name="textAr" rows={3} dir="rtl" /></label>
-        <button className="primary-button form-span" disabled={busy === "comment"}>{busy === "comment" ? "Saving…" : "Create Comment Template"}</button>
+        {commentScope === "COMPONENT" && <label>{tr("Component", "المكوّن")}<select name="componentId" required defaultValue=""><option value="">{tr("Select component…", "اختر المكوّن…")}</option>{commentComponents.map(component => <option key={component.id} value={component.id}>{component.code} — {localizedName(component)}</option>)}</select></label>}
+        <label>{tr("Name (English)", "الاسم بالإنجليزية")}<input name="nameEn" required /></label>
+        <label>{tr("Name (Arabic)", "الاسم بالعربية")}<input name="nameAr" dir="rtl" /></label>
+        <label className="form-span">{tr("Comment (English)", "التعليق بالإنجليزية")}<textarea name="textEn" rows={3} required /></label>
+        <label className="form-span">{tr("Comment (Arabic)", "التعليق بالعربية")}<textarea name="textAr" rows={3} dir="rtl" /></label>
+        <button className="primary-button form-span" disabled={busy === "comment"}>{busy === "comment" ? tr("Saving…", "جارٍ الحفظ…") : tr("Create Comment Template", "إنشاء قالب التعليق")}</button>
       </form>
     </article>
     {message && <div className="form-success form-span">{message}</div>}
