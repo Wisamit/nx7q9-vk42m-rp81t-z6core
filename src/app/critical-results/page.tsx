@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { getUiLocale, tr } from "@/lib/ui-i18n";
 
 export const dynamic = "force-dynamic";
 
 export default async function CriticalResultsPage() {
   const session = await requirePermission("critical.communicate");
+  const locale = getUiLocale(session.user.preferredLocale);
   const branchIds = session.user.branchScopes.map(scope => scope.branchId);
   const now = new Date();
 
@@ -38,18 +40,18 @@ export default async function CriticalResultsPage() {
   return <main className="catalog-shell">
     <header className="page-header">
       <div>
-        <p className="eyebrow">Critical Result Escalation</p>
-        <h1>Open Critical Results</h1>
-        <p className="muted">Branch-scoped queue for acknowledgement deadlines, communication attempts and escalation levels.</p>
+        <p className="eyebrow">{tr(locale, "Critical Result Escalation", "تصعيد النتائج الحرجة")}</p>
+        <h1>{tr(locale, "Open Critical Results", "النتائج الحرجة المفتوحة")}</h1>
+        <p className="muted">{tr(locale, "Branch-scoped queue for acknowledgement deadlines, communication attempts and escalation levels.", "قائمة حسب صلاحية الفروع لمواعيد الإقرار ومحاولات التواصل ومستويات التصعيد.")}</p>
       </div>
-      <Link className="secondary-link" href="/dashboard">Back to Dashboard</Link>
+      <Link className="secondary-link" href="/dashboard">{tr(locale, "Back to Dashboard", "العودة للوحة التحكم")}</Link>
     </header>
 
     <section className="table-card">
-      <div className="table-toolbar"><h2>Active critical events</h2><span>{events.length} shown</span></div>
+      <div className="table-toolbar"><h2>{tr(locale, "Active critical events", "الأحداث الحرجة النشطة")}</h2><span>{events.length} shown</span></div>
       <div className="table-wrap"><table>
-        <thead><tr><th>Patient / Order</th><th>Test</th><th>Branch</th><th>Detected</th><th>Acknowledgement due</th><th>Escalation</th><th>Last communication</th><th>Action</th></tr></thead>
-        <tbody>{events.length === 0 ? <tr><td colSpan={8} className="empty-state">No open critical result events in your authorized branches.</td></tr> : events.map(event => {
+        <thead><tr><th>{tr(locale, "Patient / Order", "المريض / الطلب")}</th><th>{tr(locale, "Test", "الفحص")}</th><th>{tr(locale, "Branch", "الفرع")}</th><th>{tr(locale, "Detected", "تم الاكتشاف")}</th><th>{tr(locale, "Acknowledgement due", "موعد الإقرار")}</th><th>{tr(locale, "Escalation", "التصعيد")}</th><th>{tr(locale, "Last communication", "آخر تواصل")}</th><th>{tr(locale, "Action", "الإجراء")}</th></tr></thead>
+        <tbody>{events.length === 0 ? <tr><td colSpan={8} className="empty-state">{tr(locale, "No open critical result events in your authorized branches.", "لا توجد نتائج حرجة مفتوحة ضمن الفروع المصرح لك بها.")}</td></tr> : events.map(event => {
           const overdue = Boolean(event.acknowledgementDueAt && event.acknowledgementDueAt < now);
           const last = event.communications[0];
           return <tr key={event.id}>
@@ -58,11 +60,11 @@ export default async function CriticalResultsPage() {
             <td>{event.result.performingBranch.nameEn}</td>
             <td>{event.detectedAt.toISOString().replace("T"," ").slice(0,19)}</td>
             <td>{event.acknowledgementDueAt
-              ? <strong className={overdue ? "delta-exceeded" : ""}>{event.acknowledgementDueAt.toISOString().replace("T"," ").slice(0,19)}{overdue ? " · OVERDUE" : ""}</strong>
-              : "No policy"}</td>
-            <td>Level {event.escalationLevel}{event.maxEscalationLevelSnapshot !== null ? ` / ${event.maxEscalationLevelSnapshot}` : ""}<br/><small>{event.nextEscalationDueAt ? "Next: " + event.nextEscalationDueAt.toISOString().replace("T"," ").slice(0,19) : "—"}</small></td>
-            <td>{last ? <><strong>{last.outcome}</strong><br/><small>{last.communicatedAt.toISOString().replace("T"," ").slice(0,19)} · {last.recipientName}</small></> : "No communication yet"}</td>
-            <td><Link className="secondary-link" href={`/worklists/${event.result.orderItemId}`}>Open Result</Link></td>
+              ? <strong className={overdue ? "delta-exceeded" : ""}>{event.acknowledgementDueAt.toISOString().replace("T"," ").slice(0,19)}{overdue ? " · " + tr(locale, "OVERDUE", "متأخر") : ""}</strong>
+              : tr(locale, "No policy", "لا توجد سياسة")}</td>
+            <td>{tr(locale, "Level", "المستوى")} {event.escalationLevel}{event.maxEscalationLevelSnapshot !== null ? ` / ${event.maxEscalationLevelSnapshot}` : ""}<br/><small>{event.nextEscalationDueAt ? tr(locale, "Next", "التالي") + ": " + event.nextEscalationDueAt.toISOString().replace("T"," ").slice(0,19) : "—"}</small></td>
+            <td>{last ? <><strong>{last.outcome}</strong><br/><small>{last.communicatedAt.toISOString().replace("T"," ").slice(0,19)} · {last.recipientName}</small></> : tr(locale, "No communication yet", "لا يوجد تواصل بعد")}</td>
+            <td><Link className="secondary-link" href={`/worklists/${event.result.orderItemId}`}>{tr(locale, "Open Result", "فتح النتيجة")}</Link></td>
           </tr>;
         })}</tbody>
       </table></div>
