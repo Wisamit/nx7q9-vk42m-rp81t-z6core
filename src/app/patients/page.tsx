@@ -43,7 +43,7 @@ export default async function PatientsPage({
         <p className="muted">{tr(locale, "Organization-wide patient identity shared across all branches, with duplicate protection and auditable identifiers.", "هوية موحدة للمريض على مستوى المؤسسة ومشتركة بين جميع الفروع مع حماية من التكرار ومعرّفات قابلة للتدقيق.")}</p>
       </div>
       <div className="header-actions">
-        <PatientCreateModal />
+        <PatientCreateModal locale={locale} />
         <Link className="secondary-link" href="/dashboard"><SystemIcon name="dashboard" size={15} />{tr(locale, "Back to Dashboard", "العودة للوحة التحكم")}</Link>
       </div>
     </header>
