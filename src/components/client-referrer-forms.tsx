@@ -2,6 +2,8 @@
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
+import { CrudModal } from "@/components/crud-modal";
+import { SystemIcon } from "@/components/system-icon";
 
 type ClientOption = { id: string; code: string; nameEn: string };
 
@@ -11,6 +13,7 @@ export function ClientReferrerForms({ clients, canManageSources = false }: { cli
   const [referrerMessage, setReferrerMessage] = useState("");
   const [sourceMessage, setSourceMessage] = useState("");
   const [busy, setBusy] = useState<"client" | "referrer" | "source" | "">("");
+  const [open, setOpen] = useState<"client" | "referrer" | "source" | "">("");
 
   async function submitClient(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -34,6 +37,7 @@ export function ClientReferrerForms({ clients, canManageSources = false }: { cli
       setClientMessage(`Client created: ${body.client.code}`);
       event.currentTarget.reset();
       router.refresh();
+      setOpen("");
     } else setClientMessage(body.error || "Client creation failed.");
     setBusy("");
   }
@@ -61,6 +65,7 @@ export function ClientReferrerForms({ clients, canManageSources = false }: { cli
       setReferrerMessage(`Referrer created: ${body.referrer.code}`);
       event.currentTarget.reset();
       router.refresh();
+      setOpen("");
     } else setReferrerMessage(body.error || "Referrer creation failed.");
     setBusy("");
   }
@@ -85,13 +90,26 @@ export function ClientReferrerForms({ clients, canManageSources = false }: { cli
       setSourceMessage(`Source created: ${body.source.code}`);
       event.currentTarget.reset();
       router.refresh();
+      setOpen("");
     } else setSourceMessage(body.error || "Source creation failed.");
     setBusy("");
   }
 
-  return <div className="detail-grid">
-    <article className="detail-card">
-      <h2>Add Client</h2>
+  return <>
+    <div className="crud-action-bar">
+      <div>
+        {clientMessage && <span className="crud-success-toast">{clientMessage}</span>}
+        {referrerMessage && <span className="crud-success-toast">{referrerMessage}</span>}
+        {sourceMessage && <span className="crud-success-toast">{sourceMessage}</span>}
+      </div>
+      <div className="crud-action-buttons">
+        <button type="button" className="primary-button" onClick={() => { setClientMessage(""); setOpen("client"); }}><SystemIcon name="plus" size={16}/>Add Client</button>
+        <button type="button" className="secondary-button" onClick={() => { setReferrerMessage(""); setOpen("referrer"); }}><SystemIcon name="plus" size={16}/>Add Referrer</button>
+        {canManageSources && <button type="button" className="secondary-button" onClick={() => { setSourceMessage(""); setOpen("source"); }}><SystemIcon name="plus" size={16}/>Add Source</button>}
+      </div>
+    </div>
+
+    <CrudModal open={open === "client"} onClose={() => setOpen("")} title="Add Client" description="Create a billing/commercial client account." size="lg">
       <form className="catalog-form" onSubmit={submitClient}>
         <label>Code<input name="code" placeholder="Optional; generated from name" /></label>
         <label>Type<select name="type" defaultValue="CLINIC"><option>INDIVIDUAL</option><option>CLINIC</option><option>HOSPITAL</option><option>COMPANY</option><option>INSURANCE</option><option>OTHER</option></select></label>
@@ -103,10 +121,9 @@ export function ClientReferrerForms({ clients, canManageSources = false }: { cli
         <button className="primary-button form-span" disabled={busy === "client"}>{busy === "client" ? "Saving…" : "Create Client"}</button>
         {clientMessage && <div className="form-success form-span">{clientMessage}</div>}
       </form>
-    </article>
+    </CrudModal>
 
-    <article className="detail-card">
-      <h2>Add Referrer</h2>
+    <CrudModal open={open === "referrer"} onClose={() => setOpen("")} title="Add Referrer" description="Create a doctor, clinic or hospital referral source." size="lg">
       <form className="catalog-form" onSubmit={submitReferrer}>
         <label>Code<input name="code" placeholder="Optional; generated from name" /></label>
         <label>Type<select name="type" defaultValue="PHYSICIAN"><option>PHYSICIAN</option><option>CLINIC</option><option>HOSPITAL</option><option>OTHER</option></select></label>
@@ -119,11 +136,9 @@ export function ClientReferrerForms({ clients, canManageSources = false }: { cli
         <button className="primary-button form-span" disabled={busy === "referrer"}>{busy === "referrer" ? "Saving…" : "Create Referrer"}</button>
         {referrerMessage && <div className="form-success form-span">{referrerMessage}</div>}
       </form>
-    </article>
+    </CrudModal>
 
-    {canManageSources && <article className="detail-card">
-      <h2>Add Order Source</h2>
-      <p className="muted">Configurable acquisition/source categories used by orders and management analytics.</p>
+    {canManageSources && <CrudModal open={open === "source"} onClose={() => setOpen("")} title="Add Order Source" description="Create a configurable acquisition/source category for orders and analytics." size="md">
       <form className="catalog-form" onSubmit={submitSource}>
         <label>Code<input name="code" required placeholder="WALK_IN / CAMPAIGN / INSURANCE" /></label>
         <label>Category<input name="category" required placeholder="WALK_IN / DOCTOR / CORPORATE" /></label>
@@ -132,6 +147,6 @@ export function ClientReferrerForms({ clients, canManageSources = false }: { cli
         <button className="primary-button form-span" disabled={busy === "source"}>{busy === "source" ? "Saving…" : "Create Source"}</button>
         {sourceMessage && <div className="form-success form-span">{sourceMessage}</div>}
       </form>
-    </article>}
-  </div>;
+    </CrudModal>}
+  </>;
 }
