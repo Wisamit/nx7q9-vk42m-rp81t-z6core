@@ -8,6 +8,7 @@ export const dynamic = "force-dynamic";
 
 export default async function BillingPage() {
   const session = await requirePermission("billing.view");
+  const locale = session.user.preferredLocale === "ar" ? "ar" : "en";
 
   const accessibleBranchIds = session.user.branchScopes.map(scope => scope.branchId);
 
@@ -53,7 +54,7 @@ export default async function BillingPage() {
         <p className="muted">Historical invoice values are stored as immutable snapshots. Payments are allocated separately and support partial settlement.</p>
       </div>
       <div className="header-actions">
-        <PaymentCreateModal invoices={openInvoices.map(invoice => ({
+        <PaymentCreateModal locale={locale} invoices={openInvoices.map(invoice => ({
           id: invoice.id,
           invoiceNumber: invoice.invoiceNumber,
           currency: invoice.currency,
