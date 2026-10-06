@@ -28,7 +28,19 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   const organizationId = session.user.organizationId;
   const target = await prisma.user.findFirst({
     where: { id, organizationId },
-    include: { roles: { include: { role: true } }, branchScopes: true, departmentScopes: true },
+    include: {
+      roles: {
+        include: {
+          role: {
+            include: {
+              permissions: { select: { permission: { select: { code: true } } } },
+            },
+          },
+        },
+      },
+      branchScopes: true,
+      departmentScopes: true,
+    },
   });
   if (!target) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
@@ -56,13 +68,46 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   }
 
   const [roles, branchCount, departments] = await Promise.all([
-    prisma.role.findMany({ where: { id: { in: roleIds }, organizationId, status: "ACTIVE" }, select: { id: true, code: true } }),
+    prisma.role.findMany({
+      where: { id: { in: roleIds }, organizationId, status: "ACTIVE" },
+      select: {
+        id: true,
+        code: true,
+        discountLimitPercent: true,
+        permissions: { select: { permission: { select: { code: true } } } },
+      },
+    }),
     prisma.branch.count({ where: { id: { in: branchIds }, organizationId, status: "ACTIVE" } }),
     prisma.department.findMany({ where: { id: { in: departmentIds }, organizationId, status: "ACTIVE" }, select: { id: true, branchId: true } }),
   ]);
   const departmentScopeInvalid = departments.length !== departmentIds.length
     || departments.some(department => department.branchId && !branchIds.includes(department.branchId));
   if (roles.length !== roleIds.length || branchCount !== branchIds.length || departmentScopeInvalid) return NextResponse.json({ error: "invalid_scope" }, { status: 400 });
+
+  const currentRoleLimit = target.roles
+    .filter(assignment => assignment.role.status === "ACTIVE")
+    .reduce((highest, assignment) => Math.max(highest, Number(assignment.role.discountLimitPercent.toString())), 0);
+  const desiredRoleLimit = roles.reduce((highest, role) => Math.max(highest, Number(role.discountLimitPercent.toString())), 0);
+  const currentCanApproveDiscounts = target.roles.some(assignment =>
+    assignment.role.status === "ACTIVE"
+    && assignment.role.permissions.some(grant => grant.permission.code === "billing.discount.approve")
+  );
+  const desiredCanApproveDiscounts = roles.some(role =>
+    role.permissions.some(grant => grant.permission.code === "billing.discount.approve")
+  );
+  const currentBranchIds = new Set(target.branchScopes.map(scope => scope.branchId));
+  const branchAuthorityExpanded = branchIds.some(branchId => !currentBranchIds.has(branchId))
+    && (desiredRoleLimit > 0 || desiredCanApproveDiscounts || (discountLimitPercent ?? 0) > 0);
+  const financialAuthorityIncreased =
+    desiredRoleLimit > currentRoleLimit
+    || (desiredCanApproveDiscounts && !currentCanApproveDiscounts)
+    || branchAuthorityExpanded
+    || (target.status !== "ACTIVE" && status === "ACTIVE"
+      && (desiredRoleLimit > 0 || desiredCanApproveDiscounts || (discountLimitPercent ?? 0) > 0));
+
+  if (financialAuthorityIncreased && !permissions.has("billing.discount.limits.manage")) {
+    return NextResponse.json({ error: "discount_authority_forbidden" }, { status: 403 });
+  }
 
   const hadSystemAdmin = target.roles.some(x => x.role.code === "SYSTEM_ADMIN" && x.role.status === "ACTIVE");
   const keepsSystemAdmin = roles.some(x => x.code === "SYSTEM_ADMIN") && status === "ACTIVE";
