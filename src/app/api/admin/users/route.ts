@@ -1,0 +1,122 @@
+import { hash } from "bcryptjs";
+import { NextResponse } from "next/server";
+import { getCurrentSession, permissionSet, requestContext } from "@/lib/auth";
+import { prisma } from "@/lib/db";
+
+function text(value: unknown, max = 200) {
+  return typeof value === "string" ? value.trim().slice(0, max) : "";
+}
+function ids(value: unknown) {
+  return Array.isArray(value) ? [...new Set(value.filter((x): x is string => typeof x === "string" && x.length > 0))] : [];
+}
+
+export async function GET() {
+  const session = await getCurrentSession();
+  if (!session) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  if (!permissionSet(session).has("users.view")) return NextResponse.json({ error: "forbidden" }, { status: 403 });
+
+  const organizationId = session.user.organizationId;
+  const [users, roles, branches] = await Promise.all([
+    prisma.user.findMany({
+      where: { organizationId },
+      include: {
+        roles: { include: { role: true } },
+        branchScopes: { include: { branch: true } },
+      },
+      orderBy: [{ status: "asc" }, { displayNameEn: "asc" }],
+    }),
+    prisma.role.findMany({ where: { organizationId, status: "ACTIVE" }, orderBy: [{ isSystem: "desc" }, { nameEn: "asc" }] }),
+    prisma.branch.findMany({ where: { organizationId, status: "ACTIVE" }, orderBy: { nameEn: "asc" } }),
+  ]);
+
+  return NextResponse.json({
+    users: users.map(user => ({
+      id: user.id,
+      username: user.username,
+      email: user.email,
+      displayNameEn: user.displayNameEn,
+      displayNameAr: user.displayNameAr,
+      preferredLocale: user.preferredLocale,
+      status: user.status,
+      mfaEnabled: user.mfaEnabled,
+      lastLoginAt: user.lastLoginAt,
+      roleIds: user.roles.filter(x => x.role.status === "ACTIVE").map(x => x.roleId),
+      roleNames: user.roles.filter(x => x.role.status === "ACTIVE").map(x => x.role.nameEn),
+      branchIds: user.branchScopes.filter(x => x.branch.status === "ACTIVE").map(x => x.branchId),
+      branchNames: user.branchScopes.filter(x => x.branch.status === "ACTIVE").map(x => x.branch.nameEn),
+    })),
+    roles: roles.map(role => ({ id: role.id, code: role.code, nameEn: role.nameEn, nameAr: role.nameAr, isSystem: role.isSystem })),
+    branches: branches.map(branch => ({ id: branch.id, code: branch.code, nameEn: branch.nameEn, nameAr: branch.nameAr })),
+  });
+}
+
+export async function POST(request: Request) {
+  const session = await getCurrentSession();
+  if (!session) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  if (!permissionSet(session).has("users.manage")) return NextResponse.json({ error: "forbidden" }, { status: 403 });
+
+  const body = await request.json().catch(() => null) as Record<string, unknown> | null;
+  if (!body) return NextResponse.json({ error: "invalid_request" }, { status: 400 });
+
+  const organizationId = session.user.organizationId;
+  const username = text(body.username, 100).toLowerCase();
+  const email = text(body.email, 191).toLowerCase();
+  const displayNameEn = text(body.displayNameEn);
+  const displayNameAr = text(body.displayNameAr);
+  const password = typeof body.password === "string" ? body.password : "";
+  const preferredLocale = body.preferredLocale === "ar" ? "ar" : "en";
+  const roleIds = ids(body.roleIds);
+  const branchIds = ids(body.branchIds);
+
+  if (!/^[a-z0-9._-]{3,100}$/.test(username) || !displayNameEn || password.length < 12 || roleIds.length === 0 || branchIds.length === 0) {
+    return NextResponse.json({ error: "invalid_fields" }, { status: 400 });
+  }
+
+  const [roleCount, branchCount] = await Promise.all([
+    prisma.role.count({ where: { id: { in: roleIds }, organizationId, status: "ACTIVE" } }),
+    prisma.branch.count({ where: { id: { in: branchIds }, organizationId, status: "ACTIVE" } }),
+  ]);
+  if (roleCount !== roleIds.length || branchCount !== branchIds.length) {
+    return NextResponse.json({ error: "invalid_scope" }, { status: 400 });
+  }
+
+  const passwordHash = await hash(password, 12);
+  const ctx = await requestContext();
+
+  try {
+    const user = await prisma.$transaction(async tx => {
+      const created = await tx.user.create({
+        data: {
+          organizationId,
+          username,
+          email: email || null,
+          passwordHash,
+          displayNameEn,
+          displayNameAr: displayNameAr || null,
+          preferredLocale,
+          status: "ACTIVE",
+          passwordChangedAt: new Date(),
+          roles: { create: roleIds.map(roleId => ({ roleId, assignedBy: session.user.id })) },
+          branchScopes: { create: branchIds.map(branchId => ({ branchId })) },
+        },
+      });
+      await tx.auditEvent.create({
+        data: {
+          organizationId,
+          branchId: session.activeBranchId,
+          actorUserId: session.user.id,
+          action: "USER_CREATED",
+          entityType: "User",
+          entityId: created.id,
+          newValues: { username, email: email || null, displayNameEn, displayNameAr: displayNameAr || null, preferredLocale, roleIds, branchIds },
+          ipAddress: ctx.ipAddress,
+          userAgent: ctx.userAgent,
+        },
+      });
+      return created;
+    });
+    return NextResponse.json({ userId: user.id }, { status: 201 });
+  } catch {
+    return NextResponse.json({ error: "user_create_failed" }, { status: 409 });
+  }
+}

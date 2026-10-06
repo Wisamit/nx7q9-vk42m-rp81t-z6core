@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import packageJson from "../../package.json";
 import { SystemShell } from "@/components/system-shell";
 import { getCurrentSession, permissionSet } from "@/lib/auth";
+import { buildThemeCss, getOrganizationSystemSettings } from "@/lib/system-settings";
 
 export const metadata: Metadata = {
   title: {
@@ -15,8 +17,13 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   const session = await getCurrentSession();
   const locale = session?.user.preferredLocale === "ar" ? "ar" : "en";
   const direction = locale === "ar" ? "rtl" : "ltr";
+  const settings = session ? await getOrganizationSystemSettings(session.user.organizationId) : null;
+  const initialTheme = settings?.defaultTheme === "DARK" ? "dark" : "light";
+  const systemName = settings
+    ? (locale === "ar" ? settings.systemNameAr || settings.systemNameEn : settings.systemNameEn || settings.systemNameAr)
+    : "Family Lab";
 
-  const body = session ? <SystemShell
+  const body = session && settings ? <SystemShell
     user={{
       displayName: session.user.displayNameAr && locale === "ar"
         ? session.user.displayNameAr
@@ -35,7 +42,30 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
         })),
       permissions: [...permissionSet(session)],
     }}
+    appearance={{
+      systemName,
+      logoDataUrl: settings.logoDataUrl,
+      defaultTheme: settings.defaultTheme,
+      timezone: settings.timezone,
+      dateFormat: settings.dateFormat,
+      timeFormat: settings.timeFormat,
+      showSeconds: settings.showSeconds,
+      developerCredit: settings.developerCredit,
+      appVersion: packageJson.version,
+    }}
   >{children}</SystemShell> : children;
 
-  return <html lang={locale} dir={direction}><body>{body}</body></html>;
+  return <html
+    lang={locale}
+    dir={direction}
+    data-theme={initialTheme}
+    data-density={settings?.density === "COMPACT" ? "compact" : "comfortable"}
+  >
+    <head>
+      {settings && <style id="organization-theme" dangerouslySetInnerHTML={{ __html: buildThemeCss(settings) }} />}
+      <link rel="icon" href={settings?.faviconDataUrl || "/favicon.ico"} />
+      <meta name="application-name" content={systemName} />
+    </head>
+    <body>{body}</body>
+  </html>;
 }

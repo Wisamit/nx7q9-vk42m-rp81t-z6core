@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { SpecimenActions } from "@/components/specimen-actions";
+import { SystemIcon } from "@/components/system-icon";
 
 export const dynamic = "force-dynamic";
 
@@ -70,13 +71,13 @@ export default async function SpecimensPage({
     <header className="page-header">
       <div>
         <p className="eyebrow">Pre-Analytical Workflow</p>
-        <h1>Specimens & Barcodes</h1>
+        <h1 className="page-title-with-icon"><SystemIcon name="specimen" size={25} />Specimens & Barcodes</h1>
         <p className="muted">Trace each specimen from planned collection through receipt, rejection and recollection using organization-unique barcodes.</p>
       </div>
       <div className="header-actions">
-        <Link className="secondary-link" href="/orders">Orders</Link>
-        <Link className="secondary-link" href="/transfers">Transfers</Link>
-        <Link className="secondary-link" href="/dashboard">Back to Dashboard</Link>
+        <Link className="secondary-link" href="/orders"><SystemIcon name="orders" size={15} />Orders</Link>
+        <Link className="secondary-link" href="/transfers"><SystemIcon name="transfer" size={15} />Transfers</Link>
+        <Link className="secondary-link" href="/dashboard"><SystemIcon name="dashboard" size={15} />Back to Dashboard</Link>
       </div>
     </header>
 
@@ -101,7 +102,7 @@ export default async function SpecimensPage({
             <option value="IN_PROCESS">IN_PROCESS</option>
             <option value="REJECTED">REJECTED</option>
           </select>
-          <button className="secondary-button">Search</button>
+          <button className="secondary-button"><SystemIcon name="search" size={15} />Search</button>
           {(q || status) && <Link className="secondary-link" href="/specimens">Clear</Link>}
         </form>
       </div>
@@ -116,7 +117,7 @@ export default async function SpecimensPage({
               <h2 className="barcode-text">{specimen.barcode}</h2>
               <p className="muted">{specimen.order.accessionNumber} · {specimen.order.patient.patientNumber} · {specimen.order.patient.fullNameEn}</p>
             </div>
-            <Link className="secondary-link" href={`/orders/${specimen.orderId}`}>Open Order</Link>
+            <Link className="secondary-link" href={`/orders/${specimen.orderId}`}><SystemIcon name="orders" size={15} />Open Order</Link>
           </div>
 
           <div className="specimen-metadata">

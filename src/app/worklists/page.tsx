@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { BulkResultEntry } from "@/components/bulk-result-entry";
+import { SystemIcon } from "@/components/system-icon";
 
 export const dynamic = "force-dynamic";
 
@@ -132,12 +133,12 @@ export default async function WorklistsPage({
     <header className="page-header">
       <div>
         <p className="eyebrow">Laboratory Operations</p>
-        <h1>Worklists</h1>
+        <h1 className="page-title-with-icon"><SystemIcon name="worklist" size={25} />Worklists</h1>
         <p className="muted">Received specimens ready for analytical work, result entry and controlled verification.</p>
       </div>
       <div className="header-actions">
-        <Link className="secondary-link" href="/specimens">Specimens</Link>
-        <Link className="secondary-link" href="/dashboard">Back to Dashboard</Link>
+        <Link className="secondary-link" href="/specimens"><SystemIcon name="specimen" size={15} />Specimens</Link>
+        <Link className="secondary-link" href="/dashboard"><SystemIcon name="dashboard" size={15} />Back to Dashboard</Link>
       </div>
     </header>
 
@@ -166,7 +167,7 @@ export default async function WorklistsPage({
             <option value="RESULTED">RESULTED</option>
             <option value="VERIFIED">VERIFIED</option>
           </select>
-          <button className="secondary-button">Filter</button>
+          <button className="secondary-button"><SystemIcon name="search" size={15} />Filter</button>
           {(q || status || departmentId) && <Link className="secondary-link" href="/worklists">Clear</Link>}
         </form>
       </div>
@@ -190,7 +191,7 @@ export default async function WorklistsPage({
                   <td>{readySpecimen?.currentBranch?.nameEn || item.performedBranch?.nameEn || "—"}</td>
                   <td><span className={"status-badge status-" + (result?.status || item.status).toLowerCase().replaceAll("_","-")}>{result?.status || item.status}</span></td>
                   <td>{criticalCount > 0 ? <strong className="critical-text">{criticalCount} critical</strong> : abnormalCount > 0 ? `${abnormalCount} flagged` : "—"}</td>
-                  <td><Link className="secondary-link" href={`/worklists/${item.id}`}>{result ? "Open Result" : "Enter Result"}</Link></td>
+                  <td><Link className="secondary-link" href={`/worklists/${item.id}`}><SystemIcon name="report" size={15} />{result ? "Open Result" : "Enter Result"}</Link></td>
                 </tr>;
               })
             }

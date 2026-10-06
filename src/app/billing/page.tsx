@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { PaymentForm } from "@/components/payment-form";
+import { SystemIcon } from "@/components/system-icon";
 
 export const dynamic = "force-dynamic";
 
@@ -48,13 +49,13 @@ export default async function BillingPage() {
     <header className="page-header">
       <div>
         <p className="eyebrow">Billing</p>
-        <h1>Invoices & Payments</h1>
+        <h1 className="page-title-with-icon"><SystemIcon name="billing" size={25} />Invoices & Payments</h1>
         <p className="muted">Historical invoice values are stored as immutable snapshots. Payments are allocated separately and support partial settlement.</p>
       </div>
       <div className="header-actions">
-        <Link className="secondary-link" href="/orders">Orders</Link>
-        <Link className="secondary-link" href="/pricing">Pricing</Link>
-        <Link className="secondary-link" href="/dashboard">Back to Dashboard</Link>
+        <Link className="secondary-link" href="/orders"><SystemIcon name="orders" size={15} />Orders</Link>
+        <Link className="secondary-link" href="/pricing"><SystemIcon name="pricing" size={15} />Pricing</Link>
+        <Link className="secondary-link" href="/dashboard"><SystemIcon name="dashboard" size={15} />Back to Dashboard</Link>
       </div>
     </header>
 
@@ -71,7 +72,7 @@ export default async function BillingPage() {
 
     <section className="detail-grid">
       <article className="detail-card">
-        <h2>Post Payment</h2>
+        <h2 className="section-heading-icon"><SystemIcon name="billing" size={18} />Post Payment</h2>
         <PaymentForm invoices={openInvoices.map(invoice => ({
           id: invoice.id,
           invoiceNumber: invoice.invoiceNumber,
@@ -80,7 +81,7 @@ export default async function BillingPage() {
         }))} />
       </article>
       <article className="detail-card">
-        <h2>Billing Rules</h2>
+        <h2 className="section-heading-icon"><SystemIcon name="security" size={18} />Billing Rules</h2>
         <dl>
           <dt>Money</dt><dd>DECIMAL snapshots</dd>
           <dt>Currency</dt><dd>Explicit per invoice and payment</dd>
