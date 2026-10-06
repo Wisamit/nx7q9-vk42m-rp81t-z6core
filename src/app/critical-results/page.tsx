@@ -50,7 +50,7 @@ export default async function CriticalResultsPage() {
     </header>
 
     <section className="table-card">
-      <div className="table-toolbar"><h2>{tr(locale, "Active critical events", "الأحداث الحرجة النشطة")}</h2><span>{events.length} shown</span></div>
+      <div className="table-toolbar"><h2>{tr(locale, "Active critical events", "الأحداث الحرجة النشطة")}</h2><span>{events.length} {tr(locale, "shown", "معروضة")}</span></div>
       <div className="table-wrap"><table>
         <thead><tr><th>{tr(locale, "Patient / Order", "المريض / الطلب")}</th><th>{tr(locale, "Test", "الفحص")}</th><th>{tr(locale, "Branch", "الفرع")}</th><th>{tr(locale, "Detected", "تم الاكتشاف")}</th><th>{tr(locale, "Acknowledgement due", "موعد الإقرار")}</th><th>{tr(locale, "Escalation", "التصعيد")}</th><th>{tr(locale, "Last communication", "آخر تواصل")}</th><th>{tr(locale, "Action", "الإجراء")}</th></tr></thead>
         <tbody>{events.length === 0 ? <tr><td colSpan={8} className="empty-state">{tr(locale, "No open critical result events in your authorized branches.", "لا توجد نتائج حرجة مفتوحة ضمن الفروع المصرح لك بها.")}</td></tr> : events.map(event => {
