@@ -14,6 +14,12 @@ function documentNumber(prefix: string, branchCode: string) {
   return `${prefix}-${branchCode}-${stamp}-${randomUUID().slice(0, 8).toUpperCase()}`.slice(0, 50);
 }
 
+class FinancialConflict extends Error {
+  constructor(public readonly code: "invoice_changed" | "payment_changed") {
+    super(code);
+  }
+}
+
 export async function POST(request: Request) {
   const session = await requirePermission("billing.manage");
   const ctx = await requestContext();
@@ -49,7 +55,9 @@ export async function POST(request: Request) {
 
   const refundNumber = documentNumber("RF", payment.branch.code);
 
-  const result = await prisma.$transaction(async tx => {
+  let result;
+  try {
+    result = await prisma.$transaction(async tx => {
     const currentPayment = await tx.payment.findFirst({
       where: { id: paymentId, organizationId: session.user.organizationId },
     });
@@ -110,7 +118,7 @@ export async function POST(request: Request) {
         status: state.status,
       },
     });
-    if (invoiceUpdated.count !== 1) return { error: "invoice_changed", httpStatus: 409 } as const;
+    if (invoiceUpdated.count !== 1) throw new FinancialConflict("invoice_changed");
 
     const paymentStatus = totalRefundedAfter.eq(currentPayment.amount) ? "REFUNDED" : "POSTED";
     const paymentUpdated = await tx.payment.updateMany({
@@ -124,7 +132,7 @@ export async function POST(request: Request) {
         status: paymentStatus,
       },
     });
-    if (paymentUpdated.count !== 1) return { error: "payment_changed", httpStatus: 409 } as const;
+    if (paymentUpdated.count !== 1) throw new FinancialConflict("payment_changed");
 
     const refund = await tx.refund.create({
       data: {
@@ -189,7 +197,13 @@ export async function POST(request: Request) {
       invoiceStatus: state.status,
       paymentStatus,
     } as const;
-  }, { timeout: 30000 });
+    }, { timeout: 30000 });
+  } catch (error) {
+    if (error instanceof FinancialConflict) {
+      return NextResponse.json({ error: error.code }, { status: 409 });
+    }
+    throw error;
+  }
 
   if ("error" in result) return NextResponse.json({ error: result.error }, { status: result.httpStatus });
   return NextResponse.json(result, { status: 201 });
