@@ -85,7 +85,6 @@ export function UserManagement({ locale }: { locale: "ar" | "en" }) {
         roleIds: form.getAll("roleIds"),
         branchIds: form.getAll("branchIds"),
         departmentIds: form.getAll("departmentIds"),
-        discountLimitPercent: form.get("discountLimitPercent"),
       }),
     });
     const body = await response.json().catch(() => ({}));
@@ -111,6 +110,7 @@ export function UserManagement({ locale }: { locale: "ar" | "en" }) {
         roleIds: form.getAll("roleIds"),
         branchIds: form.getAll("branchIds"),
         departmentIds: form.getAll("departmentIds"),
+        discountLimitPercent: form.get("discountLimitPercent"),
       }),
     });
     const body = await response.json().catch(() => ({}));
