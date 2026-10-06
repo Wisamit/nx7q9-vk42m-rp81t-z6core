@@ -268,3 +268,12 @@ html[data-density="compact"] :where(.detail-card,.dashboard-panel,.settings-card
 .credential-token-box{display:grid;gap:8px;margin-top:14px;padding:14px;border:1px solid color-mix(in srgb,var(--fl-warning) 40%,var(--fl-border));border-radius:10px;background:color-mix(in srgb,var(--fl-warning) 8%,var(--fl-surface))}
 .credential-token-box code{display:block;overflow-wrap:anywhere;word-break:break-all;padding:10px;border-radius:8px;background:var(--fl-bg);color:var(--fl-text);font-size:11px}
 @media(max-width:700px){.crud-action-bar{align-items:stretch}.crud-action-buttons{width:100%;margin-inline-start:0}.crud-action-buttons>*{flex:1}}
+
+
+/* User profile avatar */
+.system-avatar{overflow:hidden;display:grid;place-items:center}
+.system-avatar img{width:100%;height:100%;object-fit:cover;border-radius:inherit}
+.profile-avatar-settings{display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+.profile-avatar-large{width:86px;height:86px;border-radius:18px;background:var(--fl-primary-soft);color:var(--fl-primary);display:grid;place-items:center;overflow:hidden;border:1px solid var(--fl-border);flex:0 0 86px}
+.profile-avatar-large img{width:100%;height:100%;object-fit:cover}
+.file-button{cursor:pointer}
