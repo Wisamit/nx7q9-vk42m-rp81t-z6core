@@ -31,7 +31,7 @@ export default async function QualityPage() {
   ] = await Promise.all([
     prisma.branch.findMany({
       where: { organizationId: session.user.organizationId, id: { in: branchIds }, status: "ACTIVE" },
-      select: { id: true, code: true, nameEn: true },
+      select: { id: true, code: true, nameEn: true, nameAr: true },
       orderBy: { nameEn: "asc" },
     }),
     prisma.user.findMany({
@@ -43,7 +43,7 @@ export default async function QualityPage() {
           { branchScopes: { some: { branchId: { in: branchIds } } } },
         ],
       },
-      select: { id: true, username: true, displayNameEn: true },
+      select: { id: true, username: true, displayNameEn: true, displayNameAr: true },
       orderBy: { displayNameEn: "asc" },
       take: 500,
     }),
@@ -140,6 +140,10 @@ export default async function QualityPage() {
   ).length;
   const competencyDue = competencies.filter(item => item.nextDueAt && item.nextDueAt < new Date()).length;
   const openFindings = audits.flatMap(item => item.findings).filter(item => item.status !== "CLOSED").length;
+  const localizedBranchName = (item: { nameEn: string; nameAr?: string | null }) =>
+    locale === "ar" ? item.nameAr || item.nameEn : item.nameEn;
+  const localizedUserName = (item: { displayNameEn: string; displayNameAr?: string | null }) =>
+    locale === "ar" ? item.displayNameAr || item.displayNameEn : item.displayNameEn;
 
   return <main className="catalog-shell">
     <header className="page-header">
@@ -149,7 +153,7 @@ export default async function QualityPage() {
         <p className="muted">{tr(locale, "Nonconformance, CAPA, controlled documents, training, competency, quality indicators and internal audits with branch scope and audit history.", "عدم المطابقة وCAPA والوثائق المضبوطة والتدريب والكفاءة ومؤشرات الجودة والتدقيق الداخلي مع نطاق الفروع وسجل تدقيق كامل.")}</p>
       </div>
       <div className="result-actions">
-        {permissions.has("qc.view") && <Link className="secondary-link" href="/qc">QC</Link>}
+        {permissions.has("qc.view") && <Link className="secondary-link" href="/qc">{tr(locale, "QC", "ضبط الجودة")}</Link>}
         <Link className="secondary-link" href="/dashboard">{tr(locale, "Back to Dashboard", "العودة للوحة التحكم")}</Link>
       </div>
     </header>
@@ -163,6 +167,7 @@ export default async function QualityPage() {
     </section>
 
     <QualityManagementConsole
+      locale={locale}
       permissions={{
         nonconformance: permissions.has("quality.nonconformance.manage"),
         capa: permissions.has("quality.capa.manage"),
@@ -181,9 +186,9 @@ export default async function QualityPage() {
         category: item.category,
         severity: item.severity,
         status: item.status,
-        branch: item.branch?.nameEn || "Organization",
+        branch: item.branch ? localizedBranchName(item.branch) : tr(locale, "Organization", "المؤسسة"),
         detectedAt: item.detectedAt.toISOString(),
-        owner: item.owner?.displayNameEn || null,
+        owner: item.owner ? localizedUserName(item.owner) : null,
         rootCause: item.rootCause,
         closureSummary: item.closureSummary,
         capas: item.capas,
@@ -193,8 +198,8 @@ export default async function QualityPage() {
         capaNumber: item.capaNumber,
         title: item.title,
         status: item.status,
-        branch: item.branch?.nameEn || "Organization",
-        owner: item.owner.displayNameEn,
+        branch: item.branch ? localizedBranchName(item.branch) : tr(locale, "Organization", "المؤسسة"),
+        owner: localizedUserName(item.owner),
         dueDate: item.dueDate?.toISOString() || null,
         effectiveness: item.effectiveness,
         nonconformanceCase: item.nonconformance?.caseNumber || null,
@@ -203,7 +208,7 @@ export default async function QualityPage() {
           actionType: action.actionType,
           description: action.description,
           status: action.status,
-          owner: action.owner?.displayNameEn || null,
+          owner: action.owner ? localizedUserName(action.owner) : null,
           dueDate: action.dueDate?.toISOString() || null,
         })),
       }))}
@@ -213,7 +218,7 @@ export default async function QualityPage() {
         titleEn: item.titleEn,
         titleAr: item.titleAr,
         documentType: item.documentType,
-        branch: item.branch?.nameEn || "Organization",
+        branch: item.branch ? localizedBranchName(item.branch) : tr(locale, "Organization", "المؤسسة"),
         currentEffectiveVersion: item.currentEffectiveVersion,
         versions: item.versions.map(version => ({
           id: version.id,
@@ -227,7 +232,7 @@ export default async function QualityPage() {
       }))}
       trainingRecords={trainingRecords.map(item => ({
         id: item.id,
-        user: item.user.displayNameEn,
+        user: localizedUserName(item.user),
         title: item.title,
         status: item.status,
         analyzer: item.analyzer ? item.analyzer.code + " — " + item.analyzer.name : null,
@@ -238,34 +243,35 @@ export default async function QualityPage() {
       }))}
       competencies={competencies.map(item => ({
         id: item.id,
-        user: item.user.displayNameEn,
+        user: localizedUserName(item.user),
         competencyName: item.competencyName,
         result: item.result,
         analyzer: item.analyzer ? item.analyzer.code + " — " + item.analyzer.name : null,
         assessedAt: item.assessedAt.toISOString(),
         nextDueAt: item.nextDueAt?.toISOString() || null,
-        assessor: item.assessedBy.displayNameEn,
+        assessor: localizedUserName(item.assessedBy),
       }))}
       authorizations={authorizations.map(item => ({
         id: item.id,
-        user: item.user.displayNameEn,
+        user: localizedUserName(item.user),
         analyzer: item.analyzer.code + " — " + item.analyzer.name,
         status: item.status,
         authorizedAt: item.authorizedAt.toISOString(),
         expiresAt: item.expiresAt?.toISOString() || null,
-        approvedBy: item.approvedBy.displayNameEn,
+        approvedBy: localizedUserName(item.approvedBy),
       }))}
       effectiveDocumentVersions={documents.flatMap(item => item.versions
         .filter(version => version.status === "EFFECTIVE")
         .map(version => ({
           id: version.id,
-          label: item.code + " v" + version.version + " — " + item.titleEn,
+          label: item.code + " v" + version.version + " — " + (locale === "ar" ? item.titleAr || item.titleEn : item.titleEn),
         })))}
       indicators={indicators.map(item => ({
         id: item.id,
         code: item.code,
         nameEn: item.nameEn,
-        branch: item.branch?.nameEn || "Organization",
+        nameAr: item.nameAr,
+        branch: item.branch ? localizedBranchName(item.branch) : tr(locale, "Organization", "المؤسسة"),
         direction: item.direction,
         unit: item.unit,
         targetMin: item.targetMin?.toString() || null,
@@ -283,16 +289,16 @@ export default async function QualityPage() {
         title: item.title,
         scope: item.scope,
         status: item.status,
-        branch: item.branch?.nameEn || "Organization",
+        branch: item.branch ? localizedBranchName(item.branch) : tr(locale, "Organization", "المؤسسة"),
         scheduledAt: item.scheduledAt.toISOString(),
-        leadAuditor: item.leadAuditor.displayNameEn,
+        leadAuditor: localizedUserName(item.leadAuditor),
         findings: item.findings.map(finding => ({
           id: finding.id,
           findingNumber: finding.findingNumber,
           severity: finding.severity,
           description: finding.description,
           status: finding.status,
-          owner: finding.owner?.displayNameEn || null,
+          owner: finding.owner ? localizedUserName(finding.owner) : null,
           dueDate: finding.dueDate?.toISOString() || null,
           capaNumber: finding.capa?.capaNumber || null,
         })),
