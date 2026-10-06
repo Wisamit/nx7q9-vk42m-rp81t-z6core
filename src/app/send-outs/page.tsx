@@ -14,7 +14,7 @@ export default async function SendOutsPage() {
   const [laboratories, orderItems, referrals] = await Promise.all([
     prisma.externalLaboratory.findMany({
       where: { organizationId: session.user.organizationId, status: "ACTIVE" },
-      select: { id: true, code: true, nameEn: true },
+      select: { id: true, code: true, nameEn: true, nameAr: true },
       orderBy: { nameEn: "asc" },
     }),
     prisma.orderItem.findMany({
@@ -72,6 +72,10 @@ export default async function SendOutsPage() {
     attachmentsByTarget.set(attachment.targetId, list);
   }
 
+  const patientName = (item: { fullNameEn: string; fullNameAr?: string | null }) => locale === "ar" ? item.fullNameAr || item.fullNameEn : item.fullNameEn;
+  const localizedName = (item: { nameEn: string; nameAr?: string | null }) => locale === "ar" ? item.nameAr || item.nameEn : item.nameEn;
+  const userName = (item: { displayNameEn: string; displayNameAr?: string | null }) => locale === "ar" ? item.displayNameAr || item.displayNameEn : item.displayNameEn;
+
   const candidates = orderItems.flatMap(item =>
     item.specimenLinks.map(link => ({
       key: item.id + ":" + link.specimenId,
@@ -81,8 +85,8 @@ export default async function SendOutsPage() {
       label: [
         item.order.accessionNumber,
         item.order.patient.patientNumber,
-        item.order.patient.fullNameEn,
-        item.testCodeSnapshot + " — " + item.testNameEnSnapshot,
+        patientName(item.order.patient),
+        item.testCodeSnapshot + " — " + (locale === "ar" ? item.testNameArSnapshot || item.testNameEnSnapshot : item.testNameEnSnapshot),
         link.specimen.barcode,
         link.specimen.currentBranch?.code,
       ].filter(Boolean).join(" · "),
@@ -106,6 +110,7 @@ export default async function SendOutsPage() {
     </section>
 
     <SendOutManager
+      locale={locale}
       laboratories={laboratories}
       candidates={candidates}
       referrals={referrals.map(referral => ({
@@ -114,12 +119,12 @@ export default async function SendOutsPage() {
         branchCode: referral.branch.code,
         accessionNumber: referral.orderItem.order.accessionNumber,
         patientNumber: referral.orderItem.order.patient.patientNumber,
-        patientName: referral.orderItem.order.patient.fullNameEn,
+        patientName: patientName(referral.orderItem.order.patient),
         testCode: referral.orderItem.testCodeSnapshot,
-        testName: referral.orderItem.testNameEnSnapshot,
+        testName: locale === "ar" ? referral.orderItem.testNameArSnapshot || referral.orderItem.testNameEnSnapshot : referral.orderItem.testNameEnSnapshot,
         specimenBarcode: referral.specimen?.barcode || null,
         laboratoryCode: referral.externalLaboratory.code,
-        laboratoryName: referral.externalLaboratory.nameEn,
+        laboratoryName: localizedName(referral.externalLaboratory),
         externalAccession: referral.externalAccession,
         costAmount: referral.costAmount?.toString() || null,
         costCurrency: referral.costCurrency,
@@ -135,7 +140,7 @@ export default async function SendOutsPage() {
           fromStatus: event.fromStatus,
           toStatus: event.toStatus,
           occurredAt: event.occurredAt.toISOString(),
-          actor: event.actor.displayNameEn,
+          actor: userName(event.actor),
           note: event.note,
         })),
         attachments: (attachmentsByTarget.get(referral.id) || []).map(attachment => ({
@@ -144,7 +149,7 @@ export default async function SendOutsPage() {
           contentType: attachment.contentType,
           sizeBytes: attachment.sizeBytes,
           createdAt: attachment.createdAt.toISOString(),
-          uploadedBy: attachment.uploadedBy.displayNameEn,
+          uploadedBy: userName(attachment.uploadedBy),
         })),
       }))}
       canManage={permissions.has("sendouts.manage")}
