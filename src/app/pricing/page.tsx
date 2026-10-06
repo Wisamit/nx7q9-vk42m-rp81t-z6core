@@ -61,6 +61,7 @@ export default async function PricingPage() {
       packages={packages}
       priceLists={priceLists.map(x => ({ id: x.id, code: x.code, nameEn: x.nameEn, currency: x.currency }))}
       defaultCurrency={session.user.organization.defaultCurrency}
+      locale={locale}
     />
 
     <section className="table-card">
