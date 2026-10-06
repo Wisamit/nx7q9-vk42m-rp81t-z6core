@@ -10,14 +10,15 @@ function normalizeLimit(value: DiscountLimitValue) {
 export function effectiveDiscountLimit(input: {
   userOverride: DiscountLimitValue;
   roleLimits: DiscountLimitValue[];
-}) {
+}): number {
   const override = normalizeLimit(input.userOverride);
   if (override !== null) return override;
 
-  return input.roleLimits.reduce((highest, value) => {
-    const limit = normalizeLimit(value) ?? 0;
-    return Math.max(highest, limit);
-  }, 0);
+  let highest = 0;
+  for (const value of input.roleLimits) {
+    highest = Math.max(highest, normalizeLimit(value) ?? 0);
+  }
+  return highest;
 }
 
 export function discountApprovalMode(input: {
