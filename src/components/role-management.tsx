@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { SystemIcon } from "@/components/system-icon";
 import { CrudModal } from "@/components/crud-modal";
+import { statusLabel } from "@/lib/ui-i18n";
 
 type Permission = { id: string; code: string; module: string; description: string | null };
 type Role = { id: string; code: string; nameEn: string; nameAr: string | null; isSystem: boolean; status: string; userCount: number; permissionIds: string[] };
@@ -90,7 +91,7 @@ export function RoleManagement({ locale }: { locale: "ar" | "en" }) {
 
     <section className="table-card admin-table-card">
       <div className="table-toolbar"><div><h2>{tr("Roles", "الأدوار")}</h2><span>{tr("System roles are protected from destructive editing.", "أدوار النظام محمية من التعديل التخريبي.")}</span></div><span>{data.roles.length}</span></div>
-      <div className="table-wrap"><table><thead><tr><th>{tr("Role", "الدور")}</th><th>{tr("Users", "المستخدمون")}</th><th>{tr("Permissions", "الصلاحيات")}</th><th>{tr("Status", "الحالة")}</th><th>{tr("Actions", "إجراءات")}</th></tr></thead><tbody>{data.roles.map(role => <tr key={role.id}><td><strong>{locale === "ar" ? role.nameAr || role.nameEn : role.nameEn}</strong><small className="table-subtext">{role.code}{role.isSystem ? " · SYSTEM" : ""}</small></td><td>{role.userCount}</td><td>{role.permissionIds.length}</td><td><span className={"status-badge " + (role.status === "ACTIVE" ? "status-active" : "status-warning")}>{role.status}</span></td><td>{role.isSystem ? <span className="muted">{tr("Protected", "محمي")}</span> : <button type="button" className="secondary-button compact-action" disabled={busy} onClick={() => void toggleRole(role)}>{role.status === "ACTIVE" ? tr("Deactivate", "تعطيل") : tr("Activate", "تفعيل")}</button>}</td></tr>)}</tbody></table></div>
+      <div className="table-wrap"><table><thead><tr><th>{tr("Role", "الدور")}</th><th>{tr("Users", "المستخدمون")}</th><th>{tr("Permissions", "الصلاحيات")}</th><th>{tr("Status", "الحالة")}</th><th>{tr("Actions", "إجراءات")}</th></tr></thead><tbody>{data.roles.map(role => <tr key={role.id}><td><strong>{locale === "ar" ? role.nameAr || role.nameEn : role.nameEn}</strong><small className="table-subtext">{role.code}{role.isSystem ? ` · ${tr("System", "نظامي")}` : ""}</small></td><td>{role.userCount}</td><td>{role.permissionIds.length}</td><td><span className={"status-badge " + (role.status === "ACTIVE" ? "status-active" : "status-warning")}>{statusLabel(locale, role.status)}</span></td><td>{role.isSystem ? <span className="muted">{tr("Protected", "محمي")}</span> : <button type="button" className="secondary-button compact-action" disabled={busy} onClick={() => void toggleRole(role)}>{role.status === "ACTIVE" ? tr("Deactivate", "تعطيل") : tr("Activate", "تفعيل")}</button>}</td></tr>)}</tbody></table></div>
     </section>
   </div>;
 }
