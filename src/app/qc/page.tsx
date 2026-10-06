@@ -3,12 +3,14 @@ import { permissionSet, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { QcManager } from "@/components/qc-manager";
 import { LeveyJenningsChart } from "@/components/levey-jennings-chart";
+import { getUiLocale, tr } from "@/lib/ui-i18n";
 
 export const dynamic = "force-dynamic";
 
 export default async function QcPage() {
   const session = await requirePermission("qc.view");
   const permissions = permissionSet(session);
+  const locale = getUiLocale(session.user.preferredLocale);
   const branchIds = session.user.branchScopes.map(scope => scope.branchId);
 
   const [analyzers, materials, lots, tests, targets, recentRuns, openViolations] = await Promise.all([
@@ -112,19 +114,19 @@ export default async function QcPage() {
   return <main className="catalog-shell">
     <header className="page-header">
       <div>
-        <p className="eyebrow">Quality Control</p>
-        <h1>QC & Westgard</h1>
-        <p className="muted">Control materials, lots, effective targets, QC runs, Levey-Jennings trends and Westgard violations across authorized branches.</p>
+        <p className="eyebrow">{tr(locale, "Quality Control", "ضبط الجودة")}</p>
+        <h1>{tr(locale, "QC & Westgard", "ضبط الجودة وقواعد Westgard")}</h1>
+        <p className="muted">{tr(locale, "Control materials, lots, effective targets, QC runs, Levey-Jennings trends and Westgard violations across authorized branches.", "مواد الضبط والتشغيلات والأهداف الفعالة وتشغيلات QC ومخططات Levey-Jennings ومخالفات Westgard عبر الفروع المصرح بها.")}</p>
       </div>
       <div className="result-actions">
-        {permissions.has("equipment.view") && <Link className="secondary-link" href="/equipment">Equipment</Link>}
-        <Link className="secondary-link" href="/dashboard">Back to Dashboard</Link>
+        {permissions.has("equipment.view") && <Link className="secondary-link" href="/equipment">{tr(locale, "Equipment", "المعدات")}</Link>}
+        <Link className="secondary-link" href="/dashboard">{tr(locale, "Back to Dashboard", "العودة للوحة التحكم")}</Link>
       </div>
     </header>
 
     <section className="detail-grid">
-      <article className="detail-card"><h2>Active Targets</h2><strong>{targets.length}</strong><p className="muted">Analyzer/test/component QC definitions.</p></article>
-      <article className="detail-card"><h2>Open Violations</h2><strong>{openViolations.length}</strong><p className="muted">Westgard warnings and blocks awaiting corrective action.</p></article>
+      <article className="detail-card"><h2>{tr(locale, "Active Targets", "الأهداف النشطة")}</h2><strong>{targets.length}</strong><p className="muted">Analyzer/test/component QC definitions.</p></article>
+      <article className="detail-card"><h2>{tr(locale, "Open Violations", "المخالفات المفتوحة")}</h2><strong>{openViolations.length}</strong><p className="muted">Westgard warnings and blocks awaiting corrective action.</p></article>
       <article className="detail-card"><h2>Failed Runs</h2><strong>{failedRuns}</strong><p className="muted">Within the latest {recentRuns.length} QC runs.</p></article>
       <article className="detail-card"><h2>Warnings</h2><strong>{warningRuns}</strong><p className="muted">QC runs requiring review.</p></article>
       <article className="detail-card"><h2>Expired Lots</h2><strong>{expiredLots}</strong><p className="muted">Active QC lots past expiry and therefore unusable by the QC gate.</p></article>
