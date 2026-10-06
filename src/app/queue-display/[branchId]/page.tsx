@@ -1,3 +1,4 @@
+import Image from "next/image";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { OrganizationThemeOverride } from "@/components/organization-theme-override";
@@ -52,6 +53,7 @@ export default async function QueueDisplayPage({ params }: { params: Promise<{ b
   return <><OrganizationThemeOverride settings={settings} /><main className="catalog-shell">
     <header className="page-header">
       <div>
+        {settings.logoDataUrl && <Image className="public-brand-logo" src={settings.logoDataUrl} alt={settings.systemNameEn} width={180} height={80} unoptimized priority />}
         <p className="eyebrow">Queue Display</p>
         <h1>{branch.nameEn}</h1>
         <p className="muted">{branch.nameAr || "Family Lab"} · Current called/serving tickets only</p>
