@@ -3,6 +3,7 @@ import { requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { SpecimenActions } from "@/components/specimen-actions";
 import { SystemIcon } from "@/components/system-icon";
+import { getUiLocale, statusLabel, tr } from "@/lib/ui-i18n";
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +13,7 @@ export default async function SpecimensPage({
   searchParams: Promise<{ q?: string; status?: string }>;
 }) {
   const session = await requirePermission("specimens.view");
+  const locale = getUiLocale(session.user.preferredLocale);
   const params = await searchParams;
   const q = params.q?.trim() || "";
   const status = params.status?.trim() || "";
@@ -70,31 +72,31 @@ export default async function SpecimensPage({
   return <main className="catalog-shell">
     <header className="page-header">
       <div>
-        <p className="eyebrow">Pre-Analytical Workflow</p>
-        <h1 className="page-title-with-icon"><SystemIcon name="specimen" size={25} />Specimens & Barcodes</h1>
-        <p className="muted">Trace each specimen from planned collection through receipt, rejection and recollection using organization-unique barcodes.</p>
+        <p className="eyebrow">{tr(locale, "Pre-Analytical Workflow", "مرحلة ما قبل التحليل")}</p>
+        <h1 className="page-title-with-icon"><SystemIcon name="specimen" size={25} />{tr(locale, "Specimens & Barcodes", "العينات والباركود")}</h1>
+        <p className="muted">{tr(locale, "Trace each specimen from planned collection through receipt, rejection and recollection using organization-unique barcodes.", "تتبع كل عينة من التخطيط للجمع حتى الاستلام والرفض وإعادة السحب باستخدام باركود فريد على مستوى المؤسسة.")}</p>
       </div>
       <div className="header-actions">
-        <Link className="secondary-link" href="/orders"><SystemIcon name="orders" size={15} />Orders</Link>
-        <Link className="secondary-link" href="/transfers"><SystemIcon name="transfer" size={15} />Transfers</Link>
-        <Link className="secondary-link" href="/dashboard"><SystemIcon name="dashboard" size={15} />Back to Dashboard</Link>
+        <Link className="secondary-link" href="/orders"><SystemIcon name="orders" size={15} />{tr(locale, "Orders", "الطلبات")}</Link>
+        <Link className="secondary-link" href="/transfers"><SystemIcon name="transfer" size={15} />{tr(locale, "Transfers", "النقل بين الفروع")}</Link>
+        <Link className="secondary-link" href="/dashboard"><SystemIcon name="dashboard" size={15} />{tr(locale, "Back to Dashboard", "العودة للوحة التحكم")}</Link>
       </div>
     </header>
 
     <section className="workflow-summary">
-      <article><span>Planned</span><strong>{planned}</strong><small>awaiting collection</small></article>
-      <article><span>Collected</span><strong>{collected}</strong><small>awaiting receipt / routing</small></article>
-      <article><span>Lab ready</span><strong>{received}</strong><small>received or in process</small></article>
-      <article className={rejected ? "summary-attention" : ""}><span>Rejected</span><strong>{rejected}</strong><small>requires attention / recollection</small></article>
+      <article><span>{tr(locale, "Planned", "مخطط")}</span><strong>{planned}</strong><small>{tr(locale, "awaiting collection", "بانتظار الجمع")}</small></article>
+      <article><span>{tr(locale, "Collected", "تم الجمع")}</span><strong>{collected}</strong><small>{tr(locale, "awaiting receipt / routing", "بانتظار الاستلام / التوجيه")}</small></article>
+      <article><span>{tr(locale, "Lab ready", "جاهزة للمختبر")}</span><strong>{received}</strong><small>{tr(locale, "received or in process", "مستلمة أو قيد المعالجة")}</small></article>
+      <article className={rejected ? "summary-attention" : ""}><span>{tr(locale, "Rejected", "مرفوضة")}</span><strong>{rejected}</strong><small>{tr(locale, "requires attention / recollection", "تتطلب متابعة / إعادة سحب")}</small></article>
     </section>
 
     <section className="table-card">
       <div className="table-toolbar">
-        <div><h2>Specimen Work Queue</h2><span>{specimens.length} shown</span></div>
+        <div><h2>{tr(locale, "Specimen Work Queue", "قائمة عمل العينات")}</h2><span>{specimens.length} shown</span></div>
         <form className="inline-search" action="/specimens" method="get">
-          <input name="q" defaultValue={q} placeholder="Scan barcode or search order / patient…" autoFocus />
+          <input name="q" defaultValue={q} placeholder={tr(locale, "Scan barcode or search order / patient…", "امسح الباركود أو ابحث بالطلب / المريض…")} autoFocus />
           <select name="status" defaultValue={status}>
-            <option value="">All statuses</option>
+            <option value="">{tr(locale, "All statuses", "كل الحالات")}</option>
             <option value="PLANNED">PLANNED</option>
             <option value="COLLECTED">COLLECTED</option>
             <option value="RECEIVED">RECEIVED</option>
@@ -102,33 +104,33 @@ export default async function SpecimensPage({
             <option value="IN_PROCESS">IN_PROCESS</option>
             <option value="REJECTED">REJECTED</option>
           </select>
-          <button className="secondary-button"><SystemIcon name="search" size={15} />Search</button>
-          {(q || status) && <Link className="secondary-link" href="/specimens">Clear</Link>}
+          <button className="secondary-button"><SystemIcon name="search" size={15} />{tr(locale, "Search", "بحث")}</button>
+          {(q || status) && <Link className="secondary-link" href="/specimens">{tr(locale, "Clear", "مسح")}</Link>}
         </form>
       </div>
     </section>
 
     <div className="specimen-card-list">
-      {specimens.length === 0 ? <section className="detail-card"><p className="empty-state">No matching specimens.</p></section> :
+      {specimens.length === 0 ? <section className="detail-card"><p className="empty-state">{tr(locale, "No matching specimens.", "لا توجد عينات مطابقة.")}</p></section> :
         specimens.map(specimen => <section className="detail-card specimen-card" key={specimen.id}>
           <div className="specimen-card-head">
             <div>
-              <span className={"status-badge status-" + specimen.status.toLowerCase().replaceAll("_","-")}>{specimen.status}</span>
+              <span className={"status-badge status-" + specimen.status.toLowerCase().replaceAll("_","-")}>{statusLabel(locale, specimen.status)}</span>
               <h2 className="barcode-text">{specimen.barcode}</h2>
               <p className="muted">{specimen.order.accessionNumber} · {specimen.order.patient.patientNumber} · {specimen.order.patient.fullNameEn}</p>
             </div>
-            <Link className="secondary-link" href={`/orders/${specimen.orderId}`}><SystemIcon name="orders" size={15} />Open Order</Link>
+            <Link className="secondary-link" href={`/orders/${specimen.orderId}`}><SystemIcon name="orders" size={15} />{tr(locale, "Open Order", "فتح الطلب")}</Link>
           </div>
 
           <div className="specimen-metadata">
-            <div><span>Specimen</span><strong>{specimen.specimenType?.nameEn || "Not configured"}</strong></div>
-            <div><span>Container</span><strong>{specimen.container?.nameEn || "—"}</strong></div>
-            <div><span>Order branch</span><strong>{specimen.order.orderingBranch.nameEn}</strong></div>
-            <div><span>Current branch</span><strong>{specimen.currentBranch?.nameEn || "—"}</strong></div>
-            <div><span>Linked tests</span><strong>{specimen.orderItems.map(link => link.orderItem.testCodeSnapshot).join(", ") || "—"}</strong></div>
-            <div><span>Collected</span><strong>{specimen.collectedAt ? specimen.collectedAt.toISOString().replace("T"," ").slice(0,19) : "—"}</strong></div>
-            <div><span>Received</span><strong>{specimen.receivedAt ? specimen.receivedAt.toISOString().replace("T"," ").slice(0,19) : "—"}</strong></div>
-            <div><span>Volume</span><strong>{specimen.volume ? `${specimen.volume.toString()} ${specimen.volumeUnit || ""}` : "—"}</strong></div>
+            <div><span>{tr(locale, "Specimen", "العينة")}</span><strong>{specimen.specimenType?.nameEn || tr(locale, "Not configured", "غير مهيأة")}</strong></div>
+            <div><span>{tr(locale, "Container", "الحاوية")}</span><strong>{specimen.container?.nameEn || "—"}</strong></div>
+            <div><span>{tr(locale, "Order branch", "فرع الطلب")}</span><strong>{specimen.order.orderingBranch.nameEn}</strong></div>
+            <div><span>{tr(locale, "Current branch", "الفرع الحالي")}</span><strong>{specimen.currentBranch?.nameEn || "—"}</strong></div>
+            <div><span>{tr(locale, "Linked tests", "الفحوصات المرتبطة")}</span><strong>{specimen.orderItems.map(link => link.orderItem.testCodeSnapshot).join(", ") || "—"}</strong></div>
+            <div><span>{tr(locale, "Collected", "تم الجمع")}</span><strong>{specimen.collectedAt ? specimen.collectedAt.toISOString().replace("T"," ").slice(0,19) : "—"}</strong></div>
+            <div><span>{tr(locale, "Received", "تم الاستلام")}</span><strong>{specimen.receivedAt ? specimen.receivedAt.toISOString().replace("T"," ").slice(0,19) : "—"}</strong></div>
+            <div><span>{tr(locale, "Volume", "الحجم")}</span><strong>{specimen.volume ? `${specimen.volume.toString()} ${specimen.volumeUnit || ""}` : "—"}</strong></div>
           </div>
 
           {specimen.status === "REJECTED" && <div className="specimen-rejection">
@@ -146,7 +148,7 @@ export default async function SpecimensPage({
           />
 
           <details className="specimen-history">
-            <summary>Chain of custody ({specimen.events.length} recent events)</summary>
+            <summary>{tr(locale, "Chain of custody", "سلسلة الحيازة")} ({specimen.events.length} {tr(locale, "recent events", "أحداث حديثة")})</summary>
             <div className="summary-list">
               {specimen.events.map(event => <div key={event.id}>
                 <span>{event.occurredAt.toISOString().replace("T"," ").slice(0,19)} · {event.branch?.code || "—"} · {event.actor?.displayNameEn || "System"}</span>
