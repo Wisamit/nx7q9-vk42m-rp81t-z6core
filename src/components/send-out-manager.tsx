@@ -3,8 +3,9 @@
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AttachmentManager } from "@/components/attachment-manager";
+import { statusLabel as sharedStatusLabel } from "@/lib/ui-i18n";
 
-type Laboratory = { id: string; code: string; nameEn: string };
+type Laboratory = { id: string; code: string; nameEn: string; nameAr?: string | null };
 type Candidate = {
   key: string;
   orderItemId: string;
@@ -53,6 +54,7 @@ export function SendOutManager({
   canManage,
   canVerify,
   canUploadAttachments,
+  locale,
 }: {
   laboratories: Laboratory[];
   candidates: Candidate[];
@@ -60,12 +62,24 @@ export function SendOutManager({
   canManage: boolean;
   canVerify: boolean;
   canUploadAttachments: boolean;
+  locale: "ar" | "en";
 }) {
   const router = useRouter();
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState("");
   const [candidateKey, setCandidateKey] = useState("");
   const [resultTexts, setResultTexts] = useState<Record<string, string>>({});
+  const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
+  const labName = (lab: Laboratory) => locale === "ar" ? lab.nameAr || lab.nameEn : lab.nameEn;
+  const referralStatusLabel = (value: string) =>
+    value === "CREATED" ? tr("Created", "تم الإنشاء") :
+    value === "DISPATCHED" ? tr("Dispatched", "تم الإرسال") :
+    value === "RESULT_RECEIVED" ? tr("Result received", "تم استلام النتيجة") :
+    value === "VERIFIED" ? tr("Verified", "تم التحقق") :
+    value === "COMPLETED" ? tr("Completed", "مكتمل") :
+    value === "CANCELLED" ? tr("Cancelled", "ملغى") :
+    value === "NEW" ? tr("New", "جديد") :
+    sharedStatusLabel(locale, value);
 
   async function createLab(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -77,17 +91,17 @@ export function SendOutManager({
     });
     const body = await response.json().catch(() => ({}));
     if (response.ok) {
-      setMessage("External laboratory created.");
+      setMessage(tr("External laboratory created.", "تم إنشاء المختبر الخارجي."));
       event.currentTarget.reset();
       router.refresh();
-    } else setMessage(body.error || "Could not create external laboratory.");
+    } else setMessage(tr("Could not create external laboratory.", "تعذر إنشاء المختبر الخارجي."));
     setBusy("");
   }
 
   async function createReferral(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const candidate = candidates.find(item => item.key === candidateKey);
-    if (!candidate) { setMessage("Select an order item/specimen."); return; }
+    if (!candidate) { setMessage(tr("Select an order item/specimen.", "اختر فحص الطلب/العينة.")); return; }
     const form = new FormData(event.currentTarget);
     setBusy("referral"); setMessage("");
     const response = await fetch("/api/send-outs", {
@@ -106,11 +120,11 @@ export function SendOutManager({
     });
     const body = await response.json().catch(() => ({}));
     if (response.ok) {
-      setMessage("Send-out referral created.");
+      setMessage(tr("Send-out referral created.", "تم إنشاء إحالة للمختبر الخارجي."));
       setCandidateKey("");
       event.currentTarget.reset();
       router.refresh();
-    } else setMessage(body.error || "Could not create send-out referral.");
+    } else setMessage(tr("Could not create send-out referral.", "تعذر إنشاء الإحالة الخارجية."));
     setBusy("");
   }
 
@@ -122,44 +136,44 @@ export function SendOutManager({
     });
     const body = await response.json().catch(() => ({}));
     if (response.ok) {
-      setMessage("Send-out updated.");
+      setMessage(tr("Send-out updated.", "تم تحديث الإحالة الخارجية."));
       router.refresh();
-    } else setMessage(body.error || "Send-out action failed.");
+    } else setMessage(tr("Send-out action failed.", "فشل إجراء الإحالة الخارجية."));
     setBusy("");
   }
 
   return <div className="sendout-workspace">
     {canManage && <section className="detail-grid">
       <article className="detail-card">
-        <h2>External Laboratory</h2>
+        <h2>{tr("External Laboratory","مختبر خارجي")}</h2>
         <form className="catalog-form" onSubmit={createLab}>
-          <label>Code<input name="code" required /></label>
-          <label>Name<input name="nameEn" required /></label>
-          <label dir="rtl">الاسم بالعربية<input name="nameAr" dir="rtl" /></label>
-          <label>Phone<input name="phone" /></label>
-          <label>Email<input name="email" type="email" /></label>
-          <label className="form-span">Address<textarea name="address" rows={2} /></label>
-          <button className="secondary-button form-span" disabled={busy === "lab"}>{busy === "lab" ? "Saving…" : "Add External Laboratory"}</button>
+          <label>{tr("Code","الرمز")}<input name="code" required /></label>
+          <label>{tr("Name (English)","الاسم بالإنجليزية")}<input name="nameEn" required /></label>
+          <label>{tr("Name (Arabic)","الاسم بالعربية")}<input name="nameAr" dir="rtl" /></label>
+          <label>{tr("Phone","الهاتف")}<input name="phone" /></label>
+          <label>{tr("Email","البريد الإلكتروني")}<input name="email" type="email" /></label>
+          <label className="form-span">{tr("Address","العنوان")}<textarea name="address" rows={2} /></label>
+          <button className="secondary-button form-span" disabled={busy === "lab"}>{busy === "lab" ? tr("Saving…","جارٍ الحفظ…") : tr("Add External Laboratory","إضافة مختبر خارجي")}</button>
         </form>
       </article>
 
       <article className="detail-card">
-        <h2>Create Send-out</h2>
+        <h2>{tr("Create Send-out","إنشاء إحالة خارجية")}</h2>
         <form className="catalog-form" onSubmit={createReferral}>
-          <label className="form-span">Ordered test / specimen<select value={candidateKey} onChange={event => setCandidateKey(event.target.value)} required>
-            <option value="">Select…</option>
+          <label className="form-span">{tr("Ordered test / specimen","الفحص المطلوب / العينة")}<select value={candidateKey} onChange={event => setCandidateKey(event.target.value)} required>
+            <option value="">{tr("Select…","اختر…")}</option>
             {candidates.map(item => <option key={item.key} value={item.key}>{item.label}</option>)}
           </select></label>
-          <label className="form-span">External laboratory<select name="externalLaboratoryId" required>
-            <option value="">Select…</option>
-            {laboratories.map(lab => <option key={lab.id} value={lab.id}>{lab.code} — {lab.nameEn}</option>)}
+          <label className="form-span">{tr("External laboratory","المختبر الخارجي")}<select name="externalLaboratoryId" required>
+            <option value="">{tr("Select…","اختر…")}</option>
+            {laboratories.map(lab => <option key={lab.id} value={lab.id}>{lab.code} — {labName(lab)}</option>)}
           </select></label>
-          <label>External accession<input name="externalAccession" /></label>
-          <label>Expected result<input name="expectedResultAt" type="datetime-local" /></label>
-          <label>Cost<input name="costAmount" type="number" min="0" step="0.0001" /></label>
-          <label>Currency<input name="costCurrency" maxLength={3} placeholder="AED" /></label>
-          <label className="form-span">Note<input name="note" /></label>
-          <button className="primary-button form-span" disabled={busy === "referral"}>{busy === "referral" ? "Creating…" : "Create Send-out Referral"}</button>
+          <label>{tr("External accession","رقم الطلب الخارجي")}<input name="externalAccession" /></label>
+          <label>{tr("Expected result","موعد النتيجة المتوقع")}<input name="expectedResultAt" type="datetime-local" /></label>
+          <label>{tr("Cost","التكلفة")}<input name="costAmount" type="number" min="0" step="0.0001" /></label>
+          <label>{tr("Currency","العملة")}<input name="costCurrency" maxLength={3} placeholder="AED" /></label>
+          <label className="form-span">{tr("Note","ملاحظة")}<input name="note" /></label>
+          <button className="primary-button form-span" disabled={busy === "referral"}>{busy === "referral" ? tr("Creating…","جارٍ الإنشاء…") : tr("Create Send-out Referral","إنشاء إحالة خارجية")}</button>
         </form>
       </article>
     </section>}
@@ -167,24 +181,24 @@ export function SendOutManager({
     {message && <p className="form-success">{message}</p>}
 
     <section className="sendout-list">
-      {referrals.length === 0 ? <article className="detail-card"><p className="empty-state">No send-out referrals.</p></article> :
+      {referrals.length === 0 ? <article className="detail-card"><p className="empty-state">{tr("No send-out referrals.","لا توجد إحالات خارجية.")}</p></article> :
         referrals.map(referral => <article className="detail-card sendout-card" key={referral.id}>
           <div className="sendout-head">
             <div>
-              <span className={"status-badge status-" + referral.status.toLowerCase().replaceAll("_","-")}>{referral.status}</span>
+              <span className={"status-badge status-" + referral.status.toLowerCase().replaceAll("_","-")}>{referralStatusLabel(referral.status)}</span>
               <h2>{referral.testCode} — {referral.testName}</h2>
               <p className="muted">{referral.accessionNumber} · {referral.patientNumber} · {referral.patientName}</p>
             </div>
-            <div className="sendout-lab"><small>Referral laboratory</small><strong>{referral.laboratoryCode} — {referral.laboratoryName}</strong></div>
+            <div className="sendout-lab"><small>{tr("Referral laboratory","المختبر المرجعي")}</small><strong>{referral.laboratoryCode} — {referral.laboratoryName}</strong></div>
           </div>
 
           <div className="specimen-metadata">
-            <div><span>Branch</span><strong>{referral.branchCode}</strong></div>
-            <div><span>Specimen</span><strong className="barcode-text">{referral.specimenBarcode || "—"}</strong></div>
-            <div><span>External accession</span><strong>{referral.externalAccession || "—"}</strong></div>
-            <div><span>Expected result</span><strong>{referral.expectedResultAt?.replace("T"," ").slice(0,16) || "—"}</strong></div>
-            <div><span>Cost</span><strong>{referral.costAmount && referral.costCurrency ? referral.costAmount + " " + referral.costCurrency : "—"}</strong></div>
-            <div><span>Dispatch</span><strong>{referral.dispatchedAt?.replace("T"," ").slice(0,16) || "—"}</strong></div>
+            <div><span>{tr("Branch","الفرع")}</span><strong>{referral.branchCode}</strong></div>
+            <div><span>{tr("Specimen","العينة")}</span><strong className="barcode-text">{referral.specimenBarcode || "—"}</strong></div>
+            <div><span>{tr("External accession","رقم الطلب الخارجي")}</span><strong>{referral.externalAccession || "—"}</strong></div>
+            <div><span>{tr("Expected result","النتيجة المتوقعة")}</span><strong>{referral.expectedResultAt?.replace("T"," ").slice(0,16) || "—"}</strong></div>
+            <div><span>{tr("Cost","التكلفة")}</span><strong>{referral.costAmount && referral.costCurrency ? referral.costAmount + " " + referral.costCurrency : "—"}</strong></div>
+            <div><span>{tr("Dispatch","الإرسال")}</span><strong>{referral.dispatchedAt?.replace("T"," ").slice(0,16) || "—"}</strong></div>
           </div>
 
           <div className="sendout-actions">
@@ -198,11 +212,11 @@ export function SendOutManager({
                 note: form.get("note"),
               });
             }}>
-              <input name="externalAccession" defaultValue={referral.externalAccession || ""} placeholder="External accession" />
-              <input name="courier" placeholder="Courier" />
-              <input name="trackingReference" placeholder="Tracking reference" />
-              <input name="note" placeholder="Dispatch note" />
-              <button className="primary-button" disabled={busy === referral.id + "DISPATCH"}>Dispatch</button>
+              <input name="externalAccession" defaultValue={referral.externalAccession || ""} placeholder={tr("External accession","رقم الطلب الخارجي")} />
+              <input name="courier" placeholder={tr("Courier","شركة النقل / المندوب")} />
+              <input name="trackingReference" placeholder={tr("Tracking reference","مرجع التتبع")} />
+              <input name="note" placeholder={tr("Dispatch note","ملاحظة الإرسال")} />
+              <button className="primary-button" disabled={busy === referral.id + "DISPATCH"}>{tr("Dispatch","إرسال")}</button>
             </form>}
 
             {canManage && referral.status === "DISPATCHED" && <form onSubmit={event => {
@@ -212,31 +226,31 @@ export function SendOutManager({
                 note: new FormData(event.currentTarget).get("note"),
               });
             }}>
-              <textarea rows={3} value={resultTexts[referral.id] ?? referral.externalResultText ?? ""} onChange={event => setResultTexts(current => ({...current,[referral.id]:event.target.value}))} placeholder="External result / interpretation (or upload report below)" />
-              <input name="note" placeholder="Receipt note" />
-              <button className="primary-button" disabled={busy === referral.id + "RECEIVE_RESULT"}>Record Result Received</button>
+              <textarea rows={3} value={resultTexts[referral.id] ?? referral.externalResultText ?? ""} onChange={event => setResultTexts(current => ({...current,[referral.id]:event.target.value}))} placeholder={tr("External result / interpretation (or upload report below)","النتيجة / التفسير الخارجي (أو ارفع التقرير أدناه)")} />
+              <input name="note" placeholder={tr("Receipt note","ملاحظة الاستلام")} />
+              <button className="primary-button" disabled={busy === referral.id + "RECEIVE_RESULT"}>{tr("Record Result Received","تسجيل استلام النتيجة")}</button>
             </form>}
 
-            {canVerify && referral.status === "RESULT_RECEIVED" && <button className="primary-button" onClick={() => void act(referral.id, "VERIFY")} disabled={busy === referral.id + "VERIFY"}>Verify External Result</button>}
-            {canVerify && referral.status === "VERIFIED" && <button className="primary-button" onClick={() => void act(referral.id, "COMPLETE")} disabled={busy === referral.id + "COMPLETE"}>Complete Send-out</button>}
+            {canVerify && referral.status === "RESULT_RECEIVED" && <button className="primary-button" onClick={() => void act(referral.id, "VERIFY")} disabled={busy === referral.id + "VERIFY"}>{tr("Verify External Result","التحقق من النتيجة الخارجية")}</button>}
+            {canVerify && referral.status === "VERIFIED" && <button className="primary-button" onClick={() => void act(referral.id, "COMPLETE")} disabled={busy === referral.id + "COMPLETE"}>{tr("Complete Send-out","إكمال الإحالة الخارجية")}</button>}
             {canManage && ["CREATED","DISPATCHED"].includes(referral.status) && <button className="secondary-button" onClick={() => {
-              const note = prompt("Cancellation reason:");
+              const note = prompt(tr("Cancellation reason:","سبب الإلغاء:"));
               if (note) void act(referral.id, "CANCEL", { note });
-            }}>Cancel</button>}
+            }}>{tr("Cancel","إلغاء")}</button>}
           </div>
 
-          {referral.externalResultText && <div className="sendout-result"><strong>External result</strong><p>{referral.externalResultText}</p></div>}
+          {referral.externalResultText && <div className="sendout-result"><strong>{tr("External result","النتيجة الخارجية")}</strong><p>{referral.externalResultText}</p></div>}
 
           <div className="sendout-attachments">
-            <h3>External report / attachments</h3>
-            <AttachmentManager targetType="SEND_OUT_REFERRAL" targetId={referral.id} attachments={referral.attachments} canUpload={canUploadAttachments && canManage} />
+            <h3>{tr("External report / attachments","التقرير الخارجي / المرفقات")}</h3>
+            <AttachmentManager targetType="SEND_OUT_REFERRAL" targetId={referral.id} attachments={referral.attachments} canUpload={canUploadAttachments && canManage} locale={locale} />
           </div>
 
           <details className="specimen-history">
-            <summary>Chain of custody / status history ({referral.events.length})</summary>
+            <summary>{tr("Chain of custody / status history","سلسلة الحيازة / سجل الحالة")} ({referral.events.length})</summary>
             <div className="summary-list">{referral.events.map(event => <div key={event.id}>
               <span>{event.occurredAt.replace("T"," ").slice(0,19)} · {event.actor}</span>
-              <strong>{event.fromStatus || "NEW"} → {event.toStatus}{event.note ? " · " + event.note : ""}</strong>
+              <strong>{referralStatusLabel(event.fromStatus || "NEW")} → {referralStatusLabel(event.toStatus)}{event.note ? " · " + event.note : ""}</strong>
             </div>)}</div>
           </details>
         </article>)
