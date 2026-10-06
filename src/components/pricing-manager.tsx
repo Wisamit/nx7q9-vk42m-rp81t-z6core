@@ -192,7 +192,7 @@ export function PricingManager({
 
     <CrudModal open={open === "list"} onClose={() => setOpen("")} title={tr("Create Price List", "إنشاء قائمة أسعار")} description={tr("Define pricing scope, currency, precedence and effective dates.", "حدد نطاق التسعير والعملة والأولوية وتواريخ السريان.")} size="lg">
       <form className="catalog-form" onSubmit={createList}>
-        <label>{tr("Code", "الرمز")}<input name="code" placeholder="Optional; generated from name" /></label>
+        <label>{tr("Code", "الرمز")}<input name="code" placeholder={tr("Optional; generated from name","اختياري؛ يتم توليده من الاسم")} /></label>
         <label>{tr("Scope", "النطاق")}<select value={scopeType} onChange={e => setScopeType(e.target.value)}><option value="ORGANIZATION">{scopeLabel("ORGANIZATION")}</option><option value="BRANCH">{scopeLabel("BRANCH")}</option><option value="CLIENT">{scopeLabel("CLIENT")}</option><option value="CONTRACT">{scopeLabel("CONTRACT")}</option></select></label>
         <label>{tr("Name (English)", "الاسم بالإنجليزية")}<input name="nameEn" required /></label>
         <label dir="rtl">الاسم بالعربية<input name="nameAr" dir="rtl" /></label>
