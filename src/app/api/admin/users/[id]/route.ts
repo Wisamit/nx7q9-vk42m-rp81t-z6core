@@ -9,6 +9,11 @@ function text(value: unknown, max = 200) {
 function ids(value: unknown) {
   return Array.isArray(value) ? [...new Set(value.filter((x): x is string => typeof x === "string" && x.length > 0))] : [];
 }
+function optionalDiscountPercent(value: unknown) {
+  if (value === null || value === "") return null;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric >= 0 && numeric <= 100 ? Math.round(numeric * 100) / 100 : undefined;
+}
 
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
   const session = await getCurrentSession();
@@ -35,8 +40,11 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   const branchIds = body.branchIds === undefined ? target.branchScopes.map(x => x.branchId) : ids(body.branchIds);
   const departmentIds = body.departmentIds === undefined ? target.departmentScopes.map(x => x.departmentId) : ids(body.departmentIds);
   const password = typeof body.password === "string" ? body.password : "";
+  const discountLimitPercent = body.discountLimitPercent === undefined
+    ? (target.discountLimitPercent ? Number(target.discountLimitPercent.toString()) : null)
+    : optionalDiscountPercent(body.discountLimitPercent);
 
-  if (!displayNameEn || roleIds.length === 0 || branchIds.length === 0 || (password && password.length < 12)) {
+  if (!displayNameEn || roleIds.length === 0 || branchIds.length === 0 || (password && password.length < 12) || discountLimitPercent === undefined) {
     return NextResponse.json({ error: "invalid_fields" }, { status: 400 });
   }
   if (id === session.user.id && status !== "ACTIVE") {
@@ -77,6 +85,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
         displayNameAr: displayNameAr || null,
         email: email || null,
         preferredLocale,
+        discountLimitPercent: discountLimitPercent === null ? null : discountLimitPercent.toFixed(2),
         status,
         ...(passwordHash ? { passwordHash, passwordChangedAt: new Date(), failedLoginAttempts: 0, lockedUntil: null } : {}),
       },
@@ -96,8 +105,8 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
         action: "USER_UPDATED",
         entityType: "User",
         entityId: id,
-        oldValues: { displayNameEn: target.displayNameEn, displayNameAr: target.displayNameAr, email: target.email, preferredLocale: target.preferredLocale, status: target.status, roleIds: target.roles.map(x => x.roleId), branchIds: target.branchScopes.map(x => x.branchId), departmentIds: target.departmentScopes.map(x => x.departmentId) },
-        newValues: { displayNameEn, displayNameAr: displayNameAr || null, email: email || null, preferredLocale, status, roleIds, branchIds, departmentIds, passwordReset: Boolean(passwordHash) },
+        oldValues: { displayNameEn: target.displayNameEn, displayNameAr: target.displayNameAr, email: target.email, preferredLocale: target.preferredLocale, discountLimitPercent: target.discountLimitPercent?.toString() ?? null, status: target.status, roleIds: target.roles.map(x => x.roleId), branchIds: target.branchScopes.map(x => x.branchId), departmentIds: target.departmentScopes.map(x => x.departmentId) },
+        newValues: { displayNameEn, displayNameAr: displayNameAr || null, email: email || null, preferredLocale, discountLimitPercent: discountLimitPercent === null ? null : discountLimitPercent.toFixed(2), status, roleIds, branchIds, departmentIds, passwordReset: Boolean(passwordHash) },
         ipAddress: ctx.ipAddress,
         userAgent: ctx.userAgent,
       },
