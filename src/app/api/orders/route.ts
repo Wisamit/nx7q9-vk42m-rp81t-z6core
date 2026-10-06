@@ -335,19 +335,27 @@ export async function POST(request: Request) {
         item: { id: string };
         test: (typeof tests)[number];
         unitPrice: Prisma.Decimal;
+        discountAmount: Prisma.Decimal;
+        finalPrice: Prisma.Decimal;
         packageId: string | null;
       }> = [];
       let subtotal = new Prisma.Decimal(0);
+      let discountTotal = new Prisma.Decimal(0);
       const createdOrderPackages = new Map<string, {
         id: string;
         package: (typeof packages)[number];
         unitPrice: Prisma.Decimal;
+        discountAmount: Prisma.Decimal;
+        finalPrice: Prisma.Decimal;
       }>();
 
       for (const pkg of packages) {
         const price = packagePriceMap.get(pkg.id)!;
         const unitPrice = new Prisma.Decimal(price.unitPrice);
+        const discountAmount = new Prisma.Decimal(unitPrice.mul(requestedDiscountPercent).div(100).toFixed(4));
+        const finalPrice = unitPrice.sub(discountAmount);
         subtotal = subtotal.add(unitPrice);
+        discountTotal = discountTotal.add(discountAmount);
         const orderPackage = await tx.orderPackage.create({
           data: {
             orderId: order.id,
@@ -357,13 +365,13 @@ export async function POST(request: Request) {
             packageNameEnSnapshot: pkg.nameEn,
             packageNameArSnapshot: pkg.nameAr,
             unitPriceSnapshot: unitPrice,
-            discountAmountSnapshot: new Prisma.Decimal(0),
+            discountAmountSnapshot: discountAmount,
             taxAmountSnapshot: new Prisma.Decimal(0),
-            finalPriceSnapshot: unitPrice,
+            finalPriceSnapshot: finalPrice,
             currency,
           },
         });
-        createdOrderPackages.set(pkg.id, { id: orderPackage.id, package: pkg, unitPrice });
+        createdOrderPackages.set(pkg.id, { id: orderPackage.id, package: pkg, unitPrice, discountAmount, finalPrice });
       }
 
       for (const test of tests) {
@@ -371,7 +379,14 @@ export async function POST(request: Request) {
         const directPrice = packageId ? null : directPriceMap.get(test.id);
         if (!packageId && !directPrice) throw new Error("DIRECT_PRICE_RESOLUTION_MISSING");
         const unitPrice = packageId ? new Prisma.Decimal(0) : new Prisma.Decimal(directPrice!.unitPrice);
-        if (!packageId) subtotal = subtotal.add(unitPrice);
+        const discountAmount = packageId
+          ? new Prisma.Decimal(0)
+          : new Prisma.Decimal(unitPrice.mul(requestedDiscountPercent).div(100).toFixed(4));
+        const finalPrice = unitPrice.sub(discountAmount);
+        if (!packageId) {
+          subtotal = subtotal.add(unitPrice);
+          discountTotal = discountTotal.add(discountAmount);
+        }
 
         const item = await tx.orderItem.create({
           data: {
@@ -384,9 +399,9 @@ export async function POST(request: Request) {
             testNameArSnapshot: test.nameAr,
             unitSnapshot: test.defaultUnit?.symbol || null,
             unitPriceSnapshot: unitPrice,
-            discountAmountSnapshot: new Prisma.Decimal(0),
+            discountAmountSnapshot: discountAmount,
             taxAmountSnapshot: new Prisma.Decimal(0),
-            finalPriceSnapshot: unitPrice,
+            finalPriceSnapshot: finalPrice,
             currency,
           },
           select: { id: true },
@@ -423,7 +438,7 @@ export async function POST(request: Request) {
           });
         }
 
-        createdItems.push({ item, test, unitPrice, packageId });
+        createdItems.push({ item, test, unitPrice, discountAmount, finalPrice, packageId });
       }
 
       const specimenGroups = new Map<string, typeof createdItems>();
