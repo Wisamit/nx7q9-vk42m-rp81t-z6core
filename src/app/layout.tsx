@@ -41,6 +41,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
           name: locale === "ar" ? scope.branch.nameAr || scope.branch.nameEn : scope.branch.nameEn || scope.branch.nameAr || scope.branch.code,
         })),
       permissions: [...permissionSet(session)],
+      avatarDataUrl: session.user.avatarDataUrl,
     }}
     appearance={{
       systemName,
