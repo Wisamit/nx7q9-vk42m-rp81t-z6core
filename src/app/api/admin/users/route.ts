@@ -19,7 +19,9 @@ function optionalDiscountPercent(value: unknown) {
 export async function GET() {
   const session = await getCurrentSession();
   if (!session) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  if (!permissionSet(session).has("users.view")) return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  const permissionsForViewer = permissionSet(session);
+  if (!permissionsForViewer.has("users.view")) return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  const canManageDiscountLimits = permissionsForViewer.has("billing.discount.limits.manage");
 
   const organizationId = session.user.organizationId;
   const [users, roles, branches, departments] = await Promise.all([
@@ -48,11 +50,13 @@ export async function GET() {
       status: user.status,
       mfaEnabled: user.mfaEnabled,
       lastLoginAt: user.lastLoginAt,
-      discountLimitPercent: user.discountLimitPercent?.toString() ?? null,
-      effectiveDiscountLimitPercent: effectiveDiscountLimit({
-        userOverride: user.discountLimitPercent,
-        roleLimits: user.roles.filter(x => x.role.status === "ACTIVE").map(x => x.role.discountLimitPercent),
-      }).toFixed(2),
+      ...(canManageDiscountLimits ? {
+        discountLimitPercent: user.discountLimitPercent?.toString() ?? null,
+        effectiveDiscountLimitPercent: effectiveDiscountLimit({
+          userOverride: user.discountLimitPercent,
+          roleLimits: user.roles.filter(x => x.role.status === "ACTIVE").map(x => x.role.discountLimitPercent),
+        }).toFixed(2),
+      } : {}),
       roleIds: user.roles.filter(x => x.role.status === "ACTIVE").map(x => x.roleId),
       roleNames: user.roles.filter(x => x.role.status === "ACTIVE").map(x => x.role.nameEn),
       branchIds: user.branchScopes.filter(x => x.branch.status === "ACTIVE").map(x => x.branchId),
@@ -60,7 +64,7 @@ export async function GET() {
       departmentIds: user.departmentScopes.filter(x => x.department.status === "ACTIVE").map(x => x.departmentId),
       departmentNames: user.departmentScopes.filter(x => x.department.status === "ACTIVE").map(x => x.department.nameEn),
     })),
-    roles: roles.map(role => ({ id: role.id, code: role.code, nameEn: role.nameEn, nameAr: role.nameAr, isSystem: role.isSystem, discountLimitPercent: role.discountLimitPercent.toString() })),
+    roles: roles.map(role => ({ id: role.id, code: role.code, nameEn: role.nameEn, nameAr: role.nameAr, isSystem: role.isSystem, ...(canManageDiscountLimits ? { discountLimitPercent: role.discountLimitPercent.toString() } : {}) })),
     branches: branches.map(branch => ({ id: branch.id, code: branch.code, nameEn: branch.nameEn, nameAr: branch.nameAr })),
     departments: departments.map(department => ({ id: department.id, code: department.code, nameEn: department.nameEn, nameAr: department.nameAr, branchId: department.branchId })),
   });
@@ -114,7 +118,7 @@ export async function POST(request: Request) {
 
   const roleGrantsFinancialAuthority = roles.some(role =>
     Number(role.discountLimitPercent.toString()) > 0
-    || role.permissions.some(grant => grant.permission.code === "billing.discount.approve")
+    || role.permissions.some(grant => ["billing.discount.approve", "billing.discount.limits.manage"].includes(grant.permission.code))
   );
   const overrideGrantsFinancialAuthority = (discountLimitPercent ?? 0) > 0;
   if ((roleGrantsFinancialAuthority || overrideGrantsFinancialAuthority) && !permissions.has("billing.discount.limits.manage")) {
