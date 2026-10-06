@@ -3,7 +3,7 @@ import "./globals.css";
 import packageJson from "../../package.json";
 import { SystemShell } from "@/components/system-shell";
 import { getCurrentSession, permissionSet } from "@/lib/auth";
-import { buildThemeCss, getOrganizationSystemSettings } from "@/lib/system-settings";
+import { buildThemeCss, getOrganizationSystemSettings, SYSTEM_DEVELOPER_CREDIT } from "@/lib/system-settings";
 
 export const metadata: Metadata = {
   title: {
@@ -50,7 +50,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
       dateFormat: settings.dateFormat,
       timeFormat: settings.timeFormat,
       showSeconds: settings.showSeconds,
-      developerCredit: settings.developerCredit,
+      developerCredit: SYSTEM_DEVELOPER_CREDIT,
       appVersion: packageJson.version,
     }}
   >{children}</SystemShell> : children;
