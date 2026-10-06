@@ -25,7 +25,20 @@ export function UserManagement({ locale }: { locale: "ar" | "en" }) {
     if (response.ok) setData(body);
     setLoading(false);
   }
-  useEffect(() => { void load(); }, []);
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/admin/users", { cache: "no-store" })
+      .then(async response => ({ response, body: await response.json() }))
+      .then(({ response, body }) => {
+        if (cancelled) return;
+        if (response.ok) setData(body);
+        setLoading(false);
+      })
+      .catch(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, []);
 
   async function createUser(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
