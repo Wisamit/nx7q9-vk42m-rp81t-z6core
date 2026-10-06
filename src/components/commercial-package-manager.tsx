@@ -3,26 +3,28 @@
 import { FormEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
-type TestOption = { id: string; code: string; nameEn: string };
+type TestOption = { id: string; code: string; nameEn: string; nameAr?: string | null };
 
-export function CommercialPackageManager({ tests }: { tests: TestOption[] }) {
+export function CommercialPackageManager({ tests, locale }: { tests: TestOption[]; locale: "ar" | "en" }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
+  const testName = (test: TestOption) => locale === "ar" ? test.nameAr || test.nameEn : test.nameEn;
 
   const options = useMemo(() => tests.map(test => ({
     ...test,
-    label: `${test.code} — ${test.nameEn}`,
-  })), [tests]);
+    label: `${test.code} — ${locale === "ar" ? test.nameAr || test.nameEn : test.nameEn}`,
+  })), [tests, locale]);
   const selected = selectedIds.map(id => tests.find(test => test.id === id)).filter((x): x is TestOption => Boolean(x));
 
   function addTest() {
     const match = options.find(option => option.label === search);
     if (!match) {
-      setMessage("Select a valid test from the suggestions.");
+      setMessage(tr("Select a valid test from the suggestions.", "اختر فحصًا صحيحًا من الاقتراحات."));
       return;
     }
     setSelectedIds(ids => ids.includes(match.id) ? ids : [...ids, match.id]);
@@ -33,7 +35,7 @@ export function CommercialPackageManager({ tests }: { tests: TestOption[] }) {
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (selectedIds.length === 0) {
-      setMessage("Add at least one test to the package.");
+      setMessage(tr("Add at least one test to the package.", "أضف فحصًا واحدًا على الأقل إلى الباقة."));
       return;
     }
     const form = new FormData(event.currentTarget);
@@ -53,48 +55,48 @@ export function CommercialPackageManager({ tests }: { tests: TestOption[] }) {
     });
     const body = await response.json().catch(() => ({}));
     if (response.ok) {
-      setMessage(`Package created: ${body.package.code}`);
+      setMessage(tr(`Package created: ${body.package.code}`, `تم إنشاء الباقة: ${body.package.code}`));
       setSelectedIds([]);
       setSearch("");
       event.currentTarget.reset();
       router.refresh();
     } else {
-      setMessage(body.error || "Could not create package.");
+      setMessage(tr("Could not create package.", "تعذر إنشاء الباقة."));
     }
     setBusy(false);
   }
 
   return <>
-    <button className="secondary-button" type="button" onClick={() => setOpen(true)}>Commercial Package</button>
+    <button className="secondary-button" type="button" onClick={() => setOpen(true)}>{tr("Commercial Package", "باقة تجارية")}</button>
     {open && <div className="modal-backdrop" onMouseDown={event => event.target === event.currentTarget && setOpen(false)}>
       <div className="modal-card">
         <div className="modal-head">
-          <div><p className="eyebrow">Commercial Catalog</p><h2>Create Package</h2></div>
+          <div><p className="eyebrow">{tr("Commercial Catalog", "الدليل التجاري")}</p><h2>{tr("Create Package", "إنشاء باقة")}</h2></div>
           <button className="icon-button" type="button" onClick={() => setOpen(false)}>×</button>
         </div>
-        <p className="muted">Packages are commercial groupings. Member tests remain separate clinical order items for specimen, result and audit traceability.</p>
+        <p className="muted">{tr("Packages are commercial groupings. Member tests remain separate clinical order items for specimen, result and audit traceability.", "الباقات هي تجميعات تجارية، بينما تبقى الفحوصات عناصر سريرية مستقلة لضمان تتبع العينة والنتيجة وسجل التدقيق.")}</p>
         <form className="catalog-form" onSubmit={submit}>
-          <label>Code<input name="code" required maxLength={80} /></label>
-          <label>Name (English)<input name="nameEn" required maxLength={220} /></label>
-          <label dir="rtl">الاسم بالعربية<input name="nameAr" dir="rtl" maxLength={220} /></label>
-          <label className="form-span">Description<textarea name="descriptionEn" rows={2} /></label>
-          <label className="form-span" dir="rtl">الوصف<textarea name="descriptionAr" rows={2} dir="rtl" /></label>
+          <label>{tr("Code", "الرمز")}<input name="code" required maxLength={80} /></label>
+          <label>{tr("Name (English)", "الاسم بالإنجليزية")}<input name="nameEn" required maxLength={220} /></label>
+          <label>{tr("Name (Arabic)", "الاسم بالعربية")}<input name="nameAr" dir="rtl" maxLength={220} /></label>
+          <label className="form-span">{tr("Description (English)", "الوصف بالإنجليزية")}<textarea name="descriptionEn" rows={2} /></label>
+          <label className="form-span">{tr("Description (Arabic)", "الوصف بالعربية")}<textarea name="descriptionAr" rows={2} dir="rtl" /></label>
           <div className="form-span order-test-picker">
-            <label>Member tests
+            <label>{tr("Member tests", "الفحوصات المشمولة")}
               <div className="inline-search">
-                <input list="commercial-package-test-options" value={search} onChange={event => setSearch(event.target.value)} placeholder="Type test code or name…" />
-                <button type="button" className="secondary-button" onClick={addTest}>Add Test</button>
+                <input list="commercial-package-test-options" value={search} onChange={event => setSearch(event.target.value)} placeholder={tr("Type test code or name…", "اكتب رمز الفحص أو اسمه…")} />
+                <button type="button" className="secondary-button" onClick={addTest}>{tr("Add Test", "إضافة فحص")}</button>
               </div>
               <datalist id="commercial-package-test-options">{options.map(option => <option key={option.id} value={option.label} />)}</datalist>
             </label>
             <div className="selected-test-list">
-              {selected.length === 0 ? <span className="muted">No tests selected.</span> : selected.map(test =>
-                <span className="selected-test-chip" key={test.id}>{test.code} — {test.nameEn}<button type="button" onClick={() => setSelectedIds(ids => ids.filter(id => id !== test.id))}>×</button></span>
+              {selected.length === 0 ? <span className="muted">{tr("No tests selected.", "لم يتم اختيار فحوصات.")}</span> : selected.map(test =>
+                <span className="selected-test-chip" key={test.id}>{test.code} — {testName(test)}<button type="button" onClick={() => setSelectedIds(ids => ids.filter(id => id !== test.id))}>×</button></span>
               )}
             </div>
           </div>
           {message && <div className="form-success form-span">{message}</div>}
-          <button className="primary-button form-span" disabled={busy}>{busy ? "Saving…" : "Create Commercial Package"}</button>
+          <button className="primary-button form-span" disabled={busy}>{busy ? tr("Saving…", "جارٍ الحفظ…") : tr("Create Commercial Package", "إنشاء الباقة التجارية")}</button>
         </form>
       </div>
     </div>}
