@@ -5,12 +5,14 @@ import { CatalogManager } from "@/components/catalog-manager";
 import { ClinicalCatalogManager } from "@/components/clinical-catalog-manager";
 import { LegacyImportBatches } from "@/components/legacy-import-batches";
 import { CommercialPackageManager } from "@/components/commercial-package-manager";
+import { getUiLocale, statusLabel, tr } from "@/lib/ui-i18n";
 
 export const dynamic = "force-dynamic";
 
 export default async function CatalogPage() {
   const session = await requirePermission("catalog.view");
   const permissions = permissionSet(session);
+  const locale = getUiLocale(session.user.preferredLocale);
   const [tests, departments, specimens, containers, methods, units, panels, packages, importBatches] = await Promise.all([prisma.labTest.findMany({
     where: { organizationId: session.user.organizationId },
     include: { department: true, specimenType: true, components: { include: { unit: true, referenceIntervals: { orderBy: { effectiveFrom: "desc" }, take: 1 } }, orderBy: { displayOrder: "asc" } } },
@@ -20,32 +22,32 @@ export default async function CatalogPage() {
   return (
     <main className="catalog-shell">
       <header className="page-header">
-        <div><p className="eyebrow">Master Data</p><h1>Test Catalog</h1><p className="muted">Configuration-driven tests, components, specimens, methods and reference intervals.</p></div>
-        <div className="header-actions"><ClinicalCatalogManager tests={tests} units={units} methods={methods} branches={session.user.branchScopes.map(scope => scope.branch)} /><CatalogManager departments={departments} specimens={specimens} containers={containers} methods={methods} units={units} />{permissions.has("catalog.manage") && <CommercialPackageManager tests={tests.map(test => ({ id: test.id, code: test.code, nameEn: test.nameEn }))} />}<Link className="secondary-link" href="/dashboard">Back to Dashboard</Link></div>
+        <div><p className="eyebrow">{tr(locale, "Master Data", "البيانات الأساسية")}</p><h1>{tr(locale, "Test Catalog", "دليل الفحوصات")}</h1><p className="muted">{tr(locale, "Configuration-driven tests, components, specimens, methods and reference intervals.", "فحوصات ومكونات وعينات وطرق ومجالات مرجعية قابلة للتهيئة بالكامل.")}</p></div>
+        <div className="header-actions"><ClinicalCatalogManager tests={tests} units={units} methods={methods} branches={session.user.branchScopes.map(scope => scope.branch)} /><CatalogManager departments={departments} specimens={specimens} containers={containers} methods={methods} units={units} />{permissions.has("catalog.manage") && <CommercialPackageManager tests={tests.map(test => ({ id: test.id, code: test.code, nameEn: test.nameEn }))} />}<Link className="secondary-link" href="/dashboard">{tr(locale, "Back to Dashboard", "العودة للوحة التحكم")}</Link></div>
       </header>
       <section className="catalog-stats">
-        <article><strong>{tests.length}</strong><span>Tests</span></article>
-        <article><strong>{tests.filter((test) => test.status === "ACTIVE").length}</strong><span>Active</span></article>
-        <article><strong>{tests.reduce((sum, test) => sum + test.components.length, 0)}</strong><span>Components</span></article>
-        <article><strong>{panels.length}</strong><span>Panels / Profiles</span></article>
-        <article><strong>{packages.length}</strong><span>Commercial Packages</span></article>
+        <article><strong>{tests.length}</strong><span>{tr(locale, "Tests", "الفحوصات")}</span></article>
+        <article><strong>{tests.filter((test) => test.status === "ACTIVE").length}</strong><span>{tr(locale, "Active", "النشطة")}</span></article>
+        <article><strong>{tests.reduce((sum, test) => sum + test.components.length, 0)}</strong><span>{tr(locale, "Components", "المكونات")}</span></article>
+        <article><strong>{panels.length}</strong><span>{tr(locale, "Panels / Profiles", "البانلات / البروفايلات")}</span></article>
+        <article><strong>{packages.length}</strong><span>{tr(locale, "Commercial Packages", "الباقات التجارية")}</span></article>
       </section>
       <LegacyImportBatches batches={importBatches.map(batch => ({ id: batch.id, sourceName: batch.sourceName, sourceType: batch.sourceType, status: batch.status, rows: batch._count.rows, createdAt: batch.createdAt.toISOString() }))} />
       <section className="table-card detail-section">
-        <div className="table-toolbar"><h2>Commercial Packages</h2><span>Commercial groupings are separate from clinical panels.</span></div>
+        <div className="table-toolbar"><h2>{tr(locale, "Commercial Packages", "الباقات التجارية")}</h2><span>{tr(locale, "Commercial groupings are separate from clinical panels.", "الباقات التجارية مستقلة عن البانلات السريرية.")}</span></div>
         <div className="table-wrap">
           <table>
-            <thead><tr><th>Code</th><th>Name</th><th>Tests</th><th>Latest configured price</th><th>Status</th></tr></thead>
+            <thead><tr><th>{tr(locale, "Code", "الرمز")}</th><th>{tr(locale, "Name", "الاسم")}</th><th>{tr(locale, "Tests", "الفحوصات")}</th><th>{tr(locale, "Latest configured price", "آخر سعر مهيأ")}</th><th>{tr(locale, "Status", "الحالة")}</th></tr></thead>
             <tbody>
-              {packages.length === 0 ? <tr><td colSpan={5} className="empty-state">No commercial packages configured.</td></tr> :
+              {packages.length === 0 ? <tr><td colSpan={5} className="empty-state">{tr(locale, "No commercial packages configured.", "لا توجد باقات تجارية مهيأة.")}</td></tr> :
                 packages.map(pkg => {
                   const price = pkg.priceListItems[0];
                   return <tr key={pkg.id}>
                     <td><strong>{pkg.code}</strong></td>
                     <td>{pkg.nameEn}{pkg.nameAr ? <><br/><small dir="rtl">{pkg.nameAr}</small></> : null}</td>
                     <td>{pkg.items.map(item => item.test.code).join(", ")}</td>
-                    <td>{price ? price.unitPrice.toString() + " " + price.priceList.currency + " · " + price.priceList.code : "Not priced"}</td>
-                    <td><span className={"status-badge status-" + pkg.status.toLowerCase()}>{pkg.status}</span></td>
+                    <td>{price ? price.unitPrice.toString() + " " + price.priceList.currency + " · " + price.priceList.code : tr(locale, "Not priced", "غير مسعّر")}</td>
+                    <td><span className={"status-badge status-" + pkg.status.toLowerCase()}>{statusLabel(locale, pkg.status)}</span></td>
                   </tr>;
                 })}
             </tbody>
@@ -54,12 +56,12 @@ export default async function CatalogPage() {
       </section>
 
       <section className="table-card">
-        <div className="table-toolbar"><h2>Tests</h2><span>Legacy catalog import will be added through controlled validation.</span></div>
+        <div className="table-toolbar"><h2>{tr(locale, "Tests", "الفحوصات")}</h2><span>{tr(locale, "Legacy catalog import is handled through controlled validation.", "يتم استيراد دليل النظام القديم من خلال تحقق مضبوط.")}</span></div>
         <div className="table-wrap">
-          <table><thead><tr><th>Code</th><th>English name</th><th>Arabic name</th><th>Department</th><th>Specimen</th><th>Components</th><th>Status</th></tr></thead>
+          <table><thead><tr><th>{tr(locale, "Code", "الرمز")}</th><th>{tr(locale, "English name", "الاسم بالإنجليزية")}</th><th>{tr(locale, "Arabic name", "الاسم بالعربية")}</th><th>{tr(locale, "Department", "القسم")}</th><th>{tr(locale, "Specimen", "العينة")}</th><th>{tr(locale, "Components", "المكونات")}</th><th>{tr(locale, "Status", "الحالة")}</th></tr></thead>
           <tbody>
-            {tests.length === 0 ? <tr><td colSpan={7} className="empty-state">No tests configured yet.</td></tr> :
-              tests.map((test) => <tr key={test.id}><td><Link className="table-link" href={`/catalog/tests/${test.id}`}><strong>{test.code}</strong></Link></td><td><Link className="table-link" href={`/catalog/tests/${test.id}`}>{test.nameEn}</Link></td><td dir="rtl">{test.nameAr || "—"}</td><td>{test.department?.nameEn || "—"}</td><td>{test.specimenType?.nameEn || "—"}</td><td>{test.components.length}</td><td>{test.status}</td></tr>)}
+            {tests.length === 0 ? <tr><td colSpan={7} className="empty-state">{tr(locale, "No tests configured yet.", "لا توجد فحوصات مهيأة بعد.")}</td></tr> :
+              tests.map((test) => <tr key={test.id}><td><Link className="table-link" href={`/catalog/tests/${test.id}`}><strong>{test.code}</strong></Link></td><td><Link className="table-link" href={`/catalog/tests/${test.id}`}>{test.nameEn}</Link></td><td dir="rtl">{test.nameAr || "—"}</td><td>{test.department?.nameEn || "—"}</td><td>{test.specimenType?.nameEn || "—"}</td><td>{test.components.length}</td><td>{statusLabel(locale, test.status)}</td></tr>)}
           </tbody></table>
         </div>
       </section>
