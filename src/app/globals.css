@@ -279,4 +279,4 @@ html[data-density="compact"] :where(.detail-card,.dashboard-panel,.settings-card
 .file-button{cursor:pointer}
 
 /* Printed clinical reports intentionally render as paper, independent of screen theme. */
-@media print{.diagnostic-report,.professional-report{--fl-surface:white;--fl-surface-soft:#f8f8f8;--fl-text:black;--fl-muted:#555;--fl-border:#ddd;background:white;color:black}}
+@media print{.diagnostic-report,.professional-report{--fl-surface:white;--fl-surface-soft:whitesmoke;--fl-text:black;--fl-muted:dimgray;--fl-border:gainsboro;background:white;color:black}}
