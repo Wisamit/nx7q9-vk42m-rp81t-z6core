@@ -27,6 +27,7 @@ export function OrderCreateModal(props: {
   sources: SourceOption[];
   branches: BranchOption[];
   activeBranchId: string | null;
+  discountLimitPercent: number;
   locale: "ar" | "en";
 }) {
   const tr = <T,>(en: T, ar: T) => props.locale === "ar" ? ar : en;
@@ -44,7 +45,7 @@ export function OrderCreateModal(props: {
       open={open}
       onClose={() => setOpen(false)}
       title={tr("New Laboratory Order", "طلب مختبر جديد")}
-      description={tr("Select patient, tests, source and billing context. The invoice is created from effective pricing snapshots.", "اختر المريض والفحوصات والمصدر وبيانات الفوترة. يتم إنشاء الفاتورة من الأسعار الفعالة المحفوظة.")}
+      description={tr("Select patient, tests, source, billing context and any approved discount. The invoice is created from immutable pricing snapshots.", "اختر المريض والفحوصات والمصدر وبيانات الفوترة وأي خصم معتمد. يتم إنشاء الفاتورة من لقطات أسعار تاريخية غير قابلة للتغيير.")}
       size="full"
     >
       <OrderCreateForm {...props} locale={props.locale} onSuccess={message => {
