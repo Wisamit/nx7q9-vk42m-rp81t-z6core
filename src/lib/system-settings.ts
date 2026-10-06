@@ -141,6 +141,16 @@ function cssVars(p: ThemePalette) {
     ["--fl-warning", p.warning],
     ["--fl-danger", p.danger],
     ["--fl-info", p.info],
+    ["--fl-surface-soft", `color-mix(in srgb, ${p.surface} 94%, ${p.background})`],
+    ["--fl-surface-raised", p.surface],
+    ["--fl-surface-hover", `color-mix(in srgb, ${p.surface} 86%, ${p.primarySoft})`],
+    ["--fl-text-subtle", `color-mix(in srgb, ${p.muted} 78%, ${p.text})`],
+    ["--fl-focus-ring", `color-mix(in srgb, ${p.primary} 18%, transparent)`],
+    ["--fl-overlay", `color-mix(in srgb, ${p.text} 58%, transparent)`],
+    ["--fl-success-soft", `color-mix(in srgb, ${p.success} 12%, ${p.surface})`],
+    ["--fl-warning-soft", `color-mix(in srgb, ${p.warning} 12%, ${p.surface})`],
+    ["--fl-danger-soft", `color-mix(in srgb, ${p.danger} 12%, ${p.surface})`],
+    ["--fl-info-soft", `color-mix(in srgb, ${p.info} 12%, ${p.surface})`],
   ].map(([key, value]) => `${key}:${value}`).join(";");
 }
 
