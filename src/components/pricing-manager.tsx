@@ -5,11 +5,11 @@ import { useRouter } from "next/navigation";
 import { CrudModal } from "@/components/crud-modal";
 import { SystemIcon } from "@/components/system-icon";
 
-type Option = { id: string; code: string; nameEn: string };
+type Option = { id: string; code: string; nameEn: string; nameAr?: string | null };
 type ContractOption = Option & { clientId: string };
-type TestOption = { id: string; code: string; nameEn: string };
-type PackageOption = { id: string; code: string; nameEn: string };
-type PriceListOption = { id: string; code: string; nameEn: string; currency: string };
+type TestOption = { id: string; code: string; nameEn: string; nameAr?: string | null };
+type PackageOption = { id: string; code: string; nameEn: string; nameAr?: string | null };
+type PriceListOption = { id: string; code: string; nameEn: string; nameAr?: string | null; currency: string };
 
 export function PricingManager({
   branches,
@@ -31,6 +31,8 @@ export function PricingManager({
   locale: "ar" | "en";
 }) {
   const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
+  const localizedName = (item: { nameEn: string; nameAr?: string | null }) => locale === "ar" ? item.nameAr || item.nameEn : item.nameEn;
+  const scopeLabel = (value: string) => ({ ORGANIZATION: tr("Organization","المؤسسة"), BRANCH: tr("Branch","الفرع"), CLIENT: tr("Client","العميل"), CONTRACT: tr("Contract","العقد") }[value] || value);
   const router = useRouter();
   const [scopeType, setScopeType] = useState("ORGANIZATION");
   const [message, setMessage] = useState("");
@@ -43,11 +45,11 @@ export function PricingManager({
 
   const testOptions = useMemo(() => tests.map((test) => ({
     ...test,
-    label: `${test.code} — ${test.nameEn}`,
+    label: `${test.code} — ${localizedName(test)}`,
   })), [tests]);
   const packageOptions = useMemo(() => packages.map((pkg) => ({
     ...pkg,
-    label: `${pkg.code} — ${pkg.nameEn}`,
+    label: `${pkg.code} — ${localizedName(pkg)}`,
   })), [packages]);
 
   async function createContract(event: FormEvent<HTMLFormElement>) {
@@ -176,10 +178,10 @@ export function PricingManager({
 
     <CrudModal open={open === "contract"} onClose={() => setOpen("")} title={tr("Create Client Contract", "إنشاء عقد عميل")} description={tr("Create an effective-dated commercial contract for a client.", "إنشاء عقد تجاري للعميل بتاريخ سريان محدد.")} size="lg">
       <form className="catalog-form" onSubmit={createContract}>
-        <label>{tr("Code", "الرمز")}<input name="code" placeholder="Optional; generated from name" /></label>
-        <label>{tr("Client", "العميل")}<select name="clientId" required><option value="">{tr("Select client…", "اختر العميل…")}</option>{clients.map(x => <option key={x.id} value={x.id}>{x.code} — {x.nameEn}</option>)}</select></label>
+        <label>{tr("Code", "الرمز")}<input name="code" placeholder={tr("Optional; generated from name","اختياري؛ يتم توليده من الاسم")} /></label>
+        <label>{tr("Client", "العميل")}<select name="clientId" required><option value="">{tr("Select client…", "اختر العميل…")}</option>{clients.map(x => <option key={x.id} value={x.id}>{x.code} — {localizedName(x)}</option>)}</select></label>
         <label>{tr("Name (English)", "الاسم بالإنجليزية")}<input name="nameEn" required /></label>
-        <label dir="rtl">الاسم بالعربية<input name="nameAr" dir="rtl" /></label>
+        <label>{tr("Name (Arabic)","الاسم بالعربية")}<input name="nameAr" dir="rtl" /></label>
         <label>{tr("Currency", "العملة")}<input name="currency" required maxLength={3} defaultValue={defaultCurrency} /></label>
         <label>{tr("Effective from", "ساري من")}<input name="effectiveFrom" type="date" required defaultValue={new Date().toISOString().slice(0,10)} /></label>
         <label>{tr("Effective to", "ساري حتى")}<input name="effectiveTo" type="date" /></label>
@@ -191,12 +193,12 @@ export function PricingManager({
     <CrudModal open={open === "list"} onClose={() => setOpen("")} title={tr("Create Price List", "إنشاء قائمة أسعار")} description={tr("Define pricing scope, currency, precedence and effective dates.", "حدد نطاق التسعير والعملة والأولوية وتواريخ السريان.")} size="lg">
       <form className="catalog-form" onSubmit={createList}>
         <label>{tr("Code", "الرمز")}<input name="code" placeholder="Optional; generated from name" /></label>
-        <label>{tr("Scope", "النطاق")}<select value={scopeType} onChange={e => setScopeType(e.target.value)}><option>ORGANIZATION</option><option>BRANCH</option><option>CLIENT</option><option>CONTRACT</option></select></label>
+        <label>{tr("Scope", "النطاق")}<select value={scopeType} onChange={e => setScopeType(e.target.value)}><option value="ORGANIZATION">{scopeLabel("ORGANIZATION")}</option><option value="BRANCH">{scopeLabel("BRANCH")}</option><option value="CLIENT">{scopeLabel("CLIENT")}</option><option value="CONTRACT">{scopeLabel("CONTRACT")}</option></select></label>
         <label>{tr("Name (English)", "الاسم بالإنجليزية")}<input name="nameEn" required /></label>
         <label dir="rtl">الاسم بالعربية<input name="nameAr" dir="rtl" /></label>
-        {scopeType === "BRANCH" && <label>{tr("Branch", "الفرع")}<select name="branchId" required><option value="">{tr("Select branch…", "اختر الفرع…")}</option>{branches.map(x => <option key={x.id} value={x.id}>{x.code} — {x.nameEn}</option>)}</select></label>}
-        {scopeType === "CLIENT" && <label>{tr("Client", "العميل")}<select name="clientId" required><option value="">{tr("Select client…", "اختر العميل…")}</option>{clients.map(x => <option key={x.id} value={x.id}>{x.code} — {x.nameEn}</option>)}</select></label>}
-        {scopeType === "CONTRACT" && <label>{tr("Contract", "العقد")}<select name="contractId" required><option value="">{tr("Select contract…", "اختر العقد…")}</option>{contracts.map(x => <option key={x.id} value={x.id}>{x.code} — {x.nameEn}</option>)}</select></label>}
+        {scopeType === "BRANCH" && <label>{tr("Branch", "الفرع")}<select name="branchId" required><option value="">{tr("Select branch…", "اختر الفرع…")}</option>{branches.map(x => <option key={x.id} value={x.id}>{x.code} — {localizedName(x)}</option>)}</select></label>}
+        {scopeType === "CLIENT" && <label>{tr("Client", "العميل")}<select name="clientId" required><option value="">{tr("Select client…", "اختر العميل…")}</option>{clients.map(x => <option key={x.id} value={x.id}>{x.code} — {localizedName(x)}</option>)}</select></label>}
+        {scopeType === "CONTRACT" && <label>{tr("Contract", "العقد")}<select name="contractId" required><option value="">{tr("Select contract…", "اختر العقد…")}</option>{contracts.map(x => <option key={x.id} value={x.id}>{x.code} — {localizedName(x)}</option>)}</select></label>}
         <label>{tr("Currency", "العملة")}<input name="currency" required maxLength={3} defaultValue={defaultCurrency} /></label>
         <label>{tr("Priority", "الأولوية")}<input name="priority" type="number" defaultValue="0" /></label>
         <label>{tr("Effective from", "ساري من")}<input name="effectiveFrom" type="date" required defaultValue={new Date().toISOString().slice(0,10)} /></label>
@@ -208,7 +210,7 @@ export function PricingManager({
 
     <CrudModal open={open === "item"} onClose={() => setOpen("")} title={tr("Add Test Price", "إضافة سعر فحص")} description={tr("Add an effective-dated test price to a price list.", "أضف سعر فحص بتاريخ سريان إلى قائمة الأسعار.")} size="md">
       <form className="catalog-form" onSubmit={addPrice}>
-        <label className="form-span">{tr("Price list", "قائمة الأسعار")}<select name="priceListId" required><option value="">{tr("Select price list…", "اختر قائمة الأسعار…")}</option>{priceLists.map(x => <option key={x.id} value={x.id}>{x.code} — {x.nameEn} ({x.currency})</option>)}</select></label>
+        <label className="form-span">{tr("Price list", "قائمة الأسعار")}<select name="priceListId" required><option value="">{tr("Select price list…", "اختر قائمة الأسعار…")}</option>{priceLists.map(x => <option key={x.id} value={x.id}>{x.code} — {localizedName(x)} ({x.currency})</option>)}</select></label>
         <label className="form-span">{tr("Test", "الفحص")}
           <input list="pricing-test-options" placeholder={tr("Type test code or name…", "اكتب رمز الفحص أو اسمه…")} value={testSearch} onChange={e => { const value=e.target.value; setTestSearch(value); const match=testOptions.find(x=>x.label===value); setTestId(match?.id || ""); }} required />
           <datalist id="pricing-test-options">{testOptions.map(test => <option key={test.id} value={test.label} />)}</datalist>
@@ -223,7 +225,7 @@ export function PricingManager({
 
     <CrudModal open={open === "package"} onClose={() => setOpen("")} title={tr("Add Package Price", "إضافة سعر باقة")} description={tr("Package pricing remains independent from member-test pricing.", "يبقى سعر الباقة مستقلاً عن أسعار الفحوصات المكونة لها.")} size="md">
       <form className="catalog-form" onSubmit={addPackagePrice}>
-        <label className="form-span">{tr("Price list", "قائمة الأسعار")}<select name="priceListId" required><option value="">{tr("Select price list…", "اختر قائمة الأسعار…")}</option>{priceLists.map(x => <option key={x.id} value={x.id}>{x.code} — {x.nameEn} ({x.currency})</option>)}</select></label>
+        <label className="form-span">{tr("Price list", "قائمة الأسعار")}<select name="priceListId" required><option value="">{tr("Select price list…", "اختر قائمة الأسعار…")}</option>{priceLists.map(x => <option key={x.id} value={x.id}>{x.code} — {localizedName(x)} ({x.currency})</option>)}</select></label>
         <label className="form-span">{tr("Commercial package", "الباقة التجارية")}
           <input list="pricing-package-options" placeholder={tr("Type package code or name…", "اكتب رمز الباقة أو اسمها…")} value={packageSearch} onChange={e => { const value=e.target.value; setPackageSearch(value); const match=packageOptions.find(x=>x.label===value); setPackageId(match?.id || ""); }} required />
           <datalist id="pricing-package-options">{packageOptions.map(pkg => <option key={pkg.id} value={pkg.label} />)}</datalist>
