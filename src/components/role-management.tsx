@@ -17,7 +17,16 @@ export function RoleManagement({ locale }: { locale: "ar" | "en" }) {
     const response = await fetch("/api/admin/roles", { cache: "no-store" });
     if (response.ok) setData(await response.json());
   }
-  useEffect(() => { void load(); }, []);
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/admin/roles", { cache: "no-store" })
+      .then(async response => ({ response, body: await response.json() }))
+      .then(({ response, body }) => {
+        if (!cancelled && response.ok) setData(body);
+      })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, []);
 
   const grouped = useMemo(() => {
     const map = new Map<string, Permission[]>();
