@@ -19,7 +19,7 @@ export default async function PortalLoginPage() {
         : <p className="eyebrow">{systemName}</p>}
       <h1>{tr("Portal Sign In", "تسجيل دخول البوابة")}</h1>
       <p className="muted">{tr("Secure access for patients, doctors and corporate clients.", "دخول آمن للمرضى والأطباء والعملاء من الشركات.")}</p>
-      <PortalLoginForm />
+      <PortalLoginForm locale={locale} />
     </section>
   </main>;
 }
