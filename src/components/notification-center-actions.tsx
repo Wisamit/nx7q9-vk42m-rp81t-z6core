@@ -10,27 +10,32 @@ export function NotificationCenterActions({
   preferences,
   canManage,
   canDispatch,
+  locale,
 }: {
   notificationIds: string[];
   preferences: Preference[];
   canManage: boolean;
   canDispatch: boolean;
+  locale: "ar" | "en";
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
+  const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
+  const channelLabel = (value: string) => value === "IN_APP" ? tr("In-app", "داخل النظام") : value === "EMAIL" ? tr("Email", "البريد الإلكتروني") : value === "SMS" ? tr("SMS", "رسالة نصية") : value === "WHATSAPP" ? tr("WhatsApp", "واتساب") : value;
+  const eventLabel = (value: string) => value === "CRITICAL_RESULT_OPENED" ? tr("Critical result opened", "فتح نتيجة حرجة") : value === "CRITICAL_RESULT_ESCALATED" ? tr("Critical result escalated", "تصعيد نتيجة حرجة") : value === "REPORT_RELEASED" ? tr("Report released", "إصدار تقرير") : value === "TAT_BREACH" ? tr("TAT breach", "تجاوز زمن الإنجاز") : value === "APPOINTMENT_REMINDER" ? tr("Appointment reminder", "تذكير بموعد") : value;
 
   async function markAllRead() {
     setBusy("read"); setMessage("");
     for (const id of notificationIds) {
       const response = await fetch(`/api/notifications/${id}/read`, { method: "POST" });
       if (!response.ok) {
-        setMessage("Could not mark all notifications as read.");
+        setMessage(tr("Could not mark all notifications as read.", "تعذر تعليم كل الإشعارات كمقروءة."));
         setBusy("");
         return;
       }
     }
-    setBusy(""); setMessage("Notifications marked as read."); router.refresh();
+    setBusy(""); setMessage(tr("Notifications marked as read.", "تم تعليم الإشعارات كمقروءة.")); router.refresh();
   }
 
   async function togglePreference(eventCode: string, channel: string, enabled: boolean) {
@@ -41,7 +46,7 @@ export function NotificationCenterActions({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ eventCode, channel, enabled }),
     });
-    setBusy(""); setMessage(response.ok ? "Preference updated." : "Preference update failed.");
+    setBusy(""); setMessage(response.ok ? tr("Preference updated.", "تم تحديث التفضيل.") : tr("Preference update failed.", "فشل تحديث التفضيل."));
     if (response.ok) router.refresh();
   }
 
@@ -54,7 +59,7 @@ export function NotificationCenterActions({
     });
     const body = await response.json().catch(() => ({}));
     setBusy("");
-    setMessage(response.ok ? `Processed ${body.results?.length || 0} outbound deliveries.` : "Dispatch failed.");
+    setMessage(response.ok ? tr(`Processed ${body.results?.length || 0} outbound deliveries.`, `تمت معالجة ${body.results?.length || 0} عملية تسليم صادرة.`) : tr("Dispatch failed.", "فشلت عملية الإرسال."));
     if (response.ok) router.refresh();
   }
 
@@ -76,7 +81,7 @@ export function NotificationCenterActions({
       }),
     });
     setBusy("");
-    setMessage(response.ok ? "Notification template created." : "Template creation failed.");
+    setMessage(response.ok ? tr("Notification template created.", "تم إنشاء قالب الإشعار.") : tr("Template creation failed.", "فشل إنشاء القالب."));
     if (response.ok) {
       event.currentTarget.reset();
       router.refresh();
@@ -95,21 +100,21 @@ export function NotificationCenterActions({
   return <div className="notification-actions-stack">
     <div className="notification-toolbar-actions">
       {notificationIds.length > 0 && <button className="secondary-button" type="button" disabled={busy === "read"} onClick={() => void markAllRead()}>
-        {busy === "read" ? "Updating…" : "Mark all read"}
+        {busy === "read" ? tr("Updating…", "جارٍ التحديث…") : tr("Mark all read", "تعليم الكل كمقروء")}
       </button>}
       {canDispatch && <button className="secondary-button" type="button" disabled={busy === "dispatch"} onClick={() => void dispatch()}>
-        {busy === "dispatch" ? "Dispatching…" : "Dispatch outbound queue"}
+        {busy === "dispatch" ? tr("Dispatching…", "جارٍ الإرسال…") : tr("Dispatch outbound queue", "إرسال قائمة الصادر")}
       </button>}
     </div>
 
     {message && <div className="form-success">{message}</div>}
 
     <section className="detail-card">
-      <h2>My Channel Preferences</h2>
-      <p className="muted">In-app is the safe default. External channels only send when a destination and provider gateway are configured.</p>
+      <h2>{tr("My Channel Preferences", "تفضيلات قنواتي")}</h2>
+      <p className="muted">{tr("In-app is the safe default. External channels only send when a destination and provider gateway are configured.", "الإشعار داخل النظام هو الافتراضي الآمن. القنوات الخارجية لا ترسل إلا عند تهيئة الوجهة وبوابة المزود.")}</p>
       <div className="notification-preference-grid">
         {knownEvents.map(eventCode => <div className="notification-preference-row" key={eventCode}>
-          <strong>{eventCode}</strong>
+          <strong>{eventLabel(eventCode)}</strong>
           {["IN_APP","EMAIL","SMS","WHATSAPP"].map(channel => {
             const current = preferences.find(item => item.eventCode === eventCode && item.channel === channel);
             const enabled = current ? current.enabled : channel === "IN_APP";
@@ -121,7 +126,7 @@ export function NotificationCenterActions({
                 disabled={busy === key}
                 onChange={event => void togglePreference(eventCode, channel, event.target.checked)}
               />
-              <span>{channel}</span>
+              <span>{channelLabel(channel)}</span>
             </label>;
           })}
         </div>)}
@@ -129,16 +134,16 @@ export function NotificationCenterActions({
     </section>
 
     {canManage && <section className="detail-card">
-      <h2>Create Notification Template</h2>
+      <h2>{tr("Create Notification Template", "إنشاء قالب إشعار")}</h2>
       <form className="catalog-form" onSubmit={createTemplate}>
-        <label>Code<input name="code" required placeholder="CRITICAL_RESULT_EMAIL" /></label>
-        <label>Event code<input name="eventCode" required placeholder="CRITICAL_RESULT_OPENED" /></label>
-        <label>Channel<select name="channel" defaultValue="IN_APP"><option>IN_APP</option><option>EMAIL</option><option>SMS</option><option>WHATSAPP</option></select></label>
-        <label>Subject (English)<input name="subjectEn" /></label>
-        <label dir="rtl">الموضوع بالعربية<input name="subjectAr" dir="rtl" /></label>
-        <label className="form-span">Body (English)<textarea name="bodyEn" rows={4} required /></label>
-        <label className="form-span" dir="rtl">النص بالعربية<textarea name="bodyAr" rows={4} dir="rtl" /></label>
-        <button className="primary-button form-span" disabled={busy === "template"}>{busy === "template" ? "Saving…" : "Create Template"}</button>
+        <label>{tr("Code", "الرمز")}<input name="code" required placeholder="CRITICAL_RESULT_EMAIL" /></label>
+        <label>{tr("Event code", "رمز الحدث")}<input name="eventCode" required placeholder="CRITICAL_RESULT_OPENED" /></label>
+        <label>{tr("Channel", "القناة")}<select name="channel" defaultValue="IN_APP"><option value="IN_APP">{channelLabel("IN_APP")}</option><option value="EMAIL">{channelLabel("EMAIL")}</option><option value="SMS">{channelLabel("SMS")}</option><option value="WHATSAPP">{channelLabel("WHATSAPP")}</option></select></label>
+        <label>{tr("Subject (English)", "الموضوع بالإنجليزية")}<input name="subjectEn" /></label>
+        <label>{tr("Subject (Arabic)", "الموضوع بالعربية")}<input name="subjectAr" dir="rtl" /></label>
+        <label className="form-span">{tr("Body (English)", "النص بالإنجليزية")}<textarea name="bodyEn" rows={4} required /></label>
+        <label className="form-span">{tr("Body (Arabic)", "النص بالعربية")}<textarea name="bodyAr" rows={4} dir="rtl" /></label>
+        <button className="primary-button form-span" disabled={busy === "template"}>{busy === "template" ? tr("Saving…", "جارٍ الحفظ…") : tr("Create Template", "إنشاء القالب")}</button>
       </form>
     </section>}
   </div>;
