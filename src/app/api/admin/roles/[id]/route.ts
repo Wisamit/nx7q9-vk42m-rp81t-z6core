@@ -48,9 +48,12 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   });
   if (selectedPermissions.length !== permissionIds.length) return NextResponse.json({ error: "invalid_permissions" }, { status: 400 });
 
-  const currentCanApproveDiscounts = current.permissions.some(grant => grant.permission.code === "billing.discount.approve");
-  const desiredCanApproveDiscounts = selectedPermissions.some(permission => permission.code === "billing.discount.approve");
-  const financialAuthorityChanged = currentCanApproveDiscounts !== desiredCanApproveDiscounts;
+  const financialPermissionCodes = new Set(["billing.discount.approve", "billing.discount.limits.manage"]);
+  const currentFinancialPermissions = new Set(current.permissions.filter(grant => financialPermissionCodes.has(grant.permission.code)).map(grant => grant.permission.code));
+  const desiredFinancialPermissions = new Set(selectedPermissions.filter(permission => financialPermissionCodes.has(permission.code)).map(permission => permission.code));
+  const financialAuthorityChanged = currentFinancialPermissions.size !== desiredFinancialPermissions.size
+    || [...currentFinancialPermissions].some(code => !desiredFinancialPermissions.has(code));
+  const currentCanApproveDiscounts = currentFinancialPermissions.has("billing.discount.approve");
   const financialRoleReactivated = current.status !== "ACTIVE"
     && status === "ACTIVE"
     && (Number(current.discountLimitPercent.toString()) > 0 || currentCanApproveDiscounts);
