@@ -9,6 +9,29 @@ import { effectiveDiscountLimit } from "@/lib/discount-policy";
 
 export const dynamic = "force-dynamic";
 
+function discountRequestContext(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return { patientNumber: "—", services: "—" };
+  }
+  const record = value as Record<string, unknown>;
+  const patientNumber = typeof record.patientNumber === "string" ? record.patientNumber : "—";
+  const rows = [
+    ...(Array.isArray(record.directTests) ? record.directTests : []),
+    ...(Array.isArray(record.packages) ? record.packages : []),
+  ];
+  const services = rows
+    .map(item => {
+      if (!item || typeof item !== "object" || Array.isArray(item)) return "";
+      const entry = item as Record<string, unknown>;
+      const code = typeof entry.code === "string" ? entry.code : "";
+      const name = typeof entry.name === "string" ? entry.name : "";
+      return [code, name].filter(Boolean).join(" — ");
+    })
+    .filter(Boolean)
+    .join(", ");
+  return { patientNumber, services: services || "—" };
+}
+
 export default async function BillingPage() {
   const session = await requirePermission("billing.view");
   const locale = session.user.preferredLocale === "ar" ? "ar" : "en";
@@ -105,11 +128,15 @@ export default async function BillingPage() {
     {canApproveDiscounts && <DiscountApprovalManager
       locale={locale}
       approverLimitPercent={approverLimitPercent}
-      approvals={discountApprovals.map(item => ({
+      approvals={discountApprovals.map(item => {
+        const context = discountRequestContext(item.contextSnapshot);
+        return {
         id: item.id,
         branchCode: item.branch.code,
         branchName: locale === "ar" ? item.branch.nameAr || item.branch.nameEn : item.branch.nameEn,
         requesterName: locale === "ar" ? item.requestedBy.displayNameAr || item.requestedBy.displayNameEn : item.requestedBy.displayNameEn,
+        patientNumber: context.patientNumber,
+        services: context.services,
         discountPercent: item.discountPercent.toString(),
         reason: item.reason,
         currency: item.currency,
@@ -118,7 +145,8 @@ export default async function BillingPage() {
         finalTotal: item.finalTotalSnapshot.toString(),
         requestedAt: item.requestedAt.toISOString(),
         expiresAt: item.expiresAt.toISOString(),
-      }))}
+      };
+      })}
     />}
 
     <section className="table-card">
