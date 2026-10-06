@@ -2,7 +2,7 @@ import Link from "next/link";
 import { permissionSet, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { InventoryManager } from "@/components/inventory-manager";
-import { getUiLocale, tr } from "@/lib/ui-i18n";
+import { getUiLocale, statusLabel, tr } from "@/lib/ui-i18n";
 
 export const dynamic = "force-dynamic";
 
@@ -28,7 +28,7 @@ export default async function InventoryPage() {
     }),
     prisma.branch.findMany({
       where: { organizationId: session.user.organizationId, id: { in: branchIds }, status: "ACTIVE" },
-      select: { id: true, code: true, nameEn: true },
+      select: { id: true, code: true, nameEn: true, nameAr: true },
       orderBy: { nameEn: "asc" },
     }),
     prisma.branchStock.findMany({
@@ -53,8 +53,23 @@ export default async function InventoryPage() {
     const bExpiry = b.lot.expiryDate?.getTime() ?? Number.MAX_SAFE_INTEGER;
     return aExpiry - bExpiry;
   });
-
   const lowStock = branchStocks.filter(stock => stock.quantityOnHand.lte(stock.item.minimumStockQty));
+  const localizedName = (item: { nameEn: string; nameAr?: string | null }) =>
+    locale === "ar" ? item.nameAr || item.nameEn : item.nameEn;
+  const itemTypeLabel = (value: string) => {
+    const labels: Record<string, [string, string]> = {
+      REAGENT: ["Reagent", "كاشف"],
+      CONTROL: ["Control", "مادة ضبط"],
+      CALIBRATOR: ["Calibrator", "مادة معايرة"],
+      KIT: ["Kit", "طقم"],
+      TUBE: ["Tube", "أنبوب"],
+      NEEDLE: ["Needle", "إبرة"],
+      CONSUMABLE: ["Consumable", "مستهلك"],
+      OTHER: ["Other", "أخرى"],
+    };
+    const label = labels[value];
+    return label ? tr(locale, label[0], label[1]) : value;
+  };
 
   return <main className="catalog-shell">
     <header className="page-header">
@@ -79,9 +94,10 @@ export default async function InventoryPage() {
     </section>
 
     <InventoryManager
-      categories={categories.map(category => ({ id: category.id, code: category.code, nameEn: category.nameEn }))}
-      suppliers={suppliers.map(supplier => ({ id: supplier.id, code: supplier.code, nameEn: supplier.nameEn }))}
-      items={items.map(item => ({ id: item.id, code: item.code, nameEn: item.nameEn, stockUnit: item.stockUnit, itemType: item.itemType, lotTracking: item.lotTracking, expiryTracking: item.expiryTracking }))}
+      locale={locale}
+      categories={categories.map(category => ({ id: category.id, code: category.code, nameEn: category.nameEn, nameAr: category.nameAr }))}
+      suppliers={suppliers.map(supplier => ({ id: supplier.id, code: supplier.code, nameEn: supplier.nameEn, nameAr: supplier.nameAr }))}
+      items={items.map(item => ({ id: item.id, code: item.code, nameEn: item.nameEn, nameAr: item.nameAr, stockUnit: item.stockUnit, itemType: item.itemType, lotTracking: item.lotTracking, expiryTracking: item.expiryTracking }))}
       branches={branches}
       canManage={permissions.has("inventory.manage")}
       canReceive={permissions.has("procurement.receive")}
@@ -89,31 +105,31 @@ export default async function InventoryPage() {
 
     <section className="detail-grid detail-section">
       <article className="table-card">
-        <div className="table-toolbar"><h2>{tr(locale, "Branch Stock", "مخزون الفروع")}</h2><span>{branchStocks.length} balances</span></div>
+        <div className="table-toolbar"><h2>{tr(locale, "Branch Stock", "مخزون الفروع")}</h2><span>{branchStocks.length} {tr(locale, "balances", "رصيد")}</span></div>
         <div className="table-wrap"><table>
-          <thead><tr><th>Branch</th><th>Item</th><th>Type</th><th>On hand</th><th>Reserved</th><th>Minimum</th><th>Status</th></tr></thead>
+          <thead><tr><th>{tr(locale, "Branch", "الفرع")}</th><th>{tr(locale, "Item", "الصنف")}</th><th>{tr(locale, "Type", "النوع")}</th><th>{tr(locale, "On hand", "المتاح فعلياً")}</th><th>{tr(locale, "Reserved", "المحجوز")}</th><th>{tr(locale, "Minimum", "الحد الأدنى")}</th><th>{tr(locale, "Status", "الحالة")}</th></tr></thead>
           <tbody>{branchStocks.length === 0 ? <tr><td colSpan={7} className="empty-state">{tr(locale, "No stock posted yet.", "لا توجد حركات مخزون بعد.")}</td></tr> : branchStocks.map(stock => <tr key={stock.id}>
-            <td>{stock.branch.code} — {stock.branch.nameEn}</td>
-            <td><strong>{stock.item.code}</strong><br/><small>{stock.item.nameEn}</small></td>
-            <td>{stock.item.itemType}</td>
+            <td>{stock.branch.code} — {localizedName(stock.branch)}</td>
+            <td><strong>{stock.item.code}</strong><br/><small>{localizedName(stock.item)}</small></td>
+            <td>{itemTypeLabel(stock.item.itemType)}</td>
             <td>{stock.quantityOnHand.toString()} {stock.item.stockUnit}</td>
             <td>{stock.reservedQty.toString()}</td>
             <td>{stock.item.minimumStockQty.toString()}</td>
-            <td>{stock.quantityOnHand.lte(stock.item.minimumStockQty) ? <strong className="critical-text">{tr(locale, "LOW", "منخفض")}</strong> : "OK"}</td>
+            <td>{stock.quantityOnHand.lte(stock.item.minimumStockQty) ? <strong className="critical-text">{tr(locale, "LOW", "منخفض")}</strong> : tr(locale, "OK", "طبيعي")}</td>
           </tr>)}</tbody>
         </table></div>
       </article>
 
       <article className="table-card">
-        <div className="table-toolbar"><h2>FEFO Lots</h2><span>{fefoLots.length} positive balances</span></div>
+        <div className="table-toolbar"><h2>{tr(locale, "FEFO Lots", "تشغيلات FEFO")}</h2><span>{fefoLots.length} {tr(locale, "positive balances", "أرصدة موجبة")}</span></div>
         <div className="table-wrap"><table>
-          <thead><tr><th>Expiry</th><th>Branch</th><th>Item</th><th>Lot</th><th>Supplier</th><th>On hand</th></tr></thead>
-          <tbody>{fefoLots.length === 0 ? <tr><td colSpan={6} className="empty-state">No lot stock available.</td></tr> : fefoLots.map(stock => <tr key={stock.id}>
-            <td>{stock.lot.expiryDate?.toISOString().slice(0,10) || "No expiry"}</td>
-            <td>{stock.branch.code}</td>
-            <td><strong>{stock.lot.item.code}</strong><br/><small>{stock.lot.item.nameEn}</small></td>
+          <thead><tr><th>{tr(locale, "Expiry", "الانتهاء")}</th><th>{tr(locale, "Branch", "الفرع")}</th><th>{tr(locale, "Item", "الصنف")}</th><th>{tr(locale, "Lot", "التشغيلة")}</th><th>{tr(locale, "Supplier", "المورد")}</th><th>{tr(locale, "On hand", "المتاح فعلياً")}</th></tr></thead>
+          <tbody>{fefoLots.length === 0 ? <tr><td colSpan={6} className="empty-state">{tr(locale, "No lot stock available.", "لا يوجد مخزون تشغيلات متاح.")}</td></tr> : fefoLots.map(stock => <tr key={stock.id}>
+            <td>{stock.lot.expiryDate?.toISOString().slice(0,10) || tr(locale, "No expiry", "بدون انتهاء")}</td>
+            <td>{stock.branch.code} — {localizedName(stock.branch)}</td>
+            <td><strong>{stock.lot.item.code}</strong><br/><small>{localizedName(stock.lot.item)}</small></td>
             <td>{stock.lot.lotNumber}</td>
-            <td>{stock.lot.supplier?.nameEn || "—"}</td>
+            <td>{stock.lot.supplier ? localizedName(stock.lot.supplier) : "—"}</td>
             <td>{stock.quantityOnHand.toString()} {stock.lot.item.stockUnit}</td>
           </tr>)}</tbody>
         </table></div>
@@ -121,14 +137,14 @@ export default async function InventoryPage() {
     </section>
 
     <section className="table-card detail-section">
-      <div className="table-toolbar"><h2>Recent Goods Receipts</h2><span>{receipts.length} shown</span></div>
+      <div className="table-toolbar"><h2>{tr(locale, "Recent Goods Receipts", "أحدث استلامات البضاعة")}</h2><span>{receipts.length} {tr(locale, "shown", "معروضة")}</span></div>
       <div className="table-wrap"><table>
-        <thead><tr><th>Receipt</th><th>Branch</th><th>Supplier</th><th>Status</th><th>Received</th><th>Lines</th></tr></thead>
-        <tbody>{receipts.length === 0 ? <tr><td colSpan={6} className="empty-state">No goods receipts yet.</td></tr> : receipts.map(receipt => <tr key={receipt.id}>
+        <thead><tr><th>{tr(locale, "Receipt", "الاستلام")}</th><th>{tr(locale, "Branch", "الفرع")}</th><th>{tr(locale, "Supplier", "المورد")}</th><th>{tr(locale, "Status", "الحالة")}</th><th>{tr(locale, "Received", "تاريخ الاستلام")}</th><th>{tr(locale, "Lines", "البنود")}</th></tr></thead>
+        <tbody>{receipts.length === 0 ? <tr><td colSpan={6} className="empty-state">{tr(locale, "No goods receipts yet.", "لا توجد استلامات بضاعة بعد.")}</td></tr> : receipts.map(receipt => <tr key={receipt.id}>
           <td><strong>{receipt.receiptNumber}</strong><br/><small>{receipt.supplierReference || "—"}</small></td>
-          <td>{receipt.branch.code}</td>
-          <td>{receipt.supplier.nameEn}</td>
-          <td>{receipt.status}</td>
+          <td>{receipt.branch.code} — {localizedName(receipt.branch)}</td>
+          <td>{localizedName(receipt.supplier)}</td>
+          <td>{statusLabel(locale, receipt.status)}</td>
           <td>{receipt.receivedAt.toISOString().replace("T"," ").slice(0,16)}</td>
           <td>{receipt.items.length}</td>
         </tr>)}</tbody>
