@@ -21,7 +21,7 @@ export default async function ProcurementPage() {
     }),
     prisma.inventoryItem.findMany({
       where: { organizationId: session.user.organizationId, status: "ACTIVE" },
-      select: { id: true, code: true, nameEn: true, stockUnit: true },
+      select: { id: true, code: true, nameEn: true, nameAr: true, stockUnit: true },
       orderBy: { nameEn: "asc" },
     }),
     prisma.supplier.findMany({
