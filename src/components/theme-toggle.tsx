@@ -18,7 +18,8 @@ export function ThemeToggle({ defaultTheme, labelLight, labelDark }: { defaultTh
     const saved = window.localStorage.getItem("family-lab-theme");
     const next = saved === "light" || saved === "dark" ? saved : preferred(defaultTheme);
     document.documentElement.dataset.theme = next;
-    setTheme(next);
+    const timer = window.setTimeout(() => setTheme(next), 0);
+    return () => window.clearTimeout(timer);
   }, [defaultTheme]);
 
   function toggle() {
