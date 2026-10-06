@@ -39,7 +39,11 @@ export async function POST(request: Request) {
   const diagnosis = text(body.diagnosis, 500);
   const pregnancyInfo = text(body.pregnancyInfo, 500);
   const fasting = body.fasting === true ? true : body.fasting === false ? false : null;
-  const requestedDiscountPercent = Number(body.discountPercent ?? 0);
+  const rawRequestedDiscountPercent = Number(body.discountPercent ?? 0);
+  if (!Number.isFinite(rawRequestedDiscountPercent) || rawRequestedDiscountPercent < 0 || rawRequestedDiscountPercent > 100) {
+    return NextResponse.json({ error: "invalid_discount_percent" }, { status: 400 });
+  }
+  const requestedDiscountPercent = Math.round(rawRequestedDiscountPercent * 100) / 100;
   const discountReason = text(body.discountReason, 1000);
   const suppliedDiscountApprovalRequestId = text(body.discountApprovalRequestId, 36) || null;
 
