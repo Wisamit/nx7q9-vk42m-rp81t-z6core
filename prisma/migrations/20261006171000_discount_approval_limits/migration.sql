@@ -52,6 +52,13 @@ CREATE TABLE `discount_approval_requests` (
   CONSTRAINT `discount_approval_approver_fkey` FOREIGN KEY (`approved_by_user_id`) REFERENCES `users`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
+ALTER TABLE `invoices`
+  ADD COLUMN `discount_approval_request_id` CHAR(36) NULL AFTER `discount_approved_at`,
+  ADD UNIQUE INDEX `invoices_discount_approval_request_key`(`discount_approval_request_id`),
+  ADD CONSTRAINT `invoices_discount_approval_request_fkey`
+    FOREIGN KEY (`discount_approval_request_id`) REFERENCES `discount_approval_requests`(`id`)
+    ON DELETE RESTRICT ON UPDATE CASCADE;
+
 INSERT IGNORE INTO `permissions` (`id`,`code`,`module`,`description`,`created_at`) VALUES
 (UUID(),'billing.discount.approve','billing','Approve order discounts above the requester limit',CURRENT_TIMESTAMP(3)),
 (UUID(),'billing.discount.limits.manage','billing','Configure role and user discount limits',CURRENT_TIMESTAMP(3));
