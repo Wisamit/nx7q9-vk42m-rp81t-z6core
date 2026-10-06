@@ -110,7 +110,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
             <td>{item.performedBranch?.nameEn || "—"}</td>
             <td>{packageSnapshot ? tr(locale, "Package", "باقة") + " " + packageSnapshot.packageCodeSnapshot : item.priceListItem?.priceList.code || "—"}</td>
             <td>{packageSnapshot ? tr(locale, "Included in package", "مشمول ضمن الباقة") : item.finalPriceSnapshot.toString() + " " + item.currency}</td>
-            <td>{item.results[0] ? <Link className="table-link" href={`/worklists/${item.id}`}>{statusLabel(locale, item.results[0].status)}{item.results[0].values.some(value => value.isCritical) ? " · CRITICAL" : ""}</Link> : "—"}</td>
+            <td>{item.results[0] ? <Link className="table-link" href={`/worklists/${item.id}`}>{statusLabel(locale, item.results[0].status)}{item.results[0].values.some(value => value.isCritical) ? " · " + tr(locale, "CRITICAL", "حرج") : ""}</Link> : "—"}</td>
             <td>{statusLabel(locale, item.status)}</td>
           </tr>;
           })}</tbody>
@@ -161,15 +161,15 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         <h2>{tr(locale, "Invoices", "الفواتير")}</h2>
         {order.invoices.length === 0 ? <p className="muted">{tr(locale, "No invoices.", "لا توجد فواتير.")}</p> :
           <div className="summary-list">{order.invoices.map(invoice => <div key={invoice.id}>
-            <span>{invoice.invoiceNumber} · {invoice.status}</span>
-            <strong>{invoice.total.toString()} {invoice.currency} · " + tr(locale, "Balance", "الرصيد") + " {invoice.balanceAmount.toString()}</strong>
+            <span>{invoice.invoiceNumber} · {statusLabel(locale, invoice.status)}</span>
+            <strong>{invoice.total.toString()} {invoice.currency} · {tr(locale, "Balance", "الرصيد")} {invoice.balanceAmount.toString()}</strong>
           </div>)}</div>}
       </article>
       <article className="detail-card">
         <h2>{tr(locale, "Status History", "سجل الحالات")}</h2>
         <div className="summary-list">{order.statusHistory.map(entry => <div key={entry.id}>
           <span>{entry.changedAt.toISOString().replace("T"," ").slice(0,19)} · {entry.changedBy.displayNameEn}</span>
-          <strong>{entry.fromStatus || "NEW"} → {entry.toStatus}</strong>
+          <strong>{entry.fromStatus ? statusLabel(locale, entry.fromStatus) : tr(locale, "NEW", "جديد")} → {statusLabel(locale, entry.toStatus)}</strong>
         </div>)}</div>
       </article>
     </section>
