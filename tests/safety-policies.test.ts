@@ -10,6 +10,7 @@ import {
 import { comparePricingCandidates } from "../src/lib/pricing-policy.ts";
 import { approverCanAuthorize, discountApprovalMode, effectiveDiscountLimit } from "../src/lib/discount-policy.ts";
 import { discountApprovalFingerprint } from "../src/lib/discount-approval.ts";
+import { creditNoteError, invoiceAdjustmentState, refundError } from "../src/lib/billing-adjustments.ts";
 
 test("specimen collection is only allowed from PLANNED with specimen type configured", () => {
   assert.equal(specimenActionError({ status: "PLANNED", action: "COLLECT", specimenTypeConfigured: true }), null);
@@ -272,4 +273,80 @@ test("discount approval fingerprint changes when financial context changes", () 
     discountApprovalFingerprint(base),
     discountApprovalFingerprint({ ...base, discountPercent: "11.00" }),
   );
+});
+
+
+test("credit notes cannot exceed the uncredited invoice amount", () => {
+  assert.equal(creditNoteError({
+    invoiceStatus: "PAID",
+    total: "100.0000",
+    credited: "25.0000",
+    requested: "75.0000",
+  }), null);
+  assert.equal(creditNoteError({
+    invoiceStatus: "PAID",
+    total: "100.0000",
+    credited: "25.0000",
+    requested: "75.0001",
+  }), "credit_exceeds_remaining_amount");
+});
+
+test("full credit closes invoice obligation without rewriting original total", () => {
+  assert.deepEqual(invoiceAdjustmentState({
+    total: "100.0000",
+    credited: "100.0000",
+    netPaid: "100.0000",
+  }), {
+    status: "CREDITED",
+    balance: "0.0000",
+    overpayment: "100.0000",
+    obligation: "0.0000",
+  });
+});
+
+test("refund reduces net paid and reopens an unpaid invoice balance", () => {
+  assert.deepEqual(invoiceAdjustmentState({
+    total: "100.0000",
+    credited: "0.0000",
+    netPaid: "60.0000",
+  }), {
+    status: "PARTIALLY_PAID",
+    balance: "40.0000",
+    overpayment: "0.0000",
+    obligation: "100.0000",
+  });
+});
+
+test("full credit plus full refund remains credited with zero balance", () => {
+  assert.deepEqual(invoiceAdjustmentState({
+    total: "100.0000",
+    credited: "100.0000",
+    netPaid: "0.0000",
+  }), {
+    status: "CREDITED",
+    balance: "0.0000",
+    overpayment: "0.0000",
+    obligation: "0.0000",
+  });
+});
+
+test("refund cannot exceed the remaining payment allocation", () => {
+  assert.equal(refundError({
+    paymentStatus: "POSTED",
+    allocated: "100.0000",
+    refundedForAllocation: "40.0000",
+    requested: "60.0000",
+  }), null);
+  assert.equal(refundError({
+    paymentStatus: "POSTED",
+    allocated: "100.0000",
+    refundedForAllocation: "40.0000",
+    requested: "60.0001",
+  }), "refund_exceeds_allocation");
+  assert.equal(refundError({
+    paymentStatus: "REFUNDED",
+    allocated: "100.0000",
+    refundedForAllocation: "100.0000",
+    requested: "1.0000",
+  }), "payment_not_refundable");
 });

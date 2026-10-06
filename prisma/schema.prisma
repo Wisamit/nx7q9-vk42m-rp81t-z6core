@@ -124,6 +124,16 @@ enum PaymentStatus {
   REFUNDED
 }
 
+enum CreditNoteStatus {
+  ISSUED
+  VOIDED
+}
+
+enum RefundStatus {
+  POSTED
+  VOIDED
+}
+
 enum SpecimenStatus {
   PLANNED
   COLLECTED
@@ -815,6 +825,8 @@ model Organization {
   invoices Invoice[]
   discountApprovalRequests DiscountApprovalRequest[]
   payments Payment[]
+  creditNotes CreditNote[]
+  refunds Refund[]
   specimens Specimen[]
   transferManifests SpecimenTransferManifest[]
   results LaboratoryResult[]
@@ -944,6 +956,8 @@ model Branch {
   invoices Invoice[]
   discountApprovalRequests DiscountApprovalRequest[]
   payments Payment[]
+  creditNotes CreditNote[]
+  refunds Refund[]
   collectedSpecimens Specimen[] @relation("SpecimenCollectionBranch")
   currentSpecimens Specimen[] @relation("SpecimenCurrentBranch")
   specimenEvents SpecimenEvent[]
@@ -1099,6 +1113,8 @@ model User {
   requestedDiscountApprovals DiscountApprovalRequest[] @relation("DiscountApprovalRequester")
   approvedDiscountApprovals DiscountApprovalRequest[] @relation("DiscountApprovalApprover")
   cashierPayments Payment[] @relation("PaymentCashier")
+  issuedCreditNotes CreditNote[] @relation("CreditNoteIssuer")
+  processedRefunds Refund[] @relation("RefundProcessor")
   orderStatusChanges OrderStatusHistory[] @relation("OrderStatusChanger")
   collectedSpecimens Specimen[] @relation("SpecimenCollector")
   receivedSpecimens Specimen[] @relation("SpecimenReceiver")
@@ -2204,6 +2220,7 @@ model Invoice {
   discountApprovalRequestId String? @unique @map("discount_approval_request_id") @db.Char(36)
   taxTotal        Decimal       @default(0) @map("tax_total") @db.Decimal(18, 4)
   total           Decimal       @default(0) @db.Decimal(18, 4)
+  creditedAmount  Decimal       @default(0) @map("credited_amount") @db.Decimal(18, 4)
   paidAmount      Decimal       @default(0) @map("paid_amount") @db.Decimal(18, 4)
   balanceAmount   Decimal       @default(0) @map("balance_amount") @db.Decimal(18, 4)
   issuedAt        DateTime      @default(now()) @map("issued_at") @db.DateTime(3)
@@ -2220,6 +2237,8 @@ model Invoice {
   discountApprovalRequest DiscountApprovalRequest? @relation("InvoiceDiscountApprovalRequest", fields: [discountApprovalRequestId], references: [id], onDelete: Restrict)
   lines        InvoiceLine[]
   allocations  PaymentAllocation[]
+  creditNotes  CreditNote[]
+  refunds      Refund[]
 
   @@unique([organizationId, invoiceNumber])
   @@index([branchId, issuedAt])
@@ -2246,6 +2265,7 @@ model InvoiceLine {
   invoice      Invoice       @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
   orderItem    OrderItem?    @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
   orderPackage OrderPackage? @relation(fields: [orderPackageId], references: [id], onDelete: Restrict)
+  creditNoteLines CreditNoteLine[]
 
   @@index([invoiceId])
   @@index([orderItemId])
@@ -2258,6 +2278,7 @@ model Payment {
   organizationId String        @map("organization_id") @db.Char(36)
   branchId       String        @map("branch_id") @db.Char(36)
   amount         Decimal       @db.Decimal(18, 4)
+  refundedAmount Decimal       @default(0) @map("refunded_amount") @db.Decimal(18, 4)
   currency       String        @db.Char(3)
   method         PaymentMethod
   status         PaymentStatus @default(POSTED)
@@ -2270,6 +2291,7 @@ model Payment {
   branch       Branch       @relation(fields: [branchId], references: [id], onDelete: Restrict)
   cashier      User         @relation("PaymentCashier", fields: [cashierUserId], references: [id], onDelete: Restrict)
   allocations  PaymentAllocation[]
+  refunds      Refund[]
 
   @@index([branchId, receivedAt])
   @@index([cashierUserId, receivedAt])
@@ -2288,6 +2310,92 @@ model PaymentAllocation {
   @@id([paymentId, invoiceId])
   @@index([invoiceId])
   @@map("payment_allocations")
+}
+
+model CreditNote {
+  id                     String           @id @default(uuid()) @db.Char(36)
+  organizationId         String           @map("organization_id") @db.Char(36)
+  branchId               String           @map("branch_id") @db.Char(36)
+  invoiceId              String           @map("invoice_id") @db.Char(36)
+  creditNoteNumber       String           @map("credit_note_number") @db.VarChar(50)
+  status                 CreditNoteStatus @default(ISSUED)
+  currency               String           @db.Char(3)
+  amount                 Decimal          @db.Decimal(18, 4)
+  reason                 String           @db.VarChar(1000)
+  invoiceTotalSnapshot   Decimal          @map("invoice_total_snapshot") @db.Decimal(18, 4)
+  creditedBeforeSnapshot Decimal          @map("credited_before_snapshot") @db.Decimal(18, 4)
+  balanceBeforeSnapshot  Decimal          @map("balance_before_snapshot") @db.Decimal(18, 4)
+  creditedAfterSnapshot  Decimal          @map("credited_after_snapshot") @db.Decimal(18, 4)
+  balanceAfterSnapshot   Decimal          @map("balance_after_snapshot") @db.Decimal(18, 4)
+  issuedByUserId         String           @map("issued_by_user_id") @db.Char(36)
+  issuedAt               DateTime         @default(now()) @map("issued_at") @db.DateTime(3)
+  createdAt              DateTime         @default(now()) @map("created_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  branch       Branch       @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  invoice      Invoice      @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  issuedBy     User         @relation("CreditNoteIssuer", fields: [issuedByUserId], references: [id], onDelete: Restrict)
+  lines        CreditNoteLine[]
+
+  @@unique([organizationId, creditNoteNumber])
+  @@index([branchId, issuedAt])
+  @@index([invoiceId, status, issuedAt])
+  @@index([issuedByUserId, issuedAt])
+  @@map("credit_notes")
+}
+
+model CreditNoteLine {
+  id            String   @id @default(uuid()) @db.Char(36)
+  creditNoteId  String   @map("credit_note_id") @db.Char(36)
+  invoiceLineId String?  @map("invoice_line_id") @db.Char(36)
+  description   String   @db.VarChar(255)
+  quantity      Decimal  @default(1) @db.Decimal(12, 3)
+  amount        Decimal  @db.Decimal(18, 4)
+  createdAt     DateTime @default(now()) @map("created_at") @db.DateTime(3)
+
+  creditNote  CreditNote   @relation(fields: [creditNoteId], references: [id], onDelete: Restrict)
+  invoiceLine InvoiceLine? @relation(fields: [invoiceLineId], references: [id], onDelete: Restrict)
+
+  @@index([creditNoteId])
+  @@index([invoiceLineId])
+  @@map("credit_note_lines")
+}
+
+model Refund {
+  id                           String       @id @default(uuid()) @db.Char(36)
+  organizationId               String       @map("organization_id") @db.Char(36)
+  branchId                     String       @map("branch_id") @db.Char(36)
+  paymentId                    String       @map("payment_id") @db.Char(36)
+  invoiceId                    String       @map("invoice_id") @db.Char(36)
+  refundNumber                 String       @map("refund_number") @db.VarChar(50)
+  status                       RefundStatus @default(POSTED)
+  currency                     String       @db.Char(3)
+  amount                       Decimal      @db.Decimal(18, 4)
+  reason                       String       @db.VarChar(1000)
+  reference                    String?      @db.VarChar(150)
+  paymentAmountSnapshot        Decimal      @map("payment_amount_snapshot") @db.Decimal(18, 4)
+  allocationAmountSnapshot     Decimal      @map("allocation_amount_snapshot") @db.Decimal(18, 4)
+  refundedBeforeSnapshot       Decimal      @map("refunded_before_snapshot") @db.Decimal(18, 4)
+  invoicePaidBeforeSnapshot    Decimal      @map("invoice_paid_before_snapshot") @db.Decimal(18, 4)
+  invoiceBalanceBeforeSnapshot Decimal      @map("invoice_balance_before_snapshot") @db.Decimal(18, 4)
+  invoicePaidAfterSnapshot     Decimal      @map("invoice_paid_after_snapshot") @db.Decimal(18, 4)
+  invoiceBalanceAfterSnapshot  Decimal      @map("invoice_balance_after_snapshot") @db.Decimal(18, 4)
+  processedByUserId            String       @map("processed_by_user_id") @db.Char(36)
+  processedAt                  DateTime     @default(now()) @map("processed_at") @db.DateTime(3)
+  createdAt                    DateTime     @default(now()) @map("created_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  branch       Branch       @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  payment      Payment      @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  invoice      Invoice      @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  processedBy  User         @relation("RefundProcessor", fields: [processedByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([organizationId, refundNumber])
+  @@index([branchId, processedAt])
+  @@index([invoiceId, status, processedAt])
+  @@index([paymentId, status, processedAt])
+  @@index([processedByUserId, processedAt])
+  @@map("refunds")
 }
 
 
