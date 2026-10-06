@@ -122,15 +122,16 @@ test("department scope restricts access once explicit departments are assigned",
   assert.equal(departmentScopeAllows(["hematology"], null), false);
 });
 
-test("pricing precedence is CONTRACT > CLIENT > BRANCH > ORGANIZATION", () => {
+test("pricing precedence is CONTRACT > CLIENT > SOURCE > BRANCH > ORGANIZATION", () => {
   const candidates = [
     { scopeType: "ORGANIZATION" as const, priority: 999, effectiveFrom: new Date("2026-01-01") },
-    { scopeType: "BRANCH" as const, priority: 1, effectiveFrom: new Date("2026-01-01") },
+    { scopeType: "BRANCH" as const, priority: 999, effectiveFrom: new Date("2026-01-01") },
+    { scopeType: "SOURCE" as const, priority: 1, effectiveFrom: new Date("2026-01-01") },
     { scopeType: "CLIENT" as const, priority: 1, effectiveFrom: new Date("2026-01-01") },
     { scopeType: "CONTRACT" as const, priority: 0, effectiveFrom: new Date("2025-01-01") },
   ].sort(comparePricingCandidates);
 
-  assert.deepEqual(candidates.map(item => item.scopeType), ["CONTRACT", "CLIENT", "BRANCH", "ORGANIZATION"]);
+  assert.deepEqual(candidates.map(item => item.scopeType), ["CONTRACT", "CLIENT", "SOURCE", "BRANCH", "ORGANIZATION"]);
 });
 
 test("pricing priority wins within the same scope", () => {
@@ -149,4 +150,14 @@ test("newer effective date wins when scope and priority are equal", () => {
   ].sort(comparePricingCandidates);
 
   assert.equal(candidates[0].effectiveFrom.toISOString().slice(0, 10), "2026-10-01");
+});
+
+
+test("source pricing priority wins within the source scope", () => {
+  const candidates = [
+    { scopeType: "SOURCE" as const, priority: 10, effectiveFrom: new Date("2026-09-01") },
+    { scopeType: "SOURCE" as const, priority: 20, effectiveFrom: new Date("2026-01-01") },
+  ].sort(comparePricingCandidates);
+
+  assert.equal(candidates[0].priority, 20);
 });
