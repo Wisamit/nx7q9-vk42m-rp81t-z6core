@@ -5,12 +5,14 @@ import { prisma } from "@/lib/db";
 import { MicrobiologyCaseEditor } from "@/components/microbiology-case-editor";
 import { MicrobiologyFinalWorkflow } from "@/components/microbiology-final-workflow";
 import { ValidationHoldPanel } from "@/components/validation-hold-panel";
+import { getUiLocale, sexLabel, statusLabel, tr } from "@/lib/ui-i18n";
 
 export const dynamic = "force-dynamic";
 
 export default async function MicrobiologyCasePage({ params }: { params: Promise<{ id: string }> }) {
   const session = await requirePermission("microbiology.view");
   const permissions = permissionSet(session);
+  const locale = getUiLocale(session.user.preferredLocale);
   const { id } = await params;
   const branchIds = session.user.branchScopes.map(scope => scope.branchId);
 
@@ -64,12 +66,12 @@ export default async function MicrobiologyCasePage({ params }: { params: Promise
   const [organisms, antibiotics] = await Promise.all([
     prisma.organism.findMany({
       where: { organizationId: session.user.organizationId, status: "ACTIVE" },
-      select: { id: true, code: true, nameEn: true },
+      select: { id: true, code: true, nameEn: true, nameAr: true },
       orderBy: { nameEn: "asc" },
     }),
     prisma.antibiotic.findMany({
       where: { organizationId: session.user.organizationId, status: "ACTIVE" },
-      select: { id: true, code: true, nameEn: true },
+      select: { id: true, code: true, nameEn: true, nameAr: true },
       orderBy: { nameEn: "asc" },
     }),
   ]);
@@ -79,38 +81,39 @@ export default async function MicrobiologyCasePage({ params }: { params: Promise
   return <main className="catalog-shell">
     <header className="page-header">
       <div>
-        <p className="eyebrow">Microbiology Case</p>
-        <h1>{microbiologyCase.orderItem.test.code} — {microbiologyCase.orderItem.test.nameEn}</h1>
-        <p className="muted">{microbiologyCase.orderItem.order.accessionNumber} · {microbiologyCase.orderItem.order.patient.patientNumber} · {microbiologyCase.orderItem.order.patient.fullNameEn}</p>
+        <p className="eyebrow">{tr(locale, "Microbiology Case", "حالة أحياء دقيقة")}</p>
+        <h1>{microbiologyCase.orderItem.test.code} — {locale === "ar" ? microbiologyCase.orderItem.test.nameAr || microbiologyCase.orderItem.test.nameEn : microbiologyCase.orderItem.test.nameEn}</h1>
+        <p className="muted">{microbiologyCase.orderItem.order.accessionNumber} · {microbiologyCase.orderItem.order.patient.patientNumber} · {locale === "ar" ? microbiologyCase.orderItem.order.patient.fullNameAr || microbiologyCase.orderItem.order.patient.fullNameEn : microbiologyCase.orderItem.order.patient.fullNameEn}</p>
       </div>
-      <Link className="secondary-link" href="/microbiology">Back to Microbiology</Link>
+      <Link className="secondary-link" href="/microbiology">{tr(locale, "Back to Microbiology", "العودة للأحياء الدقيقة")}</Link>
     </header>
 
     <section className="detail-grid">
       <article className="detail-card">
-        <h2>Patient & Order</h2>
+        <h2>{tr(locale, "Patient & Order", "المريض والطلب")}</h2>
         <dl>
-          <dt>Patient</dt><dd>{microbiologyCase.orderItem.order.patient.fullNameEn}</dd>
-          <dt>Date of birth</dt><dd>{microbiologyCase.orderItem.order.patient.dateOfBirth?.toISOString().slice(0,10) || "—"}</dd>
-          <dt>Sex at birth</dt><dd>{microbiologyCase.orderItem.order.patient.sexAtBirth}</dd>
-          <dt>Accession</dt><dd>{microbiologyCase.orderItem.order.accessionNumber}</dd>
-          <dt>Ordering branch</dt><dd>{microbiologyCase.orderItem.order.orderingBranch.nameEn}</dd>
+          <dt>{tr(locale, "Patient", "المريض")}</dt><dd>{locale === "ar" ? microbiologyCase.orderItem.order.patient.fullNameAr || microbiologyCase.orderItem.order.patient.fullNameEn : microbiologyCase.orderItem.order.patient.fullNameEn}</dd>
+          <dt>{tr(locale, "Date of birth", "تاريخ الميلاد")}</dt><dd>{microbiologyCase.orderItem.order.patient.dateOfBirth?.toISOString().slice(0,10) || "—"}</dd>
+          <dt>{tr(locale, "Sex at birth", "الجنس عند الولادة")}</dt><dd>{sexLabel(locale, microbiologyCase.orderItem.order.patient.sexAtBirth)}</dd>
+          <dt>{tr(locale, "Accession", "رقم الطلب")}</dt><dd>{microbiologyCase.orderItem.order.accessionNumber}</dd>
+          <dt>{tr(locale, "Ordering branch", "فرع الطلب")}</dt><dd>{microbiologyCase.orderItem.order.orderingBranch.nameEn}</dd>
         </dl>
       </article>
       <article className="detail-card">
-        <h2>Case & Specimen</h2>
+        <h2>{tr(locale, "Case & Specimen", "الحالة والعينة")}</h2>
         <dl>
-          <dt>Case status</dt><dd>{microbiologyCase.status}</dd>
-          <dt>Culture status</dt><dd>{microbiologyCase.cultureStatus}</dd>
-          <dt>Performing branch</dt><dd>{microbiologyCase.performingBranch.nameEn}</dd>
-          <dt>Barcode</dt><dd><strong>{microbiologyCase.specimen.barcode}</strong></dd>
-          <dt>Specimen</dt><dd>{microbiologyCase.specimen.specimenType?.nameEn || "—"}</dd>
-          <dt>Container</dt><dd>{microbiologyCase.specimen.container?.nameEn || "—"}</dd>
+          <dt>{tr(locale, "Case status", "حالة الحالة")}</dt><dd>{statusLabel(locale, microbiologyCase.status)}</dd>
+          <dt>{tr(locale, "Culture status", "حالة الزرع")}</dt><dd>{statusLabel(locale, microbiologyCase.cultureStatus)}</dd>
+          <dt>{tr(locale, "Performing branch", "فرع التنفيذ")}</dt><dd>{microbiologyCase.performingBranch.nameEn}</dd>
+          <dt>{tr(locale, "Barcode", "الباركود")}</dt><dd><strong>{microbiologyCase.specimen.barcode}</strong></dd>
+          <dt>{tr(locale, "Specimen", "العينة")}</dt><dd>{microbiologyCase.specimen.specimenType?.nameEn || "—"}</dd>
+          <dt>{tr(locale, "Container", "الحاوية")}</dt><dd>{microbiologyCase.specimen.container?.nameEn || "—"}</dd>
         </dl>
       </article>
     </section>
 
     {!locked && permissions.has("microbiology.enter") && <MicrobiologyCaseEditor
+      locale={locale}
       caseId={microbiologyCase.id}
       cultureStatus={microbiologyCase.cultureStatus}
       preliminaryComment={microbiologyCase.preliminaryComment || ""}
@@ -126,10 +129,10 @@ export default async function MicrobiologyCasePage({ params }: { params: Promise
 
     <section className="detail-grid detail-section">
       <article className="table-card">
-        <div className="table-toolbar"><h2>Culture Observations</h2><span>{microbiologyCase.observations.length}</span></div>
+        <div className="table-toolbar"><h2>{tr(locale, "Culture Observations", "ملاحظات الزرع")}</h2><span>{microbiologyCase.observations.length}</span></div>
         <div className="table-wrap"><table>
-          <thead><tr><th>Time</th><th>Type</th><th>Observation</th><th>Entered by</th></tr></thead>
-          <tbody>{microbiologyCase.observations.length === 0 ? <tr><td colSpan={4} className="empty-state">No culture observations recorded.</td></tr> : microbiologyCase.observations.map(item => <tr key={item.id}>
+          <thead><tr><th>{tr(locale, "Time", "الوقت")}</th><th>{tr(locale, "Type", "النوع")}</th><th>{tr(locale, "Observation", "الملاحظة")}</th><th>{tr(locale, "Entered by", "أُدخل بواسطة")}</th></tr></thead>
+          <tbody>{microbiologyCase.observations.length === 0 ? <tr><td colSpan={4} className="empty-state">{tr(locale, "No culture observations recorded.", "لا توجد ملاحظات زرع مسجلة.")}</td></tr> : microbiologyCase.observations.map(item => <tr key={item.id}>
             <td>{item.observedAt.toISOString().replace("T"," ").slice(0,19)}</td>
             <td>{item.observationType}</td>
             <td>{item.observationText}</td>
@@ -139,20 +142,21 @@ export default async function MicrobiologyCasePage({ params }: { params: Promise
       </article>
 
       <article className="detail-card">
-        <h2>Interpretive Comments</h2>
+        <h2>{tr(locale, "Interpretive Comments", "التعليقات التفسيرية")}</h2>
         <dl>
-          <dt>Preliminary</dt><dd>{microbiologyCase.preliminaryComment || "—"}</dd>
-          <dt>Final</dt><dd>{microbiologyCase.finalComment || "Not finalized"}</dd>
-          <dt>Created by</dt><dd>{microbiologyCase.createdBy.displayNameEn}</dd>
-          <dt>Finalized by</dt><dd>{microbiologyCase.finalizedBy?.displayNameEn || "—"}</dd>
+          <dt>{tr(locale, "Preliminary", "أولي")}</dt><dd>{microbiologyCase.preliminaryComment || "—"}</dd>
+          <dt>{tr(locale, "Final", "نهائي")}</dt><dd>{microbiologyCase.finalComment || tr(locale, "Not finalized", "غير نهائي")}</dd>
+          <dt>{tr(locale, "Created by", "أنشئ بواسطة")}</dt><dd>{microbiologyCase.createdBy.displayNameEn}</dd>
+          <dt>{tr(locale, "Finalized by", "تم الإنهاء بواسطة")}</dt><dd>{microbiologyCase.finalizedBy?.displayNameEn || "—"}</dd>
         </dl>
-        <p className="muted">Final microbiology content is bridged into the normal versioned LaboratoryResult workflow before verification and release.</p>
+        <p className="muted">{tr(locale, "Final microbiology content is bridged into the normal versioned LaboratoryResult workflow before verification and release.", "يتم ربط المحتوى النهائي للأحياء الدقيقة بمسار LaboratoryResult ذي الإصدارات قبل التحقق والإصدار.")}</p>
       </article>
     </section>
 
 
     <MicrobiologyFinalWorkflow
       caseId={microbiologyCase.id}
+      locale={locale}
       resultId={microbiologyCase.result?.id || null}
       resultStatus={microbiologyCase.result?.status || null}
       finalComment={microbiologyCase.finalComment || ""}
@@ -164,6 +168,7 @@ export default async function MicrobiologyCasePage({ params }: { params: Promise
 
     {microbiologyCase.result && <ValidationHoldPanel
       resultId={microbiologyCase.result.id}
+      locale={locale}
       canReview={permissions.has("validation_holds.review")}
       events={microbiologyCase.result.validationHoldEvents.map(event => ({
         id: event.id,
@@ -178,16 +183,16 @@ export default async function MicrobiologyCasePage({ params }: { params: Promise
     />}
 
     <section className="detail-section">
-      <h2>Isolates & Susceptibility</h2>
-      {microbiologyCase.isolates.length === 0 ? <div className="detail-card"><p className="empty-state">No organisms isolated.</p></div> :
+      <h2>{tr(locale, "Isolates & Susceptibility", "العزلات والحساسية")}</h2>
+      {microbiologyCase.isolates.length === 0 ? <div className="detail-card"><p className="empty-state">{tr(locale, "No organisms isolated.", "لم يتم عزل كائنات دقيقة.")}</p></div> :
         microbiologyCase.isolates.map(isolate => <article className="detail-card detail-section" key={isolate.id}>
-          <h3>Isolate #{isolate.sequenceNumber}: {isolate.organism.code} — {isolate.organism.nameEn}</h3>
-          <p className="muted">{isolate.quantityText || "Quantity not specified"}{isolate.colonyNotes ? " · " + isolate.colonyNotes : ""}</p>
-          {isolate.susceptibilityTests.length === 0 ? <p className="empty-state">No susceptibility panel recorded.</p> :
+          <h3>{tr(locale, "Isolate", "العزلة")} #{isolate.sequenceNumber}: {isolate.organism.code} — {isolate.organism.nameEn}</h3>
+          <p className="muted">{isolate.quantityText || tr(locale, "Quantity not specified", "الكمية غير محددة")}{isolate.colonyNotes ? " · " + isolate.colonyNotes : ""}</p>
+          {isolate.susceptibilityTests.length === 0 ? <p className="empty-state">{tr(locale, "No susceptibility panel recorded.", "لا توجد لوحة حساسية مسجلة.")}</p> :
             isolate.susceptibilityTests.map(test => <div className="table-wrap" key={test.id}>
-              <p><strong>{test.method || "Method not specified"}</strong> · {test.testedAt.toISOString().replace("T"," ").slice(0,19)} · {test.enteredBy.displayNameEn}</p>
+              <p><strong>{test.method || tr(locale, "Method not specified", "الطريقة غير محددة")}</strong> · {test.testedAt.toISOString().replace("T"," ").slice(0,19)} · {test.enteredBy.displayNameEn}</p>
               <table>
-                <thead><tr><th>Antibiotic</th><th>S/I/R</th><th>MIC</th><th>Zone</th><th>Breakpoint snapshot</th></tr></thead>
+                <thead><tr><th>{tr(locale, "Antibiotic", "المضاد الحيوي")}</th><th>S/I/R</th><th>MIC</th><th>{tr(locale, "Zone", "القطر")}</th><th>{tr(locale, "Breakpoint snapshot", "حد التفسير المحفوظ")}</th></tr></thead>
                 <tbody>{test.results.map(result => <tr key={result.id}>
                   <td><strong>{result.antibioticCodeSnapshot}</strong><br/><small>{result.antibioticNameEnSnapshot}</small></td>
                   <td>{result.interpretation}</td>

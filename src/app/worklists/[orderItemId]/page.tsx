@@ -8,6 +8,7 @@ import { ResultWorkflowActions } from "@/components/result-workflow-actions";
 import { ReflexReviewPanel } from "@/components/reflex-review-panel";
 import { ValidationHoldPanel } from "@/components/validation-hold-panel";
 import { ResultRepeatPanel } from "@/components/result-repeat-panel";
+import { getUiLocale, sexLabel, statusLabel, tr } from "@/lib/ui-i18n";
 
 export const dynamic = "force-dynamic";
 
@@ -33,6 +34,7 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
   const session = await requirePermission("results.enter");
   const { orderItemId } = await params;
   const permissions = permissionSet(session);
+  const locale = getUiLocale(session.user.preferredLocale);
   const branchIds = session.user.branchScopes.map(scope => scope.branchId);
 
   const item = await prisma.orderItem.findFirst({
@@ -133,12 +135,12 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
   if (!readySpecimen || !readySpecimen.currentBranchId || !branchIds.includes(readySpecimen.currentBranchId)) {
     return <main className="catalog-shell result-workspace">
       <header className="page-header">
-        <div><p className="eyebrow">Result Entry</p><h1>{item.testCodeSnapshot} — {item.testNameEnSnapshot}</h1></div>
-        <Link className="secondary-link" href="/worklists">Back to Worklists</Link>
+        <div><p className="eyebrow">{tr(locale, "Result Entry", "إدخال النتائج")}</p><h1>{item.testCodeSnapshot} — {item.testNameEnSnapshot}</h1></div>
+        <Link className="secondary-link" href="/worklists">{tr(locale, "Back to Worklists", "العودة لقوائم العمل")}</Link>
       </header>
       <section className="detail-card">
-        <h2>Specimen not ready</h2>
-        <p className="muted">A received specimen at one of your authorized branches is required before manual result entry.</p>
+        <h2>{tr(locale, "Specimen not ready", "العينة غير جاهزة")}</h2>
+        <p className="muted">{tr(locale, "A received specimen at one of your authorized branches is required before manual result entry.", "يجب استلام العينة في أحد الفروع المصرح لك بها قبل إدخال النتيجة يدويًا.")}</p>
       </section>
     </main>;
   }
@@ -209,44 +211,44 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
         <h1>{item.testCodeSnapshot} — {item.testNameEnSnapshot}</h1>
         <p className="muted">{item.order.accessionNumber} · {item.order.patient.patientNumber} · {item.order.patient.fullNameEn}</p>
       </div>
-      <Link className="secondary-link" href="/worklists">Back to Worklists</Link>
+      <Link className="secondary-link" href="/worklists">{tr(locale, "Back to Worklists", "العودة لقوائم العمل")}</Link>
     </header>
 
     <section className="result-context-strip">
-      <div><span>Accession</span><strong>{item.order.accessionNumber}</strong></div>
-      <div><span>Patient</span><strong>{item.order.patient.patientNumber}</strong><small>{item.order.patient.fullNameEn}</small></div>
-      <div><span>Specimen</span><strong className="barcode-text">{readySpecimen.barcode}</strong><small>{readySpecimen.status}</small></div>
-      <div><span>Priority</span><strong className={"status-badge priority-" + item.order.priority.toLowerCase()}>{item.order.priority}</strong></div>
-      <div><span>Result</span><strong className={"status-badge status-" + (latestResult?.status || "DRAFT").toLowerCase().replaceAll("_","-")}>{latestResult?.status || "DRAFT"}</strong></div>
+      <div><span>{tr(locale, "Accession", "رقم الطلب")}</span><strong>{item.order.accessionNumber}</strong></div>
+      <div><span>{tr(locale, "Patient", "المريض")}</span><strong>{item.order.patient.patientNumber}</strong><small>{locale === "ar" ? item.order.patient.fullNameAr || item.order.patient.fullNameEn : item.order.patient.fullNameEn}</small></div>
+      <div><span>{tr(locale, "Specimen", "العينة")}</span><strong className="barcode-text">{readySpecimen.barcode}</strong><small>{statusLabel(locale, readySpecimen.status)}</small></div>
+      <div><span>{tr(locale, "Priority", "الأولوية")}</span><strong className={"status-badge priority-" + item.order.priority.toLowerCase()}>{tr(locale, item.order.priority, item.order.priority === "STAT" ? "فوري" : item.order.priority === "URGENT" ? "عاجل" : "عادي")}</strong></div>
+      <div><span>{tr(locale, "Result", "النتيجة")}</span><strong className={"status-badge status-" + (latestResult?.status || "DRAFT").toLowerCase().replaceAll("_","-")}>{latestResult?.status || "DRAFT"}</strong></div>
     </section>
 
     <section className="detail-grid result-context-cards">
       <article className="detail-card">
-        <h2>Patient & Order</h2>
+        <h2>{tr(locale, "Patient & Order", "المريض والطلب")}</h2>
         <dl>
-          <dt>Patient</dt><dd>{item.order.patient.fullNameEn}</dd>
-          <dt>Date of birth</dt><dd>{item.order.patient.dateOfBirth?.toISOString().slice(0,10) || "—"}</dd>
-          <dt>Sex at birth</dt><dd>{item.order.patient.sexAtBirth}</dd>
-          <dt>Priority</dt><dd>{item.order.priority}</dd>
-          <dt>Department</dt><dd>{item.test.department?.nameEn || "Unassigned"}</dd>
-          <dt>Method</dt><dd>{item.test.method?.nameEn || "Not configured"}</dd>
+          <dt>{tr(locale, "Patient", "المريض")}</dt><dd>{item.order.patient.fullNameEn}</dd>
+          <dt>{tr(locale, "Date of birth", "تاريخ الميلاد")}</dt><dd>{item.order.patient.dateOfBirth?.toISOString().slice(0,10) || "—"}</dd>
+          <dt>{tr(locale, "Sex at birth", "الجنس عند الولادة")}</dt><dd>{sexLabel(locale, item.order.patient.sexAtBirth)}</dd>
+          <dt>{tr(locale, "Priority", "الأولوية")}</dt><dd>{tr(locale, item.order.priority, item.order.priority === "STAT" ? "فوري" : item.order.priority === "URGENT" ? "عاجل" : "عادي")}</dd>
+          <dt>{tr(locale, "Department", "القسم")}</dt><dd>{locale === "ar" ? item.test.department?.nameAr || item.test.department?.nameEn || tr(locale, "Unassigned", "غير معين") : item.test.department?.nameEn || "Unassigned"}</dd>
+          <dt>{tr(locale, "Method", "الطريقة")}</dt><dd>{item.test.method?.nameEn || "Not configured"}</dd>
         </dl>
       </article>
       <article className="detail-card">
-        <h2>Specimen</h2>
+        <h2>{tr(locale, "Specimen", "العينة")}</h2>
         <dl>
-          <dt>Barcode</dt><dd><strong>{readySpecimen.barcode}</strong></dd>
-          <dt>Type</dt><dd>{readySpecimen.specimenType?.nameEn || "—"}</dd>
-          <dt>Container</dt><dd>{readySpecimen.container?.nameEn || "—"}</dd>
-          <dt>Status</dt><dd>{readySpecimen.status}</dd>
-          <dt>Location</dt><dd>{readySpecimen.currentBranch?.nameEn || latestResult?.performingBranch.nameEn || "—"}</dd>
+          <dt>{tr(locale, "Barcode", "الباركود")}</dt><dd><strong>{readySpecimen.barcode}</strong></dd>
+          <dt>{tr(locale, "Type", "النوع")}</dt><dd>{readySpecimen.specimenType?.nameEn || "—"}</dd>
+          <dt>{tr(locale, "Container", "الحاوية")}</dt><dd>{readySpecimen.container?.nameEn || "—"}</dd>
+          <dt>{tr(locale, "Status", "الحالة")}</dt><dd>{statusLabel(locale, readySpecimen.status)}</dd>
+          <dt>{tr(locale, "Location", "الموقع")}</dt><dd>{readySpecimen.currentBranch?.nameEn || latestResult?.performingBranch.nameEn || "—"}</dd>
         </dl>
       </article>
     </section>
 
     <section className="detail-card detail-section result-entry-surface">
-      <div className="section-title-row"><div><p className="eyebrow">Analytical workflow</p><h2>Result Values</h2></div><span className="keyboard-hint">Enter values → review flags → verify</span></div>
-      <p className="muted">Reference intervals are matched by effective date, branch, method, sex and patient age when configured. The matched values are snapshotted with the result.</p>
+      <div className="section-title-row"><div><p className="eyebrow">{tr(locale, "Analytical workflow", "المسار التحليلي")}</p><h2>{tr(locale, "Result Values", "قيم النتائج")}</h2></div><span className="keyboard-hint">{tr(locale, "Enter values → review flags → verify", "أدخل القيم ← راجع العلامات ← تحقق")}</span></div>
+      <p className="muted">{tr(locale, "Reference intervals are matched by effective date, branch, method, sex and patient age when configured. The matched values are snapshotted with the result.", "تُطابق المجالات المرجعية حسب تاريخ السريان والفرع والطريقة والجنس وعمر المريض عند تهيئتها، وتُحفظ القيم المستخدمة تاريخيًا مع النتيجة.")}</p>
       <ResultEntryForm
         orderItemId={item.id}
         specimenId={readySpecimen.id}
@@ -261,10 +263,12 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
           : null}
         canVerify={permissions.has("results.verify")}
         commentTemplates={commentTemplates}
+        locale={locale}
       />
 
       {latestResult && <ResultRepeatPanel
         resultId={latestResult.id}
+        locale={locale}
         events={latestResult.repeatEvents.map(event => ({
           id: event.id,
           type: event.type,
@@ -277,6 +281,7 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
       {latestResult && <ReflexReviewPanel
         resultId={latestResult.id}
         canReview={permissions.has("reflex.review")}
+        locale={locale}
         events={latestResult.reflexEvents.map(event => ({
           id: event.id,
           status: event.status,
@@ -293,6 +298,7 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
       {latestResult && <ValidationHoldPanel
         resultId={latestResult.id}
         canReview={permissions.has("validation_holds.review")}
+        locale={locale}
         events={latestResult.validationHoldEvents.map(event => ({
           id: event.id,
           status: event.status,
@@ -307,7 +313,7 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
     </section>
 
     {latestResult && <section className="detail-card detail-section">
-      <h2>Validation, Release & Amendment</h2>
+      <h2>{tr(locale, "Validation, Release & Amendment", "التحقق والإصدار والتعديل")}</h2>
       <ResultWorkflowActions
         resultId={latestResult.id}
         resultStatus={latestResult.status}
@@ -332,24 +338,25 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
         canCommunicate={permissions.has("critical.communicate")}
         canRelease={permissions.has("results.release")}
         canAmend={permissions.has("results.amend")}
+        locale={locale}
       />
-      {permissions.has("reports.view") && <p><Link className="secondary-link" href={`/reports/${item.orderId}`}>Open Diagnostic Report</Link></p>}
+      {permissions.has("reports.view") && <p><Link className="secondary-link" href={`/reports/${item.orderId}`}>{tr(locale, "Open Diagnostic Report", "فتح التقرير التشخيصي")}</Link></p>}
     </section>}
 
     {latestResult && <section className="detail-card detail-section">
-      <h2>Result Audit Context</h2>
+      <h2>{tr(locale, "Result Audit Context", "سياق تدقيق النتيجة")}</h2>
       <dl>
-        <dt>Version</dt><dd>{latestResult.version}</dd>
-        <dt>Source</dt><dd>{latestResult.source}{latestResult.analyzerCodeSnapshot ? " · " + latestResult.analyzerCodeSnapshot + (latestResult.analyzerNameSnapshot ? " — " + latestResult.analyzerNameSnapshot : "") : ""}</dd>
-        <dt>Entered by</dt><dd>{latestResult.enteredBy.displayNameEn}</dd>
-        <dt>Entered at</dt><dd>{latestResult.enteredAt.toISOString().replace("T"," ").slice(0,19)}</dd>
-        <dt>Verification mode</dt><dd>{latestResult.autoVerified ? "AUTOVERIFICATION" : "MANUAL"}</dd>
-        <dt>Verified by</dt><dd>{latestResult.autoVerified ? "System policy" : latestResult.verifiedBy?.displayNameEn || "—"}</dd>
-        <dt>Verified at</dt><dd>{latestResult.verifiedAt?.toISOString().replace("T"," ").slice(0,19) || "—"}</dd>
-        <dt>Released by</dt><dd>{latestResult.releasedBy?.displayNameEn || "—"}</dd>
-        <dt>Released at</dt><dd>{latestResult.releasedAt?.toISOString().replace("T"," ").slice(0,19) || "—"}</dd>
-        <dt>Version</dt><dd>{latestResult.version}{latestResult.amendedFromId ? " · amendment" : ""}</dd>
-        <dt>Amendment reason</dt><dd>{latestResult.amendmentReason || "—"}</dd>
+        <dt>{tr(locale, "Version", "الإصدار")}</dt><dd>{latestResult.version}</dd>
+        <dt>{tr(locale, "Source", "المصدر")}</dt><dd>{latestResult.source}{latestResult.analyzerCodeSnapshot ? " · " + latestResult.analyzerCodeSnapshot + (latestResult.analyzerNameSnapshot ? " — " + latestResult.analyzerNameSnapshot : "") : ""}</dd>
+        <dt>{tr(locale, "Entered by", "أُدخل بواسطة")}</dt><dd>{latestResult.enteredBy.displayNameEn}</dd>
+        <dt>{tr(locale, "Entered at", "وقت الإدخال")}</dt><dd>{latestResult.enteredAt.toISOString().replace("T"," ").slice(0,19)}</dd>
+        <dt>{tr(locale, "Verification mode", "طريقة التحقق")}</dt><dd>{latestResult.autoVerified ? "AUTOVERIFICATION" : "MANUAL"}</dd>
+        <dt>{tr(locale, "Verified by", "تم التحقق بواسطة")}</dt><dd>{latestResult.autoVerified ? tr(locale, "System policy", "سياسة النظام") : latestResult.verifiedBy?.displayNameEn || "—"}</dd>
+        <dt>{tr(locale, "Verified at", "وقت التحقق")}</dt><dd>{latestResult.verifiedAt?.toISOString().replace("T"," ").slice(0,19) || "—"}</dd>
+        <dt>{tr(locale, "Released by", "تم الإصدار بواسطة")}</dt><dd>{latestResult.releasedBy?.displayNameEn || "—"}</dd>
+        <dt>{tr(locale, "Released at", "وقت الإصدار")}</dt><dd>{latestResult.releasedAt?.toISOString().replace("T"," ").slice(0,19) || "—"}</dd>
+        <dt>{tr(locale, "Version", "الإصدار")}</dt><dd>{latestResult.version}{latestResult.amendedFromId ? " · " + tr(locale, "amendment", "تعديل") : ""}</dd>
+        <dt>{tr(locale, "Amendment reason", "سبب التعديل")}</dt><dd>{latestResult.amendmentReason || "—"}</dd>
       </dl>
     </section>}
   </main>;

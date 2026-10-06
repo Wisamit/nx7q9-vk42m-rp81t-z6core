@@ -3,8 +3,9 @@
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 
-export function PortalChangePasswordForm() {
+export function PortalChangePasswordForm({ locale }: { locale: "ar" | "en" }) {
   const router = useRouter();
+  const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
 
@@ -14,7 +15,7 @@ export function PortalChangePasswordForm() {
     const password = String(form.get("password") || "");
     const confirm = String(form.get("confirm") || "");
     if (password !== confirm) {
-      setMessage("Passwords do not match.");
+      setMessage(tr("Passwords do not match.", "كلمتا المرور غير متطابقتين."));
       return;
     }
 
@@ -28,7 +29,7 @@ export function PortalChangePasswordForm() {
     const body = await response.json().catch(() => ({}));
     setBusy(false);
     if (!response.ok) {
-      setMessage(body.error === "password_too_short" ? "Use at least 12 characters." : body.error || "Could not change password.");
+      setMessage(body.error === "password_too_short" ? tr("Use at least 12 characters.", "استخدم 12 محرفًا على الأقل.") : body.error || tr("Could not change password.", "تعذر تغيير كلمة المرور."));
       return;
     }
     router.replace("/portal");
@@ -36,9 +37,9 @@ export function PortalChangePasswordForm() {
   }
 
   return <form className="catalog-form" onSubmit={submit}>
-    <label className="form-span">New password<input name="password" type="password" minLength={12} autoComplete="new-password" required /></label>
-    <label className="form-span">Confirm password<input name="confirm" type="password" minLength={12} autoComplete="new-password" required /></label>
-    <button className="primary-button form-span" disabled={busy}>{busy ? "Saving…" : "Set new password"}</button>
+    <label className="form-span">{tr("New password", "كلمة المرور الجديدة")}<input name="password" type="password" minLength={12} autoComplete="new-password" required /></label>
+    <label className="form-span">{tr("Confirm password", "تأكيد كلمة المرور")}<input name="confirm" type="password" minLength={12} autoComplete="new-password" required /></label>
+    <button className="primary-button form-span" disabled={busy}>{busy ? tr("Saving…", "جارٍ الحفظ…") : tr("Set new password", "تعيين كلمة المرور الجديدة")}</button>
     {message && <p className="form-error form-span">{message}</p>}
   </form>;
 }

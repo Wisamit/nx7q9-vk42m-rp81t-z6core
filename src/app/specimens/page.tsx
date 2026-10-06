@@ -145,6 +145,7 @@ export default async function SpecimensPage({
             specimenTypeConfigured={Boolean(specimen.specimenTypeId)}
             branches={branches}
             activeBranchId={session.activeBranchId}
+            locale={locale}
           />
 
           <details className="specimen-history">

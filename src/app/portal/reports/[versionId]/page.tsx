@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { requirePortalSession } from "@/lib/portal-auth";
 import { prisma } from "@/lib/db";
 import { requestContext } from "@/lib/auth";
+import { getUiLocale, priorityLabel, statusLabel, tr } from "@/lib/ui-i18n";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +26,7 @@ type ReportSnapshot = {
       referenceLow?: string | null;
       referenceHigh?: string | null;
       referenceTextEn?: string | null;
+      referenceTextAr?: string | null;
     }>;
   }>;
 };
@@ -33,6 +35,7 @@ export default async function PortalReportPage({ params }: { params: Promise<{ v
   const session = await requirePortalSession();
   const { versionId } = await params;
   const account = session.portalAccount;
+  const locale = getUiLocale(account.preferredLocale);
   const version = await prisma.diagnosticReportVersion.findUnique({
     where: { id: versionId },
     include: { report: { include: { order: true } } },
@@ -78,32 +81,32 @@ export default async function PortalReportPage({ params }: { params: Promise<{ v
   });
 
   const snapshot = version.contentSnapshot as unknown as ReportSnapshot;
-  return <main className="catalog-shell">
+  return <main className="catalog-shell" dir={locale === "ar" ? "rtl" : "ltr"}>
     <header className="page-header">
       <div>
-        <p className="eyebrow">Diagnostic Report · v{version.version}</p>
-        <h1>{snapshot.organization?.nameEn || "Family Lab"}</h1>
-        <p className="muted">{snapshot.branch?.nameEn || ""} · {version.status} · Issued {version.issuedAt.toISOString().replace("T"," ").slice(0,16)}</p>
+        <p className="eyebrow">{tr(locale, "Diagnostic Report", "التقرير التشخيصي")} · v{version.version}</p>
+        <h1>{locale === "ar" ? snapshot.organization?.nameAr || snapshot.organization?.nameEn || "Family Lab" : snapshot.organization?.nameEn || "Family Lab"}</h1>
+        <p className="muted">{locale === "ar" ? snapshot.branch?.nameAr || snapshot.branch?.nameEn || "" : snapshot.branch?.nameEn || ""} · {statusLabel(locale, version.status)} · {tr(locale, "Issued", "صدر")} {version.issuedAt.toISOString().replace("T"," ").slice(0,16)}</p>
       </div>
-      <a className="secondary-link" href="/portal">Back to Portal</a>
+      <a className="secondary-link" href="/portal">{tr(locale, "Back to Portal", "العودة للبوابة")}</a>
     </header>
 
     <section className="detail-grid">
-      <article className="detail-card"><h2>Patient</h2><strong>{snapshot.patient?.fullNameEn || "—"}</strong><p className="muted">{snapshot.patient?.patientNumber || ""}</p></article>
-      <article className="detail-card"><h2>Accession</h2><strong>{snapshot.order?.accessionNumber || "—"}</strong><p className="muted">{snapshot.order?.priority || ""}</p></article>
-      <article className="detail-card"><h2>Report Version</h2><strong>v{version.version}</strong><p className="muted">{version.status}</p></article>
+      <article className="detail-card"><h2>{tr(locale, "Patient", "المريض")}</h2><strong>{locale === "ar" ? snapshot.patient?.fullNameAr || snapshot.patient?.fullNameEn || "—" : snapshot.patient?.fullNameEn || "—"}</strong><p className="muted">{snapshot.patient?.patientNumber || ""}</p></article>
+      <article className="detail-card"><h2>{tr(locale, "Accession", "رقم الطلب")}</h2><strong>{snapshot.order?.accessionNumber || "—"}</strong><p className="muted">{priorityLabel(locale, snapshot.order?.priority)}</p></article>
+      <article className="detail-card"><h2>{tr(locale, "Report Version", "إصدار التقرير")}</h2><strong>v{version.version}</strong><p className="muted">{statusLabel(locale, version.status)}</p></article>
     </section>
 
     {(snapshot.results || []).map((result, index) => <section className="table-card detail-section" key={(result.testCode || "test") + index}>
-      <div className="table-toolbar"><h2>{result.testCode} — {result.testNameEn}</h2></div>
+      <div className="table-toolbar"><h2>{result.testCode} — {locale === "ar" ? result.testNameAr || result.testNameEn : result.testNameEn}</h2></div>
       <div className="table-wrap"><table>
-        <thead><tr><th>Component</th><th>Result</th><th>Flag</th><th>Unit</th><th>Reference</th></tr></thead>
+        <thead><tr><th>{tr(locale, "Component", "المكوّن")}</th><th>{tr(locale, "Result", "النتيجة")}</th><th>{tr(locale, "Flag", "العلامة")}</th><th>{tr(locale, "Unit", "الوحدة")}</th><th>{tr(locale, "Reference", "المرجع")}</th></tr></thead>
         <tbody>{(result.values || []).map((value, valueIndex) => <tr key={(value.componentCode || "component") + valueIndex}>
-          <td>{value.componentCode}<br/><small>{value.componentNameEn}</small></td>
+          <td>{value.componentCode}<br/><small>{locale === "ar" ? value.componentNameAr || value.componentNameEn : value.componentNameEn}</small></td>
           <td><strong>{value.displayValue || "—"}</strong></td>
           <td>{value.flag || "—"}</td>
           <td>{value.unit || "—"}</td>
-          <td>{value.referenceTextEn || [value.referenceLow, value.referenceHigh].filter(Boolean).join(" – ") || "—"}</td>
+          <td>{(locale === "ar" ? value.referenceTextAr || value.referenceTextEn : value.referenceTextEn) || [value.referenceLow, value.referenceHigh].filter(Boolean).join(" – ") || "—"}</td>
         </tr>)}</tbody>
       </table></div>
       {result.comments && <p className="muted">{result.comments}</p>}

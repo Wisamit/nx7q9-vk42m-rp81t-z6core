@@ -3,8 +3,9 @@
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 
-export function PortalLoginForm() {
+export function PortalLoginForm({ locale }: { locale: "ar" | "en" }) {
   const router = useRouter();
+  const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
 
@@ -26,8 +27,8 @@ export function PortalLoginForm() {
     setBusy(false);
     if (!response.ok) {
       setMessage(body.error === "portal_account_temporarily_locked"
-        ? "Account temporarily locked after repeated failed attempts."
-        : "Invalid portal credentials.");
+        ? tr("Account temporarily locked after repeated failed attempts.", "تم قفل الحساب مؤقتًا بعد محاولات دخول فاشلة متكررة.")
+        : tr("Invalid portal credentials.", "بيانات دخول البوابة غير صحيحة."));
       return;
     }
     router.replace(body.mustChangePassword ? "/portal/change-password" : "/portal");
@@ -35,10 +36,10 @@ export function PortalLoginForm() {
   }
 
   return <form className="catalog-form" onSubmit={submit}>
-    <label className="form-span">Laboratory code<input name="organizationCode" autoCapitalize="characters" required placeholder="FAMILY_LAB" /></label>
-    <label className="form-span">Email or phone<input name="login" autoComplete="username" required /></label>
-    <label className="form-span">Password<input name="password" type="password" autoComplete="current-password" required /></label>
-    <button className="primary-button form-span" disabled={busy}>{busy ? "Signing in…" : "Sign in"}</button>
+    <label className="form-span">{tr("Laboratory code", "رمز المختبر")}<input name="organizationCode" autoCapitalize="characters" required placeholder="FAMILY_LAB" /></label>
+    <label className="form-span">{tr("Email or phone", "البريد الإلكتروني أو الهاتف")}<input name="login" autoComplete="username" required /></label>
+    <label className="form-span">{tr("Password", "كلمة المرور")}<input name="password" type="password" autoComplete="current-password" required /></label>
+    <button className="primary-button form-span" disabled={busy}>{busy ? tr("Signing in…", "جارٍ تسجيل الدخول…") : tr("Sign in", "تسجيل الدخول")}</button>
     {message && <p className="form-error form-span">{message}</p>}
   </form>;
 }
