@@ -111,6 +111,17 @@ export function normalizePalette(value: unknown, fallback: ThemePalette): ThemeP
   return result;
 }
 
+export async function getSingleActiveOrganizationSystemSettings(): Promise<SystemSettings | null> {
+  const organizations = await prisma.organization.findMany({
+    where: { status: "ACTIVE" },
+    select: { id: true },
+    orderBy: { createdAt: "asc" },
+    take: 2,
+  });
+  if (organizations.length !== 1) return null;
+  return getOrganizationSystemSettings(organizations[0].id);
+}
+
 export async function getOrganizationSystemSettings(organizationId: string): Promise<SystemSettings> {
   const organization = await prisma.organization.findUniqueOrThrow({
     where: { id: organizationId },
