@@ -10,7 +10,8 @@
     "db:generate": "prisma generate",
     "db:migrate:deploy": "prisma migrate deploy",
     "db:migrate:status": "prisma migrate status",
-    "test:safety": "node --experimental-strip-types --test tests/*.test.ts"
+    "test:safety": "node --experimental-strip-types --test tests/*.test.ts",
+    "test:ui-theme": "node scripts/check-ui-theme.mjs"
   },
   "dependencies": {
     "@prisma/client": "7.10.0",
