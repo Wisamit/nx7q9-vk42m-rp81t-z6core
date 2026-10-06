@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { Prisma } from "../../../../generated/prisma/client";
-import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
+import { canAccessBranch, canAccessDepartment, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { numericFlag, resolveReferenceInterval } from "@/lib/result-reference";
 import { evaluateDelta } from "@/lib/delta-check";
@@ -104,6 +104,7 @@ export async function POST(request: Request) {
   });
 
   if (!orderItem) return NextResponse.json({ error: "order_item_not_found" }, { status: 404 });
+  if (!canAccessDepartment(session, orderItem.test.departmentId)) return NextResponse.json({ error: "department_forbidden" }, { status: 403 });
 
   const specimenLink = orderItem.specimenLinks[0];
   const specimen = specimenLink?.specimen;
