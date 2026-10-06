@@ -31,7 +31,7 @@ export default async function AnalyzersPage() {
     }),
     prisma.branch.findMany({
       where: { organizationId: session.user.organizationId, id: { in: branchIds }, status: "ACTIVE" },
-      select: { id: true, code: true, nameEn: true },
+      select: { id: true, code: true, nameEn: true, nameAr: true },
       orderBy: { nameEn: "asc" },
     }),
     prisma.department.findMany({
@@ -40,7 +40,7 @@ export default async function AnalyzersPage() {
         status: "ACTIVE",
         OR: [{ branchId: null }, { branchId: { in: branchIds } }],
       },
-      select: { id: true, code: true, nameEn: true, branchId: true },
+      select: { id: true, code: true, nameEn: true, nameAr: true, branchId: true },
       orderBy: { nameEn: "asc" },
     }),
     prisma.labTest.findMany({
@@ -49,9 +49,10 @@ export default async function AnalyzersPage() {
         id: true,
         code: true,
         nameEn: true,
+        nameAr: true,
         components: {
           where: { status: "ACTIVE" },
-          select: { id: true, code: true, nameEn: true },
+          select: { id: true, code: true, nameEn: true, nameAr: true },
           orderBy: { displayOrder: "asc" },
         },
       },
@@ -74,6 +75,9 @@ export default async function AnalyzersPage() {
       take: 200,
     }),
   ]);
+
+  const localizedName = (item: { nameEn: string; nameAr?: string | null }) =>
+    locale === "ar" ? item.nameAr || item.nameEn : item.nameEn;
 
   const mappedGroups = new Map<string, {
     analyzerCode: string;
@@ -98,7 +102,7 @@ export default async function AnalyzersPage() {
         analyzerName: item.analyzer.name,
         orderItemId: item.orderItemId,
         testCode: item.orderItem?.testCodeSnapshot || "—",
-        testName: item.orderItem?.testNameEnSnapshot || "—",
+        testName: locale === "ar" ? item.orderItem?.testNameArSnapshot || item.orderItem?.testNameEnSnapshot || "—" : item.orderItem?.testNameEnSnapshot || "—",
         specimenId: item.specimenId,
         barcode: item.barcodeSnapshot || "—",
         importIds: [item.id],
@@ -117,6 +121,7 @@ export default async function AnalyzersPage() {
     </header>
 
     {permissions.has("analyzers.manage") && <AnalyzerManager
+      locale={locale}
       branches={branches}
       departments={departments}
       tests={tests}
@@ -124,12 +129,12 @@ export default async function AnalyzersPage() {
     />}
 
     <section className="table-card detail-section">
-      <div className="table-toolbar"><h2>{tr(locale, "Analyzer Registry", "سجل أجهزة التحليل")}</h2><span>{analyzers.length} analyzer(s)</span></div>
+      <div className="table-toolbar"><h2>{tr(locale, "Analyzer Registry", "سجل أجهزة التحليل")}</h2><span>{analyzers.length} {tr(locale, "analyzer(s)", "جهاز")}</span></div>
       <div className="table-wrap"><table>
-        <thead><tr><th>Analyzer</th><th>Branch</th><th>Protocol</th><th>Transport</th><th>Credentials</th><th>Mappings</th><th>Status</th></tr></thead>
+        <thead><tr><th>{tr(locale, "Analyzer", "الجهاز")}</th><th>{tr(locale, "Branch", "الفرع")}</th><th>{tr(locale, "Protocol", "البروتوكول")}</th><th>{tr(locale, "Transport", "وسيلة الاتصال")}</th><th>{tr(locale, "Credentials", "بيانات الاعتماد")}</th><th>{tr(locale, "Mappings", "الربط")}</th><th>{tr(locale, "Status", "الحالة")}</th></tr></thead>
         <tbody>{analyzers.length === 0 ? <tr><td colSpan={7} className="empty-state">{tr(locale, "No analyzers registered.", "لا توجد أجهزة تحليل مسجلة.")}</td></tr> : analyzers.map(item => <tr key={item.id}>
           <td><strong>{item.code} — {item.name}</strong><br/><small>{[item.manufacturer, item.model, item.serialNumber].filter(Boolean).join(" · ") || tr(locale, "No device metadata", "لا توجد بيانات للجهاز")}</small></td>
-          <td>{item.branch.nameEn}{item.department ? " · " + item.department.nameEn : ""}</td>
+          <td>{localizedName(item.branch)}{item.department ? " · " + localizedName(item.department) : ""}</td>
           <td>{item.protocol}</td>
           <td>{item.transport}</td>
           <td>{item.credentials.filter(credential => credential.status === "ACTIVE").length} {tr(locale, "active", "نشط")}</td>
@@ -140,9 +145,9 @@ export default async function AnalyzersPage() {
     </section>
 
     <section className="table-card detail-section">
-      <div className="table-toolbar"><h2>{tr(locale, "Raw Message Inbox", "صندوق الرسائل الخام")}</h2><span>{messages.length} recent</span></div>
+      <div className="table-toolbar"><h2>{tr(locale, "Raw Message Inbox", "صندوق الرسائل الخام")}</h2><span>{messages.length} {tr(locale, "recent", "حديثة")}</span></div>
       <div className="table-wrap"><table>
-        <thead><tr><th>Received</th><th>Analyzer</th><th>Bridge message</th><th>Protocol</th><th>Status</th><th>Attempts</th><th>Error</th><th>Payload hash</th><th>Action</th></tr></thead>
+        <thead><tr><th>{tr(locale, "Received", "الاستلام")}</th><th>{tr(locale, "Analyzer", "الجهاز")}</th><th>{tr(locale, "Bridge message", "رسالة الجسر")}</th><th>{tr(locale, "Protocol", "البروتوكول")}</th><th>{tr(locale, "Status", "الحالة")}</th><th>{tr(locale, "Attempts", "المحاولات")}</th><th>{tr(locale, "Error", "الخطأ")}</th><th>{tr(locale, "Payload hash", "بصمة الحمولة")}</th><th>{tr(locale, "Action", "الإجراء")}</th></tr></thead>
         <tbody>{messages.length === 0 ? <tr><td colSpan={9} className="empty-state">{tr(locale, "No analyzer messages received.", "لم يتم استلام رسائل من أجهزة التحليل.")}</td></tr> : messages.map(item => <tr key={item.id}>
           <td>{item.receivedAt.toISOString().replace("T"," ").slice(0,19)}</td>
           <td>{item.analyzer.code} — {item.analyzer.name}</td>
@@ -152,31 +157,31 @@ export default async function AnalyzersPage() {
           <td>{item.attempts}</td>
           <td>{item.errorCode || item.errorText || "—"}</td>
           <td><code>{item.payloadHash.slice(0,16)}…</code></td>
-          <td>{permissions.has("analyzers.replay") && ["ERROR","DEAD_LETTER"].includes(item.status) ? <AnalyzerMessageReplayButton messageId={item.id} /> : "—"}</td>
+          <td>{permissions.has("analyzers.replay") && ["ERROR","DEAD_LETTER"].includes(item.status) ? <AnalyzerMessageReplayButton messageId={item.id} locale={locale} /> : "—"}</td>
         </tr>)}</tbody>
       </table></div>
     </section>
 
 
     {permissions.has("analyzers.import") && mappedGroups.size > 0 && <section className="table-card detail-section">
-      <div className="table-toolbar"><h2>Ready for Clinical Import</h2><span>{mappedGroups.size} result group(s)</span></div>
+      <div className="table-toolbar"><h2>{tr(locale, "Ready for Clinical Import", "جاهز للاستيراد السريري")}</h2><span>{mappedGroups.size} {tr(locale, "result group(s)", "مجموعة نتائج")}</span></div>
       <div className="table-wrap"><table>
-        <thead><tr><th>Analyzer</th><th>Test</th><th>Barcode</th><th>Observations</th><th>Action</th></tr></thead>
+        <thead><tr><th>{tr(locale, "Analyzer", "الجهاز")}</th><th>{tr(locale, "Test", "الفحص")}</th><th>{tr(locale, "Barcode", "الباركود")}</th><th>{tr(locale, "Observations", "المشاهدات")}</th><th>{tr(locale, "Action", "الإجراء")}</th></tr></thead>
         <tbody>{[...mappedGroups.values()].map(group => <tr key={group.analyzerCode + group.orderItemId + group.specimenId}>
           <td>{group.analyzerCode} — {group.analyzerName}</td>
           <td><strong>{group.testCode}</strong><br/><small>{group.testName}</small></td>
           <td><strong>{group.barcode}</strong></td>
           <td>{group.importIds.length}</td>
-          <td><AnalyzerClinicalImportButton importIds={group.importIds} /></td>
+          <td><AnalyzerClinicalImportButton importIds={group.importIds} locale={locale} /></td>
         </tr>)}</tbody>
       </table></div>
     </section>}
 
     <section className="table-card detail-section">
-      <div className="table-toolbar"><h2>Normalized Result Staging</h2><span>{resultImports.length} recent</span></div>
+      <div className="table-toolbar"><h2>{tr(locale, "Normalized Result Staging", "مرحلة تهيئة النتائج الموحّدة")}</h2><span>{resultImports.length} {tr(locale, "recent", "حديثة")}</span></div>
       <div className="table-wrap"><table>
-        <thead><tr><th>Created</th><th>Analyzer</th><th>Observation</th><th>Barcode</th><th>Analyzer code</th><th>LIS target</th><th>Raw value</th><th>Status</th><th>Error</th><th>Clinical result</th></tr></thead>
-        <tbody>{resultImports.length === 0 ? <tr><td colSpan={10} className="empty-state">No normalized analyzer observations staged.</td></tr> : resultImports.map(item => <tr key={item.id}>
+        <thead><tr><th>{tr(locale, "Created", "تاريخ الإنشاء")}</th><th>{tr(locale, "Analyzer", "الجهاز")}</th><th>{tr(locale, "Observation", "المشاهدة")}</th><th>{tr(locale, "Barcode", "الباركود")}</th><th>{tr(locale, "Analyzer code", "رمز الجهاز")}</th><th>{tr(locale, "LIS target", "هدف LIS")}</th><th>{tr(locale, "Raw value", "القيمة الخام")}</th><th>{tr(locale, "Status", "الحالة")}</th><th>{tr(locale, "Error", "الخطأ")}</th><th>{tr(locale, "Clinical result", "النتيجة السريرية")}</th></tr></thead>
+        <tbody>{resultImports.length === 0 ? <tr><td colSpan={10} className="empty-state">{tr(locale, "No normalized analyzer observations staged.", "لا توجد مشاهدات أجهزة مهيأة للاستيراد.")}</td></tr> : resultImports.map(item => <tr key={item.id}>
           <td>{item.createdAt.toISOString().replace("T"," ").slice(0,19)}</td>
           <td>{item.analyzer.code}</td>
           <td>{item.bridgeObservationId}</td>
@@ -186,22 +191,22 @@ export default async function AnalyzersPage() {
           <td><strong>{item.rawValue}</strong>{item.rawUnit ? " " + item.rawUnit : ""}</td>
           <td>{statusLabel(locale, item.status)}</td>
           <td>{item.errorCode ? item.errorCode + (item.errorText ? " · " + item.errorText : "") : "—"}</td>
-          <td>{item.resultId && item.orderItemId ? <Link href={`/worklists/${item.orderItemId}`}>Open result</Link> : "—"}</td>
+          <td>{item.resultId && item.orderItemId ? <Link href={`/worklists/${item.orderItemId}`}>{tr(locale, "Open result", "فتح النتيجة")}</Link> : "—"}</td>
         </tr>)}</tbody>
       </table></div>
     </section>
 
     <section className="detail-grid detail-section">
       {analyzers.map(item => <article className="table-card" key={item.id}>
-        <div className="table-toolbar"><h2>{item.code} Mappings</h2><span>{item.mappings.length} shown</span></div>
+        <div className="table-toolbar"><h2>{item.code} {tr(locale, "Mappings", "عمليات الربط")}</h2><span>{item.mappings.length} {tr(locale, "shown", "معروضة")}</span></div>
         <div className="table-wrap"><table>
-          <thead><tr><th>Analyzer code</th><th>LIS target</th><th>Unit</th><th>Effective</th><th>Status</th></tr></thead>
-          <tbody>{item.mappings.length === 0 ? <tr><td colSpan={5} className="empty-state">No mappings configured.</td></tr> : item.mappings.map(mapping => <tr key={mapping.id}>
+          <thead><tr><th>{tr(locale, "Analyzer code", "رمز الجهاز")}</th><th>{tr(locale, "LIS target", "هدف LIS")}</th><th>{tr(locale, "Unit", "الوحدة")}</th><th>{tr(locale, "Effective", "السريان")}</th><th>{tr(locale, "Status", "الحالة")}</th></tr></thead>
+          <tbody>{item.mappings.length === 0 ? <tr><td colSpan={5} className="empty-state">{tr(locale, "No mappings configured.", "لا توجد عمليات ربط مهيأة.")}</td></tr> : item.mappings.map(mapping => <tr key={mapping.id}>
             <td><strong>{mapping.analyzerTestCode}</strong></td>
             <td>{mapping.test.code}{mapping.component ? " · " + mapping.component.code : ""}</td>
             <td>{mapping.analyzerUnitCode || "—"}</td>
-            <td>{mapping.effectiveFrom.toISOString().slice(0,10)} → {mapping.effectiveTo?.toISOString().slice(0,10) || "Open"}</td>
-            <td>{mapping.status}</td>
+            <td>{mapping.effectiveFrom.toISOString().slice(0,10)} → {mapping.effectiveTo?.toISOString().slice(0,10) || tr(locale, "Open", "مفتوح")}</td>
+            <td>{statusLabel(locale, mapping.status)}</td>
           </tr>)}</tbody>
         </table></div>
       </article>)}
