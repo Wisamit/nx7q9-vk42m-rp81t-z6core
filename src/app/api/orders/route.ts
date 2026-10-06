@@ -605,6 +605,24 @@ export async function POST(request: Request) {
       }
 
       const specimenGroups = new Map<string, typeof createdItems>();
+      if (discountApprovalRequestIdToUse) {
+        const consumed = await tx.discountApprovalRequest.updateMany({
+          where: {
+            id: discountApprovalRequestIdToUse,
+            organizationId: session.user.organizationId,
+            requestedByUserId: session.user.id,
+            status: "APPROVED",
+            usedAt: null,
+            expiresAt: { gt: new Date() },
+          },
+          data: {
+            status: "USED",
+            usedAt: new Date(),
+          },
+        });
+        if (consumed.count !== 1) throw new Error("DISCOUNT_APPROVAL_NOT_CONSUMABLE");
+      }
+
       for (const entry of createdItems) {
         const specimenTypeId = entry.test.specimenTypeId;
         const containerId = entry.test.containerId;
@@ -652,6 +670,10 @@ export async function POST(request: Request) {
         });
 
         specimenSequence++;
+      }
+
+      if (!subtotal.equals(quoteSubtotal) || !discountTotal.equals(quoteDiscountTotal)) {
+        throw new Error("DISCOUNT_QUOTE_MISMATCH");
       }
 
       let invoiceNumber = documentNumber("INV");
@@ -723,8 +745,8 @@ export async function POST(request: Request) {
           data: {
             organizationId: session.user.organizationId,
             branchId,
-            actorUserId: discountApprovedByUserId,
-            action: "ORDER_DISCOUNT_APPROVED",
+            actorUserId: session.user.id,
+            action: "ORDER_DISCOUNT_APPLIED",
             entityType: "Invoice",
             entityId: invoice.id,
             reason: discountReason,
@@ -737,6 +759,8 @@ export async function POST(request: Request) {
               discountTotal: discountTotal.toString(),
               finalTotal: finalTotal.toString(),
               approvalMethod: discountApprovalMethod,
+              approvalRequestId: discountApprovalRequestIdToUse,
+              approvedByUserId: discountApprovedByUserId,
             },
             ipAddress: ctx.ipAddress,
             userAgent: ctx.userAgent,
