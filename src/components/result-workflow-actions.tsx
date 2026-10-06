@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
+import { statusLabel as sharedStatusLabel } from "@/lib/ui-i18n";
 
 type Communication = {
   id: string;
@@ -47,6 +48,22 @@ export function ResultWorkflowActions({
   locale: "ar" | "en";
 }) {
   const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
+  const methodLabel = (value: string) => ({
+    PHONE: tr("Phone", "هاتف"),
+    VERBAL: tr("Verbal", "شفهي"),
+    EMAIL: tr("Email", "بريد إلكتروني"),
+    SMS: tr("SMS", "رسالة نصية"),
+    WHATSAPP: tr("WhatsApp", "واتساب"),
+    OTHER: tr("Other", "أخرى"),
+  }[value] || value);
+  const outcomeLabel = (value: string) => ({
+    ACKNOWLEDGED: tr("Acknowledged", "تم الإقرار"),
+    NO_ANSWER: tr("No answer", "لا توجد إجابة"),
+    LEFT_MESSAGE: tr("Left message", "تم ترك رسالة"),
+    FAILED: tr("Failed", "فشل"),
+    ESCALATED: tr("Escalated", "تم التصعيد"),
+  }[value] || value);
+  const criticalStatusLabel = (value: string | null) => value ? sharedStatusLabel(locale, value) : tr("Open", "مفتوح");
   const router = useRouter();
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
@@ -140,9 +157,9 @@ export function ResultWorkflowActions({
 
   return <div className="result-workflow-box">
     <div className="result-workflow-status">
-      <div><span>{tr("Result status", "حالة النتيجة")}</span><strong>{resultStatus}</strong></div>
+      <div><span>{tr("Result status", "حالة النتيجة")}</span><strong>{sharedStatusLabel(locale, resultStatus)}</strong></div>
       <div><span>{tr("Critical values", "القيم الحرجة")}</span><strong>{criticalCount}</strong></div>
-      <div><span>{tr("Critical communication", "التواصل بشأن النتيجة الحرجة")}</span><strong>{criticalCount === 0 ? tr("Not required", "غير مطلوب") : criticalEventStatus || "OPEN"}</strong></div>
+      <div><span>{tr("Critical communication", "التواصل بشأن النتيجة الحرجة")}</span><strong>{criticalCount === 0 ? tr("Not required", "غير مطلوب") : criticalStatusLabel(criticalEventStatus)}</strong></div>
       {criticalCount > 0 && <div><span>{tr("Acknowledgement due", "موعد الإقرار")}</span><strong>{criticalAcknowledgementDueAt ? criticalAcknowledgementDueAt.replace("T"," ").slice(0,19) : tr("No policy", "لا توجد سياسة")}</strong></div>}
       {criticalCount > 0 && <div><span>{tr("Escalation level", "مستوى التصعيد")}</span><strong>{criticalEscalationLevel}{criticalMaxEscalationLevel !== null ? ` / ${criticalMaxEscalationLevel}` : ""}</strong></div>}
       {criticalCount > 0 && <div><span>{tr("Next escalation due", "موعد التصعيد التالي")}</span><strong>{criticalNextEscalationDueAt ? criticalNextEscalationDueAt.replace("T"," ").slice(0,19) : "—"}</strong></div>}
@@ -167,12 +184,12 @@ export function ResultWorkflowActions({
     {showCommunication && <form className="catalog-form result-workflow-form" onSubmit={submitCommunication}>
       <label>{tr("Method", "الطريقة")}
         <select name="method" required defaultValue="PHONE">
-          <option>PHONE</option><option>VERBAL</option><option>EMAIL</option><option>SMS</option><option>WHATSAPP</option><option>OTHER</option>
+          <option value="PHONE">{methodLabel("PHONE")}</option><option value="VERBAL">{methodLabel("VERBAL")}</option><option value="EMAIL">{methodLabel("EMAIL")}</option><option value="SMS">{methodLabel("SMS")}</option><option value="WHATSAPP">{methodLabel("WHATSAPP")}</option><option value="OTHER">{methodLabel("OTHER")}</option>
         </select>
       </label>
       <label>{tr("Outcome", "النتيجة")}
         <select name="outcome" required defaultValue="ACKNOWLEDGED">
-          <option>ACKNOWLEDGED</option><option>NO_ANSWER</option><option>LEFT_MESSAGE</option><option>FAILED</option><option>ESCALATED</option>
+          <option value="ACKNOWLEDGED">{outcomeLabel("ACKNOWLEDGED")}</option><option value="NO_ANSWER">{outcomeLabel("NO_ANSWER")}</option><option value="LEFT_MESSAGE">{outcomeLabel("LEFT_MESSAGE")}</option><option value="FAILED">{outcomeLabel("FAILED")}</option><option value="ESCALATED">{outcomeLabel("ESCALATED")}</option>
         </select>
       </label>
       <label>{tr("Recipient name", "اسم المستلم")}<input name="recipientName" required maxLength={200} /></label>
@@ -195,8 +212,8 @@ export function ResultWorkflowActions({
       <summary>{tr("Critical communication history", "سجل التواصل بشأن النتائج الحرجة")} ({communications.length})</summary>
       <div className="summary-list">
         {communications.map(item => <div key={item.id}>
-          <span>{item.communicatedAt.replace("T"," ").slice(0,19)} · {item.communicatedBy} · {item.method}</span>
-          <strong>{item.outcome} · {item.recipientName}{item.recipientRole ? ` (${item.recipientRole})` : ""}{item.readBackConfirmed ? " · read-back" : ""}</strong>
+          <span>{item.communicatedAt.replace("T"," ").slice(0,19)} · {item.communicatedBy} · {methodLabel(item.method)}</span>
+          <strong>{outcomeLabel(item.outcome)} · {item.recipientName}{item.recipientRole ? ` (${item.recipientRole})` : ""}{item.readBackConfirmed ? " · " + tr("read-back", "إعادة قراءة") : ""}</strong>
         </div>)}
       </div>
     </details>}
