@@ -157,6 +157,8 @@ export async function POST(request: NextRequest) {
           code: "MAIN",
           nameEn: branchNameEn,
           nameAr: branchNameAr || null,
+          timezone: "Africa/Cairo",
+          defaultCurrency: "EGP",
           isCentralLab: true,
         },
       });
