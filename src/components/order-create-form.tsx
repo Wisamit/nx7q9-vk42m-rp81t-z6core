@@ -30,6 +30,7 @@ export function OrderCreateForm({
   sources,
   branches,
   activeBranchId,
+  onSuccess,
 }: {
   patients: PatientOption[];
   tests: TestOption[];
@@ -39,6 +40,7 @@ export function OrderCreateForm({
   sources: SourceOption[];
   branches: BranchOption[];
   activeBranchId: string | null;
+  onSuccess?: (message: string) => void;
 }) {
   const router = useRouter();
   const [patientSearch, setPatientSearch] = useState("");
@@ -135,7 +137,8 @@ export function OrderCreateForm({
 
     const body = await response.json().catch(() => ({}));
     if (response.ok) {
-      setMessage(`Order ${body.accessionNumber} created · Invoice ${body.invoiceNumber} · ${body.total} ${body.currency}`);
+      const success = `Order ${body.accessionNumber} created · Invoice ${body.invoiceNumber} · ${body.total} ${body.currency}`;
+      setMessage(success);
       setPatientId("");
       setPatientSearch("");
       setSelectedTestIds([]);
@@ -143,6 +146,7 @@ export function OrderCreateForm({
       setPackageSearch("");
       event.currentTarget.reset();
       router.refresh();
+      onSuccess?.(success);
     } else if (body.error === "missing_prices") {
       const codes = Array.isArray(body.tests) ? body.tests.map((x: { code?: string }) => x.code).filter(Boolean).join(", ") : "";
       setMessage(`Missing active prices for: ${codes || "selected tests"}. Configure Pricing first.`);
