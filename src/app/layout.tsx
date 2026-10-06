@@ -3,7 +3,7 @@ import "./globals.css";
 import packageJson from "../../package.json";
 import { SystemShell } from "@/components/system-shell";
 import { getCurrentSession, permissionSet } from "@/lib/auth";
-import { buildThemeCss, getOrganizationSystemSettings, SYSTEM_DEVELOPER_CREDIT } from "@/lib/system-settings";
+import { buildThemeCss, getOrganizationSystemSettings, getSingleActiveOrganizationSystemSettings, SYSTEM_DEVELOPER_CREDIT } from "@/lib/system-settings";
 
 export const metadata: Metadata = {
   title: {
@@ -15,9 +15,13 @@ export const metadata: Metadata = {
 
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const session = await getCurrentSession();
-  const locale = session?.user.preferredLocale === "ar" ? "ar" : "en";
+  const settings = session
+    ? await getOrganizationSystemSettings(session.user.organizationId)
+    : await getSingleActiveOrganizationSystemSettings();
+  const locale = session
+    ? (session.user.preferredLocale === "ar" ? "ar" : "en")
+    : (settings?.defaultLocale === "ar" ? "ar" : "en");
   const direction = locale === "ar" ? "rtl" : "ltr";
-  const settings = session ? await getOrganizationSystemSettings(session.user.organizationId) : null;
   const initialTheme = settings?.defaultTheme === "DARK" ? "dark" : "light";
   const systemName = settings
     ? (locale === "ar" ? settings.systemNameAr || settings.systemNameEn : settings.systemNameEn || settings.systemNameAr)

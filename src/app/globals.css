@@ -280,3 +280,28 @@ html[data-density="compact"] :where(.detail-card,.dashboard-panel,.settings-card
 
 /* Printed clinical reports intentionally render as paper, independent of screen theme. */
 @media print{.diagnostic-report,.professional-report{--fl-surface:white;--fl-surface-soft:whitesmoke;--fl-text:black;--fl-muted:dimgray;--fl-border:gainsboro;background:white;color:black}}
+
+.auth-logo{
+  display:block;
+  width:min(220px,70%);
+  height:auto;
+  max-height:110px;
+  object-fit:contain;
+  margin:0 auto 14px;
+}
+.public-auth-card{
+  max-width:520px;
+  margin:64px auto;
+}
+
+.public-brand-logo{
+  display:block;
+  width:min(180px,55%);
+  height:auto;
+  max-height:80px;
+  object-fit:contain;
+  margin-bottom:12px;
+}
+[dir="rtl"] .public-brand-logo{
+  margin-left:auto;
+}

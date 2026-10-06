@@ -1,5 +1,8 @@
+import Image from "next/image";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
+import { OrganizationThemeOverride } from "@/components/organization-theme-override";
+import { getOrganizationSystemSettings } from "@/lib/system-settings";
 
 export const dynamic = "force-dynamic";
 
@@ -25,9 +28,11 @@ export default async function VerifyReportPage({ params }: { params: Promise<{ t
   if (!version) notFound();
 
   const order = version.report.order;
+  const settings = await getOrganizationSystemSettings(order.organizationId);
 
-  return <main className="verify-report-shell">
+  return <><OrganizationThemeOverride settings={settings} /><main className="verify-report-shell">
     <section className="verify-report-card">
+      {settings.logoDataUrl && <Image className="public-brand-logo" src={settings.logoDataUrl} alt={settings.systemNameEn} width={180} height={80} unoptimized priority />}
       <div className="verification-badge">VALID REPORT</div>
       <h1>Diagnostic Report Verification</h1>
       <p className="muted">This verification record was found in the issuing laboratory system.</p>
@@ -50,5 +55,5 @@ export default async function VerifyReportPage({ params }: { params: Promise<{ t
 
       <p className="verification-note">For privacy, this public verification page shows limited patient information. The complete clinical report remains available only through authorized LIS access or the issued document.</p>
     </section>
-  </main>;
+  </main></>;
 }

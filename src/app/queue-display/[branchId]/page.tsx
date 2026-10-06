@@ -1,5 +1,8 @@
+import Image from "next/image";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
+import { OrganizationThemeOverride } from "@/components/organization-theme-override";
+import { getOrganizationSystemSettings } from "@/lib/system-settings";
 
 export const dynamic = "force-dynamic";
 
@@ -20,9 +23,10 @@ export default async function QueueDisplayPage({ params }: { params: Promise<{ b
   const { branchId } = await params;
   const branch = await prisma.branch.findFirst({
     where: { id: branchId, status: "ACTIVE" },
-    select: { id: true, nameEn: true, nameAr: true, timezone: true },
+    select: { id: true, organizationId: true, nameEn: true, nameAr: true, timezone: true },
   });
   if (!branch) notFound();
+  const settings = await getOrganizationSystemSettings(branch.organizationId);
 
   const queueDate = branchLocalDate(branch.timezone);
   const tickets = await prisma.queueTicket.findMany({
@@ -46,9 +50,10 @@ export default async function QueueDisplayPage({ params }: { params: Promise<{ b
   const reception = tickets.filter(ticket => ticket.stage === "RECEPTION");
   const phlebotomy = tickets.filter(ticket => ticket.stage === "PHLEBOTOMY");
 
-  return <main className="catalog-shell">
+  return <><OrganizationThemeOverride settings={settings} /><main className="catalog-shell">
     <header className="page-header">
       <div>
+        {settings.logoDataUrl && <Image className="public-brand-logo" src={settings.logoDataUrl} alt={settings.systemNameEn} width={180} height={80} unoptimized priority />}
         <p className="eyebrow">Queue Display</p>
         <h1>{branch.nameEn}</h1>
         <p className="muted">{branch.nameAr || "Family Lab"} · Current called/serving tickets only</p>
@@ -75,5 +80,5 @@ export default async function QueueDisplayPage({ params }: { params: Promise<{ b
     </section>
 
     <p className="muted">This public display intentionally shows no patient names, MRNs, phone numbers or other clinical information.</p>
-  </main>;
+  </main></>;
 }
