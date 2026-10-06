@@ -88,22 +88,22 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     .filter(assignment => assignment.role.status === "ACTIVE")
     .reduce((highest, assignment) => Math.max(highest, Number(assignment.role.discountLimitPercent.toString())), 0);
   const desiredRoleLimit = roles.reduce((highest, role) => Math.max(highest, Number(role.discountLimitPercent.toString())), 0);
-  const currentCanApproveDiscounts = target.roles.some(assignment =>
+  const currentSensitiveDiscountPermission = target.roles.some(assignment =>
     assignment.role.status === "ACTIVE"
-    && assignment.role.permissions.some(grant => grant.permission.code === "billing.discount.approve")
+    && assignment.role.permissions.some(grant => ["billing.discount.approve", "billing.discount.limits.manage"].includes(grant.permission.code))
   );
-  const desiredCanApproveDiscounts = roles.some(role =>
-    role.permissions.some(grant => grant.permission.code === "billing.discount.approve")
+  const desiredSensitiveDiscountPermission = roles.some(role =>
+    role.permissions.some(grant => ["billing.discount.approve", "billing.discount.limits.manage"].includes(grant.permission.code))
   );
   const currentBranchIds = new Set(target.branchScopes.map(scope => scope.branchId));
   const branchAuthorityExpanded = branchIds.some(branchId => !currentBranchIds.has(branchId))
-    && (desiredRoleLimit > 0 || desiredCanApproveDiscounts || (discountLimitPercent ?? 0) > 0);
+    && (desiredRoleLimit > 0 || desiredSensitiveDiscountPermission || (discountLimitPercent ?? 0) > 0);
   const financialAuthorityIncreased =
     desiredRoleLimit > currentRoleLimit
-    || (desiredCanApproveDiscounts && !currentCanApproveDiscounts)
+    || (desiredSensitiveDiscountPermission && !currentSensitiveDiscountPermission)
     || branchAuthorityExpanded
     || (target.status !== "ACTIVE" && status === "ACTIVE"
-      && (desiredRoleLimit > 0 || desiredCanApproveDiscounts || (discountLimitPercent ?? 0) > 0));
+      && (desiredRoleLimit > 0 || desiredSensitiveDiscountPermission || (discountLimitPercent ?? 0) > 0));
 
   if (financialAuthorityIncreased && !permissions.has("billing.discount.limits.manage")) {
     return NextResponse.json({ error: "discount_authority_forbidden" }, { status: 403 });
