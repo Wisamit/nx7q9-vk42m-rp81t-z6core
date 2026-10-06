@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { permissionSet, requirePermission } from "@/lib/auth";
+import { canAccessDepartment, permissionSet, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { MicrobiologyCaseEditor } from "@/components/microbiology-case-editor";
 import { MicrobiologyFinalWorkflow } from "@/components/microbiology-final-workflow";
@@ -59,7 +59,7 @@ export default async function MicrobiologyCasePage({ params }: { params: Promise
     },
   });
 
-  if (!microbiologyCase) notFound();
+  if (!microbiologyCase || !canAccessDepartment(session, microbiologyCase.orderItem.test.departmentId)) notFound();
 
   const [organisms, antibiotics] = await Promise.all([
     prisma.organism.findMany({
