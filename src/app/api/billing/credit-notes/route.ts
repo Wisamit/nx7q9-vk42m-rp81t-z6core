@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
-import { Prisma } from "../../../../../../generated/prisma/client";
+import { Prisma } from "../../../../../generated/prisma/client";
 import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
 import { creditNoteError, invoiceAdjustmentState } from "@/lib/billing-adjustments";
 import { prisma } from "@/lib/db";
