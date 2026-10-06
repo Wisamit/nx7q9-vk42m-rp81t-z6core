@@ -2,7 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
-import { branchScopeAllows } from "@/lib/clinical-safety";
+import { branchScopeAllows, departmentScopeAllows } from "@/lib/clinical-safety";
 
 export const SESSION_COOKIE = "family_lab_session";
 const SESSION_DAYS = 7;
@@ -45,6 +45,7 @@ export async function getCurrentSession() {
           organization: true,
           roles: { include: { role: { include: { permissions: { include: { permission: true } } } } } },
           branchScopes: { include: { branch: true } },
+          departmentScopes: { include: { department: true } },
         },
       },
       activeBranch: true,
@@ -83,4 +84,19 @@ export function canAccessBranch(
     session.user.branchScopes.filter(scope => scope.branch.status === "ACTIVE").map(scope => scope.branchId),
     branchId,
   );
+}
+
+export function authorizedDepartmentIds(
+  session: NonNullable<Awaited<ReturnType<typeof getCurrentSession>>>,
+) {
+  return session.user.departmentScopes
+    .filter(scope => scope.department.status === "ACTIVE")
+    .map(scope => scope.departmentId);
+}
+
+export function canAccessDepartment(
+  session: NonNullable<Awaited<ReturnType<typeof getCurrentSession>>>,
+  departmentId: string | null | undefined,
+) {
+  return departmentScopeAllows(authorizedDepartmentIds(session), departmentId);
 }
