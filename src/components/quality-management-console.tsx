@@ -720,7 +720,7 @@ export function QualityManagementConsole({
     {permissions.indicators && <section className="detail-card detail-section">
       <h2>{tr("Quality Indicator","مؤشر جودة")}</h2>
       <form className="catalog-form" onSubmit={createIndicator}>
-        <label>Code<input name="code" required /></label>
+        <label>{tr("Code","الرمز")}<input name="code" required /></label>
         <label>{tr("Branch","الفرع")}<select name="branchId" defaultValue=""><option value="">{tr("Organization-wide","على مستوى المؤسسة")}</option>{branches.map(branch => <option key={branch.id} value={branch.id}>{branchName(branch)}</option>)}</select></label>
         <label>{tr("Name (English)","الاسم بالإنجليزية")}<input name="nameEn" required /></label>
         <label>{tr("Name (Arabic)","الاسم بالعربية")}<input name="nameAr" dir="rtl" /></label>
