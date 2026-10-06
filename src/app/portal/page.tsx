@@ -160,7 +160,7 @@ export default async function PortalPage() {
       <div className="table-toolbar"><h2>{tr(locale, "Reports", "التقارير")}</h2><span>{reports.length} {tr(locale, "versions", "إصدارات")}</span></div>
       <div className="table-wrap"><table>
         <thead><tr><th>{tr(locale, "Accession", "رقم الطلب")}</th>{account.type !== "PATIENT" && <th>{tr(locale, "Patient", "المريض")}</th>}<th>{tr(locale, "Version", "الإصدار")}</th><th>{tr(locale, "Status", "الحالة")}</th><th>{tr(locale, "Issued", "تاريخ الإصدار")}</th><th></th></tr></thead>
-        <tbody>{reports.length === 0 ? <tr><td colSpan={account.type === "PATIENT" ? 5 : 6} className="empty-state">No released reports available.</td></tr> : reports.map(report => <tr key={report.id}>
+        <tbody>{reports.length === 0 ? <tr><td colSpan={account.type === "PATIENT" ? 5 : 6} className="empty-state">{tr(locale, "No released reports available.", "لا توجد تقارير صادرة متاحة.")}</td></tr> : reports.map(report => <tr key={report.id}>
           <td>{report.report.order.accessionNumber}</td>
           {account.type !== "PATIENT" && <td>{report.report.order.patient.fullNameEn}</td>}
           <td>v{report.version}</td>
