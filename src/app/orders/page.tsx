@@ -3,11 +3,13 @@ import { requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { OrderCreateModal } from "@/components/order-create-modal";
 import { SystemIcon } from "@/components/system-icon";
+import { getUiLocale, priorityLabel, statusLabel, tr } from "@/lib/ui-i18n";
 
 export const dynamic = "force-dynamic";
 
 export default async function OrdersPage() {
   const session = await requirePermission("orders.view");
+  const locale = getUiLocale(session.user.preferredLocale);
 
   const accessibleBranchIds = session.user.branchScopes.map(scope => scope.branchId);
 
@@ -102,9 +104,9 @@ export default async function OrdersPage() {
   return <main className="catalog-shell">
     <header className="page-header">
       <div>
-        <p className="eyebrow">Order Entry</p>
-        <h1 className="page-title-with-icon"><SystemIcon name="orders" size={25} />Orders</h1>
-        <p className="muted">Register laboratory orders with branch, patient, referral source and effective-dated price snapshots.</p>
+        <p className="eyebrow">{tr(locale, "Order Entry", "إدخال الطلبات")}</p>
+        <h1 className="page-title-with-icon"><SystemIcon name="orders" size={25} />{tr(locale, "Orders", "الطلبات")}</h1>
+        <p className="muted">{tr(locale, "Register laboratory orders with branch, patient, referral source and effective-dated price snapshots.", "تسجيل طلبات المختبر مع الفرع والمريض ومصدر الإحالة وأسعار محفوظة بتاريخها الفعلي.")}</p>
       </div>
       <div className="header-actions">
         <OrderCreateModal
@@ -125,38 +127,38 @@ export default async function OrdersPage() {
           branches={branches}
           activeBranchId={session.activeBranchId}
         />
-        <Link className="secondary-link" href="/pricing"><SystemIcon name="pricing" size={15} />Pricing</Link>
-        <Link className="secondary-link" href="/billing"><SystemIcon name="billing" size={15} />Billing</Link>
-        <Link className="secondary-link" href="/dashboard"><SystemIcon name="dashboard" size={15} />Back to Dashboard</Link>
+        <Link className="secondary-link" href="/pricing"><SystemIcon name="pricing" size={15} />{tr(locale, "Pricing", "الأسعار")}</Link>
+        <Link className="secondary-link" href="/billing"><SystemIcon name="billing" size={15} />{tr(locale, "Billing", "الفوترة")}</Link>
+        <Link className="secondary-link" href="/dashboard"><SystemIcon name="dashboard" size={15} />{tr(locale, "Back to Dashboard", "العودة للوحة التحكم")}</Link>
       </div>
     </header>
 
     <section className="workflow-summary">
-      <article><span>Today</span><strong>{todayOrders.length}</strong><small>orders registered</small></article>
-      <article><span>Open</span><strong>{openOrders.length}</strong><small>awaiting completion</small></article>
-      <article className={urgentOrders.length ? "summary-attention" : ""}><span>Urgent / STAT</span><strong>{urgentOrders.length}</strong><small>active priority orders</small></article>
-      <article><span>Sources</span><strong>{sources.length}</strong><small>active acquisition sources</small></article>
+      <article><span>{tr(locale, "Today", "اليوم")}</span><strong>{todayOrders.length}</strong><small>{tr(locale, "orders registered", "طلبات مسجلة")}</small></article>
+      <article><span>{tr(locale, "Open", "مفتوحة")}</span><strong>{openOrders.length}</strong><small>{tr(locale, "awaiting completion", "بانتظار الإكمال")}</small></article>
+      <article className={urgentOrders.length ? "summary-attention" : ""}><span>{tr(locale, "Urgent / STAT", "عاجل / فوري")}</span><strong>{urgentOrders.length}</strong><small>{tr(locale, "active priority orders", "طلبات أولوية نشطة")}</small></article>
+      <article><span>{tr(locale, "Sources", "المصادر")}</span><strong>{sources.length}</strong><small>{tr(locale, "active acquisition sources", "مصادر إدخال نشطة")}</small></article>
     </section>
 
     <section className="table-card detail-section">
-      <div className="table-toolbar"><h2>Recent Orders</h2><span>{orders.length} shown</span></div>
+      <div className="table-toolbar"><h2>{tr(locale, "Recent Orders", "أحدث الطلبات")}</h2><span>{orders.length} shown</span></div>
       <div className="table-wrap">
         <table>
-          <thead><tr><th>Accession</th><th>Patient</th><th>Branch</th><th>Source</th><th>Priority</th><th>Tests</th><th>Client / Referrer</th><th>Invoice</th><th>Status</th></tr></thead>
+          <thead><tr><th>{tr(locale, "Accession", "رقم الطلب")}</th><th>{tr(locale, "Patient", "المريض")}</th><th>{tr(locale, "Branch", "الفرع")}</th><th>{tr(locale, "Source", "المصدر")}</th><th>{tr(locale, "Priority", "الأولوية")}</th><th>{tr(locale, "Tests", "الفحوصات")}</th><th>{tr(locale, "Client / Referrer", "العميل / المحيل")}</th><th>{tr(locale, "Invoice", "الفاتورة")}</th><th>{tr(locale, "Status", "الحالة")}</th></tr></thead>
           <tbody>
-            {orders.length === 0 ? <tr><td colSpan={9} className="empty-state">No orders registered yet.</td></tr> :
+            {orders.length === 0 ? <tr><td colSpan={9} className="empty-state">{tr(locale, "No orders registered yet.", "لا توجد طلبات مسجلة بعد.")}</td></tr> :
               orders.map(order => {
                 const invoice = order.invoices[0];
                 return <tr key={order.id}>
                   <td><Link className="table-link" href={`/orders/${order.id}`}><strong>{order.accessionNumber}</strong></Link><br/><small>{order.orderedAt.toISOString().slice(0,16).replace("T"," ")}</small></td>
                   <td>{order.patient.patientNumber}<br/><small>{order.patient.fullNameEn}</small></td>
                   <td>{order.orderingBranch.code}</td>
-                  <td>{order.source?.nameEn || "Legacy / unspecified"}</td>
-                  <td><span className={"status-badge priority-" + order.priority.toLowerCase()}>{order.priority}</span></td>
+                  <td>{order.source?.nameEn || tr(locale, "Legacy / unspecified", "قديم / غير محدد")}</td>
+                  <td><span className={"status-badge priority-" + order.priority.toLowerCase()}>{priorityLabel(locale, order.priority)}</span></td>
                   <td>{order.items.length}</td>
-                  <td>{order.client?.nameEn || order.referrer?.nameEn || "Patient / walk-in"}</td>
+                  <td>{order.client?.nameEn || order.referrer?.nameEn || tr(locale, "Patient / walk-in", "مريض / زيارة مباشرة")}</td>
                   <td>{invoice ? <>{invoice.invoiceNumber}<br/><small>{invoice.total.toString()} {invoice.currency}</small></> : "—"}</td>
-                  <td><span className={"status-badge status-" + order.status.toLowerCase().replaceAll("_","-")}>{order.status}</span></td>
+                  <td><span className={"status-badge status-" + order.status.toLowerCase().replaceAll("_","-")}>{statusLabel(locale, order.status)}</span></td>
                 </tr>;
               })
             }
