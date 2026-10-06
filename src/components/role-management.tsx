@@ -9,7 +9,7 @@ type Permission = { id: string; code: string; module: string; description: strin
 type Role = { id: string; code: string; nameEn: string; nameAr: string | null; isSystem: boolean; status: string; discountLimitPercent: string; userCount: number; permissionIds: string[] };
 type Data = { roles: Role[]; permissions: Permission[] };
 
-export function RoleManagement({ locale }: { locale: "ar" | "en" }) {
+export function RoleManagement({ locale, canManageDiscountLimits }: { locale: "ar" | "en"; canManageDiscountLimits: boolean }) {
   const [data, setData] = useState<Data>({ roles: [], permissions: [] });
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -43,7 +43,7 @@ export function RoleManagement({ locale }: { locale: "ar" | "en" }) {
     const form = new FormData(event.currentTarget);
     const response = await fetch("/api/admin/roles", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code: form.get("code"), nameEn: form.get("nameEn"), nameAr: form.get("nameAr"), discountLimitPercent: Number(form.get("discountLimitPercent") || 0), permissionIds: form.getAll("permissionIds") }),
+      body: JSON.stringify({ code: form.get("code"), nameEn: form.get("nameEn"), nameAr: form.get("nameAr"), ...(canManageDiscountLimits ? { discountLimitPercent: Number(form.get("discountLimitPercent") || 0) } : {}), permissionIds: form.getAll("permissionIds") }),
     });
     const body = await response.json().catch(() => ({}));
     if (response.ok) {
@@ -67,7 +67,7 @@ export function RoleManagement({ locale }: { locale: "ar" | "en" }) {
       body: JSON.stringify({
         nameEn: form.get("nameEn"),
         nameAr: form.get("nameAr"),
-        discountLimitPercent: Number(form.get("discountLimitPercent") || 0),
+        ...(canManageDiscountLimits ? { discountLimitPercent: Number(form.get("discountLimitPercent") || 0) } : {}),
         permissionIds: form.getAll("permissionIds"),
       }),
     });
@@ -112,7 +112,7 @@ export function RoleManagement({ locale }: { locale: "ar" | "en" }) {
       size="xl"
     >
       <form className="form-stack modal-form-stack" onSubmit={createRole}>
-        <div className="settings-grid"><label>{tr("Role code", "رمز الدور")}<input name="code" required placeholder="LAB_TECH" pattern="[A-Za-z0-9._-]{2,80}" /></label><label>{tr("English name", "الاسم بالإنجليزية")}<input name="nameEn" required /></label><label>{tr("Arabic name", "الاسم بالعربية")}<input name="nameAr" /></label><label>{tr("Discount limit (%)", "حد الخصم (%)")}<input name="discountLimitPercent" type="number" min="0" max="100" step="0.01" defaultValue="0" required /></label></div>
+        <div className="settings-grid"><label>{tr("Role code", "رمز الدور")}<input name="code" required placeholder="LAB_TECH" pattern="[A-Za-z0-9._-]{2,80}" /></label><label>{tr("English name", "الاسم بالإنجليزية")}<input name="nameEn" required /></label><label>{tr("Arabic name", "الاسم بالعربية")}<input name="nameAr" /></label>{canManageDiscountLimits && <label>{tr("Discount limit (%)", "حد الخصم (%)")}<input name="discountLimitPercent" type="number" min="0" max="100" step="0.01" defaultValue="0" required /></label>}</div>
         <div className="permission-groups">{grouped.map(([module, permissions]) => <fieldset className="permission-group" key={module}><legend>{module}</legend>{permissions.map(permission => <label key={permission.id}><input type="checkbox" name="permissionIds" value={permission.id} /><span><strong>{permission.code}</strong><small>{permission.description || ""}</small></span></label>)}</fieldset>)}</div>
         <div className="crud-modal-actions"><button className="primary-button" disabled={busy}>{busy ? tr("Saving…", "جارٍ الحفظ…") : tr("Create role", "إنشاء الدور")}</button></div>
         {message && <div className="form-success">{message}</div>}
@@ -130,7 +130,7 @@ export function RoleManagement({ locale }: { locale: "ar" | "en" }) {
         <div className="settings-grid">
           <label>{tr("English name", "الاسم بالإنجليزية")}<input name="nameEn" required defaultValue={editing.nameEn} /></label>
           <label>{tr("Arabic name", "الاسم بالعربية")}<input name="nameAr" defaultValue={editing.nameAr || ""} /></label>
-          <label>{tr("Discount limit (%)", "حد الخصم (%)")}<input name="discountLimitPercent" type="number" min="0" max="100" step="0.01" required defaultValue={editing.discountLimitPercent} /></label>
+          {canManageDiscountLimits && <label>{tr("Discount limit (%)", "حد الخصم (%)")}<input name="discountLimitPercent" type="number" min="0" max="100" step="0.01" required defaultValue={editing.discountLimitPercent} /></label>}
         </div>
         <div className="permission-groups">{grouped.map(([module, permissions]) => <fieldset className="permission-group" key={module}><legend>{module}</legend>{permissions.map(permission => <label key={permission.id}><input type="checkbox" name="permissionIds" value={permission.id} defaultChecked={editing.permissionIds.includes(permission.id)} /><span><strong>{permission.code}</strong><small>{permission.description || ""}</small></span></label>)}</fieldset>)}</div>
         <div className="crud-modal-actions"><button className="primary-button" disabled={busy}>{busy ? tr("Saving…", "جارٍ الحفظ…") : tr("Save role", "حفظ الدور")}</button></div>
