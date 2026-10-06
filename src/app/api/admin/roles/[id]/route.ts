@@ -53,10 +53,9 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   const desiredFinancialPermissions = new Set(selectedPermissions.filter(permission => financialPermissionCodes.has(permission.code)).map(permission => permission.code));
   const financialAuthorityChanged = currentFinancialPermissions.size !== desiredFinancialPermissions.size
     || [...currentFinancialPermissions].some(code => !desiredFinancialPermissions.has(code));
-  const currentCanApproveDiscounts = currentFinancialPermissions.has("billing.discount.approve");
   const financialRoleReactivated = current.status !== "ACTIVE"
     && status === "ACTIVE"
-    && (Number(current.discountLimitPercent.toString()) > 0 || currentCanApproveDiscounts);
+    && (Number(current.discountLimitPercent.toString()) > 0 || currentFinancialPermissions.size > 0);
   if ((financialAuthorityChanged || financialRoleReactivated) && !permissions.has("billing.discount.limits.manage")) {
     return NextResponse.json({ error: "discount_authority_forbidden" }, { status: 403 });
   }
