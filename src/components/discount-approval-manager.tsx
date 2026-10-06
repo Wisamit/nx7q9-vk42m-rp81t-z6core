@@ -8,6 +8,8 @@ type ApprovalRow = {
   branchCode: string;
   branchName: string;
   requesterName: string;
+  patientNumber: string;
+  services: string;
   discountPercent: string;
   reason: string;
   currency: string;
@@ -94,6 +96,7 @@ export function DiscountApprovalManager({
         <thead><tr>
           <th>{tr("Requested", "تاريخ الطلب")}</th>
           <th>{tr("Branch / Requester", "الفرع / مقدم الطلب")}</th>
+          <th>{tr("Patient / Services", "المريض / الخدمات")}</th>
           <th>{tr("Discount", "الخصم")}</th>
           <th>{tr("Financial impact", "الأثر المالي")}</th>
           <th>{tr("Reason", "السبب")}</th>
@@ -101,12 +104,13 @@ export function DiscountApprovalManager({
           <th>{tr("Actions", "الإجراءات")}</th>
         </tr></thead>
         <tbody>
-          {approvals.length === 0 ? <tr><td colSpan={7} className="empty-state">{tr("No pending discount approvals.", "لا توجد طلبات خصم معلقة.")}</td></tr> :
+          {approvals.length === 0 ? <tr><td colSpan={8} className="empty-state">{tr("No pending discount approvals.", "لا توجد طلبات خصم معلقة.")}</td></tr> :
             approvals.map(row => {
               const withinLimit = Number(row.discountPercent) <= approverLimitPercent;
               return <tr key={row.id}>
                 <td>{row.requestedAt.slice(0,16).replace("T"," ")}</td>
                 <td><strong>{row.branchCode}</strong><br/><small>{row.branchName} · {row.requesterName}</small></td>
+                <td><strong>{row.patientNumber}</strong><br/><small>{row.services}</small></td>
                 <td><strong>{row.discountPercent}%</strong><br/><small>{row.discountTotal} {row.currency}</small></td>
                 <td>{row.subtotal} → <strong>{row.finalTotal}</strong> {row.currency}</td>
                 <td>{row.reason}</td>
