@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { requirePermission } from "@/lib/auth";
+import { authorizedDepartmentIds, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { BulkResultEntry } from "@/components/bulk-result-entry";
 import { SystemIcon } from "@/components/system-icon";
@@ -19,6 +19,13 @@ export default async function WorklistsPage({
   const status = params.status?.trim() || "";
   const departmentId = params.department?.trim() || "";
   const branchIds = session.user.branchScopes.map(scope => scope.branchId);
+  const scopedDepartmentIds = authorizedDepartmentIds(session);
+  const departmentRestricted = scopedDepartmentIds.length > 0;
+  const departmentFilter = departmentId
+    ? (departmentRestricted && !scopedDepartmentIds.includes(departmentId)
+      ? { departmentId: "__FORBIDDEN__" }
+      : { departmentId })
+    : (departmentRestricted ? { departmentId: { in: scopedDepartmentIds } } : {});
 
   const [items, departments] = await Promise.all([
     prisma.orderItem.findMany({
@@ -36,7 +43,7 @@ export default async function WorklistsPage({
         ...(status && ["ORDERED","COLLECTED","IN_PROGRESS","RESULTED","VERIFIED"].includes(status)
           ? { status: status as "ORDERED" | "COLLECTED" | "IN_PROGRESS" | "RESULTED" | "VERIFIED" }
           : {}),
-        ...(departmentId ? { test: { departmentId } } : {}),
+        ...(Object.keys(departmentFilter).length ? { test: departmentFilter } : {}),
         ...(q ? {
           AND: [{
             OR: [
@@ -78,7 +85,7 @@ export default async function WorklistsPage({
       take: 300,
     }),
     prisma.department.findMany({
-      where: { organizationId: session.user.organizationId, status: "ACTIVE" },
+      where: { organizationId: session.user.organizationId, status: "ACTIVE", ...(departmentRestricted ? { id: { in: scopedDepartmentIds } } : {}) },
       select: { id: true, code: true, nameEn: true },
       orderBy: { nameEn: "asc" },
     }),
