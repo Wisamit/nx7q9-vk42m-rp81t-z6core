@@ -67,10 +67,12 @@ export async function POST(request: Request) {
 
   let discountApprovalMethod: "SELF_LIMIT" | "APPROVAL_WORKFLOW" | null = null;
   let discountApprovedByUserId: string | null = null;
+  let discountApprovedAt: Date | null = null;
   let discountApprovalRequestIdToUse: string | null = null;
   if (requestedApprovalMode === "SELF_LIMIT") {
     discountApprovalMethod = "SELF_LIMIT";
     discountApprovedByUserId = session.user.id;
+    discountApprovedAt = new Date();
   }
 
   const packages = packageIds.length ? await prisma.commercialPackage.findMany({
@@ -359,12 +361,13 @@ export async function POST(request: Request) {
           expiresAt: suppliedApproval.expiresAt,
         }, { status: 409 });
       }
-      if (suppliedApproval.status !== "APPROVED" || !suppliedApproval.approvedByUserId) {
+      if (suppliedApproval.status !== "APPROVED" || !suppliedApproval.approvedByUserId || !suppliedApproval.approvedAt) {
         return NextResponse.json({ error: "discount_approval_invalid" }, { status: 409 });
       }
 
       discountApprovalMethod = "APPROVAL_WORKFLOW";
       discountApprovedByUserId = suppliedApproval.approvedByUserId;
+      discountApprovedAt = suppliedApproval.approvedAt;
       discountApprovalRequestIdToUse = suppliedApproval.id;
     } else {
       let approvalRequest = await prisma.discountApprovalRequest.findFirst({
@@ -696,7 +699,7 @@ export async function POST(request: Request) {
           discountReason: requestedDiscountPercent > 0 ? discountReason : null,
           discountApprovalMethod,
           discountApprovedByUserId,
-          discountApprovedAt: requestedDiscountPercent > 0 ? new Date() : null,
+          discountApprovedAt: requestedDiscountPercent > 0 ? discountApprovedAt : null,
           taxTotal: new Prisma.Decimal(0),
           total: finalTotal,
           paidAmount: new Prisma.Decimal(0),
@@ -761,6 +764,7 @@ export async function POST(request: Request) {
               approvalMethod: discountApprovalMethod,
               approvalRequestId: discountApprovalRequestIdToUse,
               approvedByUserId: discountApprovedByUserId,
+              approvedAt: discountApprovedAt?.toISOString() || null,
             },
             ipAddress: ctx.ipAddress,
             userAgent: ctx.userAgent,
