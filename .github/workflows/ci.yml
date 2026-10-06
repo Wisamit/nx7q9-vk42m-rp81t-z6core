@@ -44,4 +44,5 @@ jobs:
       - run: npx tsc --noEmit
       - run: npm run lint
       - run: npm run test:ui-theme
+      - run: npm run test:ui-i18n
       - run: npx next build
