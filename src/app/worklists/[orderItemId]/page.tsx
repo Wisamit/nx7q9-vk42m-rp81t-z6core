@@ -215,11 +215,11 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
     </header>
 
     <section className="result-context-strip">
-      <div><span>Accession</span><strong>{item.order.accessionNumber}</strong></div>
-      <div><span>Patient</span><strong>{item.order.patient.patientNumber}</strong><small>{item.order.patient.fullNameEn}</small></div>
-      <div><span>Specimen</span><strong className="barcode-text">{readySpecimen.barcode}</strong><small>{readySpecimen.status}</small></div>
-      <div><span>Priority</span><strong className={"status-badge priority-" + item.order.priority.toLowerCase()}>{item.order.priority}</strong></div>
-      <div><span>Result</span><strong className={"status-badge status-" + (latestResult?.status || "DRAFT").toLowerCase().replaceAll("_","-")}>{latestResult?.status || "DRAFT"}</strong></div>
+      <div><span>{tr(locale, "Accession", "رقم الطلب")}</span><strong>{item.order.accessionNumber}</strong></div>
+      <div><span>{tr(locale, "Patient", "المريض")}</span><strong>{item.order.patient.patientNumber}</strong><small>{locale === "ar" ? item.order.patient.fullNameAr || item.order.patient.fullNameEn : item.order.patient.fullNameEn}</small></div>
+      <div><span>{tr(locale, "Specimen", "العينة")}</span><strong className="barcode-text">{readySpecimen.barcode}</strong><small>{statusLabel(locale, readySpecimen.status)}</small></div>
+      <div><span>{tr(locale, "Priority", "الأولوية")}</span><strong className={"status-badge priority-" + item.order.priority.toLowerCase()}>{tr(locale, item.order.priority, item.order.priority === "STAT" ? "فوري" : item.order.priority === "URGENT" ? "عاجل" : "عادي")}</strong></div>
+      <div><span>{tr(locale, "Result", "النتيجة")}</span><strong className={"status-badge status-" + (latestResult?.status || "DRAFT").toLowerCase().replaceAll("_","-")}>{latestResult?.status || "DRAFT"}</strong></div>
     </section>
 
     <section className="detail-grid result-context-cards">
@@ -229,8 +229,8 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
           <dt>{tr(locale, "Patient", "المريض")}</dt><dd>{item.order.patient.fullNameEn}</dd>
           <dt>{tr(locale, "Date of birth", "تاريخ الميلاد")}</dt><dd>{item.order.patient.dateOfBirth?.toISOString().slice(0,10) || "—"}</dd>
           <dt>{tr(locale, "Sex at birth", "الجنس عند الولادة")}</dt><dd>{sexLabel(locale, item.order.patient.sexAtBirth)}</dd>
-          <dt>{tr(locale, "Priority", "الأولوية")}</dt><dd>{item.order.priority}</dd>
-          <dt>{tr(locale, "Department", "القسم")}</dt><dd>{item.test.department?.nameEn || "Unassigned"}</dd>
+          <dt>{tr(locale, "Priority", "الأولوية")}</dt><dd>{tr(locale, item.order.priority, item.order.priority === "STAT" ? "فوري" : item.order.priority === "URGENT" ? "عاجل" : "عادي")}</dd>
+          <dt>{tr(locale, "Department", "القسم")}</dt><dd>{locale === "ar" ? item.test.department?.nameAr || item.test.department?.nameEn || tr(locale, "Unassigned", "غير معين") : item.test.department?.nameEn || "Unassigned"}</dd>
           <dt>{tr(locale, "Method", "الطريقة")}</dt><dd>{item.test.method?.nameEn || "Not configured"}</dd>
         </dl>
       </article>
@@ -240,7 +240,7 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
           <dt>{tr(locale, "Barcode", "الباركود")}</dt><dd><strong>{readySpecimen.barcode}</strong></dd>
           <dt>{tr(locale, "Type", "النوع")}</dt><dd>{readySpecimen.specimenType?.nameEn || "—"}</dd>
           <dt>{tr(locale, "Container", "الحاوية")}</dt><dd>{readySpecimen.container?.nameEn || "—"}</dd>
-          <dt>{tr(locale, "Status", "الحالة")}</dt><dd>{readySpecimen.status}</dd>
+          <dt>{tr(locale, "Status", "الحالة")}</dt><dd>{statusLabel(locale, readySpecimen.status)}</dd>
           <dt>{tr(locale, "Location", "الموقع")}</dt><dd>{readySpecimen.currentBranch?.nameEn || latestResult?.performingBranch.nameEn || "—"}</dd>
         </dl>
       </article>
