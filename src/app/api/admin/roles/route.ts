@@ -69,8 +69,14 @@ export async function POST(request: Request) {
   if (!/^[A-Z0-9._-]{2,80}$/.test(code) || !nameEn || permissionIds.length === 0 || discountLimitPercent === null) {
     return NextResponse.json({ error: "invalid_fields" }, { status: 400 });
   }
-  const permissionCount = await prisma.permission.count({ where: { id: { in: permissionIds } } });
-  if (permissionCount !== permissionIds.length) return NextResponse.json({ error: "invalid_permissions" }, { status: 400 });
+  const selectedPermissions = await prisma.permission.findMany({
+    where: { id: { in: permissionIds } },
+    select: { id: true, code: true },
+  });
+  if (selectedPermissions.length !== permissionIds.length) return NextResponse.json({ error: "invalid_permissions" }, { status: 400 });
+  if (selectedPermissions.some(permission => permission.code === "billing.discount.approve") && !permissions.has("billing.discount.limits.manage")) {
+    return NextResponse.json({ error: "discount_authority_forbidden" }, { status: 403 });
+  }
 
   const ctx = await requestContext();
   try {
