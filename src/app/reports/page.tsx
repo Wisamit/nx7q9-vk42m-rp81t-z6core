@@ -38,7 +38,7 @@ export default async function ReportsPage() {
     </header>
 
     <section className="table-card">
-      <div className="table-toolbar"><h2>{tr(locale, "Released Reports", "التقارير الصادرة")}</h2><span>{reports.length} shown</span></div>
+      <div className="table-toolbar"><h2>{tr(locale, "Released Reports", "التقارير الصادرة")}</h2><span>{reports.length} {tr(locale, "shown", "معروضة")}</span></div>
       <div className="table-wrap">
         <table>
           <thead><tr><th>{tr(locale, "Accession", "رقم الطلب")}</th><th>{tr(locale, "Patient", "المريض")}</th><th>{tr(locale, "Branch", "الفرع")}</th><th>{tr(locale, "Version", "الإصدار")}</th><th>{tr(locale, "Type", "النوع")}</th><th>{tr(locale, "Issued", "تاريخ الإصدار")}</th><th>{tr(locale, "Issued by", "أصدر بواسطة")}</th><th></th></tr></thead>
