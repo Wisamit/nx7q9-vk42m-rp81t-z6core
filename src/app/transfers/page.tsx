@@ -14,12 +14,12 @@ export default async function TransfersPage() {
   const [branches, sourceBranches, specimens, manifests] = await Promise.all([
     prisma.branch.findMany({
       where: { organizationId: session.user.organizationId, status: "ACTIVE" },
-      select: { id: true, code: true, nameEn: true },
+      select: { id: true, code: true, nameEn: true, nameAr: true },
       orderBy: { nameEn: "asc" },
     }),
     prisma.branch.findMany({
       where: { id: { in: branchIds }, organizationId: session.user.organizationId, status: "ACTIVE" },
-      select: { id: true, code: true, nameEn: true },
+      select: { id: true, code: true, nameEn: true, nameAr: true },
       orderBy: { nameEn: "asc" },
     }),
     prisma.specimen.findMany({
@@ -33,11 +33,11 @@ export default async function TransfersPage() {
         barcode: true,
         status: true,
         currentBranchId: true,
-        specimenType: { select: { nameEn: true } },
+        specimenType: { select: { nameEn: true, nameAr: true } },
         order: {
           select: {
             accessionNumber: true,
-            patient: { select: { patientNumber: true, fullNameEn: true } },
+            patient: { select: { patientNumber: true, fullNameEn: true, fullNameAr: true } },
           },
         },
       },
@@ -53,8 +53,8 @@ export default async function TransfersPage() {
         ],
       },
       include: {
-        sourceBranch: { select: { id: true, code: true, nameEn: true } },
-        destinationBranch: { select: { id: true, code: true, nameEn: true } },
+        sourceBranch: { select: { id: true, code: true, nameEn: true, nameAr: true } },
+        destinationBranch: { select: { id: true, code: true, nameEn: true, nameAr: true } },
         items: {
           include: {
             specimen: {
@@ -91,6 +91,7 @@ export default async function TransfersPage() {
     </header>
 
     <TransferManager
+      locale={locale}
       branches={branches}
       sourceBranches={sourceBranches}
       specimens={specimens}
