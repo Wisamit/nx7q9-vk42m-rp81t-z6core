@@ -5,9 +5,9 @@ import { useRouter } from "next/navigation";
 import { CrudModal } from "@/components/crud-modal";
 import { SystemIcon } from "@/components/system-icon";
 
-type Branch = { id: string; code: string; nameEn: string };
-type Department = { id: string; code: string; nameEn: string; branchId: string | null };
-type TestOption = { id: string; code: string; nameEn: string; components: Array<{ id: string; code: string; nameEn: string }> };
+type Branch = { id: string; code: string; nameEn: string; nameAr?: string | null };
+type Department = { id: string; code: string; nameEn: string; nameAr?: string | null; branchId: string | null };
+type TestOption = { id: string; code: string; nameEn: string; nameAr?: string | null; components: Array<{ id: string; code: string; nameEn: string; nameAr?: string | null }> };
 type AnalyzerOption = { id: string; code: string; name: string; branchId: string };
 
 export function AnalyzerManager({
@@ -15,11 +15,13 @@ export function AnalyzerManager({
   departments,
   tests,
   analyzers,
+  locale,
 }: {
   branches: Branch[];
   departments: Department[];
   tests: TestOption[];
   analyzers: AnalyzerOption[];
+  locale: "ar" | "en";
 }) {
   const router = useRouter();
   const [branchId, setBranchId] = useState(branches[0]?.id || "");
@@ -28,6 +30,9 @@ export function AnalyzerManager({
   const [message, setMessage] = useState("");
   const [issuedToken, setIssuedToken] = useState("");
   const [open, setOpen] = useState<"analyzer" | "credential" | "mapping" | "">("");
+  const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
+  const localizedName = (item: { nameEn: string; nameAr?: string | null }) =>
+    locale === "ar" ? item.nameAr || item.nameEn : item.nameEn;
 
   const branchDepartments = useMemo(
     () => departments.filter(item => !item.branchId || item.branchId === branchId),
@@ -46,7 +51,7 @@ export function AnalyzerManager({
     const body = await response.json().catch(() => ({}));
     setBusy("");
     if (!response.ok) {
-      setMessage(body.error || "Analyzer configuration could not be saved.");
+      setMessage(tr("Analyzer configuration could not be saved.", "تعذر حفظ إعداد جهاز التحليل."));
       return null;
     }
     router.refresh();
@@ -70,7 +75,7 @@ export function AnalyzerManager({
     }, "analyzer");
     if (body) {
       event.currentTarget.reset();
-      setMessage("Analyzer created.");
+      setMessage(tr("Analyzer created.", "تم إنشاء جهاز التحليل."));
       setOpen("");
     }
   }
@@ -86,7 +91,7 @@ export function AnalyzerManager({
     }, "credential");
     if (body) {
       setIssuedToken(body.token || "");
-      setMessage("Bridge credential created. Copy the token now; it will not be shown again.");
+      setMessage(tr("Bridge credential created. Copy the token now; it will not be shown again.", "تم إنشاء بيانات اعتماد الجسر. انسخ الرمز الآن لأنه لن يظهر مرة أخرى."));
       event.currentTarget.reset();
     }
   }
@@ -107,7 +112,7 @@ export function AnalyzerManager({
     if (body) {
       event.currentTarget.reset();
       setMappingTestId("");
-      setMessage("Analyzer test mapping created.");
+      setMessage(tr("Analyzer test mapping created.", "تم إنشاء ربط فحص الجهاز."));
       setOpen("");
     }
   }
@@ -116,50 +121,50 @@ export function AnalyzerManager({
     <div className="crud-action-bar detail-section">
       <div>{message && <span className="crud-success-toast">{message}</span>}</div>
       <div className="crud-action-buttons">
-        <button type="button" className="primary-button" onClick={() => { setMessage(""); setOpen("analyzer"); }}><SystemIcon name="plus" size={16}/>Register Analyzer</button>
-        <button type="button" className="secondary-button" onClick={() => { setMessage(""); setIssuedToken(""); setOpen("credential"); }}><SystemIcon name="plus" size={16}/>Issue Credential</button>
-        <button type="button" className="secondary-button" onClick={() => { setMessage(""); setOpen("mapping"); }}><SystemIcon name="plus" size={16}/>Create Mapping</button>
+        <button type="button" className="primary-button" onClick={() => { setMessage(""); setOpen("analyzer"); }}><SystemIcon name="plus" size={16}/>{tr("Register Analyzer","تسجيل جهاز تحليل")}</button>
+        <button type="button" className="secondary-button" onClick={() => { setMessage(""); setIssuedToken(""); setOpen("credential"); }}><SystemIcon name="plus" size={16}/>{tr("Issue Credential","إصدار بيانات اعتماد")}</button>
+        <button type="button" className="secondary-button" onClick={() => { setMessage(""); setOpen("mapping"); }}><SystemIcon name="plus" size={16}/>{tr("Create Mapping","إنشاء ربط")}</button>
       </div>
     </div>
 
-    <CrudModal open={open === "analyzer"} onClose={() => setOpen("")} title="Register Analyzer" description="Store analyzer identity, branch, protocol and routing metadata. Device connectivity remains in Analyzer Bridge." size="lg">
+    <CrudModal open={open === "analyzer"} onClose={() => setOpen("")} title={tr("Register Analyzer","تسجيل جهاز تحليل")} description={tr("Store analyzer identity, branch, protocol and routing metadata. Device connectivity remains in Analyzer Bridge.","احفظ هوية الجهاز والفرع والبروتوكول وبيانات التوجيه. يبقى اتصال الجهاز الفعلي ضمن Analyzer Bridge.")} size="lg">
       <form className="catalog-form" onSubmit={createAnalyzer}>
-        <label>Branch<select name="branchId" required value={branchId} onChange={event => setBranchId(event.target.value)}>{branches.map(item => <option key={item.id} value={item.id}>{item.code} — {item.nameEn}</option>)}</select></label>
-        <label>Department<select name="departmentId" defaultValue=""><option value="">Unassigned</option>{branchDepartments.map(item => <option key={item.id} value={item.id}>{item.code} — {item.nameEn}</option>)}</select></label>
-        <label>Code<input name="code" required maxLength={80} /></label>
-        <label>Name<input name="name" required maxLength={200} /></label>
-        <label>Manufacturer<input name="manufacturer" maxLength={150} /></label>
-        <label>Model<input name="model" maxLength={150} /></label>
-        <label>Serial number<input name="serialNumber" maxLength={150} /></label>
-        <label>Protocol<select name="protocol" defaultValue="ASTM"><option>ASTM</option><option value="HL7_V2">HL7 v2</option><option>FILE</option><option>CSV</option><option>HTTP</option></select></label>
-        <label>Transport<select name="transport" defaultValue="SERIAL"><option>SERIAL</option><option>TCP_CLIENT</option><option>TCP_SERVER</option><option>WATCH_FOLDER</option><option>HTTP</option></select></label>
-        <label>Bridge device key<input name="bridgeDeviceKey" maxLength={150} placeholder="Local bridge identifier" /></label>
-        <button className="primary-button form-span" disabled={busy !== ""}>{busy === "analyzer" ? "Saving…" : "Register Analyzer"}</button>
+        <label>{tr("Branch","الفرع")}<select name="branchId" required value={branchId} onChange={event => setBranchId(event.target.value)}>{branches.map(item => <option key={item.id} value={item.id}>{item.code} — {localizedName(item)}</option>)}</select></label>
+        <label>{tr("Department","القسم")}<select name="departmentId" defaultValue=""><option value="">{tr("Unassigned","غير معين")}</option>{branchDepartments.map(item => <option key={item.id} value={item.id}>{item.code} — {localizedName(item)}</option>)}</select></label>
+        <label>{tr("Code","الرمز")}<input name="code" required maxLength={80} /></label>
+        <label>{tr("Name","الاسم")}<input name="name" required maxLength={200} /></label>
+        <label>{tr("Manufacturer","الشركة المصنعة")}<input name="manufacturer" maxLength={150} /></label>
+        <label>{tr("Model","الطراز")}<input name="model" maxLength={150} /></label>
+        <label>{tr("Serial number","الرقم التسلسلي")}<input name="serialNumber" maxLength={150} /></label>
+        <label>{tr("Protocol","البروتوكول")}<select name="protocol" defaultValue="ASTM"><option>ASTM</option><option value="HL7_V2">HL7 v2</option><option>FILE</option><option>CSV</option><option>HTTP</option></select></label>
+        <label>{tr("Transport","وسيلة الاتصال")}<select name="transport" defaultValue="SERIAL"><option>SERIAL</option><option>TCP_CLIENT</option><option>TCP_SERVER</option><option>WATCH_FOLDER</option><option>HTTP</option></select></label>
+        <label>{tr("Bridge device key","مفتاح الجهاز في الجسر")}<input name="bridgeDeviceKey" maxLength={150} placeholder={tr("Local bridge identifier","معرّف محلي في الجسر")} /></label>
+        <button className="primary-button form-span" disabled={busy !== ""}>{busy === "analyzer" ? tr("Saving…","جارٍ الحفظ…") : tr("Register Analyzer","تسجيل جهاز التحليل")}</button>
         {message && <div className="form-success form-span">{message}</div>}
       </form>
     </CrudModal>
 
-    <CrudModal open={open === "credential"} onClose={() => setOpen("")} title="Issue Bridge Credential" description="The raw token is shown once. Copy it before closing this window." size="md">
+    <CrudModal open={open === "credential"} onClose={() => setOpen("")} title={tr("Issue Bridge Credential","إصدار بيانات اعتماد الجسر")} description={tr("The raw token is shown once. Copy it before closing this window.","يظهر الرمز الخام مرة واحدة فقط. انسخه قبل إغلاق هذه النافذة.")} size="md">
       <form className="catalog-form" onSubmit={createCredential}>
-        <label className="form-span">Analyzer<select name="analyzerId" required defaultValue=""><option value="">Select analyzer…</option>{analyzers.map(item => <option key={item.id} value={item.id}>{item.code} — {item.name}</option>)}</select></label>
-        <label>Credential name<input name="name" required placeholder="Bridge workstation / service" /></label>
-        <label>Expires at<input name="expiresAt" type="datetime-local" /></label>
-        <button className="primary-button form-span" disabled={busy !== ""}>{busy === "credential" ? "Issuing…" : "Issue Credential"}</button>
+        <label className="form-span">{tr("Analyzer","الجهاز")}<select name="analyzerId" required defaultValue=""><option value="">{tr("Select analyzer…","اختر الجهاز…")}</option>{analyzers.map(item => <option key={item.id} value={item.id}>{item.code} — {item.name}</option>)}</select></label>
+        <label>{tr("Credential name","اسم بيانات الاعتماد")}<input name="name" required placeholder={tr("Bridge workstation / service","محطة عمل / خدمة الجسر")} /></label>
+        <label>{tr("Expires at","تنتهي في")}<input name="expiresAt" type="datetime-local" /></label>
+        <button className="primary-button form-span" disabled={busy !== ""}>{busy === "credential" ? tr("Issuing…","جارٍ الإصدار…") : tr("Issue Credential","إصدار بيانات الاعتماد")}</button>
       </form>
-      {issuedToken && <div className="credential-token-box"><strong>Copy now — shown once</strong><code>{issuedToken}</code></div>}
+      {issuedToken && <div className="credential-token-box"><strong>{tr("Copy now — shown once","انسخ الآن — يظهر مرة واحدة")}</strong><code>{issuedToken}</code></div>}
       {message && <div className="form-success">{message}</div>}
     </CrudModal>
 
-    <CrudModal open={open === "mapping"} onClose={() => setOpen("")} title="Create Test Mapping" description="Map analyzer codes to LIS tests/components using effective dates." size="lg">
+    <CrudModal open={open === "mapping"} onClose={() => setOpen("")} title={tr("Create Test Mapping","إنشاء ربط فحص")} description={tr("Map analyzer codes to LIS tests/components using effective dates.","اربط أكواد الجهاز بفحوصات/مكونات LIS مع تواريخ سريان.")} size="lg">
       <form className="catalog-form" onSubmit={createMapping}>
-        <label>Analyzer<select name="analyzerId" required defaultValue=""><option value="">Select analyzer…</option>{analyzers.map(item => <option key={item.id} value={item.id}>{item.code} — {item.name}</option>)}</select></label>
-        <label>Analyzer test code<input name="analyzerTestCode" required maxLength={120} /></label>
-        <label>Analyzer unit code<input name="analyzerUnitCode" maxLength={80} /></label>
-        <label>LIS test<select name="testId" required value={mappingTestId} onChange={event => setMappingTestId(event.target.value)}><option value="">Select test…</option>{tests.map(item => <option key={item.id} value={item.id}>{item.code} — {item.nameEn}</option>)}</select></label>
-        <label>Component<select name="componentId" defaultValue="" disabled={!mappingTestId || mappingComponents.length === 0}><option value="">{mappingComponents.length ? "Select component…" : "Simple test"}</option>{mappingComponents.map(item => <option key={item.id} value={item.id}>{item.code} — {item.nameEn}</option>)}</select></label>
-        <label>Effective from<input name="effectiveFrom" type="date" defaultValue={new Date().toISOString().slice(0,10)} required /></label>
-        <label>Effective to<input name="effectiveTo" type="date" /></label>
-        <button className="primary-button form-span" disabled={busy !== ""}>{busy === "mapping" ? "Saving…" : "Create Mapping"}</button>
+        <label>{tr("Analyzer","الجهاز")}<select name="analyzerId" required defaultValue=""><option value="">{tr("Select analyzer…","اختر الجهاز…")}</option>{analyzers.map(item => <option key={item.id} value={item.id}>{item.code} — {item.name}</option>)}</select></label>
+        <label>{tr("Analyzer test code","رمز الفحص في الجهاز")}<input name="analyzerTestCode" required maxLength={120} /></label>
+        <label>{tr("Analyzer unit code","رمز الوحدة في الجهاز")}<input name="analyzerUnitCode" maxLength={80} /></label>
+        <label>{tr("LIS test","فحص LIS")}<select name="testId" required value={mappingTestId} onChange={event => setMappingTestId(event.target.value)}><option value="">{tr("Select test…","اختر الفحص…")}</option>{tests.map(item => <option key={item.id} value={item.id}>{item.code} — {localizedName(item)}</option>)}</select></label>
+        <label>{tr("Component","المكوّن")}<select name="componentId" defaultValue="" disabled={!mappingTestId || mappingComponents.length === 0}><option value="">{mappingComponents.length ? tr("Select component…","اختر المكوّن…") : tr("Simple test","فحص بسيط")}</option>{mappingComponents.map(item => <option key={item.id} value={item.id}>{item.code} — {localizedName(item)}</option>)}</select></label>
+        <label>{tr("Effective from","ساري من")}<input name="effectiveFrom" type="date" defaultValue={new Date().toISOString().slice(0,10)} required /></label>
+        <label>{tr("Effective to","ساري حتى")}<input name="effectiveTo" type="date" /></label>
+        <button className="primary-button form-span" disabled={busy !== ""}>{busy === "mapping" ? tr("Saving…","جارٍ الحفظ…") : tr("Create Mapping","إنشاء الربط")}</button>
         {message && <div className="form-success form-span">{message}</div>}
       </form>
     </CrudModal>
