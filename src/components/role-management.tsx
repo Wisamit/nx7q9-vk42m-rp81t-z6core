@@ -55,6 +55,35 @@ export function RoleManagement({ locale }: { locale: "ar" | "en" }) {
     setBusy(false);
   }
 
+  async function updateRole(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!editing || editing.isSystem) return;
+    setBusy(true);
+    setMessage("");
+    const form = new FormData(event.currentTarget);
+    const response = await fetch("/api/admin/roles/" + editing.id, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        nameEn: form.get("nameEn"),
+        nameAr: form.get("nameAr"),
+        discountLimitPercent: Number(form.get("discountLimitPercent") || 0),
+        permissionIds: form.getAll("permissionIds"),
+      }),
+    });
+    const body = await response.json().catch(() => ({}));
+    if (response.ok) {
+      setEditing(null);
+      setMessage(tr("Role updated successfully.", "تم تحديث الدور بنجاح."));
+      await load();
+    } else {
+      setMessage(body.error === "invalid_fields"
+        ? tr("Enter valid role details, discount limit and permissions.", "أدخل بيانات الدور وحد الخصم والصلاحيات بشكل صحيح.")
+        : tr("Unable to update role.", "تعذر تحديث الدور."));
+    }
+    setBusy(false);
+  }
+
   async function toggleRole(role: Role) {
     if (role.isSystem) return;
     setBusy(true);
@@ -90,9 +119,27 @@ export function RoleManagement({ locale }: { locale: "ar" | "en" }) {
       </form>
     </CrudModal>
 
+    <CrudModal
+      open={Boolean(editing)}
+      onClose={() => setEditing(null)}
+      title={tr("Edit role", "تعديل الدور")}
+      description={editing ? editing.code : undefined}
+      size="xl"
+    >
+      {editing && !editing.isSystem && <form className="form-stack modal-form-stack" onSubmit={updateRole}>
+        <div className="settings-grid">
+          <label>{tr("English name", "الاسم بالإنجليزية")}<input name="nameEn" required defaultValue={editing.nameEn} /></label>
+          <label>{tr("Arabic name", "الاسم بالعربية")}<input name="nameAr" defaultValue={editing.nameAr || ""} /></label>
+          <label>{tr("Discount limit (%)", "حد الخصم (%)")}<input name="discountLimitPercent" type="number" min="0" max="100" step="0.01" required defaultValue={editing.discountLimitPercent} /></label>
+        </div>
+        <div className="permission-groups">{grouped.map(([module, permissions]) => <fieldset className="permission-group" key={module}><legend>{module}</legend>{permissions.map(permission => <label key={permission.id}><input type="checkbox" name="permissionIds" value={permission.id} defaultChecked={editing.permissionIds.includes(permission.id)} /><span><strong>{permission.code}</strong><small>{permission.description || ""}</small></span></label>)}</fieldset>)}</div>
+        <div className="crud-modal-actions"><button className="primary-button" disabled={busy}>{busy ? tr("Saving…", "جارٍ الحفظ…") : tr("Save role", "حفظ الدور")}</button></div>
+      </form>}
+    </CrudModal>
+
     <section className="table-card admin-table-card">
       <div className="table-toolbar"><div><h2>{tr("Roles", "الأدوار")}</h2><span>{tr("System roles are protected from destructive editing.", "أدوار النظام محمية من التعديل التخريبي.")}</span></div><span>{data.roles.length}</span></div>
-      <div className="table-wrap"><table><thead><tr><th>{tr("Role", "الدور")}</th><th>{tr("Users", "المستخدمون")}</th><th>{tr("Permissions", "الصلاحيات")}</th><th>{tr("Status", "الحالة")}</th><th>{tr("Actions", "إجراءات")}</th></tr></thead><tbody>{data.roles.map(role => <tr key={role.id}><td><strong>{locale === "ar" ? role.nameAr || role.nameEn : role.nameEn}</strong><small className="table-subtext">{role.code}{role.isSystem ? ` · ${tr("System", "نظامي")}` : ""}</small></td><td>{role.userCount}</td><td>{role.permissionIds.length}</td><td><span className={"status-badge " + (role.status === "ACTIVE" ? "status-active" : "status-warning")}>{statusLabel(locale, role.status)}</span></td><td>{role.isSystem ? <span className="muted">{tr("Protected", "محمي")}</span> : <button type="button" className="secondary-button compact-action" disabled={busy} onClick={() => void toggleRole(role)}>{role.status === "ACTIVE" ? tr("Deactivate", "تعطيل") : tr("Activate", "تفعيل")}</button>}</td></tr>)}</tbody></table></div>
+      <div className="table-wrap"><table><thead><tr><th>{tr("Role", "الدور")}</th><th>{tr("Users", "المستخدمون")}</th><th>{tr("Permissions", "الصلاحيات")}</th><th>{tr("Discount limit", "حد الخصم")}</th><th>{tr("Status", "الحالة")}</th><th>{tr("Actions", "إجراءات")}</th></tr></thead><tbody>{data.roles.map(role => <tr key={role.id}><td><strong>{locale === "ar" ? role.nameAr || role.nameEn : role.nameEn}</strong><small className="table-subtext">{role.code}{role.isSystem ? ` · ${tr("System", "نظامي")}` : ""}</small></td><td>{role.userCount}</td><td>{role.permissionIds.length}</td><td>{Number(role.discountLimitPercent).toFixed(2)}%</td><td><span className={"status-badge " + (role.status === "ACTIVE" ? "status-active" : "status-warning")}>{statusLabel(locale, role.status)}</span></td><td>{role.isSystem ? <span className="muted">{tr("Protected", "محمي")}</span> : <div className="inline-actions"><button type="button" className="secondary-button compact-action" disabled={busy} onClick={() => setEditing(role)}>{tr("Edit", "تعديل")}</button><button type="button" className="secondary-button compact-action" disabled={busy} onClick={() => void toggleRole(role)}>{role.status === "ACTIVE" ? tr("Deactivate", "تعطيل") : tr("Activate", "تفعيل")}</button></div>}</td></tr>)}</tbody></table></div>
     </section>
   </div>;
 }
