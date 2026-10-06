@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { CrudModal } from "@/components/crud-modal";
 import { SystemIcon } from "@/components/system-icon";
 
-type ClientOption = { id: string; code: string; nameEn: string };
+type ClientOption = { id: string; code: string; nameEn: string; nameAr?: string | null };
 
 export function ClientReferrerForms({
   clients,
@@ -17,6 +17,9 @@ export function ClientReferrerForms({
   locale: "ar" | "en";
 }) {
   const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
+  const localizedName = (item: ClientOption) => locale === "ar" ? item.nameAr || item.nameEn : item.nameEn;
+  const clientTypeLabel = (value: string) => ({ INDIVIDUAL: tr("Individual","فرد"), CLINIC: tr("Clinic","عيادة"), HOSPITAL: tr("Hospital","مستشفى"), COMPANY: tr("Company","شركة"), INSURANCE: tr("Insurance","تأمين"), OTHER: tr("Other","أخرى") }[value] || value);
+  const referrerTypeLabel = (value: string) => ({ PHYSICIAN: tr("Physician","طبيب"), CLINIC: tr("Clinic","عيادة"), HOSPITAL: tr("Hospital","مستشفى"), OTHER: tr("Other","أخرى") }[value] || value);
   const router = useRouter();
   const [clientMessage, setClientMessage] = useState("");
   const [referrerMessage, setReferrerMessage] = useState("");
@@ -120,10 +123,10 @@ export function ClientReferrerForms({
 
     <CrudModal open={open === "client"} onClose={() => setOpen("")} title={tr("Add Client", "إضافة عميل")} description={tr("Create a billing/commercial client account.", "إنشاء حساب عميل تجاري أو حساب فوترة.")} size="lg">
       <form className="catalog-form" onSubmit={submitClient}>
-        <label>{tr("Code", "الرمز")}<input name="code" placeholder="Optional; generated from name" /></label>
-        <label>{tr("Type", "النوع")}<select name="type" defaultValue="CLINIC"><option>INDIVIDUAL</option><option>CLINIC</option><option>HOSPITAL</option><option>COMPANY</option><option>INSURANCE</option><option>OTHER</option></select></label>
+        <label>{tr("Code", "الرمز")}<input name="code" placeholder={tr("Optional; generated from name","اختياري؛ يتم توليده من الاسم")} /></label>
+        <label>{tr("Type", "النوع")}<select name="type" defaultValue="CLINIC"><option value="INDIVIDUAL">{clientTypeLabel("INDIVIDUAL")}</option><option value="CLINIC">{clientTypeLabel("CLINIC")}</option><option value="HOSPITAL">{clientTypeLabel("HOSPITAL")}</option><option value="COMPANY">{clientTypeLabel("COMPANY")}</option><option value="INSURANCE">{clientTypeLabel("INSURANCE")}</option><option value="OTHER">{clientTypeLabel("OTHER")}</option></select></label>
         <label>{tr("Name (English)", "الاسم بالإنجليزية")}<input name="nameEn" required /></label>
-        <label dir="rtl">الاسم بالعربية<input name="nameAr" dir="rtl" /></label>
+        <label>{tr("Name (Arabic)","الاسم بالعربية")}<input name="nameAr" dir="rtl" /></label>
         <label>{tr("Phone", "الهاتف")}<input name="phone" /></label>
         <label>{tr("Email", "البريد الإلكتروني")}<input name="email" type="email" /></label>
         <label>{tr("Payment terms (days)", "شروط الدفع (أيام)")}<input name="paymentTermsDays" type="number" min="0" max="3650" /></label>
@@ -135,13 +138,13 @@ export function ClientReferrerForms({
     <CrudModal open={open === "referrer"} onClose={() => setOpen("")} title={tr("Add Referrer", "إضافة محيل")} description={tr("Create a doctor, clinic or hospital referral source.", "إنشاء مصدر إحالة لطبيب أو عيادة أو مستشفى.")} size="lg">
       <form className="catalog-form" onSubmit={submitReferrer}>
         <label>{tr("Code", "الرمز")}<input name="code" placeholder="Optional; generated from name" /></label>
-        <label>{tr("Type", "النوع")}<select name="type" defaultValue="PHYSICIAN"><option>PHYSICIAN</option><option>CLINIC</option><option>HOSPITAL</option><option>OTHER</option></select></label>
+        <label>{tr("Type", "النوع")}<select name="type" defaultValue="PHYSICIAN"><option value="PHYSICIAN">{referrerTypeLabel("PHYSICIAN")}</option><option value="CLINIC">{referrerTypeLabel("CLINIC")}</option><option value="HOSPITAL">{referrerTypeLabel("HOSPITAL")}</option><option value="OTHER">{referrerTypeLabel("OTHER")}</option></select></label>
         <label>{tr("Name (English)", "الاسم بالإنجليزية")}<input name="nameEn" required /></label>
         <label dir="rtl">الاسم بالعربية<input name="nameAr" dir="rtl" /></label>
         <label>{tr("License #", "رقم الترخيص")}<input name="licenseNumber" /></label>
         <label>{tr("Phone", "الهاتف")}<input name="phone" /></label>
         <label>{tr("Email", "البريد الإلكتروني")}<input name="email" type="email" /></label>
-        <label>{tr("Billing client", "عميل الفوترة")}<select name="clientId" defaultValue=""><option value="">No linked client</option>{clients.map(client => <option key={client.id} value={client.id}>{client.code} — {client.nameEn}</option>)}</select></label>
+        <label>{tr("Billing client", "عميل الفوترة")}<select name="clientId" defaultValue=""><option value="">{tr("No linked client","لا يوجد عميل مرتبط")}</option>{clients.map(client => <option key={client.id} value={client.id}>{client.code} — {localizedName(client)}</option>)}</select></label>
         <button className="primary-button form-span" disabled={busy === "referrer"}>{busy === "referrer" ? tr("Saving…", "جارٍ الحفظ…") : tr("Create Referrer", "إنشاء المحيل")}</button>
         {referrerMessage && <div className="form-success form-span">{referrerMessage}</div>}
       </form>
