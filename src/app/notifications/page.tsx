@@ -43,6 +43,7 @@ export default async function NotificationsPage() {
   const deliveryMap = new Map(deliveryCounts.map(item => [item.status, item._count._all]));
   const severityLabel = (value: string) => value === "INFO" ? tr(locale, "Info", "معلومة") : value === "WARNING" ? tr(locale, "Warning", "تحذير") : value === "CRITICAL" ? tr(locale, "Critical", "حرج") : value;
   const channelLabel = (value: string) => value === "IN_APP" ? tr(locale, "In-app", "داخل النظام") : value === "EMAIL" ? tr(locale, "Email", "البريد الإلكتروني") : value === "SMS" ? tr(locale, "SMS", "رسالة نصية") : value === "WHATSAPP" ? tr(locale, "WhatsApp", "واتساب") : value;
+  const eventLabel = (value: string) => value === "CRITICAL_RESULT_OPENED" ? tr(locale, "Critical result opened", "فتح نتيجة حرجة") : value === "CRITICAL_RESULT_ESCALATED" ? tr(locale, "Critical result escalated", "تصعيد نتيجة حرجة") : value === "REPORT_RELEASED" ? tr(locale, "Report released", "إصدار تقرير") : value === "TAT_BREACH" ? tr(locale, "TAT breach", "تجاوز زمن الإنجاز") : value === "APPOINTMENT_REMINDER" ? tr(locale, "Appointment reminder", "تذكير بموعد") : value;
 
   return <main className="catalog-shell">
     <header className="page-header">
@@ -74,9 +75,9 @@ export default async function NotificationsPage() {
         <thead><tr><th>{tr(locale, "Time", "الوقت")}</th><th>{tr(locale, "Event", "الحدث")}</th><th>{tr(locale, "Message", "الرسالة")}</th><th>{tr(locale, "Branch", "الفرع")}</th><th>{tr(locale, "Severity", "الشدة")}</th><th>{tr(locale, "Delivery", "التسليم")}</th><th>{tr(locale, "Read", "القراءة")}</th></tr></thead>
         <tbody>{notifications.length === 0 ? <tr><td colSpan={7} className="empty-state">{tr(locale, "No notifications yet.", "لا توجد إشعارات حتى الآن.")}</td></tr> : notifications.map(item => <tr key={item.id}>
           <td>{item.createdAt.toISOString().replace("T"," ").slice(0,19)}</td>
-          <td><strong>{item.eventCode}</strong></td>
+          <td><strong>{eventLabel(item.eventCode)}</strong></td>
           <td><strong>{item.title}</strong><br/><small>{item.body}</small></td>
-          <td>{item.branch?.code || "ORG"}</td>
+          <td>{item.branch?.code || tr(locale, "ORG", "المؤسسة")}</td>
           <td><span className={"status-badge notification-" + item.severity.toLowerCase()}>{severityLabel(item.severity)}</span></td>
           <td>{item.deliveries.map(delivery => channelLabel(delivery.channel) + ": " + statusLabel(locale, delivery.status)).join(" · ") || "—"}</td>
           <td>{item.readAt ? item.readAt.toISOString().replace("T"," ").slice(0,16) : tr(locale, "Unread", "غير مقروء")}</td>
@@ -89,7 +90,7 @@ export default async function NotificationsPage() {
       <div className="table-wrap"><table>
         <thead><tr><th>{tr(locale, "Code", "الرمز")}</th><th>{tr(locale, "Event", "الحدث")}</th><th>{tr(locale, "Channel", "القناة")}</th><th>{tr(locale, "Subject", "الموضوع")}</th><th>{tr(locale, "Status", "الحالة")}</th></tr></thead>
         <tbody>{templates.length === 0 ? <tr><td colSpan={5} className="empty-state">{tr(locale, "No templates configured.", "لا توجد قوالب مهيأة.")}</td></tr> : templates.map(item => <tr key={item.id}>
-          <td><strong>{item.code}</strong></td><td>{item.eventCode}</td><td>{channelLabel(item.channel)}</td><td>{locale === "ar" ? item.subjectAr || item.subjectEn || "—" : item.subjectEn || "—"}</td><td>{item.enabled ? statusLabel(locale, "ACTIVE") : statusLabel(locale, "DISABLED")}</td>
+          <td><strong>{item.code}</strong></td><td>{eventLabel(item.eventCode)}</td><td>{channelLabel(item.channel)}</td><td>{locale === "ar" ? item.subjectAr || item.subjectEn || "—" : item.subjectEn || "—"}</td><td>{item.enabled ? statusLabel(locale, "ACTIVE") : statusLabel(locale, "DISABLED")}</td>
         </tr>)}</tbody>
       </table></div>
     </section>}
