@@ -98,7 +98,15 @@ enum InvoiceStatus {
 
 enum DiscountApprovalMethod {
   SELF_LIMIT
-  APPROVER_REAUTH
+  APPROVAL_WORKFLOW
+}
+
+enum DiscountApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  USED
+  EXPIRED
 }
 
 enum PaymentMethod {
@@ -805,6 +813,7 @@ model Organization {
   orderQuestions OrderQuestion[]
   orderAnswers OrderAnswer[]
   invoices Invoice[]
+  discountApprovalRequests DiscountApprovalRequest[]
   payments Payment[]
   specimens Specimen[]
   transferManifests SpecimenTransferManifest[]
@@ -933,6 +942,7 @@ model Branch {
   orders LabOrder[] @relation("OrderingBranchOrders")
   performedOrderItems OrderItem[] @relation("PerformedBranchOrderItems")
   invoices Invoice[]
+  discountApprovalRequests DiscountApprovalRequest[]
   payments Payment[]
   collectedSpecimens Specimen[] @relation("SpecimenCollectionBranch")
   currentSpecimens Specimen[] @relation("SpecimenCurrentBranch")
@@ -1086,6 +1096,8 @@ model User {
   recordedOrderAnswers OrderAnswer[] @relation("OrderAnswerRecorder")
   createdInvoices Invoice[] @relation("InvoiceCreator")
   approvedDiscountInvoices Invoice[] @relation("InvoiceDiscountApprover")
+  requestedDiscountApprovals DiscountApprovalRequest[] @relation("DiscountApprovalRequester")
+  approvedDiscountApprovals DiscountApprovalRequest[] @relation("DiscountApprovalApprover")
   cashierPayments Payment[] @relation("PaymentCashier")
   orderStatusChanges OrderStatusHistory[] @relation("OrderStatusChanger")
   collectedSpecimens Specimen[] @relation("SpecimenCollector")
@@ -2133,6 +2145,43 @@ model OrderItem {
   @@index([performedBranchId, status])
   @@index([testId, status])
   @@map("order_items")
+}
+
+model DiscountApprovalRequest {
+  id                    String                 @id @default(uuid()) @db.Char(36)
+  organizationId        String                 @map("organization_id") @db.Char(36)
+  branchId              String                 @map("branch_id") @db.Char(36)
+  requestedByUserId     String                 @map("requested_by_user_id") @db.Char(36)
+  approvedByUserId      String?                @map("approved_by_user_id") @db.Char(36)
+  status                DiscountApprovalStatus @default(PENDING)
+  discountPercent       Decimal                @map("discount_percent") @db.Decimal(5, 2)
+  reason                String                 @db.VarChar(1000)
+  currency              String                 @db.Char(3)
+  subtotalSnapshot      Decimal                @map("subtotal_snapshot") @db.Decimal(18, 4)
+  discountTotalSnapshot Decimal                @map("discount_total_snapshot") @db.Decimal(18, 4)
+  finalTotalSnapshot    Decimal                @map("final_total_snapshot") @db.Decimal(18, 4)
+  pricingFingerprint    String                 @map("pricing_fingerprint") @db.Char(64)
+  contextSnapshot       Json                   @map("context_snapshot")
+  approvalNote          String?                @map("approval_note") @db.VarChar(1000)
+  requestedAt           DateTime               @default(now()) @map("requested_at") @db.DateTime(3)
+  expiresAt             DateTime               @map("expires_at") @db.DateTime(3)
+  approvedAt            DateTime?              @map("approved_at") @db.DateTime(3)
+  rejectedAt            DateTime?              @map("rejected_at") @db.DateTime(3)
+  usedAt                DateTime?              @map("used_at") @db.DateTime(3)
+  createdAt             DateTime               @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt             DateTime               @updatedAt @map("updated_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  branch       Branch       @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  requestedBy  User         @relation("DiscountApprovalRequester", fields: [requestedByUserId], references: [id], onDelete: Restrict)
+  approvedBy   User?        @relation("DiscountApprovalApprover", fields: [approvedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, status, requestedAt])
+  @@index([branchId, status, expiresAt])
+  @@index([requestedByUserId, status, expiresAt])
+  @@index([approvedByUserId, approvedAt])
+  @@index([pricingFingerprint, status, expiresAt])
+  @@map("discount_approval_requests")
 }
 
 model Invoice {
