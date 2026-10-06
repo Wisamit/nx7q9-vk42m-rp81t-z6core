@@ -3,7 +3,7 @@
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 
-export function PatientCreateForm() {
+export function PatientCreateForm({ onSuccess }: { onSuccess?: (message: string) => void }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -31,9 +31,11 @@ export function PatientCreateForm() {
     const body = await response.json().catch(() => ({}));
 
     if (response.ok) {
-      setMessage(`Patient created: ${body.patient.patientNumber}`);
+      const success = `Patient created: ${body.patient.patientNumber}`;
+      setMessage(success);
       event.currentTarget.reset();
       router.refresh();
+      onSuccess?.(success);
     } else if (body.error === "possible_duplicate" || body.error === "identifier_already_used") {
       setMessage(`Potential duplicate found: ${body.patient?.patientNumber || ""} ${body.patient?.fullNameEn || ""}`);
     } else {
