@@ -3,9 +3,9 @@
 import { FormEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
-type Item = { id: string; code: string; nameEn: string; stockUnit: string };
-type Branch = { id: string; code: string; nameEn: string };
-type Supplier = { id: string; code: string; nameEn: string };
+type Item = { id: string; code: string; nameEn: string; nameAr?: string | null; stockUnit: string };
+type Branch = { id: string; code: string; nameEn: string; nameAr?: string | null };
+type Supplier = { id: string; code: string; nameEn: string; nameAr?: string | null };
 type ApprovedRequest = {
   id: string;
   requestNumber: string;
@@ -22,12 +22,14 @@ export function ProcurementManager({
   suppliers,
   approvedRequests,
   canManage,
+  locale,
 }: {
   items: Item[];
   branches: Branch[];
   suppliers: Supplier[];
   approvedRequests: ApprovedRequest[];
   canManage: boolean;
+  locale: "ar" | "en";
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState("");
@@ -38,6 +40,8 @@ export function ProcurementManager({
   const [orderLines, setOrderLines] = useState<OrderLine[]>([
     { itemId: "", orderedQty: "", unitCost: "" },
   ]);
+  const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
+  const localizedName = (item: { nameEn: string; nameAr?: string | null }) => locale === "ar" ? item.nameAr || item.nameEn : item.nameEn;
   const [selectedRequestId, setSelectedRequestId] = useState("");
   const selectedRequest = useMemo(() => approvedRequests.find(request => request.id === selectedRequestId) || null, [approvedRequests, selectedRequestId]);
 
@@ -51,7 +55,7 @@ export function ProcurementManager({
     });
     const body = await response.json().catch(() => ({}));
     setBusy("");
-    setMessage(response.ok ? success : body.error || "Request failed.");
+    setMessage(response.ok ? success : tr("Request failed.", "فشل الطلب."));
     if (response.ok) router.refresh();
     return response.ok;
   }
@@ -77,7 +81,7 @@ export function ProcurementManager({
         currency: line.estimatedUnitCost ? line.currency : "",
         notes: line.notes,
       })),
-    }, "request", "Purchase request created.");
+    }, "request", tr("Purchase request created.", "تم إنشاء طلب الشراء."));
     if (ok) {
       event.currentTarget.reset();
       setRequestLines([{ itemId: "", requestedQty: "", estimatedUnitCost: "", currency: "AED", notes: "" }]);
@@ -97,7 +101,7 @@ export function ProcurementManager({
       expectedAt: form.get("expectedAt"),
       notes: form.get("notes"),
       items: orderLines,
-    }, "order", "Purchase order created.");
+    }, "order", tr("Purchase order created.", "تم إنشاء أمر الشراء."));
     if (ok) {
       event.currentTarget.reset();
       setSelectedRequestId("");
@@ -119,65 +123,65 @@ export function ProcurementManager({
 
   return <section className="detail-grid detail-section">
     <article className="detail-card">
-      <h2>Create Purchase Request</h2>
+      <h2>{tr("Create Purchase Request","إنشاء طلب شراء")}</h2>
       <form className="catalog-form" onSubmit={createRequest}>
-        <label>Branch<select name="branchId" required defaultValue=""><option value="">Select branch…</option>{branches.map(branch => <option key={branch.id} value={branch.id}>{branch.code} — {branch.nameEn}</option>)}</select></label>
-        <label>Request number<input name="requestNumber" required /></label>
-        <label className="form-span">Notes<textarea name="notes" rows={2} /></label>
+        <label>{tr("Branch","الفرع")}<select name="branchId" required defaultValue=""><option value="">{tr("Select branch…","اختر الفرع…")}</option>{branches.map(branch => <option key={branch.id} value={branch.id}>{branch.code} — {localizedName(branch)}</option>)}</select></label>
+        <label>{tr("Request number","رقم الطلب")}<input name="requestNumber" required /></label>
+        <label className="form-span">{tr("Notes","ملاحظات")}<textarea name="notes" rows={2} /></label>
 
         <div className="form-span">
-          <h3>Requested Items</h3>
+          <h3>{tr("Requested Items","الأصناف المطلوبة")}</h3>
           <div className="reflex-list">
             {requestLines.map((line, index) => <div className="reflex-card" key={index}>
               <div className="catalog-form" style={{ flex: 1 }}>
-                <label>Item<select value={line.itemId} required onChange={event => setRequestLine(index, "itemId", event.target.value)}><option value="">Select item…</option>{items.map(item => <option key={item.id} value={item.id}>{item.code} — {item.nameEn}</option>)}</select></label>
-                <label>Quantity<input type="number" min="0.0001" step="0.0001" value={line.requestedQty} required onChange={event => setRequestLine(index, "requestedQty", event.target.value)} /></label>
-                <label>Estimated unit cost<input type="number" min="0.0001" step="0.0001" value={line.estimatedUnitCost} onChange={event => setRequestLine(index, "estimatedUnitCost", event.target.value)} /></label>
-                <label>Currency<input maxLength={3} value={line.currency} onChange={event => setRequestLine(index, "currency", event.target.value.toUpperCase())} /></label>
-                <label className="form-span">Line note<input value={line.notes} onChange={event => setRequestLine(index, "notes", event.target.value)} /></label>
+                <label>{tr("Item","الصنف")}<select value={line.itemId} required onChange={event => setRequestLine(index, "itemId", event.target.value)}><option value="">{tr("Select item…","اختر الصنف…")}</option>{items.map(item => <option key={item.id} value={item.id}>{item.code} — {localizedName(item)}</option>)}</select></label>
+                <label>{tr("Quantity","الكمية")}<input type="number" min="0.0001" step="0.0001" value={line.requestedQty} required onChange={event => setRequestLine(index, "requestedQty", event.target.value)} /></label>
+                <label>{tr("Estimated unit cost","تكلفة الوحدة التقديرية")}<input type="number" min="0.0001" step="0.0001" value={line.estimatedUnitCost} onChange={event => setRequestLine(index, "estimatedUnitCost", event.target.value)} /></label>
+                <label>{tr("Currency","العملة")}<input maxLength={3} value={line.currency} onChange={event => setRequestLine(index, "currency", event.target.value.toUpperCase())} /></label>
+                <label className="form-span">{tr("Line note","ملاحظة البند")}<input value={line.notes} onChange={event => setRequestLine(index, "notes", event.target.value)} /></label>
               </div>
-              {requestLines.length > 1 && <button type="button" className="secondary-button" onClick={() => setRequestLines(current => current.filter((_, i) => i !== index))}>Remove</button>}
+              {requestLines.length > 1 && <button type="button" className="secondary-button" onClick={() => setRequestLines(current => current.filter((_, i) => i !== index))}>{tr("Remove","إزالة")}</button>}
             </div>)}
           </div>
-          <button type="button" className="secondary-button" onClick={() => setRequestLines(current => [...current, { itemId: "", requestedQty: "", estimatedUnitCost: "", currency: "AED", notes: "" }])}>Add Item</button>
+          <button type="button" className="secondary-button" onClick={() => setRequestLines(current => [...current, { itemId: "", requestedQty: "", estimatedUnitCost: "", currency: "AED", notes: "" }])}>{tr("Add Item","إضافة صنف")}</button>
         </div>
 
-        <button className="primary-button form-span" disabled={busy !== ""}>{busy === "request" ? "Saving…" : "Create Purchase Request"}</button>
+        <button className="primary-button form-span" disabled={busy !== ""}>{busy === "request" ? tr("Saving…","جارٍ الحفظ…") : tr("Create Purchase Request","إنشاء طلب الشراء")}</button>
       </form>
     </article>
 
     <article className="detail-card">
-      <h2>Create Purchase Order</h2>
+      <h2>{tr("Create Purchase Order","إنشاء أمر شراء")}</h2>
       <form className="catalog-form" onSubmit={createOrder}>
-        <label className="form-span">Approved request (optional)<select value={selectedRequestId} onChange={event => chooseApprovedRequest(event.target.value)}>
-          <option value="">Standalone PO</option>
+        <label className="form-span">{tr("Approved request (optional)","طلب معتمد (اختياري)")}<select value={selectedRequestId} onChange={event => chooseApprovedRequest(event.target.value)}>
+          <option value="">{tr("Standalone PO","أمر شراء مستقل")}</option>
           {approvedRequests.map(request => <option key={request.id} value={request.id}>{request.requestNumber}</option>)}
         </select></label>
-        {!selectedRequest && <label>Branch<select name="branchId" required defaultValue=""><option value="">Select branch…</option>{branches.map(branch => <option key={branch.id} value={branch.id}>{branch.code} — {branch.nameEn}</option>)}</select></label>}
-        {selectedRequest && <div><strong>Branch</strong><span>{branches.find(branch => branch.id === selectedRequest.branchId)?.nameEn || selectedRequest.branchId}</span></div>}
-        <label>Supplier<select name="supplierId" required defaultValue=""><option value="">Select supplier…</option>{suppliers.map(supplier => <option key={supplier.id} value={supplier.id}>{supplier.code} — {supplier.nameEn}</option>)}</select></label>
-        <label>PO number<input name="poNumber" required /></label>
-        <label>Currency<input name="currency" maxLength={3} defaultValue="AED" required /></label>
-        <label>Supplier reference<input name="supplierReference" /></label>
-        <label>Expected date<input name="expectedAt" type="date" /></label>
-        <label className="form-span">Notes<textarea name="notes" rows={2} /></label>
+        {!selectedRequest && <label>{tr("Branch","الفرع")}<select name="branchId" required defaultValue=""><option value="">{tr("Select branch…","اختر الفرع…")}</option>{branches.map(branch => <option key={branch.id} value={branch.id}>{branch.code} — {localizedName(branch)}</option>)}</select></label>}
+        {selectedRequest && <div><strong>{tr("Branch","الفرع")}</strong><span>{branches.find(branch => branch.id === selectedRequest.branchId) ? localizedName(branches.find(branch => branch.id === selectedRequest.branchId)!) : selectedRequest.branchId}</span></div>}
+        <label>{tr("Supplier","المورد")}<select name="supplierId" required defaultValue=""><option value="">{tr("Select supplier…","اختر المورد…")}</option>{suppliers.map(supplier => <option key={supplier.id} value={supplier.id}>{supplier.code} — {localizedName(supplier)}</option>)}</select></label>
+        <label>{tr("PO number","رقم أمر الشراء")}<input name="poNumber" required /></label>
+        <label>{tr("Currency","العملة")}<input name="currency" maxLength={3} defaultValue="AED" required /></label>
+        <label>{tr("Supplier reference","مرجع المورد")}<input name="supplierReference" /></label>
+        <label>{tr("Expected date","التاريخ المتوقع")}<input name="expectedAt" type="date" /></label>
+        <label className="form-span">{tr("Notes","ملاحظات")}<textarea name="notes" rows={2} /></label>
 
         <div className="form-span">
-          <h3>Order Lines</h3>
+          <h3>{tr("Order Lines","بنود أمر الشراء")}</h3>
           <div className="reflex-list">
             {orderLines.map((line, index) => <div className="reflex-card" key={index}>
               <div className="catalog-form" style={{ flex: 1 }}>
-                <label>Item<select value={line.itemId} required disabled={Boolean(selectedRequest)} onChange={event => setOrderLine(index, "itemId", event.target.value)}><option value="">Select item…</option>{items.map(item => <option key={item.id} value={item.id}>{item.code} — {item.nameEn}</option>)}</select></label>
-                <label>Quantity<input type="number" min="0.0001" step="0.0001" value={line.orderedQty} required onChange={event => setOrderLine(index, "orderedQty", event.target.value)} /></label>
-                <label>Unit cost<input type="number" min="0.0001" step="0.0001" value={line.unitCost} required onChange={event => setOrderLine(index, "unitCost", event.target.value)} /></label>
+                <label>{tr("Item","الصنف")}<select value={line.itemId} required disabled={Boolean(selectedRequest)} onChange={event => setOrderLine(index, "itemId", event.target.value)}><option value="">{tr("Select item…","اختر الصنف…")}</option>{items.map(item => <option key={item.id} value={item.id}>{item.code} — {localizedName(item)}</option>)}</select></label>
+                <label>{tr("Quantity","الكمية")}<input type="number" min="0.0001" step="0.0001" value={line.orderedQty} required onChange={event => setOrderLine(index, "orderedQty", event.target.value)} /></label>
+                <label>{tr("Unit cost","تكلفة الوحدة")}<input type="number" min="0.0001" step="0.0001" value={line.unitCost} required onChange={event => setOrderLine(index, "unitCost", event.target.value)} /></label>
               </div>
-              {!selectedRequest && orderLines.length > 1 && <button type="button" className="secondary-button" onClick={() => setOrderLines(current => current.filter((_, i) => i !== index))}>Remove</button>}
+              {!selectedRequest && orderLines.length > 1 && <button type="button" className="secondary-button" onClick={() => setOrderLines(current => current.filter((_, i) => i !== index))}>{tr("Remove","إزالة")}</button>}
             </div>)}
           </div>
-          {!selectedRequest && <button type="button" className="secondary-button" onClick={() => setOrderLines(current => [...current, { itemId: "", orderedQty: "", unitCost: "" }])}>Add Item</button>}
+          {!selectedRequest && <button type="button" className="secondary-button" onClick={() => setOrderLines(current => [...current, { itemId: "", orderedQty: "", unitCost: "" }])}>{tr("Add Item","إضافة صنف")}</button>}
         </div>
 
-        <button className="primary-button form-span" disabled={busy !== ""}>{busy === "order" ? "Saving…" : "Create Purchase Order"}</button>
+        <button className="primary-button form-span" disabled={busy !== ""}>{busy === "order" ? tr("Saving…","جارٍ الحفظ…") : tr("Create Purchase Order","إنشاء أمر الشراء")}</button>
       </form>
     </article>
 
