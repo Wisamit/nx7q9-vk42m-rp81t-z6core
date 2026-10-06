@@ -22,7 +22,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   const organizationId = session.user.organizationId;
   const target = await prisma.user.findFirst({
     where: { id, organizationId },
-    include: { roles: { include: { role: true } }, branchScopes: true },
+    include: { roles: { include: { role: true } }, branchScopes: true, departmentScopes: true },
   });
   if (!target) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
@@ -33,6 +33,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   const status = body.status === "ACTIVE" || body.status === "SUSPENDED" || body.status === "DISABLED" ? body.status : target.status;
   const roleIds = body.roleIds === undefined ? target.roles.map(x => x.roleId) : ids(body.roleIds);
   const branchIds = body.branchIds === undefined ? target.branchScopes.map(x => x.branchId) : ids(body.branchIds);
+  const departmentIds = body.departmentIds === undefined ? target.departmentScopes.map(x => x.departmentId) : ids(body.departmentIds);
   const password = typeof body.password === "string" ? body.password : "";
 
   if (!displayNameEn || roleIds.length === 0 || branchIds.length === 0 || (password && password.length < 12)) {
@@ -42,11 +43,14 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     return NextResponse.json({ error: "cannot_disable_self" }, { status: 409 });
   }
 
-  const [roles, branchCount] = await Promise.all([
+  const [roles, branchCount, departments] = await Promise.all([
     prisma.role.findMany({ where: { id: { in: roleIds }, organizationId, status: "ACTIVE" }, select: { id: true, code: true } }),
     prisma.branch.count({ where: { id: { in: branchIds }, organizationId, status: "ACTIVE" } }),
+    prisma.department.findMany({ where: { id: { in: departmentIds }, organizationId, status: "ACTIVE" }, select: { id: true, branchId: true } }),
   ]);
-  if (roles.length !== roleIds.length || branchCount !== branchIds.length) return NextResponse.json({ error: "invalid_scope" }, { status: 400 });
+  const departmentScopeInvalid = departments.length !== departmentIds.length
+    || departments.some(department => department.branchId && !branchIds.includes(department.branchId));
+  if (roles.length !== roleIds.length || branchCount !== branchIds.length || departmentScopeInvalid) return NextResponse.json({ error: "invalid_scope" }, { status: 400 });
 
   const hadSystemAdmin = target.roles.some(x => x.role.code === "SYSTEM_ADMIN" && x.role.status === "ACTIVE");
   const keepsSystemAdmin = roles.some(x => x.code === "SYSTEM_ADMIN") && status === "ACTIVE";
@@ -81,6 +85,8 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     await tx.userRole.createMany({ data: roleIds.map(roleId => ({ userId: id, roleId, assignedBy: session.user.id })) });
     await tx.userBranchScope.deleteMany({ where: { userId: id } });
     await tx.userBranchScope.createMany({ data: branchIds.map(branchId => ({ userId: id, branchId })) });
+    await tx.userDepartmentScope.deleteMany({ where: { userId: id } });
+    if (departmentIds.length > 0) await tx.userDepartmentScope.createMany({ data: departmentIds.map(departmentId => ({ userId: id, departmentId })) });
     if (passwordHash || status !== "ACTIVE") await tx.userSession.updateMany({ where: { userId: id, revokedAt: null }, data: { revokedAt: new Date() } });
     await tx.auditEvent.create({
       data: {
@@ -90,8 +96,8 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
         action: "USER_UPDATED",
         entityType: "User",
         entityId: id,
-        oldValues: { displayNameEn: target.displayNameEn, displayNameAr: target.displayNameAr, email: target.email, preferredLocale: target.preferredLocale, status: target.status, roleIds: target.roles.map(x => x.roleId), branchIds: target.branchScopes.map(x => x.branchId) },
-        newValues: { displayNameEn, displayNameAr: displayNameAr || null, email: email || null, preferredLocale, status, roleIds, branchIds, passwordReset: Boolean(passwordHash) },
+        oldValues: { displayNameEn: target.displayNameEn, displayNameAr: target.displayNameAr, email: target.email, preferredLocale: target.preferredLocale, status: target.status, roleIds: target.roles.map(x => x.roleId), branchIds: target.branchScopes.map(x => x.branchId), departmentIds: target.departmentScopes.map(x => x.departmentId) },
+        newValues: { displayNameEn, displayNameAr: displayNameAr || null, email: email || null, preferredLocale, status, roleIds, branchIds, departmentIds, passwordReset: Boolean(passwordHash) },
         ipAddress: ctx.ipAddress,
         userAgent: ctx.userAgent,
       },
