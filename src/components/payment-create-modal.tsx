@@ -12,7 +12,8 @@ type InvoiceOption = {
   balanceAmount: string;
 };
 
-export function PaymentCreateModal({ invoices }: { invoices: InvoiceOption[] }) {
+export function PaymentCreateModal({ invoices, locale }: { invoices: InvoiceOption[]; locale: "ar" | "en" }) {
+  const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
   const [open, setOpen] = useState(false);
   const [notice, setNotice] = useState("");
 
@@ -20,17 +21,17 @@ export function PaymentCreateModal({ invoices }: { invoices: InvoiceOption[] }) 
     <div className="crud-trigger-row">
       {notice && <span className="crud-success-toast">{notice}</span>}
       <button type="button" className="primary-button" disabled={invoices.length === 0} onClick={() => setOpen(true)}>
-        <SystemIcon name="plus" size={16} /> Post Payment
+        <SystemIcon name="plus" size={16} />{tr("Post Payment", "تسجيل دفعة")}
       </button>
     </div>
     <CrudModal
       open={open}
       onClose={() => setOpen(false)}
-      title="Post Payment"
-      description="Allocate a payment to an open invoice while preserving invoice history."
+      title={tr("Post Payment", "تسجيل دفعة")}
+      description={tr("Allocate a payment to an open invoice while preserving invoice history.", "تسجيل دفعة على فاتورة مفتوحة مع الحفاظ على السجل المالي التاريخي.")}
       size="md"
     >
-      <PaymentForm invoices={invoices} onSuccess={message => {
+      <PaymentForm invoices={invoices} locale={locale} onSuccess={message => {
         setNotice(message);
         setOpen(false);
       }} />
