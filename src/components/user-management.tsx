@@ -16,7 +16,7 @@ type UserRow = {
 };
 type Data = { users: UserRow[]; roles: Role[]; branches: Branch[]; departments: Department[] };
 
-export function UserManagement({ locale }: { locale: "ar" | "en" }) {
+export function UserManagement({ locale, canManageDiscountLimits }: { locale: "ar" | "en"; canManageDiscountLimits: boolean }) {
   const [data, setData] = useState<Data>({ users: [], roles: [], branches: [], departments: [] });
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -81,7 +81,7 @@ export function UserManagement({ locale }: { locale: "ar" | "en" }) {
         displayNameAr: form.get("displayNameAr"),
         password: form.get("password"),
         preferredLocale: form.get("preferredLocale"),
-        discountLimitPercent: form.get("discountLimitPercent"),
+        ...(canManageDiscountLimits ? { discountLimitPercent: form.get("discountLimitPercent") } : {}),
         roleIds: form.getAll("roleIds"),
         branchIds: form.getAll("branchIds"),
         departmentIds: form.getAll("departmentIds"),
@@ -110,7 +110,7 @@ export function UserManagement({ locale }: { locale: "ar" | "en" }) {
         roleIds: form.getAll("roleIds"),
         branchIds: form.getAll("branchIds"),
         departmentIds: form.getAll("departmentIds"),
-        discountLimitPercent: form.get("discountLimitPercent"),
+        ...(canManageDiscountLimits ? { discountLimitPercent: form.get("discountLimitPercent") } : {}),
       }),
     });
     const body = await response.json().catch(() => ({}));
@@ -160,7 +160,7 @@ export function UserManagement({ locale }: { locale: "ar" | "en" }) {
         <label>{tr("Email", "البريد الإلكتروني")}<input name="email" type="email" /></label>
         <label>{tr("Temporary password", "كلمة المرور المؤقتة")}<input name="password" type="password" required minLength={12} autoComplete="new-password" /><small>{tr("Minimum 12 characters.", "12 محرفًا على الأقل.")}</small></label>
         <label>{tr("Preferred language", "اللغة المفضلة")}<select name="preferredLocale" defaultValue="en"><option value="en">{tr("English", "الإنجليزية")}</option><option value="ar">العربية</option></select></label>
-        <label>{tr("Discount limit override (%)", "تجاوز حد الخصم للمستخدم (%)")}<input name="discountLimitPercent" type="number" min="0" max="100" step="0.01" placeholder={tr("Leave blank to inherit from roles", "اتركه فارغًا ليرث من الأدوار")} /></label>
+        {canManageDiscountLimits && <label>{tr("Discount limit override (%)", "تجاوز حد الخصم للمستخدم (%)")}<input name="discountLimitPercent" type="number" min="0" max="100" step="0.01" placeholder={tr("Leave blank to inherit from roles", "اتركه فارغًا ليرث من الأدوار")} /></label>}
         <fieldset className="admin-checklist"><legend>{tr("Roles", "الأدوار")}</legend>{data.roles.map(role => <label key={role.id}><input type="checkbox" name="roleIds" value={role.id} />{locale === "ar" ? role.nameAr || role.nameEn : role.nameEn}</label>)}</fieldset>
         <fieldset className="admin-checklist"><legend>{tr("Branch access", "صلاحية الفروع")}</legend>{data.branches.map(branch => <label key={branch.id}><input type="checkbox" name="branchIds" value={branch.id} />{branch.code} — {locale === "ar" ? branch.nameAr || branch.nameEn : branch.nameEn}</label>)}</fieldset>
         <fieldset className="admin-checklist form-span"><legend>{tr("Department access", "صلاحية الأقسام")}</legend><small>{tr("Optional: no selection means all departments within the selected branches. Selecting departments restricts clinical access.", "اختياري: عدم التحديد يعني كل الأقسام ضمن الفروع المختارة. تحديد أقسام يقيّد الوصول السريري بها.")}</small>{data.departments.map(department => <label key={department.id}><input type="checkbox" name="departmentIds" value={department.id} />{department.code} — {locale === "ar" ? department.nameAr || department.nameEn : department.nameEn}</label>)}</fieldset>
@@ -177,7 +177,7 @@ export function UserManagement({ locale }: { locale: "ar" | "en" }) {
       size="lg"
     >
       {editing && <form className="settings-grid" onSubmit={updateAccess}>
-        <label>{tr("Discount limit override (%)", "تجاوز حد الخصم للمستخدم (%)")}<input name="discountLimitPercent" type="number" min="0" max="100" step="0.01" defaultValue={editing.discountLimitPercent || ""} placeholder={tr("Leave blank to inherit from roles", "اتركه فارغًا ليرث من الأدوار")} /><small>{tr("Current effective limit", "الحد الفعلي الحالي")}: {Number(editing.effectiveDiscountLimitPercent).toFixed(2)}%</small></label>
+        {canManageDiscountLimits && <label>{tr("Discount limit override (%)", "تجاوز حد الخصم للمستخدم (%)")}<input name="discountLimitPercent" type="number" min="0" max="100" step="0.01" defaultValue={editing.discountLimitPercent || ""} placeholder={tr("Leave blank to inherit from roles", "اتركه فارغًا ليرث من الأدوار")} /><small>{tr("Current effective limit", "الحد الفعلي الحالي")}: {Number(editing.effectiveDiscountLimitPercent).toFixed(2)}%</small></label>}
         <fieldset className="admin-checklist"><legend>{tr("Roles", "الأدوار")}</legend>{data.roles.map(role => <label key={role.id}><input type="checkbox" name="roleIds" value={role.id} defaultChecked={editing.roleIds.includes(role.id)} />{locale === "ar" ? role.nameAr || role.nameEn : role.nameEn} · {Number(role.discountLimitPercent).toFixed(2)}%</label>)}</fieldset>
         <fieldset className="admin-checklist"><legend>{tr("Branch access", "صلاحية الفروع")}</legend>{data.branches.map(branch => <label key={branch.id}><input type="checkbox" name="branchIds" value={branch.id} defaultChecked={editing.branchIds.includes(branch.id)} />{branch.code} — {locale === "ar" ? branch.nameAr || branch.nameEn : branch.nameEn}</label>)}</fieldset>
         <fieldset className="admin-checklist form-span"><legend>{tr("Department access", "صلاحية الأقسام")}</legend><small>{tr("No department selection means unrestricted department access inside the selected branches.", "عدم تحديد أقسام يعني السماح بكل الأقسام ضمن الفروع المحددة.")}</small>{data.departments.map(department => <label key={department.id}><input type="checkbox" name="departmentIds" value={department.id} defaultChecked={editing.departmentIds.includes(department.id)} />{department.code} — {locale === "ar" ? department.nameAr || department.nameEn : department.nameEn}</label>)}</fieldset>
