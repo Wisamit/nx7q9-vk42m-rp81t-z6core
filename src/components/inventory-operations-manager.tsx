@@ -112,7 +112,7 @@ export function InventoryOperationsManager({
         <label>{tr("Item","الصنف")}<select required disabled={!consumeBranchId} value={consumeItemId} onChange={event => setConsumeItemId(event.target.value)}><option value="">{tr("Select item…","اختر الصنف…")}</option>{items.map(item => <option key={item.id} value={item.id}>{item.code} — {localizedName(item)}</option>)}</select></label>
         <label>{tr("Specific lot (optional)","تشغيلة محددة (اختياري)")}<select name="lotId" disabled={!consumeItemId} defaultValue=""><option value="">{tr("Automatic FEFO","FEFO تلقائي")}</option>{consumeLots.map(lot => <option key={lot.lotId} value={lot.lotId}>{lot.lotNumber} · {tr("Available","المتاح")} {(Number(lot.onHand)-Number(lot.reserved)).toFixed(4)}{lot.expiryDate ? " · " + tr("Exp","انتهاء") + " " + lot.expiryDate : ""}</option>)}</select></label>
         <label>{tr("Quantity","الكمية")}<input name="quantity" type="number" min="0.0001" step="0.0001" required /></label>
-        <label>{tr("Reference type","نوع المرجع")}<input name="referenceType" placeholder="OrderItem, QCEvent, AnalyzerRun…" /></label>
+        <label>{tr("Reference type","نوع المرجع")}<input name="referenceType" placeholder={tr("OrderItem, QCEvent, AnalyzerRun…","OrderItem، QCEvent، AnalyzerRun…")} /></label>
         <label>{tr("Reference ID","معرّف المرجع")}<input name="referenceId" maxLength={36} /></label>
         <label className="form-span">{tr("Reason / context","السبب / السياق")}<input name="reason" /></label>
         <button className="primary-button form-span" disabled={busy !== ""}>{busy === "consume" ? tr("Posting…","جارٍ الترحيل…") : tr("Post Consumption","ترحيل الاستهلاك")}</button>
