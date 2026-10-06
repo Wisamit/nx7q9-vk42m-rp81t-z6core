@@ -59,10 +59,24 @@ export default async function SpecimensPage({
     }),
     prisma.branch.findMany({
       where: { id: { in: branchIds }, organizationId: session.user.organizationId, status: "ACTIVE" },
-      select: { id: true, code: true, nameEn: true },
+      select: { id: true, code: true, nameEn: true, nameAr: true },
       orderBy: { nameEn: "asc" },
     }),
   ]);
+
+  const localizedName = (item: { nameEn: string; nameAr?: string | null }) => locale === "ar" ? item.nameAr || item.nameEn : item.nameEn;
+  const patientName = (item: { fullNameEn: string; fullNameAr?: string | null }) => locale === "ar" ? item.fullNameAr || item.fullNameEn : item.fullNameEn;
+  const userName = (item: { displayNameEn: string; displayNameAr?: string | null }) => locale === "ar" ? item.displayNameAr || item.displayNameEn : item.displayNameEn;
+  const eventLabel = (value: string) => ({
+    CREATED: tr(locale, "Created", "تم الإنشاء"),
+    COLLECTED: tr(locale, "Collected", "تم الجمع"),
+    RECEIVED: tr(locale, "Received", "تم الاستلام"),
+    REJECTED: tr(locale, "Rejected", "مرفوض"),
+    RELOCATED: tr(locale, "Relocated", "تم تغيير الموقع"),
+    TRANSFERRED: tr(locale, "Transferred", "تم النقل"),
+    PROCESSING_STARTED: tr(locale, "Processing started", "بدأت المعالجة"),
+    DISPOSED: tr(locale, "Disposed", "تم التخلص"),
+  }[value] || value);
 
   const planned = specimens.filter(item => item.status === "PLANNED").length;
   const collected = specimens.filter(item => item.status === "COLLECTED").length;
@@ -92,17 +106,17 @@ export default async function SpecimensPage({
 
     <section className="table-card">
       <div className="table-toolbar">
-        <div><h2>{tr(locale, "Specimen Work Queue", "قائمة عمل العينات")}</h2><span>{specimens.length} shown</span></div>
+        <div><h2>{tr(locale, "Specimen Work Queue", "قائمة عمل العينات")}</h2><span>{specimens.length} {tr(locale, "shown", "معروضة")}</span></div>
         <form className="inline-search" action="/specimens" method="get">
           <input name="q" defaultValue={q} placeholder={tr(locale, "Scan barcode or search order / patient…", "امسح الباركود أو ابحث بالطلب / المريض…")} autoFocus />
           <select name="status" defaultValue={status}>
             <option value="">{tr(locale, "All statuses", "كل الحالات")}</option>
-            <option value="PLANNED">PLANNED</option>
-            <option value="COLLECTED">COLLECTED</option>
-            <option value="RECEIVED">RECEIVED</option>
-            <option value="IN_TRANSIT">IN_TRANSIT</option>
-            <option value="IN_PROCESS">IN_PROCESS</option>
-            <option value="REJECTED">REJECTED</option>
+            <option value="PLANNED">{statusLabel(locale, "PLANNED")}</option>
+            <option value="COLLECTED">{statusLabel(locale, "COLLECTED")}</option>
+            <option value="RECEIVED">{statusLabel(locale, "RECEIVED")}</option>
+            <option value="IN_TRANSIT">{statusLabel(locale, "IN_TRANSIT")}</option>
+            <option value="IN_PROCESS">{statusLabel(locale, "IN_PROCESS")}</option>
+            <option value="REJECTED">{statusLabel(locale, "REJECTED")}</option>
           </select>
           <button className="secondary-button"><SystemIcon name="search" size={15} />{tr(locale, "Search", "بحث")}</button>
           {(q || status) && <Link className="secondary-link" href="/specimens">{tr(locale, "Clear", "مسح")}</Link>}
@@ -117,16 +131,16 @@ export default async function SpecimensPage({
             <div>
               <span className={"status-badge status-" + specimen.status.toLowerCase().replaceAll("_","-")}>{statusLabel(locale, specimen.status)}</span>
               <h2 className="barcode-text">{specimen.barcode}</h2>
-              <p className="muted">{specimen.order.accessionNumber} · {specimen.order.patient.patientNumber} · {specimen.order.patient.fullNameEn}</p>
+              <p className="muted">{specimen.order.accessionNumber} · {specimen.order.patient.patientNumber} · {patientName(specimen.order.patient)}</p>
             </div>
             <Link className="secondary-link" href={`/orders/${specimen.orderId}`}><SystemIcon name="orders" size={15} />{tr(locale, "Open Order", "فتح الطلب")}</Link>
           </div>
 
           <div className="specimen-metadata">
-            <div><span>{tr(locale, "Specimen", "العينة")}</span><strong>{specimen.specimenType?.nameEn || tr(locale, "Not configured", "غير مهيأة")}</strong></div>
-            <div><span>{tr(locale, "Container", "الحاوية")}</span><strong>{specimen.container?.nameEn || "—"}</strong></div>
-            <div><span>{tr(locale, "Order branch", "فرع الطلب")}</span><strong>{specimen.order.orderingBranch.nameEn}</strong></div>
-            <div><span>{tr(locale, "Current branch", "الفرع الحالي")}</span><strong>{specimen.currentBranch?.nameEn || "—"}</strong></div>
+            <div><span>{tr(locale, "Specimen", "العينة")}</span><strong>{specimen.specimenType ? localizedName(specimen.specimenType) : tr(locale, "Not configured", "غير مهيأة")}</strong></div>
+            <div><span>{tr(locale, "Container", "الحاوية")}</span><strong>{specimen.container ? localizedName(specimen.container) : "—"}</strong></div>
+            <div><span>{tr(locale, "Order branch", "فرع الطلب")}</span><strong>{localizedName(specimen.order.orderingBranch)}</strong></div>
+            <div><span>{tr(locale, "Current branch", "الفرع الحالي")}</span><strong>{specimen.currentBranch ? localizedName(specimen.currentBranch) : "—"}</strong></div>
             <div><span>{tr(locale, "Linked tests", "الفحوصات المرتبطة")}</span><strong>{specimen.orderItems.map(link => link.orderItem.testCodeSnapshot).join(", ") || "—"}</strong></div>
             <div><span>{tr(locale, "Collected", "تم الجمع")}</span><strong>{specimen.collectedAt ? specimen.collectedAt.toISOString().replace("T"," ").slice(0,19) : "—"}</strong></div>
             <div><span>{tr(locale, "Received", "تم الاستلام")}</span><strong>{specimen.receivedAt ? specimen.receivedAt.toISOString().replace("T"," ").slice(0,19) : "—"}</strong></div>
@@ -152,8 +166,8 @@ export default async function SpecimensPage({
             <summary>{tr(locale, "Chain of custody", "سلسلة الحيازة")} ({specimen.events.length} {tr(locale, "recent events", "أحداث حديثة")})</summary>
             <div className="summary-list">
               {specimen.events.map(event => <div key={event.id}>
-                <span>{event.occurredAt.toISOString().replace("T"," ").slice(0,19)} · {event.branch?.code || "—"} · {event.actor?.displayNameEn || "System"}</span>
-                <strong>{event.eventType}{event.fromStatus || event.toStatus ? ` · ${event.fromStatus || "NEW"} → ${event.toStatus || "—"}` : ""}</strong>
+                <span>{event.occurredAt.toISOString().replace("T"," ").slice(0,19)} · {event.branch?.code || "—"} · {event.actor ? userName(event.actor) : tr(locale, "System", "النظام")}</span>
+                <strong>{eventLabel(event.eventType)}{event.fromStatus || event.toStatus ? ` · ${event.fromStatus ? statusLabel(locale, event.fromStatus) : tr(locale, "New", "جديد")} → ${event.toStatus ? statusLabel(locale, event.toStatus) : "—"}` : ""}</strong>
               </div>)}
             </div>
           </details>
