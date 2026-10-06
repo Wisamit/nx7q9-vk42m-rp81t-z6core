@@ -7,7 +7,16 @@ import { SystemIcon } from "@/components/system-icon";
 
 type ClientOption = { id: string; code: string; nameEn: string };
 
-export function ClientReferrerForms({ clients, canManageSources = false }: { clients: ClientOption[]; canManageSources?: boolean }) {
+export function ClientReferrerForms({
+  clients,
+  canManageSources = false,
+  locale,
+}: {
+  clients: ClientOption[];
+  canManageSources?: boolean;
+  locale: "ar" | "en";
+}) {
+  const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
   const router = useRouter();
   const [clientMessage, setClientMessage] = useState("");
   const [referrerMessage, setReferrerMessage] = useState("");
@@ -34,11 +43,11 @@ export function ClientReferrerForms({ clients, canManageSources = false }: { cli
     });
     const body = await response.json().catch(() => ({}));
     if (response.ok) {
-      setClientMessage(`Client created: ${body.client.code}`);
+      setClientMessage(`${tr("Client created", "تم إنشاء العميل")}: ${body.client.code}`);
       event.currentTarget.reset();
       router.refresh();
       setOpen("");
-    } else setClientMessage(body.error || "Client creation failed.");
+    } else setClientMessage(body.error || tr("Client creation failed.", "تعذر إنشاء العميل."));
     setBusy("");
   }
 
@@ -62,11 +71,11 @@ export function ClientReferrerForms({ clients, canManageSources = false }: { cli
     });
     const body = await response.json().catch(() => ({}));
     if (response.ok) {
-      setReferrerMessage(`Referrer created: ${body.referrer.code}`);
+      setReferrerMessage(`${tr("Referrer created", "تم إنشاء المحيل")}: ${body.referrer.code}`);
       event.currentTarget.reset();
       router.refresh();
       setOpen("");
-    } else setReferrerMessage(body.error || "Referrer creation failed.");
+    } else setReferrerMessage(body.error || tr("Referrer creation failed.", "تعذر إنشاء المحيل."));
     setBusy("");
   }
 
@@ -87,11 +96,11 @@ export function ClientReferrerForms({ clients, canManageSources = false }: { cli
     });
     const body = await response.json().catch(() => ({}));
     if (response.ok) {
-      setSourceMessage(`Source created: ${body.source.code}`);
+      setSourceMessage(`${tr("Source created", "تم إنشاء المصدر")}: ${body.source.code}`);
       event.currentTarget.reset();
       router.refresh();
       setOpen("");
-    } else setSourceMessage(body.error || "Source creation failed.");
+    } else setSourceMessage(body.error || tr("Source creation failed.", "تعذر إنشاء المصدر."));
     setBusy("");
   }
 
@@ -118,7 +127,7 @@ export function ClientReferrerForms({ clients, canManageSources = false }: { cli
         <label>{tr("Phone", "الهاتف")}<input name="phone" /></label>
         <label>{tr("Email", "البريد الإلكتروني")}<input name="email" type="email" /></label>
         <label>{tr("Payment terms (days)", "شروط الدفع (أيام)")}<input name="paymentTermsDays" type="number" min="0" max="3650" /></label>
-        <button className="primary-button form-span" disabled={busy === "client"}>{busy === "client" ? "Saving…" : "Create Client"}</button>
+        <button className="primary-button form-span" disabled={busy === "client"}>{busy === "client" ? tr("Saving…", "جارٍ الحفظ…") : tr("Create Client", "إنشاء العميل")}</button>
         {clientMessage && <div className="form-success form-span">{clientMessage}</div>}
       </form>
     </CrudModal>
@@ -133,7 +142,7 @@ export function ClientReferrerForms({ clients, canManageSources = false }: { cli
         <label>{tr("Phone", "الهاتف")}<input name="phone" /></label>
         <label>{tr("Email", "البريد الإلكتروني")}<input name="email" type="email" /></label>
         <label>{tr("Billing client", "عميل الفوترة")}<select name="clientId" defaultValue=""><option value="">No linked client</option>{clients.map(client => <option key={client.id} value={client.id}>{client.code} — {client.nameEn}</option>)}</select></label>
-        <button className="primary-button form-span" disabled={busy === "referrer"}>{busy === "referrer" ? "Saving…" : "Create Referrer"}</button>
+        <button className="primary-button form-span" disabled={busy === "referrer"}>{busy === "referrer" ? tr("Saving…", "جارٍ الحفظ…") : tr("Create Referrer", "إنشاء المحيل")}</button>
         {referrerMessage && <div className="form-success form-span">{referrerMessage}</div>}
       </form>
     </CrudModal>
@@ -144,7 +153,7 @@ export function ClientReferrerForms({ clients, canManageSources = false }: { cli
         <label>{tr("Category", "الفئة")}<input name="category" required placeholder="WALK_IN / DOCTOR / CORPORATE" /></label>
         <label>{tr("Name (English)", "الاسم بالإنجليزية")}<input name="nameEn" required /></label>
         <label dir="rtl">الاسم بالعربية<input name="nameAr" dir="rtl" /></label>
-        <button className="primary-button form-span" disabled={busy === "source"}>{busy === "source" ? "Saving…" : "Create Source"}</button>
+        <button className="primary-button form-span" disabled={busy === "source"}>{busy === "source" ? tr("Saving…", "جارٍ الحفظ…") : tr("Create Source", "إنشاء المصدر")}</button>
         {sourceMessage && <div className="form-success form-span">{sourceMessage}</div>}
       </form>
     </CrudModal>}
