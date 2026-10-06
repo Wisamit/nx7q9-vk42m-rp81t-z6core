@@ -43,4 +43,5 @@ jobs:
       - run: npm run test:safety
       - run: npx tsc --noEmit
       - run: npm run lint
+      - run: npm run test:ui-theme
       - run: npx next build
