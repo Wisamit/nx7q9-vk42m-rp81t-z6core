@@ -8,6 +8,10 @@ function text(value: unknown, max = 200) {
 function ids(value: unknown) {
   return Array.isArray(value) ? [...new Set(value.filter((x): x is string => typeof x === "string" && x.length > 0))] : [];
 }
+function discountPercent(value: unknown) {
+  const numeric = Number(value ?? 0);
+  return Number.isFinite(numeric) && numeric >= 0 && numeric <= 100 ? Math.round(numeric * 100) / 100 : null;
+}
 
 export async function GET() {
   const session = await getCurrentSession();
@@ -31,6 +35,7 @@ export async function GET() {
       nameAr: role.nameAr,
       isSystem: role.isSystem,
       status: role.status,
+      discountLimitPercent: role.discountLimitPercent.toString(),
       userCount: role._count.users,
       permissionIds: role.permissions.map(x => x.permissionId),
     })),
@@ -56,7 +61,8 @@ export async function POST(request: Request) {
   const nameEn = text(body.nameEn, 150);
   const nameAr = text(body.nameAr, 150);
   const permissionIds = ids(body.permissionIds);
-  if (!/^[A-Z0-9._-]{2,80}$/.test(code) || !nameEn || permissionIds.length === 0) {
+  const discountLimitPercent = discountPercent(body.discountLimitPercent);
+  if (!/^[A-Z0-9._-]{2,80}$/.test(code) || !nameEn || permissionIds.length === 0 || discountLimitPercent === null) {
     return NextResponse.json({ error: "invalid_fields" }, { status: 400 });
   }
   const permissionCount = await prisma.permission.count({ where: { id: { in: permissionIds } } });
@@ -72,6 +78,7 @@ export async function POST(request: Request) {
           nameEn,
           nameAr: nameAr || null,
           isSystem: false,
+          discountLimitPercent: discountLimitPercent.toFixed(2),
           status: "ACTIVE",
           permissions: { create: permissionIds.map(permissionId => ({ permissionId })) },
         },
@@ -84,7 +91,7 @@ export async function POST(request: Request) {
           action: "ROLE_CREATED",
           entityType: "Role",
           entityId: created.id,
-          newValues: { code, nameEn, nameAr: nameAr || null, permissionIds },
+          newValues: { code, nameEn, nameAr: nameAr || null, discountLimitPercent: discountLimitPercent.toFixed(2), permissionIds },
           ipAddress: ctx.ipAddress,
           userAgent: ctx.userAgent,
         },
