@@ -267,6 +267,198 @@ export async function POST(request: Request) {
   const directPriceMap = new Map(directPrices.map(entry => [entry.test.id, entry.price!]));
   const packagePriceMap = new Map(packagePrices.map(entry => [entry.package.id, entry.price!]));
 
+  let quoteSubtotal = new Prisma.Decimal(0);
+  let quoteDiscountTotal = new Prisma.Decimal(0);
+  for (const entry of directPrices) {
+    const amount = new Prisma.Decimal(entry.price!.unitPrice);
+    quoteSubtotal = quoteSubtotal.add(amount);
+    quoteDiscountTotal = quoteDiscountTotal.add(
+      new Prisma.Decimal(amount.mul(requestedDiscountPercent).div(100).toFixed(4)),
+    );
+  }
+  for (const entry of packagePrices) {
+    const amount = new Prisma.Decimal(entry.price!.unitPrice);
+    quoteSubtotal = quoteSubtotal.add(amount);
+    quoteDiscountTotal = quoteDiscountTotal.add(
+      new Prisma.Decimal(amount.mul(requestedDiscountPercent).div(100).toFixed(4)),
+    );
+  }
+  const quoteFinalTotal = quoteSubtotal.sub(quoteDiscountTotal);
+  const pricingFingerprint = discountApprovalFingerprint({
+    organizationId: session.user.organizationId,
+    branchId,
+    patientId,
+    sourceId,
+    referrerId,
+    clientId: effectiveClientId,
+    directTestIds,
+    packageIds,
+    discountPercent: requestedDiscountPercent.toFixed(2),
+    discountReason,
+    currency,
+    pricing: [
+      ...directPrices.map(entry => ({
+        kind: "TEST" as const,
+        id: entry.test.id,
+        priceReferenceId: entry.price!.priceListItemId,
+        unitPrice: entry.price!.unitPrice.toString(),
+      })),
+      ...packagePrices.map(entry => ({
+        kind: "PACKAGE" as const,
+        id: entry.package.id,
+        priceReferenceId: entry.price!.priceListPackageItemId,
+        unitPrice: entry.price!.unitPrice.toString(),
+      })),
+    ],
+  });
+
+  if (requestedApprovalMode === "APPROVAL_WORKFLOW") {
+    const now = new Date();
+    await prisma.discountApprovalRequest.updateMany({
+      where: {
+        organizationId: session.user.organizationId,
+        requestedByUserId: session.user.id,
+        status: "PENDING",
+        expiresAt: { lte: now },
+      },
+      data: { status: "EXPIRED" },
+    });
+
+    if (suppliedDiscountApprovalRequestId) {
+      const suppliedApproval = await prisma.discountApprovalRequest.findFirst({
+        where: {
+          id: suppliedDiscountApprovalRequestId,
+          organizationId: session.user.organizationId,
+          requestedByUserId: session.user.id,
+          branchId,
+        },
+      });
+      if (!suppliedApproval) {
+        return NextResponse.json({ error: "discount_approval_not_found" }, { status: 409 });
+      }
+      if (
+        suppliedApproval.pricingFingerprint !== pricingFingerprint
+        || Number(suppliedApproval.discountPercent.toString()) !== requestedDiscountPercent
+        || suppliedApproval.reason !== discountReason
+      ) {
+        return NextResponse.json({ error: "discount_approval_context_changed" }, { status: 409 });
+      }
+      if (suppliedApproval.expiresAt <= now || suppliedApproval.status === "EXPIRED") {
+        return NextResponse.json({ error: "discount_approval_expired" }, { status: 409 });
+      }
+      if (suppliedApproval.status === "REJECTED") {
+        return NextResponse.json({ error: "discount_approval_rejected" }, { status: 409 });
+      }
+      if (suppliedApproval.status === "USED") {
+        return NextResponse.json({ error: "discount_approval_used" }, { status: 409 });
+      }
+      if (suppliedApproval.status === "PENDING") {
+        return NextResponse.json({
+          error: "discount_approval_pending",
+          approvalRequestId: suppliedApproval.id,
+          expiresAt: suppliedApproval.expiresAt,
+        }, { status: 409 });
+      }
+      if (suppliedApproval.status !== "APPROVED" || !suppliedApproval.approvedByUserId) {
+        return NextResponse.json({ error: "discount_approval_invalid" }, { status: 409 });
+      }
+
+      discountApprovalMethod = "APPROVAL_WORKFLOW";
+      discountApprovedByUserId = suppliedApproval.approvedByUserId;
+      discountApprovalRequestIdToUse = suppliedApproval.id;
+    } else {
+      let approvalRequest = await prisma.discountApprovalRequest.findFirst({
+        where: {
+          organizationId: session.user.organizationId,
+          branchId,
+          requestedByUserId: session.user.id,
+          pricingFingerprint,
+          status: "PENDING",
+          expiresAt: { gt: now },
+        },
+        orderBy: { requestedAt: "desc" },
+      });
+
+      if (!approvalRequest) {
+        const expiresAt = new Date(now.getTime() + 60 * 60_000);
+        approvalRequest = await prisma.$transaction(async tx => {
+          const created = await tx.discountApprovalRequest.create({
+            data: {
+              organizationId: session.user.organizationId,
+              branchId,
+              requestedByUserId: session.user.id,
+              discountPercent: requestedDiscountPercent.toFixed(2),
+              reason: discountReason,
+              currency,
+              subtotalSnapshot: quoteSubtotal,
+              discountTotalSnapshot: quoteDiscountTotal,
+              finalTotalSnapshot: quoteFinalTotal,
+              pricingFingerprint,
+              contextSnapshot: {
+                patientId,
+                patientNumber: patient.patientNumber,
+                sourceId,
+                sourceCode: source.code,
+                referrerId,
+                clientId: effectiveClientId,
+                directTests: directPrices.map(entry => ({
+                  id: entry.test.id,
+                  code: entry.test.code,
+                  name: entry.test.nameEn,
+                  priceListItemId: entry.price!.priceListItemId,
+                  unitPrice: entry.price!.unitPrice.toString(),
+                })),
+                packages: packagePrices.map(entry => ({
+                  id: entry.package.id,
+                  code: entry.package.code,
+                  name: entry.package.nameEn,
+                  priceListPackageItemId: entry.price!.priceListPackageItemId,
+                  unitPrice: entry.price!.unitPrice.toString(),
+                })),
+              },
+              expiresAt,
+            },
+          });
+          await tx.auditEvent.create({
+            data: {
+              organizationId: session.user.organizationId,
+              branchId,
+              actorUserId: session.user.id,
+              action: "DISCOUNT_APPROVAL_REQUESTED",
+              entityType: "DiscountApprovalRequest",
+              entityId: created.id,
+              reason: discountReason,
+              newValues: {
+                discountPercent: requestedDiscountPercent.toFixed(2),
+                requesterLimitPercent: requesterDiscountLimit.toFixed(2),
+                currency,
+                subtotal: quoteSubtotal.toString(),
+                discountTotal: quoteDiscountTotal.toString(),
+                finalTotal: quoteFinalTotal.toString(),
+                expiresAt,
+              },
+              ipAddress: ctx.ipAddress,
+              userAgent: ctx.userAgent,
+            },
+          });
+          return created;
+        });
+      }
+
+      return NextResponse.json({
+        error: "discount_approval_required",
+        approvalRequestId: approvalRequest.id,
+        requesterLimitPercent: requesterDiscountLimit.toFixed(2),
+        discountPercent: requestedDiscountPercent.toFixed(2),
+        currency,
+        subtotal: quoteSubtotal.toString(),
+        discountTotal: quoteDiscountTotal.toString(),
+        total: quoteFinalTotal.toString(),
+        expiresAt: approvalRequest.expiresAt,
+      }, { status: 409 });
+    }
+  }
+
   try {
     const result = await prisma.$transaction(async (tx) => {
       let accessionNumber = documentNumber("ORD");
