@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
+import { canAccessBranch, canAccessDepartment, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 
 export async function POST(_: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -9,12 +9,15 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
 
   const microbiologyCase = await prisma.microbiologyCase.findFirst({
     where: { id, organizationId: session.user.organizationId },
-    include: { result: true },
+    include: { result: true, orderItem: { include: { test: { select: { departmentId: true } } } } },
   });
 
   if (!microbiologyCase) return NextResponse.json({ error: "microbiology_case_not_found" }, { status: 404 });
   if (!canAccessBranch(session, microbiologyCase.performingBranchId)) {
     return NextResponse.json({ error: "branch_forbidden" }, { status: 403 });
+  }
+  if (!canAccessDepartment(session, microbiologyCase.orderItem.test.departmentId)) {
+    return NextResponse.json({ error: "department_forbidden" }, { status: 403 });
   }
   if (!microbiologyCase.result) {
     return NextResponse.json({ error: "microbiology_result_not_submitted" }, { status: 409 });
