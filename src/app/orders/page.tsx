@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { OrderCreateModal } from "@/components/order-create-modal";
 import { SystemIcon } from "@/components/system-icon";
 import { getUiLocale, priorityLabel, statusLabel, tr } from "@/lib/ui-i18n";
+import { effectiveDiscountLimit } from "@/lib/discount-policy";
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +13,12 @@ export default async function OrdersPage() {
   const locale = getUiLocale(session.user.preferredLocale);
 
   const accessibleBranchIds = session.user.branchScopes.map(scope => scope.branchId);
+  const discountLimitPercent = effectiveDiscountLimit({
+    userOverride: session.user.discountLimitPercent,
+    roleLimits: session.user.roles
+      .filter(assignment => assignment.role.status === "ACTIVE")
+      .map(assignment => assignment.role.discountLimitPercent),
+  });
 
   const [patients, tests, packages, clients, referrers, sources, branches, orders] = await Promise.all([
     prisma.patient.findMany({
@@ -126,6 +133,7 @@ export default async function OrdersPage() {
           sources={sources}
           branches={branches}
           activeBranchId={session.activeBranchId}
+          discountLimitPercent={discountLimitPercent}
           locale={locale}
         />
         <Link className="secondary-link" href="/pricing"><SystemIcon name="pricing" size={15} />{tr(locale, "Pricing", "الأسعار")}</Link>
