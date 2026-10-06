@@ -9,11 +9,17 @@ function text(value: unknown, max = 200) {
 function ids(value: unknown) {
   return Array.isArray(value) ? [...new Set(value.filter((x): x is string => typeof x === "string" && x.length > 0))] : [];
 }
+function optionalDiscountPercent(value: unknown) {
+  if (value === null || value === "") return null;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric >= 0 && numeric <= 100 ? Math.round(numeric * 100) / 100 : undefined;
+}
 
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
   const session = await getCurrentSession();
   if (!session) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  if (!permissionSet(session).has("users.manage")) return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  const permissions = permissionSet(session);
+  if (!permissions.has("users.manage")) return NextResponse.json({ error: "forbidden" }, { status: 403 });
 
   const { id } = await context.params;
   const body = await request.json().catch(() => null) as Record<string, unknown> | null;
@@ -22,7 +28,19 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   const organizationId = session.user.organizationId;
   const target = await prisma.user.findFirst({
     where: { id, organizationId },
-    include: { roles: { include: { role: true } }, branchScopes: true, departmentScopes: true },
+    include: {
+      roles: {
+        include: {
+          role: {
+            include: {
+              permissions: { select: { permission: { select: { code: true } } } },
+            },
+          },
+        },
+      },
+      branchScopes: true,
+      departmentScopes: true,
+    },
   });
   if (!target) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
@@ -35,8 +53,14 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   const branchIds = body.branchIds === undefined ? target.branchScopes.map(x => x.branchId) : ids(body.branchIds);
   const departmentIds = body.departmentIds === undefined ? target.departmentScopes.map(x => x.departmentId) : ids(body.departmentIds);
   const password = typeof body.password === "string" ? body.password : "";
+  if (body.discountLimitPercent !== undefined && !permissions.has("billing.discount.limits.manage")) {
+    return NextResponse.json({ error: "discount_limit_forbidden" }, { status: 403 });
+  }
+  const discountLimitPercent = body.discountLimitPercent === undefined
+    ? (target.discountLimitPercent ? Number(target.discountLimitPercent.toString()) : null)
+    : optionalDiscountPercent(body.discountLimitPercent);
 
-  if (!displayNameEn || roleIds.length === 0 || branchIds.length === 0 || (password && password.length < 12)) {
+  if (!displayNameEn || roleIds.length === 0 || branchIds.length === 0 || (password && password.length < 12) || discountLimitPercent === undefined) {
     return NextResponse.json({ error: "invalid_fields" }, { status: 400 });
   }
   if (id === session.user.id && status !== "ACTIVE") {
@@ -44,13 +68,54 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   }
 
   const [roles, branchCount, departments] = await Promise.all([
-    prisma.role.findMany({ where: { id: { in: roleIds }, organizationId, status: "ACTIVE" }, select: { id: true, code: true } }),
+    prisma.role.findMany({
+      where: { id: { in: roleIds }, organizationId, status: "ACTIVE" },
+      select: {
+        id: true,
+        code: true,
+        discountLimitPercent: true,
+        permissions: { select: { permission: { select: { code: true } } } },
+      },
+    }),
     prisma.branch.count({ where: { id: { in: branchIds }, organizationId, status: "ACTIVE" } }),
     prisma.department.findMany({ where: { id: { in: departmentIds }, organizationId, status: "ACTIVE" }, select: { id: true, branchId: true } }),
   ]);
   const departmentScopeInvalid = departments.length !== departmentIds.length
     || departments.some(department => department.branchId && !branchIds.includes(department.branchId));
   if (roles.length !== roleIds.length || branchCount !== branchIds.length || departmentScopeInvalid) return NextResponse.json({ error: "invalid_scope" }, { status: 400 });
+
+  const currentRoleLimit = target.roles
+    .filter(assignment => assignment.role.status === "ACTIVE")
+    .reduce((highest, assignment) => Math.max(highest, Number(assignment.role.discountLimitPercent.toString())), 0);
+  const desiredRoleLimit = roles.reduce((highest, role) => Math.max(highest, Number(role.discountLimitPercent.toString())), 0);
+  const sensitiveCodes = new Set(["billing.discount.approve", "billing.discount.limits.manage"]);
+  const currentSensitiveDiscountPermissions = new Set(
+    target.roles
+      .filter(assignment => assignment.role.status === "ACTIVE")
+      .flatMap(assignment => assignment.role.permissions.map(grant => grant.permission.code))
+      .filter(code => sensitiveCodes.has(code)),
+  );
+  const desiredSensitiveDiscountPermissions = new Set(
+    roles
+      .flatMap(role => role.permissions.map(grant => grant.permission.code))
+      .filter(code => sensitiveCodes.has(code)),
+  );
+  const sensitivePermissionExpanded = [...desiredSensitiveDiscountPermissions]
+    .some(code => !currentSensitiveDiscountPermissions.has(code));
+  const hasDesiredSensitiveDiscountPermission = desiredSensitiveDiscountPermissions.size > 0;
+  const currentBranchIds = new Set(target.branchScopes.map(scope => scope.branchId));
+  const branchAuthorityExpanded = branchIds.some(branchId => !currentBranchIds.has(branchId))
+    && (desiredRoleLimit > 0 || hasDesiredSensitiveDiscountPermission || (discountLimitPercent ?? 0) > 0);
+  const financialAuthorityIncreased =
+    desiredRoleLimit > currentRoleLimit
+    || sensitivePermissionExpanded
+    || branchAuthorityExpanded
+    || (target.status !== "ACTIVE" && status === "ACTIVE"
+      && (desiredRoleLimit > 0 || hasDesiredSensitiveDiscountPermission || (discountLimitPercent ?? 0) > 0));
+
+  if (financialAuthorityIncreased && !permissions.has("billing.discount.limits.manage")) {
+    return NextResponse.json({ error: "discount_authority_forbidden" }, { status: 403 });
+  }
 
   const hadSystemAdmin = target.roles.some(x => x.role.code === "SYSTEM_ADMIN" && x.role.status === "ACTIVE");
   const keepsSystemAdmin = roles.some(x => x.code === "SYSTEM_ADMIN") && status === "ACTIVE";
@@ -77,6 +142,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
         displayNameAr: displayNameAr || null,
         email: email || null,
         preferredLocale,
+        discountLimitPercent: discountLimitPercent === null ? null : discountLimitPercent.toFixed(2),
         status,
         ...(passwordHash ? { passwordHash, passwordChangedAt: new Date(), failedLoginAttempts: 0, lockedUntil: null } : {}),
       },
@@ -96,8 +162,8 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
         action: "USER_UPDATED",
         entityType: "User",
         entityId: id,
-        oldValues: { displayNameEn: target.displayNameEn, displayNameAr: target.displayNameAr, email: target.email, preferredLocale: target.preferredLocale, status: target.status, roleIds: target.roles.map(x => x.roleId), branchIds: target.branchScopes.map(x => x.branchId), departmentIds: target.departmentScopes.map(x => x.departmentId) },
-        newValues: { displayNameEn, displayNameAr: displayNameAr || null, email: email || null, preferredLocale, status, roleIds, branchIds, departmentIds, passwordReset: Boolean(passwordHash) },
+        oldValues: { displayNameEn: target.displayNameEn, displayNameAr: target.displayNameAr, email: target.email, preferredLocale: target.preferredLocale, discountLimitPercent: target.discountLimitPercent?.toString() ?? null, status: target.status, roleIds: target.roles.map(x => x.roleId), branchIds: target.branchScopes.map(x => x.branchId), departmentIds: target.departmentScopes.map(x => x.departmentId) },
+        newValues: { displayNameEn, displayNameAr: displayNameAr || null, email: email || null, preferredLocale, discountLimitPercent: discountLimitPercent === null ? null : discountLimitPercent.toFixed(2), status, roleIds, branchIds, departmentIds, passwordReset: Boolean(passwordHash) },
         ipAddress: ctx.ipAddress,
         userAgent: ctx.userAgent,
       },

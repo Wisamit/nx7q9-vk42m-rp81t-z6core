@@ -8,17 +8,22 @@ function text(value: unknown, max = 200) {
 function ids(value: unknown) {
   return Array.isArray(value) ? [...new Set(value.filter((x): x is string => typeof x === "string" && x.length > 0))] : [];
 }
+function discountPercent(value: unknown) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric >= 0 && numeric <= 100 ? Math.round(numeric * 100) / 100 : null;
+}
 
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
   const session = await getCurrentSession();
   if (!session) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  if (!permissionSet(session).has("roles.manage")) return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  const permissions = permissionSet(session);
+  if (!permissions.has("roles.manage")) return NextResponse.json({ error: "forbidden" }, { status: 403 });
 
   const { id } = await context.params;
   const organizationId = session.user.organizationId;
   const current = await prisma.role.findFirst({
     where: { id, organizationId },
-    include: { permissions: true, _count: { select: { users: true } } },
+    include: { permissions: { include: { permission: true } }, _count: { select: { users: true } } },
   });
   if (!current) return NextResponse.json({ error: "not_found" }, { status: 404 });
   if (current.isSystem) return NextResponse.json({ error: "system_role_locked" }, { status: 409 });
@@ -30,13 +35,34 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   const nameAr = body.nameAr === null ? "" : text(body.nameAr, 150);
   const status = body.status === "ACTIVE" || body.status === "INACTIVE" ? body.status : current.status;
   const permissionIds = body.permissionIds === undefined ? current.permissions.map(x => x.permissionId) : ids(body.permissionIds);
-  if (!nameEn || permissionIds.length === 0) return NextResponse.json({ error: "invalid_fields" }, { status: 400 });
-  const permissionCount = await prisma.permission.count({ where: { id: { in: permissionIds } } });
-  if (permissionCount !== permissionIds.length) return NextResponse.json({ error: "invalid_permissions" }, { status: 400 });
+  if (body.discountLimitPercent !== undefined && !permissions.has("billing.discount.limits.manage")) {
+    return NextResponse.json({ error: "discount_limit_forbidden" }, { status: 403 });
+  }
+  const discountLimitPercent = body.discountLimitPercent === undefined
+    ? Number(current.discountLimitPercent.toString())
+    : discountPercent(body.discountLimitPercent);
+  if (!nameEn || permissionIds.length === 0 || discountLimitPercent === null) return NextResponse.json({ error: "invalid_fields" }, { status: 400 });
+  const selectedPermissions = await prisma.permission.findMany({
+    where: { id: { in: permissionIds } },
+    select: { id: true, code: true },
+  });
+  if (selectedPermissions.length !== permissionIds.length) return NextResponse.json({ error: "invalid_permissions" }, { status: 400 });
+
+  const financialPermissionCodes = new Set(["billing.discount.approve", "billing.discount.limits.manage"]);
+  const currentFinancialPermissions = new Set(current.permissions.filter(grant => financialPermissionCodes.has(grant.permission.code)).map(grant => grant.permission.code));
+  const desiredFinancialPermissions = new Set(selectedPermissions.filter(permission => financialPermissionCodes.has(permission.code)).map(permission => permission.code));
+  const financialAuthorityChanged = currentFinancialPermissions.size !== desiredFinancialPermissions.size
+    || [...currentFinancialPermissions].some(code => !desiredFinancialPermissions.has(code));
+  const financialRoleReactivated = current.status !== "ACTIVE"
+    && status === "ACTIVE"
+    && (Number(current.discountLimitPercent.toString()) > 0 || currentFinancialPermissions.size > 0);
+  if ((financialAuthorityChanged || financialRoleReactivated) && !permissions.has("billing.discount.limits.manage")) {
+    return NextResponse.json({ error: "discount_authority_forbidden" }, { status: 403 });
+  }
 
   const ctx = await requestContext();
   await prisma.$transaction(async tx => {
-    await tx.role.update({ where: { id }, data: { nameEn, nameAr: nameAr || null, status } });
+    await tx.role.update({ where: { id }, data: { nameEn, nameAr: nameAr || null, discountLimitPercent: discountLimitPercent.toFixed(2), status } });
     await tx.rolePermission.deleteMany({ where: { roleId: id } });
     await tx.rolePermission.createMany({ data: permissionIds.map(permissionId => ({ roleId: id, permissionId })) });
     if (status === "INACTIVE") {
@@ -51,8 +77,8 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
         action: "ROLE_UPDATED",
         entityType: "Role",
         entityId: id,
-        oldValues: { nameEn: current.nameEn, nameAr: current.nameAr, status: current.status, permissionIds: current.permissions.map(x => x.permissionId) },
-        newValues: { nameEn, nameAr: nameAr || null, status, permissionIds },
+        oldValues: { nameEn: current.nameEn, nameAr: current.nameAr, discountLimitPercent: current.discountLimitPercent.toString(), status: current.status, permissionIds: current.permissions.map(x => x.permissionId) },
+        newValues: { nameEn, nameAr: nameAr || null, discountLimitPercent: discountLimitPercent.toFixed(2), status, permissionIds },
         ipAddress: ctx.ipAddress,
         userAgent: ctx.userAgent,
       },

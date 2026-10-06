@@ -8,11 +8,17 @@ function text(value: unknown, max = 200) {
 function ids(value: unknown) {
   return Array.isArray(value) ? [...new Set(value.filter((x): x is string => typeof x === "string" && x.length > 0))] : [];
 }
+function discountPercent(value: unknown) {
+  const numeric = Number(value ?? 0);
+  return Number.isFinite(numeric) && numeric >= 0 && numeric <= 100 ? Math.round(numeric * 100) / 100 : null;
+}
 
 export async function GET() {
   const session = await getCurrentSession();
   if (!session) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  if (!permissionSet(session).has("roles.view")) return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  const permissionsForViewer = permissionSet(session);
+  if (!permissionsForViewer.has("roles.view")) return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  const canManageDiscountLimits = permissionsForViewer.has("billing.discount.limits.manage");
 
   const organizationId = session.user.organizationId;
   const [roles, permissions] = await Promise.all([
@@ -31,6 +37,7 @@ export async function GET() {
       nameAr: role.nameAr,
       isSystem: role.isSystem,
       status: role.status,
+      ...(canManageDiscountLimits ? { discountLimitPercent: role.discountLimitPercent.toString() } : {}),
       userCount: role._count.users,
       permissionIds: role.permissions.map(x => x.permissionId),
     })),
@@ -46,7 +53,8 @@ export async function GET() {
 export async function POST(request: Request) {
   const session = await getCurrentSession();
   if (!session) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  if (!permissionSet(session).has("roles.manage")) return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  const permissions = permissionSet(session);
+  if (!permissions.has("roles.manage")) return NextResponse.json({ error: "forbidden" }, { status: 403 });
 
   const body = await request.json().catch(() => null) as Record<string, unknown> | null;
   if (!body) return NextResponse.json({ error: "invalid_request" }, { status: 400 });
@@ -56,11 +64,21 @@ export async function POST(request: Request) {
   const nameEn = text(body.nameEn, 150);
   const nameAr = text(body.nameAr, 150);
   const permissionIds = ids(body.permissionIds);
-  if (!/^[A-Z0-9._-]{2,80}$/.test(code) || !nameEn || permissionIds.length === 0) {
+  const discountLimitPercent = discountPercent(body.discountLimitPercent);
+  if ((body.discountLimitPercent !== undefined && Number(body.discountLimitPercent || 0) !== 0) && !permissions.has("billing.discount.limits.manage")) {
+    return NextResponse.json({ error: "discount_limit_forbidden" }, { status: 403 });
+  }
+  if (!/^[A-Z0-9._-]{2,80}$/.test(code) || !nameEn || permissionIds.length === 0 || discountLimitPercent === null) {
     return NextResponse.json({ error: "invalid_fields" }, { status: 400 });
   }
-  const permissionCount = await prisma.permission.count({ where: { id: { in: permissionIds } } });
-  if (permissionCount !== permissionIds.length) return NextResponse.json({ error: "invalid_permissions" }, { status: 400 });
+  const selectedPermissions = await prisma.permission.findMany({
+    where: { id: { in: permissionIds } },
+    select: { id: true, code: true },
+  });
+  if (selectedPermissions.length !== permissionIds.length) return NextResponse.json({ error: "invalid_permissions" }, { status: 400 });
+  if (selectedPermissions.some(permission => ["billing.discount.approve", "billing.discount.limits.manage"].includes(permission.code)) && !permissions.has("billing.discount.limits.manage")) {
+    return NextResponse.json({ error: "discount_authority_forbidden" }, { status: 403 });
+  }
 
   const ctx = await requestContext();
   try {
@@ -72,6 +90,7 @@ export async function POST(request: Request) {
           nameEn,
           nameAr: nameAr || null,
           isSystem: false,
+          discountLimitPercent: discountLimitPercent.toFixed(2),
           status: "ACTIVE",
           permissions: { create: permissionIds.map(permissionId => ({ permissionId })) },
         },
@@ -84,7 +103,7 @@ export async function POST(request: Request) {
           action: "ROLE_CREATED",
           entityType: "Role",
           entityId: created.id,
-          newValues: { code, nameEn, nameAr: nameAr || null, permissionIds },
+          newValues: { code, nameEn, nameAr: nameAr || null, discountLimitPercent: discountLimitPercent.toFixed(2), permissionIds },
           ipAddress: ctx.ipAddress,
           userAgent: ctx.userAgent,
         },

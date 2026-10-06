@@ -6,14 +6,15 @@ import { CrudModal } from "@/components/crud-modal";
 import { statusLabel } from "@/lib/ui-i18n";
 
 type Permission = { id: string; code: string; module: string; description: string | null };
-type Role = { id: string; code: string; nameEn: string; nameAr: string | null; isSystem: boolean; status: string; userCount: number; permissionIds: string[] };
+type Role = { id: string; code: string; nameEn: string; nameAr: string | null; isSystem: boolean; status: string; discountLimitPercent?: string; userCount: number; permissionIds: string[] };
 type Data = { roles: Role[]; permissions: Permission[] };
 
-export function RoleManagement({ locale }: { locale: "ar" | "en" }) {
+export function RoleManagement({ locale, canManageDiscountLimits }: { locale: "ar" | "en"; canManageDiscountLimits: boolean }) {
   const [data, setData] = useState<Data>({ roles: [], permissions: [] });
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
+  const [editing, setEditing] = useState<Role | null>(null);
   const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
 
   async function load() {
@@ -42,7 +43,7 @@ export function RoleManagement({ locale }: { locale: "ar" | "en" }) {
     const form = new FormData(event.currentTarget);
     const response = await fetch("/api/admin/roles", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code: form.get("code"), nameEn: form.get("nameEn"), nameAr: form.get("nameAr"), permissionIds: form.getAll("permissionIds") }),
+      body: JSON.stringify({ code: form.get("code"), nameEn: form.get("nameEn"), nameAr: form.get("nameAr"), ...(canManageDiscountLimits ? { discountLimitPercent: Number(form.get("discountLimitPercent") || 0) } : {}), permissionIds: form.getAll("permissionIds") }),
     });
     const body = await response.json().catch(() => ({}));
     if (response.ok) {
@@ -51,6 +52,35 @@ export function RoleManagement({ locale }: { locale: "ar" | "en" }) {
       setCreateOpen(false);
       await load();
     } else setMessage(body.error === "invalid_fields" ? tr("Enter a role name and select at least one permission.", "أدخل اسم الدور واختر صلاحية واحدة على الأقل.") : tr("Unable to create role. Code may already exist.", "تعذر إنشاء الدور. قد يكون الرمز مستخدمًا."));
+    setBusy(false);
+  }
+
+  async function updateRole(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!editing || editing.isSystem) return;
+    setBusy(true);
+    setMessage("");
+    const form = new FormData(event.currentTarget);
+    const response = await fetch("/api/admin/roles/" + editing.id, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        nameEn: form.get("nameEn"),
+        nameAr: form.get("nameAr"),
+        ...(canManageDiscountLimits ? { discountLimitPercent: Number(form.get("discountLimitPercent") || 0) } : {}),
+        permissionIds: form.getAll("permissionIds"),
+      }),
+    });
+    const body = await response.json().catch(() => ({}));
+    if (response.ok) {
+      setEditing(null);
+      setMessage(tr("Role updated successfully.", "تم تحديث الدور بنجاح."));
+      await load();
+    } else {
+      setMessage(body.error === "invalid_fields"
+        ? tr("Enter valid role details, discount limit and permissions.", "أدخل بيانات الدور وحد الخصم والصلاحيات بشكل صحيح.")
+        : tr("Unable to update role.", "تعذر تحديث الدور."));
+    }
     setBusy(false);
   }
 
@@ -82,16 +112,41 @@ export function RoleManagement({ locale }: { locale: "ar" | "en" }) {
       size="xl"
     >
       <form className="form-stack modal-form-stack" onSubmit={createRole}>
-        <div className="settings-grid"><label>{tr("Role code", "رمز الدور")}<input name="code" required placeholder="LAB_TECH" pattern="[A-Za-z0-9._-]{2,80}" /></label><label>{tr("English name", "الاسم بالإنجليزية")}<input name="nameEn" required /></label><label>{tr("Arabic name", "الاسم بالعربية")}<input name="nameAr" /></label></div>
-        <div className="permission-groups">{grouped.map(([module, permissions]) => <fieldset className="permission-group" key={module}><legend>{module}</legend>{permissions.map(permission => <label key={permission.id}><input type="checkbox" name="permissionIds" value={permission.id} /><span><strong>{permission.code}</strong><small>{permission.description || ""}</small></span></label>)}</fieldset>)}</div>
+        <div className="settings-grid"><label>{tr("Role code", "رمز الدور")}<input name="code" required placeholder="LAB_TECH" pattern="[A-Za-z0-9._-]{2,80}" /></label><label>{tr("English name", "الاسم بالإنجليزية")}<input name="nameEn" required /></label><label>{tr("Arabic name", "الاسم بالعربية")}<input name="nameAr" /></label>{canManageDiscountLimits && <label>{tr("Discount limit (%)", "حد الخصم (%)")}<input name="discountLimitPercent" type="number" min="0" max="100" step="0.01" defaultValue="0" required /></label>}</div>
+        <div className="permission-groups">{grouped.map(([module, permissions]) => <fieldset className="permission-group" key={module}><legend>{module}</legend>{permissions.map(permission => {
+  const protectedFinancialPermission = ["billing.discount.approve", "billing.discount.limits.manage"].includes(permission.code) && !canManageDiscountLimits;
+  return <label key={permission.id}><input type="checkbox" name="permissionIds" value={permission.id} disabled={protectedFinancialPermission} /><span><strong>{permission.code}</strong><small>{permission.description || ""}{protectedFinancialPermission ? ` · ${tr("Financial admin only", "لمدير الصلاحيات المالية فقط")}` : ""}</small></span></label>;
+})}</fieldset>)}</div>
         <div className="crud-modal-actions"><button className="primary-button" disabled={busy}>{busy ? tr("Saving…", "جارٍ الحفظ…") : tr("Create role", "إنشاء الدور")}</button></div>
         {message && <div className="form-success">{message}</div>}
       </form>
     </CrudModal>
 
+    <CrudModal
+      open={Boolean(editing)}
+      onClose={() => setEditing(null)}
+      title={tr("Edit role", "تعديل الدور")}
+      description={editing ? editing.code : undefined}
+      size="xl"
+    >
+      {editing && !editing.isSystem && <form className="form-stack modal-form-stack" onSubmit={updateRole}>
+        <div className="settings-grid">
+          <label>{tr("English name", "الاسم بالإنجليزية")}<input name="nameEn" required defaultValue={editing.nameEn} /></label>
+          <label>{tr("Arabic name", "الاسم بالعربية")}<input name="nameAr" defaultValue={editing.nameAr || ""} /></label>
+          {canManageDiscountLimits && <label>{tr("Discount limit (%)", "حد الخصم (%)")}<input name="discountLimitPercent" type="number" min="0" max="100" step="0.01" required defaultValue={editing.discountLimitPercent || "0"} /></label>}
+        </div>
+        <div className="permission-groups">{grouped.map(([module, permissions]) => <fieldset className="permission-group" key={module}><legend>{module}</legend>{permissions.map(permission => {
+  const protectedFinancialPermission = ["billing.discount.approve", "billing.discount.limits.manage"].includes(permission.code) && !canManageDiscountLimits;
+  const currentlyGranted = editing.permissionIds.includes(permission.id);
+  return <label key={permission.id}>{protectedFinancialPermission && currentlyGranted && <input type="hidden" name="permissionIds" value={permission.id} />}<input type="checkbox" name="permissionIds" value={permission.id} defaultChecked={currentlyGranted} disabled={protectedFinancialPermission} /><span><strong>{permission.code}</strong><small>{permission.description || ""}{protectedFinancialPermission ? ` · ${tr("Financial admin only", "لمدير الصلاحيات المالية فقط")}` : ""}</small></span></label>;
+})}</fieldset>)}</div>
+        <div className="crud-modal-actions"><button className="primary-button" disabled={busy}>{busy ? tr("Saving…", "جارٍ الحفظ…") : tr("Save role", "حفظ الدور")}</button></div>
+      </form>}
+    </CrudModal>
+
     <section className="table-card admin-table-card">
       <div className="table-toolbar"><div><h2>{tr("Roles", "الأدوار")}</h2><span>{tr("System roles are protected from destructive editing.", "أدوار النظام محمية من التعديل التخريبي.")}</span></div><span>{data.roles.length}</span></div>
-      <div className="table-wrap"><table><thead><tr><th>{tr("Role", "الدور")}</th><th>{tr("Users", "المستخدمون")}</th><th>{tr("Permissions", "الصلاحيات")}</th><th>{tr("Status", "الحالة")}</th><th>{tr("Actions", "إجراءات")}</th></tr></thead><tbody>{data.roles.map(role => <tr key={role.id}><td><strong>{locale === "ar" ? role.nameAr || role.nameEn : role.nameEn}</strong><small className="table-subtext">{role.code}{role.isSystem ? ` · ${tr("System", "نظامي")}` : ""}</small></td><td>{role.userCount}</td><td>{role.permissionIds.length}</td><td><span className={"status-badge " + (role.status === "ACTIVE" ? "status-active" : "status-warning")}>{statusLabel(locale, role.status)}</span></td><td>{role.isSystem ? <span className="muted">{tr("Protected", "محمي")}</span> : <button type="button" className="secondary-button compact-action" disabled={busy} onClick={() => void toggleRole(role)}>{role.status === "ACTIVE" ? tr("Deactivate", "تعطيل") : tr("Activate", "تفعيل")}</button>}</td></tr>)}</tbody></table></div>
+      <div className="table-wrap"><table><thead><tr><th>{tr("Role", "الدور")}</th><th>{tr("Users", "المستخدمون")}</th><th>{tr("Permissions", "الصلاحيات")}</th>{canManageDiscountLimits && <th>{tr("Discount limit", "حد الخصم")}</th>}<th>{tr("Status", "الحالة")}</th><th>{tr("Actions", "إجراءات")}</th></tr></thead><tbody>{data.roles.map(role => <tr key={role.id}><td><strong>{locale === "ar" ? role.nameAr || role.nameEn : role.nameEn}</strong><small className="table-subtext">{role.code}{role.isSystem ? ` · ${tr("System", "نظامي")}` : ""}</small></td><td>{role.userCount}</td><td>{role.permissionIds.length}</td>{canManageDiscountLimits && <td>{Number(role.discountLimitPercent || 0).toFixed(2)}%</td>}<td><span className={"status-badge " + (role.status === "ACTIVE" ? "status-active" : "status-warning")}>{statusLabel(locale, role.status)}</span></td><td>{role.isSystem ? <span className="muted">{tr("Protected", "محمي")}</span> : <div className="inline-actions"><button type="button" className="secondary-button compact-action" disabled={busy} onClick={() => setEditing(role)}>{tr("Edit", "تعديل")}</button><button type="button" className="secondary-button compact-action" disabled={busy} onClick={() => void toggleRole(role)}>{role.status === "ACTIVE" ? tr("Deactivate", "تعطيل") : tr("Activate", "تفعيل")}</button></div>}</td></tr>)}</tbody></table></div>
     </section>
   </div>;
 }

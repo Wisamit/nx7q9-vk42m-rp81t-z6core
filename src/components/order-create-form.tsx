@@ -30,6 +30,7 @@ export function OrderCreateForm({
   sources,
   branches,
   activeBranchId,
+  discountLimitPercent,
   locale,
   onSuccess,
 }: {
@@ -41,6 +42,7 @@ export function OrderCreateForm({
   sources: SourceOption[];
   branches: BranchOption[];
   activeBranchId: string | null;
+  discountLimitPercent: number;
   locale: "ar" | "en";
   onSuccess?: (message: string) => void;
 }) {
@@ -54,6 +56,8 @@ export function OrderCreateForm({
   const [selectedPackageIds, setSelectedPackageIds] = useState<string[]>([]);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [discountPercent, setDiscountPercent] = useState(0);
+  const [discountApprovalRequestId, setDiscountApprovalRequestId] = useState("");
 
   const patientOptions = useMemo(() => patients.map(p => ({
     ...p,
@@ -132,6 +136,9 @@ export function OrderCreateForm({
         diagnosis: form.get("diagnosis"),
         clinicalNotes: form.get("clinicalNotes"),
         pregnancyInfo: form.get("pregnancyInfo"),
+        discountPercent,
+        discountReason: form.get("discountReason"),
+        discountApprovalRequestId: discountApprovalRequestId || null,
         testIds: selectedTestIds,
         packageIds: selectedPackageIds,
         answers,
@@ -147,9 +154,33 @@ export function OrderCreateForm({
       setSelectedTestIds([]);
       setSelectedPackageIds([]);
       setPackageSearch("");
+      setDiscountPercent(0);
+      setDiscountApprovalRequestId("");
       event.currentTarget.reset();
       router.refresh();
       onSuccess?.(success);
+    } else if (body.error === "discount_approval_required") {
+      setDiscountApprovalRequestId(typeof body.approvalRequestId === "string" ? body.approvalRequestId : "");
+      setMessage(tr(
+        "Discount approval requested. Ask an authorized manager to approve it in Billing, then submit this same order again without changing its pricing context.",
+        "تم إرسال طلب اعتماد الخصم. اطلب من مدير مخول اعتماده من شاشة الفوترة، ثم أعد إرسال نفس الطلب دون تغيير بيانات التسعير.",
+      ));
+    } else if (body.error === "discount_approval_pending") {
+      setDiscountApprovalRequestId(typeof body.approvalRequestId === "string" ? body.approvalRequestId : discountApprovalRequestId);
+      setMessage(tr("Discount approval is still pending.", "طلب اعتماد الخصم ما زال قيد الانتظار."));
+    } else if (body.error === "discount_approval_rejected") {
+      setDiscountApprovalRequestId("");
+      setMessage(tr("The discount request was rejected. Adjust the discount or request a new approval.", "تم رفض طلب الخصم. عدّل الخصم أو أنشئ طلب اعتماد جديد."));
+    } else if (body.error === "discount_approval_expired" || body.error === "discount_approval_used") {
+      setDiscountApprovalRequestId("");
+      setMessage(tr("The discount approval is no longer valid. Submit again to create a new request.", "لم تعد موافقة الخصم صالحة. أعد الإرسال لإنشاء طلب جديد."));
+    } else if (body.error === "discount_approval_context_changed") {
+      setDiscountApprovalRequestId("");
+      setMessage(tr("Order pricing context changed after the approval request. Submit again to create a fresh approval request.", "تغيّر سياق تسعير الطلب بعد طلب الاعتماد. أعد الإرسال لإنشاء طلب اعتماد جديد."));
+    } else if (body.error === "discount_reason_required") {
+      setMessage(tr("A discount reason is required.", "سبب الخصم مطلوب."));
+    } else if (body.error === "invalid_discount_percent") {
+      setMessage(tr("Discount percentage must be between 0 and 100.", "يجب أن تكون نسبة الخصم بين 0 و100."));
     } else if (body.error === "missing_prices") {
       const codes = Array.isArray(body.tests) ? body.tests.map((x: { code?: string }) => x.code).filter(Boolean).join(", ") : "";
       setMessage(`${tr("Missing active prices for", "لا توجد أسعار فعالة لـ")}: ${codes || tr("selected tests", "الفحوصات المحددة")}. ${tr("Configure Pricing first.", "قم بإعداد الأسعار أولًا.")}`);
@@ -267,6 +298,53 @@ export function OrderCreateForm({
         </div>
       </div>
 
+
+      <div className="form-span order-question-panel">
+        <div className="section-title-row">
+          <div>
+            <p className="eyebrow">{tr("Billing control", "ضبط الفوترة")}</p>
+            <h3>{tr("Order Discount", "خصم الطلب")}</h3>
+          </div>
+          <span className="keyboard-hint">{tr("Your self-approval limit", "حد الخصم المسموح لك")}: {discountLimitPercent.toFixed(2)}%</span>
+        </div>
+        <div className="form-grid">
+          <label>{tr("Discount (%)", "الخصم (%)")}
+            <input
+              name="discountPercent"
+              type="number"
+              min="0"
+              max="100"
+              step="0.01"
+              value={discountPercent}
+              onChange={event => {
+                const value = Number(event.target.value);
+                setDiscountPercent(Number.isFinite(value) ? value : 0);
+                setDiscountApprovalRequestId("");
+                setMessage("");
+              }}
+            />
+          </label>
+          {discountPercent > 0 && <label className="form-span">{tr("Discount reason", "سبب الخصم")}
+            <input
+              name="discountReason"
+              maxLength={1000}
+              required
+              onChange={() => {
+                if (discountApprovalRequestId) setDiscountApprovalRequestId("");
+              }}
+              placeholder={tr("Required for audit and approval", "مطلوب للتدقيق والاعتماد")}
+            />
+          </label>}
+        </div>
+        {discountPercent > discountLimitPercent && <div className="form-warning">
+          <strong>{tr("Manager approval required", "مطلوب اعتماد مدير")}</strong>
+          <p>{tr(
+            "Submitting will create an approval request without creating the order. After an authorized manager approves it in Billing, submit the unchanged order again.",
+            "عند الإرسال سيتم إنشاء طلب اعتماد دون إنشاء الطلب. بعد أن يعتمد مدير مخول الطلب من شاشة الفوترة، أعد إرسال الطلب نفسه دون تغيير.",
+          )}</p>
+          {discountApprovalRequestId && <small>{tr("Approval request", "طلب الاعتماد")}: {discountApprovalRequestId}</small>}
+        </div>}
+      </div>
 
       {selectedTests.some(test => test.orderQuestions.length > 0) && <div className="form-span order-question-panel">
         <div className="section-title-row">

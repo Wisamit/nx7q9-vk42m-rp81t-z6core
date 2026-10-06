@@ -4,6 +4,8 @@ import { Prisma } from "../../../../generated/prisma/client";
 import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { resolvePackagePrice, resolveTestPrice } from "@/lib/pricing";
+import { discountApprovalMode, effectiveDiscountLimit } from "@/lib/discount-policy";
+import { discountApprovalFingerprint } from "@/lib/discount-approval";
 
 function text(value: unknown, max = 500) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -37,11 +39,45 @@ export async function POST(request: Request) {
   const diagnosis = text(body.diagnosis, 500);
   const pregnancyInfo = text(body.pregnancyInfo, 500);
   const fasting = body.fasting === true ? true : body.fasting === false ? false : null;
+  const rawRequestedDiscountPercent = Number(body.discountPercent ?? 0);
+  if (!Number.isFinite(rawRequestedDiscountPercent) || rawRequestedDiscountPercent < 0 || rawRequestedDiscountPercent > 100) {
+    return NextResponse.json({ error: "invalid_discount_percent" }, { status: 400 });
+  }
+  const requestedDiscountPercent = Math.round(rawRequestedDiscountPercent * 100) / 100;
+  const discountReason = text(body.discountReason, 1000);
+  const suppliedDiscountApprovalRequestId = text(body.discountApprovalRequestId, 36) || null;
+
+  const requesterDiscountLimit = effectiveDiscountLimit({
+    userOverride: session.user.discountLimitPercent,
+    roleLimits: session.user.roles
+      .filter(assignment => assignment.role.status === "ACTIVE")
+      .map(assignment => assignment.role.discountLimitPercent),
+  });
+  const requestedApprovalMode = discountApprovalMode({
+    requestedPercent: requestedDiscountPercent,
+    requesterLimitPercent: requesterDiscountLimit,
+  });
+  if (requestedApprovalMode === "INVALID") {
+    return NextResponse.json({ error: "invalid_discount_percent" }, { status: 400 });
+  }
+  if (requestedDiscountPercent > 0 && !discountReason) {
+    return NextResponse.json({ error: "discount_reason_required" }, { status: 400 });
+  }
 
   if (!branchId || !patientId || !sourceId || (directTestIds.length === 0 && packageIds.length === 0)) {
     return NextResponse.json({ error: "missing_required_fields" }, { status: 400 });
   }
   if (!canAccessBranch(session, branchId)) return NextResponse.json({ error: "branch_forbidden" }, { status: 403 });
+
+  let discountApprovalMethod: "SELF_LIMIT" | "APPROVAL_WORKFLOW" | null = null;
+  let discountApprovedByUserId: string | null = null;
+  let discountApprovedAt: Date | null = null;
+  let discountApprovalRequestIdToUse: string | null = null;
+  if (requestedApprovalMode === "SELF_LIMIT") {
+    discountApprovalMethod = "SELF_LIMIT";
+    discountApprovedByUserId = session.user.id;
+    discountApprovedAt = new Date();
+  }
 
   const packages = packageIds.length ? await prisma.commercialPackage.findMany({
     where: {
@@ -237,6 +273,199 @@ export async function POST(request: Request) {
   const directPriceMap = new Map(directPrices.map(entry => [entry.test.id, entry.price!]));
   const packagePriceMap = new Map(packagePrices.map(entry => [entry.package.id, entry.price!]));
 
+  let quoteSubtotal = new Prisma.Decimal(0);
+  let quoteDiscountTotal = new Prisma.Decimal(0);
+  for (const entry of directPrices) {
+    const amount = new Prisma.Decimal(entry.price!.unitPrice);
+    quoteSubtotal = quoteSubtotal.add(amount);
+    quoteDiscountTotal = quoteDiscountTotal.add(
+      new Prisma.Decimal(amount.mul(requestedDiscountPercent).div(100).toFixed(4)),
+    );
+  }
+  for (const entry of packagePrices) {
+    const amount = new Prisma.Decimal(entry.price!.unitPrice);
+    quoteSubtotal = quoteSubtotal.add(amount);
+    quoteDiscountTotal = quoteDiscountTotal.add(
+      new Prisma.Decimal(amount.mul(requestedDiscountPercent).div(100).toFixed(4)),
+    );
+  }
+  const quoteFinalTotal = quoteSubtotal.sub(quoteDiscountTotal);
+  const pricingFingerprint = discountApprovalFingerprint({
+    organizationId: session.user.organizationId,
+    branchId,
+    patientId,
+    sourceId,
+    referrerId,
+    clientId: effectiveClientId,
+    directTestIds,
+    packageIds,
+    discountPercent: requestedDiscountPercent.toFixed(2),
+    discountReason,
+    currency,
+    pricing: [
+      ...directPrices.map(entry => ({
+        kind: "TEST" as const,
+        id: entry.test.id,
+        priceReferenceId: entry.price!.priceListItemId,
+        unitPrice: entry.price!.unitPrice.toString(),
+      })),
+      ...packagePrices.map(entry => ({
+        kind: "PACKAGE" as const,
+        id: entry.package.id,
+        priceReferenceId: entry.price!.priceListPackageItemId,
+        unitPrice: entry.price!.unitPrice.toString(),
+      })),
+    ],
+  });
+
+  if (requestedApprovalMode === "APPROVAL_WORKFLOW") {
+    const now = new Date();
+    await prisma.discountApprovalRequest.updateMany({
+      where: {
+        organizationId: session.user.organizationId,
+        requestedByUserId: session.user.id,
+        status: "PENDING",
+        expiresAt: { lte: now },
+      },
+      data: { status: "EXPIRED" },
+    });
+
+    if (suppliedDiscountApprovalRequestId) {
+      const suppliedApproval = await prisma.discountApprovalRequest.findFirst({
+        where: {
+          id: suppliedDiscountApprovalRequestId,
+          organizationId: session.user.organizationId,
+          requestedByUserId: session.user.id,
+          branchId,
+        },
+      });
+      if (!suppliedApproval) {
+        return NextResponse.json({ error: "discount_approval_not_found" }, { status: 409 });
+      }
+      if (
+        suppliedApproval.pricingFingerprint !== pricingFingerprint
+        || Number(suppliedApproval.discountPercent.toString()) !== requestedDiscountPercent
+        || suppliedApproval.reason !== discountReason
+      ) {
+        return NextResponse.json({ error: "discount_approval_context_changed" }, { status: 409 });
+      }
+      if (suppliedApproval.expiresAt <= now || suppliedApproval.status === "EXPIRED") {
+        return NextResponse.json({ error: "discount_approval_expired" }, { status: 409 });
+      }
+      if (suppliedApproval.status === "REJECTED") {
+        return NextResponse.json({ error: "discount_approval_rejected" }, { status: 409 });
+      }
+      if (suppliedApproval.status === "USED") {
+        return NextResponse.json({ error: "discount_approval_used" }, { status: 409 });
+      }
+      if (suppliedApproval.status === "PENDING") {
+        return NextResponse.json({
+          error: "discount_approval_pending",
+          approvalRequestId: suppliedApproval.id,
+          expiresAt: suppliedApproval.expiresAt,
+        }, { status: 409 });
+      }
+      if (suppliedApproval.status !== "APPROVED" || !suppliedApproval.approvedByUserId || !suppliedApproval.approvedAt) {
+        return NextResponse.json({ error: "discount_approval_invalid" }, { status: 409 });
+      }
+
+      discountApprovalMethod = "APPROVAL_WORKFLOW";
+      discountApprovedByUserId = suppliedApproval.approvedByUserId;
+      discountApprovedAt = suppliedApproval.approvedAt;
+      discountApprovalRequestIdToUse = suppliedApproval.id;
+    } else {
+      let approvalRequest = await prisma.discountApprovalRequest.findFirst({
+        where: {
+          organizationId: session.user.organizationId,
+          branchId,
+          requestedByUserId: session.user.id,
+          pricingFingerprint,
+          status: "PENDING",
+          expiresAt: { gt: now },
+        },
+        orderBy: { requestedAt: "desc" },
+      });
+
+      if (!approvalRequest) {
+        const expiresAt = new Date(now.getTime() + 60 * 60_000);
+        approvalRequest = await prisma.$transaction(async tx => {
+          const created = await tx.discountApprovalRequest.create({
+            data: {
+              organizationId: session.user.organizationId,
+              branchId,
+              requestedByUserId: session.user.id,
+              discountPercent: requestedDiscountPercent.toFixed(2),
+              reason: discountReason,
+              currency,
+              subtotalSnapshot: quoteSubtotal,
+              discountTotalSnapshot: quoteDiscountTotal,
+              finalTotalSnapshot: quoteFinalTotal,
+              pricingFingerprint,
+              contextSnapshot: {
+                patientId,
+                patientNumber: patient.patientNumber,
+                sourceId,
+                sourceCode: source.code,
+                referrerId,
+                clientId: effectiveClientId,
+                directTests: directPrices.map(entry => ({
+                  id: entry.test.id,
+                  code: entry.test.code,
+                  name: entry.test.nameEn,
+                  priceListItemId: entry.price!.priceListItemId,
+                  unitPrice: entry.price!.unitPrice.toString(),
+                })),
+                packages: packagePrices.map(entry => ({
+                  id: entry.package.id,
+                  code: entry.package.code,
+                  name: entry.package.nameEn,
+                  priceListPackageItemId: entry.price!.priceListPackageItemId,
+                  unitPrice: entry.price!.unitPrice.toString(),
+                })),
+              },
+              expiresAt,
+            },
+          });
+          await tx.auditEvent.create({
+            data: {
+              organizationId: session.user.organizationId,
+              branchId,
+              actorUserId: session.user.id,
+              action: "DISCOUNT_APPROVAL_REQUESTED",
+              entityType: "DiscountApprovalRequest",
+              entityId: created.id,
+              reason: discountReason,
+              newValues: {
+                discountPercent: requestedDiscountPercent.toFixed(2),
+                requesterLimitPercent: requesterDiscountLimit.toFixed(2),
+                currency,
+                subtotal: quoteSubtotal.toString(),
+                discountTotal: quoteDiscountTotal.toString(),
+                finalTotal: quoteFinalTotal.toString(),
+                expiresAt,
+              },
+              ipAddress: ctx.ipAddress,
+              userAgent: ctx.userAgent,
+            },
+          });
+          return created;
+        });
+      }
+
+      return NextResponse.json({
+        error: "discount_approval_required",
+        approvalRequestId: approvalRequest.id,
+        requesterLimitPercent: requesterDiscountLimit.toFixed(2),
+        discountPercent: requestedDiscountPercent.toFixed(2),
+        currency,
+        subtotal: quoteSubtotal.toString(),
+        discountTotal: quoteDiscountTotal.toString(),
+        total: quoteFinalTotal.toString(),
+        expiresAt: approvalRequest.expiresAt,
+      }, { status: 409 });
+    }
+  }
+
   try {
     const result = await prisma.$transaction(async (tx) => {
       let accessionNumber = documentNumber("ORD");
@@ -276,19 +505,27 @@ export async function POST(request: Request) {
         item: { id: string };
         test: (typeof tests)[number];
         unitPrice: Prisma.Decimal;
+        discountAmount: Prisma.Decimal;
+        finalPrice: Prisma.Decimal;
         packageId: string | null;
       }> = [];
       let subtotal = new Prisma.Decimal(0);
+      let discountTotal = new Prisma.Decimal(0);
       const createdOrderPackages = new Map<string, {
         id: string;
         package: (typeof packages)[number];
         unitPrice: Prisma.Decimal;
+        discountAmount: Prisma.Decimal;
+        finalPrice: Prisma.Decimal;
       }>();
 
       for (const pkg of packages) {
         const price = packagePriceMap.get(pkg.id)!;
         const unitPrice = new Prisma.Decimal(price.unitPrice);
+        const discountAmount = new Prisma.Decimal(unitPrice.mul(requestedDiscountPercent).div(100).toFixed(4));
+        const finalPrice = unitPrice.sub(discountAmount);
         subtotal = subtotal.add(unitPrice);
+        discountTotal = discountTotal.add(discountAmount);
         const orderPackage = await tx.orderPackage.create({
           data: {
             orderId: order.id,
@@ -298,13 +535,13 @@ export async function POST(request: Request) {
             packageNameEnSnapshot: pkg.nameEn,
             packageNameArSnapshot: pkg.nameAr,
             unitPriceSnapshot: unitPrice,
-            discountAmountSnapshot: new Prisma.Decimal(0),
+            discountAmountSnapshot: discountAmount,
             taxAmountSnapshot: new Prisma.Decimal(0),
-            finalPriceSnapshot: unitPrice,
+            finalPriceSnapshot: finalPrice,
             currency,
           },
         });
-        createdOrderPackages.set(pkg.id, { id: orderPackage.id, package: pkg, unitPrice });
+        createdOrderPackages.set(pkg.id, { id: orderPackage.id, package: pkg, unitPrice, discountAmount, finalPrice });
       }
 
       for (const test of tests) {
@@ -312,7 +549,14 @@ export async function POST(request: Request) {
         const directPrice = packageId ? null : directPriceMap.get(test.id);
         if (!packageId && !directPrice) throw new Error("DIRECT_PRICE_RESOLUTION_MISSING");
         const unitPrice = packageId ? new Prisma.Decimal(0) : new Prisma.Decimal(directPrice!.unitPrice);
-        if (!packageId) subtotal = subtotal.add(unitPrice);
+        const discountAmount = packageId
+          ? new Prisma.Decimal(0)
+          : new Prisma.Decimal(unitPrice.mul(requestedDiscountPercent).div(100).toFixed(4));
+        const finalPrice = unitPrice.sub(discountAmount);
+        if (!packageId) {
+          subtotal = subtotal.add(unitPrice);
+          discountTotal = discountTotal.add(discountAmount);
+        }
 
         const item = await tx.orderItem.create({
           data: {
@@ -325,9 +569,9 @@ export async function POST(request: Request) {
             testNameArSnapshot: test.nameAr,
             unitSnapshot: test.defaultUnit?.symbol || null,
             unitPriceSnapshot: unitPrice,
-            discountAmountSnapshot: new Prisma.Decimal(0),
+            discountAmountSnapshot: discountAmount,
             taxAmountSnapshot: new Prisma.Decimal(0),
-            finalPriceSnapshot: unitPrice,
+            finalPriceSnapshot: finalPrice,
             currency,
           },
           select: { id: true },
@@ -364,10 +608,28 @@ export async function POST(request: Request) {
           });
         }
 
-        createdItems.push({ item, test, unitPrice, packageId });
+        createdItems.push({ item, test, unitPrice, discountAmount, finalPrice, packageId });
       }
 
       const specimenGroups = new Map<string, typeof createdItems>();
+      if (discountApprovalRequestIdToUse) {
+        const consumed = await tx.discountApprovalRequest.updateMany({
+          where: {
+            id: discountApprovalRequestIdToUse,
+            organizationId: session.user.organizationId,
+            requestedByUserId: session.user.id,
+            status: "APPROVED",
+            usedAt: null,
+            expiresAt: { gt: new Date() },
+          },
+          data: {
+            status: "USED",
+            usedAt: new Date(),
+          },
+        });
+        if (consumed.count !== 1) throw new Error("DISCOUNT_APPROVAL_NOT_CONSUMABLE");
+      }
+
       for (const entry of createdItems) {
         const specimenTypeId = entry.test.specimenTypeId;
         const containerId = entry.test.containerId;
@@ -417,11 +679,16 @@ export async function POST(request: Request) {
         specimenSequence++;
       }
 
+      if (!subtotal.equals(quoteSubtotal) || !discountTotal.equals(quoteDiscountTotal)) {
+        throw new Error("DISCOUNT_QUOTE_MISMATCH");
+      }
+
       let invoiceNumber = documentNumber("INV");
       while (await tx.invoice.findUnique({ where: { organizationId_invoiceNumber: { organizationId: session.user.organizationId, invoiceNumber } } })) {
         invoiceNumber = documentNumber("INV");
       }
 
+      const finalTotal = subtotal.sub(discountTotal);
       const invoice = await tx.invoice.create({
         data: {
           organizationId: session.user.organizationId,
@@ -431,11 +698,16 @@ export async function POST(request: Request) {
           invoiceNumber,
           currency,
           subtotal,
-          discountTotal: new Prisma.Decimal(0),
+          discountTotal,
+          discountPercent: requestedDiscountPercent.toFixed(2),
+          discountReason: requestedDiscountPercent > 0 ? discountReason : null,
+          discountApprovalMethod,
+          discountApprovedByUserId,
+          discountApprovedAt: requestedDiscountPercent > 0 ? discountApprovedAt : null,
           taxTotal: new Prisma.Decimal(0),
-          total: subtotal,
+          total: finalTotal,
           paidAmount: new Prisma.Decimal(0),
-          balanceAmount: subtotal,
+          balanceAmount: finalTotal,
           createdByUserId: session.user.id,
         },
       });
@@ -451,9 +723,9 @@ export async function POST(request: Request) {
             testNameEnSnapshot: entry.test.nameEn,
             quantity: new Prisma.Decimal(1),
             unitPrice: entry.unitPrice,
-            discountAmount: new Prisma.Decimal(0),
+            discountAmount: entry.discountAmount,
             taxAmount: new Prisma.Decimal(0),
-            lineTotal: entry.unitPrice,
+            lineTotal: entry.finalPrice,
           },
         });
       }
@@ -468,9 +740,38 @@ export async function POST(request: Request) {
             testNameEnSnapshot: orderPackage.package.nameEn,
             quantity: new Prisma.Decimal(1),
             unitPrice: orderPackage.unitPrice,
-            discountAmount: new Prisma.Decimal(0),
+            discountAmount: orderPackage.discountAmount,
             taxAmount: new Prisma.Decimal(0),
-            lineTotal: orderPackage.unitPrice,
+            lineTotal: orderPackage.finalPrice,
+          },
+        });
+      }
+
+      if (requestedDiscountPercent > 0 && discountApprovedByUserId && discountApprovalMethod) {
+        await tx.auditEvent.create({
+          data: {
+            organizationId: session.user.organizationId,
+            branchId,
+            actorUserId: session.user.id,
+            action: "ORDER_DISCOUNT_APPLIED",
+            entityType: "Invoice",
+            entityId: invoice.id,
+            reason: discountReason,
+            newValues: {
+              invoiceNumber,
+              orderId: order.id,
+              requestedByUserId: session.user.id,
+              discountPercent: requestedDiscountPercent.toFixed(2),
+              originalSubtotal: subtotal.toString(),
+              discountTotal: discountTotal.toString(),
+              finalTotal: finalTotal.toString(),
+              approvalMethod: discountApprovalMethod,
+              approvalRequestId: discountApprovalRequestIdToUse,
+              approvedByUserId: discountApprovedByUserId,
+              approvedAt: discountApprovedAt?.toISOString() || null,
+            },
+            ipAddress: ctx.ipAddress,
+            userAgent: ctx.userAgent,
           },
         });
       }
@@ -500,14 +801,20 @@ export async function POST(request: Request) {
               .map(entry => entry.question.code),
             invoiceNumber,
             currency,
-            total: subtotal.toString(),
+            subtotal: subtotal.toString(),
+            discountPercent: requestedDiscountPercent.toFixed(2),
+            discountTotal: discountTotal.toString(),
+            discountReason: requestedDiscountPercent > 0 ? discountReason : null,
+            discountApprovalMethod,
+            discountApprovedByUserId,
+            total: finalTotal.toString(),
           },
           ipAddress: ctx.ipAddress,
           userAgent: ctx.userAgent,
         },
       });
 
-      return { order, invoice, total: subtotal.toString() };
+      return { order, invoice, subtotal: subtotal.toString(), discountTotal: discountTotal.toString(), total: finalTotal.toString() };
     }, { timeout: 30000 });
 
     return NextResponse.json({
@@ -517,6 +824,9 @@ export async function POST(request: Request) {
       invoiceId: result.invoice.id,
       invoiceNumber: result.invoice.invoiceNumber,
       currency,
+      subtotal: result.subtotal,
+      discountPercent: requestedDiscountPercent.toFixed(2),
+      discountTotal: result.discountTotal,
       total: result.total,
     }, { status: 201 });
   } catch {

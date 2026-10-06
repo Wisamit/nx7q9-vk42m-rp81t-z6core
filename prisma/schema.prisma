@@ -96,6 +96,19 @@ enum InvoiceStatus {
   CREDITED
 }
 
+enum DiscountApprovalMethod {
+  SELF_LIMIT
+  APPROVAL_WORKFLOW
+}
+
+enum DiscountApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  USED
+  EXPIRED
+}
+
 enum PaymentMethod {
   CASH
   CARD
@@ -800,6 +813,7 @@ model Organization {
   orderQuestions OrderQuestion[]
   orderAnswers OrderAnswer[]
   invoices Invoice[]
+  discountApprovalRequests DiscountApprovalRequest[]
   payments Payment[]
   specimens Specimen[]
   transferManifests SpecimenTransferManifest[]
@@ -928,6 +942,7 @@ model Branch {
   orders LabOrder[] @relation("OrderingBranchOrders")
   performedOrderItems OrderItem[] @relation("PerformedBranchOrderItems")
   invoices Invoice[]
+  discountApprovalRequests DiscountApprovalRequest[]
   payments Payment[]
   collectedSpecimens Specimen[] @relation("SpecimenCollectionBranch")
   currentSpecimens Specimen[] @relation("SpecimenCurrentBranch")
@@ -1063,6 +1078,7 @@ model User {
   mfaPendingSecretEncrypted String? @map("mfa_pending_secret_encrypted") @db.VarChar(700)
   mfaConfirmedAt   DateTime? @map("mfa_confirmed_at") @db.DateTime(3)
   mfaRecoveryCodes Json?     @map("mfa_recovery_codes")
+  discountLimitPercent Decimal? @map("discount_limit_percent") @db.Decimal(5, 2)
   createdAt      DateTime   @default(now()) @map("created_at") @db.DateTime(3)
   updatedAt      DateTime   @updatedAt @map("updated_at") @db.DateTime(3)
   deactivatedAt  DateTime?  @map("deactivated_at") @db.DateTime(3)
@@ -1079,6 +1095,9 @@ model User {
   createdOrders LabOrder[] @relation("OrderCreator")
   recordedOrderAnswers OrderAnswer[] @relation("OrderAnswerRecorder")
   createdInvoices Invoice[] @relation("InvoiceCreator")
+  approvedDiscountInvoices Invoice[] @relation("InvoiceDiscountApprover")
+  requestedDiscountApprovals DiscountApprovalRequest[] @relation("DiscountApprovalRequester")
+  approvedDiscountApprovals DiscountApprovalRequest[] @relation("DiscountApprovalApprover")
   cashierPayments Payment[] @relation("PaymentCashier")
   orderStatusChanges OrderStatusHistory[] @relation("OrderStatusChanger")
   collectedSpecimens Specimen[] @relation("SpecimenCollector")
@@ -1184,6 +1203,7 @@ model Role {
   nameEn         String       @map("name_en") @db.VarChar(150)
   nameAr         String?      @map("name_ar") @db.VarChar(150)
   isSystem       Boolean      @default(false) @map("is_system")
+  discountLimitPercent Decimal @default(0) @map("discount_limit_percent") @db.Decimal(5, 2)
   status         RecordStatus @default(ACTIVE)
   createdAt      DateTime     @default(now()) @map("created_at") @db.DateTime(3)
   updatedAt      DateTime     @updatedAt @map("updated_at") @db.DateTime(3)
@@ -2127,6 +2147,44 @@ model OrderItem {
   @@map("order_items")
 }
 
+model DiscountApprovalRequest {
+  id                    String                 @id @default(uuid()) @db.Char(36)
+  organizationId        String                 @map("organization_id") @db.Char(36)
+  branchId              String                 @map("branch_id") @db.Char(36)
+  requestedByUserId     String                 @map("requested_by_user_id") @db.Char(36)
+  approvedByUserId      String?                @map("approved_by_user_id") @db.Char(36)
+  status                DiscountApprovalStatus @default(PENDING)
+  discountPercent       Decimal                @map("discount_percent") @db.Decimal(5, 2)
+  reason                String                 @db.VarChar(1000)
+  currency              String                 @db.Char(3)
+  subtotalSnapshot      Decimal                @map("subtotal_snapshot") @db.Decimal(18, 4)
+  discountTotalSnapshot Decimal                @map("discount_total_snapshot") @db.Decimal(18, 4)
+  finalTotalSnapshot    Decimal                @map("final_total_snapshot") @db.Decimal(18, 4)
+  pricingFingerprint    String                 @map("pricing_fingerprint") @db.Char(64)
+  contextSnapshot       Json                   @map("context_snapshot")
+  approvalNote          String?                @map("approval_note") @db.VarChar(1000)
+  requestedAt           DateTime               @default(now()) @map("requested_at") @db.DateTime(3)
+  expiresAt             DateTime               @map("expires_at") @db.DateTime(3)
+  approvedAt            DateTime?              @map("approved_at") @db.DateTime(3)
+  rejectedAt            DateTime?              @map("rejected_at") @db.DateTime(3)
+  usedAt                DateTime?              @map("used_at") @db.DateTime(3)
+  createdAt             DateTime               @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt             DateTime               @updatedAt @map("updated_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  branch       Branch       @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  requestedBy  User         @relation("DiscountApprovalRequester", fields: [requestedByUserId], references: [id], onDelete: Restrict)
+  approvedBy   User?        @relation("DiscountApprovalApprover", fields: [approvedByUserId], references: [id], onDelete: Restrict)
+  invoice      Invoice?      @relation("InvoiceDiscountApprovalRequest")
+
+  @@index([organizationId, status, requestedAt])
+  @@index([branchId, status, expiresAt])
+  @@index([requestedByUserId, status, expiresAt])
+  @@index([approvedByUserId, approvedAt])
+  @@index([pricingFingerprint, status, expiresAt])
+  @@map("discount_approval_requests")
+}
+
 model Invoice {
   id              String        @id @default(uuid()) @db.Char(36)
   organizationId  String        @map("organization_id") @db.Char(36)
@@ -2138,6 +2196,12 @@ model Invoice {
   currency        String        @db.Char(3)
   subtotal        Decimal       @default(0) @db.Decimal(18, 4)
   discountTotal   Decimal       @default(0) @map("discount_total") @db.Decimal(18, 4)
+  discountPercent Decimal       @default(0) @map("discount_percent") @db.Decimal(5, 2)
+  discountReason  String?       @map("discount_reason") @db.VarChar(1000)
+  discountApprovalMethod DiscountApprovalMethod? @map("discount_approval_method")
+  discountApprovedByUserId String? @map("discount_approved_by_user_id") @db.Char(36)
+  discountApprovedAt DateTime? @map("discount_approved_at") @db.DateTime(3)
+  discountApprovalRequestId String? @unique @map("discount_approval_request_id") @db.Char(36)
   taxTotal        Decimal       @default(0) @map("tax_total") @db.Decimal(18, 4)
   total           Decimal       @default(0) @db.Decimal(18, 4)
   paidAmount      Decimal       @default(0) @map("paid_amount") @db.Decimal(18, 4)
@@ -2152,12 +2216,15 @@ model Invoice {
   order        LabOrder?    @relation(fields: [orderId], references: [id], onDelete: Restrict)
   client       Client?      @relation(fields: [clientId], references: [id], onDelete: Restrict)
   createdBy    User         @relation("InvoiceCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  discountApprovedBy User?   @relation("InvoiceDiscountApprover", fields: [discountApprovedByUserId], references: [id], onDelete: Restrict)
+  discountApprovalRequest DiscountApprovalRequest? @relation("InvoiceDiscountApprovalRequest", fields: [discountApprovalRequestId], references: [id], onDelete: Restrict)
   lines        InvoiceLine[]
   allocations  PaymentAllocation[]
 
   @@unique([organizationId, invoiceNumber])
   @@index([branchId, issuedAt])
   @@index([clientId, status, issuedAt])
+  @@index([discountApprovedByUserId, discountApprovedAt])
   @@map("invoices")
 }
 

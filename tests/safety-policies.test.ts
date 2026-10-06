@@ -8,6 +8,8 @@ import {
   specimenActionError,
 } from "../src/lib/clinical-safety.ts";
 import { comparePricingCandidates } from "../src/lib/pricing-policy.ts";
+import { approverCanAuthorize, discountApprovalMode, effectiveDiscountLimit } from "../src/lib/discount-policy.ts";
+import { discountApprovalFingerprint } from "../src/lib/discount-approval.ts";
 
 test("specimen collection is only allowed from PLANNED with specimen type configured", () => {
   assert.equal(specimenActionError({ status: "PLANNED", action: "COLLECT", specimenTypeConfigured: true }), null);
@@ -160,4 +162,114 @@ test("source pricing priority wins within the source scope", () => {
   ].sort(comparePricingCandidates);
 
   assert.equal(candidates[0].priority, 20);
+});
+
+
+test("user discount override takes precedence over assigned role limits", () => {
+  assert.equal(effectiveDiscountLimit({
+    userOverride: 7.5,
+    roleLimits: [5, 20],
+  }), 7.5);
+});
+
+test("highest active role discount limit is used when user has no override", () => {
+  assert.equal(effectiveDiscountLimit({
+    userOverride: null,
+    roleLimits: [5, 12.5, 10],
+  }), 12.5);
+});
+
+test("discount above requester limit requires approval workflow", () => {
+  assert.equal(discountApprovalMode({ requestedPercent: 6, requesterLimitPercent: 5 }), "APPROVAL_WORKFLOW");
+  assert.equal(discountApprovalMode({ requestedPercent: 5, requesterLimitPercent: 5 }), "SELF_LIMIT");
+  assert.equal(discountApprovalMode({ requestedPercent: 0, requesterLimitPercent: 0 }), "NONE");
+});
+
+test("discount approver must have permission, branch access and sufficient limit", () => {
+  assert.equal(approverCanAuthorize({
+    requestedPercent: 15,
+    approverLimitPercent: 20,
+    hasApprovalPermission: true,
+    branchAllowed: true,
+  }), true);
+  assert.equal(approverCanAuthorize({
+    requestedPercent: 15,
+    approverLimitPercent: 10,
+    hasApprovalPermission: true,
+    branchAllowed: true,
+  }), false);
+  assert.equal(approverCanAuthorize({
+    requestedPercent: 15,
+    approverLimitPercent: 20,
+    hasApprovalPermission: false,
+    branchAllowed: true,
+  }), false);
+  assert.equal(approverCanAuthorize({
+    requestedPercent: 15,
+    approverLimitPercent: 20,
+    hasApprovalPermission: true,
+    branchAllowed: false,
+  }), false);
+});
+
+
+test("discount approval fingerprint is stable for equivalent sorted pricing context", () => {
+  const base = {
+    organizationId: "org-a",
+    branchId: "branch-a",
+    patientId: "patient-a",
+    sourceId: "source-a",
+    referrerId: null,
+    clientId: null,
+    directTestIds: ["test-b", "test-a"],
+    packageIds: ["package-b", "package-a"],
+    discountPercent: "10.00",
+    discountReason: "Campaign adjustment",
+    currency: "EGP",
+    pricing: [
+      { kind: "PACKAGE" as const, id: "package-b", priceReferenceId: "price-p-b", unitPrice: "200.0000" },
+      { kind: "TEST" as const, id: "test-a", priceReferenceId: "price-t-a", unitPrice: "100.0000" },
+    ],
+  };
+  const reordered = {
+    ...base,
+    directTestIds: [...base.directTestIds].reverse(),
+    packageIds: [...base.packageIds].reverse(),
+    pricing: [...base.pricing].reverse(),
+  };
+  assert.equal(discountApprovalFingerprint(base), discountApprovalFingerprint(reordered));
+});
+
+test("discount approval fingerprint changes when financial context changes", () => {
+  const base = {
+    organizationId: "org-a",
+    branchId: "branch-a",
+    patientId: "patient-a",
+    sourceId: "source-a",
+    referrerId: null,
+    clientId: null,
+    directTestIds: ["test-a"],
+    packageIds: [],
+    discountPercent: "10.00",
+    discountReason: "Campaign adjustment",
+    currency: "EGP",
+    pricing: [
+      { kind: "TEST" as const, id: "test-a", priceReferenceId: "price-t-a", unitPrice: "100.0000" },
+    ],
+  };
+  assert.notEqual(
+    discountApprovalFingerprint(base),
+    discountApprovalFingerprint({ ...base, sourceId: "source-b" }),
+  );
+  assert.notEqual(
+    discountApprovalFingerprint(base),
+    discountApprovalFingerprint({
+      ...base,
+      pricing: [{ ...base.pricing[0], unitPrice: "110.0000" }],
+    }),
+  );
+  assert.notEqual(
+    discountApprovalFingerprint(base),
+    discountApprovalFingerprint({ ...base, discountPercent: "11.00" }),
+  );
 });
