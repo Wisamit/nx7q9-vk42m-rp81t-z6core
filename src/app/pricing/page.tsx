@@ -33,7 +33,7 @@ export default async function PricingPage() {
     }),
     prisma.labTest.findMany({
       where: { organizationId: session.user.organizationId, status: "ACTIVE" },
-      select: { id: true, code: true, nameEn: true },
+      select: { id: true, code: true, nameEn: true, nameAr: true },
       orderBy: { nameEn: "asc" },
     }),
     prisma.commercialPackage.findMany({
@@ -42,6 +42,9 @@ export default async function PricingPage() {
       orderBy: { nameEn: "asc" },
     }),
   ]);
+
+  const localizedName = (item: { nameEn: string; nameAr?: string | null }) => locale === "ar" ? item.nameAr || item.nameEn : item.nameEn;
+  const scopeLabel = (value: string) => ({ ORGANIZATION: tr(locale,"Organization","المؤسسة"), BRANCH: tr(locale,"Branch","الفرع"), CLIENT: tr(locale,"Client","العميل"), CONTRACT: tr(locale,"Contract","العقد") }[value] || value);
 
   return <main className="catalog-shell">
     <header className="page-header">
@@ -54,18 +57,18 @@ export default async function PricingPage() {
     </header>
 
     <PricingManager
-      branches={branches.map(x => ({ id: x.id, code: x.code, nameEn: x.nameEn }))}
-      clients={clients.map(x => ({ id: x.id, code: x.code, nameEn: x.nameEn }))}
-      contracts={contracts.map(x => ({ id: x.id, code: x.code, nameEn: x.nameEn, clientId: x.clientId }))}
+      branches={branches.map(x => ({ id: x.id, code: x.code, nameEn: x.nameEn, nameAr: x.nameAr }))}
+      clients={clients.map(x => ({ id: x.id, code: x.code, nameEn: x.nameEn, nameAr: x.nameAr }))}
+      contracts={contracts.map(x => ({ id: x.id, code: x.code, nameEn: x.nameEn, nameAr: x.nameAr, clientId: x.clientId }))}
       tests={tests}
       packages={packages}
-      priceLists={priceLists.map(x => ({ id: x.id, code: x.code, nameEn: x.nameEn, currency: x.currency }))}
+      priceLists={priceLists.map(x => ({ id: x.id, code: x.code, nameEn: x.nameEn, nameAr: x.nameAr, currency: x.currency }))}
       defaultCurrency={session.user.organization.defaultCurrency}
       locale={locale}
     />
 
     <section className="table-card">
-      <div className="table-toolbar"><h2>{tr(locale, "Price Lists", "قوائم الأسعار")}</h2><span>{priceLists.length} shown</span></div>
+      <div className="table-toolbar"><h2>{tr(locale, "Price Lists", "قوائم الأسعار")}</h2><span>{priceLists.length} {tr(locale, "shown", "معروضة")}</span></div>
       <div className="table-wrap">
         <table>
           <thead><tr><th>{tr(locale, "Code", "الرمز")}</th><th>{tr(locale, "Name", "الاسم")}</th><th>{tr(locale, "Scope", "النطاق")}</th><th>{tr(locale, "Currency", "العملة")}</th><th>{tr(locale, "Priority", "الأولوية")}</th><th>{tr(locale, "Effective", "السريان")}</th><th>{tr(locale, "Items", "العناصر")}</th><th>{tr(locale, "Status", "الحالة")}</th></tr></thead>
@@ -73,8 +76,8 @@ export default async function PricingPage() {
             {priceLists.length === 0 ? <tr><td colSpan={8} className="empty-state">{tr(locale, "No price lists configured yet.", "لا توجد قوائم أسعار مهيأة بعد.")}</td></tr> :
               priceLists.map(list => <tr key={list.id}>
                 <td><strong>{list.code}</strong></td>
-                <td>{list.nameEn}</td>
-                <td>{list.scopeType}</td>
+                <td>{localizedName(list)}</td>
+                <td>{scopeLabel(list.scopeType)}</td>
                 <td>{list.currency}</td>
                 <td>{list.priority}</td>
                 <td>{list.effectiveFrom.toISOString().slice(0,10)} → {list.effectiveTo ? list.effectiveTo.toISOString().slice(0,10) : tr(locale, "Open", "مفتوح")}</td>
