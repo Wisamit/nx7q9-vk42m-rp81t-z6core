@@ -180,8 +180,8 @@ export function QualityManagementConsole({
     const labels: Record<string, [string, string]> = {
       OPEN: ["Open", "مفتوح"],
       INVESTIGATING: ["Investigating", "قيد التحقيق"],
-      ACTION_IN_PROGRESS: ["Action in progress", "الإجراء قيد التنفيذ"],
-      PENDING_EFFECTIVENESS_REVIEW: ["Pending effectiveness review", "بانتظار مراجعة الفعالية"],
+      ACTION_REQUIRED: ["Action required", "إجراء مطلوب"],
+      EFFECTIVENESS_REVIEW: ["Effectiveness review", "مراجعة الفعالية"],
       CLOSED: ["Closed", "مغلق"],
       CANCELLED: ["Cancelled", "ملغى"],
       DRAFT: ["Draft", "مسودة"],
@@ -194,8 +194,11 @@ export function QualityManagementConsole({
       IN_PROGRESS: ["In progress", "قيد التنفيذ"],
       COMPLETED: ["Completed", "مكتمل"],
       WAIVED: ["Waived", "معفى"],
+      EXPIRED: ["Expired", "منتهي"],
       ACTIVE: ["Active", "نشط"],
+      SUSPENDED: ["Suspended", "موقوف"],
       REVOKED: ["Revoked", "ملغى"],
+      PLANNED: ["Planned", "مخطط"],
     };
     const label = labels[value];
     return label ? tr(label[0], label[1]) : sharedStatusLabel(locale, value);
