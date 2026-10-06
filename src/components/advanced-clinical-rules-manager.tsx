@@ -94,7 +94,7 @@ export function AdvancedClinicalRulesManager({ tests, branches, locale }: { test
           <option value="">{tr("Select calculated target…", "اختر المكوّن المحسوب…")}</option>
           {calcComponents.filter(component => component.resultType === "NUMERIC").map(component => <option key={component.id} value={component.id}>{component.code} — {localizedName(component)}</option>)}
         </select></label>
-        <label className="form-span">{tr("Formula", "المعادلة")}<input name="expression" required placeholder="Example: TC - HDL - (TG / 5)" /></label>
+        <label className="form-span">{tr("Formula", "المعادلة")}<input name="expression" required placeholder={tr("Example: TC - HDL - (TG / 5)","مثال: TC - HDL - (TG / 5)")} /></label>
         <p className="muted form-span">{tr("Available component codes:", "رموز المكونات المتاحة:")} {calcComponents.map(component => component.code).join(", ") || tr("Select a test first.", "اختر فحصًا أولاً.")}</p>
         <label>{tr("Decimal precision", "عدد المنازل العشرية")}<input name="decimalPrecision" type="number" min="0" max="12" defaultValue="2" /></label>
         <label>{tr("Effective from", "ساري من")}<input name="effectiveFrom" type="date" defaultValue={new Date().toISOString().slice(0,10)} required /></label>
