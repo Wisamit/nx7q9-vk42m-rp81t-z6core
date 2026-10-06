@@ -8,6 +8,7 @@ import {
   specimenActionError,
 } from "../src/lib/clinical-safety.ts";
 import { comparePricingCandidates } from "../src/lib/pricing-policy.ts";
+import { approverCanAuthorize, discountApprovalMode, effectiveDiscountLimit } from "../src/lib/discount-policy.ts";
 
 test("specimen collection is only allowed from PLANNED with specimen type configured", () => {
   assert.equal(specimenActionError({ status: "PLANNED", action: "COLLECT", specimenTypeConfigured: true }), null);
@@ -160,4 +161,52 @@ test("source pricing priority wins within the source scope", () => {
   ].sort(comparePricingCandidates);
 
   assert.equal(candidates[0].priority, 20);
+});
+
+
+test("user discount override takes precedence over assigned role limits", () => {
+  assert.equal(effectiveDiscountLimit({
+    userOverride: 7.5,
+    roleLimits: [5, 20],
+  }), 7.5);
+});
+
+test("highest active role discount limit is used when user has no override", () => {
+  assert.equal(effectiveDiscountLimit({
+    userOverride: null,
+    roleLimits: [5, 12.5, 10],
+  }), 12.5);
+});
+
+test("discount above requester limit requires approver re-authentication", () => {
+  assert.equal(discountApprovalMode({ requestedPercent: 6, requesterLimitPercent: 5 }), "APPROVER_REAUTH");
+  assert.equal(discountApprovalMode({ requestedPercent: 5, requesterLimitPercent: 5 }), "SELF_LIMIT");
+  assert.equal(discountApprovalMode({ requestedPercent: 0, requesterLimitPercent: 0 }), "NONE");
+});
+
+test("discount approver must have permission, branch access and sufficient limit", () => {
+  assert.equal(approverCanAuthorize({
+    requestedPercent: 15,
+    approverLimitPercent: 20,
+    hasApprovalPermission: true,
+    branchAllowed: true,
+  }), true);
+  assert.equal(approverCanAuthorize({
+    requestedPercent: 15,
+    approverLimitPercent: 10,
+    hasApprovalPermission: true,
+    branchAllowed: true,
+  }), false);
+  assert.equal(approverCanAuthorize({
+    requestedPercent: 15,
+    approverLimitPercent: 20,
+    hasApprovalPermission: false,
+    branchAllowed: true,
+  }), false);
+  assert.equal(approverCanAuthorize({
+    requestedPercent: 15,
+    approverLimitPercent: 20,
+    hasApprovalPermission: true,
+    branchAllowed: false,
+  }), false);
 });
