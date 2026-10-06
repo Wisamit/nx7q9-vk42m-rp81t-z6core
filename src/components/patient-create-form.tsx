@@ -3,7 +3,8 @@
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 
-export function PatientCreateForm({ onSuccess }: { onSuccess?: (message: string) => void }) {
+export function PatientCreateForm({ locale, onSuccess }: { locale: "ar" | "en"; onSuccess?: (message: string) => void }) {
+  const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -31,29 +32,29 @@ export function PatientCreateForm({ onSuccess }: { onSuccess?: (message: string)
     const body = await response.json().catch(() => ({}));
 
     if (response.ok) {
-      const success = `Patient created: ${body.patient.patientNumber}`;
+      const success = `${tr("Patient created", "تم إنشاء المريض")}: ${body.patient.patientNumber}`;
       setMessage(success);
       event.currentTarget.reset();
       router.refresh();
       onSuccess?.(success);
     } else if (body.error === "possible_duplicate" || body.error === "identifier_already_used") {
-      setMessage(`Potential duplicate found: ${body.patient?.patientNumber || ""} ${body.patient?.fullNameEn || ""}`);
+      setMessage(`${tr("Potential duplicate found", "تم العثور على مريض مشابه محتمل")}: ${body.patient?.patientNumber || ""} ${body.patient?.fullNameEn || ""}`);
     } else {
-      setMessage(body.error || "Patient creation failed.");
+      setMessage(body.error || tr("Patient creation failed.", "تعذر إنشاء المريض."));
     }
     setBusy(false);
   }
 
   return <form className="catalog-form" onSubmit={submit}>
-    <label>Full name (English)<input name="fullNameEn" required maxLength={220} /></label>
+    <label>{tr("Full name (English)", "الاسم الكامل بالإنجليزية")}<input name="fullNameEn" required maxLength={220} /></label>
     <label dir="rtl">الاسم الكامل بالعربية<input name="fullNameAr" maxLength={220} dir="rtl" /></label>
-    <label>Date of birth<input name="dateOfBirth" type="date" /></label>
-    <label>Sex at birth<select name="sexAtBirth" defaultValue="UNKNOWN"><option value="UNKNOWN">Unknown</option><option value="MALE">Male</option><option value="FEMALE">Female</option></select></label>
-    <label>Phone<input name="phone" maxLength={50} /></label>
-    <label>Email<input name="email" type="email" maxLength={191} /></label>
-    <label>National ID<input name="nationalId" maxLength={120} /></label>
-    <label>Nationality code<input name="nationalityCode" maxLength={2} placeholder="AE" /></label>
-    <button className="primary-button form-span" disabled={busy}>{busy ? "Saving…" : "Create Patient"}</button>
+    <label>{tr("Date of birth", "تاريخ الميلاد")}<input name="dateOfBirth" type="date" /></label>
+    <label>{tr("Sex at birth", "الجنس عند الولادة")}<select name="sexAtBirth" defaultValue="UNKNOWN"><option value="UNKNOWN">{tr("Unknown", "غير محدد")}</option><option value="MALE">{tr("Male", "ذكر")}</option><option value="FEMALE">{tr("Female", "أنثى")}</option></select></label>
+    <label>{tr("Phone", "الهاتف")}<input name="phone" maxLength={50} /></label>
+    <label>{tr("Email", "البريد الإلكتروني")}<input name="email" type="email" maxLength={191} /></label>
+    <label>{tr("National ID", "الرقم القومي")}<input name="nationalId" maxLength={120} /></label>
+    <label>{tr("Nationality code", "رمز الجنسية")}<input name="nationalityCode" maxLength={2} placeholder="EG" /></label>
+    <button className="primary-button form-span" disabled={busy}>{busy ? tr("Saving…", "جارٍ الحفظ…") : tr("Create Patient", "إنشاء المريض")}</button>
     {message && <div className="form-success form-span">{message}</div>}
   </form>;
 }
