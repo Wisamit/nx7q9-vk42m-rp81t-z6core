@@ -2,9 +2,10 @@
 
 import { FormEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { statusLabel as sharedStatusLabel } from "@/lib/ui-i18n";
 
-type Branch = { id: string; code: string; nameEn: string };
-type UserOption = { id: string; username: string; displayNameEn: string };
+type Branch = { id: string; code: string; nameEn: string; nameAr?: string | null };
+type UserOption = { id: string; username: string; displayNameEn: string; displayNameAr?: string | null };
 type Analyzer = { id: string; code: string; name: string; branchId: string };
 type PermissionFlags = {
   nonconformance: boolean;
@@ -106,6 +107,7 @@ type Indicator = {
   id: string;
   code: string;
   nameEn: string;
+  nameAr?: string | null;
   branch: string;
   direction: string;
   unit: string | null;
@@ -149,6 +151,7 @@ export function QualityManagementConsole({
   effectiveDocumentVersions,
   indicators,
   audits,
+  locale,
 }: {
   permissions: PermissionFlags;
   branches: Branch[];
@@ -163,12 +166,68 @@ export function QualityManagementConsole({
   effectiveDocumentVersions: Array<{ id: string; label: string }>;
   indicators: Indicator[];
   audits: InternalAudit[];
+  locale: "ar" | "en";
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
   const [trainingAnalyzerId, setTrainingAnalyzerId] = useState("");
   const [competencyAnalyzerId, setCompetencyAnalyzerId] = useState("");
+  const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
+  const branchName = (item: Branch) => locale === "ar" ? item.nameAr || item.nameEn : item.nameEn;
+  const userName = (item: UserOption) => locale === "ar" ? item.displayNameAr || item.displayNameEn : item.displayNameEn;
+  const qmsStatusLabel = (value: string) => {
+    const labels: Record<string, [string, string]> = {
+      OPEN: ["Open", "مفتوح"],
+      INVESTIGATING: ["Investigating", "قيد التحقيق"],
+      ACTION_IN_PROGRESS: ["Action in progress", "الإجراء قيد التنفيذ"],
+      PENDING_EFFECTIVENESS_REVIEW: ["Pending effectiveness review", "بانتظار مراجعة الفعالية"],
+      CLOSED: ["Closed", "مغلق"],
+      CANCELLED: ["Cancelled", "ملغى"],
+      DRAFT: ["Draft", "مسودة"],
+      IN_REVIEW: ["In review", "قيد المراجعة"],
+      REVIEWED: ["Reviewed", "تمت المراجعة"],
+      APPROVED: ["Approved", "معتمد"],
+      EFFECTIVE: ["Effective", "ساري"],
+      RETIRED: ["Retired", "متقاعد"],
+      ASSIGNED: ["Assigned", "معين"],
+      IN_PROGRESS: ["In progress", "قيد التنفيذ"],
+      COMPLETED: ["Completed", "مكتمل"],
+      WAIVED: ["Waived", "معفى"],
+      ACTIVE: ["Active", "نشط"],
+      REVOKED: ["Revoked", "ملغى"],
+    };
+    const label = labels[value];
+    return label ? tr(label[0], label[1]) : sharedStatusLabel(locale, value);
+  };
+  const severityLabel = (value: string) =>
+    value === "OBSERVATION" ? tr("Observation", "ملاحظة") :
+    value === "MINOR" ? tr("Minor", "طفيفة") :
+    value === "MAJOR" ? tr("Major", "جسيمة") :
+    value === "CRITICAL" ? tr("Critical", "حرجة") : value;
+  const actionTypeLabel = (value: string) =>
+    value === "CORRECTIVE" ? tr("Corrective", "تصحيحي") :
+    value === "PREVENTIVE" ? tr("Preventive", "وقائي") : value;
+  const effectivenessLabel = (value: string) =>
+    value === "UNKNOWN" ? tr("Not reviewed", "لم تُراجع") :
+    value === "EFFECTIVE" ? tr("Effective", "فعّال") :
+    value === "PARTIALLY_EFFECTIVE" ? tr("Partially effective", "فعّال جزئياً") :
+    value === "INEFFECTIVE" ? tr("Ineffective", "غير فعّال") : value;
+  const directionLabel = (value: string) =>
+    value === "LOWER_IS_BETTER" ? tr("Lower is better", "الأقل أفضل") :
+    value === "HIGHER_IS_BETTER" ? tr("Higher is better", "الأعلى أفضل") :
+    value === "TARGET_RANGE" ? tr("Target range", "نطاق مستهدف") : value;
+  const competencyResultLabel = (value: string) =>
+    value === "PASS" ? tr("Pass", "ناجح") :
+    value === "CONDITIONAL" ? tr("Conditional", "مشروط") :
+    value === "FAIL" ? tr("Fail", "فشل") : value;
+  const documentTypeLabel = (value: string) =>
+    value === "POLICY" ? tr("Policy", "سياسة") :
+    value === "WORK_INSTRUCTION" ? tr("Work instruction", "تعليمات عمل") :
+    value === "FORM" ? tr("Form", "نموذج") :
+    value === "CHECKLIST" ? tr("Checklist", "قائمة تحقق") :
+    value === "OTHER" ? tr("Other", "أخرى") :
+    value;
 
   const openNonconformances = useMemo(
     () => nonconformances.filter(item => !["CLOSED","CANCELLED"].includes(item.status)),
@@ -189,7 +248,7 @@ export function QualityManagementConsole({
     });
     const body = await response.json().catch(() => ({}));
     setBusy("");
-    setMessage(response.ok ? success : body.error || "Action failed.");
+    setMessage(response.ok ? success : tr("Action failed.", "فشلت العملية."));
     if (response.ok) router.refresh();
     return response.ok;
   }
@@ -208,7 +267,7 @@ export function QualityManagementConsole({
       immediateAction: form.get("immediateAction"),
       sourceEntityType: form.get("sourceEntityType"),
       sourceEntityId: form.get("sourceEntityId"),
-    }, "nc-create", "Nonconformance recorded.");
+    }, "nc-create", tr("Nonconformance recorded.", "تم تسجيل حالة عدم المطابقة."));
     if (ok) event.currentTarget.reset();
   }
 
@@ -216,17 +275,17 @@ export function QualityManagementConsole({
     let rootCause = item.rootCause || "";
     let closureSummary = item.closureSummary || "";
     if (close) {
-      rootCause = window.prompt("Root cause is required before closure:", rootCause) || "";
+      rootCause = window.prompt(tr("Root cause is required before closure:", "السبب الجذري مطلوب قبل الإغلاق:"), rootCause) || "";
       if (!rootCause.trim()) return;
-      closureSummary = window.prompt("Closure summary is required:", closureSummary) || "";
+      closureSummary = window.prompt(tr("Closure summary is required:", "ملخص الإغلاق مطلوب:"), closureSummary) || "";
       if (!closureSummary.trim()) return;
-      if (!window.confirm("Close this nonconformance? The closure will remain in audit history.")) return;
+      if (!window.confirm(tr("Close this nonconformance? The closure will remain in audit history.", "هل تريد إغلاق حالة عدم المطابقة؟ سيبقى الإغلاق محفوظاً في سجل التدقيق."))) return;
     }
     await send(`/api/quality/nonconformances/${item.id}`, "PATCH", {
       status: close ? "CLOSED" : "INVESTIGATING",
       rootCause,
       closureSummary,
-    }, "nc-" + item.id, close ? "Nonconformance closed." : "Nonconformance moved to investigation.");
+    }, "nc-" + item.id, close ? tr("Nonconformance closed.", "تم إغلاق حالة عدم المطابقة.") : tr("Nonconformance moved to investigation.", "تم نقل حالة عدم المطابقة إلى التحقيق."));
   }
 
   async function createCapa(event: FormEvent<HTMLFormElement>) {
@@ -240,15 +299,15 @@ export function QualityManagementConsole({
       rootCause: form.get("rootCause"),
       ownerUserId: form.get("ownerUserId"),
       dueDate: form.get("dueDate"),
-    }, "capa-create", "CAPA created.");
+    }, "capa-create", tr("CAPA created.", "تم إنشاء CAPA."));
     if (ok) event.currentTarget.reset();
   }
 
   async function addCapaAction(capa: Capa) {
-    const actionType = window.confirm("OK = corrective action. Cancel = preventive action.") ? "CORRECTIVE" : "PREVENTIVE";
-    const description = window.prompt(`Describe the ${actionType.toLowerCase()} action:`);
+    const actionType = window.confirm(tr("OK = corrective action. Cancel = preventive action.", "موافق = إجراء تصحيحي. إلغاء = إجراء وقائي.")) ? "CORRECTIVE" : "PREVENTIVE";
+    const description = window.prompt(actionType === "CORRECTIVE" ? tr("Describe the corrective action:", "صف الإجراء التصحيحي:") : tr("Describe the preventive action:", "صف الإجراء الوقائي:"));
     if (!description?.trim()) return;
-    const dueDate = window.prompt("Due date (YYYY-MM-DD), optional:") || "";
+    const dueDate = window.prompt(tr("Due date (YYYY-MM-DD), optional:", "تاريخ الاستحقاق (YYYY-MM-DD)، اختياري:")) || "";
     await send(`/api/quality/capas/${capa.id}/actions`, "POST", {
       actionType,
       description,
@@ -257,24 +316,24 @@ export function QualityManagementConsole({
   }
 
   async function completeCapaAction(capaId: string, actionId: string) {
-    if (!window.confirm("Mark this CAPA action as completed?")) return;
+    if (!window.confirm(tr("Mark this CAPA action as completed?", "هل تريد تعليم إجراء CAPA كمكتمل؟"))) return;
     await send(`/api/quality/capas/${capaId}/actions`, "PATCH", {
       actionId,
       status: "COMPLETED",
-    }, "capa-action-" + actionId, "CAPA action completed.");
+    }, "capa-action-" + actionId, tr("CAPA action completed.", "تم إكمال إجراء CAPA."));
   }
 
   async function reviewCapa(capa: Capa) {
-    const effectiveness = window.prompt("Effectiveness: EFFECTIVE, PARTIALLY_EFFECTIVE, or INEFFECTIVE", "EFFECTIVE")?.trim().toUpperCase();
+    const effectiveness = window.prompt(tr("Effectiveness code: EFFECTIVE, PARTIALLY_EFFECTIVE, or INEFFECTIVE", "رمز الفعالية: EFFECTIVE أو PARTIALLY_EFFECTIVE أو INEFFECTIVE"), "EFFECTIVE")?.trim().toUpperCase();
     if (!effectiveness || !["EFFECTIVE","PARTIALLY_EFFECTIVE","INEFFECTIVE"].includes(effectiveness)) return;
-    const effectivenessReview = window.prompt("Document the effectiveness review:");
+    const effectivenessReview = window.prompt(tr("Document the effectiveness review:", "وثّق مراجعة الفعالية:"));
     if (!effectivenessReview?.trim()) return;
-    const close = effectiveness === "EFFECTIVE" && window.confirm("Close this CAPA after the effectiveness review?");
+    const close = effectiveness === "EFFECTIVE" && window.confirm(tr("Close this CAPA after the effectiveness review?", "هل تريد إغلاق CAPA بعد مراجعة الفعالية؟"));
     await send(`/api/quality/capas/${capa.id}/review`, "POST", {
       effectiveness,
       effectivenessReview,
       close,
-    }, "capa-review-" + capa.id, close ? "CAPA reviewed and closed." : "CAPA effectiveness review recorded.");
+    }, "capa-review-" + capa.id, close ? tr("CAPA reviewed and closed.", "تمت مراجعة CAPA وإغلاقها.") : tr("CAPA effectiveness review recorded.", "تم تسجيل مراجعة فعالية CAPA."));
   }
 
   async function createDocument(event: FormEvent<HTMLFormElement>) {
@@ -292,33 +351,33 @@ export function QualityManagementConsole({
       reviewDueAt: form.get("reviewDueAt"),
       contentSnapshot: content ? { text: content } : null,
       changeSummary: "Initial version",
-    }, "document-create", "Controlled document created as version 1 draft.");
+    }, "document-create", tr("Controlled document created as version 1 draft.", "تم إنشاء الوثيقة المضبوطة كمسودة إصدار 1."));
     if (ok) event.currentTarget.reset();
   }
 
   async function newDocumentVersion(document: QualityDocument) {
-    const changeSummary = window.prompt("Change summary for the new version:");
+    const changeSummary = window.prompt(tr("Change summary for the new version:", "ملخص التغييرات للإصدار الجديد:"));
     if (!changeSummary?.trim()) return;
-    const content = window.prompt("Document text/content snapshot (or leave empty if you will provide an external URL):") || "";
-    const externalUrl = content ? "" : window.prompt("External document URL:") || "";
+    const content = window.prompt(tr("Document text/content snapshot (or leave empty if you will provide an external URL):", "لقطة نص/محتوى الوثيقة (أو اتركها فارغة إذا ستوفر رابطاً خارجياً):")) || "";
+    const externalUrl = content ? "" : window.prompt(tr("External document URL:", "رابط الوثيقة الخارجي:")) || "";
     if (!content.trim() && !externalUrl.trim()) return;
     await send(`/api/quality/documents/${document.id}/versions`, "POST", {
       changeSummary,
       contentSnapshot: content.trim() ? { text: content } : null,
       externalUrl,
-    }, "doc-new-" + document.id, "New immutable document version created.");
+    }, "doc-new-" + document.id, tr("New immutable document version created.", "تم إنشاء إصدار جديد غير قابل للتغيير من الوثيقة."));
   }
 
   async function documentWorkflow(versionId: string, action: "SUBMIT_REVIEW" | "COMPLETE_REVIEW" | "APPROVE" | "MAKE_EFFECTIVE") {
     const label = action === "SUBMIT_REVIEW"
-      ? "submit for review"
+      ? tr("submit for review", "إرسال للمراجعة")
       : action === "COMPLETE_REVIEW"
-        ? "complete review"
+        ? tr("complete review", "إكمال المراجعة")
         : action === "APPROVE"
-          ? "approve"
-          : "make effective";
-    if (!window.confirm(`Confirm: ${label} this document version?`)) return;
-    await send(`/api/quality/document-versions/${versionId}/workflow`, "POST", { action }, "doc-workflow-" + versionId, `Document version action completed: ${label}.`);
+          ? tr("approve", "اعتماد")
+          : tr("make effective", "جعل الإصدار سارياً");
+    if (!window.confirm(tr("Confirm: ", "تأكيد: ") + label + tr(" this document version?", " هذا الإصدار من الوثيقة؟"))) return;
+    await send(`/api/quality/document-versions/${versionId}/workflow`, "POST", { action }, "doc-workflow-" + versionId, tr("Document version action completed: ", "تم تنفيذ إجراء إصدار الوثيقة: ") + label + ".");
   }
 
   async function createTraining(event: FormEvent<HTMLFormElement>) {
@@ -337,7 +396,7 @@ export function QualityManagementConsole({
       expiresAt: form.get("expiresAt"),
       certificateUrl: form.get("certificateUrl"),
       notes: form.get("notes"),
-    }, "training-create", "Training record saved.");
+    }, "training-create", tr("Training record saved.", "تم حفظ سجل التدريب."));
     if (ok) {
       event.currentTarget.reset();
       setTrainingAnalyzerId("");
@@ -358,7 +417,7 @@ export function QualityManagementConsole({
       assessedAt: form.get("assessedAt"),
       nextDueAt: form.get("nextDueAt"),
       notes: form.get("notes"),
-    }, "competency-create", "Competency assessment recorded.");
+    }, "competency-create", tr("Competency assessment recorded.", "تم تسجيل تقييم الكفاءة."));
     if (ok) {
       event.currentTarget.reset();
       setCompetencyAnalyzerId("");
@@ -373,19 +432,19 @@ export function QualityManagementConsole({
       analyzerId: form.get("analyzerId"),
       expiresAt: form.get("expiresAt"),
       scopeNotes: form.get("scopeNotes"),
-    }, "authorization-create", "Analyzer authorization granted.");
+    }, "authorization-create", tr("Analyzer authorization granted.", "تم منح صلاحية استخدام الجهاز."));
     if (ok) event.currentTarget.reset();
   }
 
   async function revokeAuthorization(item: Authorization) {
-    const reason = window.prompt("Reason for revocation:");
+    const reason = window.prompt(tr("Reason for revocation:", "سبب إلغاء الصلاحية:"));
     if (!reason?.trim()) return;
-    if (!window.confirm("Revoke this analyzer authorization?")) return;
+    if (!window.confirm(tr("Revoke this analyzer authorization?", "هل تريد إلغاء صلاحية استخدام هذا الجهاز؟"))) return;
     await send("/api/quality/analyzer-authorizations", "PATCH", {
       id: item.id,
       status: "REVOKED",
       revocationReason: reason,
-    }, "auth-" + item.id, "Analyzer authorization revoked.");
+    }, "auth-" + item.id, tr("Analyzer authorization revoked.", "تم إلغاء صلاحية استخدام الجهاز."));
   }
 
   async function createIndicator(event: FormEvent<HTMLFormElement>) {
@@ -401,26 +460,26 @@ export function QualityManagementConsole({
       targetMin: form.get("targetMin"),
       targetMax: form.get("targetMax"),
       description: form.get("description"),
-    }, "indicator-create", "Quality indicator created.");
+    }, "indicator-create", tr("Quality indicator created.", "تم إنشاء مؤشر الجودة."));
     if (ok) event.currentTarget.reset();
   }
 
   async function addMeasurement(indicator: Indicator) {
-    const periodStart = window.prompt("Period start (YYYY-MM-DD):");
+    const periodStart = window.prompt(tr("Period start (YYYY-MM-DD):", "بداية الفترة (YYYY-MM-DD):"));
     if (!periodStart) return;
-    const periodEnd = window.prompt("Period end (YYYY-MM-DD):");
+    const periodEnd = window.prompt(tr("Period end (YYYY-MM-DD):", "نهاية الفترة (YYYY-MM-DD):"));
     if (!periodEnd) return;
-    const value = window.prompt(`Measured value${indicator.unit ? " (" + indicator.unit + ")" : ""}:`);
+    const value = window.prompt(tr("Measured value", "القيمة المقاسة") + (indicator.unit ? " (" + indicator.unit + ")" : "") + ":");
     if (!value) return;
-    const numerator = window.prompt("Numerator (optional):") || "";
-    const denominator = window.prompt("Denominator (optional):") || "";
+    const numerator = window.prompt(tr("Numerator (optional):", "البسط (اختياري):")) || "";
+    const denominator = window.prompt(tr("Denominator (optional):", "المقام (اختياري):")) || "";
     await send(`/api/quality/indicators/${indicator.id}/measurements`, "POST", {
       periodStart,
       periodEnd,
       value,
       numerator,
       denominator,
-    }, "indicator-measure-" + indicator.id, "Indicator measurement recorded.");
+    }, "indicator-measure-" + indicator.id, tr("Indicator measurement recorded.", "تم تسجيل قياس المؤشر."));
   }
 
   async function createAudit(event: FormEvent<HTMLFormElement>) {
@@ -432,31 +491,31 @@ export function QualityManagementConsole({
       scope: form.get("scope"),
       scheduledAt: form.get("scheduledAt"),
       leadAuditorUserId: form.get("leadAuditorUserId"),
-    }, "audit-create", "Internal audit planned.");
+    }, "audit-create", tr("Internal audit planned.", "تم تخطيط التدقيق الداخلي."));
     if (ok) event.currentTarget.reset();
   }
 
   async function addFinding(audit: InternalAudit) {
-    const severity = window.prompt("Severity: OBSERVATION, MINOR, MAJOR, CRITICAL", "MINOR")?.trim().toUpperCase();
+    const severity = window.prompt(tr("Severity code: OBSERVATION, MINOR, MAJOR, CRITICAL", "رمز الشدة: OBSERVATION أو MINOR أو MAJOR أو CRITICAL"), "MINOR")?.trim().toUpperCase();
     if (!severity || !["OBSERVATION","MINOR","MAJOR","CRITICAL"].includes(severity)) return;
-    const description = window.prompt("Finding description:");
+    const description = window.prompt(tr("Finding description:", "وصف الملاحظة:"));
     if (!description?.trim()) return;
-    const requirementRef = window.prompt("Requirement / SOP / clause reference (optional):") || "";
+    const requirementRef = window.prompt(tr("Requirement / SOP / clause reference (optional):", "مرجع المتطلب / SOP / البند (اختياري):")) || "";
     let capaId = "";
     if (severity === "CRITICAL") {
-      const capaNumber = window.prompt("Critical findings require a linked open CAPA. Enter CAPA number:");
+      const capaNumber = window.prompt(tr("Critical findings require a linked open CAPA. Enter CAPA number:", "الملاحظات الحرجة تتطلب CAPA مفتوحة مرتبطة. أدخل رقم CAPA:"));
       const capa = openCapas.find(item => item.capaNumber.toUpperCase() === capaNumber?.trim().toUpperCase());
       if (!capa) {
-        setMessage("Critical finding was not saved: select an existing open CAPA first.");
+        setMessage(tr("Critical finding was not saved: select an existing open CAPA first.", "لم يتم حفظ الملاحظة الحرجة: اختر أولاً CAPA مفتوحة موجودة."));
         return;
       }
       capaId = capa.id;
     } else {
-      const capaNumber = window.prompt("Link an open CAPA number (optional):")?.trim();
+      const capaNumber = window.prompt(tr("Link an open CAPA number (optional):", "اربط رقم CAPA مفتوحة (اختياري):"))?.trim();
       if (capaNumber) {
         const capa = openCapas.find(item => item.capaNumber.toUpperCase() === capaNumber.toUpperCase());
         if (!capa) {
-          setMessage("CAPA number not found among open CAPA records.");
+          setMessage(tr("CAPA number not found among open CAPA records.", "رقم CAPA غير موجود ضمن سجلات CAPA المفتوحة."));
           return;
         }
         capaId = capa.id;
@@ -467,23 +526,23 @@ export function QualityManagementConsole({
       description,
       requirementRef,
       capaId,
-    }, "finding-create-" + audit.id, "Audit finding recorded.");
+    }, "finding-create-" + audit.id, tr("Audit finding recorded.", "تم تسجيل ملاحظة التدقيق."));
   }
 
   async function closeFinding(auditId: string, findingId: string) {
-    const closureNote = window.prompt("Finding closure note:");
+    const closureNote = window.prompt(tr("Finding closure note:", "ملاحظة إغلاق الملاحظة:"));
     if (!closureNote?.trim()) return;
     await send(`/api/quality/audits/${auditId}/findings`, "PATCH", {
       findingId,
       closureNote,
-    }, "finding-close-" + findingId, "Audit finding closed.");
+    }, "finding-close-" + findingId, tr("Audit finding closed.", "تم إغلاق ملاحظة التدقيق."));
   }
 
   async function completeAudit(audit: InternalAudit) {
-    const summary = window.prompt("Audit completion summary:");
+    const summary = window.prompt(tr("Audit completion summary:", "ملخص إكمال التدقيق:"));
     if (!summary?.trim()) return;
-    if (!window.confirm("Complete this internal audit? All findings must already be closed.")) return;
-    await send(`/api/quality/audits/${audit.id}/complete`, "POST", { summary }, "audit-complete-" + audit.id, "Internal audit completed.");
+    if (!window.confirm(tr("Complete this internal audit? All findings must already be closed.", "هل تريد إكمال التدقيق الداخلي؟ يجب أن تكون كل الملاحظات مغلقة مسبقاً."))) return;
+    await send(`/api/quality/audits/${audit.id}/complete`, "POST", { summary }, "audit-complete-" + audit.id, tr("Internal audit completed.", "تم إكمال التدقيق الداخلي."));
   }
 
   return <div className="detail-section">
