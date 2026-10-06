@@ -104,7 +104,7 @@ export default async function ReferrersPage({
     </section>
 
     <section className="table-card detail-section">
-      <div className="table-toolbar"><h2>{tr(locale, "Order Sources", "مصادر الطلبات")}</h2><span>{sources.length} shown</span></div>
+      <div className="table-toolbar"><h2>{tr(locale, "Order Sources", "مصادر الطلبات")}</h2><span>{sources.length} {tr(locale, "shown", "معروض")}</span></div>
       <div className="table-wrap"><table>
         <thead><tr><th>{tr(locale, "Code", "الرمز")}</th><th>{tr(locale, "Name", "الاسم")}</th><th>{tr(locale, "Category", "الفئة")}</th><th>{tr(locale, "Status", "الحالة")}</th></tr></thead>
         <tbody>{sources.length === 0 ? <tr><td colSpan={4} className="empty-state">{tr(locale, "No order sources.", "لا توجد مصادر طلبات.")}</td></tr> : sources.map(source =>
