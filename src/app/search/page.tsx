@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { permissionSet, requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { getUiLocale, statusLabel, tr } from "@/lib/ui-i18n";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +12,7 @@ export default async function GlobalSearchPage({
 }) {
   const session = await requireSession();
   const permissions = permissionSet(session);
+  const locale = getUiLocale(session.user.preferredLocale);
   const q = (await searchParams).q?.trim().slice(0, 120) || "";
   const branchIds = session.user.branchScopes.map(scope => scope.branchId);
   const orgId = session.user.organizationId;
@@ -124,95 +126,95 @@ export default async function GlobalSearchPage({
   return <main className="catalog-shell">
     <header className="page-header">
       <div>
-        <p className="eyebrow">Global Search</p>
-        <h1>Find Anything</h1>
-        <p className="muted">Search patient identity, phone/MRN, accession, barcode, invoice, referrer and client data within your authorized scope.</p>
+        <p className="eyebrow">{tr(locale, "Global Search", "البحث الشامل")}</p>
+        <h1>{tr(locale, "Find Anything", "ابحث في النظام")}</h1>
+        <p className="muted">{tr(locale, "Search patient identity, phone/MRN, accession, barcode, invoice, referrer and client data within your authorized scope.", "ابحث عن المريض أو الهاتف أو الرقم الطبي أو رقم الطلب أو الباركود أو الفاتورة أو المحيل أو العميل ضمن صلاحياتك.")}</p>
       </div>
     </header>
 
     <form className="global-search-page" action="/search" method="get">
-      <input name="q" defaultValue={q} autoFocus placeholder="Patient, phone, MRN, accession, barcode, invoice, doctor/client…" />
-      <button className="primary-button">Search</button>
+      <input name="q" defaultValue={q} autoFocus placeholder={tr(locale, "Patient, phone, MRN, accession, barcode, invoice, doctor/client…", "مريض، هاتف، رقم طبي، طلب، باركود، فاتورة، طبيب/عميل…")} />
+      <button className="primary-button">{tr(locale, "Search", "بحث")}</button>
     </form>
 
-    {!q ? <section className="detail-card"><p className="empty-state">Enter a search term to begin.</p></section> :
-      <p className="search-result-summary">{total} result(s) across accessible modules for <strong>{q}</strong>.</p>}
+    {!q ? <section className="detail-card"><p className="empty-state">{tr(locale, "Enter a search term to begin.", "أدخل كلمة بحث للبدء.")}</p></section> :
+      <p className="search-result-summary">{total} {tr(locale, "result(s) across accessible modules for", "نتيجة ضمن الوحدات المتاحة عن")} <strong>{q}</strong>.</p>}
 
     {q && patients.length > 0 && <section className="table-card detail-section">
-      <div className="table-toolbar"><h2>Patients</h2><span>{patients.length}</span></div>
+      <div className="table-toolbar"><h2>{tr(locale, "Patients", "المرضى")}</h2><span>{patients.length}</span></div>
       <div className="table-wrap"><table>
-        <thead><tr><th>Patient No.</th><th>Name</th><th>Phone</th><th>Identifiers</th><th></th></tr></thead>
+        <thead><tr><th>{tr(locale, "Patient No.", "رقم المريض")}</th><th>{tr(locale, "Name", "الاسم")}</th><th>{tr(locale, "Phone", "الهاتف")}</th><th>{tr(locale, "Identifiers", "المعرّفات")}</th><th></th></tr></thead>
         <tbody>{patients.map(patient => <tr key={patient.id}>
           <td><strong>{patient.patientNumber}</strong></td>
           <td>{patient.fullNameEn}{patient.fullNameAr && <><br/><small dir="rtl">{patient.fullNameAr}</small></>}</td>
           <td>{patient.phone || "—"}</td>
           <td>{patient.identifiers.map(item => item.value).join(" · ") || "—"}</td>
-          <td><Link className="secondary-link" href={"/patients/"+patient.id}>Open</Link></td>
+          <td><Link className="secondary-link" href={"/patients/"+patient.id}>{tr(locale, "Open", "فتح")}</Link></td>
         </tr>)}</tbody>
       </table></div>
     </section>}
 
     {q && orders.length > 0 && <section className="table-card detail-section">
-      <div className="table-toolbar"><h2>Orders</h2><span>{orders.length}</span></div>
+      <div className="table-toolbar"><h2>{tr(locale, "Orders", "الطلبات")}</h2><span>{orders.length}</span></div>
       <div className="table-wrap"><table>
-        <thead><tr><th>Accession</th><th>Patient</th><th>Branch</th><th>Date</th><th>Status</th><th></th></tr></thead>
+        <thead><tr><th>{tr(locale, "Accession", "رقم الطلب")}</th><th>{tr(locale, "Patient", "المريض")}</th><th>{tr(locale, "Branch", "الفرع")}</th><th>{tr(locale, "Date", "التاريخ")}</th><th>{tr(locale, "Status", "الحالة")}</th><th></th></tr></thead>
         <tbody>{orders.map(order => <tr key={order.id}>
           <td><strong>{order.accessionNumber}</strong></td>
           <td>{order.patient.patientNumber}<br/><small>{order.patient.fullNameEn}</small></td>
           <td>{order.orderingBranch.code}</td>
           <td>{order.orderedAt.toISOString().replace("T"," ").slice(0,16)}</td>
-          <td><span className={"status-badge status-"+order.status.toLowerCase().replaceAll("_","-")}>{order.status}</span></td>
-          <td><Link className="secondary-link" href={"/orders/"+order.id}>Open</Link></td>
+          <td><span className={"status-badge status-"+order.status.toLowerCase().replaceAll("_","-")}>{statusLabel(locale, order.status)}</span></td>
+          <td><Link className="secondary-link" href={"/orders/"+order.id}>{tr(locale, "Open", "فتح")}</Link></td>
         </tr>)}</tbody>
       </table></div>
     </section>}
 
     {q && specimens.length > 0 && <section className="table-card detail-section">
-      <div className="table-toolbar"><h2>Specimens</h2><span>{specimens.length}</span></div>
+      <div className="table-toolbar"><h2>{tr(locale, "Specimens", "العينات")}</h2><span>{specimens.length}</span></div>
       <div className="table-wrap"><table>
-        <thead><tr><th>Barcode</th><th>Accession</th><th>Patient</th><th>Location</th><th>Status</th><th></th></tr></thead>
+        <thead><tr><th>{tr(locale, "Barcode", "الباركود")}</th><th>{tr(locale, "Accession", "رقم الطلب")}</th><th>{tr(locale, "Patient", "المريض")}</th><th>{tr(locale, "Location", "الموقع")}</th><th>{tr(locale, "Status", "الحالة")}</th><th></th></tr></thead>
         <tbody>{specimens.map(specimen => <tr key={specimen.id}>
           <td><strong className="barcode-text">{specimen.barcode}</strong></td>
           <td>{specimen.order.accessionNumber}</td>
           <td>{specimen.order.patient.patientNumber}<br/><small>{specimen.order.patient.fullNameEn}</small></td>
           <td>{specimen.currentBranch?.code || "—"}</td>
-          <td><span className={"status-badge status-"+specimen.status.toLowerCase().replaceAll("_","-")}>{specimen.status}</span></td>
-          <td><Link className="secondary-link" href={"/specimens?q="+encodeURIComponent(specimen.barcode)}>Open</Link></td>
+          <td><span className={"status-badge status-"+specimen.status.toLowerCase().replaceAll("_","-")}>{statusLabel(locale, specimen.status)}</span></td>
+          <td><Link className="secondary-link" href={"/specimens?q="+encodeURIComponent(specimen.barcode)}>{tr(locale, "Open", "فتح")}</Link></td>
         </tr>)}</tbody>
       </table></div>
     </section>}
 
     {q && invoices.length > 0 && <section className="table-card detail-section">
-      <div className="table-toolbar"><h2>Invoices</h2><span>{invoices.length}</span></div>
+      <div className="table-toolbar"><h2>{tr(locale, "Invoices", "الفواتير")}</h2><span>{invoices.length}</span></div>
       <div className="table-wrap"><table>
-        <thead><tr><th>Invoice</th><th>Patient / Client</th><th>Branch</th><th>Total</th><th>Balance</th><th>Status</th><th></th></tr></thead>
+        <thead><tr><th>{tr(locale, "Invoice", "الفاتورة")}</th><th>{tr(locale, "Patient / Client", "المريض / العميل")}</th><th>{tr(locale, "Branch", "الفرع")}</th><th>{tr(locale, "Total", "الإجمالي")}</th><th>{tr(locale, "Balance", "الرصيد")}</th><th>{tr(locale, "Status", "الحالة")}</th><th></th></tr></thead>
         <tbody>{invoices.map(invoice => <tr key={invoice.id}>
           <td><strong>{invoice.invoiceNumber}</strong></td>
           <td>{invoice.client?.nameEn || invoice.order?.patient.fullNameEn || "—"}</td>
           <td>{invoice.branch.code}</td>
           <td>{invoice.total.toString()} {invoice.currency}</td>
           <td>{invoice.balanceAmount.toString()} {invoice.currency}</td>
-          <td><span className={"status-badge status-"+invoice.status.toLowerCase().replaceAll("_","-")}>{invoice.status}</span></td>
-          <td>{invoice.orderId ? <Link className="secondary-link" href={"/orders/"+invoice.orderId}>Open order</Link> : <Link className="secondary-link" href="/billing">Billing</Link>}</td>
+          <td><span className={"status-badge status-"+invoice.status.toLowerCase().replaceAll("_","-")}>{statusLabel(locale, invoice.status)}</span></td>
+          <td>{invoice.orderId ? <Link className="secondary-link" href={"/orders/"+invoice.orderId}>{tr(locale, "Open order", "فتح الطلب")}</Link> : <Link className="secondary-link" href="/billing">{tr(locale, "Billing", "الفوترة")}</Link>}</td>
         </tr>)}</tbody>
       </table></div>
     </section>}
 
     {q && (referrers.length > 0 || clients.length > 0) && <section className="detail-grid detail-section">
       {referrers.length > 0 && <article className="table-card">
-        <div className="table-toolbar"><h2>Referrers</h2><span>{referrers.length}</span></div>
-        <div className="table-wrap"><table><thead><tr><th>Code</th><th>Name</th><th>Client</th></tr></thead><tbody>
+        <div className="table-toolbar"><h2>{tr(locale, "Referrers", "المحيلون")}</h2><span>{referrers.length}</span></div>
+        <div className="table-wrap"><table><thead><tr><th>{tr(locale, "Code", "الرمز")}</th><th>{tr(locale, "Name", "الاسم")}</th><th>{tr(locale, "Client", "العميل")}</th></tr></thead><tbody>
           {referrers.map(item=><tr key={item.id}><td><strong>{item.code}</strong></td><td>{item.nameEn}{item.nameAr&&<><br/><small dir="rtl">{item.nameAr}</small></>}</td><td>{item.client?.nameEn||"—"}</td></tr>)}
         </tbody></table></div>
       </article>}
       {clients.length > 0 && <article className="table-card">
-        <div className="table-toolbar"><h2>Clients</h2><span>{clients.length}</span></div>
-        <div className="table-wrap"><table><thead><tr><th>Code</th><th>Name</th><th>Type</th></tr></thead><tbody>
+        <div className="table-toolbar"><h2>{tr(locale, "Clients", "العملاء")}</h2><span>{clients.length}</span></div>
+        <div className="table-wrap"><table><thead><tr><th>{tr(locale, "Code", "الرمز")}</th><th>{tr(locale, "Name", "الاسم")}</th><th>{tr(locale, "Type", "النوع")}</th></tr></thead><tbody>
           {clients.map(item=><tr key={item.id}><td><strong>{item.code}</strong></td><td>{item.nameEn}{item.nameAr&&<><br/><small dir="rtl">{item.nameAr}</small></>}</td><td>{item.type}</td></tr>)}
         </tbody></table></div>
       </article>}
     </section>}
 
-    {q && total === 0 && <section className="detail-card detail-section"><p className="empty-state">No accessible records matched this search.</p></section>}
+    {q && total === 0 && <section className="detail-card detail-section"><p className="empty-state">{tr(locale, "No accessible records matched this search.", "لا توجد سجلات متاحة تطابق البحث.")}</p></section>}
   </main>;
 }
