@@ -3,12 +3,14 @@ import { redirect } from "next/navigation";
 import { permissionSet, requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { DigitalServicesConsole } from "@/components/digital-services-console";
+import { tr } from "@/lib/ui-i18n";
 
 export const dynamic = "force-dynamic";
 
 export default async function DigitalServicesPage() {
   const session = await requireSession();
   const permissions = permissionSet(session);
+  const locale = session.user.preferredLocale === "ar" ? "ar" : "en";
   const canOpen = [
     "portal_accounts.manage",
     "appointments.view",
@@ -25,24 +27,24 @@ export default async function DigitalServicesPage() {
   const [branches, patients, referrers, clients, users, portalAccounts, corporateAccess, appointments, homeCollections, queueTickets] = await Promise.all([
     prisma.branch.findMany({
       where: { organizationId: session.user.organizationId, id: { in: branchIds }, status: "ACTIVE" },
-      select: { id: true, code: true, nameEn: true },
+      select: { id: true, code: true, nameEn: true, nameAr: true },
       orderBy: { nameEn: "asc" },
     }),
     prisma.patient.findMany({
       where: { organizationId: session.user.organizationId, status: "ACTIVE" },
-      select: { id: true, patientNumber: true, fullNameEn: true },
+      select: { id: true, patientNumber: true, fullNameEn: true, fullNameAr: true },
       orderBy: { fullNameEn: "asc" },
       take: 1000,
     }),
     prisma.referrer.findMany({
       where: { organizationId: session.user.organizationId, status: "ACTIVE" },
-      select: { id: true, code: true, nameEn: true },
+      select: { id: true, code: true, nameEn: true, nameAr: true },
       orderBy: { nameEn: "asc" },
       take: 1000,
     }),
     prisma.client.findMany({
       where: { organizationId: session.user.organizationId, status: "ACTIVE" },
-      select: { id: true, code: true, nameEn: true },
+      select: { id: true, code: true, nameEn: true, nameAr: true },
       orderBy: { nameEn: "asc" },
       take: 1000,
     }),
@@ -52,7 +54,7 @@ export default async function DigitalServicesPage() {
         status: "ACTIVE",
         branchScopes: { some: { branchId: { in: branchIds } } },
       },
-      select: { id: true, displayNameEn: true, username: true },
+      select: { id: true, displayNameEn: true, displayNameAr: true, username: true },
       orderBy: { displayNameEn: "asc" },
       take: 1000,
     }),
@@ -95,29 +97,36 @@ export default async function DigitalServicesPage() {
   const activeQueue = queueTickets.filter(item => !["COMPLETED","CANCELLED","NO_SHOW"].includes(item.status)).length;
   const pendingAppointments = appointments.filter(item => ["REQUESTED","CONFIRMED","CHECKED_IN"].includes(item.status)).length;
   const activeHome = homeCollections.filter(item => !["DELIVERED","CANCELLED"].includes(item.status)).length;
+  const patientName = (item: { fullNameEn: string; fullNameAr?: string | null }) =>
+    locale === "ar" ? item.fullNameAr || item.fullNameEn : item.fullNameEn;
+  const namedEntity = (item: { nameEn: string; nameAr?: string | null }) =>
+    locale === "ar" ? item.nameAr || item.nameEn : item.nameEn;
+  const userName = (item: { displayNameEn: string; displayNameAr?: string | null }) =>
+    locale === "ar" ? item.displayNameAr || item.displayNameEn : item.displayNameEn;
 
   return <main className="catalog-shell">
     <header className="page-header">
       <div>
-        <p className="eyebrow">Digital Services</p>
-        <h1>Portals, Appointments & Queue</h1>
-        <p className="muted">Scoped external accounts, onsite and home collection bookings, and branch reception/phlebotomy queue operations.</p>
+        <p className="eyebrow">{tr(locale, "Digital Services", "الخدمات الرقمية")}</p>
+        <h1>{tr(locale, "Portals, Appointments & Queue", "البوابات والمواعيد والطوابير")}</h1>
+        <p className="muted">{tr(locale, "Scoped external accounts, onsite and home collection bookings, and branch reception/phlebotomy queue operations.", "حسابات خارجية محددة الصلاحيات، وحجوزات داخل المختبر وسحب منزلي، وإدارة طوابير الاستقبال وسحب الدم في الفروع.")}</p>
       </div>
       <div className="result-actions">
-        <Link className="secondary-link" href="/portal/login">Portal sign-in</Link>
-        {branches.slice(0,3).map(branch => <Link key={branch.id} className="secondary-link" href={"/queue-display/" + branch.id}>{branch.code} Queue Display</Link>)}
-        <Link className="secondary-link" href="/dashboard">Back to Dashboard</Link>
+        <Link className="secondary-link" href="/portal/login">{tr(locale, "Portal sign-in", "تسجيل دخول البوابة")}</Link>
+        {branches.slice(0,3).map(branch => <Link key={branch.id} className="secondary-link" href={"/queue-display/" + branch.id}>{branch.code} {tr(locale, "Queue Display", "شاشة الطابور")}</Link>)}
+        <Link className="secondary-link" href="/dashboard">{tr(locale, "Back to Dashboard", "العودة إلى لوحة التحكم")}</Link>
       </div>
     </header>
 
     <section className="detail-grid">
-      <article className="detail-card"><h2>Portal Accounts</h2><strong>{portalAccounts.length}</strong><p className="muted">Patient, doctor and corporate identities.</p></article>
-      <article className="detail-card"><h2>Pending Appointments</h2><strong>{pendingAppointments}</strong><p className="muted">Requested, confirmed or checked in.</p></article>
-      <article className="detail-card"><h2>Active Home Collection</h2><strong>{activeHome}</strong><p className="muted">Visits not yet delivered or cancelled.</p></article>
-      <article className="detail-card"><h2>Queue Waiting/Serving</h2><strong>{activeQueue}</strong><p className="muted">Reception and phlebotomy queue today.</p></article>
+      <article className="detail-card"><h2>{tr(locale, "Portal Accounts", "حسابات البوابة")}</h2><strong>{portalAccounts.length}</strong><p className="muted">{tr(locale, "Patient, doctor and corporate identities.", "هويات المرضى والأطباء والشركات.")}</p></article>
+      <article className="detail-card"><h2>{tr(locale, "Pending Appointments", "المواعيد المعلقة")}</h2><strong>{pendingAppointments}</strong><p className="muted">{tr(locale, "Requested, confirmed or checked in.", "مطلوبة أو مؤكدة أو تم تسجيل الحضور لها.")}</p></article>
+      <article className="detail-card"><h2>{tr(locale, "Active Home Collection", "السحب المنزلي النشط")}</h2><strong>{activeHome}</strong><p className="muted">{tr(locale, "Visits not yet delivered or cancelled.", "زيارات لم تُسلّم للمختبر ولم تُلغَ بعد.")}</p></article>
+      <article className="detail-card"><h2>{tr(locale, "Queue Waiting/Serving", "المنتظرون/قيد الخدمة")}</h2><strong>{activeQueue}</strong><p className="muted">{tr(locale, "Reception and phlebotomy queue today.", "طابور الاستقبال وسحب الدم لليوم.")}</p></article>
     </section>
 
     <DigitalServicesConsole
+      locale={locale}
       permissions={{
         portalAccounts: permissions.has("portal_accounts.manage"),
         appointments: permissions.has("appointments.manage"),
@@ -125,22 +134,22 @@ export default async function DigitalServicesPage() {
         queue: permissions.has("queue.manage"),
       }}
       branches={branches}
-      patients={patients.map(item => ({ id: item.id, label: item.patientNumber + " — " + item.fullNameEn }))}
-      referrers={referrers.map(item => ({ id: item.id, label: item.code + " — " + item.nameEn }))}
-      clients={clients.map(item => ({ id: item.id, label: item.code + " — " + item.nameEn }))}
-      users={users.map(item => ({ id: item.id, label: item.displayNameEn + " (" + item.username + ")" }))}
+      patients={patients.map(item => ({ id: item.id, label: item.patientNumber + " — " + patientName(item) }))}
+      referrers={referrers.map(item => ({ id: item.id, label: item.code + " — " + namedEntity(item) }))}
+      clients={clients.map(item => ({ id: item.id, label: item.code + " — " + namedEntity(item) }))}
+      users={users.map(item => ({ id: item.id, label: userName(item) + " (" + item.username + ")" }))}
       portalAccounts={portalAccounts.map(item => ({
         id: item.id,
         type: item.type,
-        subject: item.patient?.fullNameEn || item.referrer?.nameEn || item.client?.nameEn || "—",
+        subject: item.patient ? patientName(item.patient) : item.referrer ? namedEntity(item.referrer) : item.client ? namedEntity(item.client) : "—",
         contact: item.email || item.phone || "—",
         status: item.status,
         mustChangePassword: item.mustChangePassword,
       }))}
       corporateAccess={corporateAccess.map(item => ({
         id: item.id,
-        client: item.client.code + " — " + item.client.nameEn,
-        patient: item.patient.patientNumber + " — " + item.patient.fullNameEn,
+        client: item.client.code + " — " + namedEntity(item.client),
+        patient: item.patient.patientNumber + " — " + patientName(item.patient),
         employeeNumber: item.employeeNumber,
         canBook: item.canBook,
         canViewReports: item.canViewReports,
@@ -151,8 +160,8 @@ export default async function DigitalServicesPage() {
       appointments={appointments.map(item => ({
         id: item.id,
         appointmentNumber: item.appointmentNumber,
-        patient: item.patient.fullNameEn,
-        branch: item.branch.nameEn,
+        patient: patientName(item.patient),
+        branch: namedEntity(item.branch),
         mode: item.mode,
         scheduledStart: item.scheduledStart.toISOString(),
         status: item.status,
@@ -160,17 +169,17 @@ export default async function DigitalServicesPage() {
       homeCollections={homeCollections.map(item => ({
         id: item.id,
         appointmentNumber: item.appointment.appointmentNumber,
-        patient: item.appointment.patient.fullNameEn,
-        branch: item.branch.nameEn,
-        collector: item.assignedCollector?.displayNameEn || null,
+        patient: patientName(item.appointment.patient),
+        branch: namedEntity(item.branch),
+        collector: item.assignedCollector ? userName(item.assignedCollector) : null,
         status: item.status,
         scheduledStart: item.appointment.scheduledStart.toISOString(),
       }))}
       queueTickets={queueTickets.map(item => ({
         id: item.id,
         ticketNumber: item.ticketNumber,
-        patient: item.patient.fullNameEn,
-        branch: item.branch.nameEn,
+        patient: patientName(item.patient),
+        branch: namedEntity(item.branch),
         stage: item.stage,
         status: item.status,
         priority: item.priority,
