@@ -2,23 +2,25 @@ import Link from "next/link";
 import { permissionSet, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { InventoryOperationsManager } from "@/components/inventory-operations-manager";
+import { getUiLocale, tr } from "@/lib/ui-i18n";
 
 export const dynamic = "force-dynamic";
 
 export default async function InventoryOperationsPage() {
   const session = await requirePermission("inventory.view");
   const permissions = permissionSet(session);
+  const locale = getUiLocale(session.user.preferredLocale);
   const branchIds = session.user.branchScopes.map(scope => scope.branchId);
 
   const [branches, items, lotStocks, movements] = await Promise.all([
     prisma.branch.findMany({
       where: { organizationId: session.user.organizationId, id: { in: branchIds }, status: "ACTIVE" },
-      select: { id: true, code: true, nameEn: true },
+      select: { id: true, code: true, nameEn: true, nameAr: true },
       orderBy: { nameEn: "asc" },
     }),
     prisma.inventoryItem.findMany({
       where: { organizationId: session.user.organizationId, status: "ACTIVE" },
-      select: { id: true, code: true, nameEn: true, stockUnit: true },
+      select: { id: true, code: true, nameEn: true, nameAr: true, stockUnit: true },
       orderBy: { nameEn: "asc" },
     }),
     prisma.inventoryLotStock.findMany({
@@ -33,21 +35,26 @@ export default async function InventoryOperationsPage() {
     }),
   ]);
 
+  const localizedName = (item: { nameEn: string; nameAr?: string | null }) => locale === "ar" ? item.nameAr || item.nameEn : item.nameEn;
+  const userName = (item: { displayNameEn: string; displayNameAr?: string | null }) => locale === "ar" ? item.displayNameAr || item.displayNameEn : item.displayNameEn;
+  const movementLabel = (value: string) => ({ ADJUSTMENT_IN: tr(locale,"Adjustment in","تسوية إضافة"), ADJUSTMENT_OUT: tr(locale,"Adjustment out","تسوية خصم"), DISPOSAL: tr(locale,"Disposal","إتلاف"), CONSUMPTION: tr(locale,"Consumption","استهلاك"), RECEIPT: tr(locale,"Receipt","استلام"), TRANSFER_OUT: tr(locale,"Transfer out","نقل صادر"), TRANSFER_IN: tr(locale,"Transfer in","نقل وارد") }[value] || value);
+
   return <main className="catalog-shell">
     <header className="page-header">
       <div>
-        <p className="eyebrow">Inventory Operations</p>
-        <h1>Adjustments & Consumption</h1>
-        <p className="muted">Audited lot-level stock corrections and FEFO consumption for authorized branches.</p>
+        <p className="eyebrow">{tr(locale, "Inventory Operations", "عمليات المخزون")}</p>
+        <h1>{tr(locale, "Adjustments & Consumption", "التسويات والاستهلاك")}</h1>
+        <p className="muted">{tr(locale, "Audited lot-level stock corrections and FEFO consumption for authorized branches.", "تسويات مدققة على مستوى التشغيلات واستهلاك وفق FEFO ضمن الفروع المصرح بها.")}</p>
       </div>
       <div className="result-actions">
-        <Link className="secondary-link" href="/inventory">Inventory</Link>
-        <Link className="secondary-link" href="/inventory/procurement">Procurement</Link>
-        <Link className="secondary-link" href="/inventory/transfers">Transfers</Link>
+        <Link className="secondary-link" href="/inventory">{tr(locale, "Inventory", "المخزون")}</Link>
+        <Link className="secondary-link" href="/inventory/procurement">{tr(locale, "Procurement", "المشتريات")}</Link>
+        <Link className="secondary-link" href="/inventory/transfers">{tr(locale, "Transfers", "النقل")}</Link>
       </div>
     </header>
 
     <InventoryOperationsManager
+      locale={locale}
       branches={branches}
       items={items}
       lots={lotStocks.map(stock => ({
@@ -64,18 +71,18 @@ export default async function InventoryOperationsPage() {
     />
 
     <section className="table-card detail-section">
-      <div className="table-toolbar"><h2>Stock Movement Ledger</h2><span>{movements.length} shown</span></div>
+      <div className="table-toolbar"><h2>{tr(locale, "Stock Movement Ledger", "سجل حركات المخزون")}</h2><span>{movements.length} {tr(locale, "shown", "معروضة")}</span></div>
       <div className="table-wrap"><table>
-        <thead><tr><th>Time</th><th>Branch</th><th>Item</th><th>Lot</th><th>Type</th><th>Quantity</th><th>Balance after</th><th>Actor</th><th>Reference</th></tr></thead>
-        <tbody>{movements.length === 0 ? <tr><td colSpan={9} className="empty-state">No stock movements yet.</td></tr> : movements.map(movement => <tr key={movement.id}>
+        <thead><tr><th>{tr(locale, "Time", "الوقت")}</th><th>{tr(locale, "Branch", "الفرع")}</th><th>{tr(locale, "Item", "الصنف")}</th><th>{tr(locale, "Lot", "التشغيلة")}</th><th>{tr(locale, "Type", "النوع")}</th><th>{tr(locale, "Quantity", "الكمية")}</th><th>{tr(locale, "Balance after", "الرصيد بعد الحركة")}</th><th>{tr(locale, "Actor", "المنفذ")}</th><th>{tr(locale, "Reference", "المرجع")}</th></tr></thead>
+        <tbody>{movements.length === 0 ? <tr><td colSpan={9} className="empty-state">{tr(locale, "No stock movements yet.", "لا توجد حركات مخزون بعد.")}</td></tr> : movements.map(movement => <tr key={movement.id}>
           <td>{movement.occurredAt.toISOString().replace("T"," ").slice(0,19)}</td>
           <td>{movement.branch.code}</td>
-          <td><strong>{movement.item.code}</strong><br/><small>{movement.item.nameEn}</small></td>
+          <td><strong>{movement.item.code}</strong><br/><small>{localizedName(movement.item)}</small></td>
           <td>{movement.lot?.lotNumber || "—"}</td>
-          <td>{movement.movementType}</td>
+          <td>{movementLabel(movement.movementType)}</td>
           <td>{movement.quantity.toString()}</td>
           <td>{movement.balanceAfter.toString()}</td>
-          <td>{movement.actor.displayNameEn}</td>
+          <td>{userName(movement.actor)}</td>
           <td>{movement.referenceType ? movement.referenceType + (movement.referenceId ? " · " + movement.referenceId : "") : "—"}</td>
         </tr>)}</tbody>
       </table></div>
