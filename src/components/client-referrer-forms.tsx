@@ -103,46 +103,46 @@ export function ClientReferrerForms({ clients, canManageSources = false }: { cli
         {sourceMessage && <span className="crud-success-toast">{sourceMessage}</span>}
       </div>
       <div className="crud-action-buttons">
-        <button type="button" className="primary-button" onClick={() => { setClientMessage(""); setOpen("client"); }}><SystemIcon name="plus" size={16}/>Add Client</button>
-        <button type="button" className="secondary-button" onClick={() => { setReferrerMessage(""); setOpen("referrer"); }}><SystemIcon name="plus" size={16}/>Add Referrer</button>
-        {canManageSources && <button type="button" className="secondary-button" onClick={() => { setSourceMessage(""); setOpen("source"); }}><SystemIcon name="plus" size={16}/>Add Source</button>}
+        <button type="button" className="primary-button" onClick={() => { setClientMessage(""); setOpen("client"); }}><SystemIcon name="plus" size={16}/>{tr("Add Client", "إضافة عميل")}</button>
+        <button type="button" className="secondary-button" onClick={() => { setReferrerMessage(""); setOpen("referrer"); }}><SystemIcon name="plus" size={16}/>{tr("Add Referrer", "إضافة محيل")}</button>
+        {canManageSources && <button type="button" className="secondary-button" onClick={() => { setSourceMessage(""); setOpen("source"); }}><SystemIcon name="plus" size={16}/>{tr("Add Source", "إضافة مصدر")}</button>}
       </div>
     </div>
 
-    <CrudModal open={open === "client"} onClose={() => setOpen("")} title="Add Client" description="Create a billing/commercial client account." size="lg">
+    <CrudModal open={open === "client"} onClose={() => setOpen("")} title={tr("Add Client", "إضافة عميل")} description={tr("Create a billing/commercial client account.", "إنشاء حساب عميل تجاري أو حساب فوترة.")} size="lg">
       <form className="catalog-form" onSubmit={submitClient}>
-        <label>Code<input name="code" placeholder="Optional; generated from name" /></label>
-        <label>Type<select name="type" defaultValue="CLINIC"><option>INDIVIDUAL</option><option>CLINIC</option><option>HOSPITAL</option><option>COMPANY</option><option>INSURANCE</option><option>OTHER</option></select></label>
-        <label>Name (English)<input name="nameEn" required /></label>
+        <label>{tr("Code", "الرمز")}<input name="code" placeholder="Optional; generated from name" /></label>
+        <label>{tr("Type", "النوع")}<select name="type" defaultValue="CLINIC"><option>INDIVIDUAL</option><option>CLINIC</option><option>HOSPITAL</option><option>COMPANY</option><option>INSURANCE</option><option>OTHER</option></select></label>
+        <label>{tr("Name (English)", "الاسم بالإنجليزية")}<input name="nameEn" required /></label>
         <label dir="rtl">الاسم بالعربية<input name="nameAr" dir="rtl" /></label>
-        <label>Phone<input name="phone" /></label>
-        <label>Email<input name="email" type="email" /></label>
-        <label>Payment terms (days)<input name="paymentTermsDays" type="number" min="0" max="3650" /></label>
+        <label>{tr("Phone", "الهاتف")}<input name="phone" /></label>
+        <label>{tr("Email", "البريد الإلكتروني")}<input name="email" type="email" /></label>
+        <label>{tr("Payment terms (days)", "شروط الدفع (أيام)")}<input name="paymentTermsDays" type="number" min="0" max="3650" /></label>
         <button className="primary-button form-span" disabled={busy === "client"}>{busy === "client" ? "Saving…" : "Create Client"}</button>
         {clientMessage && <div className="form-success form-span">{clientMessage}</div>}
       </form>
     </CrudModal>
 
-    <CrudModal open={open === "referrer"} onClose={() => setOpen("")} title="Add Referrer" description="Create a doctor, clinic or hospital referral source." size="lg">
+    <CrudModal open={open === "referrer"} onClose={() => setOpen("")} title={tr("Add Referrer", "إضافة محيل")} description={tr("Create a doctor, clinic or hospital referral source.", "إنشاء مصدر إحالة لطبيب أو عيادة أو مستشفى.")} size="lg">
       <form className="catalog-form" onSubmit={submitReferrer}>
-        <label>Code<input name="code" placeholder="Optional; generated from name" /></label>
-        <label>Type<select name="type" defaultValue="PHYSICIAN"><option>PHYSICIAN</option><option>CLINIC</option><option>HOSPITAL</option><option>OTHER</option></select></label>
-        <label>Name (English)<input name="nameEn" required /></label>
+        <label>{tr("Code", "الرمز")}<input name="code" placeholder="Optional; generated from name" /></label>
+        <label>{tr("Type", "النوع")}<select name="type" defaultValue="PHYSICIAN"><option>PHYSICIAN</option><option>CLINIC</option><option>HOSPITAL</option><option>OTHER</option></select></label>
+        <label>{tr("Name (English)", "الاسم بالإنجليزية")}<input name="nameEn" required /></label>
         <label dir="rtl">الاسم بالعربية<input name="nameAr" dir="rtl" /></label>
-        <label>License #<input name="licenseNumber" /></label>
-        <label>Phone<input name="phone" /></label>
-        <label>Email<input name="email" type="email" /></label>
-        <label>Billing client<select name="clientId" defaultValue=""><option value="">No linked client</option>{clients.map(client => <option key={client.id} value={client.id}>{client.code} — {client.nameEn}</option>)}</select></label>
+        <label>{tr("License #", "رقم الترخيص")}<input name="licenseNumber" /></label>
+        <label>{tr("Phone", "الهاتف")}<input name="phone" /></label>
+        <label>{tr("Email", "البريد الإلكتروني")}<input name="email" type="email" /></label>
+        <label>{tr("Billing client", "عميل الفوترة")}<select name="clientId" defaultValue=""><option value="">No linked client</option>{clients.map(client => <option key={client.id} value={client.id}>{client.code} — {client.nameEn}</option>)}</select></label>
         <button className="primary-button form-span" disabled={busy === "referrer"}>{busy === "referrer" ? "Saving…" : "Create Referrer"}</button>
         {referrerMessage && <div className="form-success form-span">{referrerMessage}</div>}
       </form>
     </CrudModal>
 
-    {canManageSources && <CrudModal open={open === "source"} onClose={() => setOpen("")} title="Add Order Source" description="Create a configurable acquisition/source category for orders and analytics." size="md">
+    {canManageSources && <CrudModal open={open === "source"} onClose={() => setOpen("")} title={tr("Add Order Source", "إضافة مصدر طلب")} description={tr("Create a configurable acquisition/source category for orders and analytics.", "إنشاء مصدر قابل للتهيئة للطلبات والتحليلات.")} size="md">
       <form className="catalog-form" onSubmit={submitSource}>
-        <label>Code<input name="code" required placeholder="WALK_IN / CAMPAIGN / INSURANCE" /></label>
-        <label>Category<input name="category" required placeholder="WALK_IN / DOCTOR / CORPORATE" /></label>
-        <label>Name (English)<input name="nameEn" required /></label>
+        <label>{tr("Code", "الرمز")}<input name="code" required placeholder="WALK_IN / CAMPAIGN / INSURANCE" /></label>
+        <label>{tr("Category", "الفئة")}<input name="category" required placeholder="WALK_IN / DOCTOR / CORPORATE" /></label>
+        <label>{tr("Name (English)", "الاسم بالإنجليزية")}<input name="nameEn" required /></label>
         <label dir="rtl">الاسم بالعربية<input name="nameAr" dir="rtl" /></label>
         <button className="primary-button form-span" disabled={busy === "source"}>{busy === "source" ? "Saving…" : "Create Source"}</button>
         {sourceMessage && <div className="form-success form-span">{sourceMessage}</div>}
