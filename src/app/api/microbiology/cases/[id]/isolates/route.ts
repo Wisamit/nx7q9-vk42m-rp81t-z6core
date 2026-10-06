@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
+import { canAccessBranch, canAccessDepartment, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 
 function text(value: unknown, max = 1000) {
@@ -15,13 +15,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!organismId) return NextResponse.json({ error: "organism_required" }, { status: 400 });
 
   const [microbiologyCase, organism] = await Promise.all([
-    prisma.microbiologyCase.findFirst({ where: { id, organizationId: session.user.organizationId } }),
+    prisma.microbiologyCase.findFirst({ where: { id, organizationId: session.user.organizationId }, include: { orderItem: { include: { test: { select: { departmentId: true } } } } } }),
     prisma.organism.findFirst({ where: { id: organismId, organizationId: session.user.organizationId, status: "ACTIVE" } }),
   ]);
   if (!microbiologyCase) return NextResponse.json({ error: "microbiology_case_not_found" }, { status: 404 });
   if (!organism) return NextResponse.json({ error: "organism_not_found" }, { status: 404 });
   if (!canAccessBranch(session, microbiologyCase.performingBranchId)) {
     return NextResponse.json({ error: "branch_forbidden" }, { status: 403 });
+  }
+  if (!canAccessDepartment(session, microbiologyCase.orderItem.test.departmentId)) {
+    return NextResponse.json({ error: "department_forbidden" }, { status: 403 });
   }
   if (["FINAL","CANCELLED"].includes(microbiologyCase.status)) {
     return NextResponse.json({ error: "microbiology_case_locked", status: microbiologyCase.status }, { status: 409 });

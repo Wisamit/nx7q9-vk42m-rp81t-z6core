@@ -16,17 +16,19 @@ export async function GET() {
   if (!permissionSet(session).has("users.view")) return NextResponse.json({ error: "forbidden" }, { status: 403 });
 
   const organizationId = session.user.organizationId;
-  const [users, roles, branches] = await Promise.all([
+  const [users, roles, branches, departments] = await Promise.all([
     prisma.user.findMany({
       where: { organizationId },
       include: {
         roles: { include: { role: true } },
         branchScopes: { include: { branch: true } },
+        departmentScopes: { include: { department: true } },
       },
       orderBy: [{ status: "asc" }, { displayNameEn: "asc" }],
     }),
     prisma.role.findMany({ where: { organizationId, status: "ACTIVE" }, orderBy: [{ isSystem: "desc" }, { nameEn: "asc" }] }),
     prisma.branch.findMany({ where: { organizationId, status: "ACTIVE" }, orderBy: { nameEn: "asc" } }),
+    prisma.department.findMany({ where: { organizationId, status: "ACTIVE" }, orderBy: { nameEn: "asc" } }),
   ]);
 
   return NextResponse.json({
@@ -44,9 +46,12 @@ export async function GET() {
       roleNames: user.roles.filter(x => x.role.status === "ACTIVE").map(x => x.role.nameEn),
       branchIds: user.branchScopes.filter(x => x.branch.status === "ACTIVE").map(x => x.branchId),
       branchNames: user.branchScopes.filter(x => x.branch.status === "ACTIVE").map(x => x.branch.nameEn),
+      departmentIds: user.departmentScopes.filter(x => x.department.status === "ACTIVE").map(x => x.departmentId),
+      departmentNames: user.departmentScopes.filter(x => x.department.status === "ACTIVE").map(x => x.department.nameEn),
     })),
     roles: roles.map(role => ({ id: role.id, code: role.code, nameEn: role.nameEn, nameAr: role.nameAr, isSystem: role.isSystem })),
     branches: branches.map(branch => ({ id: branch.id, code: branch.code, nameEn: branch.nameEn, nameAr: branch.nameAr })),
+    departments: departments.map(department => ({ id: department.id, code: department.code, nameEn: department.nameEn, nameAr: department.nameAr, branchId: department.branchId })),
   });
 }
 
@@ -67,16 +72,20 @@ export async function POST(request: Request) {
   const preferredLocale = body.preferredLocale === "ar" ? "ar" : "en";
   const roleIds = ids(body.roleIds);
   const branchIds = ids(body.branchIds);
+  const departmentIds = ids(body.departmentIds);
 
   if (!/^[a-z0-9._-]{3,100}$/.test(username) || !displayNameEn || password.length < 12 || roleIds.length === 0 || branchIds.length === 0) {
     return NextResponse.json({ error: "invalid_fields" }, { status: 400 });
   }
 
-  const [roleCount, branchCount] = await Promise.all([
+  const [roleCount, branchCount, departments] = await Promise.all([
     prisma.role.count({ where: { id: { in: roleIds }, organizationId, status: "ACTIVE" } }),
     prisma.branch.count({ where: { id: { in: branchIds }, organizationId, status: "ACTIVE" } }),
+    prisma.department.findMany({ where: { id: { in: departmentIds }, organizationId, status: "ACTIVE" }, select: { id: true, branchId: true } }),
   ]);
-  if (roleCount !== roleIds.length || branchCount !== branchIds.length) {
+  const departmentScopeInvalid = departments.length !== departmentIds.length
+    || departments.some(department => department.branchId && !branchIds.includes(department.branchId));
+  if (roleCount !== roleIds.length || branchCount !== branchIds.length || departmentScopeInvalid) {
     return NextResponse.json({ error: "invalid_scope" }, { status: 400 });
   }
 
@@ -98,6 +107,7 @@ export async function POST(request: Request) {
           passwordChangedAt: new Date(),
           roles: { create: roleIds.map(roleId => ({ roleId, assignedBy: session.user.id })) },
           branchScopes: { create: branchIds.map(branchId => ({ branchId })) },
+          departmentScopes: departmentIds.length > 0 ? { create: departmentIds.map(departmentId => ({ departmentId })) } : undefined,
         },
       });
       await tx.auditEvent.create({
@@ -108,7 +118,7 @@ export async function POST(request: Request) {
           action: "USER_CREATED",
           entityType: "User",
           entityId: created.id,
-          newValues: { username, email: email || null, displayNameEn, displayNameAr: displayNameAr || null, preferredLocale, roleIds, branchIds },
+          newValues: { username, email: email || null, displayNameEn, displayNameAr: displayNameAr || null, preferredLocale, roleIds, branchIds, departmentIds },
           ipAddress: ctx.ipAddress,
           userAgent: ctx.userAgent,
         },

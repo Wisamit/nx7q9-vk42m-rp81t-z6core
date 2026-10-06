@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
+import { canAccessBranch, canAccessDepartment, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 
 function text(value: unknown, max = 1000) {
@@ -31,11 +31,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ iso
       id: isolateId,
       case: { organizationId: session.user.organizationId },
     },
-    include: { case: true, organism: true },
+    include: { case: { include: { orderItem: { include: { test: { select: { departmentId: true } } } } } }, organism: true },
   });
   if (!isolate) return NextResponse.json({ error: "isolate_not_found" }, { status: 404 });
   if (!canAccessBranch(session, isolate.case.performingBranchId)) {
     return NextResponse.json({ error: "branch_forbidden" }, { status: 403 });
+  }
+  if (!canAccessDepartment(session, isolate.case.orderItem.test.departmentId)) {
+    return NextResponse.json({ error: "department_forbidden" }, { status: 403 });
   }
   if (["FINAL","CANCELLED"].includes(isolate.case.status)) {
     return NextResponse.json({ error: "microbiology_case_locked", status: isolate.case.status }, { status: 409 });

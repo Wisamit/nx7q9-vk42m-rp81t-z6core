@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
+import { canAccessBranch, canAccessDepartment, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 
 function text(value: unknown, max = 1000) {
@@ -41,11 +41,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const result = await prisma.laboratoryResult.findFirst({
     where: { id, organizationId: session.user.organizationId },
-    include: { criticalEvents: true },
+    include: { criticalEvents: true, orderItem: { include: { test: { select: { departmentId: true } } } } },
   });
   if (!result) return NextResponse.json({ error: "result_not_found" }, { status: 404 });
   if (!canAccessBranch(session, result.performingBranchId)) {
     return NextResponse.json({ error: "branch_forbidden" }, { status: 403 });
+  }
+  if (!canAccessDepartment(session, result.orderItem.test.departmentId)) {
+    return NextResponse.json({ error: "department_forbidden" }, { status: 403 });
   }
   if (!["VERIFIED","RELEASED"].includes(result.status)) {
     return NextResponse.json({ error: "result_not_eligible_for_critical_communication", status: result.status }, { status: 409 });

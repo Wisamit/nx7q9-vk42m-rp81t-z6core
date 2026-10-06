@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
+import { canAccessBranch, canAccessDepartment, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { amendmentEligibility } from "@/lib/clinical-safety";
 
@@ -20,13 +20,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     where: { id, organizationId: session.user.organizationId },
     include: {
       values: true,
-      orderItem: true,
+      orderItem: { include: { test: { select: { departmentId: true } } } },
     },
   });
 
   if (!original) return NextResponse.json({ error: "result_not_found" }, { status: 404 });
   if (!canAccessBranch(session, original.performingBranchId)) {
     return NextResponse.json({ error: "branch_forbidden" }, { status: 403 });
+  }
+  if (!canAccessDepartment(session, original.orderItem.test.departmentId)) {
+    return NextResponse.json({ error: "department_forbidden" }, { status: 403 });
   }
   const newer = await prisma.laboratoryResult.findFirst({
     where: {

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   amendmentEligibility,
   branchScopeAllows,
+  departmentScopeAllows,
   releaseEligibility,
   specimenActionError,
 } from "../src/lib/clinical-safety.ts";
@@ -108,6 +109,17 @@ test("branch scope rejects missing or unauthorized branches", () => {
   assert.equal(branchScopeAllows(["branch-a", "branch-b"], "branch-a"), true);
   assert.equal(branchScopeAllows(["branch-a", "branch-b"], "branch-c"), false);
   assert.equal(branchScopeAllows(["branch-a"], null), false);
+});
+
+test("department scope is unrestricted when no explicit departments are assigned", () => {
+  assert.equal(departmentScopeAllows([], "hematology"), true);
+  assert.equal(departmentScopeAllows([], null), true);
+});
+
+test("department scope restricts access once explicit departments are assigned", () => {
+  assert.equal(departmentScopeAllows(["hematology", "chemistry"], "hematology"), true);
+  assert.equal(departmentScopeAllows(["hematology", "chemistry"], "microbiology"), false);
+  assert.equal(departmentScopeAllows(["hematology"], null), false);
 });
 
 test("pricing precedence is CONTRACT > CLIENT > BRANCH > ORGANIZATION", () => {

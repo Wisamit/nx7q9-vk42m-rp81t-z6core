@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
+import { canAccessBranch, canAccessDepartment, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 
 function text(value: unknown, max = 1000) {
@@ -24,12 +24,18 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       resultId: id,
       result: { organizationId: session.user.organizationId },
     },
-    include: { result: true, rule: true },
+    include: {
+      result: { include: { orderItem: { include: { test: { select: { departmentId: true } } } } } },
+      rule: true,
+    },
   });
 
   if (!event) return NextResponse.json({ error: "validation_hold_event_not_found" }, { status: 404 });
   if (!canAccessBranch(session, event.result.performingBranchId)) {
     return NextResponse.json({ error: "branch_forbidden" }, { status: 403 });
+  }
+  if (!canAccessDepartment(session, event.result.orderItem.test.departmentId)) {
+    return NextResponse.json({ error: "department_forbidden" }, { status: 403 });
   }
   if (event.status !== "ACTIVE") {
     return NextResponse.json({ error: "validation_hold_not_active", status: event.status }, { status: 409 });

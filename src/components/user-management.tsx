@@ -6,19 +6,21 @@ import { CrudModal } from "@/components/crud-modal";
 
 type Role = { id: string; code: string; nameEn: string; nameAr: string | null; isSystem: boolean };
 type Branch = { id: string; code: string; nameEn: string; nameAr: string | null };
+type Department = { id: string; code: string; nameEn: string; nameAr: string | null; branchId: string | null };
 type UserRow = {
   id: string; username: string; email: string | null; displayNameEn: string; displayNameAr: string | null;
   preferredLocale: string; status: string; mfaEnabled: boolean; lastLoginAt: string | null;
-  roleIds: string[]; roleNames: string[]; branchIds: string[]; branchNames: string[];
+  roleIds: string[]; roleNames: string[]; branchIds: string[]; branchNames: string[]; departmentIds: string[]; departmentNames: string[];
 };
-type Data = { users: UserRow[]; roles: Role[]; branches: Branch[] };
+type Data = { users: UserRow[]; roles: Role[]; branches: Branch[]; departments: Department[] };
 
 export function UserManagement({ locale }: { locale: "ar" | "en" }) {
-  const [data, setData] = useState<Data>({ users: [], roles: [], branches: [] });
+  const [data, setData] = useState<Data>({ users: [], roles: [], branches: [], departments: [] });
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
+  const [editing, setEditing] = useState<UserRow | null>(null);
   const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
 
   async function load() {
@@ -57,6 +59,7 @@ export function UserManagement({ locale }: { locale: "ar" | "en" }) {
         preferredLocale: form.get("preferredLocale"),
         roleIds: form.getAll("roleIds"),
         branchIds: form.getAll("branchIds"),
+        departmentIds: form.getAll("departmentIds"),
       }),
     });
     const body = await response.json().catch(() => ({}));
@@ -67,6 +70,32 @@ export function UserManagement({ locale }: { locale: "ar" | "en" }) {
       await load();
     } else {
       setMessage(body.error === "invalid_scope" ? tr("Select valid roles and branches.", "اختر أدوارًا وفروعًا صحيحة.") : tr("Unable to create user. Username may already exist.", "تعذر إنشاء المستخدم. قد يكون اسم المستخدم مستخدمًا."));
+    }
+    setBusy(false);
+  }
+
+  async function updateAccess(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!editing) return;
+    setBusy(true); setMessage("");
+    const form = new FormData(event.currentTarget);
+    const response = await fetch("/api/admin/users/" + editing.id, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        roleIds: form.getAll("roleIds"),
+        branchIds: form.getAll("branchIds"),
+        departmentIds: form.getAll("departmentIds"),
+      }),
+    });
+    const body = await response.json().catch(() => ({}));
+    if (response.ok) {
+      setEditing(null);
+      setMessage(tr("Access updated successfully.", "تم تحديث صلاحيات الوصول بنجاح."));
+      await load();
+    } else {
+      setMessage(body.error === "invalid_scope"
+        ? tr("Department access must match the selected branches.", "يجب أن تتوافق صلاحيات الأقسام مع الفروع المحددة.")
+        : tr("Unable to update access.", "تعذر تحديث صلاحيات الوصول."));
     }
     setBusy(false);
   }
@@ -107,15 +136,34 @@ export function UserManagement({ locale }: { locale: "ar" | "en" }) {
         <label>{tr("Preferred language", "اللغة المفضلة")}<select name="preferredLocale" defaultValue="en"><option value="en">English</option><option value="ar">العربية</option></select></label>
         <fieldset className="admin-checklist"><legend>{tr("Roles", "الأدوار")}</legend>{data.roles.map(role => <label key={role.id}><input type="checkbox" name="roleIds" value={role.id} />{locale === "ar" ? role.nameAr || role.nameEn : role.nameEn}</label>)}</fieldset>
         <fieldset className="admin-checklist"><legend>{tr("Branch access", "صلاحية الفروع")}</legend>{data.branches.map(branch => <label key={branch.id}><input type="checkbox" name="branchIds" value={branch.id} />{branch.code} — {locale === "ar" ? branch.nameAr || branch.nameEn : branch.nameEn}</label>)}</fieldset>
+        <fieldset className="admin-checklist form-span"><legend>{tr("Department access", "صلاحية الأقسام")}</legend><small>{tr("Optional: no selection means all departments within the selected branches. Selecting departments restricts clinical access.", "اختياري: عدم التحديد يعني كل الأقسام ضمن الفروع المختارة. تحديد أقسام يقيّد الوصول السريري بها.")}</small>{data.departments.map(department => <label key={department.id}><input type="checkbox" name="departmentIds" value={department.id} />{department.code} — {locale === "ar" ? department.nameAr || department.nameEn : department.nameEn}</label>)}</fieldset>
         <button className="primary-button form-span" disabled={busy}>{busy ? tr("Saving…", "جارٍ الحفظ…") : tr("Create user", "إنشاء المستخدم")}</button>
         {message && <div className="form-success form-span">{message}</div>}
       </form>
     </CrudModal>
 
+    <CrudModal
+      open={Boolean(editing)}
+      onClose={() => setEditing(null)}
+      title={tr("Edit access", "تعديل صلاحيات الوصول")}
+      description={editing ? editing.displayNameEn + " · @" + editing.username : undefined}
+      size="lg"
+    >
+      {editing && <form className="settings-grid" onSubmit={updateAccess}>
+        <fieldset className="admin-checklist"><legend>{tr("Roles", "الأدوار")}</legend>{data.roles.map(role => <label key={role.id}><input type="checkbox" name="roleIds" value={role.id} defaultChecked={editing.roleIds.includes(role.id)} />{locale === "ar" ? role.nameAr || role.nameEn : role.nameEn}</label>)}</fieldset>
+        <fieldset className="admin-checklist"><legend>{tr("Branch access", "صلاحية الفروع")}</legend>{data.branches.map(branch => <label key={branch.id}><input type="checkbox" name="branchIds" value={branch.id} defaultChecked={editing.branchIds.includes(branch.id)} />{branch.code} — {locale === "ar" ? branch.nameAr || branch.nameEn : branch.nameEn}</label>)}</fieldset>
+        <fieldset className="admin-checklist form-span"><legend>{tr("Department access", "صلاحية الأقسام")}</legend><small>{tr("No department selection means unrestricted department access inside the selected branches.", "عدم تحديد أقسام يعني السماح بكل الأقسام ضمن الفروع المحددة.")}</small>{data.departments.map(department => <label key={department.id}><input type="checkbox" name="departmentIds" value={department.id} defaultChecked={editing.departmentIds.includes(department.id)} />{department.code} — {locale === "ar" ? department.nameAr || department.nameEn : department.nameEn}</label>)}</fieldset>
+        <button className="primary-button form-span" disabled={busy}>{busy ? tr("Saving…", "جارٍ الحفظ…") : tr("Save access", "حفظ الصلاحيات")}</button>
+      </form>}
+    </CrudModal>
+
     <section className="table-card admin-table-card">
       <div className="table-toolbar"><div><h2>{tr("Staff users", "المستخدمون")}</h2><span>{tr("Roles, branches, MFA and account state", "الأدوار والفروع وMFA وحالة الحساب")}</span></div><span>{data.users.length}</span></div>
-      <div className="table-wrap">{loading ? <div className="empty-state">{tr("Loading…", "جارٍ التحميل…")}</div> : <table><thead><tr><th>{tr("User", "المستخدم")}</th><th>{tr("Roles", "الأدوار")}</th><th>{tr("Branches", "الفروع")}</th><th>MFA</th><th>{tr("Status", "الحالة")}</th><th>{tr("Actions", "إجراءات")}</th></tr></thead>
-      <tbody>{data.users.map(user => <tr key={user.id}><td><strong>{locale === "ar" ? user.displayNameAr || user.displayNameEn : user.displayNameEn}</strong><small className="table-subtext">@{user.username}{user.email ? " · " + user.email : ""}</small></td><td>{user.roleNames.join(", ") || "—"}</td><td>{user.branchNames.join(", ") || "—"}</td><td><span className={"status-badge " + (user.mfaEnabled ? "status-active" : "status-draft")}>{user.mfaEnabled ? "ON" : "OFF"}</span></td><td><span className={"status-badge " + (user.status === "ACTIVE" ? "status-active" : "status-warning")}>{user.status}</span></td><td>{user.status === "ACTIVE" ? <button type="button" className="secondary-button compact-action" disabled={busy} onClick={() => void setStatus(user, "SUSPENDED")}>{tr("Suspend", "تعليق")}</button> : <button type="button" className="secondary-button compact-action" disabled={busy} onClick={() => void setStatus(user, "ACTIVE")}>{tr("Activate", "تفعيل")}</button>}</td></tr>)}</tbody></table>}</div>
+      <div className="table-wrap">{loading ? <div className="empty-state">{tr("Loading…", "جارٍ التحميل…")}</div> : <table><thead><tr><th>{tr("User", "المستخدم")}</th><th>{tr("Roles", "الأدوار")}</th><th>{tr("Branches", "الفروع")}</th><th>{tr("Departments", "الأقسام")}</th><th>MFA</th><th>{tr("Status", "الحالة")}</th><th>{tr("Actions", "إجراءات")}</th></tr></thead>
+      <tbody>{data.users.map(user => <tr key={user.id}><td><strong>{locale === "ar" ? user.displayNameAr || user.displayNameEn : user.displayNameEn}</strong><small className="table-subtext">@{user.username}{user.email ? " · " + user.email : ""}</small></td><td>{user.roleNames.join(", ") || "—"}</td><td>{user.branchNames.join(", ") || "—"}</td><td>{user.departmentNames.length ? user.departmentNames.join(", ") : tr("All departments", "كل الأقسام")}</td><td><span className={"status-badge " + (user.mfaEnabled ? "status-active" : "status-draft")}>{user.mfaEnabled ? "ON" : "OFF"}</span></td><td><span className={"status-badge " + (user.status === "ACTIVE" ? "status-active" : "status-warning")}>{user.status}</span></td><td><div className="inline-actions">
+  <button type="button" className="secondary-button compact-action" disabled={busy} onClick={() => setEditing(user)}>{tr("Edit access", "تعديل الصلاحيات")}</button>
+  {user.status === "ACTIVE" ? <button type="button" className="secondary-button compact-action" disabled={busy} onClick={() => void setStatus(user, "SUSPENDED")}>{tr("Suspend", "تعليق")}</button> : <button type="button" className="secondary-button compact-action" disabled={busy} onClick={() => void setStatus(user, "ACTIVE")}>{tr("Activate", "تفعيل")}</button>}
+</div></td></tr>)}</tbody></table>}</div>
     </section>
   </div>;
 }

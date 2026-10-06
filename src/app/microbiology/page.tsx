@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { permissionSet, requirePermission } from "@/lib/auth";
+import { authorizedDepartmentIds, permissionSet, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { MicrobiologyManager } from "@/components/microbiology-manager";
 import { getUiLocale, statusLabel, tr } from "@/lib/ui-i18n";
@@ -11,12 +11,14 @@ export default async function MicrobiologyPage() {
   const permissions = permissionSet(session);
   const locale = getUiLocale(session.user.preferredLocale);
   const branchIds = session.user.branchScopes.map(scope => scope.branchId);
+  const departmentIds = authorizedDepartmentIds(session);
 
   const [cases, orderItems, organismCount, antibioticCount] = await Promise.all([
     prisma.microbiologyCase.findMany({
       where: {
         organizationId: session.user.organizationId,
         performingBranchId: { in: branchIds },
+        ...(departmentIds.length > 0 ? { orderItem: { test: { departmentId: { in: departmentIds } } } } : {}),
       },
       include: {
         orderItem: { include: { test: true, order: { include: { patient: true } } } },
@@ -30,7 +32,7 @@ export default async function MicrobiologyPage() {
     prisma.orderItem.findMany({
       where: {
         order: { organizationId: session.user.organizationId },
-        test: { workflowType: "MICROBIOLOGY", status: "ACTIVE" },
+        test: { workflowType: "MICROBIOLOGY", status: "ACTIVE", ...(departmentIds.length > 0 ? { departmentId: { in: departmentIds } } : {}) },
         microbiologyCases: { none: {} },
         specimenLinks: {
           some: {
