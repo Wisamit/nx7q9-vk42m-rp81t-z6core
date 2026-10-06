@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { NextResponse } from "next/server";
-import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
+import { canAccessBranch, canAccessDepartment, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { buildDiagnosticReportSnapshot } from "@/lib/report-snapshot";
 import { resolveAnalyzerQcGate } from "@/lib/qc-gate";
@@ -19,13 +19,16 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
       values: true,
       criticalEvents: { include: { communications: true } },
       microbiologyCase: true,
-      orderItem: { include: { order: true } },
+      orderItem: { include: { order: true, test: { select: { departmentId: true } } } },
     },
   });
 
   if (!result) return NextResponse.json({ error: "result_not_found" }, { status: 404 });
   if (!canAccessBranch(session, result.performingBranchId)) {
     return NextResponse.json({ error: "branch_forbidden" }, { status: 403 });
+  }
+  if (!canAccessDepartment(session, result.orderItem.test.departmentId)) {
+    return NextResponse.json({ error: "department_forbidden" }, { status: 403 });
   }
   const qcGate = result.source === "ANALYZER" && result.analyzerId
     ? await resolveAnalyzerQcGate(prisma, {
