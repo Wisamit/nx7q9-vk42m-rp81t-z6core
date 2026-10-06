@@ -30,7 +30,7 @@ export function discountApprovalMode(input: {
   if (input.requestedPercent === 0) return "NONE" as const;
   return input.requestedPercent <= input.requesterLimitPercent
     ? "SELF_LIMIT" as const
-    : "APPROVER_REAUTH" as const;
+    : "APPROVAL_WORKFLOW" as const;
 }
 
 export function approverCanAuthorize(input: {
