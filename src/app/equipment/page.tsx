@@ -15,12 +15,12 @@ export default async function EquipmentPage() {
   const [branches, departments, analyzers, equipment] = await Promise.all([
     prisma.branch.findMany({
       where: { organizationId: session.user.organizationId, id: { in: branchIds }, status: "ACTIVE" },
-      select: { id: true, code: true, nameEn: true },
+      select: { id: true, code: true, nameEn: true, nameAr: true },
       orderBy: { nameEn: "asc" },
     }),
     prisma.department.findMany({
       where: { organizationId: session.user.organizationId, status: "ACTIVE" },
-      select: { id: true, code: true, nameEn: true, branchId: true },
+      select: { id: true, code: true, nameEn: true, nameAr: true, branchId: true },
       orderBy: { nameEn: "asc" },
     }),
     prisma.analyzer.findMany({
@@ -46,6 +46,16 @@ export default async function EquipmentPage() {
 
   const openDowntime = equipment.filter(item => item.downtimeEvents[0]?.status === "OPEN").length;
   const calibrationFailed = equipment.filter(item => item.calibrationEvents[0]?.status === "FAIL").length;
+  const localizedName = (item: { nameEn: string; nameAr?: string | null }) => locale === "ar" ? item.nameAr || item.nameEn : item.nameEn;
+  const maintenanceTypeLabel = (value: string) =>
+    value === "PREVENTIVE" ? tr(locale, "Preventive", "وقائية") :
+    value === "CORRECTIVE" ? tr(locale, "Corrective", "تصحيحية") : value;
+  const equipmentStatusLabel = (value: string) =>
+    value === "PASS" ? tr(locale, "Pass", "ناجح") :
+    value === "FAIL" ? tr(locale, "Fail", "فشل") :
+    value === "OPEN" ? tr(locale, "Open", "مفتوح") :
+    value === "CLOSED" ? tr(locale, "Closed", "مغلق") :
+    statusLabel(locale, value);
 
   return <main className="catalog-shell">
     <header className="page-header">
@@ -61,12 +71,13 @@ export default async function EquipmentPage() {
     </header>
 
     <section className="detail-grid">
-      <article className="detail-card"><h2>Equipment</h2><strong>{equipment.length}</strong><p className="muted">Assets in your authorized branches.</p></article>
+      <article className="detail-card"><h2>{tr(locale, "Equipment", "المعدات")}</h2><strong>{equipment.length}</strong><p className="muted">{tr(locale, "Assets in your authorized branches.", "الأصول الموجودة ضمن الفروع المصرح لك بها.")}</p></article>
       <article className="detail-card"><h2>{tr(locale, "Active Downtime", "توقفات نشطة")}</h2><strong>{openDowntime}</strong><p className="muted">{tr(locale, "Open equipment downtime events.", "أحداث توقف المعدات المفتوحة.")}</p></article>
       <article className="detail-card"><h2>{tr(locale, "Calibration Failures", "فشل المعايرة")}</h2><strong>{calibrationFailed}</strong><p className="muted">{tr(locale, "Latest calibration status is FAIL.", "آخر حالة معايرة هي فشل.")}</p></article>
     </section>
 
     <EquipmentManager
+      locale={locale}
       branches={branches}
       departments={departments}
       analyzers={analyzers}
@@ -86,22 +97,22 @@ export default async function EquipmentPage() {
     />
 
     <section className="table-card detail-section">
-      <div className="table-toolbar"><h2>{tr(locale, "Equipment Register", "سجل المعدات")}</h2><span>{equipment.length} assets</span></div>
+      <div className="table-toolbar"><h2>{tr(locale, "Equipment Register", "سجل المعدات")}</h2><span>{equipment.length} {tr(locale, "assets", "أصل")}</span></div>
       <div className="table-wrap"><table>
-        <thead><tr><th>Asset</th><th>Branch</th><th>Department</th><th>Analyzer</th><th>Status</th><th>Maintenance</th><th>Calibration</th><th>Documents</th><th>Downtime</th></tr></thead>
+        <thead><tr><th>{tr(locale, "Asset", "الأصل")}</th><th>{tr(locale, "Branch", "الفرع")}</th><th>{tr(locale, "Department", "القسم")}</th><th>{tr(locale, "Analyzer", "الجهاز")}</th><th>{tr(locale, "Status", "الحالة")}</th><th>{tr(locale, "Maintenance", "الصيانة")}</th><th>{tr(locale, "Calibration", "المعايرة")}</th><th>{tr(locale, "Documents", "الوثائق")}</th><th>{tr(locale, "Downtime", "التوقف")}</th></tr></thead>
         <tbody>{equipment.length === 0 ? <tr><td colSpan={9} className="empty-state">{tr(locale, "No equipment registered.", "لا توجد معدات مسجلة.")}</td></tr> : equipment.map(item => <tr key={item.id}>
           <td><strong>{item.assetId}</strong><br/><small>{item.name}{item.serialNumber ? " · " + item.serialNumber : ""}</small></td>
-          <td>{item.branch.code} — {item.branch.nameEn}</td>
-          <td>{item.department?.nameEn || "—"}</td>
+          <td>{item.branch.code} — {localizedName(item.branch)}</td>
+          <td>{item.department ? localizedName(item.department) : "—"}</td>
           <td>{item.analyzer ? item.analyzer.code + " — " + item.analyzer.name : "—"}</td>
           <td>{statusLabel(locale, item.status)}</td>
           <td>
-            {item.maintenanceEvents[0] ? item.maintenanceEvents[0].maintenanceType + " · " + item.maintenanceEvents[0].status : "—"}
+            {item.maintenanceEvents[0] ? maintenanceTypeLabel(item.maintenanceEvents[0].maintenanceType) + " · " + equipmentStatusLabel(item.maintenanceEvents[0].status) : "—"}
             {item.maintenancePlans[0] ? <><br/><small>{tr(locale, "Next", "التالي")}: {item.maintenancePlans[0].nextDueAt.toISOString().slice(0,10)}</small></> : null}
           </td>
-          <td>{item.calibrationEvents[0] ? item.calibrationEvents[0].status + (item.calibrationEvents[0].performedAt ? " · " + item.calibrationEvents[0].performedAt.toISOString().slice(0,10) : "") : "—"}</td>
+          <td>{item.calibrationEvents[0] ? equipmentStatusLabel(item.calibrationEvents[0].status) + (item.calibrationEvents[0].performedAt ? " · " + item.calibrationEvents[0].performedAt.toISOString().slice(0,10) : "") : "—"}</td>
           <td>{item.documents.length}</td>
-          <td>{item.downtimeEvents[0]?.status === "OPEN" ? <strong className="critical-text">OPEN</strong> : "—"}</td>
+          <td>{item.downtimeEvents[0]?.status === "OPEN" ? <strong className="critical-text">{tr(locale, "OPEN", "مفتوح")}</strong> : "—"}</td>
         </tr>)}</tbody>
       </table></div>
     </section>

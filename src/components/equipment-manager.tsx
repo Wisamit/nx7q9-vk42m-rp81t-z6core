@@ -3,8 +3,8 @@
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 
-type Branch = { id: string; code: string; nameEn: string };
-type Department = { id: string; code: string; nameEn: string; branchId: string | null };
+type Branch = { id: string; code: string; nameEn: string; nameAr?: string | null };
+type Department = { id: string; code: string; nameEn: string; nameAr?: string | null; branchId: string | null };
 type Analyzer = { id: string; code: string; name: string; branchId: string; departmentId: string | null };
 type EquipmentOption = {
   id: string;
@@ -21,17 +21,34 @@ export function EquipmentManager({
   analyzers,
   equipment,
   canManage,
+  locale,
 }: {
   branches: Branch[];
   departments: Department[];
   analyzers: Analyzer[];
   equipment: EquipmentOption[];
   canManage: boolean;
+  locale: "ar" | "en";
 }) {
   const router = useRouter();
   const [branchId, setBranchId] = useState("");
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
+  const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
+  const localizedName = (item: { nameEn: string; nameAr?: string | null }) => locale === "ar" ? item.nameAr || item.nameEn : item.nameEn;
+  const maintenanceTypeLabel = (value: string) =>
+    value === "PREVENTIVE" ? tr("Preventive", "وقائية") :
+    value === "CORRECTIVE" ? tr("Corrective", "تصحيحية") : value;
+  const eventStatusLabel = (value: string) =>
+    value === "SCHEDULED" ? tr("Scheduled", "مجدول") :
+    value === "IN_PROGRESS" ? tr("In progress", "قيد التنفيذ") :
+    value === "COMPLETED" ? tr("Completed", "مكتمل") :
+    value === "DUE" ? tr("Due", "مستحق") :
+    value === "PASS" ? tr("Pass", "ناجح") :
+    value === "FAIL" ? tr("Fail", "فشل") :
+    value === "OPEN" ? tr("Open", "فتح") :
+    value === "CLOSE" ? tr("Close", "إغلاق") :
+    value;
 
   async function submit(url: string, payload: unknown, key: string, success: string, form: HTMLFormElement) {
     setBusy(key);
@@ -41,9 +58,9 @@ export function EquipmentManager({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
-    const body = await response.json().catch(() => ({}));
+    await response.json().catch(() => ({}));
     setBusy("");
-    setMessage(response.ok ? success : body.error || "Action failed.");
+    setMessage(response.ok ? success : tr("Action failed.", "فشلت العملية."));
     if (response.ok) {
       form.reset();
       router.refresh();
@@ -67,7 +84,7 @@ export function EquipmentManager({
       serviceVendor: form.get("serviceVendor"),
       locationText: form.get("locationText"),
       notes: form.get("notes"),
-    }, "equipment", "Equipment registered.", event.currentTarget);
+    }, "equipment", tr("Equipment registered.", "تم تسجيل المعدة."), event.currentTarget);
     setBranchId("");
   }
 
@@ -87,7 +104,7 @@ export function EquipmentManager({
       correctiveAction: form.get("correctiveAction"),
       cost: form.get("cost"),
       currency: form.get("currency"),
-    }, "maintenance", "Maintenance event recorded.", event.currentTarget);
+    }, "maintenance", tr("Maintenance event recorded.", "تم تسجيل حدث الصيانة."), event.currentTarget);
   }
 
   async function calibration(event: FormEvent<HTMLFormElement>) {
@@ -102,7 +119,7 @@ export function EquipmentManager({
       performedAt: form.get("performedAt"),
       resultSummary: form.get("resultSummary"),
       approve: form.get("approve") === "on",
-    }, "calibration", "Calibration event recorded.", event.currentTarget);
+    }, "calibration", tr("Calibration event recorded.", "تم تسجيل حدث المعايرة."), event.currentTarget);
   }
 
   async function downtime(event: FormEvent<HTMLFormElement>) {
@@ -115,7 +132,7 @@ export function EquipmentManager({
       reason: form.get("reason"),
       impact: form.get("impact"),
       resolution: form.get("resolution"),
-    }, "downtime", action === "OPEN" ? "Downtime opened." : "Downtime closed.", event.currentTarget);
+    }, "downtime", action === "OPEN" ? tr("Downtime opened.", "تم فتح حدث توقف.") : tr("Downtime closed.", "تم إغلاق حدث التوقف."), event.currentTarget);
   }
 
   async function maintenancePlan(event: FormEvent<HTMLFormElement>) {
@@ -127,7 +144,7 @@ export function EquipmentManager({
       frequencyDays: form.get("frequencyDays"),
       nextDueAt: form.get("nextDueAt"),
       instructions: form.get("instructions"),
-    }, "maintenance-plan", "Maintenance plan created.", event.currentTarget);
+    }, "maintenance-plan", tr("Maintenance plan created.", "تم إنشاء خطة الصيانة."), event.currentTarget);
   }
 
   async function equipmentDocument(event: FormEvent<HTMLFormElement>) {
@@ -140,7 +157,7 @@ export function EquipmentManager({
       externalUrl: form.get("externalUrl"),
       expiresAt: form.get("expiresAt"),
       notes: form.get("notes"),
-    }, "document", "Equipment document recorded.", event.currentTarget);
+    }, "document", tr("Equipment document recorded.", "تم تسجيل وثيقة المعدة."), event.currentTarget);
   }
 
   if (!canManage) return null;
@@ -149,99 +166,99 @@ export function EquipmentManager({
 
   return <section className="detail-grid detail-section">
     <article className="detail-card">
-      <h2>Register Equipment</h2>
+      <h2>{tr("Register Equipment", "تسجيل معدة")}</h2>
       <form className="catalog-form" onSubmit={createEquipment}>
-        <label>Branch<select required value={branchId} onChange={event => setBranchId(event.target.value)}>
-          <option value="">Select branch…</option>{branches.map(branch => <option key={branch.id} value={branch.id}>{branch.code} — {branch.nameEn}</option>)}
+        <label>{tr("Branch", "الفرع")}<select required value={branchId} onChange={event => setBranchId(event.target.value)}>
+          <option value="">{tr("Select branch…", "اختر الفرع…")}</option>{branches.map(branch => <option key={branch.id} value={branch.id}>{branch.code} — {localizedName(branch)}</option>)}
         </select></label>
-        <label>Department<select name="departmentId" defaultValue=""><option value="">Unassigned</option>{departments.filter(item => !item.branchId || item.branchId === branchId).map(item => <option key={item.id} value={item.id}>{item.code} — {item.nameEn}</option>)}</select></label>
-        <label>Analyzer link<select name="analyzerId" defaultValue=""><option value="">Not an analyzer</option>{analyzers.filter(item => item.branchId === branchId).map(item => <option key={item.id} value={item.id}>{item.code} — {item.name}</option>)}</select></label>
-        <label>Asset ID<input name="assetId" required /></label>
-        <label>Name<input name="name" required /></label>
-        <label>Manufacturer<input name="manufacturer" /></label>
-        <label>Model<input name="model" /></label>
-        <label>Serial number<input name="serialNumber" /></label>
-        <label>Installation date<input name="installationDate" type="date" /></label>
-        <label>Warranty until<input name="warrantyUntil" type="date" /></label>
-        <label>Service vendor<input name="serviceVendor" /></label>
-        <label>Location<input name="locationText" /></label>
-        <label className="form-span">Notes<textarea name="notes" rows={2} /></label>
-        <button className="primary-button form-span" disabled={busy !== ""}>{busy === "equipment" ? "Saving…" : "Register Equipment"}</button>
+        <label>{tr("Department", "القسم")}<select name="departmentId" defaultValue=""><option value="">{tr("Unassigned", "غير معين")}</option>{departments.filter(item => !item.branchId || item.branchId === branchId).map(item => <option key={item.id} value={item.id}>{item.code} — {localizedName(item)}</option>)}</select></label>
+        <label>{tr("Analyzer link", "ربط جهاز التحليل")}<select name="analyzerId" defaultValue=""><option value="">{tr("Not an analyzer", "ليست مرتبطة بجهاز تحليل")}</option>{analyzers.filter(item => item.branchId === branchId).map(item => <option key={item.id} value={item.id}>{item.code} — {item.name}</option>)}</select></label>
+        <label>{tr("Asset ID", "معرّف الأصل")}<input name="assetId" required /></label>
+        <label>{tr("Name", "الاسم")}<input name="name" required /></label>
+        <label>{tr("Manufacturer", "الشركة المصنعة")}<input name="manufacturer" /></label>
+        <label>{tr("Model", "الطراز")}<input name="model" /></label>
+        <label>{tr("Serial number", "الرقم التسلسلي")}<input name="serialNumber" /></label>
+        <label>{tr("Installation date", "تاريخ التركيب")}<input name="installationDate" type="date" /></label>
+        <label>{tr("Warranty until", "الضمان حتى")}<input name="warrantyUntil" type="date" /></label>
+        <label>{tr("Service vendor", "مزود الصيانة")}<input name="serviceVendor" /></label>
+        <label>{tr("Location", "الموقع")}<input name="locationText" /></label>
+        <label className="form-span">{tr("Notes", "ملاحظات")}<textarea name="notes" rows={2} /></label>
+        <button className="primary-button form-span" disabled={busy !== ""}>{busy === "equipment" ? tr("Saving…", "جارٍ الحفظ…") : tr("Register Equipment", "تسجيل المعدة")}</button>
       </form>
     </article>
 
     <article className="detail-card">
-      <h2>Maintenance Event</h2>
+      <h2>{tr("Maintenance Event", "حدث صيانة")}</h2>
       <form className="catalog-form" onSubmit={maintenance}>
-        <label className="form-span">Equipment<select name="equipmentId" required defaultValue=""><option value="">Select equipment…</option>{equipmentOptions.map(item => <option key={item.id} value={item.id}>{item.assetId} — {item.name}</option>)}</select></label>
-        <label>Type<select name="maintenanceType" defaultValue="PREVENTIVE"><option value="PREVENTIVE">Preventive</option><option value="CORRECTIVE">Corrective</option></select></label>
-        <label>Plan<select name="maintenancePlanId" defaultValue="">
-          <option value="">Ad-hoc maintenance</option>
-          {equipmentOptions.flatMap(item => item.maintenancePlans.map(plan => <option key={plan.id} value={plan.id}>{item.assetId} · {plan.name} · due {plan.nextDueAt}</option>))}
+        <label className="form-span">{tr("Equipment", "المعدة")}<select name="equipmentId" required defaultValue=""><option value="">{tr("Select equipment…", "اختر المعدة…")}</option>{equipmentOptions.map(item => <option key={item.id} value={item.id}>{item.assetId} — {item.name}</option>)}</select></label>
+        <label>{tr("Type", "النوع")}<select name="maintenanceType" defaultValue="PREVENTIVE"><option value="PREVENTIVE">{maintenanceTypeLabel("PREVENTIVE")}</option><option value="CORRECTIVE">{maintenanceTypeLabel("CORRECTIVE")}</option></select></label>
+        <label>{tr("Plan", "الخطة")}<select name="maintenancePlanId" defaultValue="">
+          <option value="">{tr("Ad-hoc maintenance", "صيانة غير مجدولة")}</option>
+          {equipmentOptions.flatMap(item => item.maintenancePlans.map(plan => <option key={plan.id} value={plan.id}>{item.assetId} · {plan.name} · {tr("due", "مستحق")} {plan.nextDueAt}</option>))}
         </select></label>
-        <label>Status<select name="status" defaultValue="COMPLETED"><option value="SCHEDULED">Scheduled</option><option value="IN_PROGRESS">In progress</option><option value="COMPLETED">Completed</option></select></label>
-        <label>Scheduled<input name="scheduledAt" type="datetime-local" /></label>
-        <label>Started<input name="startedAt" type="datetime-local" /></label>
-        <label>Completed<input name="completedAt" type="datetime-local" /></label>
-        <label>Vendor engineer<input name="vendorEngineer" /></label>
-        <label>Cost<input name="cost" type="number" min="0" step="0.0001" /></label>
-        <label>Currency<input name="currency" maxLength={3} defaultValue="AED" /></label>
-        <label className="form-span">Work performed<textarea name="workPerformed" rows={2} /></label>
-        <label className="form-span">Corrective action<textarea name="correctiveAction" rows={2} /></label>
-        <button className="secondary-button form-span" disabled={busy !== ""}>{busy === "maintenance" ? "Saving…" : "Record Maintenance"}</button>
+        <label>{tr("Status", "الحالة")}<select name="status" defaultValue="COMPLETED"><option value="SCHEDULED">{eventStatusLabel("SCHEDULED")}</option><option value="IN_PROGRESS">{eventStatusLabel("IN_PROGRESS")}</option><option value="COMPLETED">{eventStatusLabel("COMPLETED")}</option></select></label>
+        <label>{tr("Scheduled", "المجدول")}<input name="scheduledAt" type="datetime-local" /></label>
+        <label>{tr("Started", "وقت البدء")}<input name="startedAt" type="datetime-local" /></label>
+        <label>{tr("Completed", "وقت الاكتمال")}<input name="completedAt" type="datetime-local" /></label>
+        <label>{tr("Vendor engineer", "فني/مهندس المورد")}<input name="vendorEngineer" /></label>
+        <label>{tr("Cost", "التكلفة")}<input name="cost" type="number" min="0" step="0.0001" /></label>
+        <label>{tr("Currency", "العملة")}<input name="currency" maxLength={3} defaultValue="AED" /></label>
+        <label className="form-span">{tr("Work performed", "العمل المنفذ")}<textarea name="workPerformed" rows={2} /></label>
+        <label className="form-span">{tr("Corrective action", "الإجراء التصحيحي")}<textarea name="correctiveAction" rows={2} /></label>
+        <button className="secondary-button form-span" disabled={busy !== ""}>{busy === "maintenance" ? tr("Saving…", "جارٍ الحفظ…") : tr("Record Maintenance", "تسجيل الصيانة")}</button>
       </form>
     </article>
 
     <article className="detail-card">
-      <h2>Calibration</h2>
+      <h2>{tr("Calibration", "المعايرة")}</h2>
       <form className="catalog-form" onSubmit={calibration}>
-        <label className="form-span">Equipment<select name="equipmentId" required defaultValue=""><option value="">Select equipment…</option>{equipmentOptions.map(item => <option key={item.id} value={item.id}>{item.assetId} — {item.name}</option>)}</select></label>
-        <label>Status<select name="status" defaultValue="PASS"><option value="DUE">Due</option><option value="IN_PROGRESS">In progress</option><option value="PASS">Pass</option><option value="FAIL">Fail</option></select></label>
-        <label>Due date<input name="dueAt" type="date" /></label>
-        <label>Performed at<input name="performedAt" type="datetime-local" /></label>
-        <label>Material<input name="materialName" /></label>
-        <label>Material lot<input name="materialLot" /></label>
-        <label className="check-line"><input name="approve" type="checkbox" /> Approve passing calibration</label>
-        <label className="form-span">Result summary<textarea name="resultSummary" rows={2} /></label>
-        <button className="secondary-button form-span" disabled={busy !== ""}>{busy === "calibration" ? "Saving…" : "Record Calibration"}</button>
+        <label className="form-span">{tr("Equipment", "المعدة")}<select name="equipmentId" required defaultValue=""><option value="">{tr("Select equipment…", "اختر المعدة…")}</option>{equipmentOptions.map(item => <option key={item.id} value={item.id}>{item.assetId} — {item.name}</option>)}</select></label>
+        <label>{tr("Status", "الحالة")}<select name="status" defaultValue="PASS"><option value="DUE">{eventStatusLabel("DUE")}</option><option value="IN_PROGRESS">{eventStatusLabel("IN_PROGRESS")}</option><option value="PASS">{eventStatusLabel("PASS")}</option><option value="FAIL">{eventStatusLabel("FAIL")}</option></select></label>
+        <label>{tr("Due date", "تاريخ الاستحقاق")}<input name="dueAt" type="date" /></label>
+        <label>{tr("Performed at", "وقت التنفيذ")}<input name="performedAt" type="datetime-local" /></label>
+        <label>{tr("Material", "المادة")}<input name="materialName" /></label>
+        <label>{tr("Material lot", "تشغيلة المادة")}<input name="materialLot" /></label>
+        <label className="check-line"><input name="approve" type="checkbox" /> {tr("Approve passing calibration", "اعتماد المعايرة الناجحة")}</label>
+        <label className="form-span">{tr("Result summary", "ملخص النتيجة")}<textarea name="resultSummary" rows={2} /></label>
+        <button className="secondary-button form-span" disabled={busy !== ""}>{busy === "calibration" ? tr("Saving…", "جارٍ الحفظ…") : tr("Record Calibration", "تسجيل المعايرة")}</button>
       </form>
     </article>
 
     <article className="detail-card">
-      <h2>Downtime</h2>
+      <h2>{tr("Downtime", "التوقف")}</h2>
       <form className="catalog-form" onSubmit={downtime}>
-        <label className="form-span">Equipment<select name="equipmentId" required defaultValue=""><option value="">Select equipment…</option>{equipmentOptions.map(item => <option key={item.id} value={item.id}>{item.assetId} — {item.name}</option>)}</select></label>
-        <label>Action<select name="action" defaultValue="OPEN"><option value="OPEN">Open downtime</option><option value="CLOSE">Close downtime</option></select></label>
-        <label className="form-span">Reason<input name="reason" /></label>
-        <label className="form-span">Impact<input name="impact" /></label>
-        <label className="form-span">Resolution<input name="resolution" /></label>
-        <button className="secondary-button form-span" disabled={busy !== ""}>{busy === "downtime" ? "Saving…" : "Update Downtime"}</button>
+        <label className="form-span">{tr("Equipment", "المعدة")}<select name="equipmentId" required defaultValue=""><option value="">{tr("Select equipment…", "اختر المعدة…")}</option>{equipmentOptions.map(item => <option key={item.id} value={item.id}>{item.assetId} — {item.name}</option>)}</select></label>
+        <label>{tr("Action", "الإجراء")}<select name="action" defaultValue="OPEN"><option value="OPEN">{tr("Open downtime", "فتح توقف")}</option><option value="CLOSE">{tr("Close downtime", "إغلاق التوقف")}</option></select></label>
+        <label className="form-span">{tr("Reason", "السبب")}<input name="reason" /></label>
+        <label className="form-span">{tr("Impact", "التأثير")}<input name="impact" /></label>
+        <label className="form-span">{tr("Resolution", "الحل")}<input name="resolution" /></label>
+        <button className="secondary-button form-span" disabled={busy !== ""}>{busy === "downtime" ? tr("Saving…", "جارٍ الحفظ…") : tr("Update Downtime", "تحديث التوقف")}</button>
       </form>
     </article>
 
     <article className="detail-card">
-      <h2>Preventive Maintenance Plan</h2>
+      <h2>{tr("Preventive Maintenance Plan", "خطة الصيانة الوقائية")}</h2>
       <form className="catalog-form" onSubmit={maintenancePlan}>
-        <label className="form-span">Equipment<select name="equipmentId" required defaultValue=""><option value="">Select equipment…</option>{equipmentOptions.map(item => <option key={item.id} value={item.id}>{item.assetId} — {item.name}</option>)}</select></label>
-        <label>Plan name<input name="name" required placeholder="Monthly preventive service" /></label>
-        <label>Frequency (days)<input name="frequencyDays" type="number" min="1" max="3650" required /></label>
-        <label>Next due<input name="nextDueAt" type="date" required /></label>
-        <label className="form-span">Instructions<textarea name="instructions" rows={2} /></label>
-        <button className="secondary-button form-span" disabled={busy !== ""}>{busy === "maintenance-plan" ? "Saving…" : "Create Maintenance Plan"}</button>
+        <label className="form-span">{tr("Equipment", "المعدة")}<select name="equipmentId" required defaultValue=""><option value="">{tr("Select equipment…", "اختر المعدة…")}</option>{equipmentOptions.map(item => <option key={item.id} value={item.id}>{item.assetId} — {item.name}</option>)}</select></label>
+        <label>{tr("Plan name", "اسم الخطة")}<input name="name" required placeholder={tr("Monthly preventive service", "صيانة وقائية شهرية")} /></label>
+        <label>{tr("Frequency (days)", "التكرار (أيام)")}<input name="frequencyDays" type="number" min="1" max="3650" required /></label>
+        <label>{tr("Next due", "الاستحقاق التالي")}<input name="nextDueAt" type="date" required /></label>
+        <label className="form-span">{tr("Instructions", "التعليمات")}<textarea name="instructions" rows={2} /></label>
+        <button className="secondary-button form-span" disabled={busy !== ""}>{busy === "maintenance-plan" ? tr("Saving…", "جارٍ الحفظ…") : tr("Create Maintenance Plan", "إنشاء خطة الصيانة")}</button>
       </form>
     </article>
 
     <article className="detail-card">
-      <h2>Equipment Document</h2>
-      <p className="muted">Record a controlled document or attachment reference. File-storage upload can use the storage-key field through the API when a storage provider is connected.</p>
+      <h2>{tr("Equipment Document", "وثيقة المعدة")}</h2>
+      <p className="muted">{tr("Record a controlled document or attachment reference. File-storage upload can use the storage-key field through the API when a storage provider is connected.", "سجل وثيقة مضبوطة أو مرجع مرفق. يمكن لرفع الملفات استخدام حقل storage-key عبر API عند ربط مزود تخزين.")}</p>
       <form className="catalog-form" onSubmit={equipmentDocument}>
-        <label className="form-span">Equipment<select name="equipmentId" required defaultValue=""><option value="">Select equipment…</option>{equipmentOptions.map(item => <option key={item.id} value={item.id}>{item.assetId} — {item.name}</option>)}</select></label>
-        <label>Document type<input name="documentType" required placeholder="MANUAL / CERTIFICATE / SERVICE_REPORT" /></label>
-        <label>Name<input name="name" required /></label>
-        <label className="form-span">External URL<input name="externalUrl" type="url" required placeholder="https://…" /></label>
-        <label>Expiry<input name="expiresAt" type="date" /></label>
-        <label className="form-span">Notes<textarea name="notes" rows={2} /></label>
-        <button className="secondary-button form-span" disabled={busy !== ""}>{busy === "document" ? "Saving…" : "Record Document"}</button>
+        <label className="form-span">{tr("Equipment", "المعدة")}<select name="equipmentId" required defaultValue=""><option value="">{tr("Select equipment…", "اختر المعدة…")}</option>{equipmentOptions.map(item => <option key={item.id} value={item.id}>{item.assetId} — {item.name}</option>)}</select></label>
+        <label>{tr("Document type", "نوع الوثيقة")}<input name="documentType" required placeholder="MANUAL / CERTIFICATE / SERVICE_REPORT" /></label>
+        <label>{tr("Name", "الاسم")}<input name="name" required /></label>
+        <label className="form-span">{tr("External URL", "رابط خارجي")}<input name="externalUrl" type="url" required placeholder="https://…" /></label>
+        <label>{tr("Expiry", "الانتهاء")}<input name="expiresAt" type="date" /></label>
+        <label className="form-span">{tr("Notes", "ملاحظات")}<textarea name="notes" rows={2} /></label>
+        <button className="secondary-button form-span" disabled={busy !== ""}>{busy === "document" ? tr("Saving…", "جارٍ الحفظ…") : tr("Record Document", "تسجيل الوثيقة")}</button>
       </form>
     </article>
 
