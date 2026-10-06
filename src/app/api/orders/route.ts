@@ -5,8 +5,7 @@ import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { resolvePackagePrice, resolveTestPrice } from "@/lib/pricing";
 import { discountApprovalMode, effectiveDiscountLimit } from "@/lib/discount-policy";
-import { verifyDiscountApprover } from "@/lib/discount-approval";
-import { checkRateLimit } from "@/lib/rate-limit";
+import { discountApprovalFingerprint } from "@/lib/discount-approval";
 
 function text(value: unknown, max = 500) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -42,9 +41,7 @@ export async function POST(request: Request) {
   const fasting = body.fasting === true ? true : body.fasting === false ? false : null;
   const requestedDiscountPercent = Number(body.discountPercent ?? 0);
   const discountReason = text(body.discountReason, 1000);
-  const discountApproverUsername = text(body.discountApproverUsername, 100).toLowerCase();
-  const discountApproverPassword = typeof body.discountApproverPassword === "string" ? body.discountApproverPassword : "";
-  const discountApproverMfaCode = text(body.discountApproverMfaCode, 20);
+  const suppliedDiscountApprovalRequestId = text(body.discountApprovalRequestId, 36) || null;
 
   const requesterDiscountLimit = effectiveDiscountLimit({
     userOverride: session.user.discountLimitPercent,
@@ -68,38 +65,12 @@ export async function POST(request: Request) {
   }
   if (!canAccessBranch(session, branchId)) return NextResponse.json({ error: "branch_forbidden" }, { status: 403 });
 
-  let discountApprovalMethod: "SELF_LIMIT" | "APPROVER_REAUTH" | null = null;
+  let discountApprovalMethod: "SELF_LIMIT" | "APPROVAL_WORKFLOW" | null = null;
   let discountApprovedByUserId: string | null = null;
+  let discountApprovalRequestIdToUse: string | null = null;
   if (requestedApprovalMode === "SELF_LIMIT") {
     discountApprovalMethod = "SELF_LIMIT";
     discountApprovedByUserId = session.user.id;
-  } else if (requestedApprovalMode === "APPROVER_REAUTH") {
-    const limiter = await checkRateLimit({
-      scope: "discount_approval_reauth",
-      key: (ctx.ipAddress || "unknown") + ":" + (discountApproverUsername || "missing"),
-      limit: 10,
-      windowMs: 15 * 60_000,
-    });
-    if (!limiter.allowed) {
-      return NextResponse.json(
-        { error: "discount_approval_rate_limited" },
-        { status: 429, headers: { "Retry-After": String(limiter.retryAfterSeconds) } },
-      );
-    }
-
-    const approval = await verifyDiscountApprover(prisma, {
-      organizationId: session.user.organizationId,
-      branchId,
-      username: discountApproverUsername,
-      password: discountApproverPassword,
-      mfaCode: discountApproverMfaCode || null,
-      requestedPercent: requestedDiscountPercent,
-    });
-    if (!approval.ok) {
-      return NextResponse.json({ error: approval.error }, { status: 403 });
-    }
-    discountApprovalMethod = "APPROVER_REAUTH";
-    discountApprovedByUserId = approval.approver.id;
   }
 
   const packages = packageIds.length ? await prisma.commercialPackage.findMany({
