@@ -116,7 +116,7 @@ export function SystemSettingsForm({ initial, locale }: { initial: SystemSetting
       <div className="settings-card-title"><SystemIcon name="globe" /><div><h2>{tr("Regional defaults", "الإعدادات الإقليمية")}</h2><p>{tr("Default timezone and display format used by the interface.", "المنطقة الزمنية وشكل العرض الافتراضي في الواجهة.")}</p></div></div>
       <div className="settings-grid">
         <label>{tr("Timezone", "المنطقة الزمنية")}<select value={value.timezone} onChange={e => set("timezone", e.target.value)}>
-          <option value="Asia/Dubai">Asia/Dubai — UAE</option><option value="Asia/Riyadh">Asia/Riyadh</option><option value="Asia/Beirut">Asia/Beirut</option><option value="Asia/Damascus">Asia/Damascus</option><option value="Europe/Istanbul">Europe/Istanbul</option><option value="UTC">UTC</option>
+          <option value="Africa/Cairo">Africa/Cairo — Egypt</option><option value="Asia/Dubai">Asia/Dubai — UAE</option><option value="Asia/Riyadh">Asia/Riyadh</option><option value="Asia/Beirut">Asia/Beirut</option><option value="Asia/Damascus">Asia/Damascus</option><option value="Europe/Istanbul">Europe/Istanbul</option><option value="UTC">UTC</option>
         </select></label>
         <label>{tr("Default language", "اللغة الافتراضية")}<select value={value.defaultLocale} onChange={e => set("defaultLocale", e.target.value as "en" | "ar")}><option value="en">English</option><option value="ar">العربية</option></select></label>
         <label>{tr("Date format", "شكل التاريخ")}<select value={value.dateFormat} onChange={e => set("dateFormat", e.target.value as SystemSettings["dateFormat"])}><option>DD/MM/YYYY</option><option>MM/DD/YYYY</option><option>YYYY-MM-DD</option><option>DD MMM YYYY</option></select></label>
@@ -138,11 +138,6 @@ export function SystemSettingsForm({ initial, locale }: { initial: SystemSetting
           <div className="color-grid">{paletteFields.map(([key, en, ar]) => <label className="color-field" key={key}><span>{tr(en, ar)}</span><div><input type="color" value={value[mode][key]} onChange={e => setColor(mode, key, e.target.value)} /><input value={value[mode][key]} maxLength={7} pattern="#[0-9A-Fa-f]{6}" onChange={e => setColor(mode, key, e.target.value)} /></div></label>)}</div>
         </div>)}
       </div>
-    </section>
-
-    <section className="settings-card">
-      <div className="settings-card-title"><SystemIcon name="settings" /><div><h2>{tr("System footer", "تذييل النظام")}</h2><p>{tr("Developer credit is shown at the bottom of the navigation. Version is read automatically from the application package.", "يظهر اسم المصمم أسفل القائمة، ورقم الإصدار يؤخذ تلقائيًا من التطبيق.")}</p></div></div>
-      <label>{tr("Designed / developed by", "تصميم وتطوير")}<input value={value.developerCredit} maxLength={200} onChange={e => set("developerCredit", e.target.value)} /></label>
     </section>
 
     <div className="settings-savebar">
