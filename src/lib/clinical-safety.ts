@@ -65,3 +65,11 @@ export function amendmentEligibility(input: {
 export function branchScopeAllows(authorizedBranchIds: readonly string[], branchId: string | null | undefined) {
   return Boolean(branchId && authorizedBranchIds.includes(branchId));
 }
+
+export function departmentScopeAllows(
+  authorizedDepartmentIds: readonly string[],
+  departmentId: string | null | undefined,
+) {
+  if (authorizedDepartmentIds.length === 0) return true;
+  return Boolean(departmentId && authorizedDepartmentIds.includes(departmentId));
+}
