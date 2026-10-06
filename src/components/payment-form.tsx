@@ -10,7 +10,7 @@ type InvoiceOption = {
   balanceAmount: string;
 };
 
-export function PaymentForm({ invoices }: { invoices: InvoiceOption[] }) {
+export function PaymentForm({ invoices, onSuccess }: { invoices: InvoiceOption[]; onSuccess?: (message: string) => void }) {
   const router = useRouter();
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
@@ -34,9 +34,11 @@ export function PaymentForm({ invoices }: { invoices: InvoiceOption[] }) {
     const body = await response.json().catch(() => ({}));
 
     if (response.ok) {
-      setMessage(`Payment posted. Invoice ${body.invoiceNumber} balance: ${body.balanceAmount}`);
+      const success = `Payment posted. Invoice ${body.invoiceNumber} balance: ${body.balanceAmount}`;
+      setMessage(success);
       event.currentTarget.reset();
       router.refresh();
+      onSuccess?.(success);
     } else if (body.error === "amount_exceeds_balance") {
       setMessage(`Amount exceeds invoice balance (${body.balance}).`);
     } else {

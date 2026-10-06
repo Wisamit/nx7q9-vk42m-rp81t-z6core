@@ -6,7 +6,7 @@ export type SystemIconName =
   | "template" | "referrer" | "clinical" | "analyzer" | "integration" | "inventory"
   | "equipment" | "qc" | "quality" | "analytics" | "notification" | "resilience"
   | "settings" | "users" | "roles" | "security" | "search" | "clock" | "calendar"
-  | "palette" | "image" | "globe" | "sun" | "moon" | "menu" | "logout";
+  | "palette" | "image" | "globe" | "sun" | "moon" | "menu" | "close" | "plus" | "logout";
 
 const paths: Record<SystemIconName, React.ReactNode> = {
   dashboard: <><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></>,
@@ -48,6 +48,8 @@ const paths: Record<SystemIconName, React.ReactNode> = {
   sun: <><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5 19 19M19 5l-1.5 1.5M6.5 17.5 5 19"/></>,
   moon: <path d="M20 15.5A8 8 0 0 1 8.5 4 8.5 8.5 0 1 0 20 15.5Z"/>,
   menu: <path d="M4 7h16M4 12h16M4 17h16"/>,
+  close: <path d="M6 6l12 12M18 6 6 18"/>,
+  plus: <path d="M12 5v14M5 12h14"/>,
   logout: <><path d="M10 17l5-5-5-5M15 12H3M21 3v18h-6"/></>,
 };
 

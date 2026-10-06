@@ -2,6 +2,8 @@
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
+import { CrudModal } from "@/components/crud-modal";
+import { SystemIcon } from "@/components/system-icon";
 
 type Branch = { id:string; code:string; name:string };
 type Template = { id:string; code:string; name:string; branchId:string|null; latestVersion:number|null; latestStatus:string|null; latestVersionId:string|null };
@@ -10,6 +12,7 @@ export function ReportTemplateManager({ branches, templates }: { branches:Branch
   const router=useRouter();
   const [busy,setBusy]=useState("");
   const [message,setMessage]=useState("");
+  const [open,setOpen]=useState<"template"|"version"|"">("");
 
   async function createTemplate(event:FormEvent<HTMLFormElement>){
     event.preventDefault(); setBusy("template"); setMessage("");
@@ -18,7 +21,7 @@ export function ReportTemplateManager({ branches, templates }: { branches:Branch
       code:f.get("code"),nameEn:f.get("nameEn"),nameAr:f.get("nameAr"),branchId:f.get("branchId")||null,isDefault:true,
     })});
     setBusy(""); setMessage(response.ok?"Template created.":"Template creation failed.");
-    if(response.ok){event.currentTarget.reset();router.refresh();}
+    if(response.ok){event.currentTarget.reset();router.refresh();setOpen("");}
   }
 
   async function createVersion(event:FormEvent<HTMLFormElement>){
@@ -41,7 +44,7 @@ export function ReportTemplateManager({ branches, templates }: { branches:Branch
       },
     })});
     setBusy(""); setMessage(response.ok?"Draft version created.":"Version creation failed.");
-    if(response.ok){event.currentTarget.reset();router.refresh();}
+    if(response.ok){event.currentTarget.reset();router.refresh();setOpen("");}
   }
 
   async function activate(templateId:string,versionId:string){
@@ -51,20 +54,27 @@ export function ReportTemplateManager({ branches, templates }: { branches:Branch
     if(response.ok)router.refresh();
   }
 
-  return <div className="detail-grid">
-    <article className="detail-card">
-      <h2>Create Template</h2>
+  return <>
+    <div className="crud-action-bar">
+      <div>{message&&<span className="crud-success-toast">{message}</span>}</div>
+      <div className="crud-action-buttons">
+        <button type="button" className="primary-button" onClick={()=>{setMessage("");setOpen("template")}}><SystemIcon name="plus" size={16}/>New Template</button>
+        <button type="button" className="secondary-button" onClick={()=>{setMessage("");setOpen("version")}}><SystemIcon name="plus" size={16}/>New Version</button>
+      </div>
+    </div>
+
+    <CrudModal open={open==="template"} onClose={()=>setOpen("")} title="Create Report Template" description="Create the organization or branch template identity." size="lg">
       <form className="catalog-form" onSubmit={createTemplate}>
         <label>Code<input name="code" required placeholder="DEFAULT_REPORT"/></label>
         <label>Branch<select name="branchId"><option value="">Organization-wide</option>{branches.map(b=><option key={b.id} value={b.id}>{b.code} — {b.name}</option>)}</select></label>
         <label>Name (English)<input name="nameEn" required/></label>
         <label dir="rtl">الاسم بالعربية<input name="nameAr" dir="rtl"/></label>
         <button className="primary-button form-span" disabled={busy==="template"}>{busy==="template"?"Saving…":"Create Default Template"}</button>
+        {message&&<div className="form-success form-span">{message}</div>}
       </form>
-    </article>
+    </CrudModal>
 
-    <article className="detail-card">
-      <h2>Create Version</h2>
+    <CrudModal open={open==="version"} onClose={()=>setOpen("")} title="Create Report Template Version" description="Create a controlled draft version without changing historical released reports." size="xl">
       <form className="catalog-form" onSubmit={createVersion}>
         <label>Template<select name="templateId" required><option value="">Select…</option>{templates.map(t=><option key={t.id} value={t.id}>{t.code} — {t.name}</option>)}</select></label>
         <label>Language<select name="languageMode" defaultValue="BILINGUAL"><option value="BILINGUAL">Bilingual</option><option value="ENGLISH">English</option><option value="ARABIC">Arabic</option></select></label>
@@ -80,18 +90,15 @@ export function ReportTemplateManager({ branches, templates }: { branches:Branch
         </fieldset>
         <label className="form-span">Change summary<input name="changeSummary" required/></label>
         <button className="primary-button form-span" disabled={busy==="version"}>{busy==="version"?"Saving…":"Create Draft Version"}</button>
+        {message&&<div className="form-success form-span">{message}</div>}
       </form>
-    </article>
+    </CrudModal>
 
-    {message&&<div className="form-success form-span">{message}</div>}
-
-    <article className="table-card form-span">
+    <article className="table-card">
       <div className="table-toolbar"><h2>Template Versions</h2><span>{templates.length} templates</span></div>
       <div className="table-wrap"><table><thead><tr><th>Template</th><th>Scope</th><th>Latest</th><th>Status</th><th></th></tr></thead><tbody>
-        {templates.map(t=><tr key={t.id}><td><strong>{t.code}</strong><br/><small>{t.name}</small></td><td>{t.branchId?"Branch":"Organization"}</td><td>{t.latestVersion??"—"}</td><td>{t.latestStatus??"No version"}</td><td>{t.latestVersion&&["DRAFT","APPROVED"].includes(t.latestStatus||"")?<button className="secondary-button" type="button" disabled={busy.startsWith("activate:")} onClick={()=>{
-          const version=t.latestVersionId; if(version)void activate(t.id,version);
-        }}>Activate</button>:"—"}</td></tr>)}
+        {templates.map(t=><tr key={t.id}><td><strong>{t.code}</strong><br/><small>{t.name}</small></td><td>{t.branchId?"Branch":"Organization"}</td><td>{t.latestVersion??"—"}</td><td>{t.latestStatus??"No version"}</td><td>{t.latestVersion&&["DRAFT","APPROVED"].includes(t.latestStatus||"")?<button className="secondary-button" type="button" disabled={busy.startsWith("activate:")} onClick={()=>{const version=t.latestVersionId;if(version)void activate(t.id,version)}}>Activate</button>:"—"}</td></tr>)}
       </tbody></table></div>
     </article>
-  </div>;
+  </>;
 }

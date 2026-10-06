@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { OrderCreateForm } from "@/components/order-create-form";
+import { OrderCreateModal } from "@/components/order-create-modal";
 import { SystemIcon } from "@/components/system-icon";
 
 export const dynamic = "force-dynamic";
@@ -107,6 +107,24 @@ export default async function OrdersPage() {
         <p className="muted">Register laboratory orders with branch, patient, referral source and effective-dated price snapshots.</p>
       </div>
       <div className="header-actions">
+        <OrderCreateModal
+          patients={patients}
+          tests={tests.map(test => ({
+            ...test,
+            orderQuestions: test.orderQuestions.map(question => ({
+              ...question,
+              options: Array.isArray(question.options)
+                ? question.options.filter((item): item is string => typeof item === "string")
+                : [],
+            })),
+          }))}
+          packages={packages.map(pkg => ({ id: pkg.id, code: pkg.code, nameEn: pkg.nameEn, testIds: pkg.items.map(item => item.testId) }))}
+          clients={clients}
+          referrers={referrers}
+          sources={sources}
+          branches={branches}
+          activeBranchId={session.activeBranchId}
+        />
         <Link className="secondary-link" href="/pricing"><SystemIcon name="pricing" size={15} />Pricing</Link>
         <Link className="secondary-link" href="/billing"><SystemIcon name="billing" size={15} />Billing</Link>
         <Link className="secondary-link" href="/dashboard"><SystemIcon name="dashboard" size={15} />Back to Dashboard</Link>
@@ -118,28 +136,6 @@ export default async function OrdersPage() {
       <article><span>Open</span><strong>{openOrders.length}</strong><small>awaiting completion</small></article>
       <article className={urgentOrders.length ? "summary-attention" : ""}><span>Urgent / STAT</span><strong>{urgentOrders.length}</strong><small>active priority orders</small></article>
       <article><span>Sources</span><strong>{sources.length}</strong><small>active acquisition sources</small></article>
-    </section>
-
-    <section className="detail-card workflow-entry-card">
-      <div className="section-title-row"><div><p className="eyebrow">Reception workflow</p><h2 className="section-heading-icon"><SystemIcon name="orders" size={18} />New Order</h2></div><span className="keyboard-hint">Search patient → select tests → register</span></div>
-      <OrderCreateForm
-        patients={patients}
-        tests={tests.map(test => ({
-          ...test,
-          orderQuestions: test.orderQuestions.map(question => ({
-            ...question,
-            options: Array.isArray(question.options)
-              ? question.options.filter((item): item is string => typeof item === "string")
-              : [],
-          })),
-        }))}
-        packages={packages.map(pkg => ({ id: pkg.id, code: pkg.code, nameEn: pkg.nameEn, testIds: pkg.items.map(item => item.testId) }))}
-        clients={clients}
-        referrers={referrers}
-        sources={sources}
-        branches={branches}
-        activeBranchId={session.activeBranchId}
-      />
     </section>
 
     <section className="table-card detail-section">

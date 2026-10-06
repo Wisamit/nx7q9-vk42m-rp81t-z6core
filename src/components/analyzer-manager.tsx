@@ -2,6 +2,8 @@
 
 import { FormEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { CrudModal } from "@/components/crud-modal";
+import { SystemIcon } from "@/components/system-icon";
 
 type Branch = { id: string; code: string; nameEn: string };
 type Department = { id: string; code: string; nameEn: string; branchId: string | null };
@@ -25,6 +27,7 @@ export function AnalyzerManager({
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
   const [issuedToken, setIssuedToken] = useState("");
+  const [open, setOpen] = useState<"analyzer" | "credential" | "mapping" | "">("");
 
   const branchDepartments = useMemo(
     () => departments.filter(item => !item.branchId || item.branchId === branchId),
@@ -68,6 +71,7 @@ export function AnalyzerManager({
     if (body) {
       event.currentTarget.reset();
       setMessage("Analyzer created.");
+      setOpen("");
     }
   }
 
@@ -104,21 +108,24 @@ export function AnalyzerManager({
       event.currentTarget.reset();
       setMappingTestId("");
       setMessage("Analyzer test mapping created.");
+      setOpen("");
     }
   }
 
-  return <section className="detail-grid detail-section">
-    <article className="detail-card">
-      <h2>Register Analyzer</h2>
-      <p className="muted">Connection handling stays in the external Analyzer Bridge. The LIS stores identity, protocol and routing metadata only.</p>
+  return <>
+    <div className="crud-action-bar detail-section">
+      <div>{message && <span className="crud-success-toast">{message}</span>}</div>
+      <div className="crud-action-buttons">
+        <button type="button" className="primary-button" onClick={() => { setMessage(""); setOpen("analyzer"); }}><SystemIcon name="plus" size={16}/>Register Analyzer</button>
+        <button type="button" className="secondary-button" onClick={() => { setMessage(""); setIssuedToken(""); setOpen("credential"); }}><SystemIcon name="plus" size={16}/>Issue Credential</button>
+        <button type="button" className="secondary-button" onClick={() => { setMessage(""); setOpen("mapping"); }}><SystemIcon name="plus" size={16}/>Create Mapping</button>
+      </div>
+    </div>
+
+    <CrudModal open={open === "analyzer"} onClose={() => setOpen("")} title="Register Analyzer" description="Store analyzer identity, branch, protocol and routing metadata. Device connectivity remains in Analyzer Bridge." size="lg">
       <form className="catalog-form" onSubmit={createAnalyzer}>
-        <label>Branch<select name="branchId" required value={branchId} onChange={event => setBranchId(event.target.value)}>
-          {branches.map(item => <option key={item.id} value={item.id}>{item.code} — {item.nameEn}</option>)}
-        </select></label>
-        <label>Department<select name="departmentId" defaultValue="">
-          <option value="">Unassigned</option>
-          {branchDepartments.map(item => <option key={item.id} value={item.id}>{item.code} — {item.nameEn}</option>)}
-        </select></label>
+        <label>Branch<select name="branchId" required value={branchId} onChange={event => setBranchId(event.target.value)}>{branches.map(item => <option key={item.id} value={item.id}>{item.code} — {item.nameEn}</option>)}</select></label>
+        <label>Department<select name="departmentId" defaultValue=""><option value="">Unassigned</option>{branchDepartments.map(item => <option key={item.id} value={item.id}>{item.code} — {item.nameEn}</option>)}</select></label>
         <label>Code<input name="code" required maxLength={80} /></label>
         <label>Name<input name="name" required maxLength={200} /></label>
         <label>Manufacturer<input name="manufacturer" maxLength={150} /></label>
@@ -128,26 +135,22 @@ export function AnalyzerManager({
         <label>Transport<select name="transport" defaultValue="SERIAL"><option>SERIAL</option><option>TCP_CLIENT</option><option>TCP_SERVER</option><option>WATCH_FOLDER</option><option>HTTP</option></select></label>
         <label>Bridge device key<input name="bridgeDeviceKey" maxLength={150} placeholder="Local bridge identifier" /></label>
         <button className="primary-button form-span" disabled={busy !== ""}>{busy === "analyzer" ? "Saving…" : "Register Analyzer"}</button>
+        {message && <div className="form-success form-span">{message}</div>}
       </form>
-    </article>
+    </CrudModal>
 
-    <article className="detail-card">
-      <h2>Issue Bridge Credential</h2>
-      <p className="muted">The raw token is shown once. Only its SHA-256 hash is stored in the LIS.</p>
+    <CrudModal open={open === "credential"} onClose={() => setOpen("")} title="Issue Bridge Credential" description="The raw token is shown once. Copy it before closing this window." size="md">
       <form className="catalog-form" onSubmit={createCredential}>
-        <label>Analyzer<select name="analyzerId" required defaultValue=""><option value="">Select analyzer…</option>{analyzers.map(item => <option key={item.id} value={item.id}>{item.code} — {item.name}</option>)}</select></label>
+        <label className="form-span">Analyzer<select name="analyzerId" required defaultValue=""><option value="">Select analyzer…</option>{analyzers.map(item => <option key={item.id} value={item.id}>{item.code} — {item.name}</option>)}</select></label>
         <label>Credential name<input name="name" required placeholder="Bridge workstation / service" /></label>
         <label>Expires at<input name="expiresAt" type="datetime-local" /></label>
         <button className="primary-button form-span" disabled={busy !== ""}>{busy === "credential" ? "Issuing…" : "Issue Credential"}</button>
       </form>
-      {issuedToken && <div className="detail-section">
-        <strong>Copy now — shown once</strong>
-        <code style={{overflowWrap:"anywhere"}}>{issuedToken}</code>
-      </div>}
-    </article>
+      {issuedToken && <div className="credential-token-box"><strong>Copy now — shown once</strong><code>{issuedToken}</code></div>}
+      {message && <div className="form-success">{message}</div>}
+    </CrudModal>
 
-    <article className="detail-card">
-      <h2>Create Test Mapping</h2>
+    <CrudModal open={open === "mapping"} onClose={() => setOpen("")} title="Create Test Mapping" description="Map analyzer codes to LIS tests/components using effective dates." size="lg">
       <form className="catalog-form" onSubmit={createMapping}>
         <label>Analyzer<select name="analyzerId" required defaultValue=""><option value="">Select analyzer…</option>{analyzers.map(item => <option key={item.id} value={item.id}>{item.code} — {item.name}</option>)}</select></label>
         <label>Analyzer test code<input name="analyzerTestCode" required maxLength={120} /></label>
@@ -157,8 +160,8 @@ export function AnalyzerManager({
         <label>Effective from<input name="effectiveFrom" type="date" defaultValue={new Date().toISOString().slice(0,10)} required /></label>
         <label>Effective to<input name="effectiveTo" type="date" /></label>
         <button className="primary-button form-span" disabled={busy !== ""}>{busy === "mapping" ? "Saving…" : "Create Mapping"}</button>
+        {message && <div className="form-success form-span">{message}</div>}
       </form>
-    </article>
-    {message && <div className="form-success form-span">{message}</div>}
-  </section>;
+    </CrudModal>
+  </>;
 }
