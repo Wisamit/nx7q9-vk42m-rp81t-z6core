@@ -17,6 +17,7 @@ type ShellUser = {
   activeBranchId: string | null;
   branches: BranchOption[];
   permissions: string[];
+  avatarDataUrl: string | null;
 };
 type ShellAppearance = {
   systemName: string;
@@ -97,15 +98,12 @@ const groups: Array<{ labelEn: string; labelAr: string; items: NavItem[] }> = [
       { href: "/settings", labelEn: "System Settings", labelAr: "إعدادات النظام", icon: "settings", permission: "settings.manage" },
       { href: "/users", labelEn: "Users", labelAr: "المستخدمون", icon: "users", permission: "users.view" },
       { href: "/roles", labelEn: "Roles & Permissions", labelAr: "الأدوار والصلاحيات", icon: "roles", permission: "roles.view" },
+      { href: "/security", labelEn: "Security", labelAr: "الأمان", icon: "security" },
     ],
   },
 ];
 
 const publicPrefixes = ["/login", "/setup", "/portal", "/queue-display", "/verify"];
-
-function initials(value: string) {
-  return value.split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]?.toUpperCase()).join("") || "FL";
-}
 
 export function SystemShell({ user, appearance, children }: { user: ShellUser; appearance: ShellAppearance; children: React.ReactNode }) {
   const pathname = usePathname();
@@ -203,10 +201,16 @@ export function SystemShell({ user, appearance, children }: { user: ShellUser; a
               {user.branches.map(branch => <option value={branch.id} key={branch.id}>{branch.code} — {branch.name}</option>)}
             </select>
           </label>}
-          <Link className="system-security-link" href="/security" title={tr("Security", "الأمان")}><SystemIcon name="security" size={17} /><span>{tr("Security", "الأمان")}</span></Link>
           <ThemeToggle defaultTheme={appearance.defaultTheme} labelLight={tr("Switch to light mode", "التبديل للوضع الفاتح")} labelDark={tr("Switch to dark mode", "التبديل للوضع الداكن")} />
           <button className="system-locale-toggle" type="button" disabled={localeBusy} onClick={() => void switchLocale()}>{localeBusy ? "…" : locale === "ar" ? "EN" : "AR"}</button>
-          <div className="system-user"><span className="system-avatar">{initials(user.displayName)}</span><div><strong>{user.displayName}</strong><small>{locale === "ar" ? "العربية" : "English"}</small></div></div>
+          <div className="system-user">
+            <span className="system-avatar">
+              {user.avatarDataUrl
+                ? <Image src={user.avatarDataUrl} alt={user.displayName} width={34} height={34} unoptimized />
+                : <SystemIcon name="users" size={18} />}
+            </span>
+            <div><strong>{user.displayName}</strong><small>{locale === "ar" ? "العربية" : "English"}</small></div>
+          </div>
           <LogoutButton label={tr("Sign out", "تسجيل الخروج")} />
         </div>
       </header>
