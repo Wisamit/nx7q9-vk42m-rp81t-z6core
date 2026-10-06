@@ -3,7 +3,7 @@ import { permissionSet, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { QcManager } from "@/components/qc-manager";
 import { LeveyJenningsChart } from "@/components/levey-jennings-chart";
-import { getUiLocale, tr } from "@/lib/ui-i18n";
+import { getUiLocale, statusLabel, tr } from "@/lib/ui-i18n";
 
 export const dynamic = "force-dynamic";
 
@@ -25,7 +25,7 @@ export default async function QcPage() {
     }),
     prisma.qcMaterial.findMany({
       where: { organizationId: session.user.organizationId, status: "ACTIVE" },
-      select: { id: true, code: true, nameEn: true, levelName: true },
+      select: { id: true, code: true, nameEn: true, nameAr: true, levelName: true },
       orderBy: [{ code: "asc" }, { levelName: "asc" }],
     }),
     prisma.qcLot.findMany({
@@ -39,9 +39,10 @@ export default async function QcPage() {
         id: true,
         code: true,
         nameEn: true,
+        nameAr: true,
         components: {
           where: { status: "ACTIVE" },
-          select: { id: true, code: true, nameEn: true },
+          select: { id: true, code: true, nameEn: true, nameAr: true },
           orderBy: { displayOrder: "asc" },
         },
       },
@@ -110,6 +111,17 @@ export default async function QcPage() {
   const expiredLots = lots.filter(lot => lot.expiryDate && lot.expiryDate < now).length;
   const failedRuns = recentRuns.filter(run => run.status === "FAIL").length;
   const warningRuns = recentRuns.filter(run => run.status === "WARN").length;
+  const localizedName = (item: { nameEn: string; nameAr?: string | null }) =>
+    locale === "ar" ? item.nameAr || item.nameEn : item.nameEn;
+  const userName = (item: { displayNameEn: string; displayNameAr?: string | null }) =>
+    locale === "ar" ? item.displayNameAr || item.displayNameEn : item.displayNameEn;
+  const qcStatusLabel = (value: string) =>
+    value === "PASS" ? tr(locale, "Pass", "ناجح") :
+    value === "WARN" ? tr(locale, "Warning", "تحذير") :
+    value === "FAIL" ? tr(locale, "Fail", "فشل") :
+    value === "OPEN" ? tr(locale, "Open", "مفتوح") :
+    value === "RESOLVED" ? tr(locale, "Resolved", "تمت المعالجة") :
+    statusLabel(locale, value);
 
   return <main className="catalog-shell">
     <header className="page-header">
@@ -125,21 +137,22 @@ export default async function QcPage() {
     </header>
 
     <section className="detail-grid">
-      <article className="detail-card"><h2>{tr(locale, "Active Targets", "الأهداف النشطة")}</h2><strong>{targets.length}</strong><p className="muted">Analyzer/test/component QC definitions.</p></article>
-      <article className="detail-card"><h2>{tr(locale, "Open Violations", "المخالفات المفتوحة")}</h2><strong>{openViolations.length}</strong><p className="muted">Westgard warnings and blocks awaiting corrective action.</p></article>
-      <article className="detail-card"><h2>Failed Runs</h2><strong>{failedRuns}</strong><p className="muted">Within the latest {recentRuns.length} QC runs.</p></article>
-      <article className="detail-card"><h2>Warnings</h2><strong>{warningRuns}</strong><p className="muted">QC runs requiring review.</p></article>
-      <article className="detail-card"><h2>Expired Lots</h2><strong>{expiredLots}</strong><p className="muted">Active QC lots past expiry and therefore unusable by the QC gate.</p></article>
+      <article className="detail-card"><h2>{tr(locale, "Active Targets", "الأهداف النشطة")}</h2><strong>{targets.length}</strong><p className="muted">{tr(locale, "Analyzer/test/component QC definitions.", "تعريفات QC بحسب الجهاز والفحص والمكوّن.")}</p></article>
+      <article className="detail-card"><h2>{tr(locale, "Open Violations", "المخالفات المفتوحة")}</h2><strong>{openViolations.length}</strong><p className="muted">{tr(locale, "Westgard warnings and blocks awaiting corrective action.", "تحذيرات وحالات حظر Westgard التي تنتظر إجراءً تصحيحياً.")}</p></article>
+      <article className="detail-card"><h2>{tr(locale, "Failed Runs", "تشغيلات فاشلة")}</h2><strong>{failedRuns}</strong><p className="muted">{tr(locale, "Within the latest", "ضمن أحدث")} {recentRuns.length} {tr(locale, "QC runs.", "تشغيل QC.")}</p></article>
+      <article className="detail-card"><h2>{tr(locale, "Warnings", "تحذيرات")}</h2><strong>{warningRuns}</strong><p className="muted">{tr(locale, "QC runs requiring review.", "تشغيلات QC تحتاج إلى مراجعة.")}</p></article>
+      <article className="detail-card"><h2>{tr(locale, "Expired Lots", "تشغيلات منتهية")}</h2><strong>{expiredLots}</strong><p className="muted">{tr(locale, "Active QC lots past expiry and therefore unusable by the QC gate.", "تشغيلات QC النشطة التي تجاوزت تاريخ الانتهاء ولذلك لا يمكن استخدامها ضمن بوابة QC.")}</p></article>
     </section>
 
     <QcManager
+      locale={locale}
       analyzers={analyzers}
       materials={materials}
       lots={lots.map(lot => ({
         id: lot.id,
         materialId: lot.materialId,
         lotNumber: lot.lotNumber,
-        label: `${lot.material.code} · ${lot.material.levelName} · ${lot.lotNumber}${lot.expiryDate ? " · exp " + lot.expiryDate.toISOString().slice(0,10) : ""}`,
+        label: `${lot.material.code} · ${localizedName(lot.material)} · ${lot.material.levelName} · ${lot.lotNumber}${lot.expiryDate ? " · " + tr(locale, "exp", "انتهاء") + " " + lot.expiryDate.toISOString().slice(0,10) : ""}`,
       }))}
       tests={tests}
       targets={targets.map(target => ({
@@ -165,6 +178,7 @@ export default async function QcPage() {
     <section className="detail-grid detail-section">
       {targets.slice(0, 12).map(target => <LeveyJenningsChart
         key={target.id}
+        locale={locale}
         title={target.analyzer.code + " · " + target.test.code + (target.component ? "/" + target.component.code : "") + " · " + target.qcLot.material.levelName}
         points={target.results.map(result => ({
           id: result.id,
@@ -176,37 +190,37 @@ export default async function QcPage() {
     </section>
 
     <section className="table-card detail-section">
-      <div className="table-toolbar"><h2>Recent QC Runs</h2><span>{recentRuns.length} shown</span></div>
+      <div className="table-toolbar"><h2>{tr(locale, "Recent QC Runs", "أحدث تشغيلات QC")}</h2><span>{recentRuns.length} {tr(locale, "shown", "معروضة")}</span></div>
       <div className="table-wrap"><table>
-        <thead><tr><th>Run</th><th>Analyzer</th><th>Control lot</th><th>Status</th><th>Results</th><th>Violations</th><th>Operator</th></tr></thead>
-        <tbody>{recentRuns.length === 0 ? <tr><td colSpan={7} className="empty-state">No QC runs recorded.</td></tr> : recentRuns.map(run => <tr key={run.id}>
+        <thead><tr><th>{tr(locale, "Run", "التشغيل")}</th><th>{tr(locale, "Analyzer", "الجهاز")}</th><th>{tr(locale, "Control lot", "تشغيلة الضبط")}</th><th>{tr(locale, "Status", "الحالة")}</th><th>{tr(locale, "Results", "النتائج")}</th><th>{tr(locale, "Violations", "المخالفات")}</th><th>{tr(locale, "Operator", "المشغل")}</th></tr></thead>
+        <tbody>{recentRuns.length === 0 ? <tr><td colSpan={7} className="empty-state">{tr(locale, "No QC runs recorded.", "لا توجد تشغيلات QC مسجلة.")}</td></tr> : recentRuns.map(run => <tr key={run.id}>
           <td>{run.runAt.toISOString().replace("T"," ").slice(0,19)}</td>
           <td><strong>{run.analyzer.code}</strong><br/><small>{run.analyzer.name}</small></td>
           <td>{[...new Map(run.results.map(result => [
             result.target.qcLotId,
             result.target.qcLot.material.code + " · " + result.target.qcLot.material.levelName + " · " + result.target.qcLot.lotNumber,
           ])).values()].join(" | ") || "—"}</td>
-          <td>{run.status}</td>
+          <td>{qcStatusLabel(run.status)}</td>
           <td>{run.results.length}</td>
           <td>{run.violations.length}</td>
-          <td>{run.operator.displayNameEn}</td>
+          <td>{userName(run.operator)}</td>
         </tr>)}</tbody>
       </table></div>
     </section>
 
     <section className="table-card detail-section">
-      <div className="table-toolbar"><h2>QC Targets</h2><span>{targets.length} shown</span></div>
+      <div className="table-toolbar"><h2>{tr(locale, "QC Targets", "أهداف QC")}</h2><span>{targets.length} {tr(locale, "shown", "معروضة")}</span></div>
       <div className="table-wrap"><table>
-        <thead><tr><th>Analyzer</th><th>Test</th><th>Control</th><th>Mean</th><th>SD</th><th>CV</th><th>Valid</th><th>Rules</th></tr></thead>
-        <tbody>{targets.length === 0 ? <tr><td colSpan={8} className="empty-state">No QC targets configured.</td></tr> : targets.map(target => <tr key={target.id}>
+        <thead><tr><th>{tr(locale, "Analyzer", "الجهاز")}</th><th>{tr(locale, "Test", "الفحص")}</th><th>{tr(locale, "Control", "الضبط")}</th><th>{tr(locale, "Mean", "المتوسط")}</th><th>SD</th><th>CV</th><th>{tr(locale, "Valid", "الصلاحية")}</th><th>{tr(locale, "Rules", "القواعد")}</th></tr></thead>
+        <tbody>{targets.length === 0 ? <tr><td colSpan={8} className="empty-state">{tr(locale, "No QC targets configured.", "لا توجد أهداف QC مهيأة.")}</td></tr> : targets.map(target => <tr key={target.id}>
           <td>{target.analyzer.code}</td>
           <td>{target.test.code}{target.component ? " / " + target.component.code : ""}</td>
           <td>{target.qcLot.material.code} · {target.qcLot.material.levelName}<br/><small>{target.qcLot.lotNumber}</small></td>
           <td>{target.targetMean.toString()}</td>
           <td>{target.targetSd.toString()}</td>
           <td>{target.targetCv?.toString() || "—"}</td>
-          <td>{target.qcValidHours}h</td>
-          <td>{Array.isArray(target.enabledRules) ? target.enabledRules.join(", ") : "Configured"}</td>
+          <td>{target.qcValidHours} {tr(locale, "h", "ساعة")}</td>
+          <td>{Array.isArray(target.enabledRules) ? target.enabledRules.join(", ") : tr(locale, "Configured", "مهيأة")}</td>
         </tr>)}</tbody>
       </table></div>
     </section>
