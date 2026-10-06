@@ -6,6 +6,7 @@ import { CrudModal } from "@/components/crud-modal";
 import { SystemIcon } from "@/components/system-icon";
 
 type Option = { id: string; code: string; nameEn: string; nameAr?: string | null };
+type SourceOption = Option & { category: string };
 type ContractOption = Option & { clientId: string };
 type TestOption = { id: string; code: string; nameEn: string; nameAr?: string | null };
 type PackageOption = { id: string; code: string; nameEn: string; nameAr?: string | null };
@@ -13,6 +14,7 @@ type PriceListOption = { id: string; code: string; nameEn: string; nameAr?: stri
 
 export function PricingManager({
   branches,
+  sources,
   clients,
   contracts,
   tests,
@@ -22,6 +24,7 @@ export function PricingManager({
   locale,
 }: {
   branches: Option[];
+  sources: SourceOption[];
   clients: Option[];
   contracts: ContractOption[];
   tests: TestOption[];
@@ -32,7 +35,7 @@ export function PricingManager({
 }) {
   const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
   const localizedName = (item: { nameEn: string; nameAr?: string | null }) => locale === "ar" ? item.nameAr || item.nameEn : item.nameEn;
-  const scopeLabel = (value: string) => ({ ORGANIZATION: tr("Organization","المؤسسة"), BRANCH: tr("Branch","الفرع"), CLIENT: tr("Client","العميل"), CONTRACT: tr("Contract","العقد") }[value] || value);
+  const scopeLabel = (value: string) => ({ ORGANIZATION: tr("Organization","المؤسسة"), BRANCH: tr("Branch","الفرع"), SOURCE: tr("Source / Campaign","المصدر / الحملة"), CLIENT: tr("Client","العميل"), CONTRACT: tr("Contract","العقد") }[value] || value);
   const router = useRouter();
   const [scopeType, setScopeType] = useState("ORGANIZATION");
   const [message, setMessage] = useState("");
@@ -46,11 +49,11 @@ export function PricingManager({
   const testOptions = useMemo(() => tests.map((test) => ({
     ...test,
     label: `${test.code} — ${localizedName(test)}`,
-  })), [tests]);
+  })), [tests, locale]);
   const packageOptions = useMemo(() => packages.map((pkg) => ({
     ...pkg,
     label: `${pkg.code} — ${localizedName(pkg)}`,
-  })), [packages]);
+  })), [packages, locale]);
 
   async function createContract(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -92,6 +95,7 @@ export function PricingManager({
         nameAr: form.get("nameAr"),
         scopeType,
         branchId: form.get("branchId"),
+        sourceId: form.get("sourceId"),
         clientId: form.get("clientId"),
         contractId: form.get("contractId"),
         currency: form.get("currency"),
@@ -193,10 +197,11 @@ export function PricingManager({
     <CrudModal open={open === "list"} onClose={() => setOpen("")} title={tr("Create Price List", "إنشاء قائمة أسعار")} description={tr("Define pricing scope, currency, precedence and effective dates.", "حدد نطاق التسعير والعملة والأولوية وتواريخ السريان.")} size="lg">
       <form className="catalog-form" onSubmit={createList}>
         <label>{tr("Code", "الرمز")}<input name="code" placeholder={tr("Optional; generated from name","اختياري؛ يتم توليده من الاسم")} /></label>
-        <label>{tr("Scope", "النطاق")}<select value={scopeType} onChange={e => setScopeType(e.target.value)}><option value="ORGANIZATION">{scopeLabel("ORGANIZATION")}</option><option value="BRANCH">{scopeLabel("BRANCH")}</option><option value="CLIENT">{scopeLabel("CLIENT")}</option><option value="CONTRACT">{scopeLabel("CONTRACT")}</option></select></label>
+        <label>{tr("Scope", "النطاق")}<select value={scopeType} onChange={e => setScopeType(e.target.value)}><option value="ORGANIZATION">{scopeLabel("ORGANIZATION")}</option><option value="BRANCH">{scopeLabel("BRANCH")}</option><option value="SOURCE">{scopeLabel("SOURCE")}</option><option value="CLIENT">{scopeLabel("CLIENT")}</option><option value="CONTRACT">{scopeLabel("CONTRACT")}</option></select></label>
         <label>{tr("Name (English)", "الاسم بالإنجليزية")}<input name="nameEn" required /></label>
-        <label dir="rtl">الاسم بالعربية<input name="nameAr" dir="rtl" /></label>
+        <label>{tr("Name (Arabic)", "الاسم بالعربية")}<input name="nameAr" dir="rtl" /></label>
         {scopeType === "BRANCH" && <label>{tr("Branch", "الفرع")}<select name="branchId" required><option value="">{tr("Select branch…", "اختر الفرع…")}</option>{branches.map(x => <option key={x.id} value={x.id}>{x.code} — {localizedName(x)}</option>)}</select></label>}
+        {scopeType === "SOURCE" && <label>{tr("Source / Campaign", "المصدر / الحملة")}<select name="sourceId" required><option value="">{tr("Select source or campaign…", "اختر المصدر أو الحملة…")}</option>{sources.map(x => <option key={x.id} value={x.id}>{x.code} — {localizedName(x)} · {x.category}</option>)}</select></label>}
         {scopeType === "CLIENT" && <label>{tr("Client", "العميل")}<select name="clientId" required><option value="">{tr("Select client…", "اختر العميل…")}</option>{clients.map(x => <option key={x.id} value={x.id}>{x.code} — {localizedName(x)}</option>)}</select></label>}
         {scopeType === "CONTRACT" && <label>{tr("Contract", "العقد")}<select name="contractId" required><option value="">{tr("Select contract…", "اختر العقد…")}</option>{contracts.map(x => <option key={x.id} value={x.id}>{x.code} — {localizedName(x)}</option>)}</select></label>}
         <label>{tr("Currency", "العملة")}<input name="currency" required maxLength={3} defaultValue={defaultCurrency} /></label>
