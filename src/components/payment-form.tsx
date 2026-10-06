@@ -49,7 +49,7 @@ export function PaymentForm({ invoices, locale, onSuccess }: { invoices: Invoice
   }
 
   return <form className="catalog-form" onSubmit={submit}>
-    <label className="form-span">Invoice
+    <label className="form-span">{tr("Invoice","الفاتورة")}
       <select name="invoiceId" required defaultValue="">
         <option value="">{tr("Select open invoice…", "اختر فاتورة مفتوحة…")}</option>
         {invoices.map(invoice => <option key={invoice.id} value={invoice.id}>{invoice.invoiceNumber} — {invoice.balanceAmount} {invoice.currency}</option>)}
