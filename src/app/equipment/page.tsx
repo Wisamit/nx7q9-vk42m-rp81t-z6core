@@ -2,12 +2,14 @@ import Link from "next/link";
 import { permissionSet, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { EquipmentManager } from "@/components/equipment-manager";
+import { getUiLocale, statusLabel, tr } from "@/lib/ui-i18n";
 
 export const dynamic = "force-dynamic";
 
 export default async function EquipmentPage() {
   const session = await requirePermission("equipment.view");
   const permissions = permissionSet(session);
+  const locale = getUiLocale(session.user.preferredLocale);
   const branchIds = session.user.branchScopes.map(scope => scope.branchId);
 
   const [branches, departments, analyzers, equipment] = await Promise.all([
@@ -48,20 +50,20 @@ export default async function EquipmentPage() {
   return <main className="catalog-shell">
     <header className="page-header">
       <div>
-        <p className="eyebrow">Equipment Management</p>
-        <h1>Equipment</h1>
-        <p className="muted">Asset register, analyzer linkage, maintenance, calibration and downtime across branches.</p>
+        <p className="eyebrow">{tr(locale, "Equipment Management", "إدارة المعدات")}</p>
+        <h1>{tr(locale, "Equipment", "المعدات")}</h1>
+        <p className="muted">{tr(locale, "Asset register, analyzer linkage, maintenance, calibration and downtime across branches.", "سجل الأصول وربط أجهزة التحليل والصيانة والمعايرة وأوقات التوقف عبر الفروع.")}</p>
       </div>
       <div className="result-actions">
-        {permissions.has("qc.view") && <Link className="secondary-link" href="/qc">Quality Control</Link>}
-        <Link className="secondary-link" href="/dashboard">Back to Dashboard</Link>
+        {permissions.has("qc.view") && <Link className="secondary-link" href="/qc">{tr(locale, "Quality Control", "ضبط الجودة")}</Link>}
+        <Link className="secondary-link" href="/dashboard">{tr(locale, "Back to Dashboard", "العودة للوحة التحكم")}</Link>
       </div>
     </header>
 
     <section className="detail-grid">
       <article className="detail-card"><h2>Equipment</h2><strong>{equipment.length}</strong><p className="muted">Assets in your authorized branches.</p></article>
-      <article className="detail-card"><h2>Active Downtime</h2><strong>{openDowntime}</strong><p className="muted">Open equipment downtime events.</p></article>
-      <article className="detail-card"><h2>Calibration Failures</h2><strong>{calibrationFailed}</strong><p className="muted">Latest calibration status is FAIL.</p></article>
+      <article className="detail-card"><h2>{tr(locale, "Active Downtime", "توقفات نشطة")}</h2><strong>{openDowntime}</strong><p className="muted">{tr(locale, "Open equipment downtime events.", "أحداث توقف المعدات المفتوحة.")}</p></article>
+      <article className="detail-card"><h2>{tr(locale, "Calibration Failures", "فشل المعايرة")}</h2><strong>{calibrationFailed}</strong><p className="muted">{tr(locale, "Latest calibration status is FAIL.", "آخر حالة معايرة هي فشل.")}</p></article>
     </section>
 
     <EquipmentManager
@@ -84,18 +86,18 @@ export default async function EquipmentPage() {
     />
 
     <section className="table-card detail-section">
-      <div className="table-toolbar"><h2>Equipment Register</h2><span>{equipment.length} assets</span></div>
+      <div className="table-toolbar"><h2>{tr(locale, "Equipment Register", "سجل المعدات")}</h2><span>{equipment.length} assets</span></div>
       <div className="table-wrap"><table>
         <thead><tr><th>Asset</th><th>Branch</th><th>Department</th><th>Analyzer</th><th>Status</th><th>Maintenance</th><th>Calibration</th><th>Documents</th><th>Downtime</th></tr></thead>
-        <tbody>{equipment.length === 0 ? <tr><td colSpan={9} className="empty-state">No equipment registered.</td></tr> : equipment.map(item => <tr key={item.id}>
+        <tbody>{equipment.length === 0 ? <tr><td colSpan={9} className="empty-state">{tr(locale, "No equipment registered.", "لا توجد معدات مسجلة.")}</td></tr> : equipment.map(item => <tr key={item.id}>
           <td><strong>{item.assetId}</strong><br/><small>{item.name}{item.serialNumber ? " · " + item.serialNumber : ""}</small></td>
           <td>{item.branch.code} — {item.branch.nameEn}</td>
           <td>{item.department?.nameEn || "—"}</td>
           <td>{item.analyzer ? item.analyzer.code + " — " + item.analyzer.name : "—"}</td>
-          <td>{item.status}</td>
+          <td>{statusLabel(locale, item.status)}</td>
           <td>
             {item.maintenanceEvents[0] ? item.maintenanceEvents[0].maintenanceType + " · " + item.maintenanceEvents[0].status : "—"}
-            {item.maintenancePlans[0] ? <><br/><small>Next: {item.maintenancePlans[0].nextDueAt.toISOString().slice(0,10)}</small></> : null}
+            {item.maintenancePlans[0] ? <><br/><small>{tr(locale, "Next", "التالي")}: {item.maintenancePlans[0].nextDueAt.toISOString().slice(0,10)}</small></> : null}
           </td>
           <td>{item.calibrationEvents[0] ? item.calibrationEvents[0].status + (item.calibrationEvents[0].performedAt ? " · " + item.calibrationEvents[0].performedAt.toISOString().slice(0,10) : "") : "—"}</td>
           <td>{item.documents.length}</td>
