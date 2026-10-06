@@ -18,7 +18,8 @@ function optionalDiscountPercent(value: unknown) {
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
   const session = await getCurrentSession();
   if (!session) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  if (!permissionSet(session).has("users.manage")) return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  const permissions = permissionSet(session);
+  if (!permissions.has("users.manage")) return NextResponse.json({ error: "forbidden" }, { status: 403 });
 
   const { id } = await context.params;
   const body = await request.json().catch(() => null) as Record<string, unknown> | null;
@@ -40,6 +41,9 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   const branchIds = body.branchIds === undefined ? target.branchScopes.map(x => x.branchId) : ids(body.branchIds);
   const departmentIds = body.departmentIds === undefined ? target.departmentScopes.map(x => x.departmentId) : ids(body.departmentIds);
   const password = typeof body.password === "string" ? body.password : "";
+  if (body.discountLimitPercent !== undefined && !permissions.has("billing.discount.limits.manage")) {
+    return NextResponse.json({ error: "discount_limit_forbidden" }, { status: 403 });
+  }
   const discountLimitPercent = body.discountLimitPercent === undefined
     ? (target.discountLimitPercent ? Number(target.discountLimitPercent.toString()) : null)
     : optionalDiscountPercent(body.discountLimitPercent);
