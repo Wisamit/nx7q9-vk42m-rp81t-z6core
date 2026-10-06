@@ -9,6 +9,11 @@ function text(value: unknown, max = 200) {
 function ids(value: unknown) {
   return Array.isArray(value) ? [...new Set(value.filter((x): x is string => typeof x === "string" && x.length > 0))] : [];
 }
+function optionalDiscountPercent(value: unknown) {
+  if (value === null || value === undefined || value === "") return null;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric >= 0 && numeric <= 100 ? Math.round(numeric * 100) / 100 : undefined;
+}
 
 export async function GET() {
   const session = await getCurrentSession();
@@ -42,6 +47,7 @@ export async function GET() {
       status: user.status,
       mfaEnabled: user.mfaEnabled,
       lastLoginAt: user.lastLoginAt,
+      discountLimitPercent: user.discountLimitPercent?.toString() ?? null,
       roleIds: user.roles.filter(x => x.role.status === "ACTIVE").map(x => x.roleId),
       roleNames: user.roles.filter(x => x.role.status === "ACTIVE").map(x => x.role.nameEn),
       branchIds: user.branchScopes.filter(x => x.branch.status === "ACTIVE").map(x => x.branchId),
@@ -73,8 +79,9 @@ export async function POST(request: Request) {
   const roleIds = ids(body.roleIds);
   const branchIds = ids(body.branchIds);
   const departmentIds = ids(body.departmentIds);
+  const discountLimitPercent = optionalDiscountPercent(body.discountLimitPercent);
 
-  if (!/^[a-z0-9._-]{3,100}$/.test(username) || !displayNameEn || password.length < 12 || roleIds.length === 0 || branchIds.length === 0) {
+  if (!/^[a-z0-9._-]{3,100}$/.test(username) || !displayNameEn || password.length < 12 || roleIds.length === 0 || branchIds.length === 0 || discountLimitPercent === undefined) {
     return NextResponse.json({ error: "invalid_fields" }, { status: 400 });
   }
 
@@ -103,6 +110,7 @@ export async function POST(request: Request) {
           displayNameEn,
           displayNameAr: displayNameAr || null,
           preferredLocale,
+          discountLimitPercent: discountLimitPercent === null ? null : discountLimitPercent.toFixed(2),
           status: "ACTIVE",
           passwordChangedAt: new Date(),
           roles: { create: roleIds.map(roleId => ({ roleId, assignedBy: session.user.id })) },
@@ -118,7 +126,7 @@ export async function POST(request: Request) {
           action: "USER_CREATED",
           entityType: "User",
           entityId: created.id,
-          newValues: { username, email: email || null, displayNameEn, displayNameAr: displayNameAr || null, preferredLocale, roleIds, branchIds, departmentIds },
+          newValues: { username, email: email || null, displayNameEn, displayNameAr: displayNameAr || null, preferredLocale, discountLimitPercent: discountLimitPercent === null ? null : discountLimitPercent.toFixed(2), roleIds, branchIds, departmentIds },
           ipAddress: ctx.ipAddress,
           userAgent: ctx.userAgent,
         },
