@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { requirePermission } from "@/lib/auth";
+import { authorizedDepartmentIds, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { getUiLocale, tr } from "@/lib/ui-i18n";
 
@@ -9,6 +9,7 @@ export default async function CriticalResultsPage() {
   const session = await requirePermission("critical.communicate");
   const locale = getUiLocale(session.user.preferredLocale);
   const branchIds = session.user.branchScopes.map(scope => scope.branchId);
+  const departmentIds = authorizedDepartmentIds(session);
   const now = new Date();
 
   const events = await prisma.criticalResultEvent.findMany({
@@ -17,6 +18,7 @@ export default async function CriticalResultsPage() {
       result: {
         organizationId: session.user.organizationId,
         performingBranchId: { in: branchIds },
+        ...(departmentIds.length > 0 ? { orderItem: { test: { departmentId: { in: departmentIds } } } } : {}),
       },
     },
     include: {
