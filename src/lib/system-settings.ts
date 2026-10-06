@@ -8,7 +8,12 @@ export type ThemePalette = {
   accent: string;
   background: string;
   surface: string;
+  surfaceSoft: string;
+  surfaceRaised: string;
+  surfaceHover: string;
   text: string;
+  textSubtle: string;
+  onPrimary: string;
   muted: string;
   border: string;
   sidebar: string;
@@ -32,7 +37,12 @@ export const DEFAULT_LIGHT_THEME: ThemePalette = {
   accent: "#334051",
   background: "#F5F7FA",
   surface: "#FFFFFF",
+  surfaceSoft: "#F8FAFC",
+  surfaceRaised: "#FFFFFF",
+  surfaceHover: "#FDEBED",
   text: "#172033",
+  textSubtle: "#94A3B8",
+  onPrimary: "#FFFFFF",
   muted: "#64748B",
   border: "#E2E8F0",
   sidebar: "#263446",
@@ -51,7 +61,12 @@ export const DEFAULT_DARK_THEME: ThemePalette = {
   accent: "#B7C4D5",
   background: "#0D1420",
   surface: "#141E2D",
+  surfaceSoft: "#101927",
+  surfaceRaised: "#182537",
+  surfaceHover: "#261B24",
   text: "#E8EEF6",
+  textSubtle: "#7F91A8",
+  onPrimary: "#FFFFFF",
   muted: "#98A7BA",
   border: "#2A384B",
   sidebar: "#08111D",
@@ -132,7 +147,12 @@ function cssVars(p: ThemePalette) {
     ["--fl-accent", p.accent],
     ["--fl-bg", p.background],
     ["--fl-surface", p.surface],
+    ["--fl-surface-soft", p.surfaceSoft],
+    ["--fl-surface-raised", p.surfaceRaised],
+    ["--fl-surface-hover", p.surfaceHover],
     ["--fl-text", p.text],
+    ["--fl-text-subtle", p.textSubtle],
+    ["--fl-on-primary", p.onPrimary],
     ["--fl-muted", p.muted],
     ["--fl-border", p.border],
     ["--fl-navy", p.sidebar],
@@ -141,6 +161,13 @@ function cssVars(p: ThemePalette) {
     ["--fl-warning", p.warning],
     ["--fl-danger", p.danger],
     ["--fl-info", p.info],
+    ["--fl-focus-ring", `color-mix(in srgb, ${p.primary} 18%, transparent)`],
+    ["--fl-overlay", `color-mix(in srgb, ${p.text} 58%, transparent)`],
+    ["--fl-success-soft", `color-mix(in srgb, ${p.success} 12%, ${p.surface})`],
+    ["--fl-warning-soft", `color-mix(in srgb, ${p.warning} 12%, ${p.surface})`],
+    ["--fl-danger-soft", `color-mix(in srgb, ${p.danger} 12%, ${p.surface})`],
+    ["--fl-accent-soft", `color-mix(in srgb, ${p.accent} 12%, ${p.surface})`],
+    ["--fl-info-soft", `color-mix(in srgb, ${p.info} 12%, ${p.surface})`],
   ].map(([key, value]) => `${key}:${value}`).join(";");
 }
 
