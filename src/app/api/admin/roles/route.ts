@@ -16,7 +16,9 @@ function discountPercent(value: unknown) {
 export async function GET() {
   const session = await getCurrentSession();
   if (!session) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  if (!permissionSet(session).has("roles.view")) return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  const permissionsForViewer = permissionSet(session);
+  if (!permissionsForViewer.has("roles.view")) return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  const canManageDiscountLimits = permissionsForViewer.has("billing.discount.limits.manage");
 
   const organizationId = session.user.organizationId;
   const [roles, permissions] = await Promise.all([
@@ -35,7 +37,7 @@ export async function GET() {
       nameAr: role.nameAr,
       isSystem: role.isSystem,
       status: role.status,
-      discountLimitPercent: role.discountLimitPercent.toString(),
+      ...(canManageDiscountLimits ? { discountLimitPercent: role.discountLimitPercent.toString() } : {}),
       userCount: role._count.users,
       permissionIds: role.permissions.map(x => x.permissionId),
     })),
@@ -74,7 +76,7 @@ export async function POST(request: Request) {
     select: { id: true, code: true },
   });
   if (selectedPermissions.length !== permissionIds.length) return NextResponse.json({ error: "invalid_permissions" }, { status: 400 });
-  if (selectedPermissions.some(permission => permission.code === "billing.discount.approve") && !permissions.has("billing.discount.limits.manage")) {
+  if (selectedPermissions.some(permission => ["billing.discount.approve", "billing.discount.limits.manage"].includes(permission.code)) && !permissions.has("billing.discount.limits.manage")) {
     return NextResponse.json({ error: "discount_authority_forbidden" }, { status: 403 });
   }
 
