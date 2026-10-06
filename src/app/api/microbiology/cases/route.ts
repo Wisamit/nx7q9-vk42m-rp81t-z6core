@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
+import { canAccessBranch, canAccessDepartment, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 
 function text(value: unknown, max = 1000) {
@@ -33,6 +33,7 @@ export async function POST(request: Request) {
     },
   });
   if (!orderItem) return NextResponse.json({ error: "order_item_not_found" }, { status: 404 });
+  if (!canAccessDepartment(session, orderItem.test.departmentId)) return NextResponse.json({ error: "department_forbidden" }, { status: 403 });
   if (orderItem.test.workflowType !== "MICROBIOLOGY") {
     return NextResponse.json({ error: "test_not_configured_for_microbiology" }, { status: 409 });
   }
