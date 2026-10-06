@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { SystemIcon } from "@/components/system-icon";
 import { CrudModal } from "@/components/crud-modal";
+import { statusLabel } from "@/lib/ui-i18n";
 
 type Role = { id: string; code: string; nameEn: string; nameAr: string | null; isSystem: boolean };
 type Branch = { id: string; code: string; nameEn: string; nameAr: string | null };
@@ -22,6 +23,28 @@ export function UserManagement({ locale }: { locale: "ar" | "en" }) {
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<UserRow | null>(null);
   const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
+
+  function localizedRoleNames(user: UserRow) {
+    return user.roleIds.map((id, index) => {
+      const role = data.roles.find(item => item.id === id);
+      return role ? (locale === "ar" ? role.nameAr || role.nameEn : role.nameEn) : user.roleNames[index] || id;
+    }).join(", ") || "—";
+  }
+
+  function localizedBranchNames(user: UserRow) {
+    return user.branchIds.map((id, index) => {
+      const branch = data.branches.find(item => item.id === id);
+      return branch ? (locale === "ar" ? branch.nameAr || branch.nameEn : branch.nameEn) : user.branchNames[index] || id;
+    }).join(", ") || "—";
+  }
+
+  function localizedDepartmentNames(user: UserRow) {
+    if (user.departmentIds.length === 0) return tr("All departments", "كل الأقسام");
+    return user.departmentIds.map((id, index) => {
+      const department = data.departments.find(item => item.id === id);
+      return department ? (locale === "ar" ? department.nameAr || department.nameEn : department.nameEn) : user.departmentNames[index] || id;
+    }).join(", ");
+  }
 
   async function load() {
     const response = await fetch("/api/admin/users", { cache: "no-store" });
@@ -133,7 +156,7 @@ export function UserManagement({ locale }: { locale: "ar" | "en" }) {
         <label>{tr("Username", "اسم المستخدم")}<input name="username" required minLength={3} autoCapitalize="none" /></label>
         <label>{tr("Email", "البريد الإلكتروني")}<input name="email" type="email" /></label>
         <label>{tr("Temporary password", "كلمة المرور المؤقتة")}<input name="password" type="password" required minLength={12} autoComplete="new-password" /><small>{tr("Minimum 12 characters.", "12 محرفًا على الأقل.")}</small></label>
-        <label>{tr("Preferred language", "اللغة المفضلة")}<select name="preferredLocale" defaultValue="en"><option value="en">English</option><option value="ar">العربية</option></select></label>
+        <label>{tr("Preferred language", "اللغة المفضلة")}<select name="preferredLocale" defaultValue="en"><option value="en">{tr("English", "الإنجليزية")}</option><option value="ar">العربية</option></select></label>
         <fieldset className="admin-checklist"><legend>{tr("Roles", "الأدوار")}</legend>{data.roles.map(role => <label key={role.id}><input type="checkbox" name="roleIds" value={role.id} />{locale === "ar" ? role.nameAr || role.nameEn : role.nameEn}</label>)}</fieldset>
         <fieldset className="admin-checklist"><legend>{tr("Branch access", "صلاحية الفروع")}</legend>{data.branches.map(branch => <label key={branch.id}><input type="checkbox" name="branchIds" value={branch.id} />{branch.code} — {locale === "ar" ? branch.nameAr || branch.nameEn : branch.nameEn}</label>)}</fieldset>
         <fieldset className="admin-checklist form-span"><legend>{tr("Department access", "صلاحية الأقسام")}</legend><small>{tr("Optional: no selection means all departments within the selected branches. Selecting departments restricts clinical access.", "اختياري: عدم التحديد يعني كل الأقسام ضمن الفروع المختارة. تحديد أقسام يقيّد الوصول السريري بها.")}</small>{data.departments.map(department => <label key={department.id}><input type="checkbox" name="departmentIds" value={department.id} />{department.code} — {locale === "ar" ? department.nameAr || department.nameEn : department.nameEn}</label>)}</fieldset>
@@ -159,8 +182,8 @@ export function UserManagement({ locale }: { locale: "ar" | "en" }) {
 
     <section className="table-card admin-table-card">
       <div className="table-toolbar"><div><h2>{tr("Staff users", "المستخدمون")}</h2><span>{tr("Roles, branches, MFA and account state", "الأدوار والفروع وMFA وحالة الحساب")}</span></div><span>{data.users.length}</span></div>
-      <div className="table-wrap">{loading ? <div className="empty-state">{tr("Loading…", "جارٍ التحميل…")}</div> : <table><thead><tr><th>{tr("User", "المستخدم")}</th><th>{tr("Roles", "الأدوار")}</th><th>{tr("Branches", "الفروع")}</th><th>{tr("Departments", "الأقسام")}</th><th>MFA</th><th>{tr("Status", "الحالة")}</th><th>{tr("Actions", "إجراءات")}</th></tr></thead>
-      <tbody>{data.users.map(user => <tr key={user.id}><td><strong>{locale === "ar" ? user.displayNameAr || user.displayNameEn : user.displayNameEn}</strong><small className="table-subtext">@{user.username}{user.email ? " · " + user.email : ""}</small></td><td>{user.roleNames.join(", ") || "—"}</td><td>{user.branchNames.join(", ") || "—"}</td><td>{user.departmentNames.length ? user.departmentNames.join(", ") : tr("All departments", "كل الأقسام")}</td><td><span className={"status-badge " + (user.mfaEnabled ? "status-active" : "status-draft")}>{user.mfaEnabled ? "ON" : "OFF"}</span></td><td><span className={"status-badge " + (user.status === "ACTIVE" ? "status-active" : "status-warning")}>{user.status}</span></td><td><div className="inline-actions">
+      <div className="table-wrap">{loading ? <div className="empty-state">{tr("Loading…", "جارٍ التحميل…")}</div> : <table><thead><tr><th>{tr("User", "المستخدم")}</th><th>{tr("Roles", "الأدوار")}</th><th>{tr("Branches", "الفروع")}</th><th>{tr("Departments", "الأقسام")}</th><th>{tr("MFA", "المصادقة متعددة العوامل")}</th><th>{tr("Status", "الحالة")}</th><th>{tr("Actions", "إجراءات")}</th></tr></thead>
+      <tbody>{data.users.map(user => <tr key={user.id}><td><strong>{locale === "ar" ? user.displayNameAr || user.displayNameEn : user.displayNameEn}</strong><small className="table-subtext">@{user.username}{user.email ? " · " + user.email : ""}</small></td><td>{localizedRoleNames(user)}</td><td>{localizedBranchNames(user)}</td><td>{localizedDepartmentNames(user)}</td><td><span className={"status-badge " + (user.mfaEnabled ? "status-active" : "status-draft")}>{user.mfaEnabled ? tr("ON", "مفعلة") : tr("OFF", "غير مفعلة")}</span></td><td><span className={"status-badge " + (user.status === "ACTIVE" ? "status-active" : "status-warning")}>{statusLabel(locale, user.status)}</span></td><td><div className="inline-actions">
   <button type="button" className="secondary-button compact-action" disabled={busy} onClick={() => setEditing(user)}>{tr("Edit access", "تعديل الصلاحيات")}</button>
   {user.status === "ACTIVE" ? <button type="button" className="secondary-button compact-action" disabled={busy} onClick={() => void setStatus(user, "SUSPENDED")}>{tr("Suspend", "تعليق")}</button> : <button type="button" className="secondary-button compact-action" disabled={busy} onClick={() => void setStatus(user, "ACTIVE")}>{tr("Activate", "تفعيل")}</button>}
 </div></td></tr>)}</tbody></table>}</div>
