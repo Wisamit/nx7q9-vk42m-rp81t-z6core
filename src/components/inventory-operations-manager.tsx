@@ -3,8 +3,8 @@
 import { FormEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
-type Branch = { id: string; code: string; nameEn: string };
-type Item = { id: string; code: string; nameEn: string; stockUnit: string };
+type Branch = { id: string; code: string; nameEn: string; nameAr?: string | null };
+type Item = { id: string; code: string; nameEn: string; nameAr?: string | null; stockUnit: string };
 type Lot = { branchId: string; itemId: string; lotId: string; lotNumber: string; expiryDate: string | null; onHand: string; reserved: string };
 
 export function InventoryOperationsManager({
@@ -13,12 +13,14 @@ export function InventoryOperationsManager({
   lots,
   canAdjust,
   canConsume,
+  locale,
 }: {
   branches: Branch[];
   items: Item[];
   lots: Lot[];
   canAdjust: boolean;
   canConsume: boolean;
+  locale: "ar" | "en";
 }) {
   const router = useRouter();
   const [adjustBranchId, setAdjustBranchId] = useState("");
@@ -27,6 +29,8 @@ export function InventoryOperationsManager({
   const [consumeItemId, setConsumeItemId] = useState("");
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
+  const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
+  const localizedName = (item: { nameEn: string; nameAr?: string | null }) => locale === "ar" ? item.nameAr || item.nameEn : item.nameEn;
 
   const adjustLots = useMemo(
     () => lots.filter(lot => lot.branchId === adjustBranchId && lot.itemId === adjustItemId),
@@ -47,7 +51,7 @@ export function InventoryOperationsManager({
     });
     const body = await response.json().catch(() => ({}));
     setBusy("");
-    setMessage(response.ok ? success : body.error || "Action failed.");
+    setMessage(response.ok ? success : tr("Action failed.", "فشلت العملية."));
     if (response.ok) {
       form.reset();
       router.refresh();
@@ -64,7 +68,7 @@ export function InventoryOperationsManager({
       movementType: form.get("movementType"),
       quantity: form.get("quantity"),
       reason: form.get("reason"),
-    }, "adjust", "Stock adjustment posted.", event.currentTarget);
+    }, "adjust", tr("Stock adjustment posted.", "تم ترحيل تسوية المخزون."), event.currentTarget);
   }
 
   async function consume(event: FormEvent<HTMLFormElement>) {
@@ -78,40 +82,40 @@ export function InventoryOperationsManager({
       referenceType: form.get("referenceType"),
       referenceId: form.get("referenceId"),
       reason: form.get("reason"),
-    }, "consume", "Inventory consumption posted using FEFO allocation.", event.currentTarget);
+    }, "consume", tr("Inventory consumption posted using FEFO allocation.", "تم ترحيل استهلاك المخزون باستخدام تخصيص FEFO."), event.currentTarget);
   }
 
   return <section className="detail-grid detail-section">
     {canAdjust && <article className="detail-card">
-      <h2>Controlled Stock Adjustment</h2>
-      <p className="muted">Use only for documented physical-count corrections, returns to stock or disposal. Supplier receiving should use Goods Receipt instead.</p>
+      <h2>{tr("Controlled Stock Adjustment","تسوية مخزون مضبوطة")}</h2>
+      <p className="muted">{tr("Use only for documented physical-count corrections, returns to stock or disposal. Supplier receiving should use Goods Receipt instead.", "تُستخدم فقط لتصحيحات الجرد الفعلي الموثقة أو الإرجاع للمخزون أو الإتلاف. استلام المورد يجب أن يتم عبر Goods Receipt.")}</p>
       <form className="catalog-form" onSubmit={adjust}>
-        <label>Branch<select required value={adjustBranchId} onChange={event => { setAdjustBranchId(event.target.value); setAdjustItemId(""); }}><option value="">Select branch…</option>{branches.map(branch => <option key={branch.id} value={branch.id}>{branch.code} — {branch.nameEn}</option>)}</select></label>
-        <label>Item<select required disabled={!adjustBranchId} value={adjustItemId} onChange={event => setAdjustItemId(event.target.value)}><option value="">Select item…</option>{items.map(item => <option key={item.id} value={item.id}>{item.code} — {item.nameEn}</option>)}</select></label>
-        <label>Lot<select name="lotId" required disabled={!adjustItemId} defaultValue=""><option value="">Select lot…</option>{adjustLots.map(lot => <option key={lot.lotId} value={lot.lotId}>{lot.lotNumber} · On hand {lot.onHand}{lot.expiryDate ? " · Exp " + lot.expiryDate : ""}</option>)}</select></label>
-        <label>Movement<select name="movementType" defaultValue="ADJUSTMENT_OUT">
-          <option value="ADJUSTMENT_IN">Adjustment in</option>
-          <option value="ADJUSTMENT_OUT">Adjustment out</option>
-          <option value="DISPOSAL">Disposal</option>
+        <label>{tr("Branch","الفرع")}<select required value={adjustBranchId} onChange={event => { setAdjustBranchId(event.target.value); setAdjustItemId(""); }}><option value="">{tr("Select branch…","اختر الفرع…")}</option>{branches.map(branch => <option key={branch.id} value={branch.id}>{branch.code} — {localizedName(branch)}</option>)}</select></label>
+        <label>{tr("Item","الصنف")}<select required disabled={!adjustBranchId} value={adjustItemId} onChange={event => setAdjustItemId(event.target.value)}><option value="">{tr("Select item…","اختر الصنف…")}</option>{items.map(item => <option key={item.id} value={item.id}>{item.code} — {localizedName(item)}</option>)}</select></label>
+        <label>{tr("Lot","التشغيلة")}<select name="lotId" required disabled={!adjustItemId} defaultValue=""><option value="">{tr("Select lot…","اختر التشغيلة…")}</option>{adjustLots.map(lot => <option key={lot.lotId} value={lot.lotId}>{lot.lotNumber} · " + tr("On hand","المتاح") + " {lot.onHand}{lot.expiryDate ? " · " + tr("Exp","انتهاء") + " " + lot.expiryDate : ""}</option>)}</select></label>
+        <label>{tr("Movement","الحركة")}<select name="movementType" defaultValue="ADJUSTMENT_OUT">
+          <option value="ADJUSTMENT_IN">{tr("Adjustment in","تسوية إضافة")}</option>
+          <option value="ADJUSTMENT_OUT">{tr("Adjustment out","تسوية خصم")}</option>
+          <option value="DISPOSAL">{tr("Disposal","إتلاف")}</option>
         </select></label>
-        <label>Quantity<input name="quantity" type="number" min="0.0001" step="0.0001" required /></label>
-        <label className="form-span">Reason<input name="reason" required /></label>
-        <button className="primary-button form-span" disabled={busy !== ""}>{busy === "adjust" ? "Posting…" : "Post Adjustment"}</button>
+        <label>{tr("Quantity","الكمية")}<input name="quantity" type="number" min="0.0001" step="0.0001" required /></label>
+        <label className="form-span">{tr("Reason","السبب")}<input name="reason" required /></label>
+        <button className="primary-button form-span" disabled={busy !== ""}>{busy === "adjust" ? tr("Posting…","جارٍ الترحيل…") : tr("Post Adjustment","ترحيل التسوية")}</button>
       </form>
     </article>}
 
     {canConsume && <article className="detail-card">
-      <h2>Consume Inventory</h2>
-      <p className="muted">Leave lot blank to allocate automatically by FEFO. Expired lots and reserved quantities are excluded.</p>
+      <h2>{tr("Consume Inventory","استهلاك المخزون")}</h2>
+      <p className="muted">{tr("Leave lot blank to allocate automatically by FEFO. Expired lots and reserved quantities are excluded.", "اترك التشغيلة فارغة ليتم التخصيص تلقائياً وفق FEFO. تُستبعد التشغيلات المنتهية والكميات المحجوزة.")}</p>
       <form className="catalog-form" onSubmit={consume}>
-        <label>Branch<select required value={consumeBranchId} onChange={event => { setConsumeBranchId(event.target.value); setConsumeItemId(""); }}><option value="">Select branch…</option>{branches.map(branch => <option key={branch.id} value={branch.id}>{branch.code} — {branch.nameEn}</option>)}</select></label>
-        <label>Item<select required disabled={!consumeBranchId} value={consumeItemId} onChange={event => setConsumeItemId(event.target.value)}><option value="">Select item…</option>{items.map(item => <option key={item.id} value={item.id}>{item.code} — {item.nameEn}</option>)}</select></label>
-        <label>Specific lot (optional)<select name="lotId" disabled={!consumeItemId} defaultValue=""><option value="">Automatic FEFO</option>{consumeLots.map(lot => <option key={lot.lotId} value={lot.lotId}>{lot.lotNumber} · Available {(Number(lot.onHand)-Number(lot.reserved)).toFixed(4)}{lot.expiryDate ? " · Exp " + lot.expiryDate : ""}</option>)}</select></label>
-        <label>Quantity<input name="quantity" type="number" min="0.0001" step="0.0001" required /></label>
-        <label>Reference type<input name="referenceType" placeholder="OrderItem, QCEvent, AnalyzerRun…" /></label>
-        <label>Reference ID<input name="referenceId" maxLength={36} /></label>
-        <label className="form-span">Reason / context<input name="reason" /></label>
-        <button className="primary-button form-span" disabled={busy !== ""}>{busy === "consume" ? "Posting…" : "Post Consumption"}</button>
+        <label>{tr("Branch","الفرع")}<select required value={consumeBranchId} onChange={event => { setConsumeBranchId(event.target.value); setConsumeItemId(""); }}><option value="">{tr("Select branch…","اختر الفرع…")}</option>{branches.map(branch => <option key={branch.id} value={branch.id}>{branch.code} — {localizedName(branch)}</option>)}</select></label>
+        <label>{tr("Item","الصنف")}<select required disabled={!consumeBranchId} value={consumeItemId} onChange={event => setConsumeItemId(event.target.value)}><option value="">{tr("Select item…","اختر الصنف…")}</option>{items.map(item => <option key={item.id} value={item.id}>{item.code} — {localizedName(item)}</option>)}</select></label>
+        <label>{tr("Specific lot (optional)","تشغيلة محددة (اختياري)")}<select name="lotId" disabled={!consumeItemId} defaultValue=""><option value="">{tr("Automatic FEFO","FEFO تلقائي")}</option>{consumeLots.map(lot => <option key={lot.lotId} value={lot.lotId}>{lot.lotNumber} · " + tr("Available","المتاح") + " {(Number(lot.onHand)-Number(lot.reserved)).toFixed(4)}{lot.expiryDate ? " · " + tr("Exp","انتهاء") + " " + lot.expiryDate : ""}</option>)}</select></label>
+        <label>{tr("Quantity","الكمية")}<input name="quantity" type="number" min="0.0001" step="0.0001" required /></label>
+        <label>{tr("Reference type","نوع المرجع")}<input name="referenceType" placeholder="OrderItem, QCEvent, AnalyzerRun…" /></label>
+        <label>{tr("Reference ID","معرّف المرجع")}<input name="referenceId" maxLength={36} /></label>
+        <label className="form-span">{tr("Reason / context","السبب / السياق")}<input name="reason" /></label>
+        <button className="primary-button form-span" disabled={busy !== ""}>{busy === "consume" ? tr("Posting…","جارٍ الترحيل…") : tr("Post Consumption","ترحيل الاستهلاك")}</button>
       </form>
     </article>}
 
