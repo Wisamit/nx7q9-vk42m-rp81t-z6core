@@ -94,15 +94,31 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "invalid_fields" }, { status: 400 });
   }
 
-  const [roleCount, branchCount, departments] = await Promise.all([
-    prisma.role.count({ where: { id: { in: roleIds }, organizationId, status: "ACTIVE" } }),
+  const [roles, branchCount, departments] = await Promise.all([
+    prisma.role.findMany({
+      where: { id: { in: roleIds }, organizationId, status: "ACTIVE" },
+      select: {
+        id: true,
+        discountLimitPercent: true,
+        permissions: { select: { permission: { select: { code: true } } } },
+      },
+    }),
     prisma.branch.count({ where: { id: { in: branchIds }, organizationId, status: "ACTIVE" } }),
     prisma.department.findMany({ where: { id: { in: departmentIds }, organizationId, status: "ACTIVE" }, select: { id: true, branchId: true } }),
   ]);
   const departmentScopeInvalid = departments.length !== departmentIds.length
     || departments.some(department => department.branchId && !branchIds.includes(department.branchId));
-  if (roleCount !== roleIds.length || branchCount !== branchIds.length || departmentScopeInvalid) {
+  if (roles.length !== roleIds.length || branchCount !== branchIds.length || departmentScopeInvalid) {
     return NextResponse.json({ error: "invalid_scope" }, { status: 400 });
+  }
+
+  const roleGrantsFinancialAuthority = roles.some(role =>
+    Number(role.discountLimitPercent.toString()) > 0
+    || role.permissions.some(grant => grant.permission.code === "billing.discount.approve")
+  );
+  const overrideGrantsFinancialAuthority = (discountLimitPercent ?? 0) > 0;
+  if ((roleGrantsFinancialAuthority || overrideGrantsFinancialAuthority) && !permissions.has("billing.discount.limits.manage")) {
+    return NextResponse.json({ error: "discount_authority_forbidden" }, { status: 403 });
   }
 
   const passwordHash = await hash(password, 12);
