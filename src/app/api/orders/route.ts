@@ -191,6 +191,7 @@ export async function POST(request: Request) {
     price: await resolveTestPrice(prisma, {
       organizationId: session.user.organizationId,
       branchId,
+      sourceId,
       clientId: effectiveClientId,
       testId: test.id,
     }),
@@ -201,6 +202,7 @@ export async function POST(request: Request) {
     price: await resolvePackagePrice(prisma, {
       organizationId: session.user.organizationId,
       branchId,
+      sourceId,
       clientId: effectiveClientId,
       packageId: pkg.id,
     }),
