@@ -7,6 +7,7 @@ type BulkField = {
   componentId: string | null;
   code: string;
   nameEn: string;
+  nameAr?: string | null;
   resultType: "NUMERIC" | "TEXT" | "QUALITATIVE" | "BOOLEAN" | "DATE";
   currentValue: string;
 };
@@ -29,16 +30,18 @@ function inputFor(
   field: BulkField,
   value: string,
   onChange: (value: string) => void,
+  locale: "ar" | "en",
 ) {
+  const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
   if (field.resultType === "BOOLEAN") return <select value={value} onChange={event => onChange(event.target.value)}>
-    <option value="">—</option><option value="true">True</option><option value="false">False</option>
+    <option value="">—</option><option value="true">{tr("True","نعم")}</option><option value="false">{tr("False","لا")}</option>
   </select>;
   if (field.resultType === "DATE") return <input type="date" value={value} onChange={event => onChange(event.target.value)} />;
-  if (field.resultType === "NUMERIC") return <input inputMode="decimal" value={value} onChange={event => onChange(event.target.value)} placeholder="Value" />;
-  return <input value={value} onChange={event => onChange(event.target.value)} placeholder={field.resultType === "TEXT" ? "Text result" : "Result"} />;
+  if (field.resultType === "NUMERIC") return <input inputMode="decimal" value={value} onChange={event => onChange(event.target.value)} placeholder={tr("Value","القيمة")} />;
+  return <input value={value} onChange={event => onChange(event.target.value)} placeholder={field.resultType === "TEXT" ? tr("Text result","نتيجة نصية") : tr("Result","النتيجة")} />;
 }
 
-export function BulkResultEntry({ rows }: { rows: BulkRow[] }) {
+export function BulkResultEntry({ rows, locale }: { rows: BulkRow[]; locale: "ar" | "en" }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const initialValues = useMemo(() => Object.fromEntries(rows.map(row => [
@@ -49,6 +52,7 @@ export function BulkResultEntry({ rows }: { rows: BulkRow[] }) {
   const [comments, setComments] = useState<Record<string, string>>(Object.fromEntries(rows.map(row => [row.orderItemId, row.comments])));
   const [states, setStates] = useState<Record<string, { status: "idle" | "saving" | "ok" | "error"; message?: string }>>({});
   const [busy, setBusy] = useState(false);
+  const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
 
   const enteredCount = rows.filter(row =>
     row.fields.some(field => (values[row.orderItemId]?.[field.componentId || "__TEST__"] || "").trim() !== "")
@@ -86,21 +90,21 @@ export function BulkResultEntry({ rows }: { rows: BulkRow[] }) {
       if (response.ok) {
         successful++;
         const notices = [
-          body.criticalCount ? body.criticalCount + " critical" : "",
-          body.deltaExceededCount ? body.deltaExceededCount + " delta" : "",
-          body.blockingValidationHoldCount ? body.blockingValidationHoldCount + " hold" : "",
+          body.criticalCount ? body.criticalCount + " " + tr("critical","حرجة") : "",
+          body.deltaExceededCount ? body.deltaExceededCount + " " + tr("delta","تغير دلتا") : "",
+          body.blockingValidationHoldCount ? body.blockingValidationHoldCount + " " + tr("hold","حجز تحقق") : "",
         ].filter(Boolean);
         setStates(current => ({
           ...current,
           [row.orderItemId]: {
             status: "ok",
-            message: body.autoVerified ? "Saved · autoverified" : notices.length ? "Saved · " + notices.join(" · ") : body.complete ? "Saved · ready for verification" : "Draft saved",
+            message: body.autoVerified ? tr("Saved · autoverified","تم الحفظ · تحقق تلقائي") : notices.length ? tr("Saved","تم الحفظ") + " · " + notices.join(" · ") : body.complete ? tr("Saved · ready for verification","تم الحفظ · جاهز للتحقق") : tr("Draft saved","تم حفظ المسودة"),
           },
         }));
       } else {
         setStates(current => ({
           ...current,
-          [row.orderItemId]: { status: "error", message: body.error || "Save failed" },
+          [row.orderItemId]: { status: "error", message: tr("Save failed","فشل الحفظ") },
         }));
       }
     }
@@ -113,8 +117,8 @@ export function BulkResultEntry({ rows }: { rows: BulkRow[] }) {
 
   return <section className="bulk-entry-panel detail-section">
     <div className="bulk-entry-head">
-      <div><p className="eyebrow">Keyboard-oriented workflow</p><h2>Bulk Result Entry</h2><p className="muted">Each row is saved through the same reference-range, critical, delta, reflex, hold and autoverification rules as individual entry.</p></div>
-      <button type="button" className="secondary-button" onClick={() => setOpen(value => !value)}>{open ? "Close Bulk Entry" : "Open Bulk Entry"}</button>
+      <div><p className="eyebrow">{tr("Keyboard-oriented workflow","مسار عمل مهيأ للوحة المفاتيح")}</p><h2>{tr("Bulk Result Entry","إدخال النتائج بالجملة")}</h2><p className="muted">{tr("Each row is saved through the same reference-range, critical, delta, reflex, hold and autoverification rules as individual entry.","يُحفظ كل صف عبر نفس قواعد المديات المرجعية والنتائج الحرجة والدلتا والفحوص الانعكاسية وحجوزات التحقق والتحقق التلقائي المستخدمة في الإدخال الفردي.")}</p></div>
+      <button type="button" className="secondary-button" onClick={() => setOpen(value => !value)}>{open ? tr("Close Bulk Entry","إغلاق الإدخال الجماعي") : tr("Open Bulk Entry","فتح الإدخال الجماعي")}</button>
     </div>
     {open && <form onSubmit={submit}>
       <div className="bulk-result-list">
@@ -132,19 +136,19 @@ export function BulkResultEntry({ rows }: { rows: BulkRow[] }) {
                 return <label key={key}><span>{field.code}</span>{inputFor(field, values[row.orderItemId]?.[key] || "", value => setValues(current => ({
                   ...current,
                   [row.orderItemId]: { ...(current[row.orderItemId] || {}), [key]: value },
-                })))}</label>;
+                })), locale)}</label>;
               })}
-              <label className="bulk-comment"><span>Comment</span><input value={comments[row.orderItemId] || ""} onChange={event => setComments(current => ({ ...current, [row.orderItemId]: event.target.value }))} /></label>
+              <label className="bulk-comment"><span>{tr("Comment","تعليق")}</span><input value={comments[row.orderItemId] || ""} onChange={event => setComments(current => ({ ...current, [row.orderItemId]: event.target.value }))} /></label>
             </div>
             <div className="bulk-row-state">
-              {state.status === "saving" ? "Saving…" : state.message || "Ready"}
+              {state.status === "saving" ? tr("Saving…","جارٍ الحفظ…") : state.message || tr("Ready","جاهز")}
             </div>
           </article>;
         })}
       </div>
       <div className="bulk-actions">
-        <span>{enteredCount} row(s) with entered data</span>
-        <button className="primary-button" disabled={busy || enteredCount === 0}>{busy ? "Saving batch…" : "Save Entered Results"}</button>
+        <span>{enteredCount} {tr("row(s) with entered data","صف يحتوي بيانات مدخلة")}</span>
+        <button className="primary-button" disabled={busy || enteredCount === 0}>{busy ? tr("Saving batch…","جارٍ حفظ الدفعة…") : tr("Save Entered Results","حفظ النتائج المدخلة")}</button>
       </div>
     </form>}
   </section>;

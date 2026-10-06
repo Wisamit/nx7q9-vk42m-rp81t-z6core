@@ -3,10 +3,11 @@
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 
-export function OrderQuestionManager({ testId }: { testId: string }) {
+export function OrderQuestionManager({ testId, locale }: { testId: string; locale: "ar" | "en" }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -36,33 +37,33 @@ export function OrderQuestionManager({ testId }: { testId: string }) {
     const body = await response.json().catch(() => ({}));
     setBusy(false);
     if (response.ok) {
-      setMessage("Order question created.");
+      setMessage(tr("Order question created.", "تم إنشاء سؤال الطلب."));
       event.currentTarget.reset();
       router.refresh();
     } else {
-      setMessage(body.error || "Could not create order question.");
+      setMessage(tr("Could not create order question.", "تعذر إنشاء سؤال الطلب."));
     }
   }
 
   return <form className="catalog-form" onSubmit={submit}>
-    <label>Code<input name="code" required placeholder="LMP / LAST_DOSE_TIME" /></label>
-    <label>Response type
+    <label>{tr("Code","الرمز")}<input name="code" required placeholder="LMP / LAST_DOSE_TIME" /></label>
+    <label>{tr("Response type","نوع الإجابة")}
       <select name="responseType" defaultValue="TEXT">
-        <option value="TEXT">Text</option>
-        <option value="NUMERIC">Numeric</option>
-        <option value="BOOLEAN">Yes / No</option>
-        <option value="DATE">Date</option>
-        <option value="SINGLE_CHOICE">Single choice</option>
+        <option value="TEXT">{tr("Text","نص")}</option>
+        <option value="NUMERIC">{tr("Numeric","رقمي")}</option>
+        <option value="BOOLEAN">{tr("Yes / No","نعم / لا")}</option>
+        <option value="DATE">{tr("Date","تاريخ")}</option>
+        <option value="SINGLE_CHOICE">{tr("Single choice","اختيار واحد")}</option>
       </select>
     </label>
-    <label>Question (English)<input name="questionEn" required /></label>
-    <label dir="rtl">السؤال بالعربية<input name="questionAr" dir="rtl" /></label>
-    <label>Display order<input name="displayOrder" type="number" min="0" defaultValue="0" /></label>
-    <label className="check-line"><input name="required" type="checkbox" /> Required at order entry</label>
-    <label className="form-span">Choice options <small>For SINGLE_CHOICE only; one option per line.</small>
-      <textarea name="options" rows={4} placeholder={"Fasting\nNon-fasting"} />
+    <label>{tr("Question (English)","السؤال بالإنجليزية")}<input name="questionEn" required /></label>
+    <label>{tr("Question (Arabic)","السؤال بالعربية")}<input name="questionAr" dir="rtl" /></label>
+    <label>{tr("Display order","ترتيب العرض")}<input name="displayOrder" type="number" min="0" defaultValue="0" /></label>
+    <label className="check-line"><input name="required" type="checkbox" /> {tr("Required at order entry","مطلوب عند إدخال الطلب")}</label>
+    <label className="form-span">{tr("Choice options","خيارات الاختيار")} <small>{tr("For SINGLE_CHOICE only; one option per line.","لنوع SINGLE_CHOICE فقط؛ خيار واحد في كل سطر.")}</small>
+      <textarea name="options" rows={4} placeholder={tr("Fasting\nNon-fasting","صائم\nغير صائم")} />
     </label>
     {message && <div className="form-success form-span">{message}</div>}
-    <button className="primary-button form-span" disabled={busy}>{busy ? "Saving…" : "Add Order Question"}</button>
+    <button className="primary-button form-span" disabled={busy}>{busy ? tr("Saving…","جارٍ الحفظ…") : tr("Add Order Question","إضافة سؤال الطلب")}</button>
   </form>;
 }

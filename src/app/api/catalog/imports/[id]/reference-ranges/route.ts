@@ -68,12 +68,13 @@ function similarity(a: string, b: string) {
   }
   return (2 * intersection) / (aPairs.length + bPairs.length);
 }
-function rankedTestCandidates(source: string, tests: Array<{ id: string; code: string; nameEn: string; abbreviation: string | null }>) {
+function rankedTestCandidates(source: string, tests: Array<{ id: string; code: string; nameEn: string; nameAr: string | null; abbreviation: string | null }>) {
   return tests
     .map((test) => ({
       id: test.id,
       code: test.code,
       nameEn: test.nameEn,
+      nameAr: test.nameAr,
       score: Math.round(Math.max(
         similarity(source, test.nameEn),
         similarity(source, test.code),
@@ -298,7 +299,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
       unitConflicts: topValues("TEST_UNIT_CONFLICT", (item) => `${item.testName} | ${item.rangeUnit}`),
       emptyIntervals: topValues("EMPTY_REFERENCE_INTERVAL", (item) => item.testName),
     },
-    testOptions: analysis.tests.map((test) => ({ id: test.id, code: test.code, nameEn: test.nameEn })).sort((a, b) => a.nameEn.localeCompare(b.nameEn)),
+    testOptions: analysis.tests.map((test) => ({ id: test.id, code: test.code, nameEn: test.nameEn, nameAr: test.nameAr })).sort((a, b) => a.nameEn.localeCompare(b.nameEn)),
     unitOptions: analysis.units.map((unit) => ({ id: unit.id, code: unit.code, symbol: unit.symbol })).sort((a, b) => a.symbol.localeCompare(b.symbol)),
   });
 }

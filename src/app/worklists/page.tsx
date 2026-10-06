@@ -86,10 +86,13 @@ export default async function WorklistsPage({
     }),
     prisma.department.findMany({
       where: { organizationId: session.user.organizationId, status: "ACTIVE", ...(departmentRestricted ? { id: { in: scopedDepartmentIds } } : {}) },
-      select: { id: true, code: true, nameEn: true },
+      select: { id: true, code: true, nameEn: true, nameAr: true },
       orderBy: { nameEn: "asc" },
     }),
   ]);
+
+  const localizedName = (item: { nameEn: string; nameAr?: string | null }) => locale === "ar" ? item.nameAr || item.nameEn : item.nameEn;
+  const patientName = (item: { fullNameEn: string; fullNameAr?: string | null }) => locale === "ar" ? item.fullNameAr || item.fullNameEn : item.fullNameEn;
 
   const pendingEntry = items.filter(item => !item.results[0]).length;
   const inProgress = items.filter(item => item.results[0] && !["VERIFIED","RELEASED","AMENDED"].includes(item.results[0].status)).length;
@@ -112,6 +115,7 @@ export default async function WorklistsPage({
           componentId: component.id,
           code: component.code,
           nameEn: component.nameEn,
+          nameAr: component.nameAr,
           resultType: component.resultType,
           currentValue: currentByComponent.get(component.id) || "",
         }))
@@ -119,6 +123,7 @@ export default async function WorklistsPage({
           componentId: null,
           code: item.test.code,
           nameEn: item.test.nameEn,
+          nameAr: item.test.nameAr,
           resultType: item.test.resultType,
           currentValue: currentByComponent.get("__TEST__") || "",
         }];
@@ -127,9 +132,9 @@ export default async function WorklistsPage({
       orderItemId: item.id,
       accessionNumber: item.order.accessionNumber,
       patientNumber: item.order.patient.patientNumber,
-      patientName: item.order.patient.fullNameEn,
+      patientName: patientName(item.order.patient),
       testCode: item.testCodeSnapshot,
-      testName: item.testNameEnSnapshot,
+      testName: locale === "ar" ? item.testNameArSnapshot || item.testNameEnSnapshot : item.testNameEnSnapshot,
       specimenId: readySpecimen.id,
       barcode: readySpecimen.barcode,
       performingBranchId: readySpecimen.currentBranchId,
@@ -158,23 +163,23 @@ export default async function WorklistsPage({
       <article className={critical ? "summary-attention" : ""}><span>{tr(locale, "Critical", "حرجة")}</span><strong>{critical}</strong><small>{tr(locale, "items containing critical values", "عناصر تحتوي قيماً حرجة")}</small></article>
     </section>
 
-    <BulkResultEntry rows={bulkRows} />
+    <BulkResultEntry rows={bulkRows} locale={locale} />
 
     <section className="table-card">
       <div className="table-toolbar">
-        <div><h2>{tr(locale, "Laboratory Work Queue", "قائمة عمل المختبر")}</h2><span>{items.length} item(s)</span></div>
+        <div><h2>{tr(locale, "Laboratory Work Queue", "قائمة عمل المختبر")}</h2><span>{items.length} {tr(locale, "item(s)", "عنصر")}</span></div>
         <form className="inline-search" action="/worklists" method="get">
           <input name="q" defaultValue={q} placeholder={tr(locale, "Barcode, accession, patient, test…", "باركود، رقم طلب، مريض، فحص…")} />
           <select name="department" defaultValue={departmentId}>
             <option value="">{tr(locale, "All departments", "كل الأقسام")}</option>
-            {departments.map(department => <option key={department.id} value={department.id}>{department.code} — {department.nameEn}</option>)}
+            {departments.map(department => <option key={department.id} value={department.id}>{department.code} — {localizedName(department)}</option>)}
           </select>
           <select name="status" defaultValue={status}>
             <option value="">{tr(locale, "All statuses", "كل الحالات")}</option>
-            <option value="COLLECTED">COLLECTED</option>
-            <option value="IN_PROGRESS">IN_PROGRESS</option>
-            <option value="RESULTED">RESULTED</option>
-            <option value="VERIFIED">VERIFIED</option>
+            <option value="COLLECTED">{statusLabel(locale, "COLLECTED")}</option>
+            <option value="IN_PROGRESS">{statusLabel(locale, "IN_PROGRESS")}</option>
+            <option value="RESULTED">{statusLabel(locale, "RESULTED")}</option>
+            <option value="VERIFIED">{statusLabel(locale, "VERIFIED")}</option>
           </select>
           <button className="secondary-button"><SystemIcon name="search" size={15} />{tr(locale, "Filter", "تصفية")}</button>
           {(q || status || departmentId) && <Link className="secondary-link" href="/worklists">{tr(locale, "Clear", "مسح")}</Link>}
@@ -193,11 +198,11 @@ export default async function WorklistsPage({
                 const abnormalCount = result?.values.filter(value => ["LOW","HIGH","CRITICAL_LOW","CRITICAL_HIGH","ABNORMAL"].includes(value.flag)).length || 0;
                 return <tr key={item.id}>
                   <td><strong>{item.order.accessionNumber}</strong></td>
-                  <td>{item.order.patient.patientNumber}<br/><small>{item.order.patient.fullNameEn}</small></td>
-                  <td><strong>{item.testCodeSnapshot}</strong><br/><small>{item.testNameEnSnapshot}</small></td>
-                  <td>{item.test.department?.nameEn || tr(locale, "Unassigned", "غير معيّن")}</td>
-                  <td><span className="barcode-text">{readySpecimen?.barcode || "—"}</span><br/><small>{readySpecimen?.status || "—"}</small></td>
-                  <td>{readySpecimen?.currentBranch?.nameEn || item.performedBranch?.nameEn || "—"}</td>
+                  <td>{item.order.patient.patientNumber}<br/><small>{patientName(item.order.patient)}</small></td>
+                  <td><strong>{item.testCodeSnapshot}</strong><br/><small>{locale === "ar" ? item.testNameArSnapshot || item.testNameEnSnapshot : item.testNameEnSnapshot}</small></td>
+                  <td>{item.test.department ? localizedName(item.test.department) : tr(locale, "Unassigned", "غير معيّن")}</td>
+                  <td><span className="barcode-text">{readySpecimen?.barcode || "—"}</span><br/><small>{readySpecimen?.status ? statusLabel(locale, readySpecimen.status) : "—"}</small></td>
+                  <td>{readySpecimen?.currentBranch ? localizedName(readySpecimen.currentBranch) : item.performedBranch ? localizedName(item.performedBranch) : "—"}</td>
                   <td><span className={"status-badge status-" + (result?.status || item.status).toLowerCase().replaceAll("_","-")}>{statusLabel(locale, result?.status || item.status)}</span></td>
                   <td>{criticalCount > 0 ? <strong className="critical-text">{criticalCount} {tr(locale, "critical", "حرجة")}</strong> : abnormalCount > 0 ? `${abnormalCount} ${tr(locale, "flagged", "معلّمة")}` : "—"}</td>
                   <td><Link className="secondary-link" href={`/worklists/${item.id}`}><SystemIcon name="report" size={15} />{result ? tr(locale, "Open Result", "فتح النتيجة") : tr(locale, "Enter Result", "إدخال النتيجة")}</Link></td>
