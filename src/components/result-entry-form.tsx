@@ -198,8 +198,8 @@ export function ResultEntryForm({
 
   return <form className="result-entry-form" onSubmit={save}>
     <div className="result-entry-header">
-      <div><strong>Status</strong><span>{savedStatus || "NOT ENTERED"}</span></div>
-      <div><strong>Source</strong><span>{resultSource}{analyzerLabel ? ` · ${analyzerLabel}` : ""}</span></div>
+      <div><strong>{tr("Status", "الحالة")}</strong><span>{savedStatus || tr("NOT ENTERED", "غير مدخل")}</span></div>
+      <div><strong>{tr("Source", "المصدر")}</strong><span>{resultSource}{analyzerLabel ? ` · ${analyzerLabel}` : ""}</span></div>
     </div>
 
     <div className="result-field-list">
