@@ -113,7 +113,10 @@ export function RoleManagement({ locale, canManageDiscountLimits }: { locale: "a
     >
       <form className="form-stack modal-form-stack" onSubmit={createRole}>
         <div className="settings-grid"><label>{tr("Role code", "رمز الدور")}<input name="code" required placeholder="LAB_TECH" pattern="[A-Za-z0-9._-]{2,80}" /></label><label>{tr("English name", "الاسم بالإنجليزية")}<input name="nameEn" required /></label><label>{tr("Arabic name", "الاسم بالعربية")}<input name="nameAr" /></label>{canManageDiscountLimits && <label>{tr("Discount limit (%)", "حد الخصم (%)")}<input name="discountLimitPercent" type="number" min="0" max="100" step="0.01" defaultValue="0" required /></label>}</div>
-        <div className="permission-groups">{grouped.map(([module, permissions]) => <fieldset className="permission-group" key={module}><legend>{module}</legend>{permissions.map(permission => <label key={permission.id}><input type="checkbox" name="permissionIds" value={permission.id} /><span><strong>{permission.code}</strong><small>{permission.description || ""}</small></span></label>)}</fieldset>)}</div>
+        <div className="permission-groups">{grouped.map(([module, permissions]) => <fieldset className="permission-group" key={module}><legend>{module}</legend>{permissions.map(permission => {
+  const protectedFinancialPermission = ["billing.discount.approve", "billing.discount.limits.manage"].includes(permission.code) && !canManageDiscountLimits;
+  return <label key={permission.id}><input type="checkbox" name="permissionIds" value={permission.id} disabled={protectedFinancialPermission} /><span><strong>{permission.code}</strong><small>{permission.description || ""}{protectedFinancialPermission ? ` · ${tr("Financial admin only", "لمدير الصلاحيات المالية فقط")}` : ""}</small></span></label>;
+})}</fieldset>)}</div>
         <div className="crud-modal-actions"><button className="primary-button" disabled={busy}>{busy ? tr("Saving…", "جارٍ الحفظ…") : tr("Create role", "إنشاء الدور")}</button></div>
         {message && <div className="form-success">{message}</div>}
       </form>
@@ -132,7 +135,11 @@ export function RoleManagement({ locale, canManageDiscountLimits }: { locale: "a
           <label>{tr("Arabic name", "الاسم بالعربية")}<input name="nameAr" defaultValue={editing.nameAr || ""} /></label>
           {canManageDiscountLimits && <label>{tr("Discount limit (%)", "حد الخصم (%)")}<input name="discountLimitPercent" type="number" min="0" max="100" step="0.01" required defaultValue={editing.discountLimitPercent || "0"} /></label>}
         </div>
-        <div className="permission-groups">{grouped.map(([module, permissions]) => <fieldset className="permission-group" key={module}><legend>{module}</legend>{permissions.map(permission => <label key={permission.id}><input type="checkbox" name="permissionIds" value={permission.id} defaultChecked={editing.permissionIds.includes(permission.id)} /><span><strong>{permission.code}</strong><small>{permission.description || ""}</small></span></label>)}</fieldset>)}</div>
+        <div className="permission-groups">{grouped.map(([module, permissions]) => <fieldset className="permission-group" key={module}><legend>{module}</legend>{permissions.map(permission => {
+  const protectedFinancialPermission = ["billing.discount.approve", "billing.discount.limits.manage"].includes(permission.code) && !canManageDiscountLimits;
+  const currentlyGranted = editing.permissionIds.includes(permission.id);
+  return <label key={permission.id}>{protectedFinancialPermission && currentlyGranted && <input type="hidden" name="permissionIds" value={permission.id} />}<input type="checkbox" name="permissionIds" value={permission.id} defaultChecked={currentlyGranted} disabled={protectedFinancialPermission} /><span><strong>{permission.code}</strong><small>{permission.description || ""}{protectedFinancialPermission ? ` · ${tr("Financial admin only", "لمدير الصلاحيات المالية فقط")}` : ""}</small></span></label>;
+})}</fieldset>)}</div>
         <div className="crud-modal-actions"><button className="primary-button" disabled={busy}>{busy ? tr("Saving…", "جارٍ الحفظ…") : tr("Save role", "حفظ الدور")}</button></div>
       </form>}
     </CrudModal>
