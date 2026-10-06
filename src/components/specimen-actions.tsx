@@ -82,7 +82,7 @@ export function SpecimenActions({
 
       {mode === "COLLECT" && <>
         <label>{tr("Volume", "الحجم")}<input name="volume" type="number" min="0" step="0.001" /></label>
-        <label>{tr("Volume", "الحجم")} unit<input name="volumeUnit" maxLength={30} placeholder="mL" /></label>
+        <label>{tr("Volume unit", "وحدة الحجم")}<input name="volumeUnit" maxLength={30} placeholder="mL" /></label>
         <label className="form-span">{tr("Collection notes", "ملاحظات الجمع")}<textarea name="notes" rows={2} /></label>
       </>}
 
