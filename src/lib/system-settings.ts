@@ -166,6 +166,7 @@ function cssVars(p: ThemePalette) {
     ["--fl-success-soft", `color-mix(in srgb, ${p.success} 12%, ${p.surface})`],
     ["--fl-warning-soft", `color-mix(in srgb, ${p.warning} 12%, ${p.surface})`],
     ["--fl-danger-soft", `color-mix(in srgb, ${p.danger} 12%, ${p.surface})`],
+    ["--fl-accent-soft", `color-mix(in srgb, ${p.accent} 12%, ${p.surface})`],
     ["--fl-info-soft", `color-mix(in srgb, ${p.info} 12%, ${p.surface})`],
   ].map(([key, value]) => `${key}:${value}`).join(";");
 }
