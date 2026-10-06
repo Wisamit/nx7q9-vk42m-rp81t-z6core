@@ -2,6 +2,7 @@ import { hash } from "bcryptjs";
 import { NextResponse } from "next/server";
 import { getCurrentSession, permissionSet, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { effectiveDiscountLimit } from "@/lib/discount-policy";
 
 function text(value: unknown, max = 200) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -48,6 +49,10 @@ export async function GET() {
       mfaEnabled: user.mfaEnabled,
       lastLoginAt: user.lastLoginAt,
       discountLimitPercent: user.discountLimitPercent?.toString() ?? null,
+      effectiveDiscountLimitPercent: effectiveDiscountLimit({
+        userOverride: user.discountLimitPercent,
+        roleLimits: user.roles.filter(x => x.role.status === "ACTIVE").map(x => x.role.discountLimitPercent),
+      }).toFixed(2),
       roleIds: user.roles.filter(x => x.role.status === "ACTIVE").map(x => x.roleId),
       roleNames: user.roles.filter(x => x.role.status === "ACTIVE").map(x => x.role.nameEn),
       branchIds: user.branchScopes.filter(x => x.branch.status === "ACTIVE").map(x => x.branchId),
@@ -55,7 +60,7 @@ export async function GET() {
       departmentIds: user.departmentScopes.filter(x => x.department.status === "ACTIVE").map(x => x.departmentId),
       departmentNames: user.departmentScopes.filter(x => x.department.status === "ACTIVE").map(x => x.department.nameEn),
     })),
-    roles: roles.map(role => ({ id: role.id, code: role.code, nameEn: role.nameEn, nameAr: role.nameAr, isSystem: role.isSystem })),
+    roles: roles.map(role => ({ id: role.id, code: role.code, nameEn: role.nameEn, nameAr: role.nameAr, isSystem: role.isSystem, discountLimitPercent: role.discountLimitPercent.toString() })),
     branches: branches.map(branch => ({ id: branch.id, code: branch.code, nameEn: branch.nameEn, nameAr: branch.nameAr })),
     departments: departments.map(department => ({ id: department.id, code: department.code, nameEn: department.nameEn, nameAr: department.nameAr, branchId: department.branchId })),
   });
