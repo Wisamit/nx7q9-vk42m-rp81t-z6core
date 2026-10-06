@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { PatientCreateForm } from "@/components/patient-create-form";
+import { PatientCreateModal } from "@/components/patient-create-modal";
 import { SystemIcon } from "@/components/system-icon";
 
 export const dynamic = "force-dynamic";
@@ -40,24 +40,11 @@ export default async function PatientsPage({
         <h1 className="page-title-with-icon"><SystemIcon name="patients" size={25} />Patients</h1>
         <p className="muted">Organization-wide patient identity shared across all branches, with duplicate protection and auditable identifiers.</p>
       </div>
-      <Link className="secondary-link" href="/dashboard"><SystemIcon name="dashboard" size={15} />Back to Dashboard</Link>
+      <div className="header-actions">
+        <PatientCreateModal />
+        <Link className="secondary-link" href="/dashboard"><SystemIcon name="dashboard" size={15} />Back to Dashboard</Link>
+      </div>
     </header>
-
-    <section className="detail-grid">
-      <article className="detail-card">
-        <h2 className="section-heading-icon"><SystemIcon name="patients" size={18} />Register Patient</h2>
-        <PatientCreateForm />
-      </article>
-      <article className="detail-card">
-        <h2 className="section-heading-icon"><SystemIcon name="security" size={18} />Identity Rules</h2>
-        <dl>
-          <dt>Scope</dt><dd>Organization-wide</dd>
-          <dt>Patient number</dt><dd>Immutable internal identifier</dd>
-          <dt>Duplicate checks</dt><dd>Name + DOB/phone and national ID</dd>
-          <dt>History</dt><dd>Creation and identity changes are audited</dd>
-        </dl>
-      </article>
-    </section>
 
     <section className="table-card">
       <div className="table-toolbar">
