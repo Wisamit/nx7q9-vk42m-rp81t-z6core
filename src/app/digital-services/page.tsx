@@ -3,12 +3,14 @@ import { redirect } from "next/navigation";
 import { permissionSet, requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { DigitalServicesConsole } from "@/components/digital-services-console";
+import { getUiLocale, tr } from "@/lib/ui-i18n";
 
 export const dynamic = "force-dynamic";
 
 export default async function DigitalServicesPage() {
   const session = await requireSession();
   const permissions = permissionSet(session);
+  const locale = getUiLocale(session.user.preferredLocale);
   const canOpen = [
     "portal_accounts.manage",
     "appointments.view",
@@ -99,22 +101,22 @@ export default async function DigitalServicesPage() {
   return <main className="catalog-shell">
     <header className="page-header">
       <div>
-        <p className="eyebrow">Digital Services</p>
-        <h1>Portals, Appointments & Queue</h1>
-        <p className="muted">Scoped external accounts, onsite and home collection bookings, and branch reception/phlebotomy queue operations.</p>
+        <p className="eyebrow">{tr(locale, "Digital Services", "الخدمات الرقمية")}</p>
+        <h1>{tr(locale, "Portals, Appointments & Queue", "البوابات والمواعيد وقائمة الانتظار")}</h1>
+        <p className="muted">{tr(locale, "Scoped external accounts, onsite and home collection bookings, and branch reception/phlebotomy queue operations.", "حسابات خارجية محددة الصلاحيات، ومواعيد داخل الفرع وسحب منزلي، وإدارة قوائم انتظار الاستقبال وسحب الدم.")}</p>
       </div>
       <div className="result-actions">
-        <Link className="secondary-link" href="/portal/login">Portal sign-in</Link>
-        {branches.slice(0,3).map(branch => <Link key={branch.id} className="secondary-link" href={"/queue-display/" + branch.id}>{branch.code} Queue Display</Link>)}
-        <Link className="secondary-link" href="/dashboard">Back to Dashboard</Link>
+        <Link className="secondary-link" href="/portal/login">{tr(locale, "Portal sign-in", "دخول البوابة")}</Link>
+        {branches.slice(0,3).map(branch => <Link key={branch.id} className="secondary-link" href={"/queue-display/" + branch.id}>{branch.code} {tr(locale, "Queue Display", "شاشة الانتظار")}</Link>)}
+        <Link className="secondary-link" href="/dashboard">{tr(locale, "Back to Dashboard", "العودة للوحة التحكم")}</Link>
       </div>
     </header>
 
     <section className="detail-grid">
-      <article className="detail-card"><h2>Portal Accounts</h2><strong>{portalAccounts.length}</strong><p className="muted">Patient, doctor and corporate identities.</p></article>
-      <article className="detail-card"><h2>Pending Appointments</h2><strong>{pendingAppointments}</strong><p className="muted">Requested, confirmed or checked in.</p></article>
-      <article className="detail-card"><h2>Active Home Collection</h2><strong>{activeHome}</strong><p className="muted">Visits not yet delivered or cancelled.</p></article>
-      <article className="detail-card"><h2>Queue Waiting/Serving</h2><strong>{activeQueue}</strong><p className="muted">Reception and phlebotomy queue today.</p></article>
+      <article className="detail-card"><h2>{tr(locale, "Portal Accounts", "حسابات البوابة")}</h2><strong>{portalAccounts.length}</strong><p className="muted">{tr(locale, "Patient, doctor and corporate identities.", "حسابات المرضى والأطباء والشركات.")}</p></article>
+      <article className="detail-card"><h2>{tr(locale, "Pending Appointments", "المواعيد المعلقة")}</h2><strong>{pendingAppointments}</strong><p className="muted">{tr(locale, "Requested, confirmed or checked in.", "مطلوبة أو مؤكدة أو تم تسجيل حضورها.")}</p></article>
+      <article className="detail-card"><h2>{tr(locale, "Active Home Collection", "السحب المنزلي النشط")}</h2><strong>{activeHome}</strong><p className="muted">{tr(locale, "Visits not yet delivered or cancelled.", "زيارات لم تُسلّم للمختبر بعد ولم تُلغَ.")}</p></article>
+      <article className="detail-card"><h2>{tr(locale, "Queue Waiting/Serving", "الانتظار / قيد الخدمة")}</h2><strong>{activeQueue}</strong><p className="muted">{tr(locale, "Reception and phlebotomy queue today.", "قائمة انتظار الاستقبال وسحب الدم اليوم.")}</p></article>
     </section>
 
     <DigitalServicesConsole
