@@ -61,7 +61,7 @@ export default async function PatientDetailPage({ params }: { params: Promise<{ 
         <h2>{tr(locale, "Identifiers", "المعرّفات")}</h2>
         {patient.identifiers.length === 0 ? <p className="muted">{tr(locale, "No external identifiers recorded.", "لا توجد معرّفات خارجية مسجلة.")}</p> :
           <div className="summary-list">{patient.identifiers.map(identifier =>
-            <div key={identifier.id}><span>{identifier.identifierType}{identifier.isPrimary ? " · {tr(locale, "Primary", "رئيسي")}" : ""}</span><strong>{identifier.value}</strong></div>
+            <div key={identifier.id}><span>{identifier.identifierType}{identifier.isPrimary ? ` · ${tr(locale, "Primary", "رئيسي")}` : ""}</span><strong>{identifier.value}</strong></div>
           )}</div>}
       </article>
     </section>
