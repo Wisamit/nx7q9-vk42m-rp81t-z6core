@@ -36,6 +36,7 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
   const permissions = permissionSet(session);
   const locale = getUiLocale(session.user.preferredLocale);
   const branchIds = session.user.branchScopes.map(scope => scope.branchId);
+  const now = new Date();
 
   const item = await prisma.orderItem.findFirst({
     where: {
@@ -51,14 +52,33 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
           method: true,
           components: {
             where: { status: "ACTIVE" },
-            include: { unit: true },
+            include: {
+              unit: true,
+              qualitativeResultOptions: {
+                where: {
+                  status: "ACTIVE",
+                  effectiveFrom: { lte: now },
+                  OR: [{ effectiveTo: null }, { effectiveTo: { gte: now } }],
+                },
+                orderBy: [{ displayOrder: "asc" }, { createdAt: "asc" }],
+              },
+            },
             orderBy: [{ displayOrder: "asc" }, { code: "asc" }],
+          },
+          qualitativeResultOptions: {
+            where: {
+              componentId: null,
+              status: "ACTIVE",
+              effectiveFrom: { lte: now },
+              OR: [{ effectiveTo: null }, { effectiveTo: { gte: now } }],
+            },
+            orderBy: [{ displayOrder: "asc" }, { createdAt: "asc" }],
           },
           calculatedRules: {
             where: {
               status: "ACTIVE",
-              effectiveFrom: { lte: new Date() },
-              OR: [{ effectiveTo: null }, { effectiveTo: { gte: new Date() } }],
+              effectiveFrom: { lte: now },
+              OR: [{ effectiveTo: null }, { effectiveTo: { gte: now } }],
             },
           },
         },
@@ -123,7 +143,7 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
         { scope: "COMPONENT", testId: item.testId, componentId: { in: item.test.components.map(component => component.id) } },
       ],
     },
-    select: { id: true, code: true, nameEn: true, textEn: true },
+    select: { id: true, code: true, nameEn: true, nameAr: true, textEn: true, textAr: true, scope: true, componentId: true },
     orderBy: { nameEn: "asc" },
   });
   const readySpecimen = latestResult?.specimen
@@ -156,6 +176,7 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
         nameAr: component.nameAr,
         resultType: component.resultType,
         unit: component.unit?.symbol || null,
+        qualitativeOptions: component.qualitativeResultOptions,
       }))
     : [{
         componentId: null,
@@ -164,6 +185,7 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
         nameAr: item.test.nameAr,
         resultType: item.test.resultType,
         unit: item.test.defaultUnit?.symbol || null,
+        qualitativeOptions: item.test.qualitativeResultOptions,
       }];
 
   const fields = await Promise.all(componentDefinitions.map(async component => {
@@ -191,6 +213,15 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
     return {
       ...component,
       currentValue: existing?.displayValue || "",
+      currentOptionId: existing?.qualitativeOptionId || null,
+      qualitativeOptions: component.qualitativeOptions.map(option => ({
+        id: option.id,
+        code: option.code,
+        valueEn: option.valueEn,
+        valueAr: option.valueAr,
+        flag: option.flag,
+        isCritical: option.isCritical,
+      })),
       currentFlag: existing?.flag || null,
       referenceDisplay,
       critical: Boolean(existing?.isCritical),
