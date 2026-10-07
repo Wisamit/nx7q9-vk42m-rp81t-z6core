@@ -199,6 +199,7 @@ export default async function SpecimenScanPage({
           childBarcode: item.childSpecimen?.barcode || null,
         }))}
         canManage={canAliquot}
+        canPrintLabels={canCollect}
         locale={locale}
       />
     </section>}
