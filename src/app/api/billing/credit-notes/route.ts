@@ -70,7 +70,7 @@ export async function POST(request: Request) {
     if (policyError) return { error: policyError, httpStatus: 409 } as const;
 
     let creditTaxTotal = new Prisma.Decimal(0);
-    let creditLines: Array<{ invoiceLineId: string; description: string; amount: string; taxAmountSnapshot: string }> = [];
+    const creditLines: Array<{ invoiceLineId: string; description: string; amount: string; taxAmountSnapshot: string }> = [];
     if (current.taxTotal.gt(0)) {
       if (lines.length === 0) return { error: "credit_lines_required_for_tax_invoice", httpStatus: 409 } as const;
       const invoiceLines = await tx.invoiceLine.findMany({
