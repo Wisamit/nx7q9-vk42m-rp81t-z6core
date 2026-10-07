@@ -148,6 +148,23 @@ export async function PATCH(request: Request) {
   if (!existing) return NextResponse.json({ error: "qualitative_option_not_found" }, { status: 404 });
   if (existing.status === status) return NextResponse.json({ status: "ok", option: existing });
 
+  if (status === "ACTIVE") {
+    const conflicts = await prisma.qualitativeResultOption.findMany({
+      where: {
+        organizationId: session.user.organizationId,
+        testId: existing.testId,
+        componentId: existing.componentId,
+        code: existing.code,
+        status: "ACTIVE",
+        id: { not: existing.id },
+      },
+      select: { effectiveFrom: true, effectiveTo: true },
+    });
+    if (conflicts.some((item) => overlaps(existing.effectiveFrom, existing.effectiveTo, item.effectiveFrom, item.effectiveTo))) {
+      return NextResponse.json({ error: "overlapping_qualitative_option_code" }, { status: 409 });
+    }
+  }
+
   const option = await prisma.$transaction(async (tx) => {
     const updated = await tx.qualitativeResultOption.update({
       where: { id },
