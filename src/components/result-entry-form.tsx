@@ -23,6 +23,7 @@ type ResultField = {
   resultType: "NUMERIC" | "TEXT" | "QUALITATIVE" | "BOOLEAN" | "DATE";
   unit: string | null;
   currentValue: string;
+  currentComment: string;
   currentOptionId: string | null;
   qualitativeOptions: QualitativeResultOption[];
   currentFlag: string | null;
@@ -40,7 +41,8 @@ type CommentTemplateOption = {
   nameAr: string | null;
   textEn: string;
   textAr: string | null;
-  scope: string;
+  scope: "ORGANIZATION" | "TEST" | "COMPONENT";
+  testId: string | null;
   componentId: string | null;
 };
 
@@ -110,6 +112,9 @@ export function ResultEntryForm({
       const currentIsActive = Boolean(field.currentOptionId && field.qualitativeOptions.some(option => option.id === field.currentOptionId));
       return [key, currentIsActive ? field.currentOptionId! : field.currentValue && field.qualitativeOptions.length > 0 ? "__LEGACY__" : ""];
     })),
+  );
+  const [componentComments, setComponentComments] = useState<Record<string, string>>(
+    Object.fromEntries(fields.map((field) => [field.componentId || "__TEST__", field.currentComment || ""])),
   );
   const [note, setNote] = useState(comments);
   const [savedResultId, setSavedResultId] = useState(resultId);
@@ -191,6 +196,7 @@ export function ResultEntryForm({
             componentId: field.componentId,
             rawValue: values[key] || "",
             resultOptionId: selectedOptionId && selectedOptionId !== "__LEGACY__" ? selectedOptionId : null,
+            ...(field.componentId ? { comments: componentComments[key] || "" } : {}),
           };
         }),
       }),
@@ -283,6 +289,7 @@ export function ResultEntryForm({
   const statusLocked = ["VERIFIED", "RELEASED", "AMENDED", "CANCELLED"].includes(savedStatus || "");
   const sourceLocked = resultSource !== "MANUAL";
   const locked = statusLocked || sourceLocked;
+  const resultLevelTemplates = commentTemplates.filter((template) => template.scope !== "COMPONENT");
 
   return <form className="result-entry-form" onSubmit={save}>
     <div className="result-entry-header">
@@ -299,7 +306,40 @@ export function ResultEntryForm({
             {locale !== "ar" && field.nameAr && <small dir="rtl">{field.nameAr}</small>}
             <small>{resultTypeLabel(field.resultType)}{field.unit ? ` · ${field.unit}` : ""}</small>
           </div>
-          <div className="result-field-input">{locked ? <strong>{values[key] || "—"}</strong> : fieldInput(field)}</div>
+          <div className="result-field-input">
+            {locked ? <strong>{values[key] || "—"}</strong> : fieldInput(field)}
+            {field.componentId && <div className="component-comment-editor">
+              {!locked && commentTemplates.some((template) => template.scope === "COMPONENT" && template.componentId === field.componentId) && <select
+                defaultValue=""
+                onChange={(event) => {
+                  const template = commentTemplates.find((item) => item.id === event.target.value && item.componentId === field.componentId);
+                  if (template) {
+                    const templateText = locale === "ar" ? template.textAr || template.textEn : template.textEn;
+                    setComponentComments((current) => ({
+                      ...current,
+                      [key]: current[key] ? current[key] + "\n" + templateText : templateText,
+                    }));
+                  }
+                  event.target.value = "";
+                }}
+              >
+                <option value="">{tr("Insert component comment…", "إدراج تعليق للمكوّن…")}</option>
+                {commentTemplates
+                  .filter((template) => template.scope === "COMPONENT" && template.componentId === field.componentId)
+                  .map((template) => <option key={template.id} value={template.id}>
+                    {template.code} — {locale === "ar" ? template.nameAr || template.nameEn : template.nameEn}
+                  </option>)}
+              </select>}
+              <textarea
+                data-result-entry-control="true"
+                rows={2}
+                value={componentComments[key] || ""}
+                onChange={(event) => setComponentComments((current) => ({ ...current, [key]: event.target.value }))}
+                disabled={locked}
+                placeholder={tr("Component comment", "تعليق المكوّن")}
+              />
+            </div>}
+          </div>
           <div className="result-field-reference">
             <span>{field.referenceDisplay || tr("No active reference interval", "لا يوجد مدى مرجعي نشط")}</span>
             {field.currentFlag && <strong>{flagLabel(field.currentFlag)}</strong>}
@@ -312,10 +352,10 @@ export function ResultEntryForm({
     </div>
 
     <label className="result-comments">{tr("Comments", "التعليقات")}
-      {!locked && commentTemplates.length > 0 && <select
+      {!locked && resultLevelTemplates.length > 0 && <select
         defaultValue=""
         onChange={(event) => {
-          const template = commentTemplates.find((item) => item.id === event.target.value);
+          const template = resultLevelTemplates.find((item) => item.id === event.target.value);
           if (template) {
             const templateText = locale === "ar" ? template.textAr || template.textEn : template.textEn;
             setNote((current) => current ? current + "\n" + templateText : templateText);
@@ -324,7 +364,7 @@ export function ResultEntryForm({
         }}
       >
         <option value="">{tr("Insert comment template…", "إدراج قالب تعليق…")}</option>
-        {commentTemplates.map((template) => <option key={template.id} value={template.id}>
+        {resultLevelTemplates.map((template) => <option key={template.id} value={template.id}>
           {template.code} — {locale === "ar" ? template.nameAr || template.nameEn : template.nameEn}
         </option>)}
       </select>}
