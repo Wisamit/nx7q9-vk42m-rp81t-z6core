@@ -355,7 +355,17 @@ enum ResultFlag {
   CRITICAL_LOW
   CRITICAL_HIGH
   ABNORMAL
+  POSITIVE
+  NEGATIVE
   UNKNOWN
+}
+
+enum ResultFlagSource {
+  NONE
+  REFERENCE_INTERVAL
+  RESULT_OPTION
+  ANALYZER
+  MANUAL
 }
 
 enum CriticalEventStatus {
@@ -945,6 +955,7 @@ model Organization {
   diagnosticReports DiagnosticReport[]
   deltaRules DeltaRule[]
   resultCommentTemplates ResultCommentTemplate[]
+  qualitativeResultOptions QualitativeResultOption[]
   calculatedResultRules CalculatedResultRule[]
   reflexRules ReflexRule[]
   autoverificationPolicies AutoverificationPolicy[]
@@ -1330,6 +1341,7 @@ model User {
   notifications Notification[] @relation("NotificationRecipientUser")
   createdNotificationTemplates NotificationTemplate[] @relation("NotificationTemplateCreator")
   createdReportTemplates ReportTemplate[] @relation("ReportTemplateCreator")
+  createdQualitativeResultOptions QualitativeResultOption[] @relation("QualitativeResultOptionCreator")
   submittedReportTemplateVersions ReportTemplateVersion[] @relation("ReportTemplateVersionSubmitter")
   approvedReportTemplateVersions ReportTemplateVersion[] @relation("ReportTemplateVersionApprover")
 
@@ -1681,6 +1693,7 @@ model LabTest {
   orderQuestions     OrderQuestion[]
   deltaRules         DeltaRule[]
   commentTemplates   ResultCommentTemplate[]
+  qualitativeResultOptions QualitativeResultOption[]
   calculatedRules    CalculatedResultRule[]
   sourceReflexRules  ReflexRule[] @relation("ReflexSourceTest")
   targetReflexRules  ReflexRule[] @relation("ReflexTargetTest")
@@ -1719,6 +1732,7 @@ model TestComponent {
   resultValues LaboratoryResultValue[]
   deltaRules DeltaRule[]
   commentTemplates ResultCommentTemplate[]
+  qualitativeResultOptions QualitativeResultOption[]
   calculatedTargetRules CalculatedResultRule[]
   reflexSourceRules ReflexRule[]
   analyzerMappings AnalyzerTestMapping[]
@@ -1729,6 +1743,37 @@ model TestComponent {
   @@unique([testId, code])
   @@index([testId, displayOrder])
   @@map("test_components")
+}
+
+model QualitativeResultOption {
+  id              String       @id @default(uuid()) @db.Char(36)
+  organizationId  String       @map("organization_id") @db.Char(36)
+  testId          String       @map("test_id") @db.Char(36)
+  componentId     String?      @map("component_id") @db.Char(36)
+  code            String       @db.VarChar(80)
+  valueEn         String       @map("value_en") @db.VarChar(500)
+  valueAr         String?      @map("value_ar") @db.VarChar(500)
+  flag            ResultFlag   @default(UNKNOWN)
+  isCritical      Boolean      @default(false) @map("is_critical")
+  displayOrder    Int          @default(0) @map("display_order")
+  effectiveFrom   DateTime     @map("effective_from") @db.DateTime(3)
+  effectiveTo     DateTime?    @map("effective_to") @db.DateTime(3)
+  status          RecordStatus @default(ACTIVE)
+  createdByUserId String       @map("created_by_user_id") @db.Char(36)
+  createdAt       DateTime     @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt       DateTime     @updatedAt @map("updated_at") @db.DateTime(3)
+  deactivatedAt   DateTime?    @map("deactivated_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  test         LabTest      @relation(fields: [testId], references: [id], onDelete: Restrict)
+  component    TestComponent? @relation(fields: [componentId], references: [id], onDelete: Restrict)
+  createdBy    User         @relation("QualitativeResultOptionCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  resultValues LaboratoryResultValue[]
+
+  @@index([organizationId, status])
+  @@index([testId, componentId, status, effectiveFrom, effectiveTo])
+  @@index([createdByUserId, createdAt])
+  @@map("qualitative_result_options")
 }
 
 model TestBranchAvailability {
@@ -3278,7 +3323,12 @@ model LaboratoryResultValue {
   criticalLowSnapshot      Decimal?    @map("critical_low_snapshot") @db.Decimal(18, 6)
   criticalHighSnapshot     Decimal?    @map("critical_high_snapshot") @db.Decimal(18, 6)
   flag                     ResultFlag  @default(UNKNOWN)
+  flagSource               ResultFlagSource @default(NONE) @map("flag_source")
   isCritical               Boolean     @default(false) @map("is_critical")
+  qualitativeOptionId      String?     @map("qualitative_option_id") @db.Char(36)
+  qualitativeOptionCodeSnapshot String? @map("qualitative_option_code_snapshot") @db.VarChar(80)
+  valueTextEnSnapshot      String?     @map("value_text_en_snapshot") @db.VarChar(500)
+  valueTextArSnapshot      String?     @map("value_text_ar_snapshot") @db.VarChar(500)
   deltaEvaluation           DeltaEvaluation @default(NOT_CONFIGURED) @map("delta_evaluation")
   previousValueSnapshot     Decimal?    @map("previous_value_snapshot") @db.Decimal(24, 8)
   previousResultAtSnapshot  DateTime?   @map("previous_result_at_snapshot") @db.DateTime(3)
@@ -3300,10 +3350,12 @@ model LaboratoryResultValue {
   referenceInterval ReferenceInterval? @relation(fields: [referenceIntervalId], references: [id], onDelete: Restrict)
   calculatedRule    CalculatedResultRule? @relation(fields: [calculatedRuleId], references: [id], onDelete: Restrict)
   analyzerImport     AnalyzerResultImport? @relation(fields: [analyzerImportId], references: [id], onDelete: Restrict)
+  qualitativeOption  QualitativeResultOption? @relation(fields: [qualitativeOptionId], references: [id], onDelete: Restrict)
 
   @@unique([resultId, componentCodeSnapshot])
   @@index([componentId])
   @@index([flag, isCritical])
+  @@index([qualitativeOptionId])
   @@index([calculatedRuleId])
   @@index([analyzerImportId])
   @@map("laboratory_result_values")
