@@ -60,6 +60,16 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     return NextResponse.json({ error: "discount_authority_forbidden" }, { status: 403 });
   }
 
+  const cashierPermissionCodes = new Set(["billing.cashier.approve", "billing.cashier.authority.manage"]);
+  const currentCashierPermissions = new Set(current.permissions.filter(grant => cashierPermissionCodes.has(grant.permission.code)).map(grant => grant.permission.code));
+  const desiredCashierPermissions = new Set(selectedPermissions.filter(permission => cashierPermissionCodes.has(permission.code)).map(permission => permission.code));
+  const cashierAuthorityChanged = currentCashierPermissions.size !== desiredCashierPermissions.size
+    || [...currentCashierPermissions].some(code => !desiredCashierPermissions.has(code));
+  const cashierRoleReactivated = current.status !== "ACTIVE" && status === "ACTIVE" && currentCashierPermissions.size > 0;
+  if ((cashierAuthorityChanged || cashierRoleReactivated) && !permissions.has("billing.cashier.authority.manage")) {
+    return NextResponse.json({ error: "cashier_authority_forbidden" }, { status: 403 });
+  }
+
   const ctx = await requestContext();
   await prisma.$transaction(async tx => {
     await tx.role.update({ where: { id }, data: { nameEn, nameAr: nameAr || null, discountLimitPercent: discountLimitPercent.toFixed(2), status } });
