@@ -491,6 +491,7 @@ export async function POST(request: Request) {
               currency,
               subtotalSnapshot: quoteSubtotal,
               discountTotalSnapshot: quoteDiscountTotal,
+              taxTotalSnapshot: quoteTaxTotal,
               finalTotalSnapshot: quoteFinalTotal,
               pricingFingerprint,
               contextSnapshot: {
@@ -533,6 +534,7 @@ export async function POST(request: Request) {
                 currency,
                 subtotal: quoteSubtotal.toString(),
                 discountTotal: quoteDiscountTotal.toString(),
+                taxTotal: quoteTaxTotal.toString(),
                 finalTotal: quoteFinalTotal.toString(),
                 expiresAt,
               },
@@ -552,6 +554,7 @@ export async function POST(request: Request) {
         currency,
         subtotal: quoteSubtotal.toString(),
         discountTotal: quoteDiscountTotal.toString(),
+        taxTotal: quoteTaxTotal.toString(),
         total: quoteFinalTotal.toString(),
         expiresAt: approvalRequest.expiresAt,
       }, { status: 409 });
