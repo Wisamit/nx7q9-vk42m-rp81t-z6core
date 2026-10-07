@@ -450,6 +450,23 @@ export async function POST(request: Request) {
     || null;
 
   const saved = await prisma.$transaction(async tx => {
+    if (specimen.status === "RECEIVED") {
+      const claimed = await tx.specimen.updateMany({
+        where: {
+          id: specimen.id,
+          status: "RECEIVED",
+          currentBranchId: analyzer.branchId,
+          preanalyticalVersion: specimen.preanalyticalVersion,
+          orderItems: { some: { orderItemId: orderItem.id, status: "ACTIVE" } },
+        },
+        data: {
+          status: "IN_PROCESS",
+          preanalyticalVersion: { increment: 1 },
+        },
+      });
+      if (claimed.count !== 1) throw new Error("SPECIMEN_PREANALYTICAL_STATE_CHANGED");
+    }
+
     const stillMapped = await tx.analyzerResultImport.count({
       where: { id: { in: importIds }, status: "MAPPED" },
     });
@@ -752,7 +769,6 @@ export async function POST(request: Request) {
     });
 
     if (specimen.status === "RECEIVED") {
-      await tx.specimen.update({ where: { id: specimen.id }, data: { status: "IN_PROCESS" } });
       await tx.specimenEvent.create({
         data: {
           specimenId: specimen.id,
@@ -876,7 +892,7 @@ export async function POST(request: Request) {
       },
     });
   }, { timeout: 30000, isolationLevel: "Serializable" }).catch(error => {
-    if (error instanceof Error && error.message === "ANALYZER_IMPORT_CONCURRENT_STATE_CHANGE") return null;
+    if (error instanceof Error && ["ANALYZER_IMPORT_CONCURRENT_STATE_CHANGE","SPECIMEN_PREANALYTICAL_STATE_CHANGED"].includes(error.message)) return null;
     throw error;
   });
 
