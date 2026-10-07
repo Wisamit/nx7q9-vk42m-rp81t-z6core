@@ -1,0 +1,169 @@
+import { NextResponse } from "next/server";
+import { Prisma } from "../../../../../../generated/prisma/client";
+import { requirePermission, requestContext } from "@/lib/auth";
+import { prisma } from "@/lib/db";
+import { patientMergeEligibility } from "@/lib/patient-merge";
+
+function text(value: unknown, max = 1000) {
+  return typeof value === "string" ? value.trim().slice(0, max) : "";
+}
+
+class PatientMergeError extends Error {
+  constructor(public code: string) {
+    super(code);
+  }
+}
+
+export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const session = await requirePermission("patients.merge");
+  const ctx = await requestContext();
+  const { id: sourcePatientId } = await params;
+  const body = await request.json().catch(() => null) as Record<string, unknown> | null;
+  if (!body) return NextResponse.json({ error: "invalid_request" }, { status: 400 });
+
+  const targetPatientId = text(body.targetPatientId, 36);
+  const reason = text(body.reason, 1000);
+  if (!targetPatientId || !reason) {
+    return NextResponse.json({ error: "target_and_reason_required" }, { status: 400 });
+  }
+
+  try {
+    const merged = await prisma.$transaction(async tx => {
+      const [source, target] = await Promise.all([
+        tx.patient.findFirst({
+          where: { id: sourcePatientId, organizationId: session.user.organizationId },
+          include: {
+            portalAccount: { select: { id: true } },
+            mergedFrom: { select: { id: true } },
+          },
+        }),
+        tx.patient.findFirst({
+          where: { id: targetPatientId, organizationId: session.user.organizationId },
+          include: { portalAccount: { select: { id: true } } },
+        }),
+      ]);
+
+      if (!source || !target) throw new PatientMergeError("patient_not_found");
+      const eligibility = patientMergeEligibility(source, target);
+      if (!eligibility.ok) throw new PatientMergeError(eligibility.error);
+
+      const mergedAt = new Date();
+      const claimed = await tx.patient.updateMany({
+        where: {
+          id: source.id,
+          organizationId: session.user.organizationId,
+          status: "ACTIVE",
+          mergedIntoPatientId: null,
+        },
+        data: {
+          status: "INACTIVE",
+          mergedIntoPatientId: target.id,
+          mergedAt,
+          deactivatedAt: mergedAt,
+        },
+      });
+      if (claimed.count !== 1) throw new PatientMergeError("merge_conflict");
+
+      const reparentedAliases = await tx.patient.updateMany({
+        where: {
+          organizationId: session.user.organizationId,
+          mergedIntoPatientId: source.id,
+          status: "INACTIVE",
+        },
+        data: { mergedIntoPatientId: target.id },
+      });
+
+      let portalAccountMoved = false;
+      if (source.portalAccount && !target.portalAccount) {
+        const moved = await tx.portalAccount.updateMany({
+          where: { id: source.portalAccount.id, patientId: source.id },
+          data: { patientId: target.id },
+        });
+        if (moved.count !== 1) throw new PatientMergeError("portal_account_move_conflict");
+        portalAccountMoved = true;
+      }
+
+      const event = await tx.patientMergeEvent.create({
+        data: {
+          organizationId: session.user.organizationId,
+          sourcePatientId: source.id,
+          targetPatientId: target.id,
+          sourcePatientNumberSnapshot: source.patientNumber,
+          targetPatientNumberSnapshot: target.patientNumber,
+          reason,
+          mergedByUserId: session.user.id,
+          mergedAt,
+        },
+      });
+
+      await tx.auditEvent.createMany({
+        data: [
+          {
+            organizationId: session.user.organizationId,
+            branchId: session.activeBranchId,
+            actorUserId: session.user.id,
+            action: "PATIENT_MERGED",
+            entityType: "Patient",
+            entityId: source.id,
+            oldValues: {
+              patientNumber: source.patientNumber,
+              status: source.status,
+              mergedIntoPatientId: source.mergedIntoPatientId,
+            },
+            newValues: {
+              status: "INACTIVE",
+              mergedIntoPatientId: target.id,
+              targetPatientNumber: target.patientNumber,
+              patientMergeEventId: event.id,
+              reparentedAliasCount: reparentedAliases.count,
+              portalAccountMoved,
+            },
+            reason,
+            ipAddress: ctx.ipAddress,
+            userAgent: ctx.userAgent,
+          },
+          {
+            organizationId: session.user.organizationId,
+            branchId: session.activeBranchId,
+            actorUserId: session.user.id,
+            action: "PATIENT_MERGE_RECEIVED",
+            entityType: "Patient",
+            entityId: target.id,
+            oldValues: {
+              patientNumber: target.patientNumber,
+              status: target.status,
+            },
+            newValues: {
+              sourcePatientId: source.id,
+              sourcePatientNumber: source.patientNumber,
+              patientMergeEventId: event.id,
+              reparentedAliasCount: reparentedAliases.count,
+              portalAccountMoved,
+            },
+            reason,
+            ipAddress: ctx.ipAddress,
+            userAgent: ctx.userAgent,
+          },
+        ],
+      });
+
+      return {
+        sourcePatientId: source.id,
+        sourcePatientNumber: source.patientNumber,
+        targetPatientId: target.id,
+        targetPatientNumber: target.patientNumber,
+        patientMergeEventId: event.id,
+        reparentedAliasCount: reparentedAliases.count,
+        portalAccountMoved,
+      };
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+
+    return NextResponse.json({ status: "merged", ...merged }, { status: 201 });
+  } catch (error) {
+    if (error instanceof PatientMergeError) {
+      const status = error.code === "patient_not_found" ? 404 : 409;
+      return NextResponse.json({ error: error.code }, { status });
+    }
+    throw error;
+  }
+}
