@@ -143,7 +143,7 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
         { scope: "COMPONENT", testId: item.testId, componentId: { in: item.test.components.map(component => component.id) } },
       ],
     },
-    select: { id: true, code: true, nameEn: true, nameAr: true, textEn: true, textAr: true, scope: true, componentId: true },
+    select: { id: true, code: true, nameEn: true, nameAr: true, textEn: true, textAr: true, scope: true, testId: true, componentId: true },
     orderBy: { nameEn: "asc" },
   });
   const readySpecimen = latestResult?.specimen
@@ -213,6 +213,7 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
     return {
       ...component,
       currentValue: existing?.displayValue || "",
+      currentComment: existing?.comments || "",
       currentOptionId: existing?.qualitativeOptionId || null,
       qualitativeOptions: component.qualitativeOptions.map(option => ({
         id: option.id,
