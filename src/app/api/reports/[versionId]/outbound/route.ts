@@ -106,6 +106,28 @@ export async function POST(request: Request, { params }: { params: Promise<{ ver
     return NextResponse.json({ error: "recipient_not_associated_with_order" }, { status: 409 });
   }
 
+  const expectedPortalType = recipientType === "PATIENT" ? "PATIENT" : recipientType === "REFERRER" ? "DOCTOR" : "CORPORATE";
+  if (selected.account && selected.account.type !== expectedPortalType) {
+    return NextResponse.json({ error: "portal_account_type_mismatch" }, { status: 409 });
+  }
+
+  if (recipientType === "CLIENT") {
+    const corporateAccess = await prisma.corporatePortalPatientAccess.findFirst({
+      where: {
+        clientId: selected.id,
+        patientId: order.patientId,
+        canViewReports: true,
+        status: "ACTIVE",
+        effectiveFrom: { lte: new Date() },
+        OR: [{ effectiveTo: null }, { effectiveTo: { gte: new Date() } }],
+      },
+      select: { id: true },
+    });
+    if (!corporateAccess) {
+      return NextResponse.json({ error: "corporate_report_access_required" }, { status: 403 });
+    }
+  }
+
   const destination = resolveVerifiedPortalDestination(selected.account, channel);
   if (!destination.ok) {
     return NextResponse.json({ error: destination.error }, { status: 409 });
