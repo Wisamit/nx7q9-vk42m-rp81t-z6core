@@ -24,6 +24,7 @@ type EnqueueInput = {
   metadata?: Prisma.InputJsonValue;
   channels?: NotificationChannel[];
   destinations?: Partial<Record<NotificationChannel, string>>;
+  reportDeliveryEventIdByChannel?: Partial<Record<NotificationChannel, string>>;
 };
 
 export async function enqueueNotification(db: DbClient, input: EnqueueInput) {
@@ -71,6 +72,7 @@ export async function enqueueNotification(db: DbClient, input: EnqueueInput) {
         data: {
           notificationId: notification.id,
           channel,
+          reportDeliveryEventId: input.reportDeliveryEventIdByChannel?.[channel] || null,
           status: NotificationDeliveryStatus.SKIPPED,
           lastError: "disabled_by_recipient_preference",
         },
@@ -83,6 +85,7 @@ export async function enqueueNotification(db: DbClient, input: EnqueueInput) {
         data: {
           notificationId: notification.id,
           channel,
+          reportDeliveryEventId: input.reportDeliveryEventIdByChannel?.[channel] || null,
           status: NotificationDeliveryStatus.SENT,
           sentAt: new Date(),
           provider: "internal",
@@ -98,6 +101,7 @@ export async function enqueueNotification(db: DbClient, input: EnqueueInput) {
       data: {
         notificationId: notification.id,
         channel,
+        reportDeliveryEventId: input.reportDeliveryEventIdByChannel?.[channel] || null,
         destination: destination ?? null,
         status: destination ? NotificationDeliveryStatus.PENDING : NotificationDeliveryStatus.SKIPPED,
         lastError: destination ? null : "destination_missing",
@@ -134,15 +138,16 @@ function retryAt(attempt: number) {
   return new Date(Date.now() + seconds * 1000);
 }
 
-export async function dispatchPendingNotifications(db: DbClient, limit = 50) {
+export async function dispatchPendingNotifications(db: PrismaClient, organizationId: string, limit = 50) {
   const now = new Date();
   const deliveries = await db.notificationDelivery.findMany({
     where: {
+      notification: { organizationId },
       channel: { in: [NotificationChannel.EMAIL, NotificationChannel.SMS, NotificationChannel.WHATSAPP] },
       status: { in: [NotificationDeliveryStatus.PENDING, NotificationDeliveryStatus.FAILED] },
       OR: [{ nextAttemptAt: null }, { nextAttemptAt: { lte: now } }],
     },
-    include: { notification: true },
+    include: { notification: true, reportDeliveryEvent: true },
     orderBy: { createdAt: "asc" },
     take: Math.min(Math.max(limit, 1), 200),
   });
@@ -154,14 +159,22 @@ export async function dispatchPendingNotifications(db: DbClient, limit = 50) {
     const config = gatewayConfig(delivery.channel);
 
     if (!delivery.destination) {
-      await db.notificationDelivery.update({
-        where: { id: delivery.id },
-        data: {
-          status: NotificationDeliveryStatus.SKIPPED,
-          attemptCount: attempt,
-          lastError: "destination_missing",
-          nextAttemptAt: null,
-        },
+      await db.$transaction(async tx => {
+        await tx.notificationDelivery.update({
+          where: { id: delivery.id },
+          data: {
+            status: NotificationDeliveryStatus.SKIPPED,
+            attemptCount: attempt,
+            lastError: "destination_missing",
+            nextAttemptAt: null,
+          },
+        });
+        if (delivery.reportDeliveryEventId) {
+          await tx.reportDeliveryEvent.update({
+            where: { id: delivery.reportDeliveryEventId },
+            data: { status: "FAILED" },
+          });
+        }
       });
       results.push({ id: delivery.id, status: NotificationDeliveryStatus.SKIPPED, error: "destination_missing" });
       continue;
@@ -170,14 +183,22 @@ export async function dispatchPendingNotifications(db: DbClient, limit = 50) {
     if (!config) {
       const dead = attempt >= delivery.maxAttempts;
       const status = dead ? NotificationDeliveryStatus.DEAD_LETTER : NotificationDeliveryStatus.FAILED;
-      await db.notificationDelivery.update({
-        where: { id: delivery.id },
-        data: {
-          status,
-          attemptCount: attempt,
-          lastError: "notification_gateway_not_configured",
-          nextAttemptAt: dead ? null : retryAt(attempt),
-        },
+      await db.$transaction(async tx => {
+        await tx.notificationDelivery.update({
+          where: { id: delivery.id },
+          data: {
+            status,
+            attemptCount: attempt,
+            lastError: "notification_gateway_not_configured",
+            nextAttemptAt: dead ? null : retryAt(attempt),
+          },
+        });
+        if (delivery.reportDeliveryEventId) {
+          await tx.reportDeliveryEvent.update({
+            where: { id: delivery.reportDeliveryEventId },
+            data: { status: dead ? "FAILED" : "QUEUED" },
+          });
+        }
       });
       results.push({ id: delivery.id, status, error: "notification_gateway_not_configured" });
       continue;
@@ -208,31 +229,47 @@ export async function dispatchPendingNotifications(db: DbClient, limit = 50) {
       const payload = await response.json().catch(() => ({})) as { messageId?: unknown };
       const providerMessageId = typeof payload.messageId === "string" ? payload.messageId.slice(0, 255) : null;
 
-      await db.notificationDelivery.update({
-        where: { id: delivery.id },
-        data: {
-          status: NotificationDeliveryStatus.SENT,
-          attemptCount: attempt,
-          sentAt: new Date(),
-          provider: config.provider,
-          providerMessageId,
-          lastError: null,
-          nextAttemptAt: null,
-        },
+      await db.$transaction(async tx => {
+        await tx.notificationDelivery.update({
+          where: { id: delivery.id },
+          data: {
+            status: NotificationDeliveryStatus.SENT,
+            attemptCount: attempt,
+            sentAt: new Date(),
+            provider: config.provider,
+            providerMessageId,
+            lastError: null,
+            nextAttemptAt: null,
+          },
+        });
+        if (delivery.reportDeliveryEventId) {
+          await tx.reportDeliveryEvent.update({
+            where: { id: delivery.reportDeliveryEventId },
+            data: { status: "SENT", externalRef: providerMessageId },
+          });
+        }
       });
       results.push({ id: delivery.id, status: NotificationDeliveryStatus.SENT });
     } catch (error) {
       const dead = attempt >= delivery.maxAttempts;
       const status = dead ? NotificationDeliveryStatus.DEAD_LETTER : NotificationDeliveryStatus.FAILED;
       const message = error instanceof Error ? error.message.slice(0, 1000) : "notification_dispatch_failed";
-      await db.notificationDelivery.update({
-        where: { id: delivery.id },
-        data: {
-          status,
-          attemptCount: attempt,
-          lastError: message,
-          nextAttemptAt: dead ? null : retryAt(attempt),
-        },
+      await db.$transaction(async tx => {
+        await tx.notificationDelivery.update({
+          where: { id: delivery.id },
+          data: {
+            status,
+            attemptCount: attempt,
+            lastError: message,
+            nextAttemptAt: dead ? null : retryAt(attempt),
+          },
+        });
+        if (delivery.reportDeliveryEventId) {
+          await tx.reportDeliveryEvent.update({
+            where: { id: delivery.reportDeliveryEventId },
+            data: { status: dead ? "FAILED" : "QUEUED" },
+          });
+        }
       });
       results.push({ id: delivery.id, status, error: message });
     }
