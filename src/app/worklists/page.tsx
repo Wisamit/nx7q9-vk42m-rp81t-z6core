@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { authorizedDepartmentIds, requirePermission } from "@/lib/auth";
+import { authorizedDepartmentIds, permissionSet, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { BulkResultEntry } from "@/components/bulk-result-entry";
 import { SystemIcon } from "@/components/system-icon";
@@ -22,6 +22,7 @@ export default async function WorklistsPage({
 }) {
   const session = await requirePermission("worklists.view");
   const locale = getUiLocale(session.user.preferredLocale);
+  const permissions = permissionSet(session);
   const params = await searchParams;
   const q = params.q?.trim() || "";
   const status = params.status?.trim() || "";
@@ -159,7 +160,11 @@ export default async function WorklistsPage({
     );
     const latest = item.results[0];
     if (!readySpecimen?.currentBranchId) return [];
-    if (latest && (latest.source !== "MANUAL" || ["VERIFIED","RELEASED","AMENDED","CANCELLED"].includes(latest.status))) return [];
+    if (latest && (
+      latest.source !== "MANUAL"
+      || ["VERIFIED","RELEASED","AMENDED","CANCELLED"].includes(latest.status)
+      || ["MEDICAL_VALIDATION","COMPLETE"].includes(latest.validationStage)
+    )) return [];
 
     const currentByComponent = new Map((latest?.values || []).map(value => [value.componentId || "__TEST__", value]));
     const fields = item.test.components.length > 0
@@ -235,7 +240,7 @@ export default async function WorklistsPage({
       <article className={critical ? "summary-attention" : ""}><span>{tr(locale, "Critical", "حرجة")}</span><strong>{critical}</strong><small>{tr(locale, "items containing critical values", "عناصر تحتوي قيماً حرجة")}</small></article>
     </section>
 
-    <BulkResultEntry rows={bulkRows} locale={locale} />
+    {permissions.has("results.enter") && <BulkResultEntry rows={bulkRows} locale={locale} />}
 
     <section className="table-card">
       <div className="table-toolbar">
@@ -278,9 +283,9 @@ export default async function WorklistsPage({
 
       <div className="table-wrap">
         <table>
-          <thead><tr><th>{tr(locale, "Accession", "رقم الطلب")}</th><th>{tr(locale, "Patient", "المريض")}</th><th>{tr(locale, "Test", "الفحص")}</th><th>{tr(locale, "Priority", "الأولوية")}</th><th>{tr(locale, "Department", "القسم")}</th><th>{tr(locale, "Specimen", "العينة")}</th><th>{tr(locale, "Location", "الموقع")}</th><th>{tr(locale, "Result", "النتيجة")}</th><th>{tr(locale, "Flags", "الإشارات")}</th><th></th></tr></thead>
+          <thead><tr><th>{tr(locale, "Accession", "رقم الطلب")}</th><th>{tr(locale, "Patient", "المريض")}</th><th>{tr(locale, "Test", "الفحص")}</th><th>{tr(locale, "Priority", "الأولوية")}</th><th>{tr(locale, "Department", "القسم")}</th><th>{tr(locale, "Specimen", "العينة")}</th><th>{tr(locale, "Location", "الموقع")}</th><th>{tr(locale, "Result", "النتيجة")}</th><th>{tr(locale, "Validation", "التحقق")}</th><th>{tr(locale, "Flags", "الإشارات")}</th><th></th></tr></thead>
           <tbody>
-            {items.length === 0 ? <tr><td colSpan={10} className="empty-state">{tr(locale, "No received specimens are waiting for laboratory work.", "لا توجد عينات مستلمة بانتظار العمل المخبري.")}</td></tr> :
+            {items.length === 0 ? <tr><td colSpan={11} className="empty-state">{tr(locale, "No received specimens are waiting for laboratory work.", "لا توجد عينات مستلمة بانتظار العمل المخبري.")}</td></tr> :
               items.map(item => {
                 const readySpecimen = item.specimenLinks.map(link => link.specimen).find(specimen =>
                   ["RECEIVED","IN_PROCESS"].includes(specimen.status) &&
@@ -300,6 +305,12 @@ export default async function WorklistsPage({
                   <td><span className="barcode-text">{readySpecimen?.barcode || "—"}</span><br/><small>{readySpecimen?.status ? statusLabel(locale, readySpecimen.status) : "—"}</small></td>
                   <td>{readySpecimen?.currentBranch ? localizedName(readySpecimen.currentBranch) : item.performedBranch ? localizedName(item.performedBranch) : "—"}</td>
                   <td><span className={"status-badge status-" + (result?.status || item.status).toLowerCase().replaceAll("_","-")}>{statusLabel(locale, result?.status || item.status)}</span></td>
+                  <td>{result ? (
+                    result.validationStage === "MEDICAL_VALIDATION" ? tr(locale, "Medical validation", "تحقق طبي") :
+                    result.validationStage === "COMPLETE" ? tr(locale, "Complete", "مكتمل") :
+                    result.validationStage === "TECHNICAL_REVIEW" ? tr(locale, "Technical review", "مراجعة فنية") :
+                    tr(locale, "Entry", "إدخال")
+                  ) : "—"}</td>
                   <td>{criticalCount > 0 ? <strong className="critical-text">{criticalCount} {tr(locale, "critical", "حرجة")}</strong> : abnormalCount > 0 ? `${abnormalCount} ${tr(locale, "flagged", "معلّمة")}` : "—"}</td>
                   <td><Link className="secondary-link" href={`/worklists/${item.id}`}><SystemIcon name="report" size={15} />{result ? tr(locale, "Open Result", "فتح النتيجة") : tr(locale, "Enter Result", "إدخال النتيجة")}</Link></td>
                 </tr>;
