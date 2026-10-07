@@ -46,6 +46,21 @@ export default async function SpecimenLabelPage({
     || canAccessBranch(session, specimen.order.orderingBranchId);
   if (!accessible) notFound();
 
+  if (["COLLECTION_FAILED","REJECTED","DISPOSED"].includes(specimen.status)) {
+    return <main className="catalog-shell">
+      <header className="page-header">
+        <div>
+          <p className="eyebrow">{tr(locale, "Specimen Label", "ملصق العينة")}</p>
+          <h1>{specimen.barcode}</h1>
+        </div>
+        <Link className="secondary-link" href="/specimens">{tr(locale, "Back to Specimens", "العودة للعينات")}</Link>
+      </header>
+      <section className="detail-card">
+        <p className="form-error">{tr(locale, "Label printing is blocked because this specimen barcode is no longer clinically usable.", "تم منع طباعة الملصق لأن باركود هذه العينة لم يعد صالحًا للاستخدام السريري.")}</p>
+      </section>
+    </main>;
+  }
+
   const requirement = specimen.events
     .map(event => specimenRequirementSnapshotFromDetails(event.details))
     .find(Boolean) || null;
