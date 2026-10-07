@@ -78,7 +78,7 @@ Scope:
 - channel-specific verification history records EMAIL or PHONE, the exact destination snapshot, verification method, staff actor, reason, verification time and revocation time;
 - a changed email/phone does not inherit verification from the previous destination;
 - authorized staff with `portal_accounts.manage` can record `STAFF_CONFIRMED` verification from the report delivery UI after validating the contact with the recipient;
-- the legacy generic `contactVerifiedAt` is accepted only when exactly one contact method exists, preventing ambiguous trust across both email and phone;
+- legacy `contactVerifiedAt` values are migrated only when the portal account had exactly one configured contact method; ambiguous legacy accounts with both email and phone require fresh channel-specific verification;
 - doctor delivery is allowed only to the order's associated referrer;
 - corporate delivery additionally requires active `CorporatePortalPatientAccess.canViewReports` for the order patient;
 - report-delivery events are linked one-to-one to the corresponding notification delivery, preserving queue/provider traceability;
