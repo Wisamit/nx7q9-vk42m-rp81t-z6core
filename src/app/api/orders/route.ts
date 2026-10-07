@@ -11,6 +11,7 @@ import { creditLimitDecision } from "@/lib/client-credit-control";
 import { localCalendarDate } from "@/lib/accounts-receivable-aging";
 import { resolveTaxRule, taxLineAmounts, type EffectiveTaxRule } from "@/lib/tax-policy";
 import { buildOrderItemTatSnapshot, resolveTatPolicy, type TatPriority } from "@/lib/tat";
+import { localDateTimeToUtc, normalizeOrderQuestionOptions } from "@/lib/order-questions";
 
 function text(value: unknown, max = 500) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -154,6 +155,7 @@ export async function POST(request: Request) {
 
   const packageTestIds = [...packageTestOwner.keys()];
   const allTestIds = [...directTestIds, ...packageTestIds];
+  const orderQuestionAsOf = new Date();
 
   const [patient, tests, source, referrer, client, orderingBranch] = await Promise.all([
     prisma.patient.findFirst({ where: { id: patientId, organizationId: session.user.organizationId, status: "ACTIVE" }, select: { id: true, patientNumber: true, fullNameEn: true } }),
@@ -164,7 +166,14 @@ export async function POST(request: Request) {
         specimenType: true,
         container: true,
         branchAvailability: { where: { status: "ACTIVE" } },
-        orderQuestions: { where: { status: "ACTIVE" }, orderBy: [{ displayOrder: "asc" }, { code: "asc" }] },
+        orderQuestions: {
+          where: {
+            status: "ACTIVE",
+            effectiveFrom: { lte: orderQuestionAsOf },
+            OR: [{ effectiveTo: null }, { effectiveTo: { gte: orderQuestionAsOf } }],
+          },
+          orderBy: [{ displayOrder: "asc" }, { code: "asc" }],
+        },
       },
     }),
     prisma.orderSource.findFirst({ where: { id: sourceId, organizationId: session.user.organizationId, status: "ACTIVE" }, select: { id: true, code: true, category: true } }),
@@ -200,8 +209,28 @@ export async function POST(request: Request) {
     answerNumeric: Prisma.Decimal | null;
     answerBoolean: boolean | null;
     answerDate: Date | null;
+    answerDateTime: Date | null;
+    answerDateTimeLocalSnapshot: string | null;
+    answerTimeZoneSnapshot: string | null;
     selectedOptionSnapshot: string | null;
+    selectedOptionCodeSnapshot: string | null;
+    selectedOptionTextEnSnapshot: string | null;
+    selectedOptionTextArSnapshot: string | null;
   }>();
+
+  const emptyPreparedAnswer = () => ({
+    answerText: null,
+    answerNumeric: null,
+    answerBoolean: null,
+    answerDate: null,
+    answerDateTime: null,
+    answerDateTimeLocalSnapshot: null,
+    answerTimeZoneSnapshot: null,
+    selectedOptionSnapshot: null,
+    selectedOptionCodeSnapshot: null,
+    selectedOptionTextEnSnapshot: null,
+    selectedOptionTextArSnapshot: null,
+  });
 
   try {
     for (const { question, test } of questions) {
@@ -222,32 +251,49 @@ export async function POST(request: Request) {
 
       if (question.responseType === "TEXT") {
         preparedAnswers.set(question.id, {
-          answerText: stringValue.slice(0, 5000), answerNumeric: null, answerBoolean: null, answerDate: null, selectedOptionSnapshot: null,
+          ...emptyPreparedAnswer(),
+          answerText: stringValue.slice(0, 5000),
         });
       } else if (question.responseType === "NUMERIC") {
         const value = new Prisma.Decimal(stringValue);
         preparedAnswers.set(question.id, {
-          answerText: null, answerNumeric: value, answerBoolean: null, answerDate: null, selectedOptionSnapshot: null,
+          ...emptyPreparedAnswer(),
+          answerNumeric: value,
         });
       } else if (question.responseType === "BOOLEAN") {
         if (!["true","false"].includes(stringValue.toLowerCase())) throw new Error("INVALID_BOOLEAN");
         preparedAnswers.set(question.id, {
-          answerText: null, answerNumeric: null, answerBoolean: stringValue.toLowerCase() === "true", answerDate: null, selectedOptionSnapshot: null,
+          ...emptyPreparedAnswer(),
+          answerBoolean: stringValue.toLowerCase() === "true",
         });
       } else if (question.responseType === "DATE") {
         if (!/^\d{4}-\d{2}-\d{2}$/.test(stringValue)) throw new Error("INVALID_DATE");
         const value = new Date(stringValue + "T00:00:00.000Z");
         if (Number.isNaN(value.getTime()) || value.toISOString().slice(0, 10) !== stringValue) throw new Error("INVALID_DATE");
         preparedAnswers.set(question.id, {
-          answerText: null, answerNumeric: null, answerBoolean: null, answerDate: value, selectedOptionSnapshot: null,
+          ...emptyPreparedAnswer(),
+          answerDate: value,
+        });
+      } else if (question.responseType === "DATETIME") {
+        const value = localDateTimeToUtc(stringValue, orderingBranch.timezone);
+        if (!value) throw new Error("INVALID_DATETIME");
+        preparedAnswers.set(question.id, {
+          ...emptyPreparedAnswer(),
+          answerDateTime: value,
+          answerDateTimeLocalSnapshot: stringValue.slice(0, 32),
+          answerTimeZoneSnapshot: orderingBranch.timezone,
         });
       } else if (question.responseType === "SINGLE_CHOICE") {
-        const options = Array.isArray(question.options)
-          ? question.options.filter((item): item is string => typeof item === "string")
-          : [];
-        if (!options.includes(stringValue)) throw new Error("INVALID_CHOICE");
+        const options = normalizeOrderQuestionOptions(question.options);
+        const selected = options.find(option => option.code === stringValue)
+          || options.find(option => option.valueEn === stringValue || option.valueAr === stringValue);
+        if (!selected) throw new Error("INVALID_CHOICE");
         preparedAnswers.set(question.id, {
-          answerText: null, answerNumeric: null, answerBoolean: null, answerDate: null, selectedOptionSnapshot: stringValue.slice(0, 500),
+          ...emptyPreparedAnswer(),
+          selectedOptionSnapshot: selected.valueEn,
+          selectedOptionCodeSnapshot: selected.code,
+          selectedOptionTextEnSnapshot: selected.valueEn,
+          selectedOptionTextArSnapshot: selected.valueAr,
         });
       }
     }
@@ -828,11 +874,18 @@ export async function POST(request: Request) {
               questionTextEnSnapshot: question.questionEn,
               questionTextArSnapshot: question.questionAr,
               responseTypeSnapshot: question.responseType,
+              questionVersionSnapshot: question.version,
               answerText: answer.answerText,
               answerNumeric: answer.answerNumeric,
               answerBoolean: answer.answerBoolean,
               answerDate: answer.answerDate,
+              answerDateTime: answer.answerDateTime,
+              answerDateTimeLocalSnapshot: answer.answerDateTimeLocalSnapshot,
+              answerTimeZoneSnapshot: answer.answerTimeZoneSnapshot,
               selectedOptionSnapshot: answer.selectedOptionSnapshot,
+              selectedOptionCodeSnapshot: answer.selectedOptionCodeSnapshot,
+              selectedOptionTextEnSnapshot: answer.selectedOptionTextEnSnapshot,
+              selectedOptionTextArSnapshot: answer.selectedOptionTextArSnapshot,
               recordedByUserId: session.user.id,
             },
           });
