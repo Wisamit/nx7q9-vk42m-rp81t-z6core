@@ -1061,6 +1061,7 @@ export async function POST(request: Request) {
       subtotal: result.subtotal,
       discountPercent: requestedDiscountPercent.toFixed(2),
       discountTotal: result.discountTotal,
+      taxTotal: result.invoice.taxTotal.toFixed(4),
       total: result.total,
       ...(result.creditControlSnapshot ? { creditControl: result.creditControlSnapshot } : {}),
     }, { status: 201 });
