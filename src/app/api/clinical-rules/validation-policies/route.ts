@@ -43,8 +43,8 @@ export async function POST(request: Request) {
   if (scope === "DEPARTMENT" && (!departmentId || testId)) {
     return NextResponse.json({ error: "department_scope_requires_department_only" }, { status: 400 });
   }
-  if (scope === "TEST" && !testId) {
-    return NextResponse.json({ error: "test_scope_requires_test" }, { status: 400 });
+  if (scope === "TEST" && (!testId || departmentId)) {
+    return NextResponse.json({ error: "test_scope_requires_test_only" }, { status: 400 });
   }
 
   if (departmentId) {
