@@ -44,6 +44,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       orderItems: { include: { orderItem: true } },
       specimenType: true,
       container: true,
+      parentSpecimen: { select: { id: true, barcode: true, status: true } },
+      childSpecimens: { select: { id: true, barcode: true, status: true } },
       events: { where: { eventType: "CREATED" }, orderBy: { occurredAt: "asc" } },
     },
   });
@@ -229,6 +231,82 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const reasonCode = text(body.rejectionReasonCode, 80);
   const reasonText = text(body.rejectionReasonText, 500);
   if (!reasonCode || !reasonText) return NextResponse.json({ error: "rejection_reason_required" }, { status: 400 });
+
+  const activeChildAliquots = specimen.childSpecimens.filter(child => !["REJECTED","DISPOSED"].includes(child.status));
+  if (!specimen.parentSpecimenId && activeChildAliquots.length > 0) {
+    return NextResponse.json({
+      error: "active_child_aliquots_require_resolution",
+      childBarcodes: activeChildAliquots.map(child => child.barcode),
+    }, { status: 409 });
+  }
+
+  if (specimen.parentSpecimenId) {
+    const result = await prisma.$transaction(async tx => {
+      const rejected = await tx.specimen.updateMany({
+        where: { id: specimen.id, status: specimen.status },
+        data: {
+          status: "REJECTED",
+          currentBranchId: branchId,
+          rejectedByUserId: session.user.id,
+          rejectedAt: new Date(),
+          rejectionReasonCode: reasonCode,
+          rejectionReasonText: reasonText,
+        },
+      });
+      if (rejected.count !== 1) throw new Error("SPECIMEN_STATE_CHANGED");
+
+      await tx.specimenEvent.create({
+        data: {
+          specimenId: specimen.id,
+          eventType: "REJECTED",
+          branchId,
+          actorUserId: session.user.id,
+          fromStatus: specimen.status,
+          toStatus: "REJECTED",
+          details: {
+            reasonCode,
+            reasonText,
+            derivedAliquot: true,
+            parentSpecimenId: specimen.parentSpecimenId,
+            parentBarcode: specimen.parentSpecimen?.barcode || null,
+            replacementStrategy: "DERIVE_NEW_ALIQUOT_FROM_PARENT",
+          },
+        },
+      });
+
+      await tx.auditEvent.create({
+        data: {
+          organizationId: session.user.organizationId,
+          branchId,
+          actorUserId: session.user.id,
+          action: "SPECIMEN_ALIQUOT_REJECTED",
+          entityType: "Specimen",
+          entityId: specimen.id,
+          oldValues: { status: specimen.status },
+          newValues: {
+            status: "REJECTED",
+            reasonCode,
+            reasonText,
+            parentSpecimenId: specimen.parentSpecimenId,
+            parentBarcode: specimen.parentSpecimen?.barcode || null,
+            automaticPatientRecollectionCreated: false,
+          },
+          ipAddress: ctx.ipAddress,
+          userAgent: ctx.userAgent,
+        },
+      });
+
+      return true;
+    });
+
+    return NextResponse.json({
+      status: "ok",
+      rejectedSpecimenId: specimen.id,
+      replacementType: "ALIQUOT",
+      parentSpecimenId: specimen.parentSpecimenId,
+      parentBarcode: specimen.parentSpecimen?.barcode || null,
+    });
+  }
 
   const result = await prisma.$transaction(async (tx) => {
     const rejected = await tx.specimen.updateMany({
