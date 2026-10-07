@@ -15,6 +15,7 @@ type ApprovalRow = {
   currency: string;
   subtotal: string;
   discountTotal: string;
+  taxTotal: string;
   finalTotal: string;
   requestedAt: string;
   expiresAt: string;
@@ -112,7 +113,7 @@ export function DiscountApprovalManager({
                 <td><strong>{row.branchCode}</strong><br/><small>{row.branchName} · {row.requesterName}</small></td>
                 <td><strong>{row.patientNumber}</strong><br/><small>{row.services}</small></td>
                 <td><strong>{row.discountPercent}%</strong><br/><small>{row.discountTotal} {row.currency}</small></td>
-                <td>{row.subtotal} → <strong>{row.finalTotal}</strong> {row.currency}</td>
+                <td>{row.subtotal} − {row.discountTotal} + {tr("Tax", "الضريبة")} {row.taxTotal} → <strong>{row.finalTotal}</strong> {row.currency}</td>
                 <td>{row.reason}</td>
                 <td>{row.expiresAt.slice(0,16).replace("T"," ")}</td>
                 <td><div className="inline-actions">
