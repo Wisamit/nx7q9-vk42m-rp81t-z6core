@@ -59,6 +59,7 @@ export default async function ClientAccountsPage() {
       </div>
       <div className="header-actions">
         <Link className="secondary-link" href="/billing/accounts/aging">{tr(locale, "A/R Aging", "أعمار الذمم")}</Link>
+        {permissions.has("billing.credit.limits.manage") && hasAllBranches && <Link className="secondary-link" href="/billing/accounts/credit-limits">{tr(locale, "Credit Limits", "حدود الائتمان")}</Link>}
         <Link className="secondary-link" href="/billing">{tr(locale, "Back to Billing", "العودة للفوترة")}</Link>
         <Link className="secondary-link" href="/referrers">{tr(locale, "Clients", "العملاء")}</Link>
       </div>

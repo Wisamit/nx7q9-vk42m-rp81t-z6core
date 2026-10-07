@@ -9,7 +9,7 @@ type Permission = { id: string; code: string; module: string; description: strin
 type Role = { id: string; code: string; nameEn: string; nameAr: string | null; isSystem: boolean; status: string; discountLimitPercent?: string; userCount: number; permissionIds: string[] };
 type Data = { roles: Role[]; permissions: Permission[] };
 
-export function RoleManagement({ locale, canManageDiscountLimits, canManageCashierAuthority }: { locale: "ar" | "en"; canManageDiscountLimits: boolean; canManageCashierAuthority: boolean }) {
+export function RoleManagement({ locale, canManageDiscountLimits, canManageCashierAuthority, canManageCreditLimits }: { locale: "ar" | "en"; canManageDiscountLimits: boolean; canManageCashierAuthority: boolean; canManageCreditLimits: boolean }) {
   const [data, setData] = useState<Data>({ roles: [], permissions: [] });
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -116,7 +116,8 @@ export function RoleManagement({ locale, canManageDiscountLimits, canManageCashi
         <div className="permission-groups">{grouped.map(([module, permissions]) => <fieldset className="permission-group" key={module}><legend>{module}</legend>{permissions.map(permission => {
   const protectedFinancialPermission =
     (["billing.discount.approve", "billing.discount.limits.manage"].includes(permission.code) && !canManageDiscountLimits)
-    || (["billing.cashier.approve", "billing.cashier.authority.manage"].includes(permission.code) && !canManageCashierAuthority);
+    || (["billing.cashier.approve", "billing.cashier.authority.manage"].includes(permission.code) && !canManageCashierAuthority)
+    || (permission.code === "billing.credit.limits.manage" && !canManageCreditLimits);
   return <label key={permission.id}><input type="checkbox" name="permissionIds" value={permission.id} disabled={protectedFinancialPermission} /><span><strong>{permission.code}</strong><small>{permission.description || ""}{protectedFinancialPermission ? ` · ${tr("Financial admin only", "لمدير الصلاحيات المالية فقط")}` : ""}</small></span></label>;
 })}</fieldset>)}</div>
         <div className="crud-modal-actions"><button className="primary-button" disabled={busy}>{busy ? tr("Saving…", "جارٍ الحفظ…") : tr("Create role", "إنشاء الدور")}</button></div>
@@ -140,7 +141,8 @@ export function RoleManagement({ locale, canManageDiscountLimits, canManageCashi
         <div className="permission-groups">{grouped.map(([module, permissions]) => <fieldset className="permission-group" key={module}><legend>{module}</legend>{permissions.map(permission => {
   const protectedFinancialPermission =
     (["billing.discount.approve", "billing.discount.limits.manage"].includes(permission.code) && !canManageDiscountLimits)
-    || (["billing.cashier.approve", "billing.cashier.authority.manage"].includes(permission.code) && !canManageCashierAuthority);
+    || (["billing.cashier.approve", "billing.cashier.authority.manage"].includes(permission.code) && !canManageCashierAuthority)
+    || (permission.code === "billing.credit.limits.manage" && !canManageCreditLimits);
   const currentlyGranted = editing.permissionIds.includes(permission.id);
   return <label key={permission.id}>{protectedFinancialPermission && currentlyGranted && <input type="hidden" name="permissionIds" value={permission.id} />}<input type="checkbox" name="permissionIds" value={permission.id} defaultChecked={currentlyGranted} disabled={protectedFinancialPermission} /><span><strong>{permission.code}</strong><small>{permission.description || ""}{protectedFinancialPermission ? ` · ${tr("Financial admin only", "لمدير الصلاحيات المالية فقط")}` : ""}</small></span></label>;
 })}</fieldset>)}</div>

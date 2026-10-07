@@ -14,6 +14,7 @@ import { creditNoteError, invoiceAdjustmentState, refundError } from "../src/lib
 import { cashierClosingSnapshot, cashierClosureReviewError, cashierShiftActiveKey, cashierTransactionError } from "../src/lib/cashier-shift-policy.ts";
 import { buildClientStatementLedger, clientPaymentAllocationError, localDateStartUtc, nextDateString } from "../src/lib/client-accounting.ts";
 import { agingBucket, aggregateAging, historicalInvoiceReceivable, invoiceDueDateSnapshot, localCalendarDate } from "../src/lib/accounts-receivable-aging.ts";
+import { creditLimitDecision, validCreditLimit } from "../src/lib/client-credit-control.ts";
 
 test("specimen collection is only allowed from PLANNED with specimen type configured", () => {
   assert.equal(specimenActionError({ status: "PLANNED", action: "COLLECT", specimenTypeConfigured: true }), null);
@@ -529,4 +530,59 @@ test("aging aggregation keeps buckets and client credit balance separate", () =>
     receivableTotal: "175.0000",
     creditBalanceTotal: "10.0000",
   });
+});
+
+
+test("client credit limits are evaluated using exact four-decimal amounts", () => {
+  const atLimit = creditLimitDecision({
+    mode: "BLOCK",
+    limitAmount: "100.0000",
+    exposureBefore: "70.0000",
+    newInvoiceAmount: "30.0000",
+  });
+  assert.equal(atLimit?.decision, "WITHIN_LIMIT");
+  assert.equal(atLimit?.projectedExposure, "100.0000");
+  assert.equal(atLimit?.exceeded, false);
+
+  const over = creditLimitDecision({
+    mode: "BLOCK",
+    limitAmount: "100.0000",
+    exposureBefore: "70.0000",
+    newInvoiceAmount: "30.0001",
+  });
+  assert.equal(over?.decision, "BLOCKED");
+  assert.equal(over?.projectedExposure, "100.0001");
+});
+
+test("client credit policy WARN records over-limit invoices without blocking", () => {
+  const warn = creditLimitDecision({
+    mode: "WARN",
+    limitAmount: "200.0000",
+    exposureBefore: "195.0000",
+    newInvoiceAmount: "6.0000",
+  });
+  assert.equal(warn?.decision, "WARN_EXCEEDED");
+  assert.equal(warn?.exposureBefore, "195.0000");
+  assert.equal(warn?.projectedExposure, "201.0000");
+});
+
+test("unconfigured or disabled client policy does not silently restrict existing billing", () => {
+  const disabled = creditLimitDecision({
+    mode: "DISABLED",
+    limitAmount: "0.0000",
+    exposureBefore: "900.0000",
+    newInvoiceAmount: "50.0000",
+  });
+  assert.equal(disabled?.decision, "DISABLED");
+  assert.equal(disabled?.exceeded, true);
+});
+
+test("credit policy limits validate scale, range and nonnegative input", () => {
+  assert.equal(validCreditLimit("0"), "0.0000");
+  assert.equal(validCreditLimit("1500.2500"), "1500.2500");
+  assert.equal(validCreditLimit("99999999999999.9999"), "99999999999999.9999");
+  assert.equal(validCreditLimit("999999999999999.0000"), null);
+  assert.equal(validCreditLimit("-1.0000"), null);
+  assert.equal(validCreditLimit("1.00001"), null);
+  assert.equal(validCreditLimit("1e2"), null);
 });

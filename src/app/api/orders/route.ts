@@ -7,9 +7,19 @@ import { resolvePackagePrice, resolveTestPrice } from "@/lib/pricing";
 import { discountApprovalMode, effectiveDiscountLimit } from "@/lib/discount-policy";
 import { discountApprovalFingerprint } from "@/lib/discount-approval";
 import { invoiceDueDateSnapshot } from "@/lib/accounts-receivable-aging";
+import { creditLimitDecision } from "@/lib/client-credit-control";
 
 function text(value: unknown, max = 500) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
+}
+
+class CreditControlError extends Error {
+  constructor(
+    public readonly code: "credit_limit_exceeded" | "client_credit_state_changed",
+    public readonly details: Record<string, string> = {},
+  ) {
+    super(code);
+  }
 }
 
 function uniqueIds(value: unknown) {
@@ -132,7 +142,7 @@ export async function POST(request: Request) {
     }),
     prisma.orderSource.findFirst({ where: { id: sourceId, organizationId: session.user.organizationId, status: "ACTIVE" }, select: { id: true, code: true, category: true } }),
     referrerId ? prisma.referrer.findFirst({ where: { id: referrerId, organizationId: session.user.organizationId, status: "ACTIVE" }, select: { id: true, clientId: true } }) : null,
-    clientId ? prisma.client.findFirst({ where: { id: clientId, organizationId: session.user.organizationId, status: "ACTIVE" }, select: { id: true, paymentTermsDays: true } }) : null,
+    clientId ? prisma.client.findFirst({ where: { id: clientId, organizationId: session.user.organizationId, status: "ACTIVE" }, select: { id: true, paymentTermsDays: true, creditControlVersion: true } }) : null,
     prisma.branch.findFirst({ where: { id: branchId, organizationId: session.user.organizationId, status: "ACTIVE" }, select: { id: true, timezone: true } }),
   ]);
 
@@ -227,7 +237,7 @@ export async function POST(request: Request) {
       ? client
       : await prisma.client.findFirst({
           where: { id: effectiveClientId, organizationId: session.user.organizationId, status: "ACTIVE" },
-          select: { id: true, paymentTermsDays: true },
+          select: { id: true, paymentTermsDays: true, creditControlVersion: true },
         }))
     : null;
   if (effectiveClientId && !effectiveClient) {
@@ -491,6 +501,74 @@ export async function POST(request: Request) {
 
   try {
     const result = await prisma.$transaction(async (tx) => {
+      let creditControlSnapshot: Record<string, string | boolean> | null = null;
+      if (effectiveClient) {
+        // The first database statement in this transaction acquires a client-wide
+        // optimistic guard. Competing orders and limit edits must retry instead
+        // of consuming the same credit headroom.
+        const guarded = await tx.client.updateMany({
+          where: {
+            id: effectiveClient.id,
+            organizationId: session.user.organizationId,
+            status: "ACTIVE",
+            creditControlVersion: effectiveClient.creditControlVersion,
+          },
+          data: { creditControlVersion: { increment: 1 } },
+        });
+        if (guarded.count !== 1) {
+          throw new CreditControlError("client_credit_state_changed");
+        }
+
+        const policy = await tx.clientCreditPolicy.findUnique({
+          where: {
+            organizationId_clientId_currency: {
+              organizationId: session.user.organizationId,
+              clientId: effectiveClient.id,
+              currency,
+            },
+          },
+        });
+        if (policy) {
+          if (policy.mode === "DISABLED") {
+            creditControlSnapshot = {
+              policyId: policy.id,
+              currency,
+              mode: "DISABLED",
+              limitAmount: policy.limitAmount.toFixed(4),
+              decision: "DISABLED",
+            };
+          } else {
+            const exposure = await tx.invoice.aggregate({
+              where: {
+                organizationId: session.user.organizationId,
+                clientId: effectiveClient.id,
+                currency,
+                status: { not: "VOID" },
+                balanceAmount: { gt: 0 },
+              },
+              _sum: { balanceAmount: true },
+            });
+            const decision = creditLimitDecision({
+              mode: policy.mode,
+              limitAmount: policy.limitAmount.toFixed(4),
+              exposureBefore: (exposure._sum.balanceAmount ?? new Prisma.Decimal(0)).toFixed(4),
+              newInvoiceAmount: quoteFinalTotal.toFixed(4),
+            });
+            if (!decision) throw new Error("INVALID_CLIENT_CREDIT_DECISION");
+            if (decision.decision === "BLOCKED") {
+              throw new CreditControlError("credit_limit_exceeded", {
+                clientId: effectiveClient.id,
+                currency,
+                limitAmount: decision.limitAmount,
+                exposureBefore: decision.exposureBefore,
+                projectedExposure: decision.projectedExposure,
+              });
+            }
+            creditControlSnapshot = { policyId: policy.id, currency, ...decision };
+          }
+        }
+      }
+
       let accessionNumber = documentNumber("ORD");
       while (await tx.labOrder.findUnique({ where: { organizationId_accessionNumber: { organizationId: session.user.organizationId, accessionNumber } } })) {
         accessionNumber = documentNumber("ORD");
@@ -731,6 +809,7 @@ export async function POST(request: Request) {
           total: finalTotal,
           paidAmount: new Prisma.Decimal(0),
           balanceAmount: finalTotal,
+          creditControlSnapshot: creditControlSnapshot ?? Prisma.DbNull,
           paymentTermsDaysSnapshot,
           dueDate: invoiceDueDate,
           dueDateBasis: effectiveClient ? "ISSUANCE_SNAPSHOT" : null,
@@ -838,13 +917,36 @@ export async function POST(request: Request) {
             paymentTermsDaysSnapshot,
             dueDate: invoiceDueDate?.toISOString().slice(0, 10) || null,
             dueDateBasis: effectiveClient ? "ISSUANCE_SNAPSHOT" : null,
+            creditControlSnapshot,
           },
           ipAddress: ctx.ipAddress,
           userAgent: ctx.userAgent,
         },
       });
 
-      return { order, invoice, subtotal: subtotal.toString(), discountTotal: discountTotal.toString(), total: finalTotal.toString() };
+      if (creditControlSnapshot?.decision === "WARN_EXCEEDED") {
+        await tx.auditEvent.create({
+          data: {
+            organizationId: session.user.organizationId,
+            branchId,
+            actorUserId: session.user.id,
+            action: "CLIENT_CREDIT_LIMIT_WARNING",
+            entityType: "Invoice",
+            entityId: invoice.id,
+            newValues: { clientId: effectiveClientId, invoiceNumber, ...creditControlSnapshot },
+            ipAddress: ctx.ipAddress,
+            userAgent: ctx.userAgent,
+          },
+        });
+      }
+      return {
+        order,
+        invoice,
+        subtotal: subtotal.toString(),
+        discountTotal: discountTotal.toString(),
+        total: finalTotal.toString(),
+        creditControlSnapshot,
+      };
     }, { timeout: 30000 });
 
     return NextResponse.json({
@@ -858,8 +960,27 @@ export async function POST(request: Request) {
       discountPercent: requestedDiscountPercent.toFixed(2),
       discountTotal: result.discountTotal,
       total: result.total,
+      ...(result.creditControlSnapshot ? { creditControl: result.creditControlSnapshot } : {}),
     }, { status: 201 });
-  } catch {
+  } catch (error) {
+    if (error instanceof CreditControlError) {
+      if (error.code === "credit_limit_exceeded") {
+        await prisma.auditEvent.create({
+          data: {
+            organizationId: session.user.organizationId,
+            branchId,
+            actorUserId: session.user.id,
+            action: "CLIENT_CREDIT_LIMIT_BLOCKED",
+            entityType: "Client",
+            entityId: effectiveClientId || "unassigned",
+            newValues: { ...error.details, requestedInvoiceAmount: quoteFinalTotal.toFixed(4) },
+            ipAddress: ctx.ipAddress,
+            userAgent: ctx.userAgent,
+          },
+        });
+      }
+      return NextResponse.json({ error: error.code, ...error.details }, { status: 409 });
+    }
     return NextResponse.json({ error: "order_creation_failed" }, { status: 500 });
   }
 }

@@ -9,5 +9,6 @@ export default async function RolesPage() {
   const permissions = permissionSet(session);
   const canManageDiscountLimits = permissions.has("billing.discount.limits.manage");
   const canManageCashierAuthority = permissions.has("billing.cashier.authority.manage");
-  return <main className="catalog-shell"><header className="page-header"><div><p className="eyebrow">{locale === "ar" ? "الإدارة" : "Administration"}</p><h1>{locale === "ar" ? "الأدوار والصلاحيات" : "Roles & Permissions"}</h1><p className="muted">{locale === "ar" ? "إدارة الصلاحيات بطريقة Role-based مع الحفاظ على الأدوار النظامية." : "Manage role-based permissions while protecting system roles."}</p></div></header><RoleManagement locale={locale} canManageDiscountLimits={canManageDiscountLimits} canManageCashierAuthority={canManageCashierAuthority} /></main>;
+  const canManageCreditLimits = permissions.has("billing.credit.limits.manage");
+  return <main className="catalog-shell"><header className="page-header"><div><p className="eyebrow">{locale === "ar" ? "الإدارة" : "Administration"}</p><h1>{locale === "ar" ? "الأدوار والصلاحيات" : "Roles & Permissions"}</h1><p className="muted">{locale === "ar" ? "إدارة الصلاحيات بطريقة Role-based مع الحفاظ على الأدوار النظامية." : "Manage role-based permissions while protecting system roles."}</p></div></header><RoleManagement locale={locale} canManageDiscountLimits={canManageDiscountLimits} canManageCashierAuthority={canManageCashierAuthority} canManageCreditLimits={canManageCreditLimits} /></main>;
 }

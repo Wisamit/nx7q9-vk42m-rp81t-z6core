@@ -101,6 +101,12 @@ enum InvoiceDueDateBasis {
   MIGRATED_BASELINE
 }
 
+enum CreditControlMode {
+  DISABLED
+  WARN
+  BLOCK
+}
+
 enum DiscountApprovalMethod {
   SELF_LIMIT
   APPROVAL_WORKFLOW
@@ -858,6 +864,7 @@ model Organization {
   refunds Refund[]
   cashierShifts CashierShift[]
   clientAccountStatements ClientAccountStatement[]
+  clientCreditPolicies ClientCreditPolicy[]
   specimens Specimen[]
   transferManifests SpecimenTransferManifest[]
   results LaboratoryResult[]
@@ -1152,6 +1159,8 @@ model User {
   issuedCreditNotes CreditNote[] @relation("CreditNoteIssuer")
   processedRefunds Refund[] @relation("RefundProcessor")
   createdClientAccountStatements ClientAccountStatement[] @relation("ClientStatementCreator")
+  createdClientCreditPolicies ClientCreditPolicy[] @relation("ClientCreditPolicyCreator")
+  updatedClientCreditPolicies ClientCreditPolicy[] @relation("ClientCreditPolicyUpdater")
   orderStatusChanges OrderStatusHistory[] @relation("OrderStatusChanger")
   collectedSpecimens Specimen[] @relation("SpecimenCollector")
   receivedSpecimens Specimen[] @relation("SpecimenReceiver")
@@ -1924,6 +1933,7 @@ model Client {
   addressEn      String?      @map("address_en") @db.Text
   addressAr      String?      @map("address_ar") @db.Text
   paymentTermsDays Int?       @map("payment_terms_days")
+  creditControlVersion Int   @default(0) @map("credit_control_version")
   status         RecordStatus @default(ACTIVE)
   createdAt      DateTime     @default(now()) @map("created_at") @db.DateTime(3)
   updatedAt      DateTime     @updatedAt @map("updated_at") @db.DateTime(3)
@@ -1936,6 +1946,7 @@ model Client {
   orders        LabOrder[]
   invoices      Invoice[]
   accountStatements ClientAccountStatement[]
+  creditPolicies ClientCreditPolicy[]
 
   portalAccount PortalAccount?
   corporatePortalPatientAccess CorporatePortalPatientAccess[]
@@ -2239,6 +2250,29 @@ model DiscountApprovalRequest {
   @@map("discount_approval_requests")
 }
 
+model ClientCreditPolicy {
+  id             String            @id @default(uuid()) @db.Char(36)
+  organizationId String            @map("organization_id") @db.Char(36)
+  clientId       String            @map("client_id") @db.Char(36)
+  currency       String            @db.Char(3)
+  mode           CreditControlMode @default(DISABLED)
+  limitAmount    Decimal           @default(0) @map("limit_amount") @db.Decimal(18, 4)
+  reason         String?           @db.VarChar(1000)
+  createdByUserId String           @map("created_by_user_id") @db.Char(36)
+  updatedByUserId String           @map("updated_by_user_id") @db.Char(36)
+  createdAt      DateTime          @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt      DateTime          @updatedAt @map("updated_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  client       Client       @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  createdBy    User         @relation("ClientCreditPolicyCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  updatedBy    User         @relation("ClientCreditPolicyUpdater", fields: [updatedByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([organizationId, clientId, currency])
+  @@index([organizationId, currency, mode])
+  @@map("client_credit_policies")
+}
+
 model Invoice {
   id              String        @id @default(uuid()) @db.Char(36)
   organizationId  String        @map("organization_id") @db.Char(36)
@@ -2261,6 +2295,7 @@ model Invoice {
   creditedAmount  Decimal       @default(0) @map("credited_amount") @db.Decimal(18, 4)
   paidAmount      Decimal       @default(0) @map("paid_amount") @db.Decimal(18, 4)
   balanceAmount   Decimal       @default(0) @map("balance_amount") @db.Decimal(18, 4)
+  creditControlSnapshot Json? @map("credit_control_snapshot")
   paymentTermsDaysSnapshot Int?  @map("payment_terms_days_snapshot")
   dueDate         DateTime?      @map("due_date") @db.Date
   dueDateBasis    InvoiceDueDateBasis? @map("due_date_basis")

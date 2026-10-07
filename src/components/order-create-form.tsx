@@ -147,7 +147,10 @@ export function OrderCreateForm({
 
     const body = await response.json().catch(() => ({}));
     if (response.ok) {
-      const success = `${tr("Order", "الطلب")} ${body.accessionNumber} ${tr("created", "تم إنشاؤه")} · ${tr("Invoice", "الفاتورة")} ${body.invoiceNumber} · ${body.total} ${body.currency}`;
+      const creditWarning = body.creditControl?.decision === "WARN_EXCEEDED"
+        ? tr(" · WARNING: client credit limit exceeded (recorded).", " · تحذير: تم تجاوز حد ائتمان العميل وتسجيل الحالة.")
+        : "";
+      const success = `${tr("Order", "الطلب")} ${body.accessionNumber} ${tr("created", "تم إنشاؤه")} · ${tr("Invoice", "الفاتورة")} ${body.invoiceNumber} · ${body.total} ${body.currency}${creditWarning}`;
       setMessage(success);
       setPatientId("");
       setPatientSearch("");
@@ -159,6 +162,10 @@ export function OrderCreateForm({
       event.currentTarget.reset();
       router.refresh();
       onSuccess?.(success);
+    } else if (body.error === "credit_limit_exceeded") {
+      setMessage(`${tr("Credit limit exceeded; no order or invoice was created.", "تم تجاوز حد الائتمان ولم يتم إنشاء طلب أو فاتورة.")} ${tr("Limit", "الحد")}: ${body.limitAmount} ${body.currency} · ${tr("Outstanding", "القائم")}: ${body.exposureBefore} · ${tr("Projected", "المتوقع")}: ${body.projectedExposure}`);
+    } else if (body.error === "client_credit_state_changed") {
+      setMessage(tr("Client credit state changed during processing. Review the account and submit again.", "تغيرت حالة ائتمان العميل أثناء المعالجة. راجع الحساب ثم أعد الإرسال."));
     } else if (body.error === "discount_approval_required") {
       setDiscountApprovalRequestId(typeof body.approvalRequestId === "string" ? body.approvalRequestId : "");
       setMessage(tr(
