@@ -78,6 +78,7 @@ export function SpecimenActions({
       specimen_preanalytical_state_changed: tr("Specimen state changed concurrently. Refresh and review before retrying.", "تغيرت حالة العينة بالتزامن. حدّث الصفحة وراجعها قبل إعادة المحاولة."),
       completed_order_requires_result_amendment_workflow: tr("The order is already completed. Use the controlled result/amendment workflow.", "الطلب مكتمل بالفعل. استخدم مسار النتائج/التعديل المنضبط."),
       order_cancelled: tr("The order is cancelled.", "الطلب ملغى."),
+      rejection_branch_must_match_specimen_location: tr("Rejection must be recorded at the specimen's current custody branch.", "يجب تسجيل الرفض في فرع الحيازة الحالي للعينة."),
     };
     return errors[code] || code || tr("Specimen action failed.", "فشل إجراء العينة.");
   }
