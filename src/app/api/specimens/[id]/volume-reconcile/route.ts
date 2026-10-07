@@ -30,6 +30,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     status: specimen.status,
     originalVolume: specimen.volume?.toFixed(3) || null,
     originalVolumeUnit: specimen.volumeUnit,
+    trackedVolumeUnit: specimen.volumeUnit || specimen.remainingVolumeUnit,
     availableVolume,
     availableVolumeUnit,
   });
