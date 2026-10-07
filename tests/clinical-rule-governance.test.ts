@@ -102,3 +102,43 @@ test("clinical rule activation is permission-gated and validation policies canno
   assert.match(governance, /CLINICAL_RULE_RETIRED/);
   assert.match(validationPolicies, /use_clinical_rule_governance/);
 });
+
+
+test("clinical rule governance serializes approval and retirement by clinical identity", () => {
+  const governance = readFileSync("src/app/api/clinical-rules/governance/route.ts", "utf8");
+  const migration = readFileSync("prisma/migrations/20261008030000_clinical_rule_approval_governance/migration.sql", "utf8");
+
+  assert.match(governance, /clinicalRuleGovernanceLock\.upsert/);
+  assert.match(governance, /createHash\("sha256"\)\.update\(existing\.identityKey\)/);
+  assert.match(migration, /CREATE TABLE `clinical_rule_governance_locks`/);
+  assert.match(migration, /PRIMARY KEY \(`organization_id`, `rule_type`, `identity_hash`\)/);
+});
+
+test("branch-scoped clinical rule creation and approval are server-side guarded", () => {
+  const branchScopedRoutes = [
+    "src/app/api/clinical-rules/reflex/route.ts",
+    "src/app/api/clinical-rules/delta/route.ts",
+    "src/app/api/clinical-rules/autoverification/route.ts",
+    "src/app/api/clinical-rules/validation-holds/route.ts",
+    "src/app/api/clinical-rules/critical-escalation/route.ts",
+    "src/app/api/clinical-rules/validation-policies/route.ts",
+  ];
+
+  for (const route of branchScopedRoutes) {
+    const source = readFileSync(route, "utf8");
+    assert.match(source, /canAccessBranch/);
+    assert.match(source, /branch_forbidden/);
+  }
+
+  const governance = readFileSync("src/app/api/clinical-rules/governance/route.ts", "utf8");
+  assert.match(governance, /authorizationBranchId/);
+  assert.match(governance, /canAccessBranch\(session, lockedExisting\.authorizationBranchId\)/);
+});
+
+test("delta draft configuration validates branch and method ownership", () => {
+  const delta = readFileSync("src/app/api/clinical-rules/delta/route.ts", "utf8");
+  assert.match(delta, /organizationId: session\.user\.organizationId, status: "ACTIVE"/);
+  assert.match(delta, /branch_not_found/);
+  assert.match(delta, /method_not_found/);
+  assert.match(delta, /component_not_belong_to_test/);
+});
