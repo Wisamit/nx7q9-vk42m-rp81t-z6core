@@ -39,6 +39,7 @@ export function SpecimenAliquotManager({
   childAliquots,
   usageEvents,
   canManage,
+  canPrintLabels,
   locale,
 }: {
   specimenId: string;
@@ -53,6 +54,7 @@ export function SpecimenAliquotManager({
   childAliquots: ChildAliquot[];
   usageEvents: UsageRow[];
   canManage: boolean;
+  canPrintLabels: boolean;
   locale: "ar" | "en";
 }) {
   const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
@@ -280,7 +282,7 @@ export function SpecimenAliquotManager({
           <td>{child.storageLocation || "—"}</td>
           <td><div className="header-actions">
             <Link className="secondary-link" href={"/specimens?q=" + encodeURIComponent(child.barcode)}>{tr("Open", "فتح")}</Link>
-            {canManage && <Link className="secondary-link" href={`/specimens/${child.id}/label`}>{tr("Label", "الملصق")}</Link>}
+            {canPrintLabels && <Link className="secondary-link" href={`/specimens/${child.id}/label`}>{tr("Label", "الملصق")}</Link>}
           </div></td>
         </tr>)}</tbody>
       </table>
