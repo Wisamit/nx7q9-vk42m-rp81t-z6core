@@ -10,6 +10,7 @@ import { evaluateAutoverification } from "@/lib/autoverification";
 import { validationHoldMatches } from "@/lib/validation-holds";
 import { parseResultValue } from "@/lib/result-value-parser";
 import { qualitativeFlag } from "@/lib/qualitative-result-options";
+import { resolveResultValueComment } from "@/lib/result-comments";
 
 function text(value: unknown, max = 5000) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -23,7 +24,7 @@ export async function POST(request: Request) {
     specimenId?: string;
     performingBranchId?: string;
     comments?: string;
-    values?: Array<{ componentId?: string | null; rawValue?: unknown; resultOptionId?: string | null }>;
+    values?: Array<{ componentId?: string | null; rawValue?: unknown; resultOptionId?: string | null; comments?: unknown }>;
   } | null;
 
   if (!body) return NextResponse.json({ error: "invalid_request" }, { status: 400 });
@@ -171,6 +172,7 @@ export async function POST(request: Request) {
       }];
 
   const valueByComponent = new Map((body.values || []).map((entry) => [entry.componentId || "__TEST__", entry]));
+  const existingValueByComponent = new Map((existing?.values || []).map((value) => [value.componentId || "__TEST__", value]));
   const prepared: Array<{
     componentId: string | null;
     code: string;
@@ -196,6 +198,7 @@ export async function POST(request: Request) {
     qualitativeOptionCode: string | null;
     valueTextEnSnapshot: string | null;
     valueTextArSnapshot: string | null;
+    comments: string | null;
   }> = [];
   const calculatedTargetIds = new Set(orderItem.test.calculatedRules.map(rule => rule.targetComponentId));
 
@@ -203,8 +206,10 @@ export async function POST(request: Request) {
     for (const component of expected) {
       if (component.componentId && calculatedTargetIds.has(component.componentId)) continue;
 
-      const entry = valueByComponent.get(component.componentId || "__TEST__");
+      const key = component.componentId || "__TEST__";
+      const entry = valueByComponent.get(key);
       const raw = entry?.rawValue;
+      const componentComment = resolveResultValueComment(entry, existingValueByComponent.get(key)?.comments);
       const fieldOptions = component.resultType === "QUALITATIVE"
         ? qualitativeOptions.filter((option) => option.componentId === component.componentId)
         : [];
@@ -287,6 +292,7 @@ export async function POST(request: Request) {
         qualitativeOptionCode: selectedOption?.code || null,
         valueTextEnSnapshot: selectedOption?.valueEn || null,
         valueTextArSnapshot: selectedOption?.valueAr || null,
+        comments: componentComment,
       });
     }
 
@@ -348,6 +354,7 @@ export async function POST(request: Request) {
         qualitativeOptionCode: null,
         valueTextEnSnapshot: null,
         valueTextArSnapshot: null,
+        comments: existingValueByComponent.get(target.componentId || "__TEST__")?.comments || null,
       });
     }
   } catch (error) {
@@ -453,6 +460,7 @@ export async function POST(request: Request) {
           qualitativeOptionCodeSnapshot: item.qualitativeOptionCode,
           valueTextEnSnapshot: item.valueTextEnSnapshot,
           valueTextArSnapshot: item.valueTextArSnapshot,
+          comments: item.comments,
           deltaEvaluation: item.delta.evaluation,
           previousValueSnapshot: item.delta.previousValue,
           previousResultAtSnapshot: item.delta.previousResultAt,
@@ -643,6 +651,7 @@ export async function POST(request: Request) {
             componentCode: value.componentCodeSnapshot,
             displayValue: value.displayValue,
             flag: value.flag,
+            comments: value.comments,
           })),
         } : undefined,
         newValues: {
@@ -660,6 +669,7 @@ export async function POST(request: Request) {
             critical: item.flag.isCritical,
             qualitativeOptionId: item.qualitativeOptionId,
             qualitativeOptionCode: item.qualitativeOptionCode,
+            comments: item.comments,
             referenceIntervalId: item.interval?.id || null,
             deltaEvaluation: item.delta.evaluation,
             deltaAbsolute: item.delta.deltaAbsolute?.toString() || null,
