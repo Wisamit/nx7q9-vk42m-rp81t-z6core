@@ -32,6 +32,7 @@ test("report message templates replace only supported context tokens", () => {
   const rendered = renderReportTemplate(
     "Accession {{accessionNumber}} v{{reportVersion}}: {{portalUrl}}",
     {
+      recipientName: "A",
       patientName: "A",
       accessionNumber: "ACC-1",
       reportVersion: 3,
@@ -43,7 +44,8 @@ test("report message templates replace only supported context tokens", () => {
 });
 
 test("default outbound message contains secure portal link but no result values", () => {
-  const message = defaultReportReadyMessage("en", {
+  const message = defaultReportReadyMessage("en", "PATIENT", {
+    recipientName: "Patient",
     patientName: "Patient",
     accessionNumber: "ACC-1",
     reportVersion: 1,
