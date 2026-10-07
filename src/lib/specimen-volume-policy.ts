@@ -56,6 +56,7 @@ export function reconciledVolumeError(input: {
   status: VolumeTrackedSpecimenStatus;
   originalVolume: string | null;
   originalVolumeUnit: string | null;
+  trackedVolumeUnit?: string | null;
   availableVolume: string;
   availableVolumeUnit: string | null;
 }) {
@@ -63,6 +64,9 @@ export function reconciledVolumeError(input: {
   const available = volume3ToMinor(input.availableVolume);
   if (available === null) return "invalid_available_volume";
   if (!input.availableVolumeUnit?.trim()) return "volume_unit_required";
+  if (input.trackedVolumeUnit && !volumeUnitsMatch(input.trackedVolumeUnit, input.availableVolumeUnit)) {
+    return "volume_unit_mismatch";
+  }
   const original = volume3ToMinor(input.originalVolume);
   if (original !== null) {
     if (!volumeUnitsMatch(input.originalVolumeUnit, input.availableVolumeUnit)) return "volume_unit_mismatch";
