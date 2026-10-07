@@ -57,6 +57,10 @@ test("historical volume reconciliation never silently exceeds known collected vo
     status: "REJECTED", originalVolume: "3.000", originalVolumeUnit: "mL",
     availableVolume: "1.000", availableVolumeUnit: "mL",
   }), "specimen_status_not_reconcilable");
+  assert.equal(reconciledVolumeError({
+    status: "RECEIVED", originalVolume: null, originalVolumeUnit: null, trackedVolumeUnit: "mL",
+    availableVolume: "1.000", availableVolumeUnit: "uL",
+  }), "volume_unit_mismatch");
   assert.equal(volumeUnitsMatch("mL", " ml "), true);
 });
 
