@@ -26,6 +26,8 @@ ALTER TABLE `order_answers`
   MODIFY `response_type_snapshot` ENUM('TEXT','NUMERIC','BOOLEAN','DATE','DATETIME','SINGLE_CHOICE') NOT NULL,
   ADD COLUMN `question_version_snapshot` INTEGER NOT NULL DEFAULT 1 AFTER `response_type_snapshot`,
   ADD COLUMN `answer_date_time` DATETIME(3) NULL AFTER `answer_date`,
+  ADD COLUMN `answer_date_time_local_snapshot` VARCHAR(32) NULL AFTER `answer_date_time`,
+  ADD COLUMN `answer_time_zone_snapshot` VARCHAR(100) NULL AFTER `answer_date_time_local_snapshot`,
   ADD COLUMN `selected_option_code_snapshot` VARCHAR(100) NULL AFTER `selected_option_snapshot`,
   ADD COLUMN `selected_option_text_en_snapshot` VARCHAR(500) NULL AFTER `selected_option_code_snapshot`,
   ADD COLUMN `selected_option_text_ar_snapshot` VARCHAR(500) NULL AFTER `selected_option_text_en_snapshot`;
