@@ -6231,6 +6231,8 @@ model OrderAnswer {
   answerBoolean            Boolean?                  @map("answer_boolean")
   answerDate               DateTime?                 @map("answer_date") @db.Date
   answerDateTime           DateTime?                 @map("answer_date_time") @db.DateTime(3)
+  answerDateTimeLocalSnapshot String?                @map("answer_date_time_local_snapshot") @db.VarChar(32)
+  answerTimeZoneSnapshot   String?                   @map("answer_time_zone_snapshot") @db.VarChar(100)
   selectedOptionSnapshot   String?                   @map("selected_option_snapshot") @db.VarChar(500)
   selectedOptionCodeSnapshot String?                 @map("selected_option_code_snapshot") @db.VarChar(100)
   selectedOptionTextEnSnapshot String?               @map("selected_option_text_en_snapshot") @db.VarChar(500)
