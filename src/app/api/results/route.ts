@@ -566,6 +566,7 @@ export async function POST(request: Request) {
       complete,
       values: prepared.map(item => ({
         flag: item.flag.flag,
+        isAbnormal: item.flag.isAbnormal,
         isCritical: item.flag.isCritical,
         deltaEvaluation: item.delta.evaluation,
       })),
