@@ -14,7 +14,7 @@ WHERE `effective_from` IS NULL;
 
 ALTER TABLE `order_questions`
   MODIFY `effective_from` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  DROP INDEX `order_questions_test_id_code_key`,
+  DROP INDEX `order_questions_test_code_key`,
   ADD UNIQUE INDEX `order_questions_test_id_code_version_key` (`test_id`, `code`, `version`),
   ADD INDEX `order_questions_test_code_effective_idx` (`test_id`, `code`, `status`, `effective_from`, `effective_to`),
   ADD INDEX `order_questions_supersedes_question_id_idx` (`supersedes_question_id`),
