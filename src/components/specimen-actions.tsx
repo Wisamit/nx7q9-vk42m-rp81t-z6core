@@ -18,6 +18,9 @@ export function SpecimenActions({
   branches,
   activeBranchId,
   locale,
+  canCollect,
+  canReceive,
+  canReject,
 }: {
   specimenId: string;
   orderId: string;
@@ -31,6 +34,9 @@ export function SpecimenActions({
   branches: BranchOption[];
   activeBranchId: string | null;
   locale: "ar" | "en";
+  canCollect: boolean;
+  canReceive: boolean;
+  canReject: boolean;
 }) {
   const router = useRouter();
   const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
@@ -103,14 +109,14 @@ export function SpecimenActions({
 
   return <div className="specimen-actions">
     <div className="specimen-action-buttons">
-      {status === "PLANNED" && !requirementsFinalized && <button type="button" className="secondary-button" disabled={busy} onClick={finalizeRequirements}>{tr("Finalize Requirements", "تثبيت المتطلبات")}</button>}
-      {status === "PLANNED" && requirementsFinalized && <button type="button" className="primary-button" disabled={!specimenTypeConfigured} onClick={() => setMode("COLLECT")}>{tr("Collect", "جمع")}</button>}
-      {["COLLECTED","IN_TRANSIT"].includes(status) && <button type="button" className="primary-button" onClick={() => setMode("RECEIVE")}>{tr("Receive", "استلام")}</button>}
-      {["COLLECTED","RECEIVED"].includes(status) && <button type="button" className="danger-button" onClick={() => setMode("REJECT")}>{tr("Reject", "رفض")}</button>}
+      {canCollect && status === "PLANNED" && !requirementsFinalized && <button type="button" className="secondary-button" disabled={busy} onClick={finalizeRequirements}>{tr("Finalize Requirements", "تثبيت المتطلبات")}</button>}
+      {canCollect && status === "PLANNED" && requirementsFinalized && <button type="button" className="primary-button" disabled={!specimenTypeConfigured} onClick={() => setMode("COLLECT")}>{tr("Collect", "جمع")}</button>}
+      {canReceive && ["COLLECTED","IN_TRANSIT"].includes(status) && <button type="button" className="primary-button" onClick={() => setMode("RECEIVE")}>{tr("Receive", "استلام")}</button>}
+      {canReject && ["COLLECTED","RECEIVED"].includes(status) && <button type="button" className="danger-button" onClick={() => setMode("REJECT")}>{tr("Reject", "رفض")}</button>}
     </div>
 
-    {status === "PLANNED" && !requirementsFinalized && <p className="form-warning">{tr("Collection is locked until the order's specimen requirements are finalized.", "الجمع مقفل حتى يتم تثبيت متطلبات عينات الطلب.")}</p>}
-    {!specimenTypeConfigured && status === "PLANNED" && <p className="form-error">{tr("Collection blocked: specimen type is not configured for this test.", "تعذر جمع العينة لأن نوع العينة غير مهيأ لهذا الفحص.")}</p>}
+    {canCollect && status === "PLANNED" && !requirementsFinalized && <p className="form-warning">{tr("Collection is locked until the order's specimen requirements are finalized.", "الجمع مقفل حتى يتم تثبيت متطلبات عينات الطلب.")}</p>}
+    {canCollect && !specimenTypeConfigured && status === "PLANNED" && <p className="form-error">{tr("Collection blocked: specimen type is not configured for this test.", "تعذر جمع العينة لأن نوع العينة غير مهيأ لهذا الفحص.")}</p>}
     {requirementsFinalized && requiredVolume && status === "PLANNED" && <p className="muted"><strong>{tr("Minimum required volume", "الحد الأدنى المطلوب")}: {requiredVolume} {requiredVolumeUnit || ""}</strong></p>}
     {requirementsFinalized && collectionInstructions.length > 0 && status === "PLANNED" && <div className="muted"><strong>{tr("Collection instructions", "تعليمات الجمع")}:</strong> {collectionInstructions.join(" · ")}</div>}
     {message && <p className="form-success">{message}</p>}

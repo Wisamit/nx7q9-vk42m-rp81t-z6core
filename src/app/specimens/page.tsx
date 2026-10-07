@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { requirePermission } from "@/lib/auth";
+import { permissionSet, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { SpecimenActions } from "@/components/specimen-actions";
 import { SystemIcon } from "@/components/system-icon";
@@ -15,6 +15,10 @@ export default async function SpecimensPage({
 }) {
   const session = await requirePermission("specimens.view");
   const locale = getUiLocale(session.user.preferredLocale);
+  const permissions = permissionSet(session);
+  const canCollect = permissions.has("specimens.collect");
+  const canReceive = permissions.has("specimens.receive");
+  const canReject = permissions.has("specimens.reject");
   const params = await searchParams;
   const q = params.q?.trim() || "";
   const status = params.status?.trim() || "";
@@ -92,6 +96,7 @@ export default async function SpecimensPage({
         <p className="muted">{tr(locale, "Trace each specimen from planned collection through receipt, rejection and recollection using organization-unique barcodes.", "تتبع كل عينة من التخطيط للجمع حتى الاستلام والرفض وإعادة السحب باستخدام باركود فريد على مستوى المؤسسة.")}</p>
       </div>
       <div className="header-actions">
+        <Link className="secondary-link" href="/specimens/scan"><SystemIcon name="search" size={15} />{tr(locale, "Scan Station", "محطة المسح")}</Link>
         <Link className="secondary-link" href="/orders"><SystemIcon name="orders" size={15} />{tr(locale, "Orders", "الطلبات")}</Link>
         <Link className="secondary-link" href="/transfers"><SystemIcon name="transfer" size={15} />{tr(locale, "Transfers", "النقل بين الفروع")}</Link>
         <Link className="secondary-link" href="/dashboard"><SystemIcon name="dashboard" size={15} />{tr(locale, "Back to Dashboard", "العودة للوحة التحكم")}</Link>
@@ -139,7 +144,10 @@ export default async function SpecimensPage({
                 <h2 className="barcode-text">{specimen.barcode}</h2>
                 <p className="muted">{specimen.order.accessionNumber} · {specimen.order.patient.patientNumber} · {patientName(specimen.order.patient)}</p>
               </div>
-              <Link className="secondary-link" href={`/orders/${specimen.orderId}`}><SystemIcon name="orders" size={15} />{tr(locale, "Open Order", "فتح الطلب")}</Link>
+              <div className="header-actions">
+                {canCollect && (specimen.status !== "PLANNED" || Boolean(requirement)) && <Link className="secondary-link" href={`/specimens/${specimen.id}/label`}>{tr(locale, "Print Label", "طباعة الملصق")}</Link>}
+                <Link className="secondary-link" href={`/orders/${specimen.orderId}`}><SystemIcon name="orders" size={15} />{tr(locale, "Open Order", "فتح الطلب")}</Link>
+              </div>
             </div>
 
             <div className="specimen-metadata">
@@ -180,6 +188,9 @@ export default async function SpecimensPage({
               branches={branches}
               activeBranchId={session.activeBranchId}
               locale={locale}
+              canCollect={canCollect}
+              canReceive={canReceive}
+              canReject={canReject}
             />
 
             <details className="specimen-history">
