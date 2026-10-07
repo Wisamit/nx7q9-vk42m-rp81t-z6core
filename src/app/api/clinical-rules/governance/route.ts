@@ -431,19 +431,39 @@ export async function POST(request: Request) {
     return NextResponse.json(outcome);
   }
 
-  if (clinicalRuleLifecycleState(existing) !== "APPROVED") {
-    return NextResponse.json({ error: "only_approved_clinical_rule_can_be_retired" }, { status: 409 });
-  }
   if (!reason) return NextResponse.json({ error: "retirement_reason_required" }, { status: 400 });
 
-  const retiredAt = new Date();
-  const effectiveTo = existing.effectiveFrom <= retiredAt
-    && (existing.effectiveTo === null || existing.effectiveTo > retiredAt)
-      ? retiredAt
-      : existing.effectiveTo;
-  const typeName = entityType(type);
+  const identityHash = createHash("sha256").update(existing.identityKey).digest("hex");
+  const outcome = await prisma.$transaction(async tx => {
+    const lockAt = new Date();
+    await tx.clinicalRuleGovernanceLock.upsert({
+      where: {
+        organizationId_ruleType_identityHash: {
+          organizationId,
+          ruleType: type,
+          identityHash,
+        },
+      },
+      create: { organizationId, ruleType: type, identityHash, updatedAt: lockAt },
+      update: { updatedAt: lockAt },
+    });
 
-  await prisma.$transaction(async tx => {
+    const lockedExisting = await loadRule(tx, type, id, organizationId);
+    if (!lockedExisting) return { error: "clinical_rule_not_found" as const };
+    if (lockedExisting.authorizationBranchId && !canAccessBranch(session, lockedExisting.authorizationBranchId)) {
+      return { error: "branch_forbidden" as const };
+    }
+    if (clinicalRuleLifecycleState(lockedExisting) !== "APPROVED") {
+      return { error: "only_approved_clinical_rule_can_be_retired" as const };
+    }
+
+    const retiredAt = new Date();
+    const effectiveTo = lockedExisting.effectiveFrom <= retiredAt
+      && (lockedExisting.effectiveTo === null || lockedExisting.effectiveTo > retiredAt)
+        ? retiredAt
+        : lockedExisting.effectiveTo;
+    const typeName = entityType(type);
+
     switch (type) {
       case "CALCULATED_RESULT_RULE":
         await tx.calculatedResultRule.update({ where: { id }, data: { status: "INACTIVE", deactivatedAt: retiredAt, effectiveTo } });
@@ -477,9 +497,9 @@ export async function POST(request: Request) {
         entityType: typeName,
         entityId: id,
         oldValues: {
-          status: existing.status,
+          status: lockedExisting.status,
           lifecycle: "APPROVED",
-          effectiveTo: existing.effectiveTo,
+          effectiveTo: lockedExisting.effectiveTo,
         },
         newValues: {
           status: "INACTIVE",
@@ -493,7 +513,15 @@ export async function POST(request: Request) {
         userAgent: ctx.userAgent,
       },
     });
+
+    return { status: "ok" as const, lifecycle: "RETIRED" as const, retiredAt };
   }, { timeout: 30000 });
 
-  return NextResponse.json({ status: "ok", lifecycle: "RETIRED", retiredAt });
+  if ("error" in outcome) {
+    const status = outcome.error === "clinical_rule_not_found" ? 404
+      : outcome.error === "branch_forbidden" ? 403
+        : 409;
+    return NextResponse.json(outcome, { status });
+  }
+  return NextResponse.json(outcome);
 }
