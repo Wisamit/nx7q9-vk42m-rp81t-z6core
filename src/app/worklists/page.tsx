@@ -290,7 +290,7 @@ export default async function WorklistsPage({
                 );
                 const result = item.results[0];
                 const criticalCount = result?.values.filter(value => value.isCritical).length || 0;
-                const abnormalCount = result?.values.filter(value => ["LOW","HIGH","CRITICAL_LOW","CRITICAL_HIGH","ABNORMAL","POSITIVE"].includes(value.flag)).length || 0;
+                const abnormalCount = result?.values.filter(value => value.isAbnormal).length || 0;
                 return <tr key={item.id}>
                   <td><strong>{item.order.accessionNumber}</strong></td>
                   <td>{item.order.patient.patientNumber}<br/><small>{patientName(item.order.patient)}</small></td>
