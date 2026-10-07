@@ -37,6 +37,7 @@ type ValidationReview = {
 type ValidationSnapshot = {
   source?: string;
   code?: string;
+  branchId?: string | null;
   nameEn?: string;
   nameAr?: string | null;
   requiresMedicalValidation?: boolean;
@@ -309,7 +310,7 @@ export function ResultWorkflowActions({
       <div><span>{tr("Result status", "حالة النتيجة")}</span><strong>{sharedStatusLabel(locale, resultStatus)}</strong></div>
       <div><span>{tr("Validation stage", "مرحلة التحقق")}</span><strong>{validationStageLabel(validationStage)}</strong></div>
       <div><span>{tr("Validation path", "مسار التحقق")}</span><strong>{snapshot?.requiresMedicalValidation ? tr("Technical → Medical", "فني ← طبي") : tr("Technical only", "فني فقط")}</strong></div>
-      <div><span>{tr("Validation policy", "سياسة التحقق")}</span><strong>{snapshot?.code || tr("Default", "افتراضية")}</strong></div>
+      <div><span>{tr("Validation policy", "سياسة التحقق")}</span><strong>{snapshot?.code || tr("Default", "افتراضية")}{snapshot?.branchId ? " · " + tr("Branch override", "تجاوز فرع") : ""}</strong></div>
       <div><span>{tr("Technical reviewer", "المراجع الفني")}</span><strong>{technicalReviewerLabel}</strong></div>
       {snapshot?.requiresMedicalValidation && <div><span>{tr("Medical validator", "المعتمد الطبي")}</span><strong>{medicalValidatorLabel}</strong></div>}
       <div><span>{tr("Critical values", "القيم الحرجة")}</span><strong>{criticalCount}</strong></div>
