@@ -285,6 +285,7 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
       <p className="muted">{tr(locale, "Reference intervals are matched by effective date, branch, method, sex and patient age when configured. The matched values are snapshotted with the result.", "تُطابق المجالات المرجعية حسب تاريخ السريان والفرع والطريقة والجنس وعمر المريض عند تهيئتها، وتُحفظ القيم المستخدمة تاريخيًا مع النتيجة.")}</p>
       <ResultEntryForm
         orderItemId={item.id}
+        testId={item.testId}
         specimenId={readySpecimen.id}
         performingBranchId={latestResult?.performingBranchId || readySpecimen.currentBranchId}
         fields={fields}
