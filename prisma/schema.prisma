@@ -25,6 +25,12 @@ enum PatientSex {
   UNKNOWN
 }
 
+enum PregnancyStatus {
+  UNKNOWN
+  NOT_PREGNANT
+  PREGNANT
+}
+
 enum PatientIdentifierType {
   NATIONAL_ID
   PASSPORT
@@ -1651,6 +1657,7 @@ model SpecimenType {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   tests        LabTest[]
   specimens    Specimen[]
+  referenceIntervals ReferenceInterval[]
 
   @@unique([organizationId, code])
   @@map("specimen_types")
@@ -1900,15 +1907,21 @@ model TestBranchAvailability {
 }
 
 model ReferenceInterval {
-  id                String           @id @default(uuid()) @db.Char(36)
-  componentId       String           @map("component_id") @db.Char(36)
-  branchId          String?          @map("branch_id") @db.Char(36)
-  methodId          String?          @map("method_id") @db.Char(36)
-  sex               SexApplicability @default(ANY)
-  ageFrom           Decimal?         @map("age_from") @db.Decimal(10, 3)
-  ageTo             Decimal?         @map("age_to") @db.Decimal(10, 3)
-  ageUnit           AgeUnit?         @map("age_unit")
-  lowValue          Decimal?         @map("low_value") @db.Decimal(18, 6)
+  id                      String           @id @default(uuid()) @db.Char(36)
+  componentId             String           @map("component_id") @db.Char(36)
+  branchId                String?          @map("branch_id") @db.Char(36)
+  methodId                String?          @map("method_id") @db.Char(36)
+  analyzerId              String?          @map("analyzer_id") @db.Char(36)
+  specimenTypeId          String?          @map("specimen_type_id") @db.Char(36)
+  sex                     SexApplicability @default(ANY)
+  ageFrom                 Decimal?         @map("age_from") @db.Decimal(10, 3)
+  ageTo                   Decimal?         @map("age_to") @db.Decimal(10, 3)
+  ageUnit                 AgeUnit?         @map("age_unit")
+  pregnancyStatus         PregnancyStatus? @map("pregnancy_status")
+  gestationalAgeFromWeeks Decimal?         @map("gestational_age_from_weeks") @db.Decimal(6, 2)
+  gestationalAgeToWeeks   Decimal?         @map("gestational_age_to_weeks") @db.Decimal(6, 2)
+  populationCode          String?          @map("population_code") @db.VarChar(80)
+  lowValue                Decimal?         @map("low_value") @db.Decimal(18, 6)
   highValue         Decimal?         @map("high_value") @db.Decimal(18, 6)
   normalTextEn      String?          @map("normal_text_en") @db.VarChar(500)
   normalTextAr      String?          @map("normal_text_ar") @db.VarChar(500)
@@ -1924,14 +1937,19 @@ model ReferenceInterval {
   createdAt         DateTime         @default(now()) @map("created_at") @db.DateTime(3)
   updatedAt         DateTime         @updatedAt @map("updated_at") @db.DateTime(3)
 
-  component TestComponent @relation(fields: [componentId], references: [id], onDelete: Restrict)
-  branch    Branch? @relation(fields: [branchId], references: [id], onDelete: Restrict)
-  method    Method? @relation(fields: [methodId], references: [id], onDelete: Restrict)
-  approvedBy User? @relation("ReferenceIntervalApprover", fields: [approvedByUserId], references: [id], onDelete: Restrict)
+  component    TestComponent @relation(fields: [componentId], references: [id], onDelete: Restrict)
+  branch       Branch? @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  method       Method? @relation(fields: [methodId], references: [id], onDelete: Restrict)
+  analyzer     Analyzer? @relation(fields: [analyzerId], references: [id], onDelete: Restrict)
+  specimenType SpecimenType? @relation(fields: [specimenTypeId], references: [id], onDelete: Restrict)
+  approvedBy   User? @relation("ReferenceIntervalApprover", fields: [approvedByUserId], references: [id], onDelete: Restrict)
   resultValues LaboratoryResultValue[]
 
   @@index([componentId, effectiveFrom, effectiveTo])
   @@index([branchId, status])
+  @@index([analyzerId, status])
+  @@index([specimenTypeId, status])
+  @@index([populationCode, status])
   @@map("reference_intervals")
 }
 
@@ -2365,8 +2383,11 @@ model LabOrder {
   clinicalNotes    String?       @map("clinical_notes") @db.Text
   diagnosis        String?       @db.VarChar(500)
   fasting          Boolean?      
-  pregnancyInfo    String?       @map("pregnancy_info") @db.VarChar(500)
-  orderedAt        DateTime      @default(now()) @map("ordered_at") @db.DateTime(3)
+  pregnancyInfo          String?          @map("pregnancy_info") @db.VarChar(500)
+  pregnancyStatus        PregnancyStatus  @default(UNKNOWN) @map("pregnancy_status")
+  gestationalAgeWeeks    Decimal?         @map("gestational_age_weeks") @db.Decimal(6, 2)
+  referencePopulationCode String?         @map("reference_population_code") @db.VarChar(80)
+  orderedAt              DateTime         @default(now()) @map("ordered_at") @db.DateTime(3)
   createdByUserId  String        @map("created_by_user_id") @db.Char(36)
   createdAt        DateTime      @default(now()) @map("created_at") @db.DateTime(3)
   updatedAt        DateTime      @updatedAt @map("updated_at") @db.DateTime(3)
@@ -4165,6 +4186,7 @@ model Analyzer {
   messages     AnalyzerMessage[]
   resultImports AnalyzerResultImport[]
   results LaboratoryResult[]
+  referenceIntervals ReferenceInterval[]
   equipment Equipment?
   maintenanceEvents MaintenanceEvent[]
   calibrationEvents CalibrationEvent[]
