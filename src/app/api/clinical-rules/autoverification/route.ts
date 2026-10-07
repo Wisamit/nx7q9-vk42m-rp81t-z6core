@@ -6,15 +6,6 @@ function text(value: unknown, max = 500) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
 }
 
-function overlaps(
-  aStart: Date,
-  aEnd: Date | null,
-  bStart: Date,
-  bEnd: Date | null,
-) {
-  return (aEnd === null || bStart <= aEnd) && (bEnd === null || aStart <= bEnd);
-}
-
 export async function POST(request: Request) {
   const session = await requirePermission("clinical_rules.manage");
   const ctx = await requestContext();
@@ -42,27 +33,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "invalid_effective_dates" }, { status: 400 });
   }
 
-  const [test, branchRecord, existing] = await Promise.all([
+  const [test, branchRecord] = await Promise.all([
     prisma.labTest.findFirst({ where: { id: testId, organizationId: session.user.organizationId, status: "ACTIVE" } }),
     branchId
       ? prisma.branch.findFirst({ where: { id: branchId, organizationId: session.user.organizationId, status: "ACTIVE" } })
       : Promise.resolve(null),
-    prisma.autoverificationPolicy.findMany({
-      where: {
-        organizationId: session.user.organizationId,
-        testId,
-        branchId,
-        status: "ACTIVE",
-      },
-      select: { id: true, effectiveFrom: true, effectiveTo: true },
-    }),
   ]);
 
   if (!test) return NextResponse.json({ error: "test_not_found" }, { status: 404 });
   if (branchId && !branchRecord) return NextResponse.json({ error: "branch_not_found" }, { status: 404 });
-  if (existing.some(policy => overlaps(effectiveFrom, effectiveTo, policy.effectiveFrom, policy.effectiveTo))) {
-    return NextResponse.json({ error: "overlapping_autoverification_policy" }, { status: 409 });
-  }
 
   const policy = await prisma.$transaction(async tx => {
     const created = await tx.autoverificationPolicy.create({
@@ -81,6 +60,7 @@ export async function POST(request: Request) {
         requireAllFlagsNormal,
         effectiveFrom,
         effectiveTo,
+        status: "INACTIVE",
       },
     });
 
@@ -89,7 +69,7 @@ export async function POST(request: Request) {
         organizationId: session.user.organizationId,
         branchId: session.activeBranchId,
         actorUserId: session.user.id,
-        action: "AUTOVERIFICATION_POLICY_CREATED",
+        action: "AUTOVERIFICATION_POLICY_DRAFT_CREATED",
         entityType: "AutoverificationPolicy",
         entityId: created.id,
         newValues: {
