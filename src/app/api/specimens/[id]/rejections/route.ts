@@ -128,6 +128,24 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
                   select: { id: true, status: true },
                   take: 1,
                 },
+                microbiologyCases: {
+                  where: { status: { not: "CANCELLED" } },
+                  select: { id: true, status: true },
+                  take: 1,
+                },
+                sendOutReferrals: {
+                  where: { status: { notIn: ["COMPLETED","CANCELLED"] } },
+                  select: { id: true, status: true },
+                  take: 1,
+                },
+                analyzerResultImports: {
+                  where: {
+                    specimenId: id,
+                    status: { in: ["MAPPED","IMPORTED"] },
+                  },
+                  select: { id: true, status: true },
+                  take: 1,
+                },
               },
             },
           },
@@ -190,8 +208,21 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
 
   const affectedSet = new Set(affectedOrderItemIds);
-  if (activeLinks.some(link => affectedSet.has(link.orderItemId) && link.orderItem.results.length > 0)) {
+  const affectedLinks = activeLinks.filter(link => affectedSet.has(link.orderItemId));
+  if (affectedLinks.some(link => link.orderItem.results.length > 0)) {
     return NextResponse.json({ error: "affected_tests_already_have_results" }, { status: 409 });
+  }
+  if (affectedLinks.some(link => ["IN_PROGRESS","RESULTED","VERIFIED"].includes(link.orderItem.status))) {
+    return NextResponse.json({ error: "affected_tests_analytical_work_started" }, { status: 409 });
+  }
+  if (affectedLinks.some(link => link.orderItem.microbiologyCases.length > 0)) {
+    return NextResponse.json({ error: "affected_tests_microbiology_work_started" }, { status: 409 });
+  }
+  if (affectedLinks.some(link => link.orderItem.sendOutReferrals.length > 0)) {
+    return NextResponse.json({ error: "affected_tests_sendout_active" }, { status: 409 });
+  }
+  if (affectedLinks.some(link => link.orderItem.analyzerResultImports.length > 0)) {
+    return NextResponse.json({ error: "affected_tests_analyzer_work_started" }, { status: 409 });
   }
 
   const activeChildren = specimen.childSpecimens.filter(child => !["REJECTED","DISPOSED"].includes(child.status));
