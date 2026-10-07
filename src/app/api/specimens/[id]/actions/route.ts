@@ -101,6 +101,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           collectedAt: new Date(),
           volume: volume === null ? null : volume.toFixed(3),
           volumeUnit,
+          remainingVolume: volume === null ? null : volume.toFixed(3),
+          remainingVolumeUnit: volume === null ? null : volumeUnit,
           notes: text(body.notes, 5000) || null,
         },
       });
@@ -164,6 +166,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
             requiredVolumeUnit: requirementSnapshot.requiredVolumeUnit,
             collectedVolume: volume === null ? null : volume.toFixed(3),
             collectedVolumeUnit: volumeUnit,
+            remainingVolume: volume === null ? null : volume.toFixed(3),
+            remainingVolumeUnit: volume === null ? null : volumeUnit,
           },
           ipAddress: ctx.ipAddress,
           userAgent: ctx.userAgent,
