@@ -73,7 +73,7 @@ export default async function PortalReportPage({ params }: { params: Promise<{ v
         reportVersionId: version.id,
         channel: "PORTAL",
         status: "DELIVERED",
-        recipient: account.id,
+        recipient: account.type,
         externalRef: session.id,
         details: {
           portalAccountId: account.id,
