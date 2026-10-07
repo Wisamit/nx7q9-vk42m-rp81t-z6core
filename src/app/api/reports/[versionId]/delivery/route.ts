@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { Prisma } from "../../../../../../generated/prisma/client";
-import { requirePermission, requestContext } from "@/lib/auth";
+import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 
 function text(value: unknown, max = 255) {
@@ -33,6 +33,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ ver
     include: { report: { include: { order: true } } },
   });
   if (!version) return NextResponse.json({ error: "report_version_not_found" }, { status: 404 });
+  if (!canAccessBranch(session, version.branchId)) {
+    return NextResponse.json({ error: "branch_forbidden" }, { status: 403 });
+  }
 
   const event = await prisma.$transaction(async (tx) => {
     const created = await tx.reportDeliveryEvent.create({
