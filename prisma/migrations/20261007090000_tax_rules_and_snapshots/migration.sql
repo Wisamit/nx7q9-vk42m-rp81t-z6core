@@ -30,7 +30,6 @@ CREATE TABLE `tax_rules` (
   CONSTRAINT `tax_rules_test_fkey` FOREIGN KEY (`test_id`) REFERENCES `lab_tests`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
   CONSTRAINT `tax_rules_package_fkey` FOREIGN KEY (`package_id`) REFERENCES `commercial_packages`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
   CONSTRAINT `tax_rules_creator_fkey` FOREIGN KEY (`created_by_user_id`) REFERENCES `users`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
-  CONSTRAINT `tax_rules_exactly_one_service` CHECK ((`test_id` IS NULL) <> (`package_id` IS NULL)),
   CONSTRAINT `tax_rules_rate_range` CHECK (`rate_percent` >= 0 AND `rate_percent` <= 100)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
