@@ -13,6 +13,7 @@ import { discountApprovalFingerprint } from "../src/lib/discount-approval.ts";
 import { creditNoteError, invoiceAdjustmentState, refundError } from "../src/lib/billing-adjustments.ts";
 import { cashierClosingSnapshot, cashierClosureReviewError, cashierShiftActiveKey, cashierTransactionError } from "../src/lib/cashier-shift-policy.ts";
 import { buildClientStatementLedger, clientPaymentAllocationError, localDateStartUtc, nextDateString } from "../src/lib/client-accounting.ts";
+import { agingBucket, aggregateAging, historicalInvoiceReceivable, invoiceDueDateSnapshot, localCalendarDate } from "../src/lib/accounts-receivable-aging.ts";
 
 test("specimen collection is only allowed from PLANNED with specimen type configured", () => {
   assert.equal(specimenActionError({ status: "PLANNED", action: "COLLECT", specimenTypeConfigured: true }), null);
@@ -469,4 +470,63 @@ test("client statement date boundaries respect the reporting timezone", () => {
   assert.equal(nextDateString("2026-10-07"), "2026-10-08");
   assert.equal(localDateStartUtc("2026-10-07", "Asia/Dubai")?.toISOString(), "2026-10-06T20:00:00.000Z");
   assert.equal(localDateStartUtc("2026-02-30", "Asia/Dubai"), null);
+});
+
+
+test("invoice due date snapshot uses branch-local issuance date and frozen payment terms", () => {
+  const issuedAt = new Date("2026-10-06T22:30:00.000Z");
+  assert.equal(localCalendarDate(issuedAt, "Asia/Dubai"), "2026-10-07");
+  assert.equal(invoiceDueDateSnapshot(issuedAt, "Asia/Dubai", 30)?.toISOString().slice(0, 10), "2026-11-06");
+  assert.equal(invoiceDueDateSnapshot(issuedAt, "Asia/Dubai", -1), null);
+});
+
+test("aging bucket boundaries are stable at current, 30, 60 and 90 days", () => {
+  assert.deepEqual(agingBucket("2026-10-07", "2026-10-07"), { bucket: "CURRENT", daysOverdue: 0 });
+  assert.deepEqual(agingBucket("2026-10-08", "2026-10-07"), { bucket: "CURRENT", daysOverdue: 0 });
+  assert.deepEqual(agingBucket("2026-09-07", "2026-10-07"), { bucket: "DAYS_1_30", daysOverdue: 30 });
+  assert.deepEqual(agingBucket("2026-09-06", "2026-10-07"), { bucket: "DAYS_31_60", daysOverdue: 31 });
+  assert.deepEqual(agingBucket("2026-08-08", "2026-10-07"), { bucket: "DAYS_31_60", daysOverdue: 60 });
+  assert.deepEqual(agingBucket("2026-08-07", "2026-10-07"), { bucket: "DAYS_61_90", daysOverdue: 61 });
+  assert.deepEqual(agingBucket("2026-07-09", "2026-10-07"), { bucket: "DAYS_61_90", daysOverdue: 90 });
+  assert.deepEqual(agingBucket("2026-07-08", "2026-10-07"), { bucket: "DAYS_91_PLUS", daysOverdue: 91 });
+});
+
+test("historical invoice receivable reconstructs credits payments and refunds without current balance", () => {
+  assert.deepEqual(historicalInvoiceReceivable({
+    total: "100.0000",
+    creditNotes: "10.0000",
+    payments: "50.0000",
+    refunds: "5.0000",
+  }), {
+    rawBalance: "45.0000",
+    receivable: "45.0000",
+    creditBalance: "0.0000",
+  });
+
+  assert.deepEqual(historicalInvoiceReceivable({
+    total: "100.0000",
+    creditNotes: "100.0000",
+    payments: "40.0000",
+    refunds: "0.0000",
+  }), {
+    rawBalance: "-40.0000",
+    receivable: "0.0000",
+    creditBalance: "40.0000",
+  });
+});
+
+test("aging aggregation keeps buckets and client credit balance separate", () => {
+  assert.deepEqual(aggregateAging([
+    { bucket: "CURRENT", receivable: "100.0000", creditBalance: "0.0000" },
+    { bucket: "DAYS_1_30", receivable: "50.0000", creditBalance: "0.0000" },
+    { bucket: "DAYS_91_PLUS", receivable: "25.0000", creditBalance: "10.0000" },
+  ]), {
+    current: "100.0000",
+    days1to30: "50.0000",
+    days31to60: "0.0000",
+    days61to90: "0.0000",
+    days91plus: "25.0000",
+    receivableTotal: "175.0000",
+    creditBalanceTotal: "10.0000",
+  });
 });
