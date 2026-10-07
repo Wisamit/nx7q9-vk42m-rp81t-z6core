@@ -73,8 +73,9 @@ test("collection requires configured minimum volume and matching unit", () => {
   assert.equal(specimenCollectionVolumeError({ requiredVolume: "1.250", requiredVolumeUnit: "mL", collectedVolume: "1.250", collectedVolumeUnit: "mL" }), null);
 });
 
-test("requirement snapshot reader preserves immutable collection metadata", () => {
-  assert.deepEqual(specimenRequirementSnapshotFromDetails({
+test("requirement snapshot reader accepts only explicit finalized metadata", () => {
+  const finalized = {
+    requirementsFinalized: true,
     requiredVolume: "0.800",
     requiredVolumeUnit: "mL",
     volumeRequirementComplete: true,
@@ -84,7 +85,9 @@ test("requirement snapshot reader preserves immutable collection metadata", () =
     shared: true,
     configurationComplete: true,
     requirementMembers: [{ testCode: "GLU" }],
-  }), {
+  };
+  assert.equal(specimenRequirementSnapshotFromDetails({ requiredVolume: "0.800" }), null);
+  assert.deepEqual(specimenRequirementSnapshotFromDetails(finalized), {
     requiredVolume: "0.800",
     requiredVolumeUnit: "mL",
     volumeRequirementComplete: true,
