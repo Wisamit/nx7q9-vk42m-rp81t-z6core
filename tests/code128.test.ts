@@ -41,3 +41,15 @@ test("planned labels require finalized requirements and reprints require a reaso
     status: "COLLECTED", requirementsFinalized: true, priorPrintCount: 1, reason: "Damaged label",
   }), null);
 });
+
+
+test("terminal specimen statuses cannot produce reusable labels", () => {
+  for (const status of ["COLLECTION_FAILED","REJECTED","DISPOSED"]) {
+    assert.equal(specimenLabelPrintError({
+      status,
+      requirementsFinalized: true,
+      priorPrintCount: 0,
+      reason: "",
+    }), "specimen_label_status_blocked");
+  }
+});
