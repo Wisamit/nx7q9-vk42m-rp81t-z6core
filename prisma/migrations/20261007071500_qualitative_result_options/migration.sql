@@ -1,6 +1,7 @@
 ALTER TABLE `laboratory_result_values`
   MODIFY COLUMN `flag` ENUM('NORMAL','LOW','HIGH','CRITICAL_LOW','CRITICAL_HIGH','ABNORMAL','POSITIVE','NEGATIVE','UNKNOWN') NOT NULL DEFAULT 'UNKNOWN',
   ADD COLUMN `flag_source` ENUM('NONE','REFERENCE_INTERVAL','RESULT_OPTION','ANALYZER','MANUAL') NOT NULL DEFAULT 'NONE' AFTER `flag`,
+  ADD COLUMN `is_abnormal` BOOLEAN NOT NULL DEFAULT false AFTER `flag_source`,
   ADD COLUMN `qualitative_option_id` CHAR(36) NULL AFTER `is_critical`,
   ADD COLUMN `qualitative_option_code_snapshot` VARCHAR(80) NULL AFTER `qualitative_option_id`,
   ADD COLUMN `value_text_en_snapshot` VARCHAR(500) NULL AFTER `qualitative_option_code_snapshot`,
@@ -15,6 +16,7 @@ CREATE TABLE `qualitative_result_options` (
   `value_en` VARCHAR(500) NOT NULL,
   `value_ar` VARCHAR(500) NULL,
   `flag` ENUM('NORMAL','LOW','HIGH','CRITICAL_LOW','CRITICAL_HIGH','ABNORMAL','POSITIVE','NEGATIVE','UNKNOWN') NOT NULL DEFAULT 'UNKNOWN',
+  `is_abnormal` BOOLEAN NOT NULL DEFAULT false,
   `is_critical` BOOLEAN NOT NULL DEFAULT false,
   `display_order` INTEGER NOT NULL DEFAULT 0,
   `effective_from` DATETIME(3) NOT NULL,
