@@ -7,6 +7,7 @@ import {
   activeDerivedAliquotConflict,
   selectedRejectionOrderItemIds,
   selectiveRejectionNeedsPatientRecollection,
+  rejectionAnalyticalWorkError,
 } from "@/lib/specimen-reception-policy";
 
 function text(value: unknown, max: number) {
@@ -209,20 +210,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const affectedSet = new Set(affectedOrderItemIds);
   const affectedLinks = activeLinks.filter(link => affectedSet.has(link.orderItemId));
-  if (affectedLinks.some(link => link.orderItem.results.length > 0)) {
-    return NextResponse.json({ error: "affected_tests_already_have_results" }, { status: 409 });
-  }
-  if (affectedLinks.some(link => ["IN_PROGRESS","RESULTED","VERIFIED"].includes(link.orderItem.status))) {
-    return NextResponse.json({ error: "affected_tests_analytical_work_started" }, { status: 409 });
-  }
-  if (affectedLinks.some(link => link.orderItem.microbiologyCases.length > 0)) {
-    return NextResponse.json({ error: "affected_tests_microbiology_work_started" }, { status: 409 });
-  }
-  if (affectedLinks.some(link => link.orderItem.sendOutReferrals.length > 0)) {
-    return NextResponse.json({ error: "affected_tests_sendout_active" }, { status: 409 });
-  }
-  if (affectedLinks.some(link => link.orderItem.analyzerResultImports.length > 0)) {
-    return NextResponse.json({ error: "affected_tests_analyzer_work_started" }, { status: 409 });
+  const analyticalWorkError = rejectionAnalyticalWorkError(affectedLinks.map(link => ({
+    orderItemStatus: link.orderItem.status,
+    resultCount: link.orderItem.results.length,
+    microbiologyCount: link.orderItem.microbiologyCases.length,
+    activeSendOutCount: link.orderItem.sendOutReferrals.length,
+    analyzerWorkCount: link.orderItem.analyzerResultImports.length,
+  })));
+  if (analyticalWorkError) {
+    return NextResponse.json({ error: analyticalWorkError }, { status: 409 });
   }
 
   const activeChildren = specimen.childSpecimens.filter(child => !["REJECTED","DISPOSED"].includes(child.status));
