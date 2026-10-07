@@ -182,6 +182,7 @@ enum ClientStatementLineType {
 
 enum SpecimenStatus {
   PLANNED
+  COLLECTION_FAILED
   COLLECTED
   RECEIVED
   IN_TRANSIT
@@ -192,6 +193,7 @@ enum SpecimenStatus {
 
 enum SpecimenEventType {
   CREATED
+  COLLECTION_FAILED
   COLLECTED
   RECEIVED
   REJECTED
@@ -211,7 +213,26 @@ enum SpecimenParentRelationType {
 
 enum SpecimenOrderItemStatus {
   ACTIVE
+  FAILED_COLLECTION
   REJECTED
+}
+
+enum SpecimenCollectionAttemptOutcome {
+  SUCCESS
+  FAILED
+}
+
+enum SpecimenCollectionLocationType {
+  BRANCH
+  HOME
+  OTHER
+}
+
+enum PatientCollectionVerificationType {
+  DATE_OF_BIRTH
+  PATIENT_NUMBER
+  PHONE
+  EXTERNAL_IDENTIFIER
 }
 
 enum SpecimenRejectionScope {
@@ -911,6 +932,7 @@ model Organization {
   taxRules TaxRule[]
   specimens Specimen[]
   specimenUsageEvents SpecimenUsageEvent[]
+  specimenCollectionAttempts SpecimenCollectionAttempt[]
   specimenReceptionAssessments SpecimenReceptionAssessment[]
   specimenRejectionReasons SpecimenRejectionReason[]
   specimenRejections SpecimenRejection[]
@@ -1052,6 +1074,7 @@ model Branch {
   currentSpecimens Specimen[] @relation("SpecimenCurrentBranch")
   specimenEvents SpecimenEvent[]
   specimenUsageEvents SpecimenUsageEvent[]
+  specimenCollectionAttempts SpecimenCollectionAttempt[]
   specimenReceptionAssessments SpecimenReceptionAssessment[]
   specimenRejections SpecimenRejection[]
   outgoingTransferManifests SpecimenTransferManifest[] @relation("TransferSourceBranch")
@@ -1221,6 +1244,7 @@ model User {
   rejectedSpecimens Specimen[] @relation("SpecimenRejector")
   specimenEvents SpecimenEvent[] @relation("SpecimenEventActor")
   specimenUsageEvents SpecimenUsageEvent[] @relation("SpecimenUsageActor")
+  specimenCollectionAttempts SpecimenCollectionAttempt[] @relation("SpecimenCollectionAttemptCollector")
   specimenReceptionAssessments SpecimenReceptionAssessment[] @relation("SpecimenReceptionActor")
   specimenRejections SpecimenRejection[] @relation("SpecimenRejectionActor")
   createdTransferManifests SpecimenTransferManifest[] @relation("TransferManifestCreator")
@@ -2775,6 +2799,8 @@ model Specimen {
   receivedBy       User?         @relation("SpecimenReceiver", fields: [receivedByUserId], references: [id], onDelete: Restrict)
   rejectedBy       User?         @relation("SpecimenRejector", fields: [rejectedByUserId], references: [id], onDelete: Restrict)
   orderItems       SpecimenOrderItem[]
+  collectionAttempts SpecimenCollectionAttempt[] @relation("SpecimenCollectionAttemptSource")
+  replacementForCollectionAttempts SpecimenCollectionAttempt[] @relation("SpecimenCollectionAttemptReplacement")
   receptionAssessments SpecimenReceptionAssessment[]
   rejectionRecords SpecimenRejection[] @relation("SpecimenRejectionSource")
   replacementForRejections SpecimenRejection[] @relation("SpecimenRejectionReplacement")
@@ -2833,6 +2859,39 @@ model SpecimenEvent {
   @@map("specimen_events")
 }
 
+
+model SpecimenCollectionAttempt {
+  id                            String                           @id @default(uuid()) @db.Char(36)
+  organizationId                String                           @map("organization_id") @db.Char(36)
+  specimenId                    String                           @map("specimen_id") @db.Char(36)
+  replacementSpecimenId         String?                          @unique @map("replacement_specimen_id") @db.Char(36)
+  branchId                      String                           @map("branch_id") @db.Char(36)
+  collectorUserId               String                           @map("collector_user_id") @db.Char(36)
+  outcome                       SpecimenCollectionAttemptOutcome
+  patientNameSnapshot           String                           @map("patient_name_snapshot") @db.VarChar(220)
+  patientNumberSnapshot         String                           @map("patient_number_snapshot") @db.VarChar(40)
+  secondaryVerificationType     PatientCollectionVerificationType @map("secondary_verification_type")
+  secondaryVerificationSnapshot String                           @map("secondary_verification_snapshot") @db.VarChar(160)
+  collectionLocationType        SpecimenCollectionLocationType   @map("collection_location_type")
+  collectionLocationText        String?                          @map("collection_location_text") @db.VarChar(250)
+  volume                        Decimal?                         @db.Decimal(10, 3)
+  volumeUnit                    String?                          @map("volume_unit") @db.VarChar(30)
+  failureReasonCode             String?                          @map("failure_reason_code") @db.VarChar(80)
+  failureReasonText             String?                          @map("failure_reason_text") @db.VarChar(1000)
+  notes                         String?                          @db.VarChar(1000)
+  attemptedAt                   DateTime                         @default(now()) @map("attempted_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  specimen Specimen @relation("SpecimenCollectionAttemptSource", fields: [specimenId], references: [id], onDelete: Restrict)
+  replacementSpecimen Specimen? @relation("SpecimenCollectionAttemptReplacement", fields: [replacementSpecimenId], references: [id], onDelete: Restrict)
+  branch Branch @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  collector User @relation("SpecimenCollectionAttemptCollector", fields: [collectorUserId], references: [id], onDelete: Restrict)
+
+  @@index([specimenId, attemptedAt])
+  @@index([branchId, attemptedAt])
+  @@index([collectorUserId, attemptedAt])
+  @@map("specimen_collection_attempts")
+}
 
 model SpecimenReceptionAssessment {
   id                            String                  @id @default(uuid()) @db.Char(36)
