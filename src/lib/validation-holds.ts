@@ -1,4 +1,5 @@
-import type { ResultFlag, ResultSource } from "../../generated/prisma/client";
+type ResultSource = "MANUAL" | "ANALYZER" | "IMPORT" | "CALCULATED";
+type ResultFlag = "NORMAL" | "LOW" | "HIGH" | "CRITICAL_LOW" | "CRITICAL_HIGH" | "ABNORMAL" | "POSITIVE" | "NEGATIVE" | "UNKNOWN";
 
 type HoldRule = {
   condition: "ALWAYS" | "RESULT_SOURCE" | "ANY_ABNORMAL" | "ANY_CRITICAL" | "DELTA_EXCEEDED";
