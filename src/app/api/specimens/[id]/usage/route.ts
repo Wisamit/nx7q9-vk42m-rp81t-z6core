@@ -33,7 +33,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!specimen.currentBranchId || !canAccessBranch(session, specimen.currentBranchId)) {
     return NextResponse.json({ error: "branch_forbidden" }, { status: 403 });
   }
-  if (orderItemId && !specimen.orderItems.some(link => link.orderItemId === orderItemId)) {
+  if (orderItemId && !specimen.orderItems.some(link => link.orderItemId === orderItemId && link.status === "ACTIVE")) {
     return NextResponse.json({ error: "usage_order_item_not_linked" }, { status: 409 });
   }
 
@@ -54,8 +54,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         status: specimen.status,
         currentBranchId: specimen.currentBranchId,
         remainingVolume: { gte: volumeUsed },
+        preanalyticalVersion: specimen.preanalyticalVersion,
       },
-      data: { remainingVolume: { decrement: volumeUsed } },
+      data: {
+        remainingVolume: { decrement: volumeUsed },
+        preanalyticalVersion: { increment: 1 },
+      },
     });
     if (changed.count !== 1) return null;
 
