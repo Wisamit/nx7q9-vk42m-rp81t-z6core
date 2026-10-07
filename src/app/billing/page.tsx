@@ -56,6 +56,10 @@ export default async function BillingPage() {
         client: true,
         branch: true,
         discountApprovedBy: true,
+        lines: { include: { creditNoteLines: {
+          where: { creditNote: { status: "ISSUED" } },
+          select: { amount: true },
+        } } },
       },
       orderBy: { issuedAt: "desc" },
       take: 200,
@@ -108,6 +112,15 @@ export default async function BillingPage() {
       currency: invoice.currency,
       remainingCredit: invoice.total.sub(invoice.creditedAmount).toFixed(4),
       balanceAmount: invoice.balanceAmount.toFixed(4),
+      taxTotal: invoice.taxTotal.toFixed(4),
+      lines: invoice.lines.map(line => ({
+        id: line.id,
+        description: line.description,
+        amountRemaining: line.lineTotal.sub(
+          line.creditNoteLines.reduce((sum, item) => sum.add(item.amount), line.lineTotal.mul(0)),
+        ).toFixed(4),
+        taxAmount: line.taxAmount.toFixed(4),
+      })).filter(line => Number(line.amountRemaining) > 0),
     }));
   const refundOptions = recentPayments.flatMap(payment => {
     if (payment.status !== "POSTED") return [];
