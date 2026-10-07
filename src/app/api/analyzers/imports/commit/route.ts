@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { parseResultValue } from "@/lib/result-value-parser";
 import { numericFlag, resolveReferenceInterval } from "@/lib/result-reference";
 import { evaluateDelta } from "@/lib/delta-check";
+import { syncDeltaReviewEvents } from "@/lib/delta-review";
 import { evaluateFormula, formulaVariables } from "@/lib/formula-engine";
 import { reflexMatches } from "@/lib/reflex-rules";
 import { validationHoldMatches } from "@/lib/validation-holds";
@@ -21,6 +22,8 @@ function emptyDelta() {
     deltaPercent: null,
     absoluteLimit: null,
     percentLimit: null,
+    ruleId: null,
+    lookbackDays: null,
   };
 }
 
@@ -643,6 +646,8 @@ export async function POST(request: Request) {
           deltaPercentSnapshot: item.delta.deltaPercent,
           deltaAbsoluteLimitSnapshot: item.delta.absoluteLimit,
           deltaPercentLimitSnapshot: item.delta.percentLimit,
+          deltaRuleId: item.delta.ruleId,
+          deltaLookbackDaysSnapshot: item.delta.lookbackDays,
           isCalculated: false,
           calculatedRuleId: null,
           calculationExpressionSnapshot: null,
@@ -685,6 +690,8 @@ export async function POST(request: Request) {
           deltaPercentSnapshot: item.delta.deltaPercent,
           deltaAbsoluteLimitSnapshot: item.delta.absoluteLimit,
           deltaPercentLimitSnapshot: item.delta.percentLimit,
+          deltaRuleId: item.delta.ruleId,
+          deltaLookbackDaysSnapshot: item.delta.lookbackDays,
           analyzerImportId: item.analyzerImportId,
         },
       });
@@ -728,6 +735,8 @@ export async function POST(request: Request) {
           deltaPercentSnapshot: item.delta.deltaPercent,
           deltaAbsoluteLimitSnapshot: item.delta.absoluteLimit,
           deltaPercentLimitSnapshot: item.delta.percentLimit,
+          deltaRuleId: item.delta.ruleId,
+          deltaLookbackDaysSnapshot: item.delta.lookbackDays,
           isCalculated: true,
           calculatedRuleId: item.calculatedRuleId,
           calculationExpressionSnapshot: item.calculationExpression,
@@ -736,6 +745,13 @@ export async function POST(request: Request) {
         },
       });
     }
+
+    await syncDeltaReviewEvents(tx, {
+      resultId: result.id,
+      performingBranchId: analyzer.branchId,
+      methodId: orderItem.test.methodId,
+      detectedAt: now,
+    });
 
     for (const rule of orderItem.test.sourceReflexRules) {
       if (rule.branchId && rule.branchId !== analyzer.branchId) continue;
