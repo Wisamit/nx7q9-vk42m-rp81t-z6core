@@ -54,6 +54,26 @@ export async function POST(request: Request) {
   const clinicalNotes = text(body.clinicalNotes, 5000);
   const diagnosis = text(body.diagnosis, 500);
   const pregnancyInfo = text(body.pregnancyInfo, 500);
+  const pregnancyStatus = ["UNKNOWN", "NOT_PREGNANT", "PREGNANT"].includes(body.pregnancyStatus)
+    ? body.pregnancyStatus as "UNKNOWN" | "NOT_PREGNANT" | "PREGNANT"
+    : "UNKNOWN";
+  const gestationalAgeWeeksRaw =
+    body.gestationalAgeWeeks === "" || body.gestationalAgeWeeks === null || body.gestationalAgeWeeks === undefined
+      ? null
+      : Number(body.gestationalAgeWeeks);
+  if (
+    gestationalAgeWeeksRaw !== null &&
+    (!Number.isFinite(gestationalAgeWeeksRaw) || gestationalAgeWeeksRaw < 0)
+  ) {
+    return NextResponse.json({ error: "invalid_gestational_age" }, { status: 400 });
+  }
+  if (gestationalAgeWeeksRaw !== null && pregnancyStatus !== "PREGNANT") {
+    return NextResponse.json({ error: "gestational_age_requires_pregnant_status" }, { status: 400 });
+  }
+  const gestationalAgeWeeks = gestationalAgeWeeksRaw === null
+    ? null
+    : Math.round(gestationalAgeWeeksRaw * 100) / 100;
+  const referencePopulationCode = text(body.referencePopulationCode, 80).toUpperCase() || null;
   const fasting = body.fasting === true ? true : body.fasting === false ? false : null;
   const rawRequestedDiscountPercent = Number(body.discountPercent ?? 0);
   if (!Number.isFinite(rawRequestedDiscountPercent) || rawRequestedDiscountPercent < 0 || rawRequestedDiscountPercent > 100) {
@@ -663,6 +683,9 @@ export async function POST(request: Request) {
           diagnosis: diagnosis || null,
           fasting,
           pregnancyInfo: pregnancyInfo || null,
+          pregnancyStatus,
+          gestationalAgeWeeks,
+          referencePopulationCode,
           createdByUserId: session.user.id,
         },
       });
