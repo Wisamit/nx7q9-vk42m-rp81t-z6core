@@ -5,6 +5,7 @@ import { PortalLogoutButton } from "@/components/portal-logout-button";
 import { PortalBookingForm } from "@/components/portal-booking-form";
 import { PortalContactVerification } from "@/components/portal-contact-verification";
 import { getUiLocale, statusLabel, tr } from "@/lib/ui-i18n";
+import { normalizePortalContactDestination } from "@/lib/report-outbound";
 
 export const dynamic = "force-dynamic";
 
@@ -119,6 +120,21 @@ export default async function PortalPage() {
     account.type === "DOCTOR" ? account.referrer?.nameEn :
     account.client?.nameEn;
 
+  const currentEmailVerification = account.email
+    ? account.contactVerifications.find(item =>
+        item.channel === "EMAIL"
+        && normalizePortalContactDestination("EMAIL", item.destinationSnapshot)
+          === normalizePortalContactDestination("EMAIL", account.email!)
+      ) || null
+    : null;
+  const currentPhoneVerification = account.phone
+    ? account.contactVerifications.find(item =>
+        item.channel === "PHONE"
+        && normalizePortalContactDestination("PHONE", item.destinationSnapshot)
+          === normalizePortalContactDestination("PHONE", account.phone!)
+      ) || null
+    : null;
+
   return <main className="catalog-shell" dir={locale === "ar" ? "rtl" : "ltr"}>
     <header className="page-header">
       <div>
@@ -139,8 +155,8 @@ export default async function PortalPage() {
     <PortalContactVerification
       email={account.email}
       phone={account.phone}
-      emailVerifiedAt={account.emailVerifiedAt?.toISOString() || null}
-      phoneVerifiedAt={account.phoneVerifiedAt?.toISOString() || null}
+      emailVerifiedAt={currentEmailVerification?.verifiedAt.toISOString() || null}
+      phoneVerifiedAt={currentPhoneVerification?.verifiedAt.toISOString() || null}
       locale={locale}
     />
 
