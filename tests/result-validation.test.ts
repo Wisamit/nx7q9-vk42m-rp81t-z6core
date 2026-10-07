@@ -31,6 +31,21 @@ test("validation policy precedence is test over department over organization", (
   assert.equal(selectValidationPolicy(policies, { branchId: "B1", testId: "T2", departmentId: "D2" })?.id, "ORG");
 });
 
+test("validation policy snapshot preserves branch override identity", () => {
+  const snapshot = snapshotValidationPolicy({
+    ...base,
+    id: "P-BRANCH",
+    code: "P-BRANCH",
+    scope: "TEST",
+    branchId: "B1",
+    departmentId: null,
+    testId: "T1",
+  });
+  assert.equal(snapshot.source, "CONFIGURED");
+  assert.equal(snapshot.branchId, "B1");
+  assert.equal(snapshot.policyId, "P-BRANCH");
+});
+
 test("branch-specific validation policy wins within the same clinical scope", () => {
   const policies = [
     { ...base, id: "GLOBAL_TEST", code: "GLOBAL_TEST", scope: "TEST" as const, branchId: null, departmentId: null, testId: "T1" },
