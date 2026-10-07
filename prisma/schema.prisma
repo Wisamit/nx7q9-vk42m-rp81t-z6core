@@ -864,6 +864,7 @@ model Organization {
   refunds Refund[]
   cashierShifts CashierShift[]
   clientAccountStatements ClientAccountStatement[]
+  clientCreditPolicies ClientCreditPolicy[]
   specimens Specimen[]
   transferManifests SpecimenTransferManifest[]
   results LaboratoryResult[]
