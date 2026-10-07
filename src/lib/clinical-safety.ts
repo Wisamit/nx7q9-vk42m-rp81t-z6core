@@ -1,5 +1,6 @@
 export type SpecimenLifecycleStatus =
   | "PLANNED"
+  | "COLLECTION_FAILED"
   | "COLLECTED"
   | "RECEIVED"
   | "IN_TRANSIT"
