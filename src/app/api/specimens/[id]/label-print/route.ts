@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
-import { specimenLabelSize } from "@/lib/code128";
+import { specimenLabelPrintError, specimenLabelSize } from "@/lib/code128";
 import { prisma } from "@/lib/db";
 import { specimenRequirementSnapshotFromDetails } from "@/lib/specimen-requirement-engine";
 
@@ -33,10 +33,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const requirement = specimen.events
     .map(event => specimenRequirementSnapshotFromDetails(event.details))
     .find(Boolean) || null;
-  if (specimen.status === "PLANNED" && !requirement) {
-    return NextResponse.json({ error: "specimen_requirements_not_finalized" }, { status: 409 });
-  }
-
   const priorPrintCount = await prisma.auditEvent.count({
     where: {
       organizationId: session.user.organizationId,
@@ -45,8 +41,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       entityId: specimen.id,
     },
   });
-  if (priorPrintCount > 0 && !reason) {
-    return NextResponse.json({ error: "reprint_reason_required", priorPrintCount }, { status: 400 });
+  const policyError = specimenLabelPrintError({
+    status: specimen.status,
+    requirementsFinalized: Boolean(requirement),
+    priorPrintCount,
+    reason,
+  });
+  if (policyError) {
+    return NextResponse.json(
+      { error: policyError, priorPrintCount },
+      { status: policyError === "reprint_reason_required" ? 400 : 409 },
+    );
   }
 
   await prisma.auditEvent.create({
