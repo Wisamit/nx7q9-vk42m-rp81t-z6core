@@ -81,3 +81,14 @@ export function remainingAfterUse(remainingVolume: string, requestedVolume: stri
 export function aliquotPurposeRequiresTests(purpose: string) {
   return purpose === "TESTING" || purpose === "SEND_OUT";
 }
+
+
+export function specimenRejectionLineageError(children: Array<{
+  parentRelationType: string | null;
+  status: string;
+}>) {
+  return children.some(child =>
+    child.parentRelationType === "ALIQUOT" && !["REJECTED","DISPOSED"].includes(child.status))
+    ? "active_child_aliquots_require_resolution"
+    : null;
+}
