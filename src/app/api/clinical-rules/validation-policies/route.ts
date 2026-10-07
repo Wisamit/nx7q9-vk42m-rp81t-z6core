@@ -24,6 +24,7 @@ export async function POST(request: Request) {
   const policyCode = code(body.code);
   const nameEn = text(body.nameEn, 200);
   const nameAr = text(body.nameAr, 200) || null;
+  const branchId = text(body.branchId, 36) || null;
   const departmentId = text(body.departmentId, 36) || null;
   const testId = text(body.testId, 36) || null;
   const requiresMedicalValidation = body.requiresMedicalValidation === true;
@@ -47,11 +48,23 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "test_scope_requires_test_only" }, { status: 400 });
   }
 
+  if (branchId) {
+    const branch = await prisma.branch.findFirst({
+      where: { id: branchId, organizationId: session.user.organizationId, status: "ACTIVE" },
+      select: { id: true },
+    });
+    if (!branch) return NextResponse.json({ error: "branch_not_found" }, { status: 404 });
+  }
+
   if (departmentId) {
     const department = await prisma.department.findFirst({
       where: { id: departmentId, organizationId: session.user.organizationId, status: "ACTIVE" },
+      select: { id: true, branchId: true },
     });
     if (!department) return NextResponse.json({ error: "department_not_found" }, { status: 404 });
+    if (branchId && department.branchId && department.branchId !== branchId) {
+      return NextResponse.json({ error: "department_branch_mismatch" }, { status: 409 });
+    }
   }
 
   if (testId) {
@@ -65,6 +78,7 @@ export async function POST(request: Request) {
     where: {
       organizationId: session.user.organizationId,
       scope: scope as "ORGANIZATION" | "DEPARTMENT" | "TEST",
+      branchId,
       departmentId,
       testId,
       status: "ACTIVE",
@@ -81,6 +95,7 @@ export async function POST(request: Request) {
         data: {
           organizationId: session.user.organizationId,
           scope: scope as "ORGANIZATION" | "DEPARTMENT" | "TEST",
+          branchId,
           departmentId,
           testId,
           code: policyCode,
@@ -105,6 +120,7 @@ export async function POST(request: Request) {
           newValues: {
             code: policyCode,
             scope,
+            branchId,
             departmentId,
             testId,
             requiresMedicalValidation,
@@ -147,6 +163,7 @@ export async function PATCH(request: Request) {
       where: {
         organizationId: session.user.organizationId,
         scope: existing.scope,
+        branchId: existing.branchId,
         departmentId: existing.departmentId,
         testId: existing.testId,
         status: "ACTIVE",
