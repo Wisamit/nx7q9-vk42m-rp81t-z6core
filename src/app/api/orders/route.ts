@@ -809,7 +809,7 @@ export async function POST(request: Request) {
           total: finalTotal,
           paidAmount: new Prisma.Decimal(0),
           balanceAmount: finalTotal,
-          creditControlSnapshot,
+          creditControlSnapshot: creditControlSnapshot ?? Prisma.DbNull,
           paymentTermsDaysSnapshot,
           dueDate: invoiceDueDate,
           dueDateBasis: effectiveClient ? "ISSUANCE_SNAPSHOT" : null,
