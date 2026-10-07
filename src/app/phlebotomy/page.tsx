@@ -96,7 +96,6 @@ export default async function PhlebotomyPage({
         },
       },
       replacementSpecimen: true,
-      collector: true,
     },
     orderBy: { attemptedAt: "desc" },
     take: 20,
@@ -106,8 +105,6 @@ export default async function PhlebotomyPage({
     locale === "ar" ? item.nameAr || item.nameEn : item.nameEn;
   const patientName = (item: { fullNameEn: string; fullNameAr?: string | null }) =>
     locale === "ar" ? item.fullNameAr || item.fullNameEn : item.fullNameEn;
-  const collectorName = (item: { displayNameEn: string; displayNameAr?: string | null }) =>
-    locale === "ar" ? item.displayNameAr || item.displayNameEn : item.displayNameEn;
 
   return <main className="catalog-shell">
     <header className="page-header">
