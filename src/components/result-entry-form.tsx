@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { statusLabel as sharedStatusLabel } from "@/lib/ui-i18n";
 import { focusNextResultEntryControl, shouldAdvanceResultEntryOnEnter } from "@/lib/result-entry-keyboard";
 import { commentTemplateTargetMatches } from "@/lib/result-comments";
+import { groupResultFields } from "@/lib/result-entry-layout";
 
 type QualitativeResultOption = {
   id: string;
@@ -307,20 +308,7 @@ export function ResultEntryForm({
   const sourceLocked = resultSource !== "MANUAL";
   const locked = statusLocked || sourceLocked;
   const resultLevelTemplates = commentTemplates.filter((template) => commentTemplateTargetMatches(template, testId, null));
-  const activeSectionIds = new Set(resultSections.map(section => section.id));
-  const fieldGroups = [
-    ...resultSections.map(section => ({
-      ...section,
-      fields: fields.filter(field => field.resultSectionId === section.id),
-    })).filter(group => group.fields.length > 0),
-    {
-      id: null,
-      code: "",
-      nameEn: "Other / Ungrouped",
-      nameAr: "أخرى / بدون قسم",
-      fields: fields.filter(field => !field.resultSectionId || !activeSectionIds.has(field.resultSectionId)),
-    },
-  ].filter(group => group.fields.length > 0);
+  const fieldGroups = groupResultFields(fields, resultSections);
 
   function renderFieldRow(field: ResultField) {
     const key = field.componentId || "__TEST__";
