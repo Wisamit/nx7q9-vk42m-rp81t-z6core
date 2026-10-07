@@ -4,6 +4,15 @@ import { FormEvent, KeyboardEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { focusNextResultEntryControl, shouldAdvanceResultEntryOnEnter } from "@/lib/result-entry-keyboard";
 
+type BulkQualitativeOption = {
+  id: string;
+  code: string;
+  valueEn: string;
+  valueAr?: string | null;
+  flag: string;
+  isCritical: boolean;
+};
+
 type BulkField = {
   componentId: string | null;
   code: string;
@@ -11,6 +20,8 @@ type BulkField = {
   nameAr?: string | null;
   resultType: "NUMERIC" | "TEXT" | "QUALITATIVE" | "BOOLEAN" | "DATE";
   currentValue: string;
+  currentOptionId: string | null;
+  qualitativeOptions: BulkQualitativeOption[];
 };
 
 type BulkRow = {
@@ -32,9 +43,34 @@ function inputFor(
   value: string,
   onChange: (value: string) => void,
   locale: "ar" | "en",
+  selectedOptionId: string,
+  onOptionChange: (optionId: string, valueEn: string) => void,
   onKeyDown: (event: KeyboardEvent<HTMLInputElement>) => void,
 ) {
   const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
+  const flagLabel = (flag: string) => ({
+    NORMAL: tr("Normal", "طبيعي"),
+    ABNORMAL: tr("Abnormal", "غير طبيعي"),
+    POSITIVE: tr("Positive", "إيجابي"),
+    NEGATIVE: tr("Negative", "سلبي"),
+    UNKNOWN: tr("Unknown", "غير محدد"),
+  }[flag] || flag);
+
+  if (field.resultType === "QUALITATIVE" && field.qualitativeOptions.length > 0) return <select
+    data-result-entry-control="true"
+    value={selectedOptionId}
+    onChange={event => {
+      const option = field.qualitativeOptions.find(item => item.id === event.target.value);
+      onOptionChange(event.target.value, option?.valueEn || "");
+    }}
+  >
+    <option value="">{tr("Select result…","اختر النتيجة…")}</option>
+    {selectedOptionId === "__LEGACY__" && field.currentValue && <option value="__LEGACY__" disabled>{tr("Current legacy value","القيمة القديمة الحالية")}: {field.currentValue}</option>}
+    {field.qualitativeOptions.map(option => <option key={option.id} value={option.id}>
+      {(locale === "ar" ? option.valueAr || option.valueEn : option.valueEn) + " · " + flagLabel(option.flag) + (option.isCritical ? " · " + tr("Critical","حرجة") : "")}
+    </option>)}
+  </select>;
+
   if (field.resultType === "BOOLEAN") return <select data-result-entry-control="true" value={value} onChange={event => onChange(event.target.value)}>
     <option value="">—</option><option value="true">{tr("True","نعم")}</option><option value="false">{tr("False","لا")}</option>
   </select>;
@@ -51,6 +87,14 @@ export function BulkResultEntry({ rows, locale }: { rows: BulkRow[]; locale: "ar
     Object.fromEntries(row.fields.map(field => [field.componentId || "__TEST__", field.currentValue])),
   ])), [rows]);
   const [values, setValues] = useState<Record<string, Record<string, string>>>(initialValues);
+  const [selectedOptions, setSelectedOptions] = useState<Record<string, Record<string, string>>>(() => Object.fromEntries(rows.map(row => [
+    row.orderItemId,
+    Object.fromEntries(row.fields.map(field => {
+      const key = field.componentId || "__TEST__";
+      const currentIsActive = Boolean(field.currentOptionId && field.qualitativeOptions.some(option => option.id === field.currentOptionId));
+      return [key, currentIsActive ? field.currentOptionId! : field.currentValue && field.qualitativeOptions.length > 0 ? "__LEGACY__" : ""];
+    })),
+  ])));
   const [comments, setComments] = useState<Record<string, string>>(Object.fromEntries(rows.map(row => [row.orderItemId, row.comments])));
   const [states, setStates] = useState<Record<string, { status: "idle" | "saving" | "ok" | "error"; message?: string }>>({});
   const [busy, setBusy] = useState(false);
@@ -92,10 +136,15 @@ export function BulkResultEntry({ rows, locale }: { rows: BulkRow[]; locale: "ar
           specimenId: row.specimenId,
           performingBranchId: row.performingBranchId,
           comments: comments[row.orderItemId] || "",
-          values: row.fields.map(field => ({
-            componentId: field.componentId,
-            rawValue: rowValues[field.componentId || "__TEST__"] || "",
-          })),
+          values: row.fields.map(field => {
+            const key = field.componentId || "__TEST__";
+            const selectedOptionId = selectedOptions[row.orderItemId]?.[key] || "";
+            return {
+              componentId: field.componentId,
+              rawValue: rowValues[key] || "",
+              resultOptionId: selectedOptionId && selectedOptionId !== "__LEGACY__" ? selectedOptionId : null,
+            };
+          }),
         }),
       });
       const body = await response.json().catch(() => ({}));
@@ -145,10 +194,27 @@ export function BulkResultEntry({ rows, locale }: { rows: BulkRow[]; locale: "ar
             <div className="bulk-result-fields">
               {row.fields.map(field => {
                 const key = field.componentId || "__TEST__";
-                return <label key={key}><span>{field.code}</span>{inputFor(field, values[row.orderItemId]?.[key] || "", value => setValues(current => ({
-                  ...current,
-                  [row.orderItemId]: { ...(current[row.orderItemId] || {}), [key]: value },
-                })), locale, handleEntryKeyDown)}</label>;
+                return <label key={key}><span>{field.code}</span>{inputFor(
+                  field,
+                  values[row.orderItemId]?.[key] || "",
+                  value => setValues(current => ({
+                    ...current,
+                    [row.orderItemId]: { ...(current[row.orderItemId] || {}), [key]: value },
+                  })),
+                  locale,
+                  selectedOptions[row.orderItemId]?.[key] || "",
+                  (optionId, valueEn) => {
+                    setSelectedOptions(current => ({
+                      ...current,
+                      [row.orderItemId]: { ...(current[row.orderItemId] || {}), [key]: optionId },
+                    }));
+                    setValues(current => ({
+                      ...current,
+                      [row.orderItemId]: { ...(current[row.orderItemId] || {}), [key]: valueEn },
+                    }));
+                  },
+                  handleEntryKeyDown,
+                )}</label>;
               })}
               <label className="bulk-comment"><span>{tr("Comment","تعليق")}</span><input data-result-entry-control="true" value={comments[row.orderItemId] || ""} onChange={event => setComments(current => ({ ...current, [row.orderItemId]: event.target.value }))} onKeyDown={handleEntryKeyDown} /></label>
             </div>
