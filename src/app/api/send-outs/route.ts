@@ -38,7 +38,7 @@ export async function POST(request: Request) {
       where: { id: orderItemId, order: { organizationId: session.user.organizationId } },
       include: {
         order: { select: { orderingBranchId: true, accessionNumber: true } },
-        specimenLinks: { include: { specimen: true } },
+        specimenLinks: { where: { status: "ACTIVE" }, include: { specimen: true } },
       },
     }),
     prisma.externalLaboratory.findFirst({
