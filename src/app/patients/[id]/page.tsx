@@ -86,7 +86,10 @@ export default async function PatientDetailPage({ params }: { params: Promise<{ 
         <h1>{locale === "ar" ? patient.fullNameAr || patient.fullNameEn : patient.fullNameEn}</h1>
         <p className="muted">{patient.patientNumber} · {tr(locale, "Organization-wide identity", "هوية موحدة على مستوى المؤسسة")}</p>
       </div>
-      <Link className="secondary-link" href="/patients">{tr(locale, "Back to Patients", "العودة للمرضى")}</Link>
+      <div className="header-actions">
+        <Link className="secondary-link" href={"/patients/" + (patient.mergedIntoPatientId || patient.id) + "/history"}>{tr(locale, "Longitudinal History", "السجل الطولي")}</Link>
+        <Link className="secondary-link" href="/patients">{tr(locale, "Back to Patients", "العودة للمرضى")}</Link>
+      </div>
     </header>
 
     {patient.mergedInto && <section className="detail-card">
