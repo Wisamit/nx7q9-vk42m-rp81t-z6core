@@ -15,14 +15,32 @@ const active = {
   email: "patient@example.com",
   phone: "+971501234567",
   preferredLocale: "en",
+  contactVerifications: [
+    {
+      channel: "EMAIL" as const,
+      destinationSnapshot: "patient@example.com",
+      revokedAt: null,
+    },
+    {
+      channel: "PHONE" as const,
+      destinationSnapshot: "+971501234567",
+      revokedAt: null,
+    },
+  ],
 };
 
-test("report outbound requires active channel-specific verified portal contact", () => {
+test("report outbound requires active destination-bound portal verification", () => {
   assert.equal(resolveVerifiedPortalDestination(null, "EMAIL").ok, false);
   assert.equal(resolveVerifiedPortalDestination({ ...active, status: "LOCKED" }, "EMAIL").ok, false);
-  assert.equal(resolveVerifiedPortalDestination({ ...active, emailVerifiedAt: null }, "EMAIL").ok, false);
-  assert.equal(resolveVerifiedPortalDestination({ ...active, phoneVerifiedAt: null }, "SMS").ok, false);
-  assert.equal(resolveVerifiedPortalDestination({ ...active, phoneVerifiedAt: null }, "WHATSAPP").ok, false);
+  assert.equal(resolveVerifiedPortalDestination({ ...active, contactVerifications: [] }, "EMAIL").ok, false);
+  assert.equal(resolveVerifiedPortalDestination({
+    ...active,
+    contactVerifications: active.contactVerifications.filter(item => item.channel !== "PHONE"),
+  }, "SMS").ok, false);
+  assert.equal(resolveVerifiedPortalDestination({
+    ...active,
+    contactVerifications: active.contactVerifications.filter(item => item.channel !== "PHONE"),
+  }, "WHATSAPP").ok, false);
 });
 
 test("email and phone channels resolve from verified portal account", () => {
@@ -30,6 +48,25 @@ test("email and phone channels resolve from verified portal account", () => {
   const sms = resolveVerifiedPortalDestination(active, "SMS");
   assert.equal(email.ok && email.destination, "patient@example.com");
   assert.equal(sms.ok && sms.destination, "+971501234567");
+});
+
+test("changed portal destination never inherits verification timestamps", () => {
+  const changed = {
+    ...active,
+    email: "new-patient@example.com",
+    emailVerifiedAt: new Date("2026-10-07T00:00:00Z"),
+  };
+  assert.equal(resolveVerifiedPortalDestination(changed, "EMAIL").ok, false);
+});
+
+test("revoked destination verification does not authorize delivery", () => {
+  const revoked = {
+    ...active,
+    contactVerifications: active.contactVerifications.map(item =>
+      item.channel === "EMAIL" ? { ...item, revokedAt: new Date("2026-10-07T01:00:00Z") } : item
+    ),
+  };
+  assert.equal(resolveVerifiedPortalDestination(revoked, "EMAIL").ok, false);
 });
 
 test("report message templates replace only supported context tokens", () => {

@@ -37,6 +37,10 @@ export async function getCurrentPortalSession() {
           patient: true,
           referrer: true,
           client: true,
+          contactVerifications: {
+            where: { revokedAt: null },
+            orderBy: { verifiedAt: "desc" },
+          },
         },
       },
     },

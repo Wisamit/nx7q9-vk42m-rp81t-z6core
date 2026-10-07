@@ -786,6 +786,17 @@ enum PortalOtpPurpose {
   RESET_ACCESS
 }
 
+enum PortalContactChannel {
+  EMAIL
+  PHONE
+}
+
+enum PortalContactVerificationMethod {
+  SELF_SERVICE_OTP
+  STAFF_CONFIRMED
+  LEGACY_IMPORTED
+}
+
 enum AppointmentMode {
   ONSITE
   HOME_COLLECTION
@@ -1387,6 +1398,7 @@ model User {
   notifications Notification[] @relation("NotificationRecipientUser")
   createdNotificationTemplates NotificationTemplate[] @relation("NotificationTemplateCreator")
   createdReportTemplates ReportTemplate[] @relation("ReportTemplateCreator")
+  portalContactVerifications PortalContactVerification[] @relation("PortalContactVerificationActor")
   createdQualitativeResultOptions QualitativeResultOption[] @relation("QualitativeResultOptionCreator")
   submittedReportTemplateVersions ReportTemplateVersion[] @relation("ReportTemplateVersionSubmitter")
   approvedReportTemplateVersions ReportTemplateVersion[] @relation("ReportTemplateVersionApprover")
@@ -5333,12 +5345,33 @@ model PortalAccount {
   client       Client?      @relation(fields: [clientId], references: [id], onDelete: Restrict)
   sessions     PortalSession[]
   otpChallenges PortalOtpChallenge[]
+  contactVerifications PortalContactVerification[]
   createdAppointments Appointment[] @relation("PortalAppointmentCreator")
 
   @@index([organizationId, type, status])
   @@index([organizationId, normalizedEmail])
   @@index([organizationId, normalizedPhone])
   @@map("portal_accounts")
+}
+
+model PortalContactVerification {
+  id                  String                           @id @default(uuid()) @db.Char(36)
+  portalAccountId     String                           @map("portal_account_id") @db.Char(36)
+  channel             PortalContactChannel
+  destinationSnapshot String                           @map("destination_snapshot") @db.VarChar(191)
+  method              PortalContactVerificationMethod
+  verificationReason  String                           @map("verification_reason") @db.VarChar(1000)
+  verifiedByUserId    String?                          @map("verified_by_user_id") @db.Char(36)
+  verifiedAt          DateTime                         @default(now()) @map("verified_at") @db.DateTime(3)
+  revokedAt           DateTime?                        @map("revoked_at") @db.DateTime(3)
+
+  portalAccount PortalAccount @relation(fields: [portalAccountId], references: [id], onDelete: Restrict)
+  verifiedBy    User?         @relation("PortalContactVerificationActor", fields: [verifiedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([portalAccountId, channel, revokedAt, verifiedAt])
+  @@index([portalAccountId, channel, destinationSnapshot, revokedAt])
+  @@index([verifiedByUserId, verifiedAt])
+  @@map("portal_contact_verifications")
 }
 
 model PortalSession {

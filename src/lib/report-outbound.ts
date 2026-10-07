@@ -9,6 +9,12 @@ export type PortalDeliveryAccount = {
   email: string | null;
   phone: string | null;
   preferredLocale: string;
+  contactVerifications?: Array<{
+    channel: "EMAIL" | "PHONE";
+    destinationSnapshot: string;
+    revokedAt: Date | null;
+    verifiedAt?: Date;
+  }>;
 };
 
 export type ReportMessageContext = {
@@ -19,6 +25,14 @@ export type ReportMessageContext = {
   reportStatus: string;
   portalUrl: string;
 };
+
+export function normalizePortalContactDestination(
+  channel: "EMAIL" | "PHONE",
+  destination: string,
+) {
+  const trimmed = destination.trim();
+  return channel === "EMAIL" ? trimmed.toLowerCase() : trimmed.replace(/\s+/g, "");
+}
 
 export function resolveVerifiedPortalDestination(
   account: PortalDeliveryAccount | null | undefined,
@@ -35,11 +49,19 @@ export function resolveVerifiedPortalDestination(
     };
   }
 
-  if (channel === "EMAIL" && !account.emailVerifiedAt) {
-    return { ok: false as const, error: "verified_email_required" };
-  }
-  if (channel !== "EMAIL" && !account.phoneVerifiedAt) {
-    return { ok: false as const, error: "verified_phone_required" };
+  const verificationChannel = channel === "EMAIL" ? "EMAIL" : "PHONE";
+  const normalizedDestination = normalizePortalContactDestination(verificationChannel, destination);
+  const verified = account.contactVerifications?.some(item =>
+    item.channel === verificationChannel
+    && item.revokedAt === null
+    && normalizePortalContactDestination(item.channel, item.destinationSnapshot) === normalizedDestination
+  ) || false;
+
+  if (!verified) {
+    return {
+      ok: false as const,
+      error: verificationChannel === "EMAIL" ? "verified_email_required" : "verified_phone_required",
+    };
   }
 
   return {

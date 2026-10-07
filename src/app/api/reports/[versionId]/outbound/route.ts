@@ -63,9 +63,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ ver
         include: {
           order: {
             include: {
-              patient: { include: { portalAccount: true } },
-              referrer: { include: { portalAccount: true } },
-              client: { include: { portalAccount: true } },
+              patient: { include: { portalAccount: {
+                include: { contactVerifications: { where: { revokedAt: null }, orderBy: { verifiedAt: "desc" } } },
+              } } },
+              referrer: { include: { portalAccount: {
+                include: { contactVerifications: { where: { revokedAt: null }, orderBy: { verifiedAt: "desc" } } },
+              } } },
+              client: { include: { portalAccount: {
+                include: { contactVerifications: { where: { revokedAt: null }, orderBy: { verifiedAt: "desc" } } },
+              } } },
             },
           },
           versions: {
