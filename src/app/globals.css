@@ -380,3 +380,90 @@ html[data-density="compact"] :where(.detail-card,.dashboard-panel,.settings-card
   background: var(--fl-surface-soft);
   grid-column: 1 / -1;
 }
+
+
+.patient-history-shell {
+  gap: 18px;
+}
+
+.patient-trend-card {
+  overflow: hidden;
+}
+
+.history-series-select {
+  min-width: min(360px, 100%);
+}
+
+.patient-trend-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: baseline;
+  flex-wrap: wrap;
+  margin-block: 12px;
+}
+
+.patient-trend-chart {
+  width: 100%;
+  min-height: 230px;
+  overflow-x: auto;
+  border: 1px solid var(--fl-border);
+  border-radius: var(--fl-radius);
+  background: var(--fl-surface-soft);
+  padding: 8px;
+  margin-block-end: 14px;
+}
+
+.patient-trend-chart svg {
+  width: 100%;
+  min-width: 620px;
+  height: 230px;
+}
+
+.patient-trend-axis {
+  stroke: var(--fl-border-strong);
+  stroke-width: 1;
+}
+
+.patient-trend-line {
+  fill: none;
+  stroke: var(--fl-primary);
+  stroke-width: 2.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.patient-trend-point {
+  fill: var(--fl-primary);
+  stroke: var(--fl-surface);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.patient-trend-label {
+  fill: var(--fl-text-muted);
+  font-size: 12px;
+}
+
+.history-subtable-toolbar {
+  margin-block-start: 18px;
+}
+
+@media print {
+  .patient-history-shell {
+    display: block;
+  }
+
+  .patient-history-shell .detail-card,
+  .patient-history-shell .table-card {
+    break-inside: avoid;
+    margin-block-end: 14px;
+  }
+
+  .patient-trend-chart {
+    overflow: visible;
+  }
+
+  .patient-trend-chart svg {
+    min-width: 0;
+  }
+}
