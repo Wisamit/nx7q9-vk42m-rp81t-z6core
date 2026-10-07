@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requirePermission, requestContext } from "@/lib/auth";
+import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 
 function text(value: unknown, max = 500) {
@@ -42,6 +42,7 @@ export async function POST(request: Request) {
 
   if (!test) return NextResponse.json({ error: "test_not_found" }, { status: 404 });
   if (branchId && !branchRecord) return NextResponse.json({ error: "branch_not_found" }, { status: 404 });
+  if (branchId && !canAccessBranch(session, branchId)) return NextResponse.json({ error: "branch_forbidden" }, { status: 403 });
 
   const policy = await prisma.$transaction(async tx => {
     const created = await tx.autoverificationPolicy.create({
