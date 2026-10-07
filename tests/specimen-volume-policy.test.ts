@@ -8,6 +8,7 @@ import {
   specimenVolumeUseError,
   volume3ToMinor,
   volumeUnitsMatch,
+  specimenRejectionLineageError,
 } from "../src/lib/specimen-volume-policy.ts";
 
 test("specimen volume math is exact to three decimals", () => {
@@ -64,4 +65,15 @@ test("testing and send-out aliquots require explicit linked tests", () => {
   assert.equal(aliquotPurposeRequiresTests("SEND_OUT"), true);
   assert.equal(aliquotPurposeRequiresTests("STORAGE"), false);
   assert.equal(aliquotPurposeRequiresTests("OTHER"), false);
+});
+
+
+test("specimen rejection blocks any active derived aliquot descendants at the direct child level", () => {
+  assert.equal(specimenRejectionLineageError([
+    { parentRelationType: "ALIQUOT", status: "RECEIVED" },
+  ]), "active_child_aliquots_require_resolution");
+  assert.equal(specimenRejectionLineageError([
+    { parentRelationType: "ALIQUOT", status: "REJECTED" },
+    { parentRelationType: "RECOLLECTION", status: "COLLECTED" },
+  ]), null);
 });
