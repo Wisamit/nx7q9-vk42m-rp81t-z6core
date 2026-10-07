@@ -1,5 +1,8 @@
 -- Phase 5D: immutable reception quality assessments and configurable selective specimen rejection.
 
+ALTER TABLE `specimens`
+  ADD COLUMN `preanalytical_version` INT NOT NULL DEFAULT 0 AFTER `storage_location`;
+
 ALTER TABLE `specimen_order_items`
   ADD COLUMN `status` ENUM('ACTIVE','REJECTED') NOT NULL DEFAULT 'ACTIVE' AFTER `order_item_id`,
   ADD COLUMN `rejection_id` CHAR(36) NULL AFTER `status`;
