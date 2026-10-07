@@ -8,6 +8,7 @@ import { CriticalEscalationManager } from "@/components/critical-escalation-mana
 import { QualitativeResultOptionsManager } from "@/components/qualitative-result-options-manager";
 import { CommentTemplateStatusButton } from "@/components/comment-template-status-button";
 import { ResultValidationPolicyManager } from "@/components/result-validation-policy-manager";
+import { ClinicalRuleGovernanceButton } from "@/components/clinical-rule-governance-button";
 import { statusLabel, tr } from "@/lib/ui-i18n";
 
 export const dynamic = "force-dynamic";
@@ -179,6 +180,7 @@ export default async function ClinicalRulesPage() {
 
     <ResultValidationPolicyManager
       locale={locale}
+      canApprove={permissions.has("clinical_rules.approve")}
       branches={branches}
       departments={departments}
       tests={tests.map(test => ({ id: test.id, code: test.code, nameEn: test.nameEn, nameAr: test.nameAr }))}
@@ -196,6 +198,7 @@ export default async function ClinicalRulesPage() {
         effectiveFrom: policy.effectiveFrom.toISOString().slice(0,10),
         effectiveTo: policy.effectiveTo?.toISOString().slice(0,10) || null,
         status: policy.status,
+        deactivatedAt: policy.deactivatedAt?.toISOString() || null,
         branch: policy.branch ? { id: policy.branch.id, code: policy.branch.code, nameEn: policy.branch.nameEn, nameAr: policy.branch.nameAr } : null,
         department: policy.department ? { id: policy.department.id, code: policy.department.code, nameEn: policy.department.nameEn, nameAr: policy.department.nameAr } : null,
         test: policy.test ? { id: policy.test.id, code: policy.test.code, nameEn: policy.test.nameEn, nameAr: policy.test.nameAr } : null,
@@ -267,7 +270,7 @@ export default async function ClinicalRulesPage() {
     <section className="detail-card detail-section">
       <div className="table-toolbar"><h2>{tr(locale, "Critical Escalation Policies", "سياسات تصعيد النتائج الحرجة")}</h2><span>{criticalEscalationPolicies.length} {tr(locale, "shown", "معروضة")}</span></div>
       <div className="table-wrap"><table>
-        <thead><tr><th>{tr(locale, "Test", "الفحص")}</th><th>{tr(locale, "Branch", "الفرع")}</th><th>{tr(locale, "Acknowledge", "الإقرار")}</th><th>{tr(locale, "Escalation interval", "فاصل التصعيد")}</th><th>{tr(locale, "Max level", "أقصى مستوى")}</th><th>{tr(locale, "Read-back", "إعادة القراءة")}</th><th>{tr(locale, "Effective", "السريان")}</th><th>{tr(locale, "Status", "الحالة")}</th></tr></thead>
+        <thead><tr><th>{tr(locale, "Test", "الفحص")}</th><th>{tr(locale, "Branch", "الفرع")}</th><th>{tr(locale, "Acknowledge", "الإقرار")}</th><th>{tr(locale, "Escalation interval", "فاصل التصعيد")}</th><th>{tr(locale, "Max level", "أقصى مستوى")}</th><th>{tr(locale, "Read-back", "إعادة القراءة")}</th><th>{tr(locale, "Effective", "السريان")}</th><th>{tr(locale, "Governance", "الحوكمة")}</th></tr></thead>
         <tbody>{criticalEscalationPolicies.length === 0 ? <tr><td colSpan={8} className="empty-state">{tr(locale, "No critical escalation policies configured.", "لا توجد سياسات تصعيد للنتائج الحرجة.")}</td></tr> : criticalEscalationPolicies.map(policy => <tr key={policy.id}>
           <td><strong>{policy.test.code}</strong><br/><small>{localizedName(policy.test)}</small></td>
           <td>{branchLabel(policy.branch)}</td>
@@ -276,7 +279,7 @@ export default async function ClinicalRulesPage() {
           <td>{policy.maxEscalationLevel}</td>
           <td>{policy.requireReadBack ? tr(locale, "Required", "مطلوبة") : tr(locale, "Optional", "اختيارية")}</td>
           <td>{policy.effectiveFrom.toISOString().slice(0,10)} → {policy.effectiveTo?.toISOString().slice(0,10) || openLabel}</td>
-          <td>{statusLabel(locale, policy.status)}</td>
+          <td><ClinicalRuleGovernanceButton id={policy.id} ruleType="CRITICAL_ESCALATION_POLICY" status={policy.status} deactivatedAt={policy.deactivatedAt?.toISOString() || null} canApprove={permissions.has("clinical_rules.approve")} locale={locale} /></td>
         </tr>)}</tbody>
       </table></div>
     </section>
@@ -285,7 +288,7 @@ export default async function ClinicalRulesPage() {
       <article className="table-card">
         <div className="table-toolbar"><h2>{tr(locale, "Autoverification Policies", "سياسات التحقق الآلي")}</h2><span>{autoverificationPolicies.length} {tr(locale, "shown", "معروضة")}</span></div>
         <div className="table-wrap"><table>
-          <thead><tr><th>{tr(locale, "Test", "الفحص")}</th><th>{tr(locale, "Branch", "الفرع")}</th><th>{tr(locale, "Enabled", "مفعلة")}</th><th>{tr(locale, "Sources", "المصادر")}</th><th>{tr(locale, "Extra gate", "شرط إضافي")}</th><th>{tr(locale, "Effective", "السريان")}</th><th>{tr(locale, "Status", "الحالة")}</th></tr></thead>
+          <thead><tr><th>{tr(locale, "Test", "الفحص")}</th><th>{tr(locale, "Branch", "الفرع")}</th><th>{tr(locale, "Enabled", "مفعلة")}</th><th>{tr(locale, "Sources", "المصادر")}</th><th>{tr(locale, "Extra gate", "شرط إضافي")}</th><th>{tr(locale, "Effective", "السريان")}</th><th>{tr(locale, "Governance", "الحوكمة")}</th></tr></thead>
           <tbody>{autoverificationPolicies.length === 0 ? <tr><td colSpan={7} className="empty-state">{tr(locale, "No autoverification policies configured.", "لا توجد سياسات تحقق آلي.")}</td></tr> : autoverificationPolicies.map(policy => <tr key={policy.id}>
             <td><strong>{policy.test.code}</strong><br/><small>{localizedName(policy.test)}</small></td>
             <td>{branchLabel(policy.branch)}</td>
@@ -297,7 +300,7 @@ export default async function ClinicalRulesPage() {
             ].filter(Boolean).join(", ") || tr(locale, "None", "لا شيء")}</td>
             <td>{policy.requireAllFlagsNormal ? tr(locale, "All flags normal", "كل الإشارات طبيعية") : tr(locale, "Mandatory safety gates only", "بوابات السلامة الإلزامية فقط")}</td>
             <td>{policy.effectiveFrom.toISOString().slice(0,10)} → {policy.effectiveTo?.toISOString().slice(0,10) || openLabel}</td>
-            <td>{statusLabel(locale, policy.status)}</td>
+            <td><ClinicalRuleGovernanceButton id={policy.id} ruleType="AUTOVERIFICATION_POLICY" status={policy.status} deactivatedAt={policy.deactivatedAt?.toISOString() || null} canApprove={permissions.has("clinical_rules.approve")} locale={locale} /></td>
           </tr>)}</tbody>
         </table></div>
       </article>
@@ -305,7 +308,7 @@ export default async function ClinicalRulesPage() {
       <article className="table-card">
         <div className="table-toolbar"><h2>{tr(locale, "Validation Hold Rules", "قواعد إيقاف التحقق")}</h2><span>{validationHoldRules.length} {tr(locale, "shown", "معروضة")}</span></div>
         <div className="table-wrap"><table>
-          <thead><tr><th>{tr(locale, "Test", "الفحص")}</th><th>{tr(locale, "Branch", "الفرع")}</th><th>{tr(locale, "Condition", "الشرط")}</th><th>{tr(locale, "Severity", "الشدة")}</th><th>{tr(locale, "Reason", "السبب")}</th><th>{tr(locale, "Effective", "السريان")}</th><th>{tr(locale, "Status", "الحالة")}</th></tr></thead>
+          <thead><tr><th>{tr(locale, "Test", "الفحص")}</th><th>{tr(locale, "Branch", "الفرع")}</th><th>{tr(locale, "Condition", "الشرط")}</th><th>{tr(locale, "Severity", "الشدة")}</th><th>{tr(locale, "Reason", "السبب")}</th><th>{tr(locale, "Effective", "السريان")}</th><th>{tr(locale, "Governance", "الحوكمة")}</th></tr></thead>
           <tbody>{validationHoldRules.length === 0 ? <tr><td colSpan={7} className="empty-state">{tr(locale, "No validation hold rules configured.", "لا توجد قواعد إيقاف تحقق.")}</td></tr> : validationHoldRules.map(rule => <tr key={rule.id}>
             <td><strong>{rule.test.code}</strong><br/><small>{localizedName(rule.test)}</small></td>
             <td>{branchLabel(rule.branch)}</td>
@@ -313,7 +316,7 @@ export default async function ClinicalRulesPage() {
             <td>{severityLabel(rule.severity)}</td>
             <td>{locale === "ar" ? rule.reasonAr || rule.reasonEn : rule.reasonEn}{rule.reasonAr && locale !== "ar" ? <><br/><small dir="rtl">{rule.reasonAr}</small></> : null}</td>
             <td>{rule.effectiveFrom.toISOString().slice(0,10)} → {rule.effectiveTo?.toISOString().slice(0,10) || openLabel}</td>
-            <td>{statusLabel(locale, rule.status)}</td>
+            <td><ClinicalRuleGovernanceButton id={rule.id} ruleType="VALIDATION_HOLD_RULE" status={rule.status} deactivatedAt={rule.deactivatedAt?.toISOString() || null} canApprove={permissions.has("clinical_rules.approve")} locale={locale} /></td>
           </tr>)}</tbody>
         </table></div>
       </article>
@@ -323,14 +326,14 @@ export default async function ClinicalRulesPage() {
       <article className="table-card">
         <div className="table-toolbar"><h2>{tr(locale, "Calculated Result Rules", "قواعد النتائج المحسوبة")}</h2><span>{calculatedRules.length} {tr(locale, "shown", "معروضة")}</span></div>
         <div className="table-wrap"><table>
-          <thead><tr><th>{tr(locale, "Test", "الفحص")}</th><th>{tr(locale, "Target", "الهدف")}</th><th>{tr(locale, "Expression", "المعادلة")}</th><th>{tr(locale, "Precision", "الدقة")}</th><th>{tr(locale, "Effective", "السريان")}</th><th>{tr(locale, "Status", "الحالة")}</th></tr></thead>
+          <thead><tr><th>{tr(locale, "Test", "الفحص")}</th><th>{tr(locale, "Target", "الهدف")}</th><th>{tr(locale, "Expression", "المعادلة")}</th><th>{tr(locale, "Precision", "الدقة")}</th><th>{tr(locale, "Effective", "السريان")}</th><th>{tr(locale, "Governance", "الحوكمة")}</th></tr></thead>
           <tbody>{calculatedRules.length === 0 ? <tr><td colSpan={6} className="empty-state">{tr(locale, "No calculated result rules configured.", "لا توجد قواعد نتائج محسوبة.")}</td></tr> : calculatedRules.map(rule => <tr key={rule.id}>
             <td><strong>{rule.test.code}</strong><br/><small>{localizedName(rule.test)}</small></td>
             <td>{rule.targetComponent.code} — {localizedName(rule.targetComponent)}</td>
             <td><code>{rule.expression}</code></td>
             <td>{rule.decimalPrecision ?? tr(locale, "Component default", "افتراضي المكوّن")}</td>
             <td>{rule.effectiveFrom.toISOString().slice(0,10)} → {rule.effectiveTo?.toISOString().slice(0,10) || openLabel}</td>
-            <td>{statusLabel(locale, rule.status)}</td>
+            <td><ClinicalRuleGovernanceButton id={rule.id} ruleType="CALCULATED_RESULT_RULE" status={rule.status} deactivatedAt={rule.deactivatedAt?.toISOString() || null} canApprove={permissions.has("clinical_rules.approve")} locale={locale} /></td>
           </tr>)}</tbody>
         </table></div>
       </article>
@@ -338,14 +341,14 @@ export default async function ClinicalRulesPage() {
       <article className="table-card">
         <div className="table-toolbar"><h2>{tr(locale, "Reflex Recommendation Rules", "قواعد التوصيات الانعكاسية")}</h2><span>{reflexRules.length} {tr(locale, "shown", "معروضة")}</span></div>
         <div className="table-wrap"><table>
-          <thead><tr><th>{tr(locale, "Source", "المصدر")}</th><th>{tr(locale, "Condition", "الشرط")}</th><th>{tr(locale, "Recommended test", "الفحص الموصى به")}</th><th>{tr(locale, "Branch", "الفرع")}</th><th>{tr(locale, "Effective", "السريان")}</th><th>{tr(locale, "Status", "الحالة")}</th></tr></thead>
+          <thead><tr><th>{tr(locale, "Source", "المصدر")}</th><th>{tr(locale, "Condition", "الشرط")}</th><th>{tr(locale, "Recommended test", "الفحص الموصى به")}</th><th>{tr(locale, "Branch", "الفرع")}</th><th>{tr(locale, "Effective", "السريان")}</th><th>{tr(locale, "Governance", "الحوكمة")}</th></tr></thead>
           <tbody>{reflexRules.length === 0 ? <tr><td colSpan={6} className="empty-state">{tr(locale, "No reflex rules configured.", "لا توجد قواعد توصية انعكاسية.")}</td></tr> : reflexRules.map(rule => <tr key={rule.id}>
             <td><strong>{rule.sourceTest.code}</strong>{rule.sourceComponent ? <><br/><small>{rule.sourceComponent.code} — {localizedName(rule.sourceComponent)}</small></> : null}</td>
             <td>{rule.operator} {rule.numericThreshold?.toString() || rule.textThreshold || "—"}</td>
             <td>{rule.targetTest.code} — {localizedName(rule.targetTest)}</td>
             <td>{branchLabel(rule.branch)}</td>
             <td>{rule.effectiveFrom.toISOString().slice(0,10)} → {rule.effectiveTo?.toISOString().slice(0,10) || openLabel}</td>
-            <td>{statusLabel(locale, rule.status)}</td>
+            <td><ClinicalRuleGovernanceButton id={rule.id} ruleType="REFLEX_RULE" status={rule.status} deactivatedAt={rule.deactivatedAt?.toISOString() || null} canApprove={permissions.has("clinical_rules.approve")} locale={locale} /></td>
           </tr>)}</tbody>
         </table></div>
       </article>
@@ -356,7 +359,7 @@ export default async function ClinicalRulesPage() {
         <div className="table-toolbar"><h2>{tr(locale, "Delta Rules", "قواعد Delta")}</h2><span>{deltaRules.length} {tr(locale, "shown", "معروضة")}</span></div>
         <div className="table-wrap">
           <table>
-            <thead><tr><th>{tr(locale, "Test", "الفحص")}</th><th>{tr(locale, "Component", "المكوّن")}</th><th>{tr(locale, "Scope", "النطاق")}</th><th>{tr(locale, "Absolute", "المطلق")}</th><th>{tr(locale, "Percent", "النسبة")}</th><th>{tr(locale, "Lookback", "الرجوع للخلف")}</th><th>{tr(locale, "Effective", "السريان")}</th><th>{tr(locale, "Status", "الحالة")}</th></tr></thead>
+            <thead><tr><th>{tr(locale, "Test", "الفحص")}</th><th>{tr(locale, "Component", "المكوّن")}</th><th>{tr(locale, "Scope", "النطاق")}</th><th>{tr(locale, "Absolute", "المطلق")}</th><th>{tr(locale, "Percent", "النسبة")}</th><th>{tr(locale, "Lookback", "الرجوع للخلف")}</th><th>{tr(locale, "Effective", "السريان")}</th><th>{tr(locale, "Governance", "الحوكمة")}</th></tr></thead>
             <tbody>{deltaRules.length === 0 ? <tr><td colSpan={8} className="empty-state">{tr(locale, "No delta rules configured.", "لا توجد قواعد Delta.")}</td></tr> : deltaRules.map(rule => <tr key={rule.id}>
               <td><strong>{rule.test.code}</strong><br/><small>{localizedName(rule.test)}</small></td>
               <td>{rule.component ? rule.component.code + " — " + localizedName(rule.component) : tr(locale, "Whole/simple test", "الفحص الكامل / البسيط")}</td>
@@ -365,7 +368,7 @@ export default async function ClinicalRulesPage() {
               <td>{rule.percentLimit ? rule.percentLimit.toString() + "%" : "—"}</td>
               <td>{rule.lookbackDays} {tr(locale, "days", "يوم")}</td>
               <td>{rule.effectiveFrom.toISOString().slice(0,10) + " → " + (rule.effectiveTo?.toISOString().slice(0,10) || openLabel)}</td>
-              <td>{statusLabel(locale, rule.status)}</td>
+              <td><ClinicalRuleGovernanceButton id={rule.id} ruleType="DELTA_RULE" status={rule.status} deactivatedAt={rule.deactivatedAt?.toISOString() || null} canApprove={permissions.has("clinical_rules.approve")} locale={locale} /></td>
             </tr>)}</tbody>
           </table>
         </div>
