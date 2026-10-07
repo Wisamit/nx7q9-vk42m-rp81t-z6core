@@ -204,6 +204,11 @@ enum SpecimenEventType {
   DISPOSED
 }
 
+enum SpecimenParentRelationType {
+  RECOLLECTION
+  ALIQUOT
+}
+
 enum SpecimenUsageType {
   ALIQUOT
   TESTING
@@ -2708,6 +2713,7 @@ model Specimen {
   organizationId      String         @map("organization_id") @db.Char(36)
   orderId             String         @map("order_id") @db.Char(36)
   parentSpecimenId    String?        @map("parent_specimen_id") @db.Char(36)
+  parentRelationType  SpecimenParentRelationType? @map("parent_relation_type")
   specimenTypeId      String?        @map("specimen_type_id") @db.Char(36)
   containerId         String?        @map("container_id") @db.Char(36)
   barcode             String         @db.VarChar(80)
