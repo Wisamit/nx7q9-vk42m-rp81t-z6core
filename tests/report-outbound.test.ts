@@ -13,12 +13,16 @@ const active = {
   email: "patient@example.com",
   phone: "+971501234567",
   preferredLocale: "en",
+  contactVerifications: [
+    { channel: "EMAIL" as const, destinationSnapshot: "patient@example.com", revokedAt: null },
+    { channel: "PHONE" as const, destinationSnapshot: "+971501234567", revokedAt: null },
+  ],
 };
 
 test("report outbound requires active verified portal contact", () => {
   assert.equal(resolveVerifiedPortalDestination(null, "EMAIL").ok, false);
   assert.equal(resolveVerifiedPortalDestination({ ...active, status: "LOCKED" }, "EMAIL").ok, false);
-  assert.equal(resolveVerifiedPortalDestination({ ...active, contactVerifiedAt: null }, "EMAIL").ok, false);
+  assert.equal(resolveVerifiedPortalDestination({ ...active, contactVerifications: [] }, "EMAIL").ok, false);
 });
 
 test("email and phone channels resolve from verified portal account", () => {
@@ -60,4 +64,28 @@ test("default outbound message contains secure portal link but no result values"
 test("delivery destinations are masked for audit/UI summaries", () => {
   assert.equal(maskedDestination("EMAIL", "patient@example.com"), "pa***@example.com");
   assert.equal(maskedDestination("SMS", "+971501234567"), "********4567");
+});
+
+
+test("verification is tied to the exact current destination", () => {
+  assert.equal(resolveVerifiedPortalDestination({
+    ...active,
+    email: "changed@example.com",
+  }, "EMAIL").ok, false);
+  assert.equal(resolveVerifiedPortalDestination({
+    ...active,
+    phone: "+971509999999",
+  }, "WHATSAPP").ok, false);
+});
+
+test("legacy generic verification is accepted only for a single configured contact", () => {
+  assert.equal(resolveVerifiedPortalDestination({
+    ...active,
+    phone: null,
+    contactVerifications: [],
+  }, "EMAIL").ok, true);
+  assert.equal(resolveVerifiedPortalDestination({
+    ...active,
+    contactVerifications: [],
+  }, "EMAIL").ok, false);
 });
