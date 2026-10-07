@@ -96,6 +96,22 @@ export function stageAfterTechnicalReview(snapshot: ValidationPolicySnapshot) {
   return snapshot.requiresMedicalValidation ? "MEDICAL_VALIDATION" as const : "COMPLETE" as const;
 }
 
+export function automatedTechnicalReviewOutcome(
+  snapshot: ValidationPolicySnapshot,
+  input: { eligible: boolean; complete: boolean },
+) {
+  if (!input.complete) {
+    return { resultStatus: "DRAFT" as const, validationStage: "ENTRY" as const, verificationComplete: false };
+  }
+  if (!input.eligible) {
+    return { resultStatus: "ENTERED" as const, validationStage: "TECHNICAL_REVIEW" as const, verificationComplete: false };
+  }
+  if (snapshot.requiresMedicalValidation) {
+    return { resultStatus: "ENTERED" as const, validationStage: "MEDICAL_VALIDATION" as const, verificationComplete: false };
+  }
+  return { resultStatus: "VERIFIED" as const, validationStage: "COMPLETE" as const, verificationComplete: true };
+}
+
 export function medicalReviewerAllowed(
   snapshot: ValidationPolicySnapshot,
   technicalReviewerUserId: string | null,
