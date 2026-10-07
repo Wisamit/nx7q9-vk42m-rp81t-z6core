@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { analyzerRoutingAllowsImport } from "@/lib/analyzer-routing";
 import { authenticateAnalyzerBridge } from "@/lib/analyzer-auth";
 
 function text(value: unknown, max: number) {
@@ -85,7 +86,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       include: {
         orderItems: {
           where: { status: "ACTIVE" },
-          include: { orderItem: true },
+          include: {
+            orderItem: {
+              include: { analyzerRoutes: { select: { analyzerId: true } } },
+            },
+          },
         },
       },
     }),
@@ -171,6 +176,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         } else if (linkedItems.length > 1) {
           errorCode = "AMBIGUOUS_ORDER_ITEM";
           errorText = "More than one order item matches the mapped LIS test for this specimen.";
+        } else if (!analyzerRoutingAllowsImport(
+          linkedItems[0].analyzerRoutes.map(route => route.analyzerId),
+          credential.analyzer.id,
+        )) {
+          errorCode = "ANALYZER_NOT_ROUTED_TO_ORDER_ITEM";
+          errorText = "This work item is explicitly routed to a different analyzer.";
         } else {
           orderItemId = linkedItems[0].id;
 

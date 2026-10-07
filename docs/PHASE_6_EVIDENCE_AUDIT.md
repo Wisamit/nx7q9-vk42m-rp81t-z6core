@@ -166,9 +166,11 @@ Autoverification compatibility:
 - if medical validation is required, autoverification stops at `MEDICAL_VALIDATION` and cannot bypass the human medical stage.
 
 
-## Phase 6F — Immutable TAT snapshot and due-time worklist
+## Phase 6F — Runtime accepted
 
-Phase 6F is implemented on feature branch `phase-6f-immutable-tat-due-worklist` and is pending CI/runtime acceptance.
+Runtime acceptance confirmed on Hostinger for main commit `fdb0ce3b6d16120e9b5d7859eb8afaaf1ce4cdb0`.
+
+Phase 6F delivered immutable TAT snapshots and due-time worklist filtering.
 
 Scope:
 - every newly registered order item snapshots the effective catalog TAT minutes inside the same order transaction;
@@ -185,3 +187,25 @@ Scope:
 
 Architecture guardrail:
 future collection-started or reception-started TAT clocks must be introduced as explicit clock-basis policies and snapshotted on the work item. They must not recompute historical deadlines from mutable catalog configuration.
+
+
+## Phase 6G — Explicit analyzer work routing
+
+Phase 6G is implemented on feature branch `phase-6g-analyzer-work-routing` and is pending CI/runtime acceptance.
+
+Scope:
+- introduces explicit current analyzer routing for pending `OrderItem` work rather than inferring an analyzer from a result that already exists;
+- one work item may be routed to multiple analyzers, supporting tests whose mapped components can be produced by more than one device;
+- each active route snapshots analyzer code, name, and branch;
+- immutable route events retain every ASSIGNED/CLEARED action, actor, timestamp, and clear reason;
+- generic audit events mirror routing changes;
+- adds separate `worklists.route` permission; it is initially granted to `SYSTEM_ADMIN` only and can be delegated through normal role management;
+- assignment is allowed only when the analyzer is active, in the current ready-specimen branch, compatible with the test department when department-scoped, and has an active effective mapping for the LIS test;
+- completed/locked work cannot be rerouted;
+- worklists display current analyzer routes and provide an Analyzer filter including an explicit Unassigned state;
+- analyzer result staging remains backward-compatible when no route exists;
+- once one or more explicit routes exist, incoming analyzer observations are accepted only from an assigned analyzer;
+- route removal requires a reason and never erases route history.
+
+Phase boundary:
+this batch supplies LIS-side pending-work routing and worklist filtering only. Serial/TCP/file connectivity, bidirectional order download, bridge transport behavior, retries, and device protocol completion remain Phase 10 Analyzer Bridge scope.

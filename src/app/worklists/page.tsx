@@ -7,6 +7,8 @@ import { SystemIcon } from "@/components/system-icon";
 import { getUiLocale, statusLabel, tr } from "@/lib/ui-i18n";
 import { scopedWorklistBranchIds } from "@/lib/clinical-safety";
 import { tatRemainingMinutes, tatWorkState } from "@/lib/tat";
+import { analyzerCanRouteWorkItem } from "@/lib/analyzer-routing";
+import { AnalyzerRoutingControl } from "@/components/analyzer-routing-control";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +23,7 @@ export default async function WorklistsPage({
     priority?: string;
     specimenStatus?: string;
     due?: string;
+    analyzer?: string;
   }>;
 }) {
   const session = await requirePermission("worklists.view");
@@ -34,6 +37,7 @@ export default async function WorklistsPage({
   const priority = params.priority?.trim() || "";
   const specimenStatus = params.specimenStatus?.trim() || "";
   const due = params.due?.trim() || "";
+  const analyzer = params.analyzer?.trim() || "";
   const authorizedBranches = session.user.branchScopes
     .filter(scope => scope.branch.status === "ACTIVE")
     .map(scope => scope.branch);
@@ -85,7 +89,13 @@ export default async function WorklistsPage({
     andFilters.push({ tatDueAt: null });
   }
 
-  const [items, departments] = await Promise.all([
+  if (analyzer === "UNASSIGNED") {
+    andFilters.push({ analyzerRoutes: { none: {} } });
+  } else if (analyzer) {
+    andFilters.push({ analyzerRoutes: { some: { analyzerId: analyzer } } });
+  }
+
+  const [items, departments, analyzers] = await Promise.all([
     prisma.orderItem.findMany({
       where: {
         order: {
@@ -146,6 +156,9 @@ export default async function WorklistsPage({
           include: { specimen: { include: { currentBranch: true } } },
           orderBy: { createdAt: "desc" },
         },
+        analyzerRoutes: {
+          orderBy: { assignedAt: "asc" },
+        },
         results: {
           orderBy: { version: "desc" },
           take: 1,
@@ -159,6 +172,32 @@ export default async function WorklistsPage({
       where: { organizationId: session.user.organizationId, status: "ACTIVE", ...(departmentRestricted ? { id: { in: scopedDepartmentIds } } : {}) },
       select: { id: true, code: true, nameEn: true, nameAr: true },
       orderBy: { nameEn: "asc" },
+    }),
+    prisma.analyzer.findMany({
+      where: {
+        organizationId: session.user.organizationId,
+        branchId: { in: worklistBranchIds },
+        status: "ACTIVE",
+        ...(departmentRestricted ? {
+          OR: [{ departmentId: null }, { departmentId: { in: scopedDepartmentIds } }],
+        } : {}),
+      },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        branchId: true,
+        departmentId: true,
+        mappings: {
+          where: {
+            status: "ACTIVE",
+            effectiveFrom: { lte: now },
+            OR: [{ effectiveTo: null }, { effectiveTo: { gte: now } }],
+          },
+          select: { testId: true },
+        },
+      },
+      orderBy: [{ code: "asc" }],
     }),
   ]);
 
@@ -311,6 +350,11 @@ export default async function WorklistsPage({
             <option value="">{tr(locale, "All departments", "كل الأقسام")}</option>
             {departments.map(department => <option key={department.id} value={department.id}>{department.code} — {localizedName(department)}</option>)}
           </select>
+          <select name="analyzer" defaultValue={analyzer}>
+            <option value="">{tr(locale, "All analyzers", "كل أجهزة التحليل")}</option>
+            <option value="UNASSIGNED">{tr(locale, "Unassigned analyzer", "بدون جهاز معيّن")}</option>
+            {analyzers.map(item => <option key={item.id} value={item.id}>{item.code} — {item.name}</option>)}
+          </select>
           <select name="due" defaultValue={due}>
             <option value="">{tr(locale, "All TAT states", "كل حالات زمن الإنجاز")}</option>
             <option value="OVERDUE">{tr(locale, "Overdue", "متأخر")}</option>
@@ -325,15 +369,15 @@ export default async function WorklistsPage({
             <option value="VERIFIED">{statusLabel(locale, "VERIFIED")}</option>
           </select>
           <button className="secondary-button"><SystemIcon name="search" size={15} />{tr(locale, "Filter", "تصفية")}</button>
-          {(q || status || departmentId || branchId || priority || specimenStatus || due) && <Link className="secondary-link" href="/worklists">{tr(locale, "Clear", "مسح")}</Link>}
+          {(q || status || departmentId || branchId || priority || specimenStatus || due || analyzer) && <Link className="secondary-link" href="/worklists">{tr(locale, "Clear", "مسح")}</Link>}
         </form>
       </div>
 
       <div className="table-wrap">
         <table>
-          <thead><tr><th>{tr(locale, "Accession", "رقم الطلب")}</th><th>{tr(locale, "Patient", "المريض")}</th><th>{tr(locale, "Test", "الفحص")}</th><th>{tr(locale, "Priority", "الأولوية")}</th><th>{tr(locale, "Department", "القسم")}</th><th>{tr(locale, "Specimen", "العينة")}</th><th>{tr(locale, "Location", "الموقع")}</th><th>{tr(locale, "TAT / Due", "زمن الإنجاز / الاستحقاق")}</th><th>{tr(locale, "Result", "النتيجة")}</th><th>{tr(locale, "Validation", "التحقق")}</th><th>{tr(locale, "Flags", "الإشارات")}</th><th></th></tr></thead>
+          <thead><tr><th>{tr(locale, "Accession", "رقم الطلب")}</th><th>{tr(locale, "Patient", "المريض")}</th><th>{tr(locale, "Test", "الفحص")}</th><th>{tr(locale, "Priority", "الأولوية")}</th><th>{tr(locale, "Department", "القسم")}</th><th>{tr(locale, "Specimen", "العينة")}</th><th>{tr(locale, "Location", "الموقع")}</th><th>{tr(locale, "Analyzer", "جهاز التحليل")}</th><th>{tr(locale, "TAT / Due", "زمن الإنجاز / الاستحقاق")}</th><th>{tr(locale, "Result", "النتيجة")}</th><th>{tr(locale, "Validation", "التحقق")}</th><th>{tr(locale, "Flags", "الإشارات")}</th><th></th></tr></thead>
           <tbody>
-            {items.length === 0 ? <tr><td colSpan={12} className="empty-state">{tr(locale, "No received specimens are waiting for laboratory work.", "لا توجد عينات مستلمة بانتظار العمل المخبري.")}</td></tr> :
+            {items.length === 0 ? <tr><td colSpan={13} className="empty-state">{tr(locale, "No received specimens are waiting for laboratory work.", "لا توجد عينات مستلمة بانتظار العمل المخبري.")}</td></tr> :
               items.map(item => {
                 const readySpecimen = item.specimenLinks.map(link => link.specimen).find(specimen =>
                   ["RECEIVED","IN_PROCESS"].includes(specimen.status) &&
@@ -346,6 +390,30 @@ export default async function WorklistsPage({
                 const abnormalCount = result?.values.filter(value => value.isAbnormal).length || 0;
                 const tatState = tatWorkState(item.tatDueAt, item.status, now);
                 const tatRemaining = tatRemainingMinutes(item.tatDueAt, now);
+                const readySpecimenBranchIds = [...new Set(item.specimenLinks
+                  .map(link => link.specimen)
+                  .filter(specimen =>
+                    ["RECEIVED","IN_PROCESS"].includes(specimen.status)
+                    && Boolean(specimen.currentBranchId)
+                    && worklistBranchIds.includes(specimen.currentBranchId!)
+                  )
+                  .map(specimen => specimen.currentBranchId!))];
+                const analyzerCandidates = analyzers
+                  .filter(candidate => analyzerCanRouteWorkItem({
+                    analyzerId: candidate.id,
+                    analyzerBranchId: candidate.branchId,
+                    analyzerDepartmentId: candidate.departmentId,
+                    mappedTestIds: [...new Set(candidate.mappings.map(mapping => mapping.testId))],
+                  }, {
+                    testId: item.testId,
+                    testDepartmentId: item.test.departmentId,
+                    readySpecimenBranchIds,
+                  }))
+                  .map(candidate => ({ id: candidate.id, code: candidate.code, name: candidate.name }));
+                const routeLocked = Boolean(result && (
+                  ["VERIFIED","RELEASED","AMENDED","CANCELLED"].includes(result.status)
+                  || result.validationStage === "COMPLETE"
+                ));
                 return <tr key={item.id}>
                   <td><strong>{item.order.accessionNumber}</strong></td>
                   <td>{item.order.patient.patientNumber}<br/><small>{patientName(item.order.patient)}</small></td>
@@ -354,6 +422,17 @@ export default async function WorklistsPage({
                   <td>{item.test.department ? localizedName(item.test.department) : tr(locale, "Unassigned", "غير معيّن")}</td>
                   <td><span className="barcode-text">{readySpecimen?.barcode || "—"}</span><br/><small>{readySpecimen?.status ? statusLabel(locale, readySpecimen.status) : "—"}</small></td>
                   <td>{readySpecimen?.currentBranch ? localizedName(readySpecimen.currentBranch) : item.performedBranch ? localizedName(item.performedBranch) : "—"}</td>
+                  <td><AnalyzerRoutingControl
+                    orderItemId={item.id}
+                    assigned={item.analyzerRoutes.map(route => ({
+                      analyzerId: route.analyzerId,
+                      analyzerCodeSnapshot: route.analyzerCodeSnapshot,
+                      analyzerNameSnapshot: route.analyzerNameSnapshot,
+                    }))}
+                    candidates={analyzerCandidates}
+                    canRoute={permissions.has("worklists.route") && !routeLocked}
+                    locale={locale}
+                  /></td>
                   <td>
                     {item.tatDueAt ? <>
                       <strong className={tatState === "OVERDUE" ? "critical-text" : ""}>

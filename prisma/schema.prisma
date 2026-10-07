@@ -381,6 +381,11 @@ enum AnalyzerImportStatus {
   ERROR
 }
 
+enum AnalyzerRouteAction {
+  ASSIGNED
+  CLEARED
+}
+
 enum ResultFlag {
   NORMAL
   LOW
@@ -1355,6 +1360,8 @@ model User {
   assessedCompetencies CompetencyAssessment[] @relation("CompetencyAssessor")
   analyzerAuthorizations AnalyzerAuthorization[] @relation("AnalyzerAuthorizedUser")
   approvedAnalyzerAuthorizations AnalyzerAuthorization[] @relation("AnalyzerAuthorizationApprover")
+  assignedAnalyzerRoutes OrderItemAnalyzerRoute[] @relation("AnalyzerRouteAssignedBy")
+  analyzerRouteEvents OrderItemAnalyzerRouteEvent[] @relation("AnalyzerRouteEventActor")
   qualityIndicatorMeasurements QualityIndicatorMeasurement[] @relation("QualityIndicatorRecorder")
   ledInternalAudits InternalAudit[] @relation("InternalAuditLead")
   ownedAuditFindings InternalAuditFinding[] @relation("AuditFindingOwner")
@@ -2407,6 +2414,8 @@ model OrderItem {
   results          LaboratoryResult[]
   resultRepeatEvents ResultRepeatEvent[]
   analyzerResultImports AnalyzerResultImport[]
+  analyzerRoutes OrderItemAnalyzerRoute[]
+  analyzerRouteEvents OrderItemAnalyzerRouteEvent[]
   microbiologyCases MicrobiologyCase[]
   packageLinks     OrderPackageItem[]
   answers          OrderAnswer[]
@@ -2417,6 +2426,47 @@ model OrderItem {
   @@index([testId, status])
   @@index([tatDueAt, status])
   @@map("order_items")
+}
+
+model OrderItemAnalyzerRoute {
+  orderItemId             String   @map("order_item_id") @db.Char(36)
+  analyzerId              String   @map("analyzer_id") @db.Char(36)
+  assignedByUserId        String   @map("assigned_by_user_id") @db.Char(36)
+  assignedAt              DateTime @default(now()) @map("assigned_at") @db.DateTime(3)
+  analyzerCodeSnapshot    String   @map("analyzer_code_snapshot") @db.VarChar(80)
+  analyzerNameSnapshot    String   @map("analyzer_name_snapshot") @db.VarChar(200)
+  analyzerBranchIdSnapshot String  @map("analyzer_branch_id_snapshot") @db.Char(36)
+
+  orderItem  OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
+  analyzer   Analyzer  @relation("AnalyzerWorkRoutes", fields: [analyzerId], references: [id], onDelete: Restrict)
+  assignedBy User      @relation("AnalyzerRouteAssignedBy", fields: [assignedByUserId], references: [id], onDelete: Restrict)
+
+  @@id([orderItemId, analyzerId])
+  @@index([analyzerId, assignedAt])
+  @@index([assignedByUserId, assignedAt])
+  @@map("order_item_analyzer_routes")
+}
+
+model OrderItemAnalyzerRouteEvent {
+  id                       String              @id @default(uuid()) @db.Char(36)
+  orderItemId              String              @map("order_item_id") @db.Char(36)
+  analyzerId               String              @map("analyzer_id") @db.Char(36)
+  action                   AnalyzerRouteAction
+  analyzerCodeSnapshot     String              @map("analyzer_code_snapshot") @db.VarChar(80)
+  analyzerNameSnapshot     String              @map("analyzer_name_snapshot") @db.VarChar(200)
+  analyzerBranchIdSnapshot String              @map("analyzer_branch_id_snapshot") @db.Char(36)
+  actorUserId              String              @map("actor_user_id") @db.Char(36)
+  reason                   String?             @db.VarChar(1000)
+  createdAt                DateTime            @default(now()) @map("created_at") @db.DateTime(3)
+
+  orderItem OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
+  analyzer  Analyzer  @relation("AnalyzerWorkRouteEvents", fields: [analyzerId], references: [id], onDelete: Restrict)
+  actor     User      @relation("AnalyzerRouteEventActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([orderItemId, createdAt])
+  @@index([analyzerId, createdAt])
+  @@index([actorUserId, createdAt])
+  @@map("order_item_analyzer_route_events")
 }
 
 model DiscountApprovalRequest {
@@ -4067,6 +4117,8 @@ model Analyzer {
   trainingRecords TrainingRecord[]
   competencyAssessments CompetencyAssessment[]
   authorizations AnalyzerAuthorization[]
+  workRoutes OrderItemAnalyzerRoute[] @relation("AnalyzerWorkRoutes")
+  workRouteEvents OrderItemAnalyzerRouteEvent[] @relation("AnalyzerWorkRouteEvents")
 
   @@unique([organizationId, code])
   @@index([branchId, status])
