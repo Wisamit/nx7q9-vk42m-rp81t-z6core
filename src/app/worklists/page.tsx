@@ -177,6 +177,7 @@ export default async function WorklistsPage({
             valueEn: option.valueEn,
             valueAr: option.valueAr,
             flag: option.flag,
+            isAbnormal: option.isAbnormal,
             isCritical: option.isCritical,
           })),
         }))
@@ -194,6 +195,7 @@ export default async function WorklistsPage({
             valueEn: option.valueEn,
             valueAr: option.valueAr,
             flag: option.flag,
+            isAbnormal: option.isAbnormal,
             isCritical: option.isCritical,
           })),
         }];
