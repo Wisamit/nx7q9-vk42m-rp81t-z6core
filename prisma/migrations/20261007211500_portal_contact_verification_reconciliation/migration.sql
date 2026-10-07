@@ -24,31 +24,10 @@ INSERT INTO `portal_contact_verifications`
   (`id`,`portal_account_id`,`channel`,`destination_snapshot`,`method`,`verification_reason`,`verified_by_user_id`,`verified_at`)
 SELECT
   UUID(), `id`, 'EMAIL', `email`, 'LEGACY_IMPORTED',
-  'Migrated from channel-specific email_verified_at',
-  NULL, `email_verified_at`
-FROM `portal_accounts`
-WHERE `email_verified_at` IS NOT NULL
-  AND `email` IS NOT NULL;
-
-INSERT INTO `portal_contact_verifications`
-  (`id`,`portal_account_id`,`channel`,`destination_snapshot`,`method`,`verification_reason`,`verified_by_user_id`,`verified_at`)
-SELECT
-  UUID(), `id`, 'PHONE', `phone`, 'LEGACY_IMPORTED',
-  'Migrated from channel-specific phone_verified_at',
-  NULL, `phone_verified_at`
-FROM `portal_accounts`
-WHERE `phone_verified_at` IS NOT NULL
-  AND `phone` IS NOT NULL;
-
-INSERT INTO `portal_contact_verifications`
-  (`id`,`portal_account_id`,`channel`,`destination_snapshot`,`method`,`verification_reason`,`verified_by_user_id`,`verified_at`)
-SELECT
-  UUID(), `id`, 'EMAIL', `email`, 'LEGACY_IMPORTED',
   'Migrated from legacy contact_verified_at with a single configured email contact',
   NULL, `contact_verified_at`
 FROM `portal_accounts`
 WHERE `contact_verified_at` IS NOT NULL
-  AND `email_verified_at` IS NULL
   AND `email` IS NOT NULL
   AND `phone` IS NULL;
 
@@ -60,6 +39,5 @@ SELECT
   NULL, `contact_verified_at`
 FROM `portal_accounts`
 WHERE `contact_verified_at` IS NOT NULL
-  AND `phone_verified_at` IS NULL
   AND `phone` IS NOT NULL
   AND `email` IS NULL;
