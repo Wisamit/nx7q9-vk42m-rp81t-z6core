@@ -626,6 +626,18 @@ export async function POST(request: Request) {
         }
       }
 
+      // Serializes tax rule changes with invoice issuance for this branch.
+      const taxGuard = await tx.branch.updateMany({
+        where: {
+          id: branchId,
+          organizationId: session.user.organizationId,
+          status: "ACTIVE",
+          taxConfigVersion: orderingBranch.taxConfigVersion,
+        },
+        data: { taxConfigVersion: { increment: 1 } },
+      });
+      if (taxGuard.count !== 1) throw new Error("TAX_CONFIGURATION_CHANGED");
+
       let accessionNumber = documentNumber("ORD");
       while (await tx.labOrder.findUnique({ where: { organizationId_accessionNumber: { organizationId: session.user.organizationId, accessionNumber } } })) {
         accessionNumber = documentNumber("ORD");
@@ -675,6 +687,7 @@ export async function POST(request: Request) {
         unitPrice: Prisma.Decimal;
         discountAmount: Prisma.Decimal;
         finalPrice: Prisma.Decimal;
+        taxQuote: (typeof taxQuotes)[number];
       }>();
 
       for (const pkg of packages) {
@@ -682,6 +695,8 @@ export async function POST(request: Request) {
         const unitPrice = new Prisma.Decimal(price.unitPrice);
         const discountAmount = new Prisma.Decimal(unitPrice.mul(requestedDiscountPercent).div(100).toFixed(4));
         const finalPrice = unitPrice.sub(discountAmount);
+        const taxQuote = taxQuoteByService.get("PACKAGE:" + pkg.id)!;
+        const grossPrice = new Prisma.Decimal(taxQuote.amounts!.lineTotal);
         subtotal = subtotal.add(unitPrice);
         discountTotal = discountTotal.add(discountAmount);
         const orderPackage = await tx.orderPackage.create({
@@ -694,12 +709,12 @@ export async function POST(request: Request) {
             packageNameArSnapshot: pkg.nameAr,
             unitPriceSnapshot: unitPrice,
             discountAmountSnapshot: discountAmount,
-            taxAmountSnapshot: new Prisma.Decimal(0),
-            finalPriceSnapshot: finalPrice,
+            taxAmountSnapshot: new Prisma.Decimal(taxQuote.amounts!.taxAmount),
+            finalPriceSnapshot: grossPrice,
             currency,
           },
         });
-        createdOrderPackages.set(pkg.id, { id: orderPackage.id, package: pkg, unitPrice, discountAmount, finalPrice });
+        createdOrderPackages.set(pkg.id, { id: orderPackage.id, package: pkg, unitPrice, discountAmount, finalPrice, taxQuote });
       }
 
       for (const test of tests) {
@@ -711,6 +726,8 @@ export async function POST(request: Request) {
           ? new Prisma.Decimal(0)
           : new Prisma.Decimal(unitPrice.mul(requestedDiscountPercent).div(100).toFixed(4));
         const finalPrice = unitPrice.sub(discountAmount);
+        const testTax = packageId ? null : taxQuoteByService.get("TEST:" + test.id)!;
+        const grossPrice = testTax ? new Prisma.Decimal(testTax.amounts!.lineTotal) : finalPrice;
         if (!packageId) {
           subtotal = subtotal.add(unitPrice);
           discountTotal = discountTotal.add(discountAmount);
@@ -728,8 +745,8 @@ export async function POST(request: Request) {
             unitSnapshot: test.defaultUnit?.symbol || null,
             unitPriceSnapshot: unitPrice,
             discountAmountSnapshot: discountAmount,
-            taxAmountSnapshot: new Prisma.Decimal(0),
-            finalPriceSnapshot: finalPrice,
+            taxAmountSnapshot: testTax ? new Prisma.Decimal(testTax.amounts!.taxAmount) : new Prisma.Decimal(0),
+            finalPriceSnapshot: grossPrice,
             currency,
           },
           select: { id: true },
@@ -766,7 +783,7 @@ export async function POST(request: Request) {
           });
         }
 
-        createdItems.push({ item, test, unitPrice, discountAmount, finalPrice, packageId });
+        createdItems.push({ item, test, unitPrice, discountAmount, finalPrice: grossPrice, packageId });
       }
 
       const specimenGroups = new Map<string, typeof createdItems>();
@@ -846,7 +863,8 @@ export async function POST(request: Request) {
         invoiceNumber = documentNumber("INV");
       }
 
-      const finalTotal = subtotal.sub(discountTotal);
+      const finalTotal = subtotal.sub(discountTotal).add(quoteExclusiveTaxTotal);
+      if (!finalTotal.equals(quoteFinalTotal)) throw new Error("TAX_QUOTE_MISMATCH");
       const invoice = await tx.invoice.create({
         data: {
           organizationId: session.user.organizationId,
@@ -862,7 +880,19 @@ export async function POST(request: Request) {
           discountApprovalMethod,
           discountApprovedByUserId,
           discountApprovedAt: requestedDiscountPercent > 0 ? discountApprovedAt : null,
-          taxTotal: new Prisma.Decimal(0),
+          taxTotal: quoteTaxTotal,
+          taxBreakdownSnapshot: taxQuotes.map(item => ({
+            kind: item.kind,
+            id: item.id,
+            ruleId: item.rule?.id || null,
+            code: item.rule?.code || null,
+            treatment: item.rule?.treatment || "NO_RULE",
+            ratePercent: item.rule?.ratePercent || "0.00",
+            priceMode: item.rule?.priceMode || "EXCLUSIVE",
+            taxableBase: item.amounts!.taxableBase,
+            taxAmount: item.amounts!.taxAmount,
+            lineTotal: item.amounts!.lineTotal,
+          })),
           total: finalTotal,
           paidAmount: new Prisma.Decimal(0),
           balanceAmount: finalTotal,
@@ -887,7 +917,12 @@ export async function POST(request: Request) {
             quantity: new Prisma.Decimal(1),
             unitPrice: entry.unitPrice,
             discountAmount: entry.discountAmount,
-            taxAmount: new Prisma.Decimal(0),
+            taxAmount: new Prisma.Decimal(taxQuoteByService.get("TEST:" + entry.test.id)!.amounts!.taxAmount),
+            taxRuleId: taxQuoteByService.get("TEST:" + entry.test.id)!.rule?.id || null,
+            taxCodeSnapshot: taxQuoteByService.get("TEST:" + entry.test.id)!.rule?.code || null,
+            taxRateSnapshot: taxQuoteByService.get("TEST:" + entry.test.id)!.rule?.ratePercent || null,
+            taxTreatmentSnapshot: taxQuoteByService.get("TEST:" + entry.test.id)!.rule?.treatment || null,
+            taxPriceModeSnapshot: taxQuoteByService.get("TEST:" + entry.test.id)!.rule?.priceMode || null,
             lineTotal: entry.finalPrice,
           },
         });
@@ -904,8 +939,13 @@ export async function POST(request: Request) {
             quantity: new Prisma.Decimal(1),
             unitPrice: orderPackage.unitPrice,
             discountAmount: orderPackage.discountAmount,
-            taxAmount: new Prisma.Decimal(0),
-            lineTotal: orderPackage.finalPrice,
+            taxAmount: new Prisma.Decimal(orderPackage.taxQuote.amounts!.taxAmount),
+            taxRuleId: orderPackage.taxQuote.rule?.id || null,
+            taxCodeSnapshot: orderPackage.taxQuote.rule?.code || null,
+            taxRateSnapshot: orderPackage.taxQuote.rule?.ratePercent || null,
+            taxTreatmentSnapshot: orderPackage.taxQuote.rule?.treatment || null,
+            taxPriceModeSnapshot: orderPackage.taxQuote.rule?.priceMode || null,
+            lineTotal: new Prisma.Decimal(orderPackage.taxQuote.amounts!.lineTotal),
           },
         });
       }
