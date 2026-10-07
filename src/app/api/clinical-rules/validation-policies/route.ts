@@ -10,10 +10,6 @@ function code(value: unknown) {
   return text(value, 80).toUpperCase().replace(/[^A-Z0-9._-]+/g, "_").replace(/^_+|_+$/g, "");
 }
 
-function overlaps(aStart: Date, aEnd: Date | null, bStart: Date, bEnd: Date | null) {
-  return (aEnd === null || bStart <= aEnd) && (bEnd === null || aStart <= bEnd);
-}
-
 export async function POST(request: Request) {
   const session = await requirePermission("clinical_rules.manage");
   const ctx = await requestContext();
@@ -74,21 +70,6 @@ export async function POST(request: Request) {
     if (!test) return NextResponse.json({ error: "test_not_found" }, { status: 404 });
   }
 
-  const existing = await prisma.resultValidationPolicy.findMany({
-    where: {
-      organizationId: session.user.organizationId,
-      scope: scope as "ORGANIZATION" | "DEPARTMENT" | "TEST",
-      branchId,
-      departmentId,
-      testId,
-      status: "ACTIVE",
-    },
-  });
-
-  if (existing.some(policy => overlaps(policy.effectiveFrom, policy.effectiveTo, effectiveFrom, effectiveTo))) {
-    return NextResponse.json({ error: "validation_policy_effective_range_overlap" }, { status: 409 });
-  }
-
   try {
     const policy = await prisma.$transaction(async tx => {
       const created = await tx.resultValidationPolicy.create({
@@ -105,6 +86,7 @@ export async function POST(request: Request) {
           allowSameReviewer,
           effectiveFrom,
           effectiveTo,
+          status: "INACTIVE",
           createdByUserId: session.user.id,
         },
       });
@@ -114,7 +96,7 @@ export async function POST(request: Request) {
           organizationId: session.user.organizationId,
           branchId: session.activeBranchId,
           actorUserId: session.user.id,
-          action: "RESULT_VALIDATION_POLICY_CREATED",
+          action: "RESULT_VALIDATION_POLICY_DRAFT_CREATED",
           entityType: "ResultValidationPolicy",
           entityId: created.id,
           newValues: {
@@ -142,61 +124,6 @@ export async function POST(request: Request) {
   }
 }
 
-export async function PATCH(request: Request) {
-  const session = await requirePermission("clinical_rules.manage");
-  const ctx = await requestContext();
-  const body = await request.json().catch(() => null) as Record<string, unknown> | null;
-  if (!body) return NextResponse.json({ error: "invalid_request" }, { status: 400 });
-
-  const id = text(body.id, 36);
-  const status = body.status === "ACTIVE" ? "ACTIVE" : body.status === "INACTIVE" ? "INACTIVE" : null;
-  if (!id || !status) return NextResponse.json({ error: "invalid_status_change" }, { status: 400 });
-
-  const existing = await prisma.resultValidationPolicy.findFirst({
-    where: { id, organizationId: session.user.organizationId },
-  });
-  if (!existing) return NextResponse.json({ error: "validation_policy_not_found" }, { status: 404 });
-  if (existing.status === status) return NextResponse.json({ status: "ok", policy: existing });
-
-  if (status === "ACTIVE") {
-    const siblings = await prisma.resultValidationPolicy.findMany({
-      where: {
-        organizationId: session.user.organizationId,
-        scope: existing.scope,
-        branchId: existing.branchId,
-        departmentId: existing.departmentId,
-        testId: existing.testId,
-        status: "ACTIVE",
-        id: { not: existing.id },
-      },
-    });
-    if (siblings.some(policy => overlaps(policy.effectiveFrom, policy.effectiveTo, existing.effectiveFrom, existing.effectiveTo))) {
-      return NextResponse.json({ error: "validation_policy_effective_range_overlap" }, { status: 409 });
-    }
-  }
-
-  const policy = await prisma.$transaction(async tx => {
-    const updated = await tx.resultValidationPolicy.update({
-      where: { id },
-      data: { status, deactivatedAt: status === "INACTIVE" ? new Date() : null },
-    });
-
-    await tx.auditEvent.create({
-      data: {
-        organizationId: session.user.organizationId,
-        branchId: session.activeBranchId,
-        actorUserId: session.user.id,
-        action: status === "ACTIVE" ? "RESULT_VALIDATION_POLICY_REACTIVATED" : "RESULT_VALIDATION_POLICY_DEACTIVATED",
-        entityType: "ResultValidationPolicy",
-        entityId: id,
-        oldValues: { status: existing.status },
-        newValues: { status },
-        ipAddress: ctx.ipAddress,
-        userAgent: ctx.userAgent,
-      },
-    });
-    return updated;
-  });
-
-  return NextResponse.json({ status: "ok", policy });
+export async function PATCH() {
+  return NextResponse.json({ error: "use_clinical_rule_governance" }, { status: 409 });
 }
