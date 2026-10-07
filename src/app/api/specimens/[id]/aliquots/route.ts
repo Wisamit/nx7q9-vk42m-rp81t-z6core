@@ -45,7 +45,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     },
   });
   if (!parent) return NextResponse.json({ error: "specimen_not_found" }, { status: 404 });
-  if (!parent.currentBranchId || !canAccessBranch(session, parent.currentBranchId)) {
+  const currentBranchId = currentBranchId;
+  if (!currentBranchId || !canAccessBranch(session, currentBranchId)) {
     return NextResponse.json({ error: "branch_forbidden" }, { status: 403 });
   }
 
@@ -79,7 +80,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
             id: parent.id,
             organizationId: session.user.organizationId,
             status: parent.status,
-            currentBranchId: parent.currentBranchId,
+            currentBranchId: currentBranchId,
             remainingVolume: { gte: volume },
           },
           data: { remainingVolume: { decrement: volume } },
@@ -118,7 +119,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
             sequenceNumber,
             status: childStatus,
             collectionBranchId: parent.collectionBranchId,
-            currentBranchId: parent.currentBranchId,
+            currentBranchId: currentBranchId,
             receivedByUserId: ["RECEIVED","IN_PROCESS"].includes(childStatus) ? session.user.id : null,
             receivedAt: ["RECEIVED","IN_PROCESS"].includes(childStatus) ? derivedAt : null,
             volume,
@@ -140,7 +141,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           data: {
             specimenId: child.id,
             eventType: "CREATED",
-            branchId: parent.currentBranchId,
+            branchId: currentBranchId,
             actorUserId: session.user.id,
             fromStatus: null,
             toStatus: childStatus,
@@ -161,7 +162,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           data: {
             specimenId: parent.id,
             eventType: "ALIQUOT_CREATED",
-            branchId: parent.currentBranchId,
+            branchId: currentBranchId,
             actorUserId: session.user.id,
             fromStatus: parent.status,
             toStatus: parent.status,
@@ -182,7 +183,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
             organizationId: parent.organizationId,
             specimenId: parent.id,
             childSpecimenId: child.id,
-            branchId: parent.currentBranchId,
+            branchId: currentBranchId,
             usageType: "ALIQUOT",
             volumeUsed: volume,
             volumeUnit: parent.remainingVolumeUnit!,
@@ -194,7 +195,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         await tx.auditEvent.create({
           data: {
             organizationId: parent.organizationId,
-            branchId: parent.currentBranchId,
+            branchId: currentBranchId,
             actorUserId: session.user.id,
             action: "SPECIMEN_ALIQUOT_CREATED",
             entityType: "Specimen",
