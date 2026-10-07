@@ -4,14 +4,19 @@ import { FormEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 type PatientOption = { id: string; patientNumber: string; fullNameEn: string; phone: string | null };
+type OrderQuestionChoice = {
+  code: string;
+  valueEn: string;
+  valueAr: string | null;
+};
 type OrderQuestionOption = {
   id: string;
   code: string;
   questionEn: string;
   questionAr: string | null;
-  responseType: "TEXT" | "NUMERIC" | "BOOLEAN" | "DATE" | "SINGLE_CHOICE";
+  responseType: "TEXT" | "NUMERIC" | "BOOLEAN" | "DATE" | "DATETIME" | "SINGLE_CHOICE";
   required: boolean;
-  options: string[];
+  options: OrderQuestionChoice[];
   displayOrder: number;
 };
 type TestOption = { id: string; code: string; nameEn: string; orderQuestions: OrderQuestionOption[] };
@@ -405,11 +410,12 @@ export function OrderCreateForm({
             {question.responseType === "TEXT" && <input name={"question_" + question.id} required={question.required} />}
             {question.responseType === "NUMERIC" && <input name={"question_" + question.id} type="number" step="any" required={question.required} />}
             {question.responseType === "DATE" && <input name={"question_" + question.id} type="date" required={question.required} />}
+            {question.responseType === "DATETIME" && <input name={"question_" + question.id} type="datetime-local" required={question.required} />}
             {question.responseType === "BOOLEAN" && <select name={"question_" + question.id} required={question.required} defaultValue="">
               <option value="">{tr("Select…", "اختر…")}</option><option value="true">{tr("Yes", "نعم")}</option><option value="false">{tr("No", "لا")}</option>
             </select>}
             {question.responseType === "SINGLE_CHOICE" && <select name={"question_" + question.id} required={question.required} defaultValue="">
-              <option value="">{tr("Select…", "اختر…")}</option>{question.options.map(option => <option key={option} value={option}>{option}</option>)}
+              <option value="">{tr("Select…", "اختر…")}</option>{question.options.map(option => <option key={option.code} value={option.code}>{locale === "ar" ? option.valueAr || option.valueEn : option.valueEn}</option>)}
             </select>}
           </label>))}
         </div>
