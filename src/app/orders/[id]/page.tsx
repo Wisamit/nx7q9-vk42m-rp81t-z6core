@@ -130,16 +130,23 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       <div className="table-wrap"><table>
         <thead><tr><th>{tr(locale, "Test", "الفحص")}</th><th>{tr(locale, "Question", "السؤال")}</th><th>{tr(locale, "Answer", "الإجابة")}</th><th>{tr(locale, "Recorded", "تم التسجيل")}</th></tr></thead>
         <tbody>{order.items.flatMap(item => item.answers.map(answer => {
+          const selectedOption = locale === "ar"
+            ? answer.selectedOptionTextArSnapshot || answer.selectedOptionTextEnSnapshot || answer.selectedOptionSnapshot
+            : answer.selectedOptionTextEnSnapshot || answer.selectedOptionSnapshot;
+          const dateTimeAnswer = answer.answerDateTimeLocalSnapshot
+            ? answer.answerDateTimeLocalSnapshot.replace("T", " ") + (answer.answerTimeZoneSnapshot ? " · " + answer.answerTimeZoneSnapshot : "")
+            : answer.answerDateTime?.toISOString().replace("T"," ").slice(0,19) || null;
           const displayAnswer = answer.answerText
             ?? answer.answerNumeric?.toString()
             ?? (answer.answerBoolean === null ? null : answer.answerBoolean ? tr(locale, "Yes", "نعم") : tr(locale, "No", "لا"))
             ?? answer.answerDate?.toISOString().slice(0,10)
-            ?? answer.selectedOptionSnapshot
+            ?? dateTimeAnswer
+            ?? selectedOption
             ?? "—";
           return <tr key={answer.id}>
             <td><strong>{item.testCodeSnapshot}</strong></td>
-            <td>{answer.questionTextEnSnapshot}{answer.questionTextArSnapshot && <><br/><small dir="rtl">{answer.questionTextArSnapshot}</small></>}</td>
-            <td><strong>{displayAnswer}</strong></td>
+            <td>{answer.questionTextEnSnapshot}{answer.questionTextArSnapshot && <><br/><small dir="rtl">{answer.questionTextArSnapshot}</small></>}<br/><small>{answer.questionCodeSnapshot} · v{answer.questionVersionSnapshot}</small></td>
+            <td><strong>{displayAnswer}</strong>{answer.selectedOptionCodeSnapshot ? <><br/><small>{answer.selectedOptionCodeSnapshot}</small></> : null}</td>
             <td>{answer.recordedAt.toISOString().replace("T"," ").slice(0,19)}</td>
           </tr>;
         }))}</tbody>
