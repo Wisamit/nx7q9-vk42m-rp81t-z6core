@@ -186,7 +186,7 @@ export function ClientAccountManager({
     <CrudModal open={statementOpen} onClose={() => setStatementOpen(false)} title={tr("Generate client account statement", "إصدار كشف حساب عميل")} description={tr("The generated statement is stored as an immutable financial snapshot.", "يتم حفظ كشف الحساب الناتج كلقطة مالية تاريخية ثابتة.")} size="md">
       <form className="catalog-form" onSubmit={generateStatement}>
         <label className="form-span">{tr("Client", "العميل")}<select name="clientId" required defaultValue=""><option value="">{tr("Select client…", "اختر العميل…")}</option>{clients.map(client => <option key={client.id} value={client.id}>{client.code} — {client.name}</option>)}</select></label>
-        <label>{tr("Branch scope", "نطاق الفرع")}<select name="branchId" required defaultValue={defaultBranchId || branches[0]?.id || ""}>{hasAllBranches && <option value="">{tr("All organization branches", "جميع فروع المؤسسة")}</option>}{branches.map(branch => <option key={branch.id} value={branch.id}>{branch.code} — {branch.name}</option>)}</select></label>
+        <label>{tr("Branch scope", "نطاق الفرع")}<select name="branchId" defaultValue={defaultBranchId || branches[0]?.id || ""}>{hasAllBranches && <option value="">{tr("All organization branches", "جميع فروع المؤسسة")}</option>}{branches.map(branch => <option key={branch.id} value={branch.id}>{branch.code} — {branch.name}</option>)}</select></label>
         <label>{tr("Currency", "العملة")}<input name="currency" minLength={3} maxLength={3} required placeholder="EGP" /></label>
         <label>{tr("Period start", "بداية الفترة")}<input name="periodStart" type="date" required /></label>
         <label>{tr("Period end", "نهاية الفترة")}<input name="periodEnd" type="date" required /></label>
