@@ -142,10 +142,14 @@ export async function POST(request: Request) {
       organizationId: session.user.organizationId,
       status: "ACTIVE",
       effectiveFrom: { lte: resultAt },
-      OR: [{ effectiveTo: null }, { effectiveTo: { gte: resultAt } }],
+      AND: [
+        { OR: [{ effectiveTo: null }, { effectiveTo: { gte: resultAt } }] },
+        { OR: [{ branchId: null }, { branchId: performingBranchId }] },
+      ],
     },
   });
   const selectedValidationPolicy = selectValidationPolicy(validationPolicies, {
+    branchId: performingBranchId,
     testId: orderItem.testId,
     departmentId: orderItem.test.departmentId,
   });
