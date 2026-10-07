@@ -158,6 +158,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   if (!specimen) return NextResponse.json({ error: "specimen_not_found" }, { status: 404 });
   if (!reason) return NextResponse.json({ error: "rejection_reason_not_active" }, { status: 409 });
+  if (!specimen.currentBranchId || specimen.currentBranchId !== branchId) {
+    return NextResponse.json({ error: "rejection_branch_must_match_specimen_location" }, { status: 409 });
+  }
   if (specimen.order.status === "CANCELLED") return NextResponse.json({ error: "order_cancelled" }, { status: 409 });
   if (specimen.order.status === "COMPLETED") {
     return NextResponse.json({ error: "completed_order_requires_result_amendment_workflow" }, { status: 409 });
