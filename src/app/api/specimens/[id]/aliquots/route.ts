@@ -3,8 +3,9 @@ import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import {
   aliquotPurposeRequiresTests,
-  remainingAfterUse,
+  minorToVolume3,
   specimenVolumeUseError,
+  volume3ToMinor,
 } from "@/lib/specimen-volume-policy";
 
 function text(value: unknown, max: number) {
@@ -69,10 +70,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (!container) return NextResponse.json({ error: "container_not_found" }, { status: 404 });
   }
 
-  const beforeRemaining = parent.remainingVolume!.toFixed(3);
-  const predictedAfter = remainingAfterUse(beforeRemaining, volume);
-  if (!predictedAfter) return NextResponse.json({ error: "insufficient_available_volume" }, { status: 409 });
-
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
       const result = await prisma.$transaction(async tx => {
@@ -92,6 +89,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           where: { id: parent.id },
           select: { remainingVolume: true, remainingVolumeUnit: true },
         });
+
+        const remainingAfter = updatedParent.remainingVolume?.toFixed(3) || null;
+        const afterMinor = volume3ToMinor(remainingAfter);
+        const usedMinor = volume3ToMinor(volume);
+        const actualBefore = afterMinor !== null && usedMinor !== null ? minorToVolume3(afterMinor + usedMinor) : null;
 
         const maxSequence = await tx.specimen.aggregate({
           where: { orderId: parent.orderId },
@@ -165,8 +167,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
               childBarcode: child.barcode,
               allocatedVolume: volume,
               volumeUnit: parent.remainingVolumeUnit,
-              remainingVolumeBefore: beforeRemaining,
-              remainingVolumeAfter: updatedParent.remainingVolume?.toFixed(3) || null,
+              remainingVolumeBefore: actualBefore,
+              remainingVolumeAfter: remainingAfter,
               purpose,
             },
           },
@@ -201,7 +203,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
               purpose,
               volume,
               volumeUnit: parent.remainingVolumeUnit,
-              parentRemainingVolume: updatedParent.remainingVolume?.toFixed(3) || null,
+              parentRemainingVolume: remainingAfter,
               storageLocation,
               linkedOrderItemIds: requestedOrderItemIds,
             },
@@ -212,7 +214,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
         return {
           child,
-          remainingVolume: updatedParent.remainingVolume?.toFixed(3) || null,
+          remainingVolume: remainingAfter,
           remainingVolumeUnit: updatedParent.remainingVolumeUnit,
         };
       }, { timeout: 30000 });
