@@ -28,14 +28,17 @@ export async function POST(request: Request) {
   const valueEn = text(body.valueEn, 500);
   const valueAr = text(body.valueAr, 500) || null;
   const flag = text(body.flag, 30) || "UNKNOWN";
-  const isAbnormal = body.isAbnormal === true;
   const isCritical = body.isCritical === true;
+  const isAbnormal = flag === "ABNORMAL" || body.isAbnormal === true || isCritical;
   const displayOrder = body.displayOrder === "" || body.displayOrder == null ? 0 : Number(body.displayOrder);
   const effectiveFrom = new Date(String(body.effectiveFrom || ""));
   const effectiveTo = body.effectiveTo ? new Date(String(body.effectiveTo)) : null;
 
   if (!testId || !optionCode || !valueEn || !qualitativeFlags.has(flag)) {
     return NextResponse.json({ error: "missing_or_invalid_required_fields" }, { status: 400 });
+  }
+  if (flag === "NORMAL" && isAbnormal) {
+    return NextResponse.json({ error: "normal_option_cannot_be_abnormal_or_critical" }, { status: 409 });
   }
   if (!Number.isInteger(displayOrder) || displayOrder < 0 || displayOrder > 10000) {
     return NextResponse.json({ error: "invalid_display_order" }, { status: 400 });
