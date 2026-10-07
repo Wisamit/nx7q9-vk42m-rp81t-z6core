@@ -81,3 +81,21 @@ export function activeDerivedAliquotConflict(input: {
     && child.orderItemIds.some(orderItemId => affected.has(orderItemId))
   );
 }
+
+
+export function rejectionAnalyticalWorkError(affectedLinks: Array<{
+  orderItemStatus: string;
+  resultCount: number;
+  microbiologyCount: number;
+  activeSendOutCount: number;
+  analyzerWorkCount: number;
+}>) {
+  if (affectedLinks.some(link => link.resultCount > 0)) return "affected_tests_already_have_results";
+  if (affectedLinks.some(link => ["IN_PROGRESS","RESULTED","VERIFIED"].includes(link.orderItemStatus))) {
+    return "affected_tests_analytical_work_started";
+  }
+  if (affectedLinks.some(link => link.microbiologyCount > 0)) return "affected_tests_microbiology_work_started";
+  if (affectedLinks.some(link => link.activeSendOutCount > 0)) return "affected_tests_sendout_active";
+  if (affectedLinks.some(link => link.analyzerWorkCount > 0)) return "affected_tests_analyzer_work_started";
+  return null;
+}
