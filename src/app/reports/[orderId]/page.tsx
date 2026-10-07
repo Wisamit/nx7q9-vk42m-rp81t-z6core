@@ -334,8 +334,8 @@ export default async function DiagnosticReportPage({ params }: { params: Promise
               result.comments && !result.microbiology ? <tr key={`${result.testCode}-comment`}><td colSpan={reportColumnCount}><strong>{reportTr("Comment", "تعليق")}:</strong> {result.comments}</td></tr> : null,
               <tr className="report-result-meta" key={`${result.testCode}-meta`}>
                 <td colSpan={reportColumnCount}>
-                  {tr(locale, "Specimen", "العينة")}: {result.specimen?.barcode || "—"} · {tr(locale, "Collected", "جُمعت")}: {result.specimen?.collectedAt?.replace("T"," ").slice(0,19) || "—"} ·
-                  {templateConfig.showSignature ? <>{tr(locale, "Verified", "تم التحقق")}: {result.verifiedBy?.nameEn || "—"} · {tr(locale, "Released", "تم الإصدار")}: {result.releasedBy?.nameEn || "—"}</> : <>{tr(locale, "Released", "تم الإصدار")}: {result.releasedAt?.replace("T"," ").slice(0,19) || "—"}</>}
+                  {reportTr("Specimen", "العينة")}: {result.specimen?.barcode || "—"} · {reportTr("Collected", "جُمعت")}: {result.specimen?.collectedAt?.replace("T"," ").slice(0,19) || "—"} ·
+                  {templateConfig.showSignature ? <>{reportTr("Verified", "تم التحقق")}: {result.verifiedBy ? localizedReportText(templateConfig.languageMode, locale, { en: result.verifiedBy.nameEn, ar: result.verifiedBy.nameAr }) : "—"} · {reportTr("Released", "تم الإصدار")}: {result.releasedBy ? localizedReportText(templateConfig.languageMode, locale, { en: result.releasedBy.nameEn, ar: result.releasedBy.nameAr }) : "—"}</> : <>{reportTr("Released", "تم الإصدار")}: {result.releasedAt?.replace("T"," ").slice(0,19) || "—"}</>}
                 </td>
               </tr>,
             ])}
@@ -344,22 +344,22 @@ export default async function DiagnosticReportPage({ params }: { params: Promise
       </section>
 
       {(snapshot.order.diagnosis || snapshot.order.clinicalNotes) && <section className="report-notes">
-        {snapshot.order.diagnosis && <p><strong>{tr(locale, "Clinical indication", "الدلالة السريرية")}:</strong> {snapshot.order.diagnosis}</p>}
-        {snapshot.order.clinicalNotes && <p><strong>{tr(locale, "Clinical notes", "الملاحظات السريرية")}:</strong> {snapshot.order.clinicalNotes}</p>}
+        {snapshot.order.diagnosis && <p><strong>{reportTr("Clinical indication", "الدلالة السريرية")}:</strong> {snapshot.order.diagnosis}</p>}
+        {snapshot.order.clinicalNotes && <p><strong>{reportTr("Clinical notes", "الملاحظات السريرية")}:</strong> {snapshot.order.clinicalNotes}</p>}
       </section>}
 
       {(templateConfig.footerEn || templateConfig.footerAr) && <section className="report-template-footer">
-        {templateConfig.footerEn && <p>{templateConfig.footerEn}</p>}
-        {templateConfig.footerAr && <p dir="rtl">{templateConfig.footerAr}</p>}
+        {showEnglish && templateConfig.footerEn && <p dir="ltr">{templateConfig.footerEn}</p>}
+        {showArabic && templateConfig.footerAr && <p dir="rtl">{templateConfig.footerAr}</p>}
       </section>}
       <footer className="report-footer">
         <div>
-          <strong>{snapshot.completeness.final ? tr(locale, "Final report", "تقرير نهائي") : tr(locale, "Partial report", "تقرير جزئي")}</strong>
-          <span>{snapshot.completeness.releasedItemCount}/{snapshot.completeness.totalItemCount} {tr(locale, "order item(s) released", "عنصر طلب تم إصداره")}</span>
+          <strong>{snapshot.completeness.final ? reportTr("Final report", "تقرير نهائي") : reportTr("Partial report", "تقرير جزئي")}</strong>
+          <span>{snapshot.completeness.releasedItemCount}/{snapshot.completeness.totalItemCount} {reportTr("order item(s) released", "عنصر طلب تم إصداره")}</span>
         </div>
         <div>
-          <span>{tr(locale, "Issued by", "صدر بواسطة")}: {latest.issuedBy.displayNameEn}</span>
-          <span>{tr(locale, "Verification token", "رمز التحقق")}: {latest.verificationToken.slice(0,16)}…</span>
+          <span>{reportTr("Issued by", "صدر بواسطة")}: {localizedReportText(templateConfig.languageMode, locale, { en: latest.issuedBy.displayNameEn, ar: latest.issuedBy.displayNameAr })}</span>
+          <span>{reportTr("Verification token", "رمز التحقق")}: {latest.verificationToken.slice(0,16)}…</span>
           {verificationUrl && <span className="verification-url">{verificationUrl}</span>}
         </div>
       </footer>
