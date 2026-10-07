@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { Prisma } from "../../../generated/prisma/client";
 import { authorizedDepartmentIds, permissionSet, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { BulkResultEntry } from "@/components/bulk-result-entry";
@@ -55,6 +56,34 @@ export default async function WorklistsPage({
       : { departmentId })
     : (departmentRestricted ? { departmentId: { in: scopedDepartmentIds } } : {});
   const now = new Date();
+  const andFilters: Prisma.OrderItemWhereInput[] = [];
+
+  if (q) {
+    andFilters.push({
+      OR: [
+        { testCodeSnapshot: { contains: q } },
+        { testNameEnSnapshot: { contains: q } },
+        { order: { accessionNumber: { contains: q } } },
+        { order: { patient: { patientNumber: { contains: q } } } },
+        { order: { patient: { fullNameEn: { contains: q } } } },
+        { specimenLinks: { some: { status: "ACTIVE", specimen: { barcode: { contains: q } } } } },
+      ],
+    });
+  }
+
+  if (dueFilter === "OVERDUE") {
+    andFilters.push({
+      status: { notIn: ["VERIFIED", "CANCELLED"] },
+      tatDueAt: { lt: now },
+    });
+  } else if (dueFilter === "PENDING") {
+    andFilters.push({
+      status: { notIn: ["VERIFIED", "CANCELLED"] },
+      tatDueAt: { gte: now },
+    });
+  } else if (dueFilter === "NO_TAT") {
+    andFilters.push({ tatDueAt: null });
+  }
 
   const [items, departments] = await Promise.all([
     prisma.orderItem.findMany({
@@ -77,29 +106,7 @@ export default async function WorklistsPage({
           ? { status: status as "ORDERED" | "COLLECTED" | "IN_PROGRESS" | "RESULTED" | "VERIFIED" }
           : {}),
         ...(Object.keys(departmentFilter).length ? { test: departmentFilter } : {}),
-        ...((q || dueFilter) ? {
-          AND: [
-            ...(q ? [{
-              OR: [
-                { testCodeSnapshot: { contains: q } },
-                { testNameEnSnapshot: { contains: q } },
-                { order: { accessionNumber: { contains: q } } },
-                { order: { patient: { patientNumber: { contains: q } } } },
-                { order: { patient: { fullNameEn: { contains: q } } } },
-                { specimenLinks: { some: { status: "ACTIVE", specimen: { barcode: { contains: q } } } } },
-              ],
-            }] : []),
-            ...(dueFilter === "OVERDUE" ? [{
-              status: { notIn: ["VERIFIED", "CANCELLED"] as const },
-              tatDueAt: { lt: now },
-            }] : dueFilter === "PENDING" ? [{
-              status: { notIn: ["VERIFIED", "CANCELLED"] as const },
-              tatDueAt: { gte: now },
-            }] : dueFilter === "NO_TAT" ? [{
-              tatDueAt: null,
-            }] : []),
-          ],
-        } : {}),
+        ...(andFilters.length ? { AND: andFilters } : {}),
       },
       include: {
         order: { include: { patient: true, orderingBranch: true } },
