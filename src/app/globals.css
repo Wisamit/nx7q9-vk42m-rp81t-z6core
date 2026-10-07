@@ -358,3 +358,14 @@ html[data-density="compact"] :where(.detail-card,.dashboard-panel,.settings-card
   box-shadow:none;
 }
 .diagnostic-report.pdf-exporting *{animation:none!important;transition:none!important}
+
+
+/* Secure outbound report delivery */
+.report-outbound-card{display:grid;gap:12px}
+.report-outbound-controls{display:grid;grid-template-columns:minmax(180px,1fr) minmax(220px,1fr) auto;gap:12px;align-items:end}
+.report-outbound-controls label{display:grid;gap:6px}
+.report-outbound-controls select{min-width:0}
+@media(max-width:760px){
+  .report-outbound-controls{grid-template-columns:1fr}
+  .report-outbound-controls button{width:100%}
+}
