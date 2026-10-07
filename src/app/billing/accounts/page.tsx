@@ -58,6 +58,7 @@ export default async function ClientAccountsPage() {
         <p className="muted">{tr(locale, "Generate immutable statements and allocate one client payment across multiple invoices without altering historical invoice values.", "أنشئ كشوف حساب تاريخية ثابتة ووزّع دفعة عميل واحدة على عدة فواتير دون تغيير قيم الفواتير التاريخية.")}</p>
       </div>
       <div className="header-actions">
+        <Link className="secondary-link" href="/billing/accounts/aging">{tr(locale, "A/R Aging", "أعمار الذمم")}</Link>
         <Link className="secondary-link" href="/billing">{tr(locale, "Back to Billing", "العودة للفوترة")}</Link>
         <Link className="secondary-link" href="/referrers">{tr(locale, "Clients", "العملاء")}</Link>
       </div>
