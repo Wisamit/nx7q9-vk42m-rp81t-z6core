@@ -4,6 +4,8 @@ export type ReportOutboundRecipientType = "PATIENT" | "REFERRER" | "CLIENT";
 export type PortalDeliveryAccount = {
   status: string;
   contactVerifiedAt: Date | null;
+  emailVerifiedAt: Date | null;
+  phoneVerifiedAt: Date | null;
   email: string | null;
   phone: string | null;
   preferredLocale: string;
@@ -25,16 +27,19 @@ export function resolveVerifiedPortalDestination(
   if (!account || account.status !== "ACTIVE") {
     return { ok: false as const, error: "active_portal_account_required" };
   }
-  if (!account.contactVerifiedAt) {
-    return { ok: false as const, error: "verified_portal_contact_required" };
-  }
-
   const destination = channel === "EMAIL" ? account.email?.trim() : account.phone?.trim();
   if (!destination) {
     return {
       ok: false as const,
       error: channel === "EMAIL" ? "verified_email_required" : "verified_phone_required",
     };
+  }
+
+  if (channel === "EMAIL" && !account.emailVerifiedAt) {
+    return { ok: false as const, error: "verified_email_required" };
+  }
+  if (channel !== "EMAIL" && !account.phoneVerifiedAt) {
+    return { ok: false as const, error: "verified_phone_required" };
   }
 
   return {
