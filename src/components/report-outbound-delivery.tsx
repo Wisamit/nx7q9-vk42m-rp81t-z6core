@@ -59,6 +59,8 @@ export function ReportOutboundDelivery({
         verified_email_required: tr("A verified portal email is required.", "يلزم بريد إلكتروني موثق في البوابة."),
         verified_phone_required: tr("A verified portal phone is required.", "يلزم رقم هاتف موثق في البوابة."),
         public_app_url_required: tr("A public application URL is required before secure links can be sent.", "يلزم عنوان عام للتطبيق قبل إرسال الروابط الآمنة."),
+        corporate_report_access_required: tr("This corporate portal does not have active report access for the patient.", "لا تملك بوابة العميل المؤسسي صلاحية فعالة لعرض تقارير هذا المريض."),
+        portal_account_type_mismatch: tr("The linked portal account type does not match the recipient.", "نوع حساب البوابة المرتبط لا يطابق نوع المستلم."),
         retracted_report_cannot_be_delivered: tr("A retracted report cannot be delivered.", "لا يمكن تسليم تقرير مسحوب."),
       };
       setMessage(errors[body.error || ""] || tr("Could not queue report delivery.", "تعذر وضع تسليم التقرير في قائمة الإرسال."));
