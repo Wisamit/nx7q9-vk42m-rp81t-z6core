@@ -37,6 +37,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const session = await requirePermission(permission);
   const ctx = await requestContext();
+  if (body.action === "COLLECT") {
+    return NextResponse.json({ error: "dedicated_phlebotomy_workflow_required" }, { status: 409 });
+  }
   const branchId = text(body.branchId, 36) || session.activeBranchId;
   if (!branchId || !canAccessBranch(session, branchId)) {
     return NextResponse.json({ error: "branch_forbidden" }, { status: 403 });
