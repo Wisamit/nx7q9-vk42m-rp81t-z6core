@@ -71,6 +71,13 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
           <dt>{tr(locale, "Referrer", "المحيل")}</dt><dd>{order.referrer?.nameEn || "—"}</dd>
           <dt>{tr(locale, "Client", "العميل")}</dt><dd>{order.client?.nameEn || tr(locale, "Patient / walk-in", "مريض / حضور مباشر")}</dd>
           <dt>{tr(locale, "Fasting", "صائم")}</dt><dd>{order.fasting === null ? tr(locale, "Unknown", "غير معروف") : order.fasting ? tr(locale, "Yes", "نعم") : tr(locale, "No", "لا")}</dd>
+          <dt>{tr(locale, "Pregnancy status", "حالة الحمل")}</dt><dd>{
+            order.pregnancyStatus === "PREGNANT" ? tr(locale, "Pregnant", "حامل") :
+            order.pregnancyStatus === "NOT_PREGNANT" ? tr(locale, "Not pregnant", "غير حامل") :
+            tr(locale, "Unknown / not stated", "غير معروف / غير مذكور")
+          }</dd>
+          <dt>{tr(locale, "Gestational age", "عمر الحمل")}</dt><dd>{order.gestationalAgeWeeks !== null ? order.gestationalAgeWeeks.toString() + " " + tr(locale, "weeks", "أسبوع") : "—"}</dd>
+          <dt>{tr(locale, "Reference population", "المجموعة المرجعية")}</dt><dd>{order.referencePopulationCode || "—"}</dd>
           <dt>{tr(locale, "Diagnosis", "التشخيص")}</dt><dd>{order.diagnosis || "—"}</dd>
           <dt>{tr(locale, "Created by", "أنشئ بواسطة")}</dt><dd>{order.createdBy.displayNameEn}</dd>
         </dl>
