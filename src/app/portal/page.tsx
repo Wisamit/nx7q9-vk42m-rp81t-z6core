@@ -3,6 +3,7 @@ import { requirePortalSession } from "@/lib/portal-auth";
 import { prisma } from "@/lib/db";
 import { PortalLogoutButton } from "@/components/portal-logout-button";
 import { PortalBookingForm } from "@/components/portal-booking-form";
+import { PortalContactVerification } from "@/components/portal-contact-verification";
 import { getUiLocale, statusLabel, tr } from "@/lib/ui-i18n";
 
 export const dynamic = "force-dynamic";
@@ -134,6 +135,14 @@ export default async function PortalPage() {
       {account.type !== "DOCTOR" && <article className="detail-card"><h2>{tr(locale, "Appointments", "المواعيد")}</h2><strong>{appointments.length}</strong><p className="muted">{tr(locale, "Onsite and home collection bookings.", "حجوزات المختبر والسحب المنزلي.")}</p></article>}
       {account.type !== "DOCTOR" && <article className="detail-card"><h2>{tr(locale, "Invoices", "الفواتير")}</h2><strong>{invoices.length}</strong><p className="muted">{tr(locale, "Financial records within portal scope.", "السجلات المالية ضمن صلاحية البوابة.")}</p></article>}
     </section>
+
+    <PortalContactVerification
+      email={account.email}
+      phone={account.phone}
+      emailVerifiedAt={account.emailVerifiedAt?.toISOString() || null}
+      phoneVerifiedAt={account.phoneVerifiedAt?.toISOString() || null}
+      locale={locale}
+    />
 
     {account.type !== "DOCTOR" && <PortalBookingForm
       branches={bookingBranches.map(branch => ({ id: branch.id, name: branch.nameEn || branch.nameAr || "Branch" }))}
