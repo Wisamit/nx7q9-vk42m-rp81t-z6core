@@ -78,6 +78,7 @@ export async function POST(request: Request) {
         noteAr,
         effectiveFrom,
         effectiveTo,
+        status: "INACTIVE",
       },
     });
 
@@ -86,7 +87,7 @@ export async function POST(request: Request) {
         organizationId: session.user.organizationId,
         branchId: session.activeBranchId,
         actorUserId: session.user.id,
-        action: "REFLEX_RULE_CREATED",
+        action: "REFLEX_RULE_DRAFT_CREATED",
         entityType: "ReflexRule",
         entityId: created.id,
         newValues: {
