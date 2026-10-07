@@ -96,3 +96,10 @@ export function specimenRejectionLineageError(children: Array<{
     ? "active_child_aliquots_require_resolution"
     : null;
 }
+
+
+export function derivedAliquotInitialStatus(parentStatus: VolumeTrackedSpecimenStatus) {
+  if (parentStatus === "IN_PROCESS") return "RECEIVED" as const;
+  if (parentStatus === "COLLECTED" || parentStatus === "RECEIVED") return parentStatus;
+  return null;
+}
