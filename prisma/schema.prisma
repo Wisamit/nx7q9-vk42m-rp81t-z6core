@@ -2091,7 +2091,7 @@ model Patient {
   phone           String?      @db.VarChar(50)
   normalizedPhone String?      @map("normalized_phone") @db.VarChar(50)
   email           String?      @db.VarChar(191)
-  nationalityCode      String       @map("nationality_code") @db.Char(2)
+  nationalityCode      String?      @map("nationality_code") @db.Char(2)
   status               RecordStatus @default(ACTIVE)
   mergedIntoPatientId  String?      @map("merged_into_patient_id") @db.Char(36)
   mergedAt             DateTime?    @map("merged_at") @db.DateTime(3)
