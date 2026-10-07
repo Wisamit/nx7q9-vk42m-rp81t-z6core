@@ -7,6 +7,7 @@ type HoldRule = {
 
 type HoldValue = {
   flag: ResultFlag;
+  isAbnormal: boolean;
   isCritical: boolean;
   deltaEvaluation: "NOT_CONFIGURED" | "NO_PREVIOUS_RESULT" | "WITHIN_LIMIT" | "EXCEEDED";
 };
@@ -19,5 +20,5 @@ export function validationHoldMatches(rule: HoldRule, input: {
   if (rule.condition === "RESULT_SOURCE") return rule.resultSource === input.source;
   if (rule.condition === "ANY_CRITICAL") return input.values.some(value => value.isCritical);
   if (rule.condition === "DELTA_EXCEEDED") return input.values.some(value => value.deltaEvaluation === "EXCEEDED");
-  return input.values.some(value => !["NORMAL", "UNKNOWN"].includes(value.flag));
+  return input.values.some(value => value.isAbnormal);
 }
