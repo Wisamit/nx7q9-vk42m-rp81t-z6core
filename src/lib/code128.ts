@@ -57,6 +57,7 @@ export function specimenLabelPrintError(input: {
   priorPrintCount: number;
   reason: string;
 }) {
+  if (["COLLECTION_FAILED","REJECTED","DISPOSED"].includes(input.status)) return "specimen_label_status_blocked";
   if (input.status === "PLANNED" && !input.requirementsFinalized) return "specimen_requirements_not_finalized";
   if (input.priorPrintCount > 0 && !input.reason.trim()) return "reprint_reason_required";
   return null;
