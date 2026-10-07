@@ -56,6 +56,7 @@ const groups: Array<{ labelEn: string; labelAr: string; items: NavItem[] }> = [
     labelEn: "Laboratory",
     labelAr: "المختبر",
     items: [
+      { href: "/phlebotomy", labelEn: "Phlebotomy", labelAr: "سحب العينات", icon: "specimen", permission: "specimens.collect" },
       { href: "/specimens", labelEn: "Specimens", labelAr: "العينات", icon: "specimen", permission: "specimens.view" },
       { href: "/transfers", labelEn: "Transfers", labelAr: "النقل بين الفروع", icon: "transfer", permission: "transfers.view" },
       { href: "/worklists", labelEn: "Worklists", labelAr: "قوائم العمل", icon: "worklist", permission: "worklists.view" },
