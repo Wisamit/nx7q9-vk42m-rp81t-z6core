@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -50,7 +51,7 @@ export function SpecimenActions({
 }) {
   const router = useRouter();
   const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
-  const [mode, setMode] = useState<"COLLECT" | "RECEIVE" | "REJECT" | null>(null);
+  const [mode, setMode] = useState<"RECEIVE" | "REJECT" | null>(null);
   const [rejectionScope, setRejectionScope] = useState<"WHOLE_SPECIMEN" | "SELECTED_TESTS">("WHOLE_SPECIMEN");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -124,8 +125,6 @@ export function SpecimenActions({
     } : {
       action: mode,
       branchId: form.get("branchId"),
-      volume: form.get("volume"),
-      volumeUnit: form.get("volumeUnit"),
       notes: form.get("notes"),
       labelAssessment: form.get("labelAssessment"),
       conditionCode: form.get("conditionCode"),
@@ -170,7 +169,7 @@ export function SpecimenActions({
   return <div className="specimen-actions">
     <div className="specimen-action-buttons">
       {canCollect && status === "PLANNED" && !requirementsFinalized && <button type="button" className="secondary-button" disabled={busy} onClick={finalizeRequirements}>{tr("Finalize Requirements", "تثبيت المتطلبات")}</button>}
-      {canCollect && status === "PLANNED" && requirementsFinalized && <button type="button" className="primary-button" disabled={!specimenTypeConfigured} onClick={() => setMode("COLLECT")}>{tr("Collect", "جمع")}</button>}
+      {canCollect && status === "PLANNED" && requirementsFinalized && specimenTypeConfigured && <Link className="primary-button" href={`/phlebotomy?specimen=${specimenId}`}>{tr("Open Phlebotomy", "فتح شاشة السحب")}</Link>}
       {canReceive && ["COLLECTED","IN_TRANSIT"].includes(status) && <button type="button" className="primary-button" onClick={() => setMode("RECEIVE")}>{tr("Receive", "استلام")}</button>}
       {canReject && ["COLLECTED","RECEIVED"].includes(status) && <button type="button" className="danger-button" onClick={() => setMode("REJECT")}>{tr("Reject", "رفض")}</button>}
     </div>
@@ -194,12 +193,6 @@ export function SpecimenActions({
         </select>
         {mode === "REJECT" && currentBranchId && <input type="hidden" name="branchId" value={currentBranchId} />}
       </label>
-
-      {mode === "COLLECT" && <>
-        <label>{tr("Volume", "الحجم")}<input name="volume" type="number" step="0.001" required={Boolean(requiredVolume)} min={requiredVolume || "0"} /></label>
-        <label>{tr("Volume unit", "وحدة الحجم")}<input name="volumeUnit" maxLength={30} placeholder="mL" required={Boolean(requiredVolumeUnit)} defaultValue={requiredVolumeUnit || ""} readOnly={Boolean(requiredVolumeUnit)} /></label>
-        <label className="form-span">{tr("Collection notes", "ملاحظات الجمع")}<textarea name="notes" rows={2} /></label>
-      </>}
 
       {mode === "RECEIVE" && <>
         <label>{tr("Label assessment", "تقييم الملصق")}<select name="labelAssessment" defaultValue="MATCHED" required>
@@ -250,7 +243,7 @@ export function SpecimenActions({
       <div className="form-span specimen-form-actions">
         <button className="secondary-button" type="button" onClick={() => { setMode(null); setRejectionScope("WHOLE_SPECIMEN"); }}>{tr("Cancel", "إلغاء")}</button>
         <button className={mode === "REJECT" ? "danger-button" : "primary-button"} disabled={busy || (mode === "REJECT" && rejectionReasons.length === 0)}>
-          {busy ? tr("Saving…", "جارٍ الحفظ…") : tr(mode, mode === "COLLECT" ? "جمع" : mode === "RECEIVE" ? "استلام" : "رفض")}
+          {busy ? tr("Saving…", "جارٍ الحفظ…") : tr(mode, mode === "RECEIVE" ? "استلام" : "رفض")}
         </button>
       </div>
     </form>}
