@@ -108,7 +108,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           criticalLowSnapshot: value.criticalLowSnapshot,
           criticalHighSnapshot: value.criticalHighSnapshot,
           flag: value.flag,
+          flagSource: value.flagSource,
+          isAbnormal: value.isAbnormal,
           isCritical: value.isCritical,
+          qualitativeOptionId: value.qualitativeOptionId,
+          qualitativeOptionCodeSnapshot: value.qualitativeOptionCodeSnapshot,
+          valueTextEnSnapshot: value.valueTextEnSnapshot,
+          valueTextArSnapshot: value.valueTextArSnapshot,
         },
       });
     }
