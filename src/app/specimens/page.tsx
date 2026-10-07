@@ -273,6 +273,7 @@ export default async function SpecimensPage({
               }))}
               branches={branches}
               activeBranchId={session.activeBranchId}
+              currentBranchId={specimen.currentBranchId}
               locale={locale}
               canCollect={canCollect}
               canReceive={canReceive}
