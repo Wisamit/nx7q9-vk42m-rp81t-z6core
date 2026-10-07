@@ -9,6 +9,7 @@ import {
   volume3ToMinor,
   volumeUnitsMatch,
   specimenRejectionLineageError,
+  derivedAliquotInitialStatus,
 } from "../src/lib/specimen-volume-policy.ts";
 
 test("specimen volume math is exact to three decimals", () => {
@@ -80,4 +81,12 @@ test("specimen rejection blocks any active derived aliquot descendants at the di
     { parentRelationType: "ALIQUOT", status: "REJECTED" },
     { parentRelationType: "RECOLLECTION", status: "COLLECTED" },
   ]), null);
+});
+
+
+test("derived aliquots never inherit an in-process state without their own processing step", () => {
+  assert.equal(derivedAliquotInitialStatus("COLLECTED"), "COLLECTED");
+  assert.equal(derivedAliquotInitialStatus("RECEIVED"), "RECEIVED");
+  assert.equal(derivedAliquotInitialStatus("IN_PROCESS"), "RECEIVED");
+  assert.equal(derivedAliquotInitialStatus("IN_TRANSIT"), null);
 });
