@@ -65,6 +65,14 @@ export async function POST(request: Request) {
         ...(verifiesPhone ? { phoneVerifiedAt: verifiedAt } : {}),
       },
     }),
+    prisma.notification.updateMany({
+      where: {
+        eventCode: "PORTAL_VERIFY_CONTACT",
+        entityType: "PortalOtpChallenge",
+        entityId: challenge.id,
+      },
+      data: { body: "Verification code consumed." },
+    }),
     prisma.auditEvent.create({
       data: {
         organizationId: account.organizationId,
