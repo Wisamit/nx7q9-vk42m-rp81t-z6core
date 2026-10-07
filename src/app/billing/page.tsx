@@ -169,6 +169,7 @@ export default async function BillingPage() {
         {canManageBilling && <CreditNoteCreateModal locale={locale} invoices={creditableInvoices} />}
         {canManageBilling && <RefundCreateModal locale={locale} options={refundOptions} />}
         <Link className="secondary-link" href="/billing/accounts">{tr(locale, "Client Accounts", "حسابات العملاء")}</Link>
+        {permissions.has("billing.tax.manage") && <Link className="secondary-link" href="/billing/taxes">{tr(locale, "Tax Rules", "القواعد الضريبية")}</Link>
         {(canManageBilling || permissions.has("billing.cashier.approve")) && <Link className="secondary-link" href="/billing/cashier">{tr(locale, "Cashier Closing", "إغلاق أمين الصندوق")}</Link>}
         <Link className="secondary-link" href="/orders"><SystemIcon name="orders" size={15} />{tr(locale, "Orders", "الطلبات")}</Link>
         <Link className="secondary-link" href="/pricing"><SystemIcon name="pricing" size={15} />{tr(locale, "Pricing", "الأسعار")}</Link>
@@ -216,9 +217,9 @@ export default async function BillingPage() {
       <div className="table-toolbar"><h2>{tr(locale, "Invoices", "الفواتير")}</h2><span>{invoices.length} {tr(locale, "shown", "معروضة")}</span></div>
       <div className="table-wrap">
         <table>
-          <thead><tr><th>{tr(locale, "Invoice", "الفاتورة")}</th><th>{tr(locale, "Order", "الطلب")}</th><th>{tr(locale, "Patient / Client", "المريض / العميل")}</th><th>{tr(locale, "Branch", "الفرع")}</th><th>{tr(locale, "Subtotal", "الإجمالي قبل الخصم")}</th><th>{tr(locale, "Discount", "الخصم")}</th><th>{tr(locale, "Credited", "الدائن")}</th><th>{tr(locale, "Total", "الإجمالي")}</th><th>{tr(locale, "Net paid", "صافي المدفوع")}</th><th>{tr(locale, "Balance", "الرصيد")}</th><th>{tr(locale, "Status", "الحالة")}</th></tr></thead>
+          <thead><tr><th>{tr(locale, "Invoice", "الفاتورة")}</th><th>{tr(locale, "Order", "الطلب")}</th><th>{tr(locale, "Patient / Client", "المريض / العميل")}</th><th>{tr(locale, "Branch", "الفرع")}</th><th>{tr(locale, "Subtotal", "الإجمالي قبل الخصم")}</th><th>{tr(locale, "Discount", "الخصم")}</th><th>{tr(locale, "Credited", "الدائن")}</th><th>{tr(locale, "Tax", "الضريبة")}</th><th>{tr(locale, "Total", "الإجمالي")}</th><th>{tr(locale, "Net paid", "صافي المدفوع")}</th><th>{tr(locale, "Balance", "الرصيد")}</th><th>{tr(locale, "Status", "الحالة")}</th></tr></thead>
           <tbody>
-            {invoices.length === 0 ? <tr><td colSpan={11} className="empty-state">{tr(locale, "No invoices yet.", "لا توجد فواتير بعد.")}</td></tr> :
+            {invoices.length === 0 ? <tr><td colSpan={12} className="empty-state">{tr(locale, "No invoices yet.", "لا توجد فواتير بعد.")}</td></tr> :
               invoices.map(invoice => <tr key={invoice.id}>
                 <td><strong>{invoice.invoiceNumber}</strong><br/><small>{invoice.issuedAt.toISOString().slice(0,16).replace("T"," ")}</small></td>
                 <td>{invoice.order?.accessionNumber || "—"}</td>
@@ -227,6 +228,7 @@ export default async function BillingPage() {
                 <td>{invoice.subtotal.toString()} {invoice.currency}</td>
                 <td>{invoice.discountTotal.toNumber() > 0 ? <><strong>{invoice.discountTotal.toString()} {invoice.currency}</strong><br/><small>{invoice.discountPercent.toString()}% · {invoice.discountReason || "—"}{invoice.discountApprovedBy ? " · " + (locale === "ar" ? invoice.discountApprovedBy.displayNameAr || invoice.discountApprovedBy.displayNameEn : invoice.discountApprovedBy.displayNameEn) : ""}</small></> : "—"}</td>
                 <td>{invoice.creditedAmount.toString()} {invoice.currency}</td>
+                <td>{invoice.taxTotal.gt(0) ? invoice.taxTotal.toFixed(4) + " " + invoice.currency : "—"}</td>
                 <td>{invoice.total.toString()} {invoice.currency}</td>
                 <td>{invoice.paidAmount.toString()} {invoice.currency}</td>
                 <td>{invoice.balanceAmount.toString()} {invoice.currency}</td>
@@ -265,14 +267,15 @@ export default async function BillingPage() {
     <section className="table-card detail-section">
       <div className="table-toolbar"><h2>{tr(locale, "Credit Notes", "الإشعارات الدائنة")}</h2><span>{creditNotes.length} {tr(locale, "shown", "معروضة")}</span></div>
       <div className="table-wrap"><table>
-        <thead><tr><th>{tr(locale, "Date", "التاريخ")}</th><th>{tr(locale, "Credit note", "الإشعار الدائن")}</th><th>{tr(locale, "Invoice", "الفاتورة")}</th><th>{tr(locale, "Branch", "الفرع")}</th><th>{tr(locale, "Amount", "المبلغ")}</th><th>{tr(locale, "Reason", "السبب")}</th><th>{tr(locale, "Issued by", "أصدره")}</th><th>{tr(locale, "Status", "الحالة")}</th></tr></thead>
-        <tbody>{creditNotes.length === 0 ? <tr><td colSpan={8} className="empty-state">{tr(locale, "No credit notes issued yet.", "لا توجد إشعارات دائنة صادرة بعد.")}</td></tr> :
+        <thead><tr><th>{tr(locale, "Date", "التاريخ")}</th><th>{tr(locale, "Credit note", "الإشعار الدائن")}</th><th>{tr(locale, "Invoice", "الفاتورة")}</th><th>{tr(locale, "Branch", "الفرع")}</th><th>{tr(locale, "Amount", "المبلغ")}</th><th>{tr(locale, "Tax reversed", "ضريبة معكوسة")}</th><th>{tr(locale, "Reason", "السبب")}</th><th>{tr(locale, "Issued by", "أصدره")}</th><th>{tr(locale, "Status", "الحالة")}</th></tr></thead>
+        <tbody>{creditNotes.length === 0 ? <tr><td colSpan={9} className="empty-state">{tr(locale, "No credit notes issued yet.", "لا توجد إشعارات دائنة صادرة بعد.")}</td></tr> :
           creditNotes.map(note => <tr key={note.id}>
             <td>{note.issuedAt.toISOString().slice(0,16).replace("T"," ")}</td>
             <td><strong>{note.creditNoteNumber}</strong></td>
             <td>{note.invoice.invoiceNumber}</td>
             <td>{note.branch.code}</td>
             <td>{note.amount.toString()} {note.currency}</td>
+            <td>{note.taxTotalSnapshot.gt(0) ? note.taxTotalSnapshot.toFixed(4) + " " + note.currency : "—"}</td>
             <td>{note.reason}</td>
             <td>{locale === "ar" ? note.issuedBy.displayNameAr || note.issuedBy.displayNameEn : note.issuedBy.displayNameEn}</td>
             <td><span className={"status-badge status-" + note.status.toLowerCase()}>{statusLabel(locale, note.status)}</span></td>
