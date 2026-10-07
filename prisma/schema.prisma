@@ -1027,6 +1027,7 @@ model Organization {
   resultValidationPolicies ResultValidationPolicy[]
   analyzers Analyzer[]
   criticalEscalationPolicies CriticalEscalationPolicy[]
+  resultValidationPolicies ResultValidationPolicy[]
   microbiologyCases MicrobiologyCase[]
   organisms Organism[]
   antibiotics Antibiotic[]
@@ -3431,6 +3432,7 @@ model ResultValidationPolicy {
   id                        String       @id @default(uuid()) @db.Char(36)
   organizationId            String       @map("organization_id") @db.Char(36)
   scope                     ResultValidationPolicyScope
+  branchId                  String?      @map("branch_id") @db.Char(36)
   departmentId              String?      @map("department_id") @db.Char(36)
   testId                    String?      @map("test_id") @db.Char(36)
   code                      String       @db.VarChar(80)
@@ -3447,6 +3449,7 @@ model ResultValidationPolicy {
   deactivatedAt             DateTime?    @map("deactivated_at") @db.DateTime(3)
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  branch       Branch?      @relation(fields: [branchId], references: [id], onDelete: Restrict)
   department   Department?  @relation(fields: [departmentId], references: [id], onDelete: Restrict)
   test         LabTest?     @relation(fields: [testId], references: [id], onDelete: Restrict)
   createdBy    User         @relation("ResultValidationPolicyCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
@@ -3454,6 +3457,7 @@ model ResultValidationPolicy {
 
   @@unique([organizationId, code])
   @@index([organizationId, scope, status, effectiveFrom, effectiveTo], map: "result_validation_policy_scope_idx")
+  @@index([branchId, scope, status, effectiveFrom], map: "result_validation_policy_branch_idx")
   @@index([departmentId, status, effectiveFrom], map: "result_validation_policy_department_idx")
   @@index([testId, status, effectiveFrom], map: "result_validation_policy_test_idx")
   @@map("result_validation_policies")
