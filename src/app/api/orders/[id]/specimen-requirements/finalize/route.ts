@@ -8,7 +8,7 @@ import {
 } from "@/lib/specimen-requirement-engine";
 
 export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const session = await requirePermission("orders.create");
+  const session = await requirePermission("specimens.collect");
   const ctx = await requestContext();
   const { id } = await params;
 
