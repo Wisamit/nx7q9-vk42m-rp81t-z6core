@@ -52,6 +52,7 @@ export async function POST(request: Request) {
         lookbackDays,
         effectiveFrom,
         effectiveTo,
+        status: "INACTIVE",
       },
     });
 
@@ -60,7 +61,7 @@ export async function POST(request: Request) {
         organizationId: session.user.organizationId,
         branchId: session.activeBranchId,
         actorUserId: session.user.id,
-        action: "DELTA_RULE_CREATED",
+        action: "DELTA_RULE_DRAFT_CREATED",
         entityType: "DeltaRule",
         entityId: created.id,
         newValues: {
