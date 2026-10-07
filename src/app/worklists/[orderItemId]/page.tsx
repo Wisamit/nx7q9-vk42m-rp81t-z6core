@@ -220,6 +220,7 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
         valueEn: option.valueEn,
         valueAr: option.valueAr,
         flag: option.flag,
+        isAbnormal: option.isAbnormal,
         isCritical: option.isCritical,
       })),
       currentFlag: existing?.flag || null,
