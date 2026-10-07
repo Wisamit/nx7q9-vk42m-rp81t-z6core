@@ -3,6 +3,7 @@ import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import {
   aliquotPurposeRequiresTests,
+  derivedAliquotInitialStatus,
   minorToVolume3,
   specimenVolumeUseError,
   volume3ToMinor,
@@ -101,7 +102,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         });
         const sequenceNumber = (maxSequence._max.sequenceNumber || 0) + 1;
         const barcode = `${parent.order.accessionNumber}-${String(sequenceNumber).padStart(2, "0")}`;
-        const childStatus = parent.status === "IN_PROCESS" ? "RECEIVED" : parent.status;
+        const childStatus = derivedAliquotInitialStatus(parent.status);
+        if (!childStatus) throw new SpecimenVolumeChanged();
         const derivedAt = new Date();
 
         const child = await tx.specimen.create({
