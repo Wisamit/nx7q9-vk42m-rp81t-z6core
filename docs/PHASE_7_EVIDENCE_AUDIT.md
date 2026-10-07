@@ -75,6 +75,10 @@ Scope:
 - the user selects only an associated recipient type (patient, referrer or client) and channel; arbitrary free-text destinations are not accepted for clinical report delivery;
 - destinations resolve server-side from the recipient's active portal account;
 - outbound report delivery requires an active portal account with verified contact state and the required email/phone destination;
+- channel-specific verification history records EMAIL or PHONE, the exact destination snapshot, verification method, staff actor, reason, verification time and revocation time;
+- a changed email/phone does not inherit verification from the previous destination;
+- authorized staff with `portal_accounts.manage` can record `STAFF_CONFIRMED` verification from the report delivery UI after validating the contact with the recipient;
+- the legacy generic `contactVerifiedAt` is accepted only when exactly one contact method exists, preventing ambiguous trust across both email and phone;
 - doctor delivery is allowed only to the order's associated referrer;
 - corporate delivery additionally requires active `CorporatePortalPatientAccess.canViewReports` for the order patient;
 - report-delivery events are linked one-to-one to the corresponding notification delivery, preserving queue/provider traceability;
