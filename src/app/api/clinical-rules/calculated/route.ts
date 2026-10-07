@@ -69,10 +69,6 @@ export async function POST(request: Request) {
     }
   }
 
-  if (test.calculatedRules.some(rule => rule.targetComponentId === targetComponentId)) {
-    return NextResponse.json({ error: "active_calculated_rule_already_exists_for_target" }, { status: 409 });
-  }
-
   const rule = await prisma.$transaction(async tx => {
     const created = await tx.calculatedResultRule.create({
       data: {
@@ -83,6 +79,7 @@ export async function POST(request: Request) {
         decimalPrecision,
         effectiveFrom,
         effectiveTo,
+        status: "INACTIVE",
       },
     });
 
@@ -91,7 +88,7 @@ export async function POST(request: Request) {
         organizationId: session.user.organizationId,
         branchId: session.activeBranchId,
         actorUserId: session.user.id,
-        action: "CALCULATED_RESULT_RULE_CREATED",
+        action: "CALCULATED_RESULT_RULE_DRAFT_CREATED",
         entityType: "CalculatedResultRule",
         entityId: created.id,
         newValues: { testId, targetComponentId, expression, variables, decimalPrecision, effectiveFrom, effectiveTo },
