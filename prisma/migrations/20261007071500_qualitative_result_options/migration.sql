@@ -7,6 +7,14 @@ ALTER TABLE `laboratory_result_values`
   ADD COLUMN `value_text_en_snapshot` VARCHAR(500) NULL AFTER `qualitative_option_code_snapshot`,
   ADD COLUMN `value_text_ar_snapshot` VARCHAR(500) NULL AFTER `value_text_en_snapshot`;
 
+UPDATE `laboratory_result_values`
+SET `is_abnormal` = true
+WHERE `flag` IN ('LOW','HIGH','CRITICAL_LOW','CRITICAL_HIGH','ABNORMAL');
+
+UPDATE `laboratory_result_values`
+SET `flag_source` = 'REFERENCE_INTERVAL'
+WHERE `reference_interval_id` IS NOT NULL;
+
 CREATE TABLE `qualitative_result_options` (
   `id` CHAR(36) NOT NULL,
   `organization_id` CHAR(36) NOT NULL,
