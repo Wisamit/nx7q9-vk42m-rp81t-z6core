@@ -51,6 +51,8 @@ export async function evaluateDelta(
       deltaPercent: null,
       absoluteLimit: null,
       percentLimit: null,
+      ruleId: null,
+      lookbackDays: null,
     };
   }
 
@@ -85,6 +87,8 @@ export async function evaluateDelta(
       deltaPercent: null,
       absoluteLimit: rule.absoluteLimit,
       percentLimit: rule.percentLimit,
+      ruleId: rule.id,
+      lookbackDays: rule.lookbackDays,
     };
   }
 
@@ -106,5 +110,7 @@ export async function evaluateDelta(
     deltaPercent,
     absoluteLimit: rule.absoluteLimit,
     percentLimit: rule.percentLimit,
+    ruleId: rule.id,
+    lookbackDays: rule.lookbackDays,
   };
 }
