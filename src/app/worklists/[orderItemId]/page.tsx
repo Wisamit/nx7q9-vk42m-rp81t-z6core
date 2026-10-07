@@ -108,6 +108,13 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
           },
           releasedBy: true,
           amendedFrom: true,
+          deltaReviewEvents: {
+            include: {
+              acknowledgedBy: true,
+              deltaRule: true,
+            },
+            orderBy: { detectedAt: "asc" },
+          },
           criticalEvents: {
             include: {
               communications: {
@@ -376,6 +383,50 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
         }))}
       />}
     </section>
+
+    {latestResult && latestResult.deltaReviewEvents.length > 0 && <section className="detail-card detail-section">
+      <div className="table-toolbar">
+        <div>
+          <h2>{tr(locale, "Delta Review Evidence", "سجل مراجعة Delta")}</h2>
+          <p className="muted">{tr(
+            locale,
+            "Delta alerts preserve the exact prior value, configured limits and reviewer acknowledgement used for this result.",
+            "تحفظ تنبيهات Delta القيمة السابقة والحدود المهيأة وإقرار المراجع المستخدمة لهذه النتيجة بشكل تاريخي."
+          )}</p>
+        </div>
+        <span>{latestResult.deltaReviewEvents.length} {tr(locale, "event(s)", "حدث")}</span>
+      </div>
+      <div className="table-wrap"><table>
+        <thead><tr>
+          <th>{tr(locale, "Component", "المكوّن")}</th>
+          <th>{tr(locale, "Current", "الحالية")}</th>
+          <th>{tr(locale, "Previous", "السابقة")}</th>
+          <th>{tr(locale, "Delta", "الفرق")}</th>
+          <th>{tr(locale, "Configured limit", "الحد المهيأ")}</th>
+          <th>{tr(locale, "Status", "الحالة")}</th>
+          <th>{tr(locale, "Reviewer", "المراجع")}</th>
+        </tr></thead>
+        <tbody>{latestResult.deltaReviewEvents.map(event => <tr key={event.id}>
+          <td><strong>{event.componentCodeSnapshot}</strong><br/><small>{locale === "ar" ? event.componentNameArSnapshot || event.componentNameEnSnapshot : event.componentNameEnSnapshot}</small></td>
+          <td>{event.currentValueSnapshot.toString()}</td>
+          <td>{event.previousValueSnapshot?.toString() || "—"}{event.previousResultAtSnapshot ? <><br/><small>{event.previousResultAtSnapshot.toISOString().slice(0,10)}</small></> : null}</td>
+          <td>{[
+            event.deltaAbsoluteSnapshot !== null ? "Δ " + event.deltaAbsoluteSnapshot.toString() : null,
+            event.deltaPercentSnapshot !== null ? event.deltaPercentSnapshot.toString() + "%" : null,
+          ].filter(Boolean).join(" · ") || "—"}</td>
+          <td>{[
+            event.absoluteLimitSnapshot !== null ? tr(locale, "Abs", "مطلق") + " " + event.absoluteLimitSnapshot.toString() : null,
+            event.percentLimitSnapshot !== null ? event.percentLimitSnapshot.toString() + "%" : null,
+            event.lookbackDaysSnapshot !== null ? event.lookbackDaysSnapshot + " " + tr(locale, "days", "يوم") : null,
+          ].filter(Boolean).join(" · ") || tr(locale, "Legacy snapshot", "لقطة تاريخية قديمة")}</td>
+          <td>{statusLabel(locale, event.status)}</td>
+          <td>{event.acknowledgedBy
+            ? (locale === "ar" ? event.acknowledgedBy.displayNameAr || event.acknowledgedBy.displayNameEn : event.acknowledgedBy.displayNameEn)
+              + (event.acknowledgedAt ? " · " + event.acknowledgedAt.toISOString().replace("T"," ").slice(0,19) : "")
+            : "—"}</td>
+        </tr>)}</tbody>
+      </table></div>
+    </section>}
 
     {latestResult && <section className="detail-card detail-section">
       <h2>{tr(locale, "Validation, Release & Amendment", "التحقق والإصدار والتعديل")}</h2>
