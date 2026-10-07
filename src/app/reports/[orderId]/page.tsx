@@ -169,6 +169,20 @@ export default async function DiagnosticReportPage({ params }: { params: Promise
 
   if (!report || !canAccessBranch(session, report.order.orderingBranchId)) notFound();
 
+  const corporateCanViewReports = report.order.clientId
+    ? Boolean(await prisma.corporatePortalPatientAccess.findFirst({
+        where: {
+          clientId: report.order.clientId,
+          patientId: report.order.patientId,
+          canViewReports: true,
+          status: "ACTIVE",
+          effectiveFrom: { lte: new Date() },
+          OR: [{ effectiveTo: null }, { effectiveTo: { gte: new Date() } }],
+        },
+        select: { id: true },
+      }))
+    : false;
+
   const latest = report.versions[0];
   if (!latest) {
     return <main className="catalog-shell">
@@ -221,7 +235,7 @@ export default async function DiagnosticReportPage({ params }: { params: Promise
       label: `${tr(locale, "Referrer", "المحيل")} — ${locale === "ar" ? report.order.referrer.nameAr || report.order.referrer.nameEn : report.order.referrer.nameEn}`,
       account: report.order.referrer.portalAccount,
     }] : []),
-    ...(report.order.client ? [{
+    ...(report.order.client && corporateCanViewReports ? [{
       type: "CLIENT" as const,
       label: `${tr(locale, "Client", "العميل")} — ${locale === "ar" ? report.order.client.nameAr || report.order.client.nameEn : report.order.client.nameEn}`,
       account: report.order.client.portalAccount,
@@ -408,7 +422,9 @@ export default async function DiagnosticReportPage({ params }: { params: Promise
 
     {latest.deliveries.length > 0 && <section className="table-card report-history no-print">
       <div className="table-toolbar"><h2>{tr(locale, "Delivery History", "سجل التسليم")}</h2><span>{latest.deliveries.length} {tr(locale, "event(s)", "حدث")}</span></div>
-      <div className="table-wrap"><table><thead><tr><th>{tr(locale, "Time", "الوقت")}</th><th>{tr(locale, "Channel", "القناة")}</th><th>{tr(locale, "Status", "الحالة")}</th><th>{tr(locale, "Recipient", "المستلم")}</th><th>{tr(locale, "User", "المستخدم")}</th></tr></thead><tbody>{latest.deliveries.map(event => <tr key={event.id}><td>{event.occurredAt.toISOString().replace("T"," ").slice(0,19)}</td><td>{event.channel}</td><td>{event.status}</td><td>{event.recipient || "—"}</td><td>{event.performedBy?.displayNameEn || tr(locale, "System", "النظام")}</td></tr>)}</tbody></table></div>
+      <div className="table-wrap"><table><thead><tr><th>{tr(locale, "Time", "الوقت")}</th><th>{tr(locale, "Channel", "القناة")}</th><th>{tr(locale, "Status", "الحالة")}</th><th>{tr(locale, "Recipient", "المستلم")}</th><th>{tr(locale, "User", "المستخدم")}</th></tr></thead><tbody>{latest.deliveries.map(event => <tr key={event.id}><td>{event.occurredAt.toISOString().replace("T"," ").slice(0,19)}</td><td>{event.channel}</td><td>{event.status}</td><td>{event.recipient && ["EMAIL","SMS","WHATSAPP"].includes(event.channel)
+  ? maskedDestination(event.channel as ReportOutboundChannel, event.recipient)
+  : event.recipient || "—"}</td><td>{event.performedBy?.displayNameEn || tr(locale, "System", "النظام")}</td></tr>)}</tbody></table></div>
     </section>}
 
     <section className="table-card report-history no-print">

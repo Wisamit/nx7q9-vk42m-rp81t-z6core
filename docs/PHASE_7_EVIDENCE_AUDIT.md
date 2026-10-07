@@ -74,12 +74,18 @@ Scope:
 - external report messages contain no laboratory result values; they provide a secure authenticated portal link to the exact `DiagnosticReportVersion`;
 - the user selects only an associated recipient type (patient, referrer or client) and channel; arbitrary free-text destinations are not accepted for clinical report delivery;
 - destinations resolve server-side from the recipient's active portal account;
-- outbound report delivery requires an active portal account with verified contact state and the required email/phone destination;
+- outbound report delivery requires an active portal account and channel-specific verified destination: `emailVerifiedAt` for EMAIL and `phoneVerifiedAt` for SMS/WHATSAPP;
+- portal users can request a six-digit VERIFY_CONTACT OTP over EMAIL or SMS; challenges expire after 10 minutes, are rate-limited, have bounded attempts, and consumed/replaced OTP bodies are redacted from stored notifications;
+- the existing generic `contactVerifiedAt` remains an aggregate compatibility marker, but is not sufficient by itself to authorize report delivery;
+- any future workflow that changes a portal email or phone must clear the corresponding `emailVerifiedAt` or `phoneVerifiedAt` before the new destination can receive reports;
 - doctor delivery is allowed only to the order's associated referrer;
 - corporate delivery additionally requires active `CorporatePortalPatientAccess.canViewReports` for the order patient;
 - report-delivery events are linked one-to-one to the corresponding notification delivery, preserving queue/provider traceability;
 - report delivery starts as QUEUED, changes to SENT only after provider-gateway success, and changes to FAILED only when delivery is terminal/skipped; retryable failures remain QUEUED;
+- if a gateway explicitly returns `delivered=true` or status `DELIVERED`, the linked report-delivery event is reconciled to DELIVERED;
 - provider message IDs are copied to `ReportDeliveryEvent.externalRef`;
+- only the latest non-retracted report version can be newly queued for outbound delivery, preventing accidental transmission of a superseded clinical report;
+- authenticated patient/doctor/corporate portal views create `PORTAL / DELIVERED` evidence on the exact report version in addition to the audit event;
 - notification dispatch is scoped to the caller's organization and dashboard delivery counts are organization-scoped;
 - dispatcher claims each delivery atomically before contacting a provider to reduce duplicate sends during concurrent dispatch runs;
 - templates use event code `REPORT_RELEASED` and support `{{recipientName}}`, `{{patientName}}`, `{{accessionNumber}}`, `{{reportVersion}}`, `{{reportStatus}}` and `{{portalUrl}}`;
@@ -93,6 +99,6 @@ Clinical/privacy guardrails:
 - provider-backed sending remains infrastructure-dependent and cannot be declared Production Accepted until real gateway credentials are tested.
 
 Remaining Phase 7 after 7B:
-1. verify portal-delivery evidence and any remaining template fidelity gaps;
+1. any remaining report-template/signature fidelity gaps found by evidence audit;
 2. provider-backed EMAIL/SMS/WHATSAPP acceptance in the deployment environment;
-3. close Phase 7 only after runtime acceptance of application-side orchestration and explicit infrastructure status documentation.
+3. close Phase 7 application scope only after runtime acceptance of 7B and explicit infrastructure status documentation.

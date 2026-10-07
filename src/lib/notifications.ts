@@ -239,8 +239,14 @@ export async function dispatchPendingNotifications(db: PrismaClient, organizatio
         throw new Error(`gateway_http_${response.status}`);
       }
 
-      const payload = await response.json().catch(() => ({})) as { messageId?: unknown };
+      const payload = await response.json().catch(() => ({})) as {
+        messageId?: unknown;
+        status?: unknown;
+        delivered?: unknown;
+      };
       const providerMessageId = typeof payload.messageId === "string" ? payload.messageId.slice(0, 255) : null;
+      const providerDelivered = payload.delivered === true
+        || (typeof payload.status === "string" && payload.status.toUpperCase() === "DELIVERED");
 
       await db.$transaction(async tx => {
         await tx.notificationDelivery.update({
@@ -258,7 +264,10 @@ export async function dispatchPendingNotifications(db: PrismaClient, organizatio
         if (delivery.reportDeliveryEventId) {
           await tx.reportDeliveryEvent.update({
             where: { id: delivery.reportDeliveryEventId },
-            data: { status: "SENT", externalRef: providerMessageId },
+            data: {
+              status: providerDelivered ? "DELIVERED" : "SENT",
+              externalRef: providerMessageId,
+            },
           });
         }
       });

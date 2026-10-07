@@ -68,6 +68,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ ver
               client: { include: { portalAccount: true } },
             },
           },
+          versions: {
+            orderBy: { version: "desc" },
+            take: 1,
+            select: { id: true, status: true },
+          },
         },
       },
     },
@@ -78,6 +83,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ ver
   }
   if (version.status === "RETRACTED") {
     return NextResponse.json({ error: "retracted_report_cannot_be_delivered" }, { status: 409 });
+  }
+  if (version.report.versions[0]?.id !== version.id) {
+    return NextResponse.json({ error: "superseded_report_cannot_be_delivered" }, { status: 409 });
   }
 
   const order = version.report.order;

@@ -5318,6 +5318,8 @@ model PortalAccount {
   preferredLocale     String              @default("en") @map("preferred_locale") @db.VarChar(10)
   status              PortalAccountStatus @default(INVITED)
   contactVerifiedAt   DateTime?           @map("contact_verified_at") @db.DateTime(3)
+  emailVerifiedAt     DateTime?           @map("email_verified_at") @db.DateTime(3)
+  phoneVerifiedAt     DateTime?           @map("phone_verified_at") @db.DateTime(3)
   lastLoginAt         DateTime?           @map("last_login_at") @db.DateTime(3)
   failedLoginAttempts Int                 @default(0) @map("failed_login_attempts")
   lockedUntil         DateTime?           @map("locked_until") @db.DateTime(3)
