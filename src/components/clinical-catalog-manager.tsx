@@ -129,10 +129,14 @@ export function ClinicalCatalogManager({
         <label>{tr("Population code", "رمز المجموعة المرجعية")}<input name="populationCode" maxLength={80} placeholder={tr("Optional configured code", "رمز اختياري مُهيأ")} /></label>
         <label>{tr("Effective from", "ساري من")}<input name="effectiveFrom" type="date" required defaultValue={new Date().toISOString().slice(0, 10)} /></label>
         <label>{tr("Source", "المصدر")}<input name="source" /></label>
+        <p className="muted form-span">{tr(
+          "New reference intervals are saved as inactive drafts. They cannot affect result flags or critical alerts until an authorized user explicitly approves them.",
+          "تُحفظ المديات المرجعية الجديدة كمسودات غير نشطة، ولا يمكن أن تؤثر في إشارات النتائج أو التنبيهات الحرجة حتى يعتمدها مستخدم مخول صراحةً."
+        )}</p>
         <label>{tr("Normal text (EN)", "النص الطبيعي (EN)")}<input name="normalTextEn" /></label>
         <label>{tr("Normal text (AR)", "النص الطبيعي (AR)")}<input name="normalTextAr" dir="rtl" /></label>
         {message && <p className="form-error form-span">{message}</p>}
-        <button className="primary-button form-span" disabled={saving}>{saving ? tr("Saving…", "جارٍ الحفظ…") : tr("Save Reference Range", "حفظ المجال المرجعي")}</button>
+        <button className="primary-button form-span" disabled={saving}>{saving ? tr("Saving…", "جارٍ الحفظ…") : tr("Save Reference Range Draft", "حفظ مسودة المجال المرجعي")}</button>
       </form>}
     </section></div>}
   </div>;
