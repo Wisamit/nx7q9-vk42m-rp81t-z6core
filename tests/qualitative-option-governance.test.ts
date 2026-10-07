@@ -43,10 +43,11 @@ test("qualitative semantics are clinically usable only after explicit approval",
 });
 
 test("qualitative option identity is scoped by test component and stable code", () => {
-  assert.equal(sameQualitativeOptionIdentity(base, { ...base, id: "OPT-2" }), true);
-  assert.equal(sameQualitativeOptionIdentity(base, { ...base, id: "OPT-2", testId: "TEST-2" }), false);
-  assert.equal(sameQualitativeOptionIdentity(base, { ...base, id: "OPT-2", componentId: "COMP-2" }), false);
-  assert.equal(sameQualitativeOptionIdentity(base, { ...base, id: "OPT-2", code: "NOT_DETECTED" }), false);
+  const identity = { testId: base.testId, componentId: base.componentId, code: base.code };
+  assert.equal(sameQualitativeOptionIdentity(identity, { ...identity }), true);
+  assert.equal(sameQualitativeOptionIdentity(identity, { ...identity, testId: "TEST-2" }), false);
+  assert.equal(sameQualitativeOptionIdentity(identity, { ...identity, componentId: "COMP-2" }), false);
+  assert.equal(sameQualitativeOptionIdentity(identity, { ...identity, code: "NOT_DETECTED" }), false);
 });
 
 test("qualitative semantic effective windows use closed overlap rules", () => {
