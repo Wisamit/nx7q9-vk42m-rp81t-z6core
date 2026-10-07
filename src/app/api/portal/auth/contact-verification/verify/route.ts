@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { getCurrentPortalSession } from "@/lib/portal-auth";
 import { prisma } from "@/lib/db";
 import { requestContext } from "@/lib/auth";
+import { maskedDestination } from "@/lib/report-outbound";
 
 export async function POST(request: Request) {
   const session = await getCurrentPortalSession();
@@ -51,46 +52,97 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "verification_destination_changed" }, { status: 409 });
   }
 
+  const verificationChannel = verifiesEmail ? "EMAIL" as const : "PHONE" as const;
+  const currentDestination = verifiesEmail ? account.email : account.phone;
+  if (!currentDestination) {
+    return NextResponse.json({ error: "verification_destination_changed" }, { status: 409 });
+  }
+
   const verifiedAt = new Date();
-  await prisma.$transaction([
-    prisma.portalOtpChallenge.update({
-      where: { id: challenge.id },
-      data: { consumedAt: verifiedAt },
-    }),
-    prisma.portalAccount.update({
-      where: { id: account.id },
-      data: {
-        contactVerifiedAt: verifiedAt,
-        ...(verifiesEmail ? { emailVerifiedAt: verifiedAt } : {}),
-        ...(verifiesPhone ? { phoneVerifiedAt: verifiedAt } : {}),
-      },
-    }),
-    prisma.notification.updateMany({
-      where: {
-        eventCode: "PORTAL_VERIFY_CONTACT",
-        entityType: "PortalOtpChallenge",
-        entityId: challenge.id,
-      },
-      data: { body: "Verification code consumed." },
-    }),
-    prisma.auditEvent.create({
-      data: {
-        organizationId: account.organizationId,
-        actorUserId: null,
-        action: "PORTAL_CONTACT_VERIFIED",
-        entityType: "PortalAccount",
-        entityId: account.id,
-        sessionId: session.id,
-        newValues: {
-          channel: verifiesEmail ? "EMAIL" : "SMS",
-          challengeId: challenge.id,
-          verifiedAt: verifiedAt.toISOString(),
+  try {
+    await prisma.$transaction(async tx => {
+      const consumed = await tx.portalOtpChallenge.updateMany({
+        where: {
+          id: challenge.id,
+          portalAccountId: account.id,
+          purpose: "VERIFY_CONTACT",
+          consumedAt: null,
         },
-        ipAddress: ctx.ipAddress,
-        userAgent: ctx.userAgent,
-      },
-    }),
-  ]);
+        data: { consumedAt: verifiedAt },
+      });
+      if (consumed.count !== 1) throw new Error("PORTAL_VERIFICATION_CONFLICT");
+
+      const claimedAccount = await tx.portalAccount.updateMany({
+        where: verifiesEmail
+          ? { id: account.id, email: currentDestination }
+          : { id: account.id, phone: currentDestination },
+        data: {
+          contactVerifiedAt: verifiedAt,
+          ...(verifiesEmail ? { emailVerifiedAt: verifiedAt } : { phoneVerifiedAt: verifiedAt }),
+        },
+      });
+      if (claimedAccount.count !== 1) throw new Error("PORTAL_VERIFICATION_DESTINATION_CHANGED");
+
+      await tx.portalContactVerification.updateMany({
+        where: {
+          portalAccountId: account.id,
+          channel: verificationChannel,
+          revokedAt: null,
+        },
+        data: { revokedAt: verifiedAt },
+      });
+
+      const verification = await tx.portalContactVerification.create({
+        data: {
+          portalAccountId: account.id,
+          channel: verificationChannel,
+          destinationSnapshot: currentDestination.trim(),
+          method: "SELF_SERVICE_OTP",
+          verificationReason: "Self-service OTP verification",
+          verifiedByUserId: null,
+          verifiedAt,
+        },
+      });
+
+      await tx.notification.updateMany({
+        where: {
+          eventCode: "PORTAL_VERIFY_CONTACT",
+          entityType: "PortalOtpChallenge",
+          entityId: challenge.id,
+        },
+        data: { body: "Verification code consumed." },
+      });
+
+      await tx.auditEvent.create({
+        data: {
+          organizationId: account.organizationId,
+          actorUserId: null,
+          action: "PORTAL_CONTACT_VERIFIED",
+          entityType: "PortalAccount",
+          entityId: account.id,
+          sessionId: session.id,
+          newValues: {
+            verificationId: verification.id,
+            channel: verificationChannel,
+            method: "SELF_SERVICE_OTP",
+            challengeId: challenge.id,
+            destinationMasked: maskedDestination(verifiesEmail ? "EMAIL" : "SMS", currentDestination),
+            verifiedAt: verifiedAt.toISOString(),
+          },
+          ipAddress: ctx.ipAddress,
+          userAgent: ctx.userAgent,
+        },
+      });
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message === "PORTAL_VERIFICATION_DESTINATION_CHANGED") {
+      return NextResponse.json({ error: "verification_destination_changed" }, { status: 409 });
+    }
+    if (error instanceof Error && error.message === "PORTAL_VERIFICATION_CONFLICT") {
+      return NextResponse.json({ error: "verification_challenge_consumed" }, { status: 409 });
+    }
+    throw error;
+  }
 
   return NextResponse.json({
     status: "verified",
