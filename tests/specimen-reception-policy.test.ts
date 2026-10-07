@@ -5,6 +5,7 @@ import {
   receptionAssessmentError,
   selectedRejectionOrderItemIds,
   selectiveRejectionNeedsPatientRecollection,
+  rejectionAnalyticalWorkError,
 } from "../src/lib/specimen-reception-policy.ts";
 
 test("reception assessment requires discrepancy details for quality mismatches", () => {
@@ -69,4 +70,21 @@ test("affected tests cannot be rejected while an active derived aliquot still ca
       { status: "REJECTED", orderItemIds: ["A"] },
     ],
   }), false);
+});
+
+
+test("pre-analytical rejection stops once any affected analytical workflow has started", () => {
+  const clean = {
+    orderItemStatus: "COLLECTED",
+    resultCount: 0,
+    microbiologyCount: 0,
+    activeSendOutCount: 0,
+    analyzerWorkCount: 0,
+  };
+  assert.equal(rejectionAnalyticalWorkError([clean]), null);
+  assert.equal(rejectionAnalyticalWorkError([{ ...clean, resultCount: 1 }]), "affected_tests_already_have_results");
+  assert.equal(rejectionAnalyticalWorkError([{ ...clean, orderItemStatus: "IN_PROGRESS" }]), "affected_tests_analytical_work_started");
+  assert.equal(rejectionAnalyticalWorkError([{ ...clean, microbiologyCount: 1 }]), "affected_tests_microbiology_work_started");
+  assert.equal(rejectionAnalyticalWorkError([{ ...clean, activeSendOutCount: 1 }]), "affected_tests_sendout_active");
+  assert.equal(rejectionAnalyticalWorkError([{ ...clean, analyzerWorkCount: 1 }]), "affected_tests_analyzer_work_started");
 });
