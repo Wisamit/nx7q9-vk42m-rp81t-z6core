@@ -49,3 +49,15 @@ export function code128BBars(value: string, quietZone = 10) {
 export function specimenLabelSize(value: string | null | undefined) {
   return value === "50x25" || value === "40x25" ? value : "50x30";
 }
+
+
+export function specimenLabelPrintError(input: {
+  status: string;
+  requirementsFinalized: boolean;
+  priorPrintCount: number;
+  reason: string;
+}) {
+  if (input.status === "PLANNED" && !input.requirementsFinalized) return "specimen_requirements_not_finalized";
+  if (input.priorPrintCount > 0 && !input.reason.trim()) return "reprint_reason_required";
+  return null;
+}
