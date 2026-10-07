@@ -63,9 +63,11 @@ Implemented in branch `phase-6a-worklist-keyboard-controls`:
 - Released results remain amendment-only.
 
 
-## Phase 6B — Qualitative result semantics
+## Phase 6B — Runtime accepted
 
-Phase 6B is implemented on feature branch `phase-6b-qualitative-result-options` and is pending CI/runtime acceptance.
+Runtime acceptance confirmed on Hostinger for main commit `3146b776c383e875aed03f32eefd14469c902b20`.
+
+Phase 6B delivered configuration-driven qualitative result semantics.
 
 Scope:
 - configuration-driven qualitative result options per simple test or qualitative component;
@@ -81,3 +83,25 @@ Scope:
 
 Clinical guardrail:
 `POSITIVE` and `NEGATIVE` are interpretations, not automatic abnormality states. `isAbnormal` is configured independently; critical implies abnormal. Existing historical numeric abnormal flags are backfilled during migration.
+
+
+## Phase 6C — Context-aware result comments
+
+Phase 6C is implemented on feature branch `phase-6c-result-comments-context` and is pending CI/runtime acceptance.
+
+Scope:
+- result-level comments remain on `LaboratoryResult`;
+- component-level comments are stored on `LaboratoryResultValue` and therefore remain tied to the exact historical value/version;
+- organization/test comment templates can only populate the result-level comment;
+- component templates can only populate the matching component comment;
+- comment-template scope is enforced in the UI even if a future query returns a broader set;
+- bulk result entry preserves existing component comments when it does not submit component-comment fields;
+- an explicit empty component comment clears the comment, while an omitted field preserves it;
+- amendment drafts copy component comments from the released version;
+- diagnostic report snapshots preserve component comments;
+- internal and portal report views render component comments;
+- FHIR R4 DiagnosticReport export carries component comments into `Observation.note`;
+- comment templates support audited soft deactivation/reactivation rather than deletion.
+
+Clinical/data-integrity guardrail:
+component comments are versioned with result values. Later template edits or deactivation do not rewrite historical result comments or released reports.
