@@ -1610,6 +1610,7 @@ model LabTest {
   commercialPackageItems CommercialPackageItem[]
   importMappings     CatalogImportMapping[]
   priceListItems     PriceListItem[]
+  taxRules           TaxRule[]
   orderItems         OrderItem[]
   orderQuestions     OrderQuestion[]
   deltaRules         DeltaRule[]
