@@ -1,4 +1,4 @@
-import { ResultFlag, ResultSource } from "../../generated/prisma/client";
+import type { ResultFlag, ResultSource } from "../../generated/prisma/client";
 
 type ValueForAutoverification = {
   flag: ResultFlag;
