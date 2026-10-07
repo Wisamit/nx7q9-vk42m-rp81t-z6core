@@ -988,6 +988,7 @@ model Organization {
   roles       Role[]
   departments Department[]
   auditEvents AuditEvent[]
+  clinicalRuleGovernanceLocks ClinicalRuleGovernanceLock[]
   specimenTypes SpecimenType[]
   containers Container[]
   units Unit[]
@@ -1277,6 +1278,18 @@ model Workstation {
   @@unique([branchId, code])
   @@index([departmentId, status])
   @@map("workstations")
+}
+
+model ClinicalRuleGovernanceLock {
+  organizationId String   @map("organization_id") @db.Char(36)
+  ruleType       String   @map("rule_type") @db.VarChar(80)
+  identityHash   String   @map("identity_hash") @db.Char(64)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+
+  @@id([organizationId, ruleType, identityHash])
+  @@map("clinical_rule_governance_locks")
 }
 
 model User {
