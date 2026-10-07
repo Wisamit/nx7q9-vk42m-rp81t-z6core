@@ -501,7 +501,7 @@ export async function POST(request: Request) {
 
   try {
     const result = await prisma.$transaction(async (tx) => {
-      let creditControlSnapshot: Record<string, string> | null = null;
+      let creditControlSnapshot: Record<string, string | boolean> | null = null;
       if (effectiveClient) {
         // The first database statement in this transaction acquires a client-wide
         // optimistic guard. Competing orders and limit edits must retry instead
