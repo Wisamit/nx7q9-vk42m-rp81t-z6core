@@ -304,6 +304,23 @@ export async function POST(request: Request) {
   const resultStatus = complete ? "ENTERED" : "DRAFT";
 
   const saved = await prisma.$transaction(async (tx) => {
+    if (specimen.status === "RECEIVED") {
+      const claimed = await tx.specimen.updateMany({
+        where: {
+          id: specimen.id,
+          status: "RECEIVED",
+          currentBranchId: performingBranchId,
+          preanalyticalVersion: specimen.preanalyticalVersion,
+          orderItems: { some: { orderItemId, status: "ACTIVE" } },
+        },
+        data: {
+          status: "IN_PROCESS",
+          preanalyticalVersion: { increment: 1 },
+        },
+      });
+      if (claimed.count !== 1) throw new Error("SPECIMEN_PREANALYTICAL_STATE_CHANGED");
+    }
+
     const result = existing
       ? await tx.laboratoryResult.update({
           where: { id: existing.id },
@@ -511,7 +528,6 @@ export async function POST(request: Request) {
     });
 
     if (specimen.status === "RECEIVED") {
-      await tx.specimen.update({ where: { id: specimen.id }, data: { status: "IN_PROCESS" } });
       await tx.specimenEvent.create({
         data: {
           specimenId: specimen.id,
@@ -635,7 +651,14 @@ export async function POST(request: Request) {
         validationHoldEvents: true,
       },
     });
-  }, { timeout: 30000 });
+  }, { timeout: 30000 }).catch(error => {
+    if (error instanceof Error && error.message === "SPECIMEN_PREANALYTICAL_STATE_CHANGED") return null;
+    throw error;
+  });
+
+  if (!saved) {
+    return NextResponse.json({ error: "specimen_preanalytical_state_changed" }, { status: 409 });
+  }
 
   return NextResponse.json({
     status: "ok",
