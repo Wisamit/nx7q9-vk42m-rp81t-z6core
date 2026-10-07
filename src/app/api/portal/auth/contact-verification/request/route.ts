@@ -69,14 +69,29 @@ export async function POST(request: Request) {
   if (!refId) return NextResponse.json({ error: "portal_subject_missing" }, { status: 409 });
 
   const challenge = await prisma.$transaction(async tx => {
-    await tx.portalOtpChallenge.updateMany({
+    const replacedChallenges = await tx.portalOtpChallenge.findMany({
       where: {
         portalAccountId: account.id,
         purpose: "VERIFY_CONTACT",
         consumedAt: null,
       },
-      data: { consumedAt: new Date() },
+      select: { id: true },
     });
+    const replacedIds = replacedChallenges.map(item => item.id);
+    if (replacedIds.length > 0) {
+      await tx.portalOtpChallenge.updateMany({
+        where: { id: { in: replacedIds } },
+        data: { consumedAt: new Date() },
+      });
+      await tx.notification.updateMany({
+        where: {
+          eventCode: "PORTAL_VERIFY_CONTACT",
+          entityType: "PortalOtpChallenge",
+          entityId: { in: replacedIds },
+        },
+        data: { body: "Verification code replaced." },
+      });
+    }
 
     const created = await tx.portalOtpChallenge.create({
       data: {
