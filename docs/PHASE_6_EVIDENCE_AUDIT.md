@@ -109,9 +109,11 @@ Clinical/data-integrity guardrail:
 component comments are versioned with result values. Later template edits or deactivation do not rewrite historical result comments or released reports.
 
 
-## Phase 6D — Configurable specialized result-layout foundation
+## Phase 6D — Runtime accepted
 
-Phase 6D is implemented on feature branch `phase-6d-configurable-result-layouts` and is pending CI/runtime acceptance.
+Runtime acceptance confirmed on Hostinger for main commit `74b2129a9d80aaaf5219ba78c908217bab962547`.
+
+Phase 6D delivered the configurable specialized result-layout foundation.
 
 Scope:
 - adds a per-test result-entry layout mode: `STANDARD`, `SECTIONED`, or `COMPACT_GRID`;
@@ -125,3 +127,38 @@ Scope:
 
 Architecture guardrail:
 specialized CBC, urine, stool, semen, coagulation, hormone, tumor-marker and serology workspaces must be configured through generic layout/section metadata. They must not depend on hard-coded test names and must not introduce per-test result tables.
+
+
+## Phase 6E — Staged technical review and medical validation
+
+Phase 6E is implemented on feature branch `phase-6e-staged-result-validation` and is pending CI/runtime acceptance.
+
+Source-aligned workflow:
+- technical review is always part of the result validation path;
+- medical validation is required only when the effective validation policy says so;
+- validation policies may be configured at organization, department, or test level;
+- precedence is `TEST > DEPARTMENT > ORGANIZATION`;
+- when no explicit policy exists, the safe compatibility default is technical review only;
+- `ResultStatus.VERIFIED` means the required validation path is complete. Technical and medical stages are represented separately by `validationStage`.
+
+Historical integrity:
+- the effective validation policy is snapshotted on the result once the path is established;
+- technical reviewer, medical validator, timestamps, and immutable review events are retained;
+- pre-Phase-6E verified/released/amended results are migrated as `COMPLETE` with a `MIGRATED_BASELINE` snapshot that explicitly states the old policy is unknown rather than fabricating historical review semantics;
+- amendment drafts start a fresh validation path and never inherit approval actors from the released version.
+
+Authorization and safety:
+- `results.technical_review` and `results.medical_validate` are separate permissions;
+- roles that already had legacy `results.verify` inherit technical-review permission for compatibility;
+- medical-validation permission is initially granted only to `SYSTEM_ADMIN` and can be delegated through normal role management;
+- by default the medical validator must be a different user from the technical reviewer; a policy must explicitly allow the same user;
+- values are locked after technical approval while medical validation is pending;
+- a medical validator may return the result for correction only with a recorded reason; the prior review remains in history and the result returns to technical review;
+- release requires both `ResultStatus.VERIFIED` and `validationStage=COMPLETE`;
+- critical communication can start after technical review even while medical validation remains pending;
+- analyzer QC and blocking validation holds are rechecked at medical validation.
+
+Autoverification compatibility:
+- an eligible autoverification decision is treated as an automated technical review;
+- if medical validation is not required, the result completes validation as before;
+- if medical validation is required, autoverification stops at `MEDICAL_VALIDATION` and cannot bypass the human medical stage.

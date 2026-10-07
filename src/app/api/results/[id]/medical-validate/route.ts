@@ -1,0 +1,259 @@
+import { NextResponse } from "next/server";
+import { canAccessBranch, canAccessDepartment, requirePermission, requestContext } from "@/lib/auth";
+import { prisma } from "@/lib/db";
+import { resolveAnalyzerQcGate } from "@/lib/qc-gate";
+import { medicalReviewerAllowed, type ValidationPolicySnapshot } from "@/lib/result-validation";
+import { Prisma } from "../../../../../../generated/prisma/client";
+
+export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const session = await requirePermission("results.medical_validate");
+  const ctx = await requestContext();
+  const { id } = await params;
+  const body = await request.json().catch(() => ({})) as {
+    action?: "APPROVE" | "RETURN";
+    reason?: string;
+    notes?: string;
+    confirmQcWarnings?: boolean;
+  };
+
+  const result = await prisma.laboratoryResult.findFirst({
+    where: { id, organizationId: session.user.organizationId },
+    include: {
+      values: true,
+      validationHoldEvents: { where: { status: "ACTIVE", severitySnapshot: "BLOCK" } },
+      orderItem: {
+        include: {
+          test: true,
+          order: true,
+        },
+      },
+    },
+  });
+
+  if (!result) return NextResponse.json({ error: "result_not_found" }, { status: 404 });
+  if (!canAccessBranch(session, result.performingBranchId)) return NextResponse.json({ error: "branch_forbidden" }, { status: 403 });
+  if (!canAccessDepartment(session, result.orderItem.test.departmentId)) return NextResponse.json({ error: "department_forbidden" }, { status: 403 });
+  if (result.status !== "ENTERED" || result.validationStage !== "MEDICAL_VALIDATION") {
+    return NextResponse.json({
+      error: "result_not_pending_medical_validation",
+      status: result.status,
+      validationStage: result.validationStage,
+    }, { status: 409 });
+  }
+  if (!result.technicalReviewedAt) {
+    return NextResponse.json({ error: "technical_review_required" }, { status: 409 });
+  }
+
+  const validationSnapshot = result.validationPolicySnapshot as unknown as ValidationPolicySnapshot | null;
+  if (!validationSnapshot?.requiresMedicalValidation) {
+    return NextResponse.json({ error: "medical_validation_not_required_by_snapshot" }, { status: 409 });
+  }
+
+  const action = body.action === "RETURN" ? "RETURN" : "APPROVE";
+  const reason = typeof body.reason === "string" ? body.reason.trim().slice(0, 1000) : "";
+  const notes = typeof body.notes === "string" ? body.notes.trim().slice(0, 1000) || null : null;
+
+  if (action === "RETURN") {
+    if (!reason) return NextResponse.json({ error: "return_reason_required" }, { status: 400 });
+
+    const returnedAt = new Date();
+    const returned = await prisma.$transaction(async tx => {
+      await tx.resultValidationReview.create({
+        data: {
+          resultId: result.id,
+          stage: "MEDICAL_VALIDATION",
+          outcome: "RETURNED",
+          reviewerUserId: session.user.id,
+          automated: false,
+          reviewedAt: returnedAt,
+          notes: reason,
+          policySnapshot: validationSnapshot as unknown as Prisma.InputJsonValue,
+        },
+      });
+
+      const updated = await tx.laboratoryResult.update({
+        where: { id: result.id },
+        data: {
+          status: "ENTERED",
+          validationStage: "TECHNICAL_REVIEW",
+          technicalReviewedByUserId: null,
+          technicalReviewedAt: null,
+          medicallyValidatedByUserId: null,
+          medicallyValidatedAt: null,
+          verifiedByUserId: null,
+          verifiedAt: null,
+          autoVerified: false,
+          autoverificationPolicyId: null,
+          autoverificationDecisionSnapshot: Prisma.DbNull,
+        },
+      });
+
+      await tx.orderItem.update({
+        where: { id: result.orderItemId },
+        data: { status: "IN_PROGRESS" },
+      });
+
+      await tx.auditEvent.create({
+        data: {
+          organizationId: session.user.organizationId,
+          branchId: result.performingBranchId,
+          actorUserId: session.user.id,
+          action: "RESULT_MEDICAL_VALIDATION_RETURNED",
+          entityType: "LaboratoryResult",
+          entityId: result.id,
+          oldValues: {
+            status: result.status,
+            validationStage: result.validationStage,
+            technicalReviewedByUserId: result.technicalReviewedByUserId,
+            technicalReviewedAt: result.technicalReviewedAt,
+          },
+          newValues: {
+            status: "ENTERED",
+            validationStage: "TECHNICAL_REVIEW",
+          },
+          reason,
+          ipAddress: ctx.ipAddress,
+          userAgent: ctx.userAgent,
+        },
+      });
+
+      return updated;
+    });
+
+    return NextResponse.json({
+      status: "ok",
+      action: "RETURNED",
+      resultStatus: returned.status,
+      validationStage: returned.validationStage,
+    });
+  }
+
+  if (!medicalReviewerAllowed(validationSnapshot, result.technicalReviewedByUserId, session.user.id)) {
+    return NextResponse.json({ error: "medical_validator_must_differ_from_technical_reviewer" }, { status: 409 });
+  }
+
+  if (result.validationHoldEvents.length > 0) {
+    return NextResponse.json({
+      error: "validation_hold_review_required",
+      blockingValidationHolds: result.validationHoldEvents.length,
+    }, { status: 409 });
+  }
+
+  const qcGate = result.source === "ANALYZER" && result.analyzerId
+    ? await resolveAnalyzerQcGate(prisma, {
+        analyzerId: result.analyzerId,
+        testId: result.orderItem.testId,
+        componentIds: result.values
+          .filter(value => !value.isCalculated && value.analyzerImportId)
+          .map(value => value.componentId),
+        asOf: new Date(),
+      })
+    : null;
+
+  if (qcGate?.blocking) {
+    return NextResponse.json({
+      error: "qc_blocking_hold",
+      qcStatus: qcGate.status,
+      reasons: qcGate.reasons,
+    }, { status: 409 });
+  }
+  if (qcGate?.warning && body.confirmQcWarnings !== true) {
+    return NextResponse.json({
+      error: "qc_warning_confirmation_required",
+      qcStatus: qcGate.status,
+      reasons: qcGate.reasons,
+    }, { status: 409 });
+  }
+
+  const validatedAt = new Date();
+  const validated = await prisma.$transaction(async tx => {
+    await tx.resultValidationReview.create({
+      data: {
+        resultId: result.id,
+        stage: "MEDICAL_VALIDATION",
+        outcome: "APPROVED",
+        reviewerUserId: session.user.id,
+        automated: false,
+        reviewedAt: validatedAt,
+        notes,
+        policySnapshot: validationSnapshot as unknown as Prisma.InputJsonValue,
+      },
+    });
+
+    const updated = await tx.laboratoryResult.update({
+      where: { id: result.id },
+      data: {
+        status: "VERIFIED",
+        validationStage: "COMPLETE",
+        medicallyValidatedByUserId: session.user.id,
+        medicallyValidatedAt: validatedAt,
+        verifiedByUserId: session.user.id,
+        verifiedAt: validatedAt,
+      },
+    });
+
+    await tx.orderItem.update({
+      where: { id: result.orderItemId },
+      data: { status: "VERIFIED" },
+    });
+
+    const remaining = await tx.orderItem.count({
+      where: {
+        orderId: result.orderItem.orderId,
+        status: { notIn: ["VERIFIED", "CANCELLED"] },
+      },
+    });
+
+    if (remaining === 0 && result.orderItem.order.status !== "COMPLETED") {
+      await tx.labOrder.update({
+        where: { id: result.orderItem.orderId },
+        data: { status: "COMPLETED" },
+      });
+      await tx.orderStatusHistory.create({
+        data: {
+          orderId: result.orderItem.orderId,
+          fromStatus: result.orderItem.order.status,
+          toStatus: "COMPLETED",
+          reason: "All non-cancelled order items completed required validation",
+          changedByUserId: session.user.id,
+        },
+      });
+    }
+
+    await tx.auditEvent.create({
+      data: {
+        organizationId: session.user.organizationId,
+        branchId: result.performingBranchId,
+        actorUserId: session.user.id,
+        action: "RESULT_MEDICALLY_VALIDATED",
+        entityType: "LaboratoryResult",
+        entityId: result.id,
+        oldValues: {
+          status: result.status,
+          validationStage: result.validationStage,
+        },
+        newValues: {
+          status: "VERIFIED",
+          validationStage: "COMPLETE",
+          medicallyValidatedAt: validatedAt,
+          verifiedAt: validatedAt,
+          validationPolicy: validationSnapshot,
+          qcGateStatus: qcGate?.status || null,
+          qcGateReasons: qcGate?.reasons || [],
+          qcWarningConfirmed: qcGate?.warning ? body.confirmQcWarnings === true : false,
+        },
+        ipAddress: ctx.ipAddress,
+        userAgent: ctx.userAgent,
+      },
+    });
+
+    return updated;
+  }, { timeout: 30000 });
+
+  return NextResponse.json({
+    status: "ok",
+    action: "APPROVED",
+    resultStatus: validated.status,
+    validationStage: validated.validationStage,
+  });
+}

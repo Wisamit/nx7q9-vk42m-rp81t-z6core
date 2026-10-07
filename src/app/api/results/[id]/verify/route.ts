@@ -3,13 +3,16 @@ import { canAccessBranch, canAccessDepartment, requirePermission, requestContext
 import { prisma } from "@/lib/db";
 import { resolveAnalyzerQcGate } from "@/lib/qc-gate";
 import { notifyUsersWithPermission } from "@/lib/notifications";
+import { selectValidationPolicy, snapshotValidationPolicy, stageAfterTechnicalReview, type ValidationPolicySnapshot } from "@/lib/result-validation";
+import { Prisma } from "../../../../../../generated/prisma/client";
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const body = await request.json().catch(() => ({})) as {
     confirmDeltaWarnings?: boolean;
     confirmQcWarnings?: boolean;
+    notes?: string;
   };
-  const session = await requirePermission("results.verify");
+  const session = await requirePermission("results.technical_review");
   const ctx = await requestContext();
   const { id } = await params;
 
@@ -34,6 +37,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!canAccessBranch(session, result.performingBranchId)) return NextResponse.json({ error: "branch_forbidden" }, { status: 403 });
   if (!canAccessDepartment(session, result.orderItem.test.departmentId)) return NextResponse.json({ error: "department_forbidden" }, { status: 403 });
   if (!["DRAFT", "ENTERED"].includes(result.status)) return NextResponse.json({ error: "result_not_verifiable", status: result.status }, { status: 409 });
+  if (!["ENTRY", "TECHNICAL_REVIEW"].includes(result.validationStage)) {
+    return NextResponse.json({ error: "result_not_pending_technical_review", validationStage: result.validationStage }, { status: 409 });
+  }
 
   const expectedCount = result.microbiologySnapshot ? 1 : Math.max(1, result.orderItem.test.components.length);
   if (result.values.length !== expectedCount) {
@@ -92,6 +98,21 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
 
   const verifiedAt = new Date();
+  const validationSnapshot = result.validationPolicySnapshot
+    ? result.validationPolicySnapshot as unknown as ValidationPolicySnapshot
+    : snapshotValidationPolicy(selectValidationPolicy(await prisma.resultValidationPolicy.findMany({
+        where: {
+          organizationId: session.user.organizationId,
+          status: "ACTIVE",
+          effectiveFrom: { lte: verifiedAt },
+          OR: [{ effectiveTo: null }, { effectiveTo: { gte: verifiedAt } }],
+        },
+      }), {
+        testId: result.orderItem.testId,
+        departmentId: result.orderItem.test.departmentId,
+      }));
+  const nextValidationStage = stageAfterTechnicalReview(validationSnapshot);
+  const finalValidationComplete = nextValidationStage === "COMPLETE";
   const criticalValues = result.values.filter((value) => value.isCritical);
   const escalationPolicies = criticalValues.length > 0
     ? await prisma.criticalEscalationPolicy.findMany({
@@ -120,15 +141,35 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const verified = await tx.laboratoryResult.update({
       where: { id: result.id },
       data: {
-        status: "VERIFIED",
-        verifiedByUserId: session.user.id,
-        verifiedAt,
+        status: finalValidationComplete ? "VERIFIED" : "ENTERED",
+        validationStage: nextValidationStage,
+        validationPolicyId: validationSnapshot.source === "CONFIGURED" ? validationSnapshot.policyId : null,
+        validationPolicySnapshot: validationSnapshot as unknown as Prisma.InputJsonValue,
+        technicalReviewedByUserId: session.user.id,
+        technicalReviewedAt: verifiedAt,
+        medicallyValidatedByUserId: null,
+        medicallyValidatedAt: null,
+        verifiedByUserId: finalValidationComplete ? session.user.id : null,
+        verifiedAt: finalValidationComplete ? verifiedAt : null,
+      },
+    });
+
+    await tx.resultValidationReview.create({
+      data: {
+        resultId: result.id,
+        stage: "TECHNICAL_REVIEW",
+        outcome: "APPROVED",
+        reviewerUserId: session.user.id,
+        automated: false,
+        reviewedAt: verifiedAt,
+        notes: typeof body.notes === "string" ? body.notes.trim().slice(0, 1000) || null : null,
+        policySnapshot: validationSnapshot as unknown as Prisma.InputJsonValue,
       },
     });
 
     await tx.orderItem.update({
       where: { id: result.orderItemId },
-      data: { status: "VERIFIED" },
+      data: { status: finalValidationComplete ? "VERIFIED" : "IN_PROGRESS" },
     });
 
     if (criticalValues.length > 0) {
@@ -198,24 +239,26 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       });
     }
 
-    const remaining = await tx.orderItem.count({
-      where: {
-        orderId: result.orderItem.orderId,
-        status: { notIn: ["VERIFIED", "CANCELLED"] },
-      },
-    });
-
-    if (remaining === 0 && result.orderItem.order.status !== "COMPLETED") {
-      await tx.labOrder.update({ where: { id: result.orderItem.orderId }, data: { status: "COMPLETED" } });
-      await tx.orderStatusHistory.create({
-        data: {
+    if (finalValidationComplete) {
+      const remaining = await tx.orderItem.count({
+        where: {
           orderId: result.orderItem.orderId,
-          fromStatus: result.orderItem.order.status,
-          toStatus: "COMPLETED",
-          reason: "All non-cancelled order items verified",
-          changedByUserId: session.user.id,
+          status: { notIn: ["VERIFIED", "CANCELLED"] },
         },
       });
+
+      if (remaining === 0 && result.orderItem.order.status !== "COMPLETED") {
+        await tx.labOrder.update({ where: { id: result.orderItem.orderId }, data: { status: "COMPLETED" } });
+        await tx.orderStatusHistory.create({
+          data: {
+            orderId: result.orderItem.orderId,
+            fromStatus: result.orderItem.order.status,
+            toStatus: "COMPLETED",
+            reason: "All non-cancelled order items completed required validation",
+            changedByUserId: session.user.id,
+          },
+        });
+      }
     }
 
     await tx.auditEvent.create({
@@ -223,13 +266,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         organizationId: session.user.organizationId,
         branchId: result.performingBranchId,
         actorUserId: session.user.id,
-        action: "RESULT_VERIFIED",
+        action: "RESULT_TECHNICAL_REVIEWED",
         entityType: "LaboratoryResult",
         entityId: result.id,
         oldValues: { status: result.status },
         newValues: {
-          status: "VERIFIED",
-          verifiedAt,
+          status: finalValidationComplete ? "VERIFIED" : "ENTERED",
+          validationStage: nextValidationStage,
+          validationPolicy: validationSnapshot,
+          technicalReviewedAt: verifiedAt,
+          verifiedAt: finalValidationComplete ? verifiedAt : null,
           criticalCount: criticalValues.length,
           deltaExceededCount: deltaExceeded.length,
           blockingValidationHoldCount: blockingValidationHolds,
@@ -253,6 +299,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     status: "ok",
     resultId: updated.id,
     resultStatus: updated.status,
+    validationStage: updated.validationStage,
+    medicalValidationRequired: validationSnapshot.requiresMedicalValidation,
     criticalCount: criticalValues.length,
     deltaExceededCount: deltaExceeded.length,
     releaseBlockedUntilCriticalAcknowledgement: criticalValues.length > 0,

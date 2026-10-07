@@ -278,6 +278,29 @@ enum ResultStatus {
   CANCELLED
 }
 
+enum ResultValidationPolicyScope {
+  ORGANIZATION
+  DEPARTMENT
+  TEST
+}
+
+enum ResultValidationStage {
+  ENTRY
+  TECHNICAL_REVIEW
+  MEDICAL_VALIDATION
+  COMPLETE
+}
+
+enum ResultReviewStage {
+  TECHNICAL_REVIEW
+  MEDICAL_VALIDATION
+}
+
+enum ResultReviewOutcome {
+  APPROVED
+  RETURNED
+}
+
 enum ResultSource {
   MANUAL
   ANALYZER
@@ -960,6 +983,7 @@ model Organization {
   reflexRules ReflexRule[]
   autoverificationPolicies AutoverificationPolicy[]
   validationHoldRules ValidationHoldRule[]
+  resultValidationPolicies ResultValidationPolicy[]
   analyzers Analyzer[]
   criticalEscalationPolicies CriticalEscalationPolicy[]
   microbiologyCases MicrobiologyCase[]
@@ -1171,6 +1195,7 @@ model Department {
   analyzers Analyzer[]
   userScopes   UserDepartmentScope[]
   labTests      LabTest[]
+  resultValidationPolicies ResultValidationPolicy[]
   equipment     Equipment[]
 
   @@unique([organizationId, code])
@@ -1264,6 +1289,10 @@ model User {
   receivedTransferItems SpecimenTransferItem[] @relation("TransferItemReceiver")
   enteredResults LaboratoryResult[] @relation("ResultEnteredBy")
   verifiedResults LaboratoryResult[] @relation("ResultVerifiedBy")
+  technicalReviewedResults LaboratoryResult[] @relation("ResultTechnicalReviewedBy")
+  medicallyValidatedResults LaboratoryResult[] @relation("ResultMedicallyValidatedBy")
+  resultValidationReviews ResultValidationReview[] @relation("ResultValidationReviewer")
+  createdResultValidationPolicies ResultValidationPolicy[] @relation("ResultValidationPolicyCreator")
   releasedResults LaboratoryResult[] @relation("ResultReleasedBy")
   criticalCommunications CriticalResultCommunication[] @relation("CriticalCommunicator")
   acknowledgedCriticalEvents CriticalResultEvent[] @relation("CriticalEventAcknowledgedBy")
@@ -1708,6 +1737,7 @@ model LabTest {
   analyzerMappings AnalyzerTestMapping[]
   autoverificationPolicies AutoverificationPolicy[]
   validationHoldRules ValidationHoldRule[]
+  resultValidationPolicies ResultValidationPolicy[]
   criticalEscalationPolicies CriticalEscalationPolicy[]
   qcTargets QcTarget[]
 
@@ -3150,6 +3180,13 @@ model LaboratoryResult {
   enteredAt          DateTime     @default(now()) @map("entered_at") @db.DateTime(3)
   verifiedByUserId   String?      @map("verified_by_user_id") @db.Char(36)
   verifiedAt         DateTime?    @map("verified_at") @db.DateTime(3)
+  validationStage    ResultValidationStage @default(ENTRY) @map("validation_stage")
+  validationPolicyId String?      @map("validation_policy_id") @db.Char(36)
+  validationPolicySnapshot Json?  @map("validation_policy_snapshot")
+  technicalReviewedByUserId String? @map("technical_reviewed_by_user_id") @db.Char(36)
+  technicalReviewedAt DateTime?   @map("technical_reviewed_at") @db.DateTime(3)
+  medicallyValidatedByUserId String? @map("medically_validated_by_user_id") @db.Char(36)
+  medicallyValidatedAt DateTime?  @map("medically_validated_at") @db.DateTime(3)
   releasedByUserId   String?      @map("released_by_user_id") @db.Char(36)
   releasedAt         DateTime?    @map("released_at") @db.DateTime(3)
   amendedFromId      String?      @map("amended_from_id") @db.Char(36)
@@ -3172,6 +3209,9 @@ model LaboratoryResult {
   analyzer         Analyzer?         @relation(fields: [analyzerId], references: [id], onDelete: Restrict)
   enteredBy        User              @relation("ResultEnteredBy", fields: [enteredByUserId], references: [id], onDelete: Restrict)
   verifiedBy       User?             @relation("ResultVerifiedBy", fields: [verifiedByUserId], references: [id], onDelete: Restrict)
+  validationPolicy ResultValidationPolicy? @relation(fields: [validationPolicyId], references: [id], onDelete: Restrict)
+  technicalReviewedBy User?          @relation("ResultTechnicalReviewedBy", fields: [technicalReviewedByUserId], references: [id], onDelete: Restrict)
+  medicallyValidatedBy User?         @relation("ResultMedicallyValidatedBy", fields: [medicallyValidatedByUserId], references: [id], onDelete: Restrict)
   releasedBy       User?             @relation("ResultReleasedBy", fields: [releasedByUserId], references: [id], onDelete: Restrict)
   amendmentRequestedBy User?         @relation("ResultAmendmentRequestedBy", fields: [amendmentRequestedByUserId], references: [id], onDelete: Restrict)
   amendedFrom      LaboratoryResult? @relation("ResultAmendmentChain", fields: [amendedFromId], references: [id], onDelete: Restrict)
@@ -3181,6 +3221,7 @@ model LaboratoryResult {
   reflexEvents      ReflexRuleEvent[]
   autoverificationPolicy AutoverificationPolicy? @relation(fields: [autoverificationPolicyId], references: [id], onDelete: Restrict)
   validationHoldEvents ValidationHoldEvent[]
+  validationReviews ResultValidationReview[]
   microbiologyCase MicrobiologyCase?
   analyzerResultImports AnalyzerResultImport[]
   repeatEvents ResultRepeatEvent[]
@@ -3191,7 +3232,62 @@ model LaboratoryResult {
   @@index([orderItemId, status])
   @@index([analyzerId, status])
   @@index([autoverificationPolicyId])
+  @@index([validationPolicyId])
+  @@index([validationStage, status])
+  @@index([technicalReviewedByUserId, technicalReviewedAt])
+  @@index([medicallyValidatedByUserId, medicallyValidatedAt])
   @@map("laboratory_results")
+}
+
+model ResultValidationPolicy {
+  id                        String       @id @default(uuid()) @db.Char(36)
+  organizationId            String       @map("organization_id") @db.Char(36)
+  scope                     ResultValidationPolicyScope
+  departmentId              String?      @map("department_id") @db.Char(36)
+  testId                    String?      @map("test_id") @db.Char(36)
+  code                      String       @db.VarChar(80)
+  nameEn                    String       @map("name_en") @db.VarChar(200)
+  nameAr                    String?      @map("name_ar") @db.VarChar(200)
+  requiresMedicalValidation Boolean      @default(false) @map("requires_medical_validation")
+  allowSameReviewer         Boolean      @default(false) @map("allow_same_reviewer")
+  effectiveFrom             DateTime     @map("effective_from") @db.DateTime(3)
+  effectiveTo               DateTime?    @map("effective_to") @db.DateTime(3)
+  status                    RecordStatus @default(ACTIVE)
+  createdByUserId           String       @map("created_by_user_id") @db.Char(36)
+  createdAt                 DateTime     @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt                 DateTime     @updatedAt @map("updated_at") @db.DateTime(3)
+  deactivatedAt             DateTime?    @map("deactivated_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  department   Department?  @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  test         LabTest?     @relation(fields: [testId], references: [id], onDelete: Restrict)
+  createdBy    User         @relation("ResultValidationPolicyCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  results      LaboratoryResult[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId, scope, status, effectiveFrom, effectiveTo], map: "result_validation_policy_scope_idx")
+  @@index([departmentId, status, effectiveFrom], map: "result_validation_policy_department_idx")
+  @@index([testId, status, effectiveFrom], map: "result_validation_policy_test_idx")
+  @@map("result_validation_policies")
+}
+
+model ResultValidationReview {
+  id             String              @id @default(uuid()) @db.Char(36)
+  resultId       String              @map("result_id") @db.Char(36)
+  stage          ResultReviewStage
+  outcome        ResultReviewOutcome @default(APPROVED)
+  reviewerUserId String?             @map("reviewer_user_id") @db.Char(36)
+  reviewedAt     DateTime            @default(now()) @map("reviewed_at") @db.DateTime(3)
+  automated      Boolean             @default(false)
+  notes          String?             @db.VarChar(1000)
+  policySnapshot Json?               @map("policy_snapshot")
+
+  result   LaboratoryResult @relation(fields: [resultId], references: [id], onDelete: Restrict)
+  reviewer User?            @relation("ResultValidationReviewer", fields: [reviewerUserId], references: [id], onDelete: Restrict)
+
+  @@index([resultId, stage, reviewedAt])
+  @@index([reviewerUserId, reviewedAt])
+  @@map("result_validation_reviews")
 }
 
 model ResultRepeatEvent {

@@ -50,8 +50,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!canAccessDepartment(session, result.orderItem.test.departmentId)) {
     return NextResponse.json({ error: "department_forbidden" }, { status: 403 });
   }
-  if (!["VERIFIED","RELEASED"].includes(result.status)) {
-    return NextResponse.json({ error: "result_not_eligible_for_critical_communication", status: result.status }, { status: 409 });
+  const eligibleForCriticalCommunication = ["VERIFIED","RELEASED"].includes(result.status)
+    || (result.status === "ENTERED" && result.validationStage === "MEDICAL_VALIDATION");
+  if (!eligibleForCriticalCommunication) {
+    return NextResponse.json({
+      error: "result_not_eligible_for_critical_communication",
+      status: result.status,
+      validationStage: result.validationStage,
+    }, { status: 409 });
   }
 
   const event = result.criticalEvents[0];

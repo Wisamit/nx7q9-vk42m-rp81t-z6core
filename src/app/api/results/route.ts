@@ -11,6 +11,7 @@ import { validationHoldMatches } from "@/lib/validation-holds";
 import { parseResultValue } from "@/lib/result-value-parser";
 import { qualitativeFlag } from "@/lib/qualitative-result-options";
 import { resolveResultValueComment } from "@/lib/result-comments";
+import { selectValidationPolicy, snapshotValidationPolicy, type ValidationPolicySnapshot } from "@/lib/result-validation";
 
 function text(value: unknown, max = 5000) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -122,6 +123,9 @@ export async function POST(request: Request) {
   if (existing && ["VERIFIED", "RELEASED", "AMENDED", "CANCELLED"].includes(existing.status)) {
     return NextResponse.json({ error: "result_locked_requires_amendment", status: existing.status }, { status: 409 });
   }
+  if (existing && ["MEDICAL_VALIDATION", "COMPLETE"].includes(existing.validationStage)) {
+    return NextResponse.json({ error: "result_locked_by_validation_stage", validationStage: existing.validationStage }, { status: 409 });
+  }
   if (existing && existing.source !== "MANUAL") {
     return NextResponse.json({
       error: "result_source_conflict_requires_explicit_workflow",
@@ -132,6 +136,20 @@ export async function POST(request: Request) {
 
   const resultSource = "MANUAL" as const;
   const resultAt = new Date();
+  const validationPolicies = await prisma.resultValidationPolicy.findMany({
+    where: {
+      organizationId: session.user.organizationId,
+      status: "ACTIVE",
+      effectiveFrom: { lte: resultAt },
+      OR: [{ effectiveTo: null }, { effectiveTo: { gte: resultAt } }],
+    },
+  });
+  const selectedValidationPolicy = selectValidationPolicy(validationPolicies, {
+    testId: orderItem.testId,
+    departmentId: orderItem.test.departmentId,
+  });
+  const configuredValidationSnapshot = snapshotValidationPolicy(selectedValidationPolicy);
+
   const qualitativeOptions = await prisma.qualitativeResultOption.findMany({
     where: {
       organizationId: session.user.organizationId,
@@ -374,6 +392,13 @@ export async function POST(request: Request) {
 
   const complete = prepared.length === expected.length;
   const resultStatus = complete ? "ENTERED" : "DRAFT";
+  const existingValidationSnapshot = existing?.validationPolicySnapshot
+    ? existing.validationPolicySnapshot as unknown as ValidationPolicySnapshot
+    : null;
+  const validationSnapshot = existingValidationSnapshot || (complete ? configuredValidationSnapshot : null);
+  const validationPolicyId = existing?.validationPolicyId
+    || (validationSnapshot?.source === "CONFIGURED" ? validationSnapshot.policyId : null);
+  const entryValidationStage = complete ? "TECHNICAL_REVIEW" as const : "ENTRY" as const;
 
   const saved = await prisma.$transaction(async (tx) => {
     if (specimen.status === "RECEIVED") {
@@ -406,6 +431,15 @@ export async function POST(request: Request) {
             autoVerified: false,
             autoverificationPolicyId: null,
             autoverificationDecisionSnapshot: Prisma.DbNull,
+            validationStage: entryValidationStage,
+            validationPolicyId,
+            validationPolicySnapshot: validationSnapshot ? validationSnapshot as unknown as Prisma.InputJsonValue : Prisma.DbNull,
+            technicalReviewedByUserId: null,
+            technicalReviewedAt: null,
+            medicallyValidatedByUserId: null,
+            medicallyValidatedAt: null,
+            verifiedByUserId: null,
+            verifiedAt: null,
             enteredAt: new Date(),
             comments: comments || null,
           },
@@ -421,6 +455,9 @@ export async function POST(request: Request) {
             status: resultStatus,
             source: resultSource,
             enteredByUserId: session.user.id,
+            validationStage: entryValidationStage,
+            validationPolicyId,
+            validationPolicySnapshot: validationSnapshot ? validationSnapshot as unknown as Prisma.InputJsonValue : undefined,
             comments: comments || null,
           },
         });
@@ -585,26 +622,52 @@ export async function POST(request: Request) {
       pendingReflexCount,
       blockingHoldCount,
     });
-    const finalResultStatus = autoverificationDecision.eligible ? "VERIFIED" : resultStatus;
+    const requiresMedicalValidation = validationSnapshot?.requiresMedicalValidation === true;
+    const finalResultStatus = autoverificationDecision.eligible && !requiresMedicalValidation ? "VERIFIED" : resultStatus;
+    const finalValidationStage = autoverificationDecision.eligible
+      ? requiresMedicalValidation ? "MEDICAL_VALIDATION" : "COMPLETE"
+      : entryValidationStage;
     const autoverifiedAt = autoverificationDecision.eligible ? new Date() : null;
 
     await tx.laboratoryResult.update({
       where: { id: result.id },
       data: {
         status: finalResultStatus,
+        validationStage: finalValidationStage,
+        validationPolicyId,
+        validationPolicySnapshot: validationSnapshot ? validationSnapshot as unknown as Prisma.InputJsonValue : Prisma.DbNull,
+        technicalReviewedByUserId: null,
+        technicalReviewedAt: autoverifiedAt,
+        medicallyValidatedByUserId: null,
+        medicallyValidatedAt: null,
         autoVerified: autoverificationDecision.eligible,
         autoverificationPolicyId: autoverificationDecision.policyId,
         autoverificationDecisionSnapshot: autoverificationDecision as Prisma.InputJsonValue,
         verifiedByUserId: null,
-        verifiedAt: autoverifiedAt,
+        verifiedAt: autoverificationDecision.eligible && !requiresMedicalValidation ? autoverifiedAt : null,
       },
     });
+
+    if (autoverificationDecision.eligible) {
+      await tx.resultValidationReview.create({
+        data: {
+          resultId: result.id,
+          stage: "TECHNICAL_REVIEW",
+          outcome: "APPROVED",
+          reviewerUserId: null,
+          automated: true,
+          reviewedAt: autoverifiedAt!,
+          notes: "Technical review completed by configured autoverification policy",
+          policySnapshot: validationSnapshot ? validationSnapshot as unknown as Prisma.InputJsonValue : undefined,
+        },
+      });
+    }
 
     await tx.orderItem.update({
       where: { id: orderItemId },
       data: {
         performedBranchId: performingBranchId,
-        status: autoverificationDecision.eligible ? "VERIFIED" : "IN_PROGRESS",
+        status: finalResultStatus === "VERIFIED" ? "VERIFIED" : "IN_PROGRESS",
       },
     });
 
@@ -683,7 +746,7 @@ export async function POST(request: Request) {
       },
     });
 
-    if (autoverificationDecision.eligible) {
+    if (finalResultStatus === "VERIFIED") {
       const remaining = await tx.orderItem.count({
         where: {
           orderId: orderItem.orderId,
@@ -717,9 +780,13 @@ export async function POST(request: Request) {
           entityId: result.id,
           oldValues: { status: resultStatus },
           newValues: {
-            status: "VERIFIED",
+            status: finalResultStatus,
+            validationStage: finalValidationStage,
             policyId: autoverificationDecision.policyId,
-            verifiedAt: autoverifiedAt,
+            validationPolicyId,
+            verifiedAt: autoverificationDecision.eligible && !requiresMedicalValidation ? autoverifiedAt : null,
+            technicalReviewedAt: autoverifiedAt,
+            medicalValidationRequired: requiresMedicalValidation,
             source: resultSource,
             warningHoldCount,
           },

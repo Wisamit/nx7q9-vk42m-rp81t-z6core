@@ -7,6 +7,7 @@ import { AutoverificationValidationManager } from "@/components/autoverification
 import { CriticalEscalationManager } from "@/components/critical-escalation-manager";
 import { QualitativeResultOptionsManager } from "@/components/qualitative-result-options-manager";
 import { CommentTemplateStatusButton } from "@/components/comment-template-status-button";
+import { ResultValidationPolicyManager } from "@/components/result-validation-policy-manager";
 import { statusLabel, tr } from "@/lib/ui-i18n";
 
 export const dynamic = "force-dynamic";
@@ -15,13 +16,18 @@ export default async function ClinicalRulesPage() {
   const session = await requirePermission("clinical_rules.manage");
   const locale = session.user.preferredLocale === "ar" ? "ar" : "en";
 
-  const [tests, branches, methods, deltaRules, commentTemplates, calculatedRules, reflexRules, autoverificationPolicies, validationHoldRules, criticalEscalationPolicies, qualitativeResultOptions] = await Promise.all([
+  const [tests, branches, departments, methods, deltaRules, commentTemplates, calculatedRules, reflexRules, autoverificationPolicies, validationHoldRules, criticalEscalationPolicies, qualitativeResultOptions, resultValidationPolicies] = await Promise.all([
     prisma.labTest.findMany({
       where: { organizationId: session.user.organizationId, status: "ACTIVE" },
       include: { components: { where: { status: "ACTIVE" }, orderBy: { displayOrder: "asc" } } },
       orderBy: { nameEn: "asc" },
     }),
     prisma.branch.findMany({
+      where: { organizationId: session.user.organizationId, status: "ACTIVE" },
+      select: { id: true, code: true, nameEn: true, nameAr: true },
+      orderBy: { nameEn: "asc" },
+    }),
+    prisma.department.findMany({
       where: { organizationId: session.user.organizationId, status: "ACTIVE" },
       select: { id: true, code: true, nameEn: true, nameAr: true },
       orderBy: { nameEn: "asc" },
@@ -78,6 +84,12 @@ export default async function ClinicalRulesPage() {
       include: { test: true, component: true },
       orderBy: [{ testId: "asc" }, { componentId: "asc" }, { displayOrder: "asc" }, { createdAt: "asc" }],
       take: 500,
+    }),
+    prisma.resultValidationPolicy.findMany({
+      where: { organizationId: session.user.organizationId },
+      include: { department: true, test: true },
+      orderBy: [{ effectiveFrom: "desc" }, { createdAt: "desc" }],
+      take: 300,
     }),
   ]);
 
@@ -164,7 +176,29 @@ export default async function ClinicalRulesPage() {
       branches={branches}
     />
 
-    <QualitativeResultOptionsManager
+    <ResultValidationPolicyManager
+      locale={locale}
+      departments={departments}
+      tests={tests.map(test => ({ id: test.id, code: test.code, nameEn: test.nameEn, nameAr: test.nameAr }))}
+      policies={resultValidationPolicies.map(policy => ({
+        id: policy.id,
+        code: policy.code,
+        nameEn: policy.nameEn,
+        nameAr: policy.nameAr,
+        scope: policy.scope,
+        departmentId: policy.departmentId,
+        testId: policy.testId,
+        requiresMedicalValidation: policy.requiresMedicalValidation,
+        allowSameReviewer: policy.allowSameReviewer,
+        effectiveFrom: policy.effectiveFrom.toISOString().slice(0,10),
+        effectiveTo: policy.effectiveTo?.toISOString().slice(0,10) || null,
+        status: policy.status,
+        department: policy.department ? { id: policy.department.id, code: policy.department.code, nameEn: policy.department.nameEn, nameAr: policy.department.nameAr } : null,
+        test: policy.test ? { id: policy.test.id, code: policy.test.code, nameEn: policy.test.nameEn, nameAr: policy.test.nameAr } : null,
+      }))}
+    />
+
+        <QualitativeResultOptionsManager
       locale={locale}
       tests={tests.map(test => ({
         id: test.id,
