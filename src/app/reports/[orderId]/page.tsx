@@ -7,6 +7,14 @@ import { notFound } from "next/navigation";
 import { canAccessBranch, permissionSet, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { PrintReportButton } from "@/components/print-report-button";
+import { ReportPdfButton } from "@/components/report-pdf-button";
+import {
+  effectiveReportLocale,
+  localizedReportText,
+  reportShowsArabic,
+  reportShowsEnglish,
+  secondaryReportText,
+} from "@/lib/report-language";
 import { getUiLocale, priorityLabel, sexLabel, statusLabel, tr, type UiLocale } from "@/lib/ui-i18n";
 
 export const dynamic = "force-dynamic";
@@ -180,6 +188,10 @@ export default async function DiagnosticReportPage({ params }: { params: Promise
   };
   const reportColumns = new Set(templateConfig.columns);
   const reportColumnCount = Math.max(1, templateConfig.columns.length);
+  const reportLocale = effectiveReportLocale(templateConfig.languageMode, locale);
+  const showEnglish = reportShowsEnglish(templateConfig.languageMode);
+  const showArabic = reportShowsArabic(templateConfig.languageMode);
+  const reportTr = <T,>(en: T, ar: T) => tr(reportLocale, en, ar);
   const headerStore = await headers();
   const host = headerStore.get("x-forwarded-host") || headerStore.get("host") || "";
   const protocol = headerStore.get("x-forwarded-proto") || "https";
@@ -196,12 +208,21 @@ export default async function DiagnosticReportPage({ params }: { params: Promise
         <p className="muted">{tr(locale, "Version", "الإصدار")} {latest.version} · {statusLabel(locale, latest.status)}{templateSnapshot ? ` · ${tr(locale, "Template", "القالب")} ${templateSnapshot.templateCode} v${templateSnapshot.templateVersion}` : ""}</p>
       </div>
       <div className="header-actions">
-        {permissions.has("reports.deliver") && <PrintReportButton reportVersionId={latest.id} canRecordDelivery />}
+        {permissions.has("reports.deliver") && <>
+          <ReportPdfButton
+            reportVersionId={latest.id}
+            accessionNumber={snapshot.order.accessionNumber}
+            reportVersion={latest.version}
+            showPageNumbers={templateConfig.showPageNumbers}
+            locale={locale}
+          />
+          <PrintReportButton reportVersionId={latest.id} canRecordDelivery locale={locale} />
+        </>}
         <Link className="secondary-link" href={`/orders/${orderId}`}>{tr(locale, "Back to Order", "العودة للطلب")}</Link>
       </div>
     </div>
 
-    <article className="diagnostic-report professional-report">
+    <article id="diagnostic-report-version" className="diagnostic-report professional-report" dir={reportLocale === "ar" ? "rtl" : "ltr"}>
       {templateConfig.watermark && <div className="report-watermark" aria-hidden="true">{templateConfig.watermark}</div>}
       <header className="report-header">
         <div className="report-brand-block">
@@ -209,26 +230,28 @@ export default async function DiagnosticReportPage({ params }: { params: Promise
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img className="report-template-logo" src={templateConfig.logoUrl} alt={tr(locale, "Laboratory logo", "شعار المختبر")} />
           </>}
-          {templateConfig.headerEn && <p className="report-template-header">{templateConfig.headerEn}</p>}
-          {templateConfig.headerAr && <p className="report-template-header" dir="rtl">{templateConfig.headerAr}</p>}
-          <h1>{snapshot.organization.nameEn}</h1>
-          {snapshot.organization.nameAr && <h2 dir="rtl">{snapshot.organization.nameAr}</h2>}
-          <p>{snapshot.branch.nameEn}{snapshot.branch.nameAr ? ` · ${snapshot.branch.nameAr}` : ""}</p>
-          <p>{snapshot.branch.addressEn || ""}</p>
+          {showEnglish && templateConfig.headerEn && <p className="report-template-header" dir="ltr">{templateConfig.headerEn}</p>}
+          {showArabic && templateConfig.headerAr && <p className="report-template-header" dir="rtl">{templateConfig.headerAr}</p>}
+          {showEnglish && <h1 dir="ltr">{snapshot.organization.nameEn}</h1>}
+          {showArabic && snapshot.organization.nameAr && <h2 dir="rtl">{snapshot.organization.nameAr}</h2>}
+          <p>{localizedReportText(templateConfig.languageMode, locale, { en: snapshot.branch.nameEn, ar: snapshot.branch.nameAr })}
+            {secondaryReportText(templateConfig.languageMode, locale, { en: snapshot.branch.nameEn, ar: snapshot.branch.nameAr }) ? ` · ${secondaryReportText(templateConfig.languageMode, locale, { en: snapshot.branch.nameEn, ar: snapshot.branch.nameAr })}` : ""}
+          </p>
+          <p>{localizedReportText(templateConfig.languageMode, locale, { en: snapshot.branch.addressEn, ar: snapshot.branch.addressAr }) || ""}</p>
           <p>{[snapshot.branch.phone, snapshot.branch.email].filter(Boolean).join(" · ")}</p>
         </div>
         <div className="report-version-stamp">
           {templateConfig.showQr && qrDataUrl && <Image src={qrDataUrl} alt={tr(locale, "Report verification QR code", "رمز QR للتحقق من التقرير")} width={104} height={104} unoptimized />}
-          <strong className={"status-badge status-" + latest.status.toLowerCase().replaceAll("_","-")}>{statusLabel(locale, latest.status)}</strong>
-          <span>{tr(locale, "Report version", "إصدار التقرير")} {latest.version}</span>
-          <span>{tr(locale, "Issued", "صدر")} {latest.issuedAt.toISOString().replace("T"," ").slice(0,19)}</span>
-          {templateConfig.showQr && <span>{tr(locale, "Scan QR to verify", "امسح QR للتحقق")}</span>}
+          <strong className={"status-badge status-" + latest.status.toLowerCase().replaceAll("_","-")}>{statusLabel(reportLocale, latest.status)}</strong>
+          <span>{reportTr("Report version", "إصدار التقرير")} {latest.version}</span>
+          <span>{reportTr("Issued", "صدر")} {latest.issuedAt.toISOString().replace("T"," ").slice(0,19)}</span>
+          {templateConfig.showQr && <span>{reportTr("Scan QR to verify", "امسح QR للتحقق")}</span>}
         </div>
       </header>
 
       {latest.status === "AMENDED" && <div className="report-amended-banner">
-        <strong>{tr(locale, "AMENDED REPORT", "تقرير معدل")}</strong>
-        <span>{latest.amendmentReason || tr(locale, "A released result was amended.", "تم تعديل نتيجة صادرة.")}</span>
+        <strong>{reportTr("AMENDED REPORT", "تقرير معدل")}</strong>
+        <span>{latest.amendmentReason || reportTr("A released result was amended.", "تم تعديل نتيجة صادرة.")}</span>
       </div>}
 
       <section className="report-patient-grid">
