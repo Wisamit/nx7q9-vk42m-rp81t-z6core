@@ -12,7 +12,7 @@ import { validationHoldMatches } from "@/lib/validation-holds";
 import { parseResultValue } from "@/lib/result-value-parser";
 import { qualitativeFlag } from "@/lib/qualitative-result-options";
 import { resolveResultValueComment } from "@/lib/result-comments";
-import { selectValidationPolicy, snapshotValidationPolicy, type ValidationPolicySnapshot } from "@/lib/result-validation";
+import { automatedTechnicalReviewOutcome, selectValidationPolicy, snapshotValidationPolicy, type ValidationPolicySnapshot } from "@/lib/result-validation";
 
 function text(value: unknown, max = 5000) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -646,11 +646,14 @@ export async function POST(request: Request) {
       pendingReflexCount,
       blockingHoldCount,
     });
-    const requiresMedicalValidation = validationSnapshot?.requiresMedicalValidation === true;
-    const finalResultStatus = autoverificationDecision.eligible && !requiresMedicalValidation ? "VERIFIED" : resultStatus;
-    const finalValidationStage = autoverificationDecision.eligible
-      ? requiresMedicalValidation ? "MEDICAL_VALIDATION" : "COMPLETE"
-      : entryValidationStage;
+    const effectiveValidationSnapshot = validationSnapshot || snapshotValidationPolicy(null);
+    const autoOutcome = automatedTechnicalReviewOutcome(effectiveValidationSnapshot, {
+      eligible: autoverificationDecision.eligible,
+      complete,
+    });
+    const requiresMedicalValidation = effectiveValidationSnapshot.requiresMedicalValidation;
+    const finalResultStatus = autoOutcome.resultStatus;
+    const finalValidationStage = autoOutcome.validationStage;
     const autoverifiedAt = autoverificationDecision.eligible ? new Date() : null;
 
     await tx.laboratoryResult.update({
