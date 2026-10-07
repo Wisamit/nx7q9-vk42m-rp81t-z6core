@@ -6,6 +6,7 @@ import { statusLabel as sharedStatusLabel } from "@/lib/ui-i18n";
 import { focusNextResultEntryControl, shouldAdvanceResultEntryOnEnter } from "@/lib/result-entry-keyboard";
 import { commentTemplateTargetMatches } from "@/lib/result-comments";
 import { groupResultFields } from "@/lib/result-entry-layout";
+import { isResultEntryLockedByValidation } from "@/lib/result-validation";
 
 type QualitativeResultOption = {
   id: string;
@@ -71,7 +72,9 @@ export function ResultEntryForm({
   resultStatus,
   resultSource,
   analyzerLabel,
-  canVerify,
+  validationStage,
+  canEnter,
+  canTechnicalReview,
   commentTemplates,
   locale,
 }: {
@@ -87,7 +90,9 @@ export function ResultEntryForm({
   resultStatus: string | null;
   resultSource: string;
   analyzerLabel?: string | null;
-  canVerify: boolean;
+  validationStage: string;
+  canEnter: boolean;
+  canTechnicalReview: boolean;
   commentTemplates: CommentTemplateOption[];
   locale: "ar" | "en";
 }) {
@@ -137,7 +142,8 @@ export function ResultEntryForm({
   const [note, setNote] = useState(comments);
   const [savedResultId, setSavedResultId] = useState(resultId);
   const [savedStatus, setSavedStatus] = useState(resultStatus);
-  const [complete, setComplete] = useState(Boolean(resultId && resultStatus === "ENTERED"));
+  const [savedValidationStage, setSavedValidationStage] = useState(validationStage);
+  const [complete, setComplete] = useState(Boolean(resultId && ["ENTERED", "VERIFIED"].includes(resultStatus || "")));
   const [busy, setBusy] = useState<"save" | "verify" | "">("");
   const [message, setMessage] = useState("");
 
@@ -224,6 +230,7 @@ export function ResultEntryForm({
     if (response.ok) {
       setSavedResultId(body.result?.id || null);
       setSavedStatus(body.result?.status || null);
+      setSavedValidationStage(body.result?.validationStage || (body.complete ? "TECHNICAL_REVIEW" : "ENTRY"));
       setComplete(Boolean(body.complete));
       const notices = [];
       if (body.criticalCount > 0) notices.push(`${body.criticalCount} ${tr("critical value(s)", "قيمة حرجة")}`);
@@ -231,8 +238,11 @@ export function ResultEntryForm({
       if (body.pendingReflexCount > 0) notices.push(`${body.pendingReflexCount} ${tr("reflex recommendation(s)", "توصية فحص انعكاسي")}`);
       if (body.blockingValidationHoldCount > 0) notices.push(`${body.blockingValidationHoldCount} ${tr("blocking validation hold(s)", "حجز تحقق مانع")}`);
       if (body.warningValidationHoldCount > 0) notices.push(`${body.warningValidationHoldCount} ${tr("validation warning(s)", "تحذير تحقق")}`);
+      const autoMedicalPending = body.autoVerified && body.result?.validationStage === "MEDICAL_VALIDATION";
       setMessage(body.autoVerified
-        ? tr("Result saved and autoverified by the active clinical policy. Release remains a separate controlled action.", "تم حفظ النتيجة والتحقق منها تلقائيًا حسب السياسة السريرية الفعالة. يبقى الإصدار إجراءً مستقلاً ومضبوطًا.")
+        ? autoMedicalPending
+          ? tr("Technical review completed automatically. Medical validation is still required before release.", "اكتملت المراجعة الفنية تلقائيًا. لا يزال التحقق الطبي مطلوبًا قبل الإصدار.")
+          : tr("Result saved and autoverified by the active clinical policy. Release remains a separate controlled action.", "تم حفظ النتيجة والتحقق منها تلقائيًا حسب السياسة السريرية الفعالة. يبقى الإصدار إجراءً مستقلاً ومضبوطًا.")
         : notices.length
           ? `${tr("Saved with", "تم الحفظ مع")}: ${notices.join(", ")}. ${tr("Review validation items before verification.", "راجع عناصر التحقق قبل اعتماد النتيجة.")}`
           : body.complete ? tr("Result saved and ready for verification.", "تم حفظ النتيجة وهي جاهزة للتحقق.") : tr("Draft saved. Complete all required result fields before verification.", "تم حفظ المسودة. أكمل جميع حقول النتيجة المطلوبة قبل التحقق."));
@@ -245,7 +255,7 @@ export function ResultEntryForm({
 
   async function verify() {
     if (!savedResultId) return;
-    if (!confirm(tr("Verify this result? Verified values become locked and later changes require an amendment.", "هل تريد التحقق من هذه النتيجة؟ بعد التحقق تُقفل القيم وأي تغيير لاحق يتطلب تعديلًا موثقًا."))) return;
+    if (!confirm(tr("Complete technical review of this result? If medical validation is required, values will be locked and routed to that stage.", "إكمال المراجعة الفنية لهذه النتيجة؟ إذا كان التحقق الطبي مطلوبًا فسيتم قفل القيم وتحويلها إلى تلك المرحلة."))) return;
 
     setBusy("verify");
     setMessage("");
@@ -285,28 +295,33 @@ export function ResultEntryForm({
     }
 
     if (response?.ok) {
-      const resultStatus = typeof body.resultStatus === "string" ? body.resultStatus : "VERIFIED";
+      const resultStatus = typeof body.resultStatus === "string" ? body.resultStatus : "ENTERED";
+      const nextValidationStage = typeof body.validationStage === "string" ? body.validationStage : "COMPLETE";
       const criticalCount = typeof body.criticalCount === "number" ? body.criticalCount : 0;
       setSavedStatus(resultStatus);
-      setMessage(criticalCount > 0
-        ? tr("Result verified. Critical result acknowledgement/communication is required before release.", "تم التحقق من النتيجة. يلزم توثيق التواصل والإقرار بالنتيجة الحرجة قبل الإصدار.")
-        : tr("Result verified successfully.", "تم التحقق من النتيجة بنجاح."));
+      setSavedValidationStage(nextValidationStage);
+      setMessage(nextValidationStage === "MEDICAL_VALIDATION"
+        ? tr("Technical review completed. Medical validation is now required before release.", "اكتملت المراجعة الفنية. أصبح التحقق الطبي مطلوبًا الآن قبل الإصدار.")
+        : criticalCount > 0
+          ? tr("Required validation completed. Critical result acknowledgement/communication is required before release.", "اكتمل مسار التحقق المطلوب. يلزم توثيق التواصل والإقرار بالنتيجة الحرجة قبل الإصدار.")
+          : tr("Required validation completed successfully.", "اكتمل مسار التحقق المطلوب بنجاح."));
       router.refresh();
     } else if (body.error === "reflex_review_required") {
-      setMessage(tr("Verification blocked: review all pending reflex recommendations first.", "التحقق محظور: راجع أولاً جميع توصيات الفحوص الانعكاسية المعلقة."));
+      setMessage(tr("Technical review blocked: review all pending reflex recommendations first.", "المراجعة الفنية محظورة: راجع أولاً جميع توصيات الفحوص الانعكاسية المعلقة."));
     } else if (body.error === "validation_hold_review_required") {
-      setMessage(tr("Verification blocked: resolve all active blocking validation holds first.", "التحقق محظور: عالج أولاً جميع حجوزات التحقق المانعة النشطة."));
+      setMessage(tr("Technical review blocked: resolve all active blocking validation holds first.", "المراجعة الفنية محظورة: عالج أولاً جميع حجوزات التحقق المانعة النشطة."));
     } else if (body.error === "qc_blocking_hold") {
-      setMessage(tr("Verification blocked: analyzer QC is not currently acceptable. Review QC status and open QC violations.", "التحقق محظور: حالة ضبط الجودة للجهاز غير مقبولة حالياً. راجع حالة QC والمخالفات المفتوحة."));
+      setMessage(tr("Technical review blocked: analyzer QC is not currently acceptable. Review QC status and open QC violations.", "المراجعة الفنية محظورة: حالة ضبط الجودة للجهاز غير مقبولة حالياً. راجع حالة QC والمخالفات المفتوحة."));
     } else {
-      setMessage(tr("Result verification failed.", "فشل التحقق من النتيجة."));
+      setMessage(tr("Technical review failed.", "فشلت المراجعة الفنية."));
     }
     setBusy("");
   }
 
   const statusLocked = ["VERIFIED", "RELEASED", "AMENDED", "CANCELLED"].includes(savedStatus || "");
   const sourceLocked = resultSource !== "MANUAL";
-  const locked = statusLocked || sourceLocked;
+  const validationLocked = isResultEntryLockedByValidation(savedValidationStage);
+  const locked = statusLocked || sourceLocked || validationLocked || !canEnter;
   const resultLevelTemplates = commentTemplates.filter((template) => commentTemplateTargetMatches(template, testId, null));
   const fieldGroups = groupResultFields(fields, resultSections);
 
@@ -365,6 +380,7 @@ export function ResultEntryForm({
   return <form className="result-entry-form" onSubmit={save}>
     <div className="result-entry-header">
       <div><strong>{tr("Status", "الحالة")}</strong><span>{savedStatus ? sharedStatusLabel(locale, savedStatus) : tr("Not entered", "غير مدخل")}</span></div>
+      <div><strong>{tr("Validation stage", "مرحلة التحقق")}</strong><span>{savedValidationStage === "MEDICAL_VALIDATION" ? tr("Medical validation", "التحقق الطبي") : savedValidationStage === "COMPLETE" ? tr("Complete", "مكتمل") : savedValidationStage === "TECHNICAL_REVIEW" ? tr("Technical review", "المراجعة الفنية") : tr("Entry", "الإدخال")}</span></div>
       <div><strong>{tr("Source", "المصدر")}</strong><span>{sourceLabel(resultSource)}{analyzerLabel ? ` · ${analyzerLabel}` : ""}</span></div>
     </div>
 
@@ -406,10 +422,12 @@ export function ResultEntryForm({
     {message && <div className="form-success">{message}</div>}
 
     <div className="result-actions">
-      {!locked && <button className="primary-button" data-result-entry-control="true" disabled={busy !== ""}>{busy === "save" ? tr("Saving…", "جارٍ الحفظ…") : tr("Save Result", "حفظ النتيجة")}</button>}
-      {!statusLocked && canVerify && savedResultId && complete && <button className="secondary-button" type="button" disabled={busy !== ""} onClick={() => void verify()}>{busy === "verify" ? tr("Verifying…", "جارٍ التحقق…") : tr("Verify Result", "التحقق من النتيجة")}</button>}
+      {!locked && canEnter && <button className="primary-button" data-result-entry-control="true" disabled={busy !== ""}>{busy === "save" ? tr("Saving…", "جارٍ الحفظ…") : tr("Save Result", "حفظ النتيجة")}</button>}
+      {!statusLocked && canTechnicalReview && savedResultId && complete && savedValidationStage === "TECHNICAL_REVIEW" && <button className="secondary-button" type="button" disabled={busy !== ""} onClick={() => void verify()}>{busy === "verify" ? tr("Reviewing…", "جارٍ تنفيذ المراجعة…") : tr("Complete Technical Review", "إكمال المراجعة الفنية")}</button>}
       {statusLocked && <span className="muted">{tr("Verified/released results are locked. Future edits must use an amendment workflow.", "النتائج التي تم التحقق منها أو إصدارها مقفلة، وأي تعديل لاحق يجب أن يتم عبر مسار التعديل الرسمي.")}</span>}
+      {!statusLocked && validationLocked && <span className="muted">{tr("Values are locked after technical review while medical validation is pending.", "القيم مقفلة بعد المراجعة الفنية أثناء انتظار التحقق الطبي.")}</span>}
       {!statusLocked && sourceLocked && <span className="muted">{tr("Analyzer/import-origin values are read-only here. Use the analyzer integration workflow for additional observations or corrections.", "القيم الواردة من الجهاز أو الاستيراد للقراءة فقط هنا. استخدم مسار تكامل أجهزة التحليل لإضافة مشاهدات أو تصحيحات.")}</span>}
+      {!canEnter && !statusLocked && !sourceLocked && !validationLocked && <span className="muted">{tr("You can review this result but do not have permission to edit result values.", "يمكنك مراجعة هذه النتيجة لكن لا تملك صلاحية تعديل قيم النتائج.")}</span>}
     </div>
   </form>;
 }
