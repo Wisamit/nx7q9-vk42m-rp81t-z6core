@@ -206,6 +206,7 @@ export default async function BillingPage() {
         currency: item.currency,
         subtotal: item.subtotalSnapshot.toString(),
         discountTotal: item.discountTotalSnapshot.toString(),
+        taxTotal: item.taxTotalSnapshot.toString(),
         finalTotal: item.finalTotalSnapshot.toString(),
         requestedAt: item.requestedAt.toISOString(),
         expiresAt: item.expiresAt.toISOString(),
