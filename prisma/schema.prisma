@@ -3745,8 +3745,9 @@ model ReportDeliveryEvent {
   performedByUserId String?           @map("performed_by_user_id") @db.Char(36)
   occurredAt     DateTime             @default(now()) @map("occurred_at") @db.DateTime(3)
 
-  reportVersion DiagnosticReportVersion @relation(fields: [reportVersionId], references: [id], onDelete: Restrict)
-  performedBy   User?                   @relation(fields: [performedByUserId], references: [id], onDelete: Restrict)
+  reportVersion        DiagnosticReportVersion @relation(fields: [reportVersionId], references: [id], onDelete: Restrict)
+  performedBy          User?                   @relation(fields: [performedByUserId], references: [id], onDelete: Restrict)
+  notificationDelivery NotificationDelivery?
 
   @@index([reportVersionId, occurredAt])
   @@index([performedByUserId, occurredAt])
@@ -5932,7 +5933,10 @@ model NotificationDelivery {
   createdAt         DateTime                   @default(now()) @map("created_at") @db.DateTime(3)
   updatedAt         DateTime                   @updatedAt @map("updated_at") @db.DateTime(3)
 
-  notification Notification @relation(fields: [notificationId], references: [id], onDelete: Restrict)
+  reportDeliveryEventId String? @unique @map("report_delivery_event_id") @db.Char(36)
+
+  notification        Notification        @relation(fields: [notificationId], references: [id], onDelete: Restrict)
+  reportDeliveryEvent ReportDeliveryEvent? @relation(fields: [reportDeliveryEventId], references: [id], onDelete: Restrict)
 
   @@index([status, nextAttemptAt, createdAt])
   @@index([notificationId, channel])
