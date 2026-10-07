@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requirePermission, requestContext } from "@/lib/auth";
+import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import {
   clinicalRuleLifecycleState,
@@ -60,6 +60,7 @@ async function loadRule(type: RuleType, id: string, organizationId: string): Pro
         effectiveTo: rule.effectiveTo,
         status: rule.status,
         deactivatedAt: rule.deactivatedAt,
+        authorizationBranchId: null,
       } : null;
     }
     case "REFLEX_RULE": {
@@ -77,6 +78,7 @@ async function loadRule(type: RuleType, id: string, organizationId: string): Pro
         effectiveTo: rule.effectiveTo,
         status: rule.status,
         deactivatedAt: rule.deactivatedAt,
+        authorizationBranchId: rule.branchId,
       } : null;
     }
     case "DELTA_RULE": {
@@ -88,6 +90,7 @@ async function loadRule(type: RuleType, id: string, organizationId: string): Pro
         effectiveTo: rule.effectiveTo,
         status: rule.status,
         deactivatedAt: rule.deactivatedAt,
+        authorizationBranchId: rule.branchId,
       } : null;
     }
     case "AUTOVERIFICATION_POLICY": {
@@ -99,6 +102,7 @@ async function loadRule(type: RuleType, id: string, organizationId: string): Pro
         effectiveTo: rule.effectiveTo,
         status: rule.status,
         deactivatedAt: rule.deactivatedAt,
+        authorizationBranchId: rule.branchId,
       } : null;
     }
     case "VALIDATION_HOLD_RULE": {
@@ -110,6 +114,7 @@ async function loadRule(type: RuleType, id: string, organizationId: string): Pro
         effectiveTo: rule.effectiveTo,
         status: rule.status,
         deactivatedAt: rule.deactivatedAt,
+        authorizationBranchId: rule.branchId,
       } : null;
     }
     case "CRITICAL_ESCALATION_POLICY": {
@@ -121,10 +126,14 @@ async function loadRule(type: RuleType, id: string, organizationId: string): Pro
         effectiveTo: rule.effectiveTo,
         status: rule.status,
         deactivatedAt: rule.deactivatedAt,
+        authorizationBranchId: rule.branchId,
       } : null;
     }
     case "RESULT_VALIDATION_POLICY": {
-      const rule = await prisma.resultValidationPolicy.findFirst({ where: { id, organizationId } });
+      const rule = await prisma.resultValidationPolicy.findFirst({
+        where: { id, organizationId },
+        include: { department: { select: { branchId: true } } },
+      });
       return rule ? {
         id: rule.id,
         identityKey: ruleIdentity([rule.scope, rule.branchId, rule.departmentId, rule.testId]),
@@ -132,6 +141,7 @@ async function loadRule(type: RuleType, id: string, organizationId: string): Pro
         effectiveTo: rule.effectiveTo,
         status: rule.status,
         deactivatedAt: rule.deactivatedAt,
+        authorizationBranchId: rule.branchId || rule.department?.branchId || null,
       } : null;
     }
   }
@@ -256,6 +266,9 @@ export async function POST(request: Request) {
   const organizationId = session.user.organizationId;
   const existing = await loadRule(type, id, organizationId);
   if (!existing) return NextResponse.json({ error: "clinical_rule_not_found" }, { status: 404 });
+  if (existing.authorizationBranchId && !canAccessBranch(session, existing.authorizationBranchId)) {
+    return NextResponse.json({ error: "branch_forbidden" }, { status: 403 });
+  }
 
   if (action === "APPROVE") {
     if (clinicalRuleLifecycleState(existing) !== "DRAFT") {
