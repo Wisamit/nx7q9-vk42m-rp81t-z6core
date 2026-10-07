@@ -45,13 +45,7 @@ export function resolveVerifiedPortalDestination(
     && item.destinationSnapshot === destination
   ) || false;
 
-  const legacySingleContactVerification = Boolean(
-    account.contactVerifiedAt
-    && ((verificationChannel === "EMAIL" && account.email && !account.phone)
-      || (verificationChannel === "PHONE" && account.phone && !account.email))
-  );
-
-  if (!verified && !legacySingleContactVerification) {
+  if (!verified) {
     return {
       ok: false as const,
       error: verificationChannel === "EMAIL" ? "verified_email_required" : "verified_phone_required",
