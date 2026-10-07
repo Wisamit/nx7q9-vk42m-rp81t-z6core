@@ -6,10 +6,28 @@ import { useRouter } from "next/navigation";
 type Unit = { id: string; code: string; symbol: string };
 type Method = { id: string; nameEn: string; nameAr?: string | null };
 type Branch = { id: string; nameEn: string; nameAr?: string | null };
+type SpecimenType = { id: string; code: string; nameEn: string; nameAr?: string | null };
+type Analyzer = { id: string; code: string; name: string; branchId: string; branchNameEn: string; branchNameAr?: string | null };
 type Component = { id: string; code: string; nameEn: string; nameAr?: string | null };
 type Test = { id: string; code: string; nameEn: string; nameAr?: string | null; components: Component[] };
 
-export function ClinicalCatalogManager({ tests, units, methods, branches, locale }: { tests: Test[]; units: Unit[]; methods: Method[]; branches: Branch[]; locale: "ar" | "en" }) {
+export function ClinicalCatalogManager({
+  tests,
+  units,
+  methods,
+  branches,
+  specimenTypes,
+  analyzers,
+  locale,
+}: {
+  tests: Test[];
+  units: Unit[];
+  methods: Method[];
+  branches: Branch[];
+  specimenTypes: SpecimenType[];
+  analyzers: Analyzer[];
+  locale: "ar" | "en";
+}) {
   const router = useRouter();
   const [mode, setMode] = useState<"component" | "panel" | "range" | null>(null);
   const [testId, setTestId] = useState(tests[0]?.id || "");
@@ -81,6 +99,12 @@ export function ClinicalCatalogManager({ tests, units, methods, branches, locale
         <label>{tr("Critical high", "الحد الحرج الأعلى")}<input name="criticalHigh" inputMode="decimal" /></label>
         <label>{tr("Branch", "الفرع")}<select name="branchId"><option value="">{tr("Organization default", "افتراضي المؤسسة")}</option>{branches.map(b => <option key={b.id} value={b.id}>{name(b)}</option>)}</select></label>
         <label>{tr("Method", "الطريقة")}<select name="methodId"><option value="">{tr("Any / default method", "أي طريقة / الافتراضية")}</option>{methods.map(m => <option key={m.id} value={m.id}>{name(m)}</option>)}</select></label>
+        <label>{tr("Analyzer", "الجهاز")}<select name="analyzerId"><option value="">{tr("Any analyzer", "أي جهاز")}</option>{analyzers.map(a => <option key={a.id} value={a.id}>{a.code} — {a.name} · {locale === "ar" ? a.branchNameAr || a.branchNameEn : a.branchNameEn}</option>)}</select></label>
+        <label>{tr("Specimen type", "نوع العينة")}<select name="specimenTypeId"><option value="">{tr("Any specimen", "أي عينة")}</option>{specimenTypes.map(x => <option key={x.id} value={x.id}>{x.code} — {name(x)}</option>)}</select></label>
+        <label>{tr("Pregnancy context", "سياق الحمل")}<select name="pregnancyStatus"><option value="ANY">{tr("Any / not restricted", "أي حالة / غير مقيّد")}</option><option value="NOT_PREGNANT">{tr("Not pregnant", "غير حامل")}</option><option value="PREGNANT">{tr("Pregnant", "حامل")}</option></select></label>
+        <label>{tr("Gestational age from (weeks)", "عمر الحمل من (أسابيع)")}<input name="gestationalAgeFromWeeks" inputMode="decimal" /></label>
+        <label>{tr("Gestational age to (weeks)", "عمر الحمل إلى (أسابيع)")}<input name="gestationalAgeToWeeks" inputMode="decimal" /></label>
+        <label>{tr("Population code", "رمز المجموعة المرجعية")}<input name="populationCode" maxLength={80} placeholder={tr("Optional configured code", "رمز اختياري مُهيأ")} /></label>
         <label>{tr("Effective from", "ساري من")}<input name="effectiveFrom" type="date" required defaultValue={new Date().toISOString().slice(0, 10)} /></label>
         <label>{tr("Source", "المصدر")}<input name="source" /></label>
         <label>{tr("Normal text (EN)", "النص الطبيعي (EN)")}<input name="normalTextEn" /></label>
