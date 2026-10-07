@@ -217,7 +217,7 @@ export default async function AnalyzersPage() {
             return <tr key={mapping.id}>
               <td><strong>{mapping.analyzerTestCode}</strong></td>
               <td>{mapping.test.code}{mapping.component ? " · " + mapping.component.code : ""}</td>
-              <td>{mapping.analyzerUnitCode || tr(locale, "Unitless", "بدون وحدة")} → <strong>{lisUnit}</strong>{mapping.lisUnitUcumCodeSnapshot ? <><br/><small>UCUM: {mapping.lisUnitUcumCodeSnapshot}</small></> : null}</td>
+              <td>{mapping.analyzerUnitCode || tr(locale, "Unitless", "بدون وحدة")} → <strong>{lisUnit}</strong>{mapping.lisUnitUcumCodeSnapshot ? <><br/><small>{tr(locale, "UCUM", "UCUM")}: {mapping.lisUnitUcumCodeSnapshot}</small></> : null}</td>
               <td>{mapping.effectiveFrom.toISOString().slice(0,10)} → {mapping.effectiveTo?.toISOString().slice(0,10) || tr(locale, "Open", "مفتوح")}</td>
               <td><strong>{mapping.approvalStatus === "APPROVED" ? tr(locale, "Approved", "معتمد") : mapping.approvalStatus === "RETIRED" ? tr(locale, "Retired", "موقوف") : tr(locale, "Draft", "مسودة")}</strong><br/><small>{statusLabel(locale, mapping.status)}</small></td>
               <td><small>{tr(locale, "Created by", "أنشأه")}: {creator}{mapping.approvedAt ? <><br/>{tr(locale, "Approved by", "اعتمده")}: {approver || "—"} · {mapping.approvedAt.toISOString().replace("T"," ").slice(0,19)}</> : null}{mapping.retiredAt ? <><br/>{tr(locale, "Retired by", "أوقفه")}: {retirer || "—"} · {mapping.retiredAt.toISOString().replace("T"," ").slice(0,19)}{mapping.retirementReason ? " · " + mapping.retirementReason : ""}</> : null}</small></td>
