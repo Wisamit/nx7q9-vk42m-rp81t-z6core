@@ -27,7 +27,9 @@ Audit rule: existing behavior is treated as evidence only when it is present in 
 | Reporting/delivery | Existing foundation | Result release creates report versions | Phase 7 remains responsible for report/delivery completion. |
 | Microbiology | Existing foundation | Dedicated microbiology models/UI | Phase 9 remains responsible for microbiology completion. |
 
-## Phase 6A batch selected from this audit
+## Phase 6A — Runtime accepted
+
+Runtime acceptance confirmed on Hostinger for main commit `d02850e73697623afbae073bde84f5b9fc8ea922`.
 
 This batch intentionally avoids changing clinical validation semantics.
 
@@ -59,3 +61,23 @@ Implemented in branch `phase-6a-worklist-keyboard-controls`:
 - Do not compute a clinically authoritative TAT deadline from mutable catalog values at display time; a future implementation should preserve the effective TAT context used for that work item.
 - Continue to require active specimen-test lineage and current-custody branch checks before result entry.
 - Released results remain amendment-only.
+
+
+## Phase 6B — Qualitative result semantics
+
+Phase 6B is implemented on feature branch `phase-6b-qualitative-result-options` and is pending CI/runtime acceptance.
+
+Scope:
+- configuration-driven qualitative result options per simple test or qualitative component;
+- effective-dated option configuration with soft deactivation/reactivation and overlap protection;
+- independent polarity flag (`POSITIVE` / `NEGATIVE`) and abnormality snapshot so polarity is never assumed to mean abnormal;
+- independent critical-result configuration for qualitative options;
+- manual and bulk entry constrained to active configured options when options exist;
+- Analyzer import exact matching by option code, English label, or Arabic label when qualitative options are configured;
+- historical snapshots for option code, bilingual labels, flag source, abnormality and critical state;
+- amendment and diagnostic-report snapshots preserve the qualitative semantics;
+- bilingual reusable comment template insertion in the result workspace;
+- safety tests for polarity/abnormality semantics and autoverification behavior.
+
+Clinical guardrail:
+`POSITIVE` and `NEGATIVE` are interpretations, not automatic abnormality states. `isAbnormal` is configured independently; critical implies abnormal. Existing historical numeric abnormal flags are backfilled during migration.
