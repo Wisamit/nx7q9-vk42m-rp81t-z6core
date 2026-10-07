@@ -2757,6 +2757,7 @@ model Specimen {
   remainingVolume     Decimal?       @map("remaining_volume") @db.Decimal(10, 3)
   remainingVolumeUnit String?        @map("remaining_volume_unit") @db.VarChar(30)
   storageLocation     String?        @map("storage_location") @db.VarChar(200)
+  preanalyticalVersion Int           @default(0) @map("preanalytical_version")
   notes               String?        @db.Text
   createdAt           DateTime       @default(now()) @map("created_at") @db.DateTime(3)
   updatedAt           DateTime       @updatedAt @map("updated_at") @db.DateTime(3)
