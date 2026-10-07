@@ -115,6 +115,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           qualitativeOptionCodeSnapshot: value.qualitativeOptionCodeSnapshot,
           valueTextEnSnapshot: value.valueTextEnSnapshot,
           valueTextArSnapshot: value.valueTextArSnapshot,
+          comments: value.comments,
         },
       });
     }
