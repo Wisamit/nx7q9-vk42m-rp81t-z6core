@@ -50,7 +50,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
 
   const now = new Date();
-  let verification;
+  let verification: { id: string };
   try {
     verification = await prisma.$transaction(async tx => {
       const claim = await tx.portalAccount.updateMany({
