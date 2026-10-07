@@ -109,6 +109,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
             organizationId: parent.organizationId,
             orderId: parent.orderId,
             parentSpecimenId: parent.id,
+            parentRelationType: "ALIQUOT",
             specimenTypeId: parent.specimenTypeId,
             containerId: containerId || parent.containerId,
             barcode,
