@@ -12,7 +12,7 @@ import { validationHoldMatches } from "@/lib/validation-holds";
 import { evaluateAutoverification } from "@/lib/autoverification";
 import { resolveAnalyzerQcGate } from "@/lib/qc-gate";
 import { matchQualitativeOption, qualitativeFlag } from "@/lib/qualitative-result-options";
-import { selectValidationPolicy, snapshotValidationPolicy, type ValidationPolicySnapshot } from "@/lib/result-validation";
+import { automatedTechnicalReviewOutcome, selectValidationPolicy, snapshotValidationPolicy, type ValidationPolicySnapshot } from "@/lib/result-validation";
 
 function emptyDelta() {
   return {
@@ -900,11 +900,14 @@ export async function POST(request: Request) {
       blockingHoldCount,
       qcGate,
     });
-    const requiresMedicalValidation = validationSnapshot?.requiresMedicalValidation === true;
-    const finalResultStatus = decision.eligible && !requiresMedicalValidation ? "VERIFIED" : resultStatus;
-    const finalValidationStage = decision.eligible
-      ? requiresMedicalValidation ? "MEDICAL_VALIDATION" : "COMPLETE"
-      : entryValidationStage;
+    const effectiveValidationSnapshot = validationSnapshot || snapshotValidationPolicy(null);
+    const autoOutcome = automatedTechnicalReviewOutcome(effectiveValidationSnapshot, {
+      eligible: decision.eligible,
+      complete,
+    });
+    const requiresMedicalValidation = effectiveValidationSnapshot.requiresMedicalValidation;
+    const finalResultStatus = autoOutcome.resultStatus;
+    const finalValidationStage = autoOutcome.validationStage;
     const autoverifiedAt = decision.eligible ? new Date() : null;
 
     await tx.laboratoryResult.update({
