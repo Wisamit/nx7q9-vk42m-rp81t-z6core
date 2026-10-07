@@ -96,6 +96,11 @@ enum InvoiceStatus {
   CREDITED
 }
 
+enum InvoiceDueDateBasis {
+  ISSUANCE_SNAPSHOT
+  MIGRATED_BASELINE
+}
+
 enum DiscountApprovalMethod {
   SELF_LIMIT
   APPROVAL_WORKFLOW
@@ -2256,6 +2261,9 @@ model Invoice {
   creditedAmount  Decimal       @default(0) @map("credited_amount") @db.Decimal(18, 4)
   paidAmount      Decimal       @default(0) @map("paid_amount") @db.Decimal(18, 4)
   balanceAmount   Decimal       @default(0) @map("balance_amount") @db.Decimal(18, 4)
+  paymentTermsDaysSnapshot Int?  @map("payment_terms_days_snapshot")
+  dueDate         DateTime?      @map("due_date") @db.Date
+  dueDateBasis    InvoiceDueDateBasis? @map("due_date_basis")
   issuedAt        DateTime      @default(now()) @map("issued_at") @db.DateTime(3)
   createdByUserId String        @map("created_by_user_id") @db.Char(36)
   createdAt       DateTime      @default(now()) @map("created_at") @db.DateTime(3)
@@ -2276,6 +2284,7 @@ model Invoice {
   @@unique([organizationId, invoiceNumber])
   @@index([branchId, issuedAt])
   @@index([clientId, status, issuedAt])
+  @@index([clientId, currency, dueDate])
   @@index([discountApprovedByUserId, discountApprovedAt])
   @@map("invoices")
 }
