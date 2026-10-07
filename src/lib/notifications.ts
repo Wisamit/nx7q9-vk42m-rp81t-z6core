@@ -156,6 +156,19 @@ export async function dispatchPendingNotifications(db: PrismaClient, organizatio
 
   for (const delivery of deliveries) {
     const attempt = delivery.attemptCount + 1;
+    const claim = await db.notificationDelivery.updateMany({
+      where: {
+        id: delivery.id,
+        status: delivery.status,
+        attemptCount: delivery.attemptCount,
+      },
+      data: {
+        attemptCount: { increment: 1 },
+        nextAttemptAt: new Date(Date.now() + 5 * 60 * 1000),
+      },
+    });
+    if (claim.count !== 1) continue;
+
     const config = gatewayConfig(delivery.channel);
 
     if (!delivery.destination) {
