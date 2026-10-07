@@ -2257,7 +2257,6 @@ model OrderItem {
   priceListItem   PriceListItem? @relation(fields: [priceListItemId], references: [id], onDelete: Restrict)
   invoiceLines    InvoiceLine[]
   specimenLinks   SpecimenOrderItem[]
-  specimenRejectionLinks SpecimenOrderItem[]
   specimenUsageEvents SpecimenUsageEvent[]
   results          LaboratoryResult[]
   resultRepeatEvents ResultRepeatEvent[]
