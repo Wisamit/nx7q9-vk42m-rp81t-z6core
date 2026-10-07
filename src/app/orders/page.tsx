@@ -5,12 +5,14 @@ import { OrderCreateModal } from "@/components/order-create-modal";
 import { SystemIcon } from "@/components/system-icon";
 import { getUiLocale, priorityLabel, statusLabel, tr } from "@/lib/ui-i18n";
 import { effectiveDiscountLimit } from "@/lib/discount-policy";
+import { normalizeOrderQuestionOptions } from "@/lib/order-questions";
 
 export const dynamic = "force-dynamic";
 
 export default async function OrdersPage() {
   const session = await requirePermission("orders.view");
   const locale = getUiLocale(session.user.preferredLocale);
+  const questionAsOf = new Date();
 
   const accessibleBranchIds = session.user.branchScopes.map(scope => scope.branchId);
   const discountLimitPercent = effectiveDiscountLimit({
@@ -34,7 +36,11 @@ export default async function OrdersPage() {
         code: true,
         nameEn: true,
         orderQuestions: {
-          where: { status: "ACTIVE" },
+          where: {
+            status: "ACTIVE",
+            effectiveFrom: { lte: questionAsOf },
+            OR: [{ effectiveTo: null }, { effectiveTo: { gte: questionAsOf } }],
+          },
           select: {
             id: true,
             code: true,
@@ -122,9 +128,7 @@ export default async function OrdersPage() {
             ...test,
             orderQuestions: test.orderQuestions.map(question => ({
               ...question,
-              options: Array.isArray(question.options)
-                ? question.options.filter((item): item is string => typeof item === "string")
-                : [],
+              options: normalizeOrderQuestionOptions(question.options),
             })),
           }))}
           packages={packages.map(pkg => ({ id: pkg.id, code: pkg.code, nameEn: pkg.nameEn, testIds: pkg.items.map(item => item.testId) }))}
