@@ -6,10 +6,6 @@ function text(value: unknown, max = 100) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
 }
 
-function overlaps(aStart: Date, aEnd: Date | null, bStart: Date, bEnd: Date | null) {
-  return (aEnd === null || bStart <= aEnd) && (bEnd === null || aStart <= bEnd);
-}
-
 export async function POST(request: Request) {
   const session = await requirePermission("clinical_rules.manage");
   const ctx = await requestContext();
@@ -38,19 +34,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "invalid_effective_dates" }, { status: 400 });
   }
 
-  const [test, branchRecord, existing] = await Promise.all([
+  const [test, branchRecord] = await Promise.all([
     prisma.labTest.findFirst({ where: { id: testId, organizationId: session.user.organizationId, status: "ACTIVE" } }),
     branchId ? prisma.branch.findFirst({ where: { id: branchId, organizationId: session.user.organizationId, status: "ACTIVE" } }) : Promise.resolve(null),
-    prisma.criticalEscalationPolicy.findMany({
-      where: { organizationId: session.user.organizationId, testId, branchId, status: "ACTIVE" },
-      select: { effectiveFrom: true, effectiveTo: true },
-    }),
   ]);
   if (!test) return NextResponse.json({ error: "test_not_found" }, { status: 404 });
   if (branchId && !branchRecord) return NextResponse.json({ error: "branch_not_found" }, { status: 404 });
-  if (existing.some(policy => overlaps(effectiveFrom, effectiveTo, policy.effectiveFrom, policy.effectiveTo))) {
-    return NextResponse.json({ error: "overlapping_critical_escalation_policy" }, { status: 409 });
-  }
 
   const policy = await prisma.$transaction(async tx => {
     const created = await tx.criticalEscalationPolicy.create({
@@ -64,6 +53,7 @@ export async function POST(request: Request) {
         requireReadBack,
         effectiveFrom,
         effectiveTo,
+        status: "INACTIVE",
       },
     });
     await tx.auditEvent.create({
@@ -71,7 +61,7 @@ export async function POST(request: Request) {
         organizationId: session.user.organizationId,
         branchId: session.activeBranchId,
         actorUserId: session.user.id,
-        action: "CRITICAL_ESCALATION_POLICY_CREATED",
+        action: "CRITICAL_ESCALATION_POLICY_DRAFT_CREATED",
         entityType: "CriticalEscalationPolicy",
         entityId: created.id,
         newValues: { testId, branchId, acknowledgementMinutes, escalationIntervalMinutes, maxEscalationLevel, requireReadBack, effectiveFrom, effectiveTo },
