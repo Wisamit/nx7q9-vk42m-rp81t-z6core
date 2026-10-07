@@ -29,7 +29,7 @@ export function ClinicalCatalogManager({
   locale: "ar" | "en";
 }) {
   const router = useRouter();
-  const [mode, setMode] = useState<"component" | "panel" | "range" | null>(null);
+  const [mode, setMode] = useState<"component" | "panel" | "range" | "tat" | null>(null);
   const [testId, setTestId] = useState(tests[0]?.id || "");
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
@@ -56,9 +56,15 @@ export function ClinicalCatalogManager({
     <button className="secondary-button" onClick={() => setMode("component")}>{tr("Add Component", "إضافة مكوّن")}</button>
     <button className="secondary-button" onClick={() => setMode("panel")}>{tr("Add Panel / Profile", "إضافة باقة / ملف")}</button>
     <button className="secondary-button" onClick={() => setMode("range")}>{tr("Add Reference Range", "إضافة مجال مرجعي")}</button>
+    <button className="secondary-button" onClick={() => setMode("tat")}>{tr("Add TAT / SLA Policy", "إضافة سياسة TAT / SLA")}</button>
 
     {mode && <div className="modal-backdrop" onMouseDown={() => setMode(null)}><section className="modal-card" onMouseDown={e => e.stopPropagation()}>
-      <div className="modal-head"><div><p className="eyebrow">{tr("Clinical Configuration", "الإعدادات السريرية")}</p><h2>{mode === "component" ? tr("Test Component", "مكوّن الفحص") : mode === "panel" ? tr("Panel / Profile", "الباقة / الملف") : tr("Reference Range & Critical Limits", "المجال المرجعي والحدود الحرجة")}</h2></div><button className="icon-button" onClick={() => setMode(null)}>×</button></div>
+      <div className="modal-head"><div><p className="eyebrow">{tr("Clinical Configuration", "الإعدادات السريرية")}</p><h2>{
+        mode === "component" ? tr("Test Component", "مكوّن الفحص") :
+        mode === "panel" ? tr("Panel / Profile", "الباقة / الملف") :
+        mode === "tat" ? tr("TAT / SLA Policy", "سياسة TAT / SLA") :
+        tr("Reference Range & Critical Limits", "المجال المرجعي والحدود الحرجة")
+      }</h2></div><button className="icon-button" onClick={() => setMode(null)}>×</button></div>
 
       {mode === "component" && <form className="catalog-form" onSubmit={e => send(e, "/api/catalog/components")}>
         <label>{tr("Test", "الفحص")}<select name="testId" required value={testId} onChange={e => setTestId(e.target.value)}>{tests.map(t => <option key={t.id} value={t.id}>{t.code} — {name(t)}</option>)}</select></label>
@@ -84,6 +90,22 @@ export function ClinicalCatalogManager({
         <fieldset className="test-picker form-span"><legend>{tr("Included tests", "الفحوصات المشمولة")}</legend>{tests.map(t => <label key={t.id} className="check-row"><input type="checkbox" name="testIds" value={t.id} /><span>{t.code} — {name(t)}</span></label>)}</fieldset>
         {message && <p className="form-error form-span">{message}</p>}
         <button className="primary-button form-span" disabled={saving}>{saving ? tr("Saving…", "جارٍ الحفظ…") : tr("Save Panel / Profile", "حفظ الباقة / الملف")}</button>
+      </form>}
+
+      {mode === "tat" && <form className="catalog-form" onSubmit={e => send(e, "/api/catalog/tat-policies")}>
+        <label>{tr("Test", "الفحص")}<select name="testId" required value={testId} onChange={e => setTestId(e.target.value)}>{tests.map(t => <option key={t.id} value={t.id}>{t.code} — {name(t)}</option>)}</select></label>
+        <label>{tr("Branch scope", "نطاق الفرع")}<select name="branchId"><option value="">{tr("Organization default / any branch", "افتراضي المؤسسة / كل الفروع")}</option>{branches.map(b => <option key={b.id} value={b.id}>{name(b)}</option>)}</select></label>
+        <label>{tr("Priority scope", "نطاق الأولوية")}<select name="priority"><option value="ANY">{tr("Any priority", "كل الأولويات")}</option><option value="ROUTINE">{tr("Routine", "عادي")}</option><option value="URGENT">{tr("Urgent", "عاجل")}</option><option value="STAT">STAT</option></select></label>
+        <label>{tr("TAT minutes", "زمن الإنجاز بالدقائق")}<input name="tatMinutes" type="number" min="0" max="5256000" required /></label>
+        <label>{tr("Alert before due (minutes)", "التنبيه قبل الاستحقاق (دقائق)")}<input name="alertBeforeMinutes" type="number" min="0" placeholder={tr("Optional", "اختياري")} /></label>
+        <label>{tr("Effective from", "ساري من")}<input name="effectiveFrom" type="date" required defaultValue={new Date().toISOString().slice(0, 10)} /></label>
+        <label>{tr("Effective to", "ساري حتى")}<input name="effectiveTo" type="date" /></label>
+        <p className="muted form-span">{tr(
+          "Resolution priority: exact branch + exact priority, branch default, organization priority, then organization default. The selected policy is snapshotted on the order item.",
+          "أولوية الاختيار: الفرع والأولوية المطابقان، ثم افتراضي الفرع، ثم أولوية المؤسسة، ثم افتراضي المؤسسة. يتم حفظ السياسة المختارة كلقطة تاريخية على الفحص المطلوب."
+        )}</p>
+        {message && <p className="form-error form-span">{message}</p>}
+        <button className="primary-button form-span" disabled={saving}>{saving ? tr("Saving…", "جارٍ الحفظ…") : tr("Save TAT / SLA Policy", "حفظ سياسة TAT / SLA")}</button>
       </form>}
 
       {mode === "range" && <form className="catalog-form" onSubmit={e => send(e, "/api/catalog/reference-intervals")}>
