@@ -52,6 +52,7 @@ export default async function SpecimenScanPage({
         orderItems: { include: { orderItem: true } },
         parentSpecimen: { select: { id: true, barcode: true } },
         childSpecimens: {
+          where: { parentRelationType: "ALIQUOT" },
           select: {
             id: true,
             barcode: true,
@@ -126,9 +127,11 @@ export default async function SpecimenScanPage({
         <div><span>{tr(locale, "Order branch", "فرع الطلب")}</span><strong>{localizedName(specimen.order.orderingBranch)}</strong></div>
         <div><span>{tr(locale, "Current branch", "الفرع الحالي")}</span><strong>{specimen.currentBranch ? localizedName(specimen.currentBranch) : "—"}</strong></div>
         <div><span>{tr(locale, "Linked tests", "الفحوصات المرتبطة")}</span><strong>{specimen.orderItems.map(link => link.orderItem.testCodeSnapshot).join(", ") || "—"}</strong></div>
-        <div><span>{tr(locale, "Required volume", "الحجم المطلوب")}</span><strong>{specimen.parentSpecimenId ? tr(locale, "Derived aliquot", "جزء مشتق") : requirement?.requiredVolume ? `${requirement.requiredVolume} ${requirement.requiredVolumeUnit || ""}` : requirement ? tr(locale, "Not specified", "غير محدد") : tr(locale, "Not finalized", "غير مثبت")}</strong></div>
+        <div><span>{tr(locale, "Required volume", "الحجم المطلوب")}</span><strong>{specimen.parentRelationType === "ALIQUOT" ? tr(locale, "Derived aliquot", "جزء مشتق") : requirement?.requiredVolume ? `${requirement.requiredVolume} ${requirement.requiredVolumeUnit || ""}` : requirement ? tr(locale, "Not specified", "غير محدد") : tr(locale, "Not finalized", "غير مثبت")}</strong></div>
         <div><span>{tr(locale, "Available volume", "الحجم المتاح")}</span><strong>{specimen.remainingVolume ? `${specimen.remainingVolume.toFixed(3)} ${specimen.remainingVolumeUnit || ""}` : "—"}</strong></div>
-        <div><span>{tr(locale, "Lineage", "التسلسل")}</span><strong>{specimen.parentSpecimen ? `${tr(locale, "Aliquot of", "جزء مشتق من")} ${specimen.parentSpecimen.barcode}` : tr(locale, "Primary specimen", "عينة أصلية")}</strong></div>
+        <div><span>{tr(locale, "Lineage", "التسلسل")}</span><strong>{specimen.parentSpecimen
+  ? `${specimen.parentRelationType === "ALIQUOT" ? tr(locale, "Aliquot of", "جزء مشتق من") : tr(locale, "Recollection after", "إعادة سحب بعد")} ${specimen.parentSpecimen.barcode}`
+  : tr(locale, "Primary specimen", "عينة أصلية")}</strong></div>
         <div><span>{tr(locale, "Physical storage", "التخزين الفعلي")}</span><strong>{specimen.storageLocation || "—"}</strong></div>
       </div>
 
