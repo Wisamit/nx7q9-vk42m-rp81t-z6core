@@ -42,6 +42,10 @@ export function PaymentForm({ invoices, locale, onSuccess }: { invoices: Invoice
       onSuccess?.(success);
     } else if (body.error === "amount_exceeds_balance") {
       setMessage(`${tr("Amount exceeds invoice balance", "المبلغ يتجاوز رصيد الفاتورة")} (${body.balance}).`);
+    } else if (body.error === "cashier_shift_required") {
+      setMessage(tr("Open a cashier shift for this branch and currency before posting payments.", "افتح وردية أمين صندوق لهذا الفرع وهذه العملة قبل تسجيل الدفعات."));
+    } else if (body.error === "cashier_shift_changed") {
+      setMessage(tr("The cashier shift changed while posting. Refresh and try again.", "تغيرت وردية أمين الصندوق أثناء التسجيل. حدّث الصفحة وحاول مجددًا."));
     } else {
       setMessage(body.error || tr("Payment could not be posted.", "تعذر تسجيل الدفعة."));
     }
