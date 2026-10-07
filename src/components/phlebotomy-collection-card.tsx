@@ -62,6 +62,7 @@ export function PhlebotomyCollectionCard({
       failed_collection_reason_required: tr("Failed collection reason is required.", "سبب فشل السحب مطلوب."),
       failed_collection_details_required: tr("Document the failed collection details.", "وثّق تفاصيل فشل السحب."),
       specimen_preanalytical_state_changed: tr("Specimen state changed. Refresh and review before retrying.", "تغيرت حالة العينة. حدّث الصفحة وراجعها قبل إعادة المحاولة."),
+      collection_branch_must_match_specimen_location: tr("Collection must be recorded at the specimen's planned custody branch.", "يجب تسجيل السحب في فرع الحيازة المخطط للعينة."),
       order_cancelled: tr("The order is cancelled.", "الطلب ملغى."),
     };
     return messages[code] || code || tr("Collection action failed.", "فشل إجراء السحب.");
