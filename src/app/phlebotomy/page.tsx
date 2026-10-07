@@ -161,8 +161,10 @@ export default async function PhlebotomyPage({
           return <PhlebotomyCollectionCard
             key={specimen.id}
             locale={locale}
-            activeBranchId={selectedBranchId || session.activeBranchId}
-            branches={branches.map(branch => ({ id: branch.id, code: branch.code, name: localizedName(branch) }))}
+            activeBranchId={specimen.currentBranchId}
+            branches={branches
+              .filter(branch => branch.id === specimen.currentBranchId)
+              .map(branch => ({ id: branch.id, code: branch.code, name: localizedName(branch) }))}
             specimen={{
               id: specimen.id,
               orderId: specimen.orderId,
