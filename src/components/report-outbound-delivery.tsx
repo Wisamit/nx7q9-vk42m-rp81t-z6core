@@ -62,6 +62,7 @@ export function ReportOutboundDelivery({
         corporate_report_access_required: tr("This corporate portal does not have active report access for the patient.", "لا تملك بوابة العميل المؤسسي صلاحية فعالة لعرض تقارير هذا المريض."),
         portal_account_type_mismatch: tr("The linked portal account type does not match the recipient.", "نوع حساب البوابة المرتبط لا يطابق نوع المستلم."),
         retracted_report_cannot_be_delivered: tr("A retracted report cannot be delivered.", "لا يمكن تسليم تقرير مسحوب."),
+        superseded_report_cannot_be_delivered: tr("Only the latest report version can be delivered.", "يمكن تسليم أحدث إصدار من التقرير فقط."),
       };
       setMessage(errors[body.error || ""] || tr("Could not queue report delivery.", "تعذر وضع تسليم التقرير في قائمة الإرسال."));
       return;
