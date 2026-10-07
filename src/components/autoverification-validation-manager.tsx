@@ -43,7 +43,7 @@ export function AutoverificationValidationManager({
         effectiveTo: form.get("effectiveTo"),
       }),
     });
-    setMessage(response.ok ? tr("Autoverification policy created.", "تم إنشاء سياسة التحقق الآلي.") : tr("Could not create autoverification policy.", "تعذر إنشاء سياسة التحقق الآلي."));
+    setMessage(response.ok ? tr("Autoverification policy draft created. Approval is required before it can verify results.", "تم إنشاء مسودة سياسة التحقق الآلي. يلزم اعتمادها قبل أن تتمكن من التحقق من النتائج.") : tr("Could not create autoverification policy.", "تعذر إنشاء سياسة التحقق الآلي."));
     setBusy("");
     if (response.ok) {
       event.currentTarget.reset();
@@ -72,7 +72,7 @@ export function AutoverificationValidationManager({
         effectiveTo: form.get("effectiveTo"),
       }),
     });
-    setMessage(response.ok ? tr("Validation hold rule created.", "تم إنشاء قاعدة إيقاف التحقق.") : tr("Could not create validation hold rule.", "تعذر إنشاء قاعدة إيقاف التحقق."));
+    setMessage(response.ok ? tr("Validation hold rule draft created. Approval is required before it can block or warn.", "تم إنشاء مسودة قاعدة إيقاف التحقق. يلزم اعتمادها قبل أن تتمكن من الحظر أو التحذير.") : tr("Could not create validation hold rule.", "تعذر إنشاء قاعدة إيقاف التحقق."));
     setBusy("");
     if (response.ok) {
       event.currentTarget.reset();
@@ -101,7 +101,7 @@ export function AutoverificationValidationManager({
         <label><input name="requireAllFlagsNormal" type="checkbox" /> {tr("Require all flags normal/unknown", "اشتراط أن تكون كل الإشارات طبيعية/غير معروفة")}</label>
         <label>{tr("Effective from", "ساري من")}<input name="effectiveFrom" type="date" defaultValue={new Date().toISOString().slice(0,10)} required /></label>
         <label>{tr("Effective to", "ساري حتى")}<input name="effectiveTo" type="date" /></label>
-        <button className="primary-button form-span" disabled={busy === "policy"}>{busy === "policy" ? tr("Saving…", "جارٍ الحفظ…") : tr("Create Autoverification Policy", "إنشاء سياسة التحقق الآلي")}</button>
+        <button className="primary-button form-span" disabled={busy === "policy"}>{busy === "policy" ? tr("Saving…", "جارٍ الحفظ…") : tr("Create Autoverification Policy Draft", "إنشاء مسودة سياسة التحقق الآلي")}</button>
       </form>
     </article>
 
@@ -138,7 +138,7 @@ export function AutoverificationValidationManager({
         <label className="form-span">{tr("Reason (Arabic)", "السبب بالعربية")}<input name="reasonAr" dir="rtl" /></label>
         <label>{tr("Effective from", "ساري من")}<input name="effectiveFrom" type="date" defaultValue={new Date().toISOString().slice(0,10)} required /></label>
         <label>{tr("Effective to", "ساري حتى")}<input name="effectiveTo" type="date" /></label>
-        <button className="primary-button form-span" disabled={busy === "hold"}>{busy === "hold" ? tr("Saving…", "جارٍ الحفظ…") : tr("Create Validation Hold Rule", "إنشاء قاعدة إيقاف التحقق")}</button>
+        <button className="primary-button form-span" disabled={busy === "hold"}>{busy === "hold" ? tr("Saving…", "جارٍ الحفظ…") : tr("Create Validation Hold Rule Draft", "إنشاء مسودة قاعدة إيقاف التحقق")}</button>
       </form>
     </article>
 
