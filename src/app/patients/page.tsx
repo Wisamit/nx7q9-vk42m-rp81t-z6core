@@ -30,7 +30,10 @@ export default async function PatientsPage({
         ],
       } : {}),
     },
-    include: { identifiers: { where: { status: "ACTIVE" }, take: 3 } },
+    include: {
+      identifiers: { where: { status: "ACTIVE" }, take: 3 },
+      mergedInto: { select: { id: true, patientNumber: true } },
+    },
     orderBy: { createdAt: "desc" },
     take: 100,
   });
@@ -69,7 +72,10 @@ export default async function PatientsPage({
                 <td>{sexLabel(locale, patient.sexAtBirth)}</td>
                 <td>{patient.phone || "—"}</td>
                 <td>{patient.identifiers.find(i => i.identifierType === "NATIONAL_ID")?.value || "—"}</td>
-                <td>{statusLabel(locale, patient.status)}</td>
+                <td>
+                  {statusLabel(locale, patient.status)}
+                  {patient.mergedInto && <><br/><small>{tr(locale, "Merged into", "مدمج ضمن")} <Link className="table-link" href={"/patients/" + patient.mergedInto.id}>{patient.mergedInto.patientNumber}</Link></small></>}
+                </td>
               </tr>)
             }
           </tbody>

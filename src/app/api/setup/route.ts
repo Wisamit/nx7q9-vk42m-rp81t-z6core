@@ -19,6 +19,7 @@ const FOUNDATION_PERMISSIONS = [
   ["catalog.reference_ranges.manage", "catalog", "Manage reference intervals and critical limits"],
   ["patients.view", "patients", "View patients"],
   ["patients.manage", "patients", "Create and update patients"],
+  ["patients.merge", "patients", "Merge duplicate patient identities with immutable audit evidence"],
   ["clients.view", "clients", "View client accounts"],
   ["clients.manage", "clients", "Manage client accounts"],
   ["referrers.view", "referrers", "View referrers"],

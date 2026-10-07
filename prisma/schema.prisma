@@ -973,6 +973,7 @@ model Organization {
   catalogImportMappings CatalogImportMapping[]
   patients Patient[]
   patientIdentifiers PatientIdentifier[]
+  patientMergeEvents PatientMergeEvent[]
   clients Client[]
   referrers Referrer[]
   contracts Contract[]
@@ -1398,6 +1399,7 @@ model User {
   notifications Notification[] @relation("NotificationRecipientUser")
   createdNotificationTemplates NotificationTemplate[] @relation("NotificationTemplateCreator")
   createdReportTemplates ReportTemplate[] @relation("ReportTemplateCreator")
+  patientMergeEvents PatientMergeEvent[] @relation("PatientMergeActor")
   portalContactVerifications PortalContactVerification[] @relation("PortalContactVerificationActor")
   createdQualitativeResultOptions QualitativeResultOption[] @relation("QualitativeResultOptionCreator")
   submittedReportTemplateVersions ReportTemplateVersion[] @relation("ReportTemplateVersionSubmitter")
@@ -2089,13 +2091,19 @@ model Patient {
   phone           String?      @db.VarChar(50)
   normalizedPhone String?      @map("normalized_phone") @db.VarChar(50)
   email           String?      @db.VarChar(191)
-  nationalityCode String?      @map("nationality_code") @db.Char(2)
-  status          RecordStatus @default(ACTIVE)
-  createdAt       DateTime     @default(now()) @map("created_at") @db.DateTime(3)
-  updatedAt       DateTime     @updatedAt @map("updated_at") @db.DateTime(3)
-  deactivatedAt   DateTime?    @map("deactivated_at") @db.DateTime(3)
+  nationalityCode      String?      @map("nationality_code") @db.Char(2)
+  status               RecordStatus @default(ACTIVE)
+  mergedIntoPatientId  String?      @map("merged_into_patient_id") @db.Char(36)
+  mergedAt             DateTime?    @map("merged_at") @db.DateTime(3)
+  createdAt            DateTime     @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt            DateTime     @updatedAt @map("updated_at") @db.DateTime(3)
+  deactivatedAt        DateTime?    @map("deactivated_at") @db.DateTime(3)
 
   organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  mergedInto   Patient?            @relation("PatientMergeLineage", fields: [mergedIntoPatientId], references: [id], onDelete: Restrict)
+  mergedFrom   Patient[]           @relation("PatientMergeLineage")
+  mergeEventsAsSource PatientMergeEvent[] @relation("PatientMergeSource")
+  mergeEventsAsTarget PatientMergeEvent[] @relation("PatientMergeTarget")
   identifiers  PatientIdentifier[]
   orders        LabOrder[]
 
@@ -2108,7 +2116,29 @@ model Patient {
   @@index([organizationId, normalizedName])
   @@index([organizationId, normalizedPhone])
   @@index([organizationId, dateOfBirth])
+  @@index([mergedIntoPatientId, status])
   @@map("patients")
+}
+
+model PatientMergeEvent {
+  id                          String   @id @default(uuid()) @db.Char(36)
+  organizationId              String   @map("organization_id") @db.Char(36)
+  sourcePatientId             String   @unique @map("source_patient_id") @db.Char(36)
+  targetPatientId             String   @map("target_patient_id") @db.Char(36)
+  sourcePatientNumberSnapshot String   @map("source_patient_number_snapshot") @db.VarChar(40)
+  targetPatientNumberSnapshot String   @map("target_patient_number_snapshot") @db.VarChar(40)
+  reason                      String   @db.VarChar(1000)
+  mergedByUserId              String   @map("merged_by_user_id") @db.Char(36)
+  mergedAt                    DateTime @default(now()) @map("merged_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  sourcePatient Patient      @relation("PatientMergeSource", fields: [sourcePatientId], references: [id], onDelete: Restrict)
+  targetPatient Patient      @relation("PatientMergeTarget", fields: [targetPatientId], references: [id], onDelete: Restrict)
+  mergedBy      User         @relation("PatientMergeActor", fields: [mergedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([targetPatientId, mergedAt])
+  @@index([mergedByUserId, mergedAt])
+  @@map("patient_merge_events")
 }
 
 model PatientIdentifier {
