@@ -1771,9 +1771,9 @@ model QualitativeResultOption {
   createdBy    User         @relation("QualitativeResultOptionCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
   resultValues LaboratoryResultValue[]
 
-  @@index([organizationId, status])
-  @@index([testId, componentId, status, effectiveFrom, effectiveTo])
-  @@index([createdByUserId, createdAt])
+  @@index([organizationId, status], map: "qual_result_options_org_status_idx")
+  @@index([testId, componentId, status, effectiveFrom, effectiveTo], map: "qual_result_options_scope_effective_idx")
+  @@index([createdByUserId, createdAt], map: "qual_result_options_creator_idx")
   @@map("qualitative_result_options")
 }
 
