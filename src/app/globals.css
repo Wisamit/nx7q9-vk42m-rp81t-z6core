@@ -17,6 +17,7 @@
   --fl-text:#142033;--fl-text-subtle:#94a3b8;--fl-on-primary:#ffffff;--fl-muted:#64748b;--fl-border:#e2e8f0;
   --fl-primary:#0f6f73;--fl-primary-strong:#0b565a;--fl-primary-soft:#e8f5f5;
   --fl-navy:#132238;--fl-danger:#b42318;--fl-warning:#b54708;--fl-success:#067647;
+  --fl-report-pdf-surface:#ffffff;--fl-report-pdf-surface-soft:#f8fafc;--fl-report-pdf-text:#111827;--fl-report-pdf-muted:#4b5563;--fl-report-pdf-border:#d1d5db;--fl-report-pdf-danger:#b42318;--fl-report-pdf-warning:#b54708;--fl-report-pdf-success:#067647;--fl-report-pdf-info:#175cd3;
   --fl-accent-soft:color-mix(in srgb,var(--fl-accent) 12%,var(--fl-surface));--fl-focus-ring:color-mix(in srgb,var(--fl-primary) 18%,transparent);--fl-overlay:color-mix(in srgb,var(--fl-text) 58%,transparent);--fl-success-soft:color-mix(in srgb,var(--fl-success) 12%,var(--fl-surface));--fl-warning-soft:color-mix(in srgb,var(--fl-warning) 12%,var(--fl-surface));--fl-danger-soft:color-mix(in srgb,var(--fl-danger) 12%,var(--fl-surface));--fl-info-soft:color-mix(in srgb,var(--fl-info) 12%,var(--fl-surface));--fl-radius:14px;--fl-shadow:0 1px 2px color-mix(in srgb,var(--fl-text) 4%,transparent),0 8px 24px color-mix(in srgb,var(--fl-text) 4.5%,transparent);
 }
 html,body{background:var(--fl-bg);color:var(--fl-text);font-family:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans Arabic",Arial,sans-serif}
@@ -337,3 +338,23 @@ html[data-density="compact"] :where(.detail-card,.dashboard-panel,.settings-card
   .result-entry-layout-compact-grid .result-field-width-narrow .result-field-input input,
   .result-entry-layout-compact-grid .result-field-width-narrow .result-field-input select{max-width:none}
 }
+
+
+/* Version-bound report PDF export */
+.report-pdf-action{display:grid;gap:4px;max-width:260px}
+.report-pdf-action small{font-size:10px;line-height:1.25}
+.diagnostic-report.pdf-exporting{
+  --fl-surface:var(--fl-report-pdf-surface);
+  --fl-surface-soft:var(--fl-report-pdf-surface-soft);
+  --fl-text:var(--fl-report-pdf-text);
+  --fl-muted:var(--fl-report-pdf-muted);
+  --fl-border:var(--fl-report-pdf-border);
+  --fl-danger:var(--fl-report-pdf-danger);
+  --fl-warning:var(--fl-report-pdf-warning);
+  --fl-success:var(--fl-report-pdf-success);
+  --fl-info:var(--fl-report-pdf-info);
+  color:var(--fl-report-pdf-text);
+  background:var(--fl-report-pdf-surface);
+  box-shadow:none;
+}
+.diagnostic-report.pdf-exporting *{animation:none!important;transition:none!important}

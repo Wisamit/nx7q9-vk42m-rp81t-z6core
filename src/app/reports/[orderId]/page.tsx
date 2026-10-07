@@ -7,6 +7,14 @@ import { notFound } from "next/navigation";
 import { canAccessBranch, permissionSet, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { PrintReportButton } from "@/components/print-report-button";
+import { ReportPdfButton } from "@/components/report-pdf-button";
+import {
+  effectiveReportLocale,
+  localizedReportText,
+  reportShowsArabic,
+  reportShowsEnglish,
+  secondaryReportText,
+} from "@/lib/report-language";
 import { getUiLocale, priorityLabel, sexLabel, statusLabel, tr, type UiLocale } from "@/lib/ui-i18n";
 
 export const dynamic = "force-dynamic";
@@ -180,6 +188,10 @@ export default async function DiagnosticReportPage({ params }: { params: Promise
   };
   const reportColumns = new Set(templateConfig.columns);
   const reportColumnCount = Math.max(1, templateConfig.columns.length);
+  const reportLocale = effectiveReportLocale(templateConfig.languageMode, locale);
+  const showEnglish = reportShowsEnglish(templateConfig.languageMode);
+  const showArabic = reportShowsArabic(templateConfig.languageMode);
+  const reportTr = <T,>(en: T, ar: T) => tr(reportLocale, en, ar);
   const headerStore = await headers();
   const host = headerStore.get("x-forwarded-host") || headerStore.get("host") || "";
   const protocol = headerStore.get("x-forwarded-proto") || "https";
@@ -196,12 +208,21 @@ export default async function DiagnosticReportPage({ params }: { params: Promise
         <p className="muted">{tr(locale, "Version", "الإصدار")} {latest.version} · {statusLabel(locale, latest.status)}{templateSnapshot ? ` · ${tr(locale, "Template", "القالب")} ${templateSnapshot.templateCode} v${templateSnapshot.templateVersion}` : ""}</p>
       </div>
       <div className="header-actions">
-        {permissions.has("reports.deliver") && <PrintReportButton reportVersionId={latest.id} canRecordDelivery />}
+        {permissions.has("reports.deliver") && <>
+          <ReportPdfButton
+            reportVersionId={latest.id}
+            accessionNumber={snapshot.order.accessionNumber}
+            reportVersion={latest.version}
+            showPageNumbers={templateConfig.showPageNumbers}
+            locale={locale}
+          />
+          <PrintReportButton reportVersionId={latest.id} canRecordDelivery locale={locale} />
+        </>}
         <Link className="secondary-link" href={`/orders/${orderId}`}>{tr(locale, "Back to Order", "العودة للطلب")}</Link>
       </div>
     </div>
 
-    <article className="diagnostic-report professional-report">
+    <article id="diagnostic-report-version" className="diagnostic-report professional-report" dir={reportLocale === "ar" ? "rtl" : "ltr"}>
       {templateConfig.watermark && <div className="report-watermark" aria-hidden="true">{templateConfig.watermark}</div>}
       <header className="report-header">
         <div className="report-brand-block">
@@ -209,93 +230,95 @@ export default async function DiagnosticReportPage({ params }: { params: Promise
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img className="report-template-logo" src={templateConfig.logoUrl} alt={tr(locale, "Laboratory logo", "شعار المختبر")} />
           </>}
-          {templateConfig.headerEn && <p className="report-template-header">{templateConfig.headerEn}</p>}
-          {templateConfig.headerAr && <p className="report-template-header" dir="rtl">{templateConfig.headerAr}</p>}
-          <h1>{snapshot.organization.nameEn}</h1>
-          {snapshot.organization.nameAr && <h2 dir="rtl">{snapshot.organization.nameAr}</h2>}
-          <p>{snapshot.branch.nameEn}{snapshot.branch.nameAr ? ` · ${snapshot.branch.nameAr}` : ""}</p>
-          <p>{snapshot.branch.addressEn || ""}</p>
+          {showEnglish && templateConfig.headerEn && <p className="report-template-header" dir="ltr">{templateConfig.headerEn}</p>}
+          {showArabic && templateConfig.headerAr && <p className="report-template-header" dir="rtl">{templateConfig.headerAr}</p>}
+          {showEnglish && <h1 dir="ltr">{snapshot.organization.nameEn}</h1>}
+          {showArabic && snapshot.organization.nameAr && <h2 dir="rtl">{snapshot.organization.nameAr}</h2>}
+          <p>{localizedReportText(templateConfig.languageMode, locale, { en: snapshot.branch.nameEn, ar: snapshot.branch.nameAr })}
+            {secondaryReportText(templateConfig.languageMode, locale, { en: snapshot.branch.nameEn, ar: snapshot.branch.nameAr }) ? ` · ${secondaryReportText(templateConfig.languageMode, locale, { en: snapshot.branch.nameEn, ar: snapshot.branch.nameAr })}` : ""}
+          </p>
+          <p>{localizedReportText(templateConfig.languageMode, locale, { en: snapshot.branch.addressEn, ar: snapshot.branch.addressAr }) || ""}</p>
           <p>{[snapshot.branch.phone, snapshot.branch.email].filter(Boolean).join(" · ")}</p>
         </div>
         <div className="report-version-stamp">
           {templateConfig.showQr && qrDataUrl && <Image src={qrDataUrl} alt={tr(locale, "Report verification QR code", "رمز QR للتحقق من التقرير")} width={104} height={104} unoptimized />}
-          <strong className={"status-badge status-" + latest.status.toLowerCase().replaceAll("_","-")}>{statusLabel(locale, latest.status)}</strong>
-          <span>{tr(locale, "Report version", "إصدار التقرير")} {latest.version}</span>
-          <span>{tr(locale, "Issued", "صدر")} {latest.issuedAt.toISOString().replace("T"," ").slice(0,19)}</span>
-          {templateConfig.showQr && <span>{tr(locale, "Scan QR to verify", "امسح QR للتحقق")}</span>}
+          <strong className={"status-badge status-" + latest.status.toLowerCase().replaceAll("_","-")}>{statusLabel(reportLocale, latest.status)}</strong>
+          <span>{reportTr("Report version", "إصدار التقرير")} {latest.version}</span>
+          <span>{reportTr("Issued", "صدر")} {latest.issuedAt.toISOString().replace("T"," ").slice(0,19)}</span>
+          {templateConfig.showQr && <span>{reportTr("Scan QR to verify", "امسح QR للتحقق")}</span>}
         </div>
       </header>
 
       {latest.status === "AMENDED" && <div className="report-amended-banner">
-        <strong>{tr(locale, "AMENDED REPORT", "تقرير معدل")}</strong>
-        <span>{latest.amendmentReason || tr(locale, "A released result was amended.", "تم تعديل نتيجة صادرة.")}</span>
+        <strong>{reportTr("AMENDED REPORT", "تقرير معدل")}</strong>
+        <span>{latest.amendmentReason || reportTr("A released result was amended.", "تم تعديل نتيجة صادرة.")}</span>
       </div>}
 
       <section className="report-patient-grid">
-        <div><span>{tr(locale, "Patient", "المريض")}</span><strong>{locale === "ar" ? snapshot.patient.fullNameAr || snapshot.patient.fullNameEn : snapshot.patient.fullNameEn}</strong>{snapshot.patient.fullNameAr && <small dir="rtl">{snapshot.patient.fullNameAr}</small>}</div>
-        <div><span>{tr(locale, "Patient No.", "رقم المريض")}</span><strong>{snapshot.patient.patientNumber}</strong></div>
-        <div><span>{tr(locale, "Date of Birth", "تاريخ الميلاد")}</span><strong>{snapshot.patient.dateOfBirth || "—"}</strong></div>
-        <div><span>{tr(locale, "Sex", "الجنس")}</span><strong>{sexLabel(locale, snapshot.patient.sexAtBirth)}</strong></div>
-        <div><span>{tr(locale, "Accession", "رقم الطلب")}</span><strong>{snapshot.order.accessionNumber}</strong></div>
-        <div><span>{tr(locale, "Priority", "الأولوية")}</span><strong>{priorityLabel(locale, snapshot.order.priority)}</strong></div>
-        <div><span>{tr(locale, "Ordered", "تاريخ الطلب")}</span><strong>{snapshot.order.orderedAt.replace("T"," ").slice(0,19)}</strong></div>
-        <div><span>{tr(locale, "Referrer", "المحيل")}</span><strong>{snapshot.referrer?.nameEn || "—"}</strong></div>
+        <div><span>{reportTr("Patient", "المريض")}</span><strong>{localizedReportText(templateConfig.languageMode, locale, { en: snapshot.patient.fullNameEn, ar: snapshot.patient.fullNameAr })}</strong>{secondaryReportText(templateConfig.languageMode, locale, { en: snapshot.patient.fullNameEn, ar: snapshot.patient.fullNameAr }) && <small>{secondaryReportText(templateConfig.languageMode, locale, { en: snapshot.patient.fullNameEn, ar: snapshot.patient.fullNameAr })}</small>}</div>
+        <div><span>{reportTr("Patient No.", "رقم المريض")}</span><strong>{snapshot.patient.patientNumber}</strong></div>
+        <div><span>{reportTr("Date of Birth", "تاريخ الميلاد")}</span><strong>{snapshot.patient.dateOfBirth || "—"}</strong></div>
+        <div><span>{reportTr("Sex", "الجنس")}</span><strong>{sexLabel(reportLocale, snapshot.patient.sexAtBirth)}</strong></div>
+        <div><span>{reportTr("Accession", "رقم الطلب")}</span><strong>{snapshot.order.accessionNumber}</strong></div>
+        <div><span>{reportTr("Priority", "الأولوية")}</span><strong>{priorityLabel(reportLocale, snapshot.order.priority)}</strong></div>
+        <div><span>{reportTr("Ordered", "تاريخ الطلب")}</span><strong>{snapshot.order.orderedAt.replace("T"," ").slice(0,19)}</strong></div>
+        <div><span>{reportTr("Referrer", "المحيل")}</span><strong>{snapshot.referrer ? localizedReportText(templateConfig.languageMode, locale, { en: snapshot.referrer.nameEn, ar: snapshot.referrer.nameAr }) : "—"}</strong></div>
       </section>
 
       <section className="report-results">
         <table>
           <thead>
             <tr>
-              {reportColumns.has("TEST") && <th>{tr(locale, "Test / Component", "الفحص / المكوّن")}</th>}
-              {reportColumns.has("RESULT") && <th>{tr(locale, "Result", "النتيجة")}</th>}
-              {reportColumns.has("FLAG") && <th>{tr(locale, "Flag", "العلامة")}</th>}
-              {reportColumns.has("UNIT") && <th>{tr(locale, "Unit", "الوحدة")}</th>}
-              {reportColumns.has("REFERENCE") && <th>{tr(locale, "Reference Range", "المجال المرجعي")}</th>}
+              {reportColumns.has("TEST") && <th>{reportTr("Test / Component", "الفحص / المكوّن")}</th>}
+              {reportColumns.has("RESULT") && <th>{reportTr("Result", "النتيجة")}</th>}
+              {reportColumns.has("FLAG") && <th>{reportTr("Flag", "العلامة")}</th>}
+              {reportColumns.has("UNIT") && <th>{reportTr("Unit", "الوحدة")}</th>}
+              {reportColumns.has("REFERENCE") && <th>{reportTr("Reference Range", "المجال المرجعي")}</th>}
             </tr>
           </thead>
           <tbody>
             {snapshot.results.map((result) => [
               <tr className="report-test-heading" key={`${result.testCode}-head`}>
                 <td colSpan={reportColumnCount}>
-                  <strong>{result.testCode} — {locale === "ar" ? result.testNameAr || result.testNameEn : result.testNameEn}</strong>
-                  {result.testNameAr && <span dir="rtl"> · {result.testNameAr}</span>}
-                  <small> · {result.performingBranch.nameEn} · {tr(locale, "Result", "النتيجة")} v{result.resultVersion}{result.analyzer ? ` · ${tr(locale, "Analyzer", "جهاز التحليل")}: ${result.analyzer.code}${result.analyzer.name ? " — " + result.analyzer.name : ""}` : ""}</small>
+                  <strong>{result.testCode} — {localizedReportText(templateConfig.languageMode, locale, { en: result.testNameEn, ar: result.testNameAr })}</strong>
+                  {secondaryReportText(templateConfig.languageMode, locale, { en: result.testNameEn, ar: result.testNameAr }) && <span> · {secondaryReportText(templateConfig.languageMode, locale, { en: result.testNameEn, ar: result.testNameAr })}</span>}
+                  <small> · {localizedReportText(templateConfig.languageMode, locale, { en: result.performingBranch.nameEn, ar: result.performingBranch.nameAr })} · {reportTr("Result", "النتيجة")} v{result.resultVersion}{result.analyzer ? ` · ${reportTr("Analyzer", "جهاز التحليل")}: ${result.analyzer.code}${result.analyzer.name ? " — " + result.analyzer.name : ""}` : ""}</small>
                 </td>
               </tr>,
               ...result.values.map((value) => <Fragment key={`${result.testCode}-${value.componentCode}`}>
                 <tr className={value.isCritical ? "report-critical-row" : ""}>
                   {reportColumns.has("TEST") && <td>
-                    <strong>{locale === "ar" ? value.componentNameAr || value.componentNameEn : value.componentNameEn}</strong>
-                    {value.componentNameAr && <small dir="rtl">{value.componentNameAr}</small>}
+                    <strong>{localizedReportText(templateConfig.languageMode, locale, { en: value.componentNameEn, ar: value.componentNameAr })}</strong>
+                    {secondaryReportText(templateConfig.languageMode, locale, { en: value.componentNameEn, ar: value.componentNameAr }) && <small>{secondaryReportText(templateConfig.languageMode, locale, { en: value.componentNameEn, ar: value.componentNameAr })}</small>}
                   </td>}
                   {reportColumns.has("RESULT") && <td><strong>{value.displayValue}</strong></td>}
                   {reportColumns.has("FLAG") && <td>{value.flag === "UNKNOWN" ? "—" : <span className={"result-flag-badge flag-" + value.flag.toLowerCase().replaceAll("_","-")}>{value.flag}</span>}</td>}
                   {reportColumns.has("UNIT") && <td>{value.unit || "—"}</td>}
-                  {reportColumns.has("REFERENCE") && <td>{referenceText(value, locale)}</td>}
+                  {reportColumns.has("REFERENCE") && <td>{referenceText(value, reportLocale)}</td>}
                 </tr>
-                {value.comments && <tr className="report-component-comment"><td colSpan={reportColumnCount}><strong>{tr(locale, "Component comment", "تعليق المكوّن")}:</strong> {value.comments}</td></tr>}
+                {value.comments && <tr className="report-component-comment"><td colSpan={reportColumnCount}><strong>{reportTr("Component comment", "تعليق المكوّن")}:</strong> {value.comments}</td></tr>}
               </Fragment>),
               result.microbiology ? <tr key={`${result.testCode}-microbiology`}>
                 <td colSpan={reportColumnCount}>
                   <div className="report-notes">
-                    <p><strong>{tr(locale, "Culture status", "حالة الزرع")}:</strong> {result.microbiology.cultureStatus.replaceAll("_", " ")}</p>
-                    {result.microbiology.finalComment && <p><strong>{tr(locale, "Final interpretation", "التفسير النهائي")}:</strong> {result.microbiology.finalComment}</p>}
+                    <p><strong>{reportTr("Culture status", "حالة الزرع")}:</strong> {result.microbiology.cultureStatus.replaceAll("_", " ")}</p>
+                    {result.microbiology.finalComment && <p><strong>{reportTr("Final interpretation", "التفسير النهائي")}:</strong> {result.microbiology.finalComment}</p>}
                     {result.microbiology.observations.length > 0 && <div>
-                      <strong>{tr(locale, "Culture observations", "ملاحظات الزرع")}</strong>
+                      <strong>{reportTr("Culture observations", "ملاحظات الزرع")}</strong>
                       <ul>{result.microbiology.observations.map((observation, index) =>
                         <li key={index}>{observation.type.replaceAll("_", " ")}: {observation.text}</li>
                       )}</ul>
                     </div>}
                     {result.microbiology.isolates.map(isolate => <div key={isolate.sequenceNumber} className="detail-section">
-                      <p><strong>{tr(locale, "Isolate", "العزلة")} #{isolate.sequenceNumber}: {isolate.organism.code} — {locale === "ar" ? isolate.organism.nameAr || isolate.organism.nameEn : isolate.organism.nameEn}</strong>
+                      <p><strong>{reportTr("Isolate", "العزلة")} #{isolate.sequenceNumber}: {isolate.organism.code} — {localizedReportText(templateConfig.languageMode, locale, { en: isolate.organism.nameEn, ar: isolate.organism.nameAr })}</strong>
                         {isolate.quantityText ? ` · ${isolate.quantityText}` : ""}</p>
                       {isolate.colonyNotes && <p>{isolate.colonyNotes}</p>}
                       {isolate.susceptibilityTests.map((panel, panelIndex) => <div key={panelIndex}>
-                        <p><strong>{tr(locale, "Susceptibility", "الحساسية")}:</strong> {panel.method || tr(locale, "Method not specified", "الطريقة غير محددة")}</p>
+                        <p><strong>{reportTr("Susceptibility", "الحساسية")}:</strong> {panel.method || reportTr("Method not specified", "الطريقة غير محددة")}</p>
                         <table>
-                          <thead><tr><th>{tr(locale, "Antibiotic", "المضاد الحيوي")}</th><th>S/I/R</th><th>MIC</th><th>{tr(locale, "Zone", "القطر")}</th><th>{tr(locale, "Breakpoint", "حد التفسير")}</th></tr></thead>
+                          <thead><tr><th>{reportTr("Antibiotic", "المضاد الحيوي")}</th><th>S/I/R</th><th>MIC</th><th>{reportTr("Zone", "القطر")}</th><th>{reportTr("Breakpoint", "حد التفسير")}</th></tr></thead>
                           <tbody>{panel.results.map(item => <tr key={item.antibioticCode}>
-                            <td>{item.antibioticCode} — {locale === "ar" ? item.antibioticNameAr || item.antibioticNameEn : item.antibioticNameEn}</td>
+                            <td>{item.antibioticCode} — {localizedReportText(templateConfig.languageMode, locale, { en: item.antibioticNameEn, ar: item.antibioticNameAr })}</td>
                             <td>{item.interpretation}</td>
                             <td>{item.micValue || "—"}{item.micUnit ? " " + item.micUnit : ""}</td>
                             <td>{item.zoneDiameterMm ? item.zoneDiameterMm + " mm" : "—"}</td>
@@ -308,11 +331,11 @@ export default async function DiagnosticReportPage({ params }: { params: Promise
                   </div>
                 </td>
               </tr> : null,
-              result.comments && !result.microbiology ? <tr key={`${result.testCode}-comment`}><td colSpan={reportColumnCount}><strong>{tr(locale, "Comment", "تعليق")}:</strong> {result.comments}</td></tr> : null,
+              result.comments && !result.microbiology ? <tr key={`${result.testCode}-comment`}><td colSpan={reportColumnCount}><strong>{reportTr("Comment", "تعليق")}:</strong> {result.comments}</td></tr> : null,
               <tr className="report-result-meta" key={`${result.testCode}-meta`}>
                 <td colSpan={reportColumnCount}>
-                  {tr(locale, "Specimen", "العينة")}: {result.specimen?.barcode || "—"} · {tr(locale, "Collected", "جُمعت")}: {result.specimen?.collectedAt?.replace("T"," ").slice(0,19) || "—"} ·
-                  {templateConfig.showSignature ? <>{tr(locale, "Verified", "تم التحقق")}: {result.verifiedBy?.nameEn || "—"} · {tr(locale, "Released", "تم الإصدار")}: {result.releasedBy?.nameEn || "—"}</> : <>{tr(locale, "Released", "تم الإصدار")}: {result.releasedAt?.replace("T"," ").slice(0,19) || "—"}</>}
+                  {reportTr("Specimen", "العينة")}: {result.specimen?.barcode || "—"} · {reportTr("Collected", "جُمعت")}: {result.specimen?.collectedAt?.replace("T"," ").slice(0,19) || "—"} ·
+                  {templateConfig.showSignature ? <>{reportTr("Verified", "تم التحقق")}: {result.verifiedBy ? localizedReportText(templateConfig.languageMode, locale, { en: result.verifiedBy.nameEn, ar: result.verifiedBy.nameAr }) : "—"} · {reportTr("Released", "تم الإصدار")}: {result.releasedBy ? localizedReportText(templateConfig.languageMode, locale, { en: result.releasedBy.nameEn, ar: result.releasedBy.nameAr }) : "—"}</> : <>{reportTr("Released", "تم الإصدار")}: {result.releasedAt?.replace("T"," ").slice(0,19) || "—"}</>}
                 </td>
               </tr>,
             ])}
@@ -321,22 +344,22 @@ export default async function DiagnosticReportPage({ params }: { params: Promise
       </section>
 
       {(snapshot.order.diagnosis || snapshot.order.clinicalNotes) && <section className="report-notes">
-        {snapshot.order.diagnosis && <p><strong>{tr(locale, "Clinical indication", "الدلالة السريرية")}:</strong> {snapshot.order.diagnosis}</p>}
-        {snapshot.order.clinicalNotes && <p><strong>{tr(locale, "Clinical notes", "الملاحظات السريرية")}:</strong> {snapshot.order.clinicalNotes}</p>}
+        {snapshot.order.diagnosis && <p><strong>{reportTr("Clinical indication", "الدلالة السريرية")}:</strong> {snapshot.order.diagnosis}</p>}
+        {snapshot.order.clinicalNotes && <p><strong>{reportTr("Clinical notes", "الملاحظات السريرية")}:</strong> {snapshot.order.clinicalNotes}</p>}
       </section>}
 
       {(templateConfig.footerEn || templateConfig.footerAr) && <section className="report-template-footer">
-        {templateConfig.footerEn && <p>{templateConfig.footerEn}</p>}
-        {templateConfig.footerAr && <p dir="rtl">{templateConfig.footerAr}</p>}
+        {showEnglish && templateConfig.footerEn && <p dir="ltr">{templateConfig.footerEn}</p>}
+        {showArabic && templateConfig.footerAr && <p dir="rtl">{templateConfig.footerAr}</p>}
       </section>}
       <footer className="report-footer">
         <div>
-          <strong>{snapshot.completeness.final ? tr(locale, "Final report", "تقرير نهائي") : tr(locale, "Partial report", "تقرير جزئي")}</strong>
-          <span>{snapshot.completeness.releasedItemCount}/{snapshot.completeness.totalItemCount} {tr(locale, "order item(s) released", "عنصر طلب تم إصداره")}</span>
+          <strong>{snapshot.completeness.final ? reportTr("Final report", "تقرير نهائي") : reportTr("Partial report", "تقرير جزئي")}</strong>
+          <span>{snapshot.completeness.releasedItemCount}/{snapshot.completeness.totalItemCount} {reportTr("order item(s) released", "عنصر طلب تم إصداره")}</span>
         </div>
         <div>
-          <span>{tr(locale, "Issued by", "صدر بواسطة")}: {latest.issuedBy.displayNameEn}</span>
-          <span>{tr(locale, "Verification token", "رمز التحقق")}: {latest.verificationToken.slice(0,16)}…</span>
+          <span>{reportTr("Issued by", "صدر بواسطة")}: {localizedReportText(templateConfig.languageMode, locale, { en: latest.issuedBy.displayNameEn, ar: latest.issuedBy.displayNameAr })}</span>
+          <span>{reportTr("Verification token", "رمز التحقق")}: {latest.verificationToken.slice(0,16)}…</span>
           {verificationUrl && <span className="verification-url">{verificationUrl}</span>}
         </div>
       </footer>
