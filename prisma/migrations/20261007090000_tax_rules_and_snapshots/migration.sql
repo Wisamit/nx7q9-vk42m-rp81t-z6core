@@ -34,6 +34,9 @@ CREATE TABLE `tax_rules` (
   CONSTRAINT `tax_rules_rate_range` CHECK (`rate_percent` >= 0 AND `rate_percent` <= 100)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
+ALTER TABLE `discount_approval_requests`
+  ADD COLUMN `tax_total_snapshot` DECIMAL(18,4) NOT NULL DEFAULT 0 AFTER `discount_total_snapshot`;
+
 ALTER TABLE `invoices`
   ADD COLUMN `tax_breakdown_snapshot` JSON NULL AFTER `tax_total`;
 
