@@ -155,9 +155,15 @@ export default async function DiagnosticReportPage({ params }: { params: Promise
       order: {
         include: {
           orderingBranch: true,
-          patient: { include: { portalAccount: true } },
-          referrer: { include: { portalAccount: true } },
-          client: { include: { portalAccount: true } },
+          patient: { include: { portalAccount: {
+                include: { contactVerifications: { where: { revokedAt: null }, orderBy: { verifiedAt: "desc" } } },
+              } } },
+          referrer: { include: { portalAccount: {
+                include: { contactVerifications: { where: { revokedAt: null }, orderBy: { verifiedAt: "desc" } } },
+              } } },
+          client: { include: { portalAccount: {
+                include: { contactVerifications: { where: { revokedAt: null }, orderBy: { verifiedAt: "desc" } } },
+              } } },
         },
       },
       versions: {
