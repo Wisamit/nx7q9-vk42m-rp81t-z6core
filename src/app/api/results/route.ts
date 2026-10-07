@@ -181,7 +181,11 @@ export async function POST(request: Request) {
     unitSnapshot: string | null;
     parsed: NonNullable<ReturnType<typeof parseResultValue>>;
     interval: Awaited<ReturnType<typeof resolveReferenceInterval>> | null;
-    flag: ReturnType<typeof numericFlag>;
+    flag: {
+      flag: "NORMAL" | "LOW" | "HIGH" | "CRITICAL_LOW" | "CRITICAL_HIGH" | "ABNORMAL" | "POSITIVE" | "NEGATIVE" | "UNKNOWN";
+      isAbnormal: boolean;
+      isCritical: boolean;
+    };
     delta: Awaited<ReturnType<typeof evaluateDelta>>;
     isCalculated: boolean;
     calculatedRuleId: string | null;
