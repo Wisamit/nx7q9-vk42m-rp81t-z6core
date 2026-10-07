@@ -10,7 +10,7 @@ export async function POST(request: Request) {
   const requestedLimit = typeof body.limit === "number" && Number.isFinite(body.limit) ? Math.floor(body.limit) : 50;
   const limit = Math.min(Math.max(requestedLimit, 1), 200);
 
-  const results = await dispatchPendingNotifications(prisma, limit);
+  const results = await dispatchPendingNotifications(prisma, session.user.organizationId, limit);
   await prisma.auditEvent.create({
     data: {
       organizationId: session.user.organizationId,
