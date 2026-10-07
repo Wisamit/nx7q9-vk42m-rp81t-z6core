@@ -74,10 +74,12 @@ Scope:
 - external report messages contain no laboratory result values; they provide a secure authenticated portal link to the exact `DiagnosticReportVersion`;
 - the user selects only an associated recipient type (patient, referrer or client) and channel; arbitrary free-text destinations are not accepted for clinical report delivery;
 - destinations resolve server-side from the recipient's active portal account;
-- outbound report delivery requires an active portal account and channel-specific verified destination: `emailVerifiedAt` for EMAIL and `phoneVerifiedAt` for SMS/WHATSAPP;
-- portal users can request a six-digit VERIFY_CONTACT OTP over EMAIL or SMS; challenges expire after 10 minutes, are rate-limited, have bounded attempts, and consumed/replaced OTP bodies are redacted from stored notifications;
-- the existing generic `contactVerifiedAt` remains an aggregate compatibility marker, but is not sufficient by itself to authorize report delivery;
-- any future workflow that changes a portal email or phone must clear the corresponding `emailVerifiedAt` or `phoneVerifiedAt` before the new destination can receive reports;
+- outbound report delivery requires an active portal account plus an active `PortalContactVerification` whose channel and `destinationSnapshot` match the account's current email/phone; compatibility timestamps are never sufficient authorization;
+- portal users can request a six-digit VERIFY_CONTACT OTP over EMAIL or SMS; successful OTP verification creates immutable destination-specific history with method `SELF_SERVICE_OTP`; challenges expire after 10 minutes, are rate-limited, have bounded attempts, and consumed/replaced OTP bodies are redacted from stored notifications;
+- authorized staff with `portal_accounts.manage` can confirm a current email/phone only with an explicit reason; the actor, reason, channel, masked destination and verification record are audited as `STAFF_CONFIRMED`;
+- existing `contactVerifiedAt`, `emailVerifiedAt` and `phoneVerifiedAt` remain compatibility/cache fields and are not the source of truth for report-delivery authorization;
+- migration preserves safe historical verification as `LEGACY_IMPORTED`: channel-specific timestamps are bound to their current destination, while the legacy aggregate marker is migrated only when exactly one contact method exists;
+- a changed email/phone never inherits the previous destination's verification because authorization requires an exact current-destination match; the present application has no post-provisioning contact-edit API, so there is currently no mutation path that can change these fields without a new implementation explicitly handling revocation;
 - doctor delivery is allowed only to the order's associated referrer;
 - corporate delivery additionally requires active `CorporatePortalPatientAccess.canViewReports` for the order patient;
 - report-delivery events are linked one-to-one to the corresponding notification delivery, preserving queue/provider traceability;
@@ -102,3 +104,16 @@ Remaining Phase 7 after 7B:
 1. any remaining report-template/signature fidelity gaps found by evidence audit;
 2. provider-backed EMAIL/SMS/WHATSAPP acceptance in the deployment environment;
 3. close Phase 7 application scope only after runtime acceptance of 7B and explicit infrastructure status documentation.
+
+### Phase 7B contact-verification reconciliation
+
+PR #114 is not to be merged directly because it diverged from the already merged PR #115 implementation. The reconciled design is built from current main and preserves #115 self-service OTP while adding destination-bound immutable verification history inspired by #114.
+
+Safety invariant:
+- report authorization checks the exact current email/phone against a non-revoked verification record;
+- changing a destination cannot inherit an old verification even if compatibility timestamp fields remain populated;
+- EMAIL verification does not authorize PHONE/SMS/WhatsApp and PHONE verification does not authorize EMAIL;
+- staff confirmation and self-service OTP both produce auditable verification-history records;
+- legacy ambiguous accounts with both contacts and only the aggregate `contactVerifiedAt` receive no inferred channel verification.
+
+Runtime acceptance remains separate from CI/deployment completion and requires explicit Hostinger functional confirmation.
