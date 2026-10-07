@@ -146,6 +146,18 @@ enum CashierClosureStatus {
   REJECTED
 }
 
+enum ClientStatementStatus {
+  ISSUED
+  VOIDED
+}
+
+enum ClientStatementLineType {
+  INVOICE
+  CREDIT_NOTE
+  PAYMENT
+  REFUND
+}
+
 enum SpecimenStatus {
   PLANNED
   COLLECTED
@@ -840,6 +852,7 @@ model Organization {
   creditNotes CreditNote[]
   refunds Refund[]
   cashierShifts CashierShift[]
+  clientAccountStatements ClientAccountStatement[]
   specimens Specimen[]
   transferManifests SpecimenTransferManifest[]
   results LaboratoryResult[]
@@ -972,6 +985,7 @@ model Branch {
   creditNotes CreditNote[]
   refunds Refund[]
   cashierShifts CashierShift[]
+  clientAccountStatements ClientAccountStatement[]
   collectedSpecimens Specimen[] @relation("SpecimenCollectionBranch")
   currentSpecimens Specimen[] @relation("SpecimenCurrentBranch")
   specimenEvents SpecimenEvent[]
@@ -1132,6 +1146,7 @@ model User {
   reviewedCashierClosures CashierShiftClosure[] @relation("CashierShiftClosureReviewer")
   issuedCreditNotes CreditNote[] @relation("CreditNoteIssuer")
   processedRefunds Refund[] @relation("RefundProcessor")
+  createdClientAccountStatements ClientAccountStatement[] @relation("ClientStatementCreator")
   orderStatusChanges OrderStatusHistory[] @relation("OrderStatusChanger")
   collectedSpecimens Specimen[] @relation("SpecimenCollector")
   receivedSpecimens Specimen[] @relation("SpecimenReceiver")
@@ -1915,6 +1930,7 @@ model Client {
   priceLists    PriceList[]
   orders        LabOrder[]
   invoices      Invoice[]
+  accountStatements ClientAccountStatement[]
 
   portalAccount PortalAccount?
   corporatePortalPatientAccess CorporatePortalPatientAccess[]
@@ -2450,6 +2466,69 @@ model CashierShift {
   @@index([cashierUserId, status, openedAt])
   @@index([organizationId, currency, status])
   @@map("cashier_shifts")
+}
+
+model ClientAccountStatement {
+  id                       String                @id @default(uuid()) @db.Char(36)
+  organizationId           String                @map("organization_id") @db.Char(36)
+  clientId                 String                @map("client_id") @db.Char(36)
+  branchId                 String?               @map("branch_id") @db.Char(36)
+  statementNumber          String                @map("statement_number") @db.VarChar(50)
+  status                   ClientStatementStatus @default(ISSUED)
+  currency                 String                @db.Char(3)
+  periodStart              DateTime              @map("period_start") @db.Date
+  periodEnd                DateTime              @map("period_end") @db.Date
+  timezoneSnapshot         String                @map("timezone_snapshot") @db.VarChar(64)
+  clientCodeSnapshot       String                @map("client_code_snapshot") @db.VarChar(60)
+  clientNameEnSnapshot     String                @map("client_name_en_snapshot") @db.VarChar(220)
+  clientNameArSnapshot     String?               @map("client_name_ar_snapshot") @db.VarChar(220)
+  paymentTermsDaysSnapshot Int?                  @map("payment_terms_days_snapshot")
+  branchCodeSnapshot       String?               @map("branch_code_snapshot") @db.VarChar(50)
+  branchNameEnSnapshot     String?               @map("branch_name_en_snapshot") @db.VarChar(200)
+  branchNameArSnapshot     String?               @map("branch_name_ar_snapshot") @db.VarChar(200)
+  openingBalance           Decimal               @map("opening_balance") @db.Decimal(18, 4)
+  invoiceCharges           Decimal               @map("invoice_charges") @db.Decimal(18, 4)
+  creditNotes              Decimal               @map("credit_notes") @db.Decimal(18, 4)
+  payments                 Decimal               @db.Decimal(18, 4)
+  refunds                  Decimal               @db.Decimal(18, 4)
+  closingBalance           Decimal               @map("closing_balance") @db.Decimal(18, 4)
+  generatedByUserId        String                @map("generated_by_user_id") @db.Char(36)
+  generatedAt              DateTime              @default(now()) @map("generated_at") @db.DateTime(3)
+  createdAt                DateTime              @default(now()) @map("created_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  client       Client       @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  branch       Branch?      @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  generatedBy  User         @relation("ClientStatementCreator", fields: [generatedByUserId], references: [id], onDelete: Restrict)
+  lines        ClientAccountStatementLine[]
+
+  @@unique([organizationId, statementNumber])
+  @@index([clientId, currency, periodStart, periodEnd])
+  @@index([branchId, generatedAt])
+  @@index([generatedByUserId, generatedAt])
+  @@map("client_account_statements")
+}
+
+model ClientAccountStatementLine {
+  id                String                  @id @default(uuid()) @db.Char(36)
+  statementId       String                  @map("statement_id") @db.Char(36)
+  lineType          ClientStatementLineType @map("line_type")
+  sourceId          String                  @map("source_id") @db.Char(36)
+  sourceNumber      String                  @map("source_number") @db.VarChar(80)
+  branchIdSnapshot  String                  @map("branch_id_snapshot") @db.Char(36)
+  branchCodeSnapshot String                 @map("branch_code_snapshot") @db.VarChar(50)
+  occurredAt        DateTime                @map("occurred_at") @db.DateTime(3)
+  description       String                  @db.VarChar(500)
+  debitAmount       Decimal                 @default(0) @map("debit_amount") @db.Decimal(18, 4)
+  creditAmount      Decimal                 @default(0) @map("credit_amount") @db.Decimal(18, 4)
+  runningBalance    Decimal                 @map("running_balance") @db.Decimal(18, 4)
+  createdAt         DateTime                @default(now()) @map("created_at") @db.DateTime(3)
+
+  statement ClientAccountStatement @relation(fields: [statementId], references: [id], onDelete: Restrict)
+
+  @@index([statementId, occurredAt])
+  @@index([sourceId, lineType])
+  @@map("client_account_statement_lines")
 }
 
 model CashierShiftClosure {

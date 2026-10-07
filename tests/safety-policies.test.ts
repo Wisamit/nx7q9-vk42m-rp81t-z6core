@@ -12,6 +12,7 @@ import { approverCanAuthorize, discountApprovalMode, effectiveDiscountLimit } fr
 import { discountApprovalFingerprint } from "../src/lib/discount-approval.ts";
 import { creditNoteError, invoiceAdjustmentState, refundError } from "../src/lib/billing-adjustments.ts";
 import { cashierClosingSnapshot, cashierClosureReviewError, cashierShiftActiveKey, cashierTransactionError } from "../src/lib/cashier-shift-policy.ts";
+import { buildClientStatementLedger, clientPaymentAllocationError, localDateStartUtc, nextDateString } from "../src/lib/client-accounting.ts";
 
 test("specimen collection is only allowed from PLANNED with specimen type configured", () => {
   assert.equal(specimenActionError({ status: "PLANNED", action: "COLLECT", specimenTypeConfigured: true }), null);
@@ -415,4 +416,57 @@ test("cashier active key isolates branch cashier and currency", () => {
     cashierShiftActiveKey("branch-a", "user-a", "EGP"),
     cashierShiftActiveKey("branch-a", "user-a", "USD"),
   );
+});
+
+
+test("client statement ledger preserves opening balance and period movements", () => {
+  const before = new Date("2026-09-30T10:00:00.000Z");
+  const inside = new Date("2026-10-05T10:00:00.000Z");
+  const base = { sourceId: "x", branchId: "b1", branchCode: "BR1", description: "event" };
+
+  const ledger = buildClientStatementLedger({
+    openingEvents: [
+      { ...base, sourceNumber: "INV-1", occurredAt: before, lineType: "INVOICE", amount: "100.0000" },
+      { ...base, sourceNumber: "PAY-1", occurredAt: before, lineType: "PAYMENT", amount: "30.0000" },
+    ],
+    periodEvents: [
+      { ...base, sourceNumber: "INV-2", occurredAt: inside, lineType: "INVOICE", amount: "50.0000" },
+      { ...base, sourceNumber: "CN-1", occurredAt: new Date(inside.getTime() + 1000), lineType: "CREDIT_NOTE", amount: "10.0000" },
+      { ...base, sourceNumber: "PAY-2", occurredAt: new Date(inside.getTime() + 2000), lineType: "PAYMENT", amount: "20.0000" },
+      { ...base, sourceNumber: "RF-1", occurredAt: new Date(inside.getTime() + 3000), lineType: "REFUND", amount: "5.0000" },
+    ],
+  });
+
+  assert.ok(ledger);
+  assert.equal(ledger.openingBalance, "70.0000");
+  assert.equal(ledger.invoiceCharges, "50.0000");
+  assert.equal(ledger.creditNotes, "10.0000");
+  assert.equal(ledger.payments, "20.0000");
+  assert.equal(ledger.refunds, "5.0000");
+  assert.equal(ledger.closingBalance, "95.0000");
+  assert.deepEqual(ledger.lines.map(line => line.runningBalance), ["120.0000", "110.0000", "90.0000", "95.0000"]);
+});
+
+test("client payment allocation must equal payment and stay within invoice balances", () => {
+  assert.equal(clientPaymentAllocationError({
+    paymentAmount: "100.0000",
+    allocations: [
+      { amount: "40.0000", invoiceBalance: "40.0000" },
+      { amount: "60.0000", invoiceBalance: "75.0000" },
+    ],
+  }), null);
+  assert.equal(clientPaymentAllocationError({
+    paymentAmount: "100.0000",
+    allocations: [{ amount: "100.0000", invoiceBalance: "90.0000" }],
+  }), "allocation_exceeds_invoice_balance");
+  assert.equal(clientPaymentAllocationError({
+    paymentAmount: "100.0000",
+    allocations: [{ amount: "99.0000", invoiceBalance: "100.0000" }],
+  }), "allocation_total_mismatch");
+});
+
+test("client statement date boundaries respect the reporting timezone", () => {
+  assert.equal(nextDateString("2026-10-07"), "2026-10-08");
+  assert.equal(localDateStartUtc("2026-10-07", "Asia/Dubai")?.toISOString(), "2026-10-06T20:00:00.000Z");
+  assert.equal(localDateStartUtc("2026-02-30", "Asia/Dubai"), null);
 });
