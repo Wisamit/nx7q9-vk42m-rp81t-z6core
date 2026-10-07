@@ -793,6 +793,7 @@ enum PortalContactChannel {
 
 enum PortalContactVerificationMethod {
   STAFF_CONFIRMED
+  LEGACY_IMPORTED
 }
 
 enum AppointmentMode {
@@ -5357,12 +5358,12 @@ model PortalContactVerification {
   destinationSnapshot String                          @map("destination_snapshot") @db.VarChar(191)
   method              PortalContactVerificationMethod @default(STAFF_CONFIRMED)
   verificationReason  String                          @map("verification_reason") @db.VarChar(1000)
-  verifiedByUserId    String                          @map("verified_by_user_id") @db.Char(36)
+  verifiedByUserId    String?                         @map("verified_by_user_id") @db.Char(36)
   verifiedAt          DateTime                        @default(now()) @map("verified_at") @db.DateTime(3)
   revokedAt           DateTime?                       @map("revoked_at") @db.DateTime(3)
 
   portalAccount PortalAccount @relation(fields: [portalAccountId], references: [id], onDelete: Restrict)
-  verifiedBy    User          @relation("PortalContactVerificationActor", fields: [verifiedByUserId], references: [id], onDelete: Restrict)
+  verifiedBy    User?         @relation("PortalContactVerificationActor", fields: [verifiedByUserId], references: [id], onDelete: Restrict)
 
   @@index([portalAccountId, channel, revokedAt, verifiedAt])
   @@index([verifiedByUserId, verifiedAt])
