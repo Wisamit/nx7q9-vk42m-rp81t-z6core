@@ -10,7 +10,14 @@ export const dynamic = "force-dynamic";
 export default async function WorklistsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; status?: string; department?: string }>;
+  searchParams: Promise<{
+    q?: string;
+    status?: string;
+    department?: string;
+    branch?: string;
+    priority?: string;
+    specimenStatus?: string;
+  }>;
 }) {
   const session = await requirePermission("worklists.view");
   const locale = getUiLocale(session.user.preferredLocale);
@@ -18,7 +25,22 @@ export default async function WorklistsPage({
   const q = params.q?.trim() || "";
   const status = params.status?.trim() || "";
   const departmentId = params.department?.trim() || "";
-  const branchIds = session.user.branchScopes.map(scope => scope.branchId);
+  const branchId = params.branch?.trim() || "";
+  const priority = params.priority?.trim() || "";
+  const specimenStatus = params.specimenStatus?.trim() || "";
+  const authorizedBranches = session.user.branchScopes
+    .filter(scope => scope.branch.status === "ACTIVE")
+    .map(scope => scope.branch);
+  const branchIds = authorizedBranches.map(branch => branch.id);
+  const worklistBranchIds = branchId
+    ? (branchIds.includes(branchId) ? [branchId] : ["__FORBIDDEN__"])
+    : branchIds;
+  const priorityFilter = ["ROUTINE", "URGENT", "STAT"].includes(priority)
+    ? priority as "ROUTINE" | "URGENT" | "STAT"
+    : null;
+  const specimenStatusFilter = ["RECEIVED", "IN_PROCESS"].includes(specimenStatus)
+    ? specimenStatus as "RECEIVED" | "IN_PROCESS"
+    : null;
   const scopedDepartmentIds = authorizedDepartmentIds(session);
   const departmentRestricted = scopedDepartmentIds.length > 0;
   const departmentFilter = departmentId
@@ -30,14 +52,17 @@ export default async function WorklistsPage({
   const [items, departments] = await Promise.all([
     prisma.orderItem.findMany({
       where: {
-        order: { organizationId: session.user.organizationId },
+        order: {
+          organizationId: session.user.organizationId,
+          ...(priorityFilter ? { priority: priorityFilter } : {}),
+        },
         status: { not: "CANCELLED" },
         specimenLinks: {
           some: {
             status: "ACTIVE",
             specimen: {
-              currentBranchId: { in: branchIds },
-              status: { in: ["RECEIVED","IN_PROCESS"] },
+              currentBranchId: { in: worklistBranchIds },
+              status: specimenStatusFilter || { in: ["RECEIVED","IN_PROCESS"] },
             },
           },
         },
@@ -95,6 +120,11 @@ export default async function WorklistsPage({
 
   const localizedName = (item: { nameEn: string; nameAr?: string | null }) => locale === "ar" ? item.nameAr || item.nameEn : item.nameEn;
   const patientName = (item: { fullNameEn: string; fullNameAr?: string | null }) => locale === "ar" ? item.fullNameAr || item.fullNameEn : item.fullNameEn;
+  const priorityLabel = (value: "ROUTINE" | "URGENT" | "STAT") => ({
+    ROUTINE: tr(locale, "Routine", "عادي"),
+    URGENT: tr(locale, "Urgent", "عاجل"),
+    STAT: "STAT",
+  }[value]);
 
   const pendingEntry = items.filter(item => !item.results[0]).length;
   const inProgress = items.filter(item => item.results[0] && !["VERIFIED","RELEASED","AMENDED"].includes(item.results[0].status)).length;
@@ -104,8 +134,9 @@ export default async function WorklistsPage({
   const bulkRows = items.flatMap(item => {
     const readySpecimen = item.specimenLinks.map(link => link.specimen).find(specimen =>
       ["RECEIVED","IN_PROCESS"].includes(specimen.status) &&
+      (!specimenStatusFilter || specimen.status === specimenStatusFilter) &&
       Boolean(specimen.currentBranchId) &&
-      branchIds.includes(specimen.currentBranchId!)
+      worklistBranchIds.includes(specimen.currentBranchId!)
     );
     const latest = item.results[0];
     if (!readySpecimen?.currentBranchId) return [];
@@ -172,6 +203,24 @@ export default async function WorklistsPage({
         <div><h2>{tr(locale, "Laboratory Work Queue", "قائمة عمل المختبر")}</h2><span>{items.length} {tr(locale, "item(s)", "عنصر")}</span></div>
         <form className="inline-search" action="/worklists" method="get">
           <input name="q" defaultValue={q} placeholder={tr(locale, "Barcode, accession, patient, test…", "باركود، رقم طلب، مريض، فحص…")} />
+          <select name="branch" defaultValue={branchId}>
+            <option value="">{tr(locale, "All authorized branches", "كل الفروع المصرح بها")}</option>
+            {authorizedBranches
+              .slice()
+              .sort((a, b) => localizedName(a).localeCompare(localizedName(b)))
+              .map(branch => <option key={branch.id} value={branch.id}>{branch.code} — {localizedName(branch)}</option>)}
+          </select>
+          <select name="priority" defaultValue={priority}>
+            <option value="">{tr(locale, "All priorities", "كل الأولويات")}</option>
+            <option value="ROUTINE">{priorityLabel("ROUTINE")}</option>
+            <option value="URGENT">{priorityLabel("URGENT")}</option>
+            <option value="STAT">{priorityLabel("STAT")}</option>
+          </select>
+          <select name="specimenStatus" defaultValue={specimenStatus}>
+            <option value="">{tr(locale, "All ready specimen states", "كل حالات العينات الجاهزة")}</option>
+            <option value="RECEIVED">{statusLabel(locale, "RECEIVED")}</option>
+            <option value="IN_PROCESS">{statusLabel(locale, "IN_PROCESS")}</option>
+          </select>
           <select name="department" defaultValue={departmentId}>
             <option value="">{tr(locale, "All departments", "كل الأقسام")}</option>
             {departments.map(department => <option key={department.id} value={department.id}>{department.code} — {localizedName(department)}</option>)}
@@ -184,17 +233,22 @@ export default async function WorklistsPage({
             <option value="VERIFIED">{statusLabel(locale, "VERIFIED")}</option>
           </select>
           <button className="secondary-button"><SystemIcon name="search" size={15} />{tr(locale, "Filter", "تصفية")}</button>
-          {(q || status || departmentId) && <Link className="secondary-link" href="/worklists">{tr(locale, "Clear", "مسح")}</Link>}
+          {(q || status || departmentId || branchId || priority || specimenStatus) && <Link className="secondary-link" href="/worklists">{tr(locale, "Clear", "مسح")}</Link>}
         </form>
       </div>
 
       <div className="table-wrap">
         <table>
-          <thead><tr><th>{tr(locale, "Accession", "رقم الطلب")}</th><th>{tr(locale, "Patient", "المريض")}</th><th>{tr(locale, "Test", "الفحص")}</th><th>{tr(locale, "Department", "القسم")}</th><th>{tr(locale, "Specimen", "العينة")}</th><th>{tr(locale, "Location", "الموقع")}</th><th>{tr(locale, "Result", "النتيجة")}</th><th>{tr(locale, "Flags", "الإشارات")}</th><th></th></tr></thead>
+          <thead><tr><th>{tr(locale, "Accession", "رقم الطلب")}</th><th>{tr(locale, "Patient", "المريض")}</th><th>{tr(locale, "Test", "الفحص")}</th><th>{tr(locale, "Priority", "الأولوية")}</th><th>{tr(locale, "Department", "القسم")}</th><th>{tr(locale, "Specimen", "العينة")}</th><th>{tr(locale, "Location", "الموقع")}</th><th>{tr(locale, "Result", "النتيجة")}</th><th>{tr(locale, "Flags", "الإشارات")}</th><th></th></tr></thead>
           <tbody>
-            {items.length === 0 ? <tr><td colSpan={9} className="empty-state">{tr(locale, "No received specimens are waiting for laboratory work.", "لا توجد عينات مستلمة بانتظار العمل المخبري.")}</td></tr> :
+            {items.length === 0 ? <tr><td colSpan={10} className="empty-state">{tr(locale, "No received specimens are waiting for laboratory work.", "لا توجد عينات مستلمة بانتظار العمل المخبري.")}</td></tr> :
               items.map(item => {
-                const readySpecimen = item.specimenLinks.map(link => link.specimen).find(specimen => ["RECEIVED","IN_PROCESS"].includes(specimen.status));
+                const readySpecimen = item.specimenLinks.map(link => link.specimen).find(specimen =>
+                  ["RECEIVED","IN_PROCESS"].includes(specimen.status) &&
+                  (!specimenStatusFilter || specimen.status === specimenStatusFilter) &&
+                  Boolean(specimen.currentBranchId) &&
+                  worklistBranchIds.includes(specimen.currentBranchId!)
+                );
                 const result = item.results[0];
                 const criticalCount = result?.values.filter(value => value.isCritical).length || 0;
                 const abnormalCount = result?.values.filter(value => ["LOW","HIGH","CRITICAL_LOW","CRITICAL_HIGH","ABNORMAL"].includes(value.flag)).length || 0;
@@ -202,6 +256,7 @@ export default async function WorklistsPage({
                   <td><strong>{item.order.accessionNumber}</strong></td>
                   <td>{item.order.patient.patientNumber}<br/><small>{patientName(item.order.patient)}</small></td>
                   <td><strong>{item.testCodeSnapshot}</strong><br/><small>{locale === "ar" ? item.testNameArSnapshot || item.testNameEnSnapshot : item.testNameEnSnapshot}</small></td>
+                  <td><strong>{priorityLabel(item.order.priority)}</strong></td>
                   <td>{item.test.department ? localizedName(item.test.department) : tr(locale, "Unassigned", "غير معيّن")}</td>
                   <td><span className="barcode-text">{readySpecimen?.barcode || "—"}</span><br/><small>{readySpecimen?.status ? statusLabel(locale, readySpecimen.status) : "—"}</small></td>
                   <td>{readySpecimen?.currentBranch ? localizedName(readySpecimen.currentBranch) : item.performedBranch ? localizedName(item.performedBranch) : "—"}</td>
