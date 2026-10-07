@@ -34,6 +34,7 @@ export default async function SpecimenLabelPage({
     include: {
       specimenType: true,
       container: true,
+      parentSpecimen: { select: { barcode: true } },
       orderItems: { include: { orderItem: true } },
       order: { include: { patient: true, orderingBranch: true } },
       events: { where: { eventType: "CREATED" }, orderBy: { occurredAt: "asc" } },
@@ -130,7 +131,8 @@ export default async function SpecimenLabelPage({
         <span>{tr(locale, "Patient", "المريض")}: <strong>{specimen.order.patient.patientNumber}</strong></span>
         <span>{tr(locale, "DOB", "الميلاد")}: <strong>{dob}</strong></span>
         <span>{tr(locale, "Order", "الطلب")}: <strong>{specimen.order.accessionNumber}</strong></span>
-        <span>{tr(locale, "Req.", "المطلوب")}: <strong>{requirement?.requiredVolume ? `${requirement.requiredVolume} ${requirement.requiredVolumeUnit || ""}` : "—"}</strong></span>
+        <span>{specimen.parentSpecimen ? (specimen.parentRelationType === "ALIQUOT" ? tr(locale, "Aliquot of", "جزء من") : tr(locale, "Recollection", "إعادة سحب")) : tr(locale, "Req.", "المطلوب")}: <strong>{specimen.parentSpecimen ? specimen.parentSpecimen.barcode : requirement?.requiredVolume ? `${requirement.requiredVolume} ${requirement.requiredVolumeUnit || ""}` : "—"}</strong></span>
+        <span>{tr(locale, "Volume", "الحجم")}: <strong>{specimen.volume ? `${specimen.volume.toFixed(3)} ${specimen.volumeUnit || ""}` : "—"}</strong></span>
         <span className="specimen-label-tests">{tr(locale, "Tests", "الفحوصات")}: <strong>{testCodes || "—"}</strong></span>
       </div>
       <div className="specimen-label-barcode" dir="ltr">
