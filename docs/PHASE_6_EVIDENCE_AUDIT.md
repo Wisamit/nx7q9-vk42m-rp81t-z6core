@@ -213,9 +213,11 @@ Phase boundary:
 this batch supplies LIS-side pending-work routing and worklist filtering only. Serial/TCP/file connectivity, bidirectional order download, bridge transport behavior, retries, and device protocol completion remain Phase 10 Analyzer Bridge scope.
 
 
-## Phase 6H — Configurable specialized result presentation
+## Phase 6H — Runtime accepted
 
-Phase 6H is implemented on feature branch `phase-6h-specialized-result-presentation` and is pending CI/runtime acceptance.
+Runtime acceptance confirmed on Hostinger for main commit `e9f6f433290b45beb75997dac94eb45db1a014bd`.
+
+Phase 6H delivered configurable specialized result presentation.
 
 Scope:
 - extends the generic result-layout system with presentation metadata that can produce optimized workspaces for CBC/hematology, urine, stool, semen/fertility, coagulation, Widal/TORCH/serology, tumor markers, hormones, PCR, bone marrow, CSF and other configured specialties;
@@ -236,3 +238,27 @@ Architecture guardrails:
 - microbiology culture workflow remains Phase 9, while Analyzer Bridge protocol/connectivity remains Phase 10.
 
 With Phase 6H runtime acceptance, the Phase 6 Core Laboratory Results scope is functionally covered by the generic result model plus configurable specialized presentation. Advanced calculated/reflex/delta/autoverification completion remains Phase 11 by roadmap boundary.
+
+
+## Phase 6 closure
+
+Phase 6 — Core Laboratory Results is Runtime Accepted through main commit `e9f6f433290b45beb75997dac94eb45db1a014bd`.
+
+The roadmap scope is covered by:
+- branch/department/analyzer/priority/specimen/TAT worklists;
+- generic and bulk manual entry with keyboard-oriented workflow;
+- numeric, qualitative, text, boolean and date results;
+- configuration-driven qualitative polarity/abnormality/critical semantics;
+- component/result comments and reusable bilingual templates;
+- immutable reference/critical/value snapshots;
+- staged technical review and medical validation;
+- critical-result communication gating;
+- released-result locking, amendments and result/report version history;
+- explicit analyzer work routing;
+- configuration-driven specialized result presentation over the generic result model.
+
+Roadmap boundaries remain unchanged:
+- report/delivery completion continues in Phase 7;
+- microbiology workflow completion belongs to Phase 9;
+- Analyzer Bridge transport/protocol completion belongs to Phase 10;
+- advanced calculated/reflex/delta/autoverification completion belongs to Phase 11.
