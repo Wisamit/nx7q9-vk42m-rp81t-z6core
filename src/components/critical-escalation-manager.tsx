@@ -41,7 +41,7 @@ export function CriticalEscalationManager({
         effectiveTo: form.get("effectiveTo"),
       }),
     });
-    setMessage(response.ok ? tr("Critical escalation policy created.", "تم إنشاء سياسة تصعيد النتائج الحرجة.") : tr("Could not create critical escalation policy.", "تعذر إنشاء سياسة تصعيد النتائج الحرجة."));
+    setMessage(response.ok ? tr("Critical escalation policy draft created. Approval is required before it controls live critical events.", "تم إنشاء مسودة سياسة تصعيد النتائج الحرجة. يلزم اعتمادها قبل أن تتحكم بالأحداث الحرجة الفعلية.") : tr("Could not create critical escalation policy.", "تعذر إنشاء سياسة تصعيد النتائج الحرجة."));
     setBusy(false);
     if (response.ok) {
       event.currentTarget.reset();
@@ -67,7 +67,7 @@ export function CriticalEscalationManager({
       <label className="check-line"><input name="requireReadBack" type="checkbox" defaultChecked /> {tr("Require read-back on acknowledgement", "اشتراط إعادة القراءة عند الإقرار")}</label>
       <label>{tr("Effective from", "ساري من")}<input name="effectiveFrom" type="date" defaultValue={new Date().toISOString().slice(0,10)} required /></label>
       <label>{tr("Effective to", "ساري حتى")}<input name="effectiveTo" type="date" /></label>
-      <button className="primary-button form-span" disabled={busy}>{busy ? tr("Saving…", "جارٍ الحفظ…") : tr("Create Critical Escalation Policy", "إنشاء سياسة التصعيد")}</button>
+      <button className="primary-button form-span" disabled={busy}>{busy ? tr("Saving…", "جارٍ الحفظ…") : tr("Create Critical Escalation Policy Draft", "إنشاء مسودة سياسة التصعيد")}</button>
     </form>
     {message && <p className="form-success">{message}</p>}
   </section>;
