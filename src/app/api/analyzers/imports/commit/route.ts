@@ -12,6 +12,7 @@ import { validationHoldMatches } from "@/lib/validation-holds";
 import { evaluateAutoverification } from "@/lib/autoverification";
 import { resolveAnalyzerQcGate } from "@/lib/qc-gate";
 import { matchQualitativeOption, qualitativeFlag } from "@/lib/qualitative-result-options";
+import { snapshotReportPresentation } from "@/lib/report-presentation";
 import { automatedTechnicalReviewOutcome, selectValidationPolicy, snapshotValidationPolicy, type ValidationPolicySnapshot } from "@/lib/result-validation";
 
 function emptyDelta() {
@@ -96,6 +97,7 @@ export async function POST(request: Request) {
             where: { status: "ACTIVE" },
             include: {
               unit: true,
+              resultSection: true,
               qualitativeResultOptions: {
                 where: {
                   status: "ACTIVE",
@@ -223,6 +225,24 @@ export async function POST(request: Request) {
         unitSnapshot: component.unit?.symbol || null,
         decimalPrecision: component.decimalPrecision,
         qualitativeOptions: component.qualitativeResultOptions,
+        reportPresentation: snapshotReportPresentation({
+          code: component.code,
+          nameEn: component.nameEn,
+          nameAr: component.nameAr,
+          displayOrder: component.displayOrder,
+          reportNameEn: component.reportNameEn,
+          reportNameAr: component.reportNameAr,
+          reportDisplayOrder: component.reportDisplayOrder,
+          reportVisible: component.reportVisible,
+          resultSection: component.resultSection ? {
+            code: component.resultSection.code,
+            nameEn: component.resultSection.nameEn,
+            nameAr: component.resultSection.nameAr,
+            displayOrder: component.resultSection.displayOrder,
+            reportDisplayOrder: component.resultSection.reportDisplayOrder,
+            reportVisible: component.resultSection.reportVisible,
+          } : null,
+        }),
       }))
     : [{
         componentId: null,
@@ -234,6 +254,16 @@ export async function POST(request: Request) {
         unitSnapshot: orderItem.test.defaultUnit?.symbol || null,
         decimalPrecision: orderItem.test.decimalPrecision,
         qualitativeOptions: orderItem.test.qualitativeResultOptions,
+        reportPresentation: {
+          reportNameEnSnapshot: orderItem.test.nameEn,
+          reportNameArSnapshot: orderItem.test.nameAr,
+          reportDisplayOrderSnapshot: 0,
+          reportVisibleSnapshot: true,
+          reportSectionCodeSnapshot: null,
+          reportSectionNameEnSnapshot: null,
+          reportSectionNameArSnapshot: null,
+          reportSectionOrderSnapshot: null,
+        },
       }];
 
   const calculatedTargetIds = new Set(orderItem.test.calculatedRules.map(rule => rule.targetComponentId));
@@ -256,6 +286,16 @@ export async function POST(request: Request) {
     resultType: "NUMERIC" | "TEXT" | "QUALITATIVE" | "BOOLEAN" | "DATE";
     unitId: string | null;
     unitSnapshot: string | null;
+    reportPresentation: {
+      reportNameEnSnapshot: string;
+      reportNameArSnapshot: string | null;
+      reportDisplayOrderSnapshot: number;
+      reportVisibleSnapshot: boolean;
+      reportSectionCodeSnapshot: string | null;
+      reportSectionNameEnSnapshot: string | null;
+      reportSectionNameArSnapshot: string | null;
+      reportSectionOrderSnapshot: number | null;
+    };
     parsed: NonNullable<ReturnType<typeof parseResultValue>>;
     interval: Awaited<ReturnType<typeof resolveReferenceInterval>> | null;
     flag: {
@@ -659,6 +699,14 @@ export async function POST(request: Request) {
           componentId: item.componentId,
           componentNameEnSnapshot: item.nameEn,
           componentNameArSnapshot: item.nameAr,
+          reportNameEnSnapshot: item.reportPresentation.reportNameEnSnapshot,
+          reportNameArSnapshot: item.reportPresentation.reportNameArSnapshot,
+          reportDisplayOrderSnapshot: item.reportPresentation.reportDisplayOrderSnapshot,
+          reportVisibleSnapshot: item.reportPresentation.reportVisibleSnapshot,
+          reportSectionCodeSnapshot: item.reportPresentation.reportSectionCodeSnapshot,
+          reportSectionNameEnSnapshot: item.reportPresentation.reportSectionNameEnSnapshot,
+          reportSectionNameArSnapshot: item.reportPresentation.reportSectionNameArSnapshot,
+          reportSectionOrderSnapshot: item.reportPresentation.reportSectionOrderSnapshot,
           resultTypeSnapshot: item.resultType,
           valueNumeric: item.parsed.valueNumeric,
           valueText: item.parsed.valueText,
@@ -703,6 +751,14 @@ export async function POST(request: Request) {
           componentCodeSnapshot: item.code,
           componentNameEnSnapshot: item.nameEn,
           componentNameArSnapshot: item.nameAr,
+          reportNameEnSnapshot: item.reportPresentation.reportNameEnSnapshot,
+          reportNameArSnapshot: item.reportPresentation.reportNameArSnapshot,
+          reportDisplayOrderSnapshot: item.reportPresentation.reportDisplayOrderSnapshot,
+          reportVisibleSnapshot: item.reportPresentation.reportVisibleSnapshot,
+          reportSectionCodeSnapshot: item.reportPresentation.reportSectionCodeSnapshot,
+          reportSectionNameEnSnapshot: item.reportPresentation.reportSectionNameEnSnapshot,
+          reportSectionNameArSnapshot: item.reportPresentation.reportSectionNameArSnapshot,
+          reportSectionOrderSnapshot: item.reportPresentation.reportSectionOrderSnapshot,
           resultTypeSnapshot: item.resultType,
           valueNumeric: item.parsed.valueNumeric,
           valueText: item.parsed.valueText,
@@ -748,6 +804,14 @@ export async function POST(request: Request) {
           componentCodeSnapshot: item.code,
           componentNameEnSnapshot: item.nameEn,
           componentNameArSnapshot: item.nameAr,
+          reportNameEnSnapshot: item.reportPresentation.reportNameEnSnapshot,
+          reportNameArSnapshot: item.reportPresentation.reportNameArSnapshot,
+          reportDisplayOrderSnapshot: item.reportPresentation.reportDisplayOrderSnapshot,
+          reportVisibleSnapshot: item.reportPresentation.reportVisibleSnapshot,
+          reportSectionCodeSnapshot: item.reportPresentation.reportSectionCodeSnapshot,
+          reportSectionNameEnSnapshot: item.reportPresentation.reportSectionNameEnSnapshot,
+          reportSectionNameArSnapshot: item.reportPresentation.reportSectionNameArSnapshot,
+          reportSectionOrderSnapshot: item.reportPresentation.reportSectionOrderSnapshot,
           resultTypeSnapshot: item.resultType,
           valueNumeric: item.parsed.valueNumeric,
           valueText: item.parsed.valueText,
