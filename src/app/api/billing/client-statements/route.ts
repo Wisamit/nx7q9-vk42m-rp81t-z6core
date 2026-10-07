@@ -147,7 +147,7 @@ export async function POST(request: Request) {
     })),
     ...allocations.map(allocation => ({
       sourceId: allocation.paymentId,
-      sourceNumber: allocation.payment.reference || `PAY-${allocation.paymentId.slice(0, 8).toUpperCase()}`,
+      sourceNumber: (allocation.payment.reference || `PAY-${allocation.paymentId.slice(0, 8).toUpperCase()}`).slice(0, 80),
       branchId: allocation.invoice.branchId,
       branchCode: allocation.invoice.branch.code,
       occurredAt: allocation.payment.receivedAt,
