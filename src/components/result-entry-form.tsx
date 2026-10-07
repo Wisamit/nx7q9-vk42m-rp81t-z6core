@@ -5,6 +5,15 @@ import { useRouter } from "next/navigation";
 import { statusLabel as sharedStatusLabel } from "@/lib/ui-i18n";
 import { focusNextResultEntryControl, shouldAdvanceResultEntryOnEnter } from "@/lib/result-entry-keyboard";
 
+type QualitativeResultOption = {
+  id: string;
+  code: string;
+  valueEn: string;
+  valueAr: string | null;
+  flag: string;
+  isCritical: boolean;
+};
+
 type ResultField = {
   componentId: string | null;
   code: string;
@@ -13,6 +22,8 @@ type ResultField = {
   resultType: "NUMERIC" | "TEXT" | "QUALITATIVE" | "BOOLEAN" | "DATE";
   unit: string | null;
   currentValue: string;
+  currentOptionId: string | null;
+  qualitativeOptions: QualitativeResultOption[];
   currentFlag: string | null;
   referenceDisplay: string | null;
   critical: boolean;
@@ -25,7 +36,11 @@ type CommentTemplateOption = {
   id: string;
   code: string;
   nameEn: string;
+  nameAr: string | null;
   textEn: string;
+  textAr: string | null;
+  scope: string;
+  componentId: string | null;
 };
 
 export function ResultEntryForm({
@@ -76,6 +91,8 @@ export function ResultEntryForm({
     CRITICAL_LOW: tr("Critical low", "منخفض حرج"),
     CRITICAL_HIGH: tr("Critical high", "مرتفع حرج"),
     ABNORMAL: tr("Abnormal", "غير طبيعي"),
+    POSITIVE: tr("Positive", "إيجابي"),
+    NEGATIVE: tr("Negative", "سلبي"),
   }[value] || value);
   const deltaLabel = (value: string) => ({
     NO_PREVIOUS_RESULT: tr("No previous result", "لا توجد نتيجة سابقة"),
@@ -85,6 +102,13 @@ export function ResultEntryForm({
   const router = useRouter();
   const [values, setValues] = useState<Record<string, string>>(
     Object.fromEntries(fields.map((field) => [field.componentId || "__TEST__", field.currentValue])),
+  );
+  const [selectedOptions, setSelectedOptions] = useState<Record<string, string>>(
+    Object.fromEntries(fields.map((field) => {
+      const key = field.componentId || "__TEST__";
+      const currentIsActive = Boolean(field.currentOptionId && field.qualitativeOptions.some(option => option.id === field.currentOptionId));
+      return [key, currentIsActive ? field.currentOptionId! : field.currentValue && field.qualitativeOptions.length > 0 ? "__LEGACY__" : ""];
+    })),
   );
   const [note, setNote] = useState(comments);
   const [savedResultId, setSavedResultId] = useState(resultId);
@@ -113,6 +137,26 @@ export function ResultEntryForm({
         setValues((current) => ({ ...current, [key]: event.target.value })),
     };
 
+    if (field.resultType === "QUALITATIVE" && field.qualitativeOptions.length > 0) {
+      const selected = selectedOptions[key] || "";
+      return <select
+        data-result-entry-control="true"
+        value={selected}
+        onChange={(event) => {
+          const optionId = event.target.value;
+          setSelectedOptions((current) => ({ ...current, [key]: optionId }));
+          const option = field.qualitativeOptions.find((item) => item.id === optionId);
+          setValues((current) => ({ ...current, [key]: option?.valueEn || "" }));
+        }}
+      >
+        <option value="">{tr("Select result…", "اختر النتيجة…")}</option>
+        {selected === "__LEGACY__" && field.currentValue && <option value="__LEGACY__" disabled>{tr("Current legacy value", "القيمة القديمة الحالية")}: {field.currentValue}</option>}
+        {field.qualitativeOptions.map((option) => <option key={option.id} value={option.id}>
+          {(locale === "ar" ? option.valueAr || option.valueEn : option.valueEn) + " · " + flagLabel(option.flag) + (option.isCritical ? " · " + tr("Critical", "حرجة") : "")}
+        </option>)}
+      </select>;
+    }
+
     if (field.resultType === "BOOLEAN") {
       return <select data-result-entry-control="true" {...common}>
         <option value="">—</option>
@@ -139,10 +183,15 @@ export function ResultEntryForm({
         specimenId,
         performingBranchId,
         comments: note,
-        values: fields.map((field) => ({
-          componentId: field.componentId,
-          rawValue: values[field.componentId || "__TEST__"] || "",
-        })),
+        values: fields.map((field) => {
+          const key = field.componentId || "__TEST__";
+          const selectedOptionId = selectedOptions[key];
+          return {
+            componentId: field.componentId,
+            rawValue: values[key] || "",
+            resultOptionId: selectedOptionId && selectedOptionId !== "__LEGACY__" ? selectedOptionId : null,
+          };
+        }),
       }),
     });
     const body = await response.json().catch(() => ({}));
@@ -266,12 +315,17 @@ export function ResultEntryForm({
         defaultValue=""
         onChange={(event) => {
           const template = commentTemplates.find((item) => item.id === event.target.value);
-          if (template) setNote((current) => current ? current + "\n" + template.textEn : template.textEn);
+          if (template) {
+            const templateText = locale === "ar" ? template.textAr || template.textEn : template.textEn;
+            setNote((current) => current ? current + "\n" + templateText : templateText);
+          }
           event.target.value = "";
         }}
       >
         <option value="">{tr("Insert comment template…", "إدراج قالب تعليق…")}</option>
-        {commentTemplates.map((template) => <option key={template.id} value={template.id}>{template.code} — {template.nameEn}</option>)}
+        {commentTemplates.map((template) => <option key={template.id} value={template.id}>
+          {template.code} — {locale === "ar" ? template.nameAr || template.nameEn : template.nameEn}
+        </option>)}
       </select>}
       <textarea data-result-entry-control="true" rows={3} value={note} onChange={(event) => setNote(event.target.value)} disabled={locked} />
     </label>
