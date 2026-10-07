@@ -63,7 +63,6 @@ export default async function AccountsReceivableAgingPage({
       where: { organizationId: session.user.organizationId, status: "ACTIVE" },
       select: { id: true, code: true, nameEn: true, nameAr: true },
       orderBy: { nameEn: "asc" },
-      take: 1000,
     }),
   ]);
   if (!organization) throw new Error("ORGANIZATION_NOT_FOUND");
@@ -119,7 +118,6 @@ export default async function AccountsReceivableAgingPage({
       },
     },
     orderBy: [{ currency: "asc" }, { issuedAt: "asc" }],
-    take: 5000,
   });
 
   const rows: AgingRow[] = [];
