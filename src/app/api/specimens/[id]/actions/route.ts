@@ -2,10 +2,6 @@ import { NextResponse } from "next/server";
 import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { specimenActionError } from "@/lib/clinical-safety";
-import {
-  specimenCollectionVolumeError,
-  specimenRequirementSnapshotFromDetails,
-} from "@/lib/specimen-requirement-engine";
 import { receptionAssessmentError } from "@/lib/specimen-reception-policy";
 
 function text(value: unknown, max = 500) {
@@ -17,9 +13,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const body = await request.json().catch(() => null) as {
     action?: "COLLECT" | "RECEIVE" | "REJECT";
     branchId?: string;
-    volume?: string | number;
-    volumeUnit?: string;
-    notes?: string;
     labelAssessment?: string;
     conditionCode?: string;
     temperatureC?: string | number;
@@ -48,20 +41,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const specimen = await prisma.specimen.findFirst({
     where: { id, organizationId: session.user.organizationId },
     include: {
-      order: true,
-      orderItems: { include: { orderItem: true } },
-      specimenType: true,
       container: true,
-      parentSpecimen: { select: { id: true, barcode: true, status: true } },
-      childSpecimens: { select: { id: true, barcode: true, status: true, parentRelationType: true } },
-      events: { where: { eventType: "CREATED" }, orderBy: { occurredAt: "asc" } },
     },
   });
   if (!specimen) return NextResponse.json({ error: "specimen_not_found" }, { status: 404 });
-
-  const requirementSnapshot = specimen.events
-    .map(event => specimenRequirementSnapshotFromDetails(event.details))
-    .find(Boolean) || null;
 
   const lifecycleError = specimenActionError({
     status: specimen.status,
