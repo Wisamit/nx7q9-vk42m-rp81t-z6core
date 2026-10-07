@@ -81,7 +81,7 @@ export default async function SpecimenLabelPage({
     <style>{`
       @page { size: ${size.width}mm ${size.height}mm; margin: 0; }
       .label-print-shell { min-height: 100vh; display: grid; align-content: start; justify-items: center; gap: 14px; padding: 24px; }
-      .specimen-label-paper { box-sizing: border-box; width: ${size.width}mm; height: ${size.height}mm; padding: 1.4mm 1.8mm; background: white; color: black; border: 1px solid #bbb; overflow: hidden; font-family: Arial, sans-serif; display: grid; grid-template-rows: auto auto auto 1fr; gap: .6mm; }
+      .specimen-label-paper { box-sizing: border-box; width: ${size.width}mm; height: ${size.height}mm; padding: 1.4mm 1.8mm; background: white; color: black; border: 1px solid var(--fl-border); overflow: hidden; font-family: Arial, sans-serif; display: grid; grid-template-rows: auto auto auto 1fr; gap: .6mm; }
       .specimen-label-head { display: flex; justify-content: space-between; gap: 2mm; font-size: 2.4mm; line-height: 1.1; }
       .specimen-label-patient { font-size: 3.2mm; font-weight: 800; line-height: 1.05; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
       .specimen-label-secondary { font-size: 2.1mm; font-weight: 600; }
@@ -110,7 +110,7 @@ export default async function SpecimenLabelPage({
 
     <div className="no-print specimen-label-size-links">
       {(["50x30","50x25","40x25"] as const).map(item =>
-        <Link key={item} className={item === labelSize ? "primary-button" : "secondary-link"} href={`/specimens/${specimen.id}/label?size=${item}`}>{item} mm</Link>)}
+        <Link key={item} className={item === labelSize ? "primary-button" : "secondary-link"} href={`/specimens/${specimen.id}/label?size=${item}`}>{item}</Link>)}
     </div>
 
     {plannedWithoutFinalizedRequirements && <p className="no-print form-error specimen-label-warning">
