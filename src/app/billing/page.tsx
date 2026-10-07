@@ -155,6 +155,7 @@ export default async function BillingPage() {
         }))} />}
         {canManageBilling && <CreditNoteCreateModal locale={locale} invoices={creditableInvoices} />}
         {canManageBilling && <RefundCreateModal locale={locale} options={refundOptions} />}
+        <Link className="secondary-link" href="/billing/accounts">{tr(locale, "Client Accounts", "حسابات العملاء")}</Link>
         {(canManageBilling || permissions.has("billing.cashier.approve")) && <Link className="secondary-link" href="/billing/cashier">{tr(locale, "Cashier Closing", "إغلاق أمين الصندوق")}</Link>}
         <Link className="secondary-link" href="/orders"><SystemIcon name="orders" size={15} />{tr(locale, "Orders", "الطلبات")}</Link>
         <Link className="secondary-link" href="/pricing"><SystemIcon name="pricing" size={15} />{tr(locale, "Pricing", "الأسعار")}</Link>
