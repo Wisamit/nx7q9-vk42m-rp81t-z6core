@@ -160,6 +160,8 @@ export async function resolveReferenceInterval(
     where: {
       componentId: input.componentId,
       status: "ACTIVE",
+      approvalStatus: "APPROVED",
+      approvedAt: { not: null },
       effectiveFrom: { lte: at },
       OR: [{ effectiveTo: null }, { effectiveTo: { gte: at } }],
       AND: [
