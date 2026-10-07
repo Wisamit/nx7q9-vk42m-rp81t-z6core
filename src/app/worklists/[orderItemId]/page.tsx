@@ -187,6 +187,9 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
         resultType: component.resultType,
         unit: component.unit?.symbol || null,
         resultSectionId: component.resultSectionId,
+        entryWidth: component.entryWidth,
+        entryHintEn: component.entryHintEn,
+        entryHintAr: component.entryHintAr,
         qualitativeOptions: component.qualitativeResultOptions,
       }))
     : [{
@@ -197,6 +200,9 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
         resultType: item.test.resultType,
         unit: item.test.defaultUnit?.symbol || null,
         resultSectionId: null,
+        entryWidth: "AUTO" as const,
+        entryHintEn: null,
+        entryHintAr: null,
         qualitativeOptions: item.test.qualitativeResultOptions,
       }];
 
@@ -307,6 +313,9 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
           code: section.code,
           nameEn: section.nameEn,
           nameAr: section.nameAr,
+          columnCount: section.columnCount,
+          hintEn: section.hintEn,
+          hintAr: section.hintAr,
         }))}
         comments={latestResult?.comments || ""}
         resultId={latestResult?.id || null}

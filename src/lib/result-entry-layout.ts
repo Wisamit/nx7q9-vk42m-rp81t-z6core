@@ -3,6 +3,9 @@ export type ResultLayoutSection = {
   code: string;
   nameEn: string;
   nameAr: string | null;
+  columnCount?: number;
+  hintEn?: string | null;
+  hintAr?: string | null;
 };
 
 export type ResultLayoutField = {
@@ -35,6 +38,9 @@ export function groupResultFields<T extends ResultLayoutField>(
       code: "",
       nameEn: "Other / Ungrouped",
       nameAr: "أخرى / بدون قسم",
+      columnCount: 1,
+      hintEn: null,
+      hintAr: null,
       fields: ungrouped,
     });
   }

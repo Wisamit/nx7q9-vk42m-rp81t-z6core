@@ -143,6 +143,9 @@ export default async function TestDetailPage({ params }: { params: Promise<{ id:
           nameEn: section.nameEn,
           nameAr: section.nameAr,
           displayOrder: section.displayOrder,
+          columnCount: section.columnCount,
+          hintEn: section.hintEn,
+          hintAr: section.hintAr,
           status: section.status,
         }))}
         components={test.components.map(component => ({
@@ -151,6 +154,9 @@ export default async function TestDetailPage({ params }: { params: Promise<{ id:
           nameEn: component.nameEn,
           nameAr: component.nameAr,
           resultSectionId: component.resultSectionId,
+          entryWidth: component.entryWidth,
+          entryHintEn: component.entryHintEn,
+          entryHintAr: component.entryHintAr,
         }))}
         locale={locale}
       />

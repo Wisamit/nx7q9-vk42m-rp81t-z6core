@@ -25,6 +25,9 @@ type ResultSection = {
   code: string;
   nameEn: string;
   nameAr: string | null;
+  columnCount: number;
+  hintEn: string | null;
+  hintAr: string | null;
 };
 
 type ResultField = {
@@ -35,6 +38,9 @@ type ResultField = {
   resultType: "NUMERIC" | "TEXT" | "QUALITATIVE" | "BOOLEAN" | "DATE";
   unit: string | null;
   resultSectionId: string | null;
+  entryWidth: "AUTO" | "NARROW" | "STANDARD" | "WIDE" | "FULL";
+  entryHintEn: string | null;
+  entryHintAr: string | null;
   currentValue: string;
   currentComment: string;
   currentOptionId: string | null;
@@ -327,11 +333,14 @@ export function ResultEntryForm({
 
   function renderFieldRow(field: ResultField) {
     const key = field.componentId || "__TEST__";
-    return <div className={`result-field-row ${field.critical ? "result-critical" : ""}`} key={key}>
+    return <div className={`result-field-row result-field-width-${field.entryWidth.toLowerCase()} ${field.critical ? "result-critical" : ""}`} key={key}>
       <div className="result-field-name">
         <strong>{field.code} — {locale === "ar" ? field.nameAr || field.nameEn : field.nameEn}</strong>
         {locale !== "ar" && field.nameAr && <small dir="rtl">{field.nameAr}</small>}
         <small>{resultTypeLabel(field.resultType)}{field.unit ? ` · ${field.unit}` : ""}</small>
+        {(locale === "ar" ? field.entryHintAr || field.entryHintEn : field.entryHintEn) && <small className="result-entry-hint">
+          {locale === "ar" ? field.entryHintAr || field.entryHintEn : field.entryHintEn}
+        </small>}
       </div>
       <div className="result-field-input">
         {locked ? <strong>{values[key] || "—"}</strong> : fieldInput(field)}
@@ -387,11 +396,14 @@ export function ResultEntryForm({
     {resultEntryLayout === "STANDARD" ? <div className="result-field-list">
       {fields.map(renderFieldRow)}
     </div> : <div className={`result-entry-layout result-entry-layout-${resultEntryLayout.toLowerCase().replaceAll("_", "-")}`}>
-      {fieldGroups.map(group => <section className="result-entry-section" key={group.id || "__UNGROUPED__"}>
+      {fieldGroups.map(group => <section className={`result-entry-section result-section-columns-${Math.min(4, Math.max(1, group.columnCount || 1))}`} key={group.id || "__UNGROUPED__"}>
         <div className="result-entry-section-head">
           <div>
             <strong>{group.id ? (locale === "ar" ? group.nameAr || group.nameEn : group.nameEn) : tr("Other / Ungrouped", "أخرى / بدون قسم")}</strong>
             {group.id && <small>{group.code}</small>}
+            {(locale === "ar" ? group.hintAr || group.hintEn : group.hintEn) && <small className="result-entry-section-hint">
+              {locale === "ar" ? group.hintAr || group.hintEn : group.hintEn}
+            </small>}
           </div>
           <span>{group.fields.length} {tr("component(s)", "مكوّن")}</span>
         </div>

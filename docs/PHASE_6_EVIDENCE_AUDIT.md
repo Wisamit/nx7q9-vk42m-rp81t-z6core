@@ -189,9 +189,11 @@ Architecture guardrail:
 future collection-started or reception-started TAT clocks must be introduced as explicit clock-basis policies and snapshotted on the work item. They must not recompute historical deadlines from mutable catalog configuration.
 
 
-## Phase 6G — Explicit analyzer work routing
+## Phase 6G — Runtime accepted
 
-Phase 6G is implemented on feature branch `phase-6g-analyzer-work-routing` and is pending CI/runtime acceptance.
+Runtime acceptance confirmed on Hostinger for main commit `47c8b747c8722fc84c7cea9d09d201f9b3a92abb`.
+
+Phase 6G delivered explicit analyzer work routing and analyzer-filtered worklists.
 
 Scope:
 - introduces explicit current analyzer routing for pending `OrderItem` work rather than inferring an analyzer from a result that already exists;
@@ -209,3 +211,28 @@ Scope:
 
 Phase boundary:
 this batch supplies LIS-side pending-work routing and worklist filtering only. Serial/TCP/file connectivity, bidirectional order download, bridge transport behavior, retries, and device protocol completion remain Phase 10 Analyzer Bridge scope.
+
+
+## Phase 6H — Configurable specialized result presentation
+
+Phase 6H is implemented on feature branch `phase-6h-specialized-result-presentation` and is pending CI/runtime acceptance.
+
+Scope:
+- extends the generic result-layout system with presentation metadata that can produce optimized workspaces for CBC/hematology, urine, stool, semen/fertility, coagulation, Widal/TORCH/serology, tumor markers, hormones, PCR, bone marrow, CSF and other configured specialties;
+- each configured result section can use 1–4 compact-grid columns and bilingual operator guidance;
+- each test component can independently use AUTO, NARROW, STANDARD, WIDE or FULL-row entry width plus bilingual operator guidance;
+- presentation configuration is managed from the Test Catalog and audited;
+- the same generic `LaboratoryResult` / `LaboratoryResultValue` model and existing result API remain unchanged;
+- result types, qualitative options, reference intervals, critical rules, comments, delta context, calculated values and validation workflow continue to use their existing generic paths;
+- inactive or missing sections still fall back to Other/Ungrouped and never hide components;
+- compact layouts collapse responsively on smaller screens;
+- tests preserve section metadata and verify ungrouped fields do not inherit another section's presentation.
+
+Architecture guardrails:
+- no runtime logic branches on test names such as CBC, Urine, Stool or Semen;
+- no specialty-specific result storage tables are introduced;
+- presentation hints are operator UI guidance only and do not replace reference intervals, critical limits, units, calculation rules or validation policies;
+- changing presentation later does not rewrite historical result values or released reports;
+- microbiology culture workflow remains Phase 9, while Analyzer Bridge protocol/connectivity remains Phase 10.
+
+With Phase 6H runtime acceptance, the Phase 6 Core Laboratory Results scope is functionally covered by the generic result model plus configurable specialized presentation. Advanced calculated/reflex/delta/autoverification completion remains Phase 11 by roadmap boundary.

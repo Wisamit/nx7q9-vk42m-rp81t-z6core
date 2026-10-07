@@ -1581,6 +1581,14 @@ enum ResultEntryLayout {
   COMPACT_GRID
 }
 
+enum ResultEntryFieldWidth {
+  AUTO
+  NARROW
+  STANDARD
+  WIDE
+  FULL
+}
+
 enum SexApplicability {
   ANY
   MALE
@@ -1777,6 +1785,9 @@ model TestComponent {
   decimalPrecision Int?         @map("decimal_precision")
   displayOrder     Int          @default(0) @map("display_order")
   resultSectionId  String?      @map("result_section_id") @db.Char(36)
+  entryWidth        ResultEntryFieldWidth @default(AUTO) @map("entry_width")
+  entryHintEn       String?      @map("entry_hint_en") @db.VarChar(500)
+  entryHintAr       String?      @map("entry_hint_ar") @db.VarChar(500)
   status           RecordStatus @default(ACTIVE)
   createdAt        DateTime     @default(now()) @map("created_at") @db.DateTime(3)
   updatedAt        DateTime     @updatedAt @map("updated_at") @db.DateTime(3)
@@ -1810,6 +1821,9 @@ model TestResultSection {
   nameEn         String       @map("name_en") @db.VarChar(200)
   nameAr         String?      @map("name_ar") @db.VarChar(200)
   displayOrder   Int          @default(0) @map("display_order")
+  columnCount    Int          @default(3) @map("column_count")
+  hintEn         String?      @map("hint_en") @db.VarChar(500)
+  hintAr         String?      @map("hint_ar") @db.VarChar(500)
   status         RecordStatus @default(ACTIVE)
   createdAt      DateTime     @default(now()) @map("created_at") @db.DateTime(3)
   updatedAt      DateTime     @updatedAt @map("updated_at") @db.DateTime(3)

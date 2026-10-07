@@ -11,6 +11,7 @@ function normalizedCode(value: unknown) {
 }
 
 const layouts = new Set(["STANDARD", "SECTIONED", "COMPACT_GRID"]);
+const fieldWidths = new Set(["AUTO", "NARROW", "STANDARD", "WIDE", "FULL"]);
 
 export async function POST(request: Request) {
   const session = await requirePermission("catalog.manage");
@@ -63,12 +64,18 @@ export async function POST(request: Request) {
     const nameEn = text(body.nameEn, 200);
     const nameAr = text(body.nameAr, 200) || null;
     const displayOrder = body.displayOrder === "" || body.displayOrder == null ? 0 : Number(body.displayOrder);
+    const columnCount = body.columnCount === "" || body.columnCount == null ? 3 : Number(body.columnCount);
+    const hintEn = text(body.hintEn, 500) || null;
+    const hintAr = text(body.hintAr, 500) || null;
 
     if (!sectionCode || !nameEn || !/^[A-Z0-9._-]{1,80}$/.test(sectionCode)) {
       return NextResponse.json({ error: "invalid_section_fields" }, { status: 400 });
     }
     if (!Number.isInteger(displayOrder) || displayOrder < 0 || displayOrder > 10000) {
       return NextResponse.json({ error: "invalid_display_order" }, { status: 400 });
+    }
+    if (!Number.isInteger(columnCount) || columnCount < 1 || columnCount > 4) {
+      return NextResponse.json({ error: "invalid_column_count" }, { status: 400 });
     }
 
     try {
@@ -80,6 +87,9 @@ export async function POST(request: Request) {
             nameEn,
             nameAr,
             displayOrder,
+            columnCount,
+            hintEn,
+            hintAr,
           },
         });
         await tx.auditEvent.create({
@@ -90,7 +100,7 @@ export async function POST(request: Request) {
             action: "RESULT_SECTION_CREATED",
             entityType: "TestResultSection",
             entityId: created.id,
-            newValues: { testId: test.id, code: sectionCode, nameEn, nameAr, displayOrder },
+            newValues: { testId: test.id, code: sectionCode, nameEn, nameAr, displayOrder, columnCount, hintEn, hintAr },
             ipAddress: ctx.ipAddress,
             userAgent: ctx.userAgent,
           },
@@ -140,6 +150,84 @@ export async function POST(request: Request) {
           entityId: component.id,
           oldValues: { resultSectionId: component.resultSectionId },
           newValues: { testId: test.id, resultSectionId: sectionId },
+          ipAddress: ctx.ipAddress,
+          userAgent: ctx.userAgent,
+        },
+      });
+      return changed;
+    });
+
+    return NextResponse.json({ status: "ok", component: updated });
+  }
+
+  if (action === "UPDATE_SECTION_PRESENTATION") {
+    const sectionId = text(body.sectionId, 36);
+    const columnCount = Number(body.columnCount);
+    const hintEn = text(body.hintEn, 500) || null;
+    const hintAr = text(body.hintAr, 500) || null;
+    if (!sectionId || !Number.isInteger(columnCount) || columnCount < 1 || columnCount > 4) {
+      return NextResponse.json({ error: "invalid_section_presentation" }, { status: 400 });
+    }
+
+    const section = await prisma.testResultSection.findFirst({
+      where: { id: sectionId, testId: test.id },
+    });
+    if (!section) return NextResponse.json({ error: "section_not_found" }, { status: 404 });
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const changed = await tx.testResultSection.update({
+        where: { id: section.id },
+        data: { columnCount, hintEn, hintAr },
+      });
+      await tx.auditEvent.create({
+        data: {
+          organizationId: session.user.organizationId,
+          branchId: session.activeBranchId,
+          actorUserId: session.user.id,
+          action: "RESULT_SECTION_PRESENTATION_UPDATED",
+          entityType: "TestResultSection",
+          entityId: section.id,
+          oldValues: { columnCount: section.columnCount, hintEn: section.hintEn, hintAr: section.hintAr },
+          newValues: { columnCount, hintEn, hintAr },
+          ipAddress: ctx.ipAddress,
+          userAgent: ctx.userAgent,
+        },
+      });
+      return changed;
+    });
+
+    return NextResponse.json({ status: "ok", section: updated });
+  }
+
+  if (action === "UPDATE_COMPONENT_PRESENTATION") {
+    const componentId = text(body.componentId, 36);
+    const entryWidth = text(body.entryWidth, 40);
+    const entryHintEn = text(body.entryHintEn, 500) || null;
+    const entryHintAr = text(body.entryHintAr, 500) || null;
+    if (!componentId || !fieldWidths.has(entryWidth)) {
+      return NextResponse.json({ error: "invalid_component_presentation" }, { status: 400 });
+    }
+
+    const component = await prisma.testComponent.findFirst({
+      where: { id: componentId, testId: test.id },
+    });
+    if (!component) return NextResponse.json({ error: "component_not_found" }, { status: 404 });
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const changed = await tx.testComponent.update({
+        where: { id: component.id },
+        data: { entryWidth: entryWidth as "AUTO" | "NARROW" | "STANDARD" | "WIDE" | "FULL", entryHintEn, entryHintAr },
+      });
+      await tx.auditEvent.create({
+        data: {
+          organizationId: session.user.organizationId,
+          branchId: session.activeBranchId,
+          actorUserId: session.user.id,
+          action: "RESULT_COMPONENT_PRESENTATION_UPDATED",
+          entityType: "TestComponent",
+          entityId: component.id,
+          oldValues: { entryWidth: component.entryWidth, entryHintEn: component.entryHintEn, entryHintAr: component.entryHintAr },
+          newValues: { entryWidth, entryHintEn, entryHintAr },
           ipAddress: ctx.ipAddress,
           userAgent: ctx.userAgent,
         },
