@@ -199,6 +199,7 @@ export default async function SpecimenScanPage({
           nameEn: localizedName(branch),
         }))}
         activeBranchId={session.activeBranchId}
+        currentBranchId={specimen.currentBranchId}
         locale={locale}
         canCollect={canCollect}
         canReceive={canReceive}
