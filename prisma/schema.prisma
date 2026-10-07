@@ -18,6 +18,12 @@ enum ReferenceIntervalApprovalStatus {
   RETIRED
 }
 
+enum QualitativeOptionApprovalStatus {
+  DRAFT
+  APPROVED
+  RETIRED
+}
+
 enum UserStatus {
   INVITED
   ACTIVE
@@ -1428,6 +1434,8 @@ model User {
   patientMergeEvents PatientMergeEvent[] @relation("PatientMergeActor")
   portalContactVerifications PortalContactVerification[] @relation("PortalContactVerificationActor")
   createdQualitativeResultOptions QualitativeResultOption[] @relation("QualitativeResultOptionCreator")
+  approvedQualitativeResultOptions QualitativeResultOption[] @relation("QualitativeResultOptionApprover")
+  retiredQualitativeResultOptions QualitativeResultOption[] @relation("QualitativeResultOptionRetirer")
   submittedReportTemplateVersions ReportTemplateVersion[] @relation("ReportTemplateVersionSubmitter")
   approvedReportTemplateVersions ReportTemplateVersion[] @relation("ReportTemplateVersionApprover")
 
@@ -1919,8 +1927,14 @@ model QualitativeResultOption {
   displayOrder    Int          @default(0) @map("display_order")
   effectiveFrom   DateTime     @map("effective_from") @db.DateTime(3)
   effectiveTo     DateTime?    @map("effective_to") @db.DateTime(3)
-  status          RecordStatus @default(ACTIVE)
+  approvalStatus  QualitativeOptionApprovalStatus @default(DRAFT) @map("approval_status")
+  status          RecordStatus @default(INACTIVE)
   createdByUserId String       @map("created_by_user_id") @db.Char(36)
+  approvedByUserId String?     @map("approved_by_user_id") @db.Char(36)
+  approvedAt      DateTime?    @map("approved_at") @db.DateTime(3)
+  retiredByUserId String?      @map("retired_by_user_id") @db.Char(36)
+  retiredAt       DateTime?    @map("retired_at") @db.DateTime(3)
+  retirementReason String?     @map("retirement_reason") @db.VarChar(1000)
   createdAt       DateTime     @default(now()) @map("created_at") @db.DateTime(3)
   updatedAt       DateTime     @updatedAt @map("updated_at") @db.DateTime(3)
   deactivatedAt   DateTime?    @map("deactivated_at") @db.DateTime(3)
@@ -1929,9 +1943,12 @@ model QualitativeResultOption {
   test         LabTest      @relation(fields: [testId], references: [id], onDelete: Restrict)
   component    TestComponent? @relation(fields: [componentId], references: [id], onDelete: Restrict)
   createdBy    User         @relation("QualitativeResultOptionCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  approvedBy   User?        @relation("QualitativeResultOptionApprover", fields: [approvedByUserId], references: [id], onDelete: Restrict)
+  retiredBy    User?        @relation("QualitativeResultOptionRetirer", fields: [retiredByUserId], references: [id], onDelete: Restrict)
   resultValues LaboratoryResultValue[]
 
   @@index([organizationId, status], map: "qual_result_options_org_status_idx")
+  @@index([organizationId, approvalStatus, status], map: "qual_result_options_approval_idx")
   @@index([testId, componentId, status, effectiveFrom, effectiveTo], map: "qual_result_options_scope_effective_idx")
   @@index([createdByUserId, createdAt], map: "qual_result_options_creator_idx")
   @@map("qualitative_result_options")
