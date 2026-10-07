@@ -145,7 +145,7 @@ export default async function TestDetailPage({ params }: { params: Promise<{ id:
           {permissions.has("catalog.reference_ranges.approve") && <th>{tr(locale, "Action", "الإجراء")}</th>}
         </tr></thead>
         <tbody>
-          {test.components.length===0 ? <tr><td colSpan={6} className="empty-state">{tr(locale, "No components configured.", "لا توجد مكونات مهيأة.")}</td></tr> :
+          {test.components.length===0 ? <tr><td colSpan={permissions.has("catalog.reference_ranges.approve") ? 8 : 7} className="empty-state">{tr(locale, "No components configured.", "لا توجد مكونات مهيأة.")}</td></tr> :
             test.components.flatMap(component => component.referenceIntervals.length ? component.referenceIntervals.map((range,index) =>
               <tr key={range.id}>
                 <td>{index===0 ? <><strong>{component.code}</strong><br/>{localizedName(component)}</> : ""}</td>
