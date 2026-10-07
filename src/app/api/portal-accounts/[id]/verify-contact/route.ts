@@ -50,34 +50,37 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
 
   const now = new Date();
-  const verification = await prisma.$transaction(async tx => {
-    await tx.portalContactVerification.updateMany({
-      where: {
-        portalAccountId: account.id,
-        channel,
-        revokedAt: null,
-      },
-      data: { revokedAt: now },
-    });
+  let verification;
+  try {
+    verification = await prisma.$transaction(async tx => {
+      const claim = await tx.portalAccount.updateMany({
+        where: { id: account.id, updatedAt: account.updatedAt },
+        data: { contactVerifiedAt: now },
+      });
+      if (claim.count !== 1) throw new Error("PORTAL_CONTACT_VERIFICATION_CONFLICT");
 
-    const created = await tx.portalContactVerification.create({
-      data: {
-        portalAccountId: account.id,
-        channel,
-        destinationSnapshot: destination,
-        method: "STAFF_CONFIRMED",
-        verificationReason: reason,
-        verifiedByUserId: session.user.id,
-        verifiedAt: now,
-      },
-    });
+      await tx.portalContactVerification.updateMany({
+        where: {
+          portalAccountId: account.id,
+          channel,
+          revokedAt: null,
+        },
+        data: { revokedAt: now },
+      });
 
-    await tx.portalAccount.update({
-      where: { id: account.id },
-      data: { contactVerifiedAt: now },
-    });
+      const created = await tx.portalContactVerification.create({
+        data: {
+          portalAccountId: account.id,
+          channel,
+          destinationSnapshot: destination,
+          method: "STAFF_CONFIRMED",
+          verificationReason: reason,
+          verifiedByUserId: session.user.id,
+          verifiedAt: now,
+        },
+      });
 
-    await tx.auditEvent.create({
+      await tx.auditEvent.create({
       data: {
         organizationId: session.user.organizationId,
         branchId: session.activeBranchId,
@@ -103,8 +106,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       },
     });
 
-    return created;
-  });
+      return created;
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message === "PORTAL_CONTACT_VERIFICATION_CONFLICT") {
+      return NextResponse.json({ error: "contact_verification_conflict" }, { status: 409 });
+    }
+    throw error;
+  }
 
   return NextResponse.json({
     status: "ok",
