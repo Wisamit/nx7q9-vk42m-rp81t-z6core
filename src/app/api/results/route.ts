@@ -96,7 +96,7 @@ export async function POST(request: Request) {
         },
       },
       specimenLinks: {
-        where: { specimenId },
+        where: { specimenId, status: "ACTIVE" },
         include: { specimen: true },
       },
       results: { orderBy: { version: "desc" }, take: 1, include: { values: true } },
