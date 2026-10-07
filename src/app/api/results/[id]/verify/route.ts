@@ -119,9 +119,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           organizationId: session.user.organizationId,
           status: "ACTIVE",
           effectiveFrom: { lte: verifiedAt },
-          OR: [{ effectiveTo: null }, { effectiveTo: { gte: verifiedAt } }],
+          AND: [
+            { OR: [{ effectiveTo: null }, { effectiveTo: { gte: verifiedAt } }] },
+            { OR: [{ branchId: null }, { branchId: result.performingBranchId }] },
+          ],
         },
       }), {
+        branchId: result.performingBranchId,
         testId: result.orderItem.testId,
         departmentId: result.orderItem.test.departmentId,
       }));
