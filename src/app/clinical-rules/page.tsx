@@ -6,6 +6,7 @@ import { AdvancedClinicalRulesManager } from "@/components/advanced-clinical-rul
 import { AutoverificationValidationManager } from "@/components/autoverification-validation-manager";
 import { CriticalEscalationManager } from "@/components/critical-escalation-manager";
 import { QualitativeResultOptionsManager } from "@/components/qualitative-result-options-manager";
+import { CommentTemplateStatusButton } from "@/components/comment-template-status-button";
 import { statusLabel, tr } from "@/lib/ui-i18n";
 
 export const dynamic = "force-dynamic";
@@ -325,14 +326,15 @@ export default async function ClinicalRulesPage() {
         <div className="table-toolbar"><h2>{tr(locale, "Comment Templates", "قوالب التعليقات")}</h2><span>{commentTemplates.length} {tr(locale, "shown", "معروضة")}</span></div>
         <div className="table-wrap">
           <table>
-            <thead><tr><th>{tr(locale, "Code", "الرمز")}</th><th>{tr(locale, "Name", "الاسم")}</th><th>{tr(locale, "Scope", "النطاق")}</th><th>{tr(locale, "Target", "الهدف")}</th><th>{tr(locale, "Comment", "التعليق")}</th><th>{tr(locale, "Status", "الحالة")}</th></tr></thead>
-            <tbody>{commentTemplates.length === 0 ? <tr><td colSpan={6} className="empty-state">{tr(locale, "No comment templates configured.", "لا توجد قوالب تعليقات.")}</td></tr> : commentTemplates.map(template => <tr key={template.id}>
+            <thead><tr><th>{tr(locale, "Code", "الرمز")}</th><th>{tr(locale, "Name", "الاسم")}</th><th>{tr(locale, "Scope", "النطاق")}</th><th>{tr(locale, "Target", "الهدف")}</th><th>{tr(locale, "Comment", "التعليق")}</th><th>{tr(locale, "Status", "الحالة")}</th><th></th></tr></thead>
+            <tbody>{commentTemplates.length === 0 ? <tr><td colSpan={7} className="empty-state">{tr(locale, "No comment templates configured.", "لا توجد قوالب تعليقات.")}</td></tr> : commentTemplates.map(template => <tr key={template.id}>
               <td><strong>{template.code}</strong></td>
               <td>{locale === "ar" ? template.nameAr || template.nameEn : template.nameEn}{template.nameAr && locale !== "ar" ? <><br/><small dir="rtl">{template.nameAr}</small></> : null}</td>
               <td>{scopeLabel(template.scope)}</td>
               <td>{template.component ? template.component.code + " — " + localizedName(template.component) : template.test ? template.test.code + " — " + localizedName(template.test) : tr(locale, "Organization", "المؤسسة")}</td>
               <td>{locale === "ar" ? template.textAr || template.textEn : template.textEn}</td>
               <td>{statusLabel(locale, template.status)}</td>
+              <td><CommentTemplateStatusButton id={template.id} status={template.status} locale={locale} /></td>
             </tr>)}</tbody>
           </table>
         </div>
