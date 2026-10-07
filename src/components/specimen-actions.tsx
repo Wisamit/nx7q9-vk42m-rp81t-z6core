@@ -103,10 +103,10 @@ export function SpecimenActions({
 
   return <div className="specimen-actions">
     <div className="specimen-action-buttons">
-      {status === "PLANNED" && !requirementsFinalized && <button className="secondary-button" disabled={busy} onClick={finalizeRequirements}>{tr("Finalize Requirements", "تثبيت المتطلبات")}</button>}
-      {status === "PLANNED" && requirementsFinalized && <button className="primary-button" disabled={!specimenTypeConfigured} onClick={() => setMode("COLLECT")}>{tr("Collect", "جمع")}</button>}
-      {["COLLECTED","IN_TRANSIT"].includes(status) && <button className="primary-button" onClick={() => setMode("RECEIVE")}>{tr("Receive", "استلام")}</button>}
-      {["COLLECTED","RECEIVED"].includes(status) && <button className="danger-button" onClick={() => setMode("REJECT")}>{tr("Reject", "رفض")}</button>}
+      {status === "PLANNED" && !requirementsFinalized && <button type="button" className="secondary-button" disabled={busy} onClick={finalizeRequirements}>{tr("Finalize Requirements", "تثبيت المتطلبات")}</button>}
+      {status === "PLANNED" && requirementsFinalized && <button type="button" className="primary-button" disabled={!specimenTypeConfigured} onClick={() => setMode("COLLECT")}>{tr("Collect", "جمع")}</button>}
+      {["COLLECTED","IN_TRANSIT"].includes(status) && <button type="button" className="primary-button" onClick={() => setMode("RECEIVE")}>{tr("Receive", "استلام")}</button>}
+      {["COLLECTED","RECEIVED"].includes(status) && <button type="button" className="danger-button" onClick={() => setMode("REJECT")}>{tr("Reject", "رفض")}</button>}
     </div>
 
     {status === "PLANNED" && !requirementsFinalized && <p className="form-warning">{tr("Collection is locked until the order's specimen requirements are finalized.", "الجمع مقفل حتى يتم تثبيت متطلبات عينات الطلب.")}</p>}
@@ -124,7 +124,7 @@ export function SpecimenActions({
       </label>
 
       {mode === "COLLECT" && <>
-        <label>{tr("Volume", "الحجم")}<input name="volume" type="number" min="0" step="0.001" required={Boolean(requiredVolume)} min={requiredVolume || "0"} /></label>
+        <label>{tr("Volume", "الحجم")}<input name="volume" type="number" step="0.001" required={Boolean(requiredVolume)} min={requiredVolume || "0"} /></label>
         <label>{tr("Volume unit", "وحدة الحجم")}<input name="volumeUnit" maxLength={30} placeholder="mL" required={Boolean(requiredVolumeUnit)} defaultValue={requiredVolumeUnit || ""} readOnly={Boolean(requiredVolumeUnit)} /></label>
         <label className="form-span">{tr("Collection notes", "ملاحظات الجمع")}<textarea name="notes" rows={2} /></label>
       </>}
