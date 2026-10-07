@@ -7,9 +7,11 @@ import type { TrendSeries } from "@/lib/patient-history";
 export function PatientResultTrends({
   series,
   locale,
+  canViewOrders,
 }: {
   series: TrendSeries[];
   locale: "ar" | "en";
+  canViewOrders: boolean;
 }) {
   const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
   const [selectedKey, setSelectedKey] = useState(series[0]?.key || "");
@@ -112,7 +114,9 @@ export function PatientResultTrends({
         </tr></thead>
         <tbody>{[...selected.points].reverse().map(point => <tr key={point.observedAt + ":" + point.accessionNumber}>
           <td>{point.observedAt.replace("T", " ").slice(0, 19)}</td>
-          <td><Link className="table-link" href={"/orders/" + point.orderId}>{point.accessionNumber}</Link></td>
+          <td>{canViewOrders
+            ? <Link className="table-link" href={"/orders/" + point.orderId}>{point.accessionNumber}</Link>
+            : point.accessionNumber}</td>
           <td><strong>{point.valueText}</strong>{selected.unit ? " " + selected.unit : ""}</td>
           <td>{point.flag}</td>
           <td>v{point.resultVersion}</td>
