@@ -38,6 +38,8 @@ function errorMessage(locale: "ar" | "en", code: string) {
     refund_exceeds_invoice_net_payment: tr("Refund amount exceeds the invoice net paid amount.", "مبلغ الاسترداد يتجاوز صافي المدفوع على الفاتورة."),
     invoice_changed: tr("The invoice changed while processing. Review the latest balance and try again.", "تغيرت الفاتورة أثناء المعالجة. راجع الرصيد الحالي ثم أعد المحاولة."),
     payment_changed: tr("The payment changed while processing. Review it and try again.", "تغيرت الدفعة أثناء المعالجة. راجعها ثم أعد المحاولة."),
+    cashier_shift_required: tr("Open a cashier shift for this branch and currency first.", "افتح وردية أمين صندوق لهذا الفرع وهذه العملة أولاً."),
+    cashier_shift_changed: tr("The cashier shift changed while processing. Refresh and try again.", "تغيرت وردية أمين الصندوق أثناء المعالجة. حدّث الصفحة وحاول مجددًا."),
   };
   return messages[code] || tr("The financial adjustment could not be posted.", "تعذر تسجيل التسوية المالية.");
 }
@@ -144,6 +146,7 @@ export function RefundCreateModal({
         paymentId,
         invoiceId,
         amount: form.get("amount"),
+        method: form.get("method"),
         reason: form.get("reason"),
         reference: form.get("reference"),
       }),
@@ -184,6 +187,7 @@ export function RefundCreateModal({
           </select>
         </label>
         <label>{tr("Refund amount", "مبلغ الاسترداد")}<input name="amount" type="number" min="0.0001" step="0.0001" required /></label>
+        <label>{tr("Refund method", "طريقة الاسترداد")}<select name="method" required defaultValue=""><option value="">{tr("Select method…", "اختر الطريقة…")}</option><option value="CASH">{tr("Cash", "نقدي")}</option><option value="CARD">{tr("Card", "بطاقة")}</option><option value="BANK_TRANSFER">{tr("Bank transfer", "تحويل بنكي")}</option><option value="ONLINE">{tr("Online", "إلكتروني")}</option><option value="OTHER">{tr("Other", "أخرى")}</option></select></label>
         <label className="form-span">{tr("Reason", "السبب")}<textarea name="reason" maxLength={1000} required /></label>
         <label className="form-span">{tr("Reference", "المرجع")}<input name="reference" maxLength={150} placeholder={tr("Refund / bank / card reference", "مرجع الاسترداد / البنك / البطاقة")} /></label>
         <button className="primary-button form-span" disabled={busy}>{busy ? tr("Posting…", "جارٍ التسجيل…") : tr("Post Refund", "تسجيل الاسترداد")}</button>

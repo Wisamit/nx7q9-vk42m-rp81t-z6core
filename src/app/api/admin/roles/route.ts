@@ -79,6 +79,9 @@ export async function POST(request: Request) {
   if (selectedPermissions.some(permission => ["billing.discount.approve", "billing.discount.limits.manage"].includes(permission.code)) && !permissions.has("billing.discount.limits.manage")) {
     return NextResponse.json({ error: "discount_authority_forbidden" }, { status: 403 });
   }
+  if (selectedPermissions.some(permission => ["billing.cashier.approve", "billing.cashier.authority.manage"].includes(permission.code)) && !permissions.has("billing.cashier.authority.manage")) {
+    return NextResponse.json({ error: "cashier_authority_forbidden" }, { status: 403 });
+  }
 
   const ctx = await requestContext();
   try {

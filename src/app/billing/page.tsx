@@ -155,6 +155,7 @@ export default async function BillingPage() {
         }))} />}
         {canManageBilling && <CreditNoteCreateModal locale={locale} invoices={creditableInvoices} />}
         {canManageBilling && <RefundCreateModal locale={locale} options={refundOptions} />}
+        {(canManageBilling || permissions.has("billing.cashier.approve")) && <Link className="secondary-link" href="/billing/cashier">{tr(locale, "Cashier Closing", "إغلاق أمين الصندوق")}</Link>}
         <Link className="secondary-link" href="/orders"><SystemIcon name="orders" size={15} />{tr(locale, "Orders", "الطلبات")}</Link>
         <Link className="secondary-link" href="/pricing"><SystemIcon name="pricing" size={15} />{tr(locale, "Pricing", "الأسعار")}</Link>
         <Link className="secondary-link" href="/dashboard"><SystemIcon name="dashboard" size={15} />{tr(locale, "Back to Dashboard", "العودة للوحة التحكم")}</Link>
@@ -275,7 +276,7 @@ export default async function BillingPage() {
             <td>{refund.processedAt.toISOString().slice(0,16).replace("T"," ")}</td>
             <td><strong>{refund.refundNumber}</strong></td>
             <td>{refund.invoice.invoiceNumber}</td>
-            <td>{refund.payment.method}</td>
+            <td>{refund.method}</td>
             <td>{refund.branch.code}</td>
             <td>{refund.amount.toString()} {refund.currency}</td>
             <td>{refund.reason}</td>

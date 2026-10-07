@@ -15,7 +15,7 @@ function documentNumber(prefix: string, branchCode: string) {
 }
 
 class FinancialConflict extends Error {
-  constructor(public readonly code: "invoice_changed" | "payment_changed") {
+  constructor(public readonly code: "invoice_changed" | "payment_changed" | "cashier_shift_changed") {
     super(code);
   }
 }
@@ -30,9 +30,12 @@ export async function POST(request: Request) {
   const invoiceId = text(body.invoiceId, 36);
   const reason = text(body.reason, 1000);
   const reference = text(body.reference, 150);
+  const method = ["CASH","CARD","BANK_TRANSFER","ONLINE","OTHER"].includes(String(body.method))
+    ? String(body.method) as "CASH" | "CARD" | "BANK_TRANSFER" | "ONLINE" | "OTHER"
+    : null;
   const amountText = typeof body.amount === "string" || typeof body.amount === "number" ? String(body.amount) : "";
 
-  if (!paymentId || !invoiceId || !reason || !/^\d+(\.\d{1,4})?$/.test(amountText)) {
+  if (!paymentId || !invoiceId || !reason || !method || !/^\d+(\.\d{1,4})?$/.test(amountText)) {
     return NextResponse.json({ error: "invalid_fields" }, { status: 400 });
   }
 
@@ -73,6 +76,17 @@ export async function POST(request: Request) {
     if (currentPayment.branchId !== currentInvoice.branchId || currentPayment.currency !== currentInvoice.currency) {
       return { error: "financial_context_mismatch", httpStatus: 409 } as const;
     }
+
+    const cashierShift = await tx.cashierShift.findFirst({
+      where: {
+        organizationId: session.user.organizationId,
+        branchId: currentPayment.branchId,
+        cashierUserId: session.user.id,
+        currency: currentPayment.currency,
+        status: "OPEN",
+      },
+    });
+    if (!cashierShift) return { error: "cashier_shift_required", httpStatus: 409 } as const;
 
     const refundedForAllocation = await tx.refund.aggregate({
       where: { paymentId, invoiceId, status: "POSTED" },
@@ -134,6 +148,16 @@ export async function POST(request: Request) {
     });
     if (paymentUpdated.count !== 1) throw new FinancialConflict("payment_changed");
 
+    const shiftUpdated = await tx.cashierShift.updateMany({
+      where: {
+        id: cashierShift.id,
+        status: "OPEN",
+        activityVersion: cashierShift.activityVersion,
+      },
+      data: { activityVersion: { increment: 1 } },
+    });
+    if (shiftUpdated.count !== 1) throw new FinancialConflict("cashier_shift_changed");
+
     const refund = await tx.refund.create({
       data: {
         organizationId: session.user.organizationId,
@@ -143,6 +167,7 @@ export async function POST(request: Request) {
         refundNumber,
         currency: currentPayment.currency,
         amount,
+        method,
         reason,
         reference: reference || null,
         paymentAmountSnapshot: currentPayment.amount,
@@ -153,6 +178,7 @@ export async function POST(request: Request) {
         invoicePaidAfterSnapshot: paidAfter,
         invoiceBalanceAfterSnapshot: new Prisma.Decimal(state.balance),
         processedByUserId: session.user.id,
+        cashierShiftId: cashierShift.id,
       },
     });
 
@@ -171,8 +197,11 @@ export async function POST(request: Request) {
           invoiceNumber: currentInvoice.invoiceNumber,
           currency: currentPayment.currency,
           amount: amount.toFixed(4),
+          method,
           reason,
           reference: reference || null,
+          cashierShiftId: cashierShift.id,
+          shiftNumber: cashierShift.shiftNumber,
           paymentRefundedBefore: currentPayment.refundedAmount.toFixed(4),
           paymentRefundedAfter: totalRefundedAfter.toFixed(4),
           invoicePaidBefore: currentInvoice.paidAmount.toFixed(4),

@@ -11,6 +11,7 @@ import { comparePricingCandidates } from "../src/lib/pricing-policy.ts";
 import { approverCanAuthorize, discountApprovalMode, effectiveDiscountLimit } from "../src/lib/discount-policy.ts";
 import { discountApprovalFingerprint } from "../src/lib/discount-approval.ts";
 import { creditNoteError, invoiceAdjustmentState, refundError } from "../src/lib/billing-adjustments.ts";
+import { cashierClosingSnapshot, cashierClosureReviewError, cashierShiftActiveKey, cashierTransactionError } from "../src/lib/cashier-shift-policy.ts";
 
 test("specimen collection is only allowed from PLANNED with specimen type configured", () => {
   assert.equal(specimenActionError({ status: "PLANNED", action: "COLLECT", specimenTypeConfigured: true }), null);
@@ -349,4 +350,69 @@ test("refund cannot exceed the remaining payment allocation", () => {
     refundedForAllocation: "100.0000",
     requested: "1.0000",
   }), "payment_not_refundable");
+});
+
+
+test("cashier closing expected cash uses opening plus cash receipts minus cash refunds", () => {
+  assert.deepEqual(cashierClosingSnapshot({
+    openingCash: "100.0000",
+    cashReceipts: "350.2500",
+    cashRefunds: "50.2500",
+    actualCash: "401.0000",
+  }), {
+    expectedCash: "400.0000",
+    differenceAmount: "1.0000",
+  });
+});
+
+test("cashier closing preserves negative cash differences exactly", () => {
+  assert.deepEqual(cashierClosingSnapshot({
+    openingCash: "25.0000",
+    cashReceipts: "75.0000",
+    cashRefunds: "10.0000",
+    actualCash: "89.5000",
+  }), {
+    expectedCash: "90.0000",
+    differenceAmount: "-0.5000",
+  });
+});
+
+test("cashier transactions require an open shift with matching branch cashier and currency", () => {
+  const base = {
+    shiftStatus: "OPEN",
+    shiftBranchId: "branch-a",
+    transactionBranchId: "branch-a",
+    shiftCashierUserId: "user-a",
+    actorUserId: "user-a",
+    shiftCurrency: "EGP",
+    transactionCurrency: "EGP",
+  };
+  assert.equal(cashierTransactionError(base), null);
+  assert.equal(cashierTransactionError({ ...base, shiftStatus: "PENDING_APPROVAL" }), "cashier_shift_not_open");
+  assert.equal(cashierTransactionError({ ...base, transactionBranchId: "branch-b" }), "cashier_shift_branch_mismatch");
+  assert.equal(cashierTransactionError({ ...base, actorUserId: "user-b" }), "cashier_shift_cashier_mismatch");
+  assert.equal(cashierTransactionError({ ...base, transactionCurrency: "USD" }), "cashier_shift_currency_mismatch");
+});
+
+test("cashier closing review requires independent approver and rejection note", () => {
+  const base = {
+    closureStatus: "PENDING",
+    shiftStatus: "PENDING_APPROVAL",
+    cashierUserId: "cashier-a",
+    reviewerUserId: "manager-a",
+    action: "APPROVE" as const,
+    note: "",
+  };
+  assert.equal(cashierClosureReviewError(base), null);
+  assert.equal(cashierClosureReviewError({ ...base, reviewerUserId: "cashier-a" }), "self_approval_forbidden");
+  assert.equal(cashierClosureReviewError({ ...base, action: "REJECT", note: "" }), "rejection_note_required");
+  assert.equal(cashierClosureReviewError({ ...base, closureStatus: "APPROVED" }), "closure_not_pending");
+});
+
+test("cashier active key isolates branch cashier and currency", () => {
+  assert.equal(cashierShiftActiveKey("branch-a", "user-a", "egp"), "branch-a:user-a:EGP");
+  assert.notEqual(
+    cashierShiftActiveKey("branch-a", "user-a", "EGP"),
+    cashierShiftActiveKey("branch-a", "user-a", "USD"),
+  );
 });

@@ -37,6 +37,7 @@ const STATUS_AR: Record<string, string> = {
   RESULT_RECEIVED: "تم استلام النتيجة",
   FINAL: "نهائي",
   PENDING: "قيد الانتظار",
+  PENDING_APPROVAL: "بانتظار الاعتماد",
   ENTERED: "تم الإدخال",
   PARTIAL: "جزئي",
   RETRACTED: "مسحوب",
