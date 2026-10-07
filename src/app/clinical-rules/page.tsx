@@ -87,7 +87,7 @@ export default async function ClinicalRulesPage() {
     }),
     prisma.resultValidationPolicy.findMany({
       where: { organizationId: session.user.organizationId },
-      include: { department: true, test: true },
+      include: { branch: true, department: true, test: true },
       orderBy: [{ effectiveFrom: "desc" }, { createdAt: "desc" }],
       take: 300,
     }),
@@ -178,6 +178,7 @@ export default async function ClinicalRulesPage() {
 
     <ResultValidationPolicyManager
       locale={locale}
+      branches={branches}
       departments={departments}
       tests={tests.map(test => ({ id: test.id, code: test.code, nameEn: test.nameEn, nameAr: test.nameAr }))}
       policies={resultValidationPolicies.map(policy => ({
@@ -186,6 +187,7 @@ export default async function ClinicalRulesPage() {
         nameEn: policy.nameEn,
         nameAr: policy.nameAr,
         scope: policy.scope,
+        branchId: policy.branchId,
         departmentId: policy.departmentId,
         testId: policy.testId,
         requiresMedicalValidation: policy.requiresMedicalValidation,
@@ -193,6 +195,7 @@ export default async function ClinicalRulesPage() {
         effectiveFrom: policy.effectiveFrom.toISOString().slice(0,10),
         effectiveTo: policy.effectiveTo?.toISOString().slice(0,10) || null,
         status: policy.status,
+        branch: policy.branch ? { id: policy.branch.id, code: policy.branch.code, nameEn: policy.branch.nameEn, nameAr: policy.branch.nameAr } : null,
         department: policy.department ? { id: policy.department.id, code: policy.department.code, nameEn: policy.department.nameEn, nameAr: policy.department.nameAr } : null,
         test: policy.test ? { id: policy.test.id, code: policy.test.code, nameEn: policy.test.nameEn, nameAr: policy.test.nameAr } : null,
       }))}
