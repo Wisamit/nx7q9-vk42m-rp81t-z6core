@@ -3,6 +3,12 @@ import { authorizedDepartmentIds, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { getUiLocale, tr } from "@/lib/ui-i18n";
 
+function jsonRecord(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
 export const dynamic = "force-dynamic";
 
 export default async function CriticalResultsPage() {
@@ -57,7 +63,10 @@ export default async function CriticalResultsPage() {
           const overdue = Boolean(event.acknowledgementDueAt && event.acknowledgementDueAt < now);
           const last = event.communications[0];
           const criticalSnapshot = Array.isArray(event.criticalValueSnapshot)
-            ? event.criticalValueSnapshot.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item))
+            ? event.criticalValueSnapshot.flatMap((item) => {
+                const record = jsonRecord(item);
+                return record ? [record] : [];
+              })
             : [];
           return <tr key={event.id}>
             <td><strong>{event.result.orderItem.order.patient.fullNameEn}</strong><br/><small>{event.result.orderItem.order.accessionNumber}</small></td>
