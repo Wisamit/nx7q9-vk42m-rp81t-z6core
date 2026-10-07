@@ -34,6 +34,7 @@ export default async function WorklistsPage({
         status: { not: "CANCELLED" },
         specimenLinks: {
           some: {
+            status: "ACTIVE",
             specimen: {
               currentBranchId: { in: branchIds },
               status: { in: ["RECEIVED","IN_PROCESS"] },
@@ -52,7 +53,7 @@ export default async function WorklistsPage({
               { order: { accessionNumber: { contains: q } } },
               { order: { patient: { patientNumber: { contains: q } } } },
               { order: { patient: { fullNameEn: { contains: q } } } },
-              { specimenLinks: { some: { specimen: { barcode: { contains: q } } } } },
+              { specimenLinks: { some: { status: "ACTIVE", specimen: { barcode: { contains: q } } } } },
             ],
           }],
         } : {}),
@@ -72,6 +73,7 @@ export default async function WorklistsPage({
         },
         performedBranch: true,
         specimenLinks: {
+          where: { status: "ACTIVE" },
           include: { specimen: { include: { currentBranch: true } } },
           orderBy: { createdAt: "desc" },
         },
