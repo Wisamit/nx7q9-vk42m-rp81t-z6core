@@ -3331,6 +3331,7 @@ model LaboratoryResultValue {
   qualitativeOptionCodeSnapshot String? @map("qualitative_option_code_snapshot") @db.VarChar(80)
   valueTextEnSnapshot      String?     @map("value_text_en_snapshot") @db.VarChar(500)
   valueTextArSnapshot      String?     @map("value_text_ar_snapshot") @db.VarChar(500)
+  comments                  String?     @db.Text
   deltaEvaluation           DeltaEvaluation @default(NOT_CONFIGURED) @map("delta_evaluation")
   previousValueSnapshot     Decimal?    @map("previous_value_snapshot") @db.Decimal(24, 8)
   previousResultAtSnapshot  DateTime?   @map("previous_result_at_snapshot") @db.DateTime(3)

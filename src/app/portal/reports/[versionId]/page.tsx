@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import { notFound } from "next/navigation";
 import { requirePortalSession } from "@/lib/portal-auth";
 import { prisma } from "@/lib/db";
@@ -23,6 +24,7 @@ type ReportSnapshot = {
       displayValue?: string | null;
       unit?: string | null;
       flag?: string;
+      comments?: string | null;
       referenceLow?: string | null;
       referenceHigh?: string | null;
       referenceTextEn?: string | null;
@@ -101,13 +103,16 @@ export default async function PortalReportPage({ params }: { params: Promise<{ v
       <div className="table-toolbar"><h2>{result.testCode} — {locale === "ar" ? result.testNameAr || result.testNameEn : result.testNameEn}</h2></div>
       <div className="table-wrap"><table>
         <thead><tr><th>{tr(locale, "Component", "المكوّن")}</th><th>{tr(locale, "Result", "النتيجة")}</th><th>{tr(locale, "Flag", "العلامة")}</th><th>{tr(locale, "Unit", "الوحدة")}</th><th>{tr(locale, "Reference", "المرجع")}</th></tr></thead>
-        <tbody>{(result.values || []).map((value, valueIndex) => <tr key={(value.componentCode || "component") + valueIndex}>
-          <td>{value.componentCode}<br/><small>{locale === "ar" ? value.componentNameAr || value.componentNameEn : value.componentNameEn}</small></td>
-          <td><strong>{value.displayValue || "—"}</strong></td>
-          <td>{value.flag || "—"}</td>
-          <td>{value.unit || "—"}</td>
-          <td>{(locale === "ar" ? value.referenceTextAr || value.referenceTextEn : value.referenceTextEn) || [value.referenceLow, value.referenceHigh].filter(Boolean).join(" – ") || "—"}</td>
-        </tr>)}</tbody>
+        <tbody>{(result.values || []).map((value, valueIndex) => <Fragment key={(value.componentCode || "component") + valueIndex}>
+          <tr>
+            <td>{value.componentCode}<br/><small>{locale === "ar" ? value.componentNameAr || value.componentNameEn : value.componentNameEn}</small></td>
+            <td><strong>{value.displayValue || "—"}</strong></td>
+            <td>{value.flag || "—"}</td>
+            <td>{value.unit || "—"}</td>
+            <td>{(locale === "ar" ? value.referenceTextAr || value.referenceTextEn : value.referenceTextEn) || [value.referenceLow, value.referenceHigh].filter(Boolean).join(" – ") || "—"}</td>
+          </tr>
+          {value.comments && <tr><td colSpan={5}><strong>{tr(locale, "Component comment", "تعليق المكوّن")}:</strong> {value.comments}</td></tr>}
+        </Fragment>)}</tbody>
       </table></div>
       {result.comments && <p className="muted">{result.comments}</p>}
     </section>)}

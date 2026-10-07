@@ -88,6 +88,7 @@ export async function buildDiagnosticReportSnapshot(db: Prisma.TransactionClient
         qualitativeOptionCode: value.qualitativeOptionCodeSnapshot,
         valueTextEn: value.valueTextEnSnapshot,
         valueTextAr: value.valueTextArSnapshot,
+        comments: value.comments,
         referenceLow: value.referenceLowSnapshot?.toString() || null,
         referenceHigh: value.referenceHighSnapshot?.toString() || null,
         referenceTextEn: value.referenceTextEnSnapshot,

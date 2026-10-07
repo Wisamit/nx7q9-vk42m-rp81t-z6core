@@ -75,3 +75,50 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "template_code_already_exists" }, { status: 409 });
   }
 }
+
+
+export async function PATCH(request: Request) {
+  const session = await requirePermission("result_comments.manage");
+  const ctx = await requestContext();
+  const body = await request.json().catch(() => null) as Record<string, unknown> | null;
+  if (!body) return NextResponse.json({ error: "invalid_request" }, { status: 400 });
+
+  const id = text(body.id, 36);
+  const status = body.status === "ACTIVE" ? "ACTIVE" : body.status === "INACTIVE" ? "INACTIVE" : null;
+  if (!id || !status) return NextResponse.json({ error: "invalid_status_change" }, { status: 400 });
+
+  const existing = await prisma.resultCommentTemplate.findFirst({
+    where: { id, organizationId: session.user.organizationId },
+  });
+  if (!existing) return NextResponse.json({ error: "comment_template_not_found" }, { status: 404 });
+  if (existing.status === status) return NextResponse.json({ status: "ok", template: existing });
+
+  const template = await prisma.$transaction(async (tx) => {
+    const updated = await tx.resultCommentTemplate.update({
+      where: { id },
+      data: {
+        status,
+        deactivatedAt: status === "INACTIVE" ? new Date() : null,
+      },
+    });
+
+    await tx.auditEvent.create({
+      data: {
+        organizationId: session.user.organizationId,
+        branchId: session.activeBranchId,
+        actorUserId: session.user.id,
+        action: status === "INACTIVE" ? "RESULT_COMMENT_TEMPLATE_DEACTIVATED" : "RESULT_COMMENT_TEMPLATE_REACTIVATED",
+        entityType: "ResultCommentTemplate",
+        entityId: id,
+        oldValues: { status: existing.status },
+        newValues: { status },
+        ipAddress: ctx.ipAddress,
+        userAgent: ctx.userAgent,
+      },
+    });
+
+    return updated;
+  });
+
+  return NextResponse.json({ status: "ok", template });
+}
