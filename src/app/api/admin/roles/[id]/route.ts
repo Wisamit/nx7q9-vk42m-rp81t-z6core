@@ -70,6 +70,13 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     return NextResponse.json({ error: "cashier_authority_forbidden" }, { status: 403 });
   }
 
+  const previouslyGrantedCredit = current.permissions.some(grant => grant.permission.code === "billing.credit.limits.manage");
+  const requestedCredit = selectedPermissions.some(permission => permission.code === "billing.credit.limits.manage");
+  if ((previouslyGrantedCredit !== requestedCredit || (current.status !== "ACTIVE" && status === "ACTIVE" && previouslyGrantedCredit))
+    && !permissions.has("billing.credit.limits.manage")) {
+    return NextResponse.json({ error: "credit_authority_forbidden" }, { status: 403 });
+  }
+
   const ctx = await requestContext();
   await prisma.$transaction(async tx => {
     await tx.role.update({ where: { id }, data: { nameEn, nameAr: nameAr || null, discountLimitPercent: discountLimitPercent.toFixed(2), status } });
