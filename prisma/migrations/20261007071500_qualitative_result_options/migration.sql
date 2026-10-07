@@ -27,9 +27,9 @@ CREATE TABLE `qualitative_result_options` (
   `updated_at` DATETIME(3) NOT NULL,
   `deactivated_at` DATETIME(3) NULL,
 
-  INDEX `qualitative_result_options_organization_id_status_idx`(`organization_id`, `status`),
-  INDEX `qualitative_result_options_test_id_component_id_status_effective_from_effective_to_idx`(`test_id`, `component_id`, `status`, `effective_from`, `effective_to`),
-  INDEX `qualitative_result_options_created_by_user_id_created_at_idx`(`created_by_user_id`, `created_at`),
+  INDEX `qual_result_options_org_status_idx`(`organization_id`, `status`),
+  INDEX `qual_result_options_scope_effective_idx`(`test_id`, `component_id`, `status`, `effective_from`, `effective_to`),
+  INDEX `qual_result_options_creator_idx`(`created_by_user_id`, `created_at`),
   PRIMARY KEY (`id`),
 
   CONSTRAINT `qualitative_result_options_organization_id_fkey`
