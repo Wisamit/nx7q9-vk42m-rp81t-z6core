@@ -41,7 +41,7 @@ export default async function PhlebotomyPage({
     where: {
       organizationId: session.user.organizationId,
       status: "PLANNED",
-      currentBranchId: selectedBranchId || { in: branchIds },
+      currentBranchId: requestedSpecimenId ? { in: branchIds } : selectedBranchId ? selectedBranchId : { in: branchIds },
       ...(requestedSpecimenId ? { id: requestedSpecimenId } : {}),
       ...(q ? {
         OR: [
@@ -209,7 +209,7 @@ export default async function PhlebotomyPage({
                 <td><strong>{attempt.specimen.order.patient.patientNumber}</strong><br/><small>{patientName(attempt.specimen.order.patient)}</small></td>
                 <td><span className="barcode-text">{attempt.specimen.barcode}</span></td>
                 <td><strong>{attempt.failureReasonCode || "—"}</strong><br/><small>{attempt.failureReasonText || "—"}</small></td>
-                <td>{collectorName(attempt.collector)}</td>
+                <td>{locale === "ar" ? attempt.collectorNameArSnapshot || attempt.collectorNameEnSnapshot : attempt.collectorNameEnSnapshot}</td>
                 <td>{attempt.replacementSpecimen ? <Link className="table-link" href={`/phlebotomy?branch=${selectedBranchId}&specimen=${attempt.replacementSpecimen.id}`}>{attempt.replacementSpecimen.barcode}</Link> : "—"}</td>
               </tr>)
             }
