@@ -15,6 +15,8 @@ function text(value: unknown, max = 500) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
 }
 
+class TaxConfigurationChanged extends Error {}
+
 class CreditControlError extends Error {
   constructor(
     public readonly code: "credit_limit_exceeded" | "client_credit_state_changed",
@@ -636,7 +638,7 @@ export async function POST(request: Request) {
         },
         data: { taxConfigVersion: { increment: 1 } },
       });
-      if (taxGuard.count !== 1) throw new Error("TAX_CONFIGURATION_CHANGED");
+      if (taxGuard.count !== 1) throw new TaxConfigurationChanged();
 
       let accessionNumber = documentNumber("ORD");
       while (await tx.labOrder.findUnique({ where: { organizationId_accessionNumber: { organizationId: session.user.organizationId, accessionNumber } } })) {
@@ -1060,6 +1062,9 @@ export async function POST(request: Request) {
       ...(result.creditControlSnapshot ? { creditControl: result.creditControlSnapshot } : {}),
     }, { status: 201 });
   } catch (error) {
+    if (error instanceof TaxConfigurationChanged) {
+      return NextResponse.json({ error: "tax_configuration_changed" }, { status: 409 });
+    }
     if (error instanceof CreditControlError) {
       if (error.code === "credit_limit_exceeded") {
         await prisma.auditEvent.create({
