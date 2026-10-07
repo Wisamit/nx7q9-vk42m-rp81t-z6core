@@ -225,6 +225,8 @@ export function ResultLayoutManager({
         <label>{tr("Grid columns", "أعمدة الشبكة")}<select value={sectionColumnCount} onChange={event => setSectionColumnCount(Number(event.target.value))}>
           <option value={1}>1</option><option value={2}>2</option><option value={3}>3</option><option value={4}>4</option>
         </select></label>
+        <label>{tr("Report order", "ترتيب التقرير")}<input type="number" min="0" max="10000" value={sectionReportDisplayOrder} onChange={event => setSectionReportDisplayOrder(event.target.value === "" ? "" : Number(event.target.value))} placeholder={tr("Use section order", "استخدم ترتيب القسم")} /></label>
+        <label className="check-row"><input type="checkbox" checked={sectionReportVisible} onChange={event => setSectionReportVisible(event.target.checked)} /><span>{tr("Show this section on report", "إظهار هذا القسم في التقرير")}</span></label>
         <label className="form-span">{tr("English hint", "التعليمات بالإنجليزية")}<input value={sectionHintEn} onChange={event => setSectionHintEn(event.target.value)} maxLength={500} /></label>
         <label className="form-span">{tr("Arabic hint", "التعليمات بالعربية")}<input dir="rtl" value={sectionHintAr} onChange={event => setSectionHintAr(event.target.value)} maxLength={500} /></label>
         <button className="secondary-button form-span" disabled={busy !== ""}>{busy === "UPDATE_SECTION_PRESENTATION" ? tr("Saving…", "جارٍ الحفظ…") : tr("Save Section Presentation", "حفظ عرض القسم")}</button>
@@ -256,6 +258,10 @@ export function ResultLayoutManager({
           <option value="WIDE">{tr("Wide", "عريض")}</option>
           <option value="FULL">{tr("Full row", "صف كامل")}</option>
         </select></label>
+        <label>{tr("Report name (English)", "اسم التقرير بالإنجليزية")}<input value={reportNameEn} onChange={event => setReportNameEn(event.target.value)} maxLength={200} placeholder={tr("Use component name", "استخدم اسم المكوّن")} /></label>
+        <label>{tr("Report name (Arabic)", "اسم التقرير بالعربية")}<input dir="rtl" value={reportNameAr} onChange={event => setReportNameAr(event.target.value)} maxLength={200} placeholder={tr("Use component Arabic name", "استخدم الاسم العربي للمكوّن")} /></label>
+        <label>{tr("Report order", "ترتيب التقرير")}<input type="number" min="0" max="10000" value={reportDisplayOrder} onChange={event => setReportDisplayOrder(event.target.value === "" ? "" : Number(event.target.value))} placeholder={tr("Use component order", "استخدم ترتيب المكوّن")} /></label>
+        <label className="check-row"><input type="checkbox" checked={reportVisible} onChange={event => setReportVisible(event.target.checked)} /><span>{tr("Show this component on report", "إظهار هذا المكوّن في التقرير")}</span></label>
         <label className="form-span">{tr("English entry hint", "تعليمات الإدخال بالإنجليزية")}<input value={entryHintEn} onChange={event => setEntryHintEn(event.target.value)} maxLength={500} /></label>
         <label className="form-span">{tr("Arabic entry hint", "تعليمات الإدخال بالعربية")}<input dir="rtl" value={entryHintAr} onChange={event => setEntryHintAr(event.target.value)} maxLength={500} /></label>
         <button className="secondary-button form-span" disabled={busy !== ""}>{busy === "UPDATE_COMPONENT_PRESENTATION" ? tr("Saving…", "جارٍ الحفظ…") : tr("Save Component Presentation", "حفظ عرض المكوّن")}</button>
