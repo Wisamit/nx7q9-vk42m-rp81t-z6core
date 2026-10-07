@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  automatedTechnicalReviewOutcome,
   isResultEntryLockedByValidation,
   medicalReviewerAllowed,
   selectValidationPolicy,
@@ -75,6 +76,37 @@ test("medical validation policy advances technical review to medical validation"
     requiresMedicalValidation: true,
   });
   assert.equal(stageAfterTechnicalReview(snapshot), "MEDICAL_VALIDATION");
+});
+
+test("autoverification cannot bypass required medical validation", () => {
+  const snapshot = {
+    ...snapshotValidationPolicy(null),
+    requiresMedicalValidation: true,
+  };
+  assert.deepEqual(
+    automatedTechnicalReviewOutcome(snapshot, { eligible: true, complete: true }),
+    { resultStatus: "ENTERED", validationStage: "MEDICAL_VALIDATION", verificationComplete: false },
+  );
+});
+
+test("autoverification completes only technical-only validation paths", () => {
+  const snapshot = snapshotValidationPolicy(null);
+  assert.deepEqual(
+    automatedTechnicalReviewOutcome(snapshot, { eligible: true, complete: true }),
+    { resultStatus: "VERIFIED", validationStage: "COMPLETE", verificationComplete: true },
+  );
+});
+
+test("ineligible or incomplete autoverification remains in manual workflow", () => {
+  const snapshot = snapshotValidationPolicy(null);
+  assert.deepEqual(
+    automatedTechnicalReviewOutcome(snapshot, { eligible: false, complete: true }),
+    { resultStatus: "ENTERED", validationStage: "TECHNICAL_REVIEW", verificationComplete: false },
+  );
+  assert.deepEqual(
+    automatedTechnicalReviewOutcome(snapshot, { eligible: true, complete: false }),
+    { resultStatus: "DRAFT", validationStage: "ENTRY", verificationComplete: false },
+  );
 });
 
 test("same reviewer is blocked unless policy explicitly allows it", () => {
