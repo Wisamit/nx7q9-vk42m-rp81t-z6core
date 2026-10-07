@@ -2867,6 +2867,11 @@ model SpecimenCollectionAttempt {
   replacementSpecimenId         String?                          @unique @map("replacement_specimen_id") @db.Char(36)
   branchId                      String                           @map("branch_id") @db.Char(36)
   collectorUserId               String                           @map("collector_user_id") @db.Char(36)
+  branchCodeSnapshot            String                           @map("branch_code_snapshot") @db.VarChar(50)
+  branchNameEnSnapshot          String                           @map("branch_name_en_snapshot") @db.VarChar(200)
+  branchNameArSnapshot          String?                          @map("branch_name_ar_snapshot") @db.VarChar(200)
+  collectorNameEnSnapshot       String                           @map("collector_name_en_snapshot") @db.VarChar(200)
+  collectorNameArSnapshot       String?                          @map("collector_name_ar_snapshot") @db.VarChar(200)
   outcome                       SpecimenCollectionAttemptOutcome
   patientNameSnapshot           String                           @map("patient_name_snapshot") @db.VarChar(220)
   patientNumberSnapshot         String                           @map("patient_number_snapshot") @db.VarChar(40)
