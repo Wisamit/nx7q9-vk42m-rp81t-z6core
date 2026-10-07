@@ -19,6 +19,7 @@ export default async function TestDetailPage({ params }: { params: Promise<{ id:
       department: true, specimenType: true, container: true, method: true, defaultUnit: true,
       branchAvailability: { include: { branch: true } },
       components: { include: { unit: true, resultSection: true, referenceIntervals: { include: { branch: true, method: true, analyzer: true, specimenType: true }, orderBy: { effectiveFrom: "desc" } } }, orderBy: { displayOrder: "asc" } },
+      tatPolicies: { include: { branch: true, createdBy: true }, orderBy: [{ effectiveFrom: "desc" }, { createdAt: "desc" }] },
       resultSections: { orderBy: [{ displayOrder: "asc" }, { code: "asc" }] },
       orderQuestions: { where: { status: "ACTIVE" }, orderBy: [{ displayOrder: "asc" }, { code: "asc" }] },
     },
@@ -91,6 +92,34 @@ export default async function TestDetailPage({ params }: { params: Promise<{ id:
       </article>
     </section>
 
+    <section className="table-card detail-section">
+      <div className="table-toolbar">
+        <h2>{tr(locale, "TAT / SLA Policies", "سياسات TAT / SLA")}</h2>
+        <span>{test.tatPolicies.length} {tr(locale, "configured", "مهيأة")}</span>
+      </div>
+      <div className="table-wrap"><table>
+        <thead><tr>
+          <th>{tr(locale, "Branch", "الفرع")}</th>
+          <th>{tr(locale, "Priority", "الأولوية")}</th>
+          <th>TAT</th>
+          <th>{tr(locale, "Alert", "التنبيه")}</th>
+          <th>{tr(locale, "Effective", "السريان")}</th>
+          <th>{tr(locale, "Created by", "أنشئ بواسطة")}</th>
+          <th>{tr(locale, "Status", "الحالة")}</th>
+        </tr></thead>
+        <tbody>{test.tatPolicies.length === 0 ? <tr><td colSpan={7} className="empty-state">{tr(locale, "No TAT / SLA policies configured. The catalog TAT remains the fallback.", "لا توجد سياسات TAT / SLA مهيأة. يبقى زمن الإنجاز الأساسي في دليل الفحص هو الخيار الاحتياطي.")}</td></tr> :
+          test.tatPolicies.map(policy => <tr key={policy.id}>
+            <td>{policy.branch ? localizedName(policy.branch) : tr(locale, "Organization default", "افتراضي المؤسسة")}</td>
+            <td>{policy.priority === "STAT" ? "STAT" : policy.priority === "URGENT" ? tr(locale, "Urgent", "عاجل") : policy.priority === "ROUTINE" ? tr(locale, "Routine", "عادي") : tr(locale, "Any priority", "كل الأولويات")}</td>
+            <td><strong>{policy.tatMinutes} {tr(locale, "min", "دقيقة")}</strong></td>
+            <td>{policy.alertBeforeMinutes === null ? "—" : policy.alertBeforeMinutes + " " + tr(locale, "min before due", "دقيقة قبل الاستحقاق")}</td>
+            <td>{policy.effectiveFrom.toISOString().slice(0,10)}{policy.effectiveTo ? " → " + policy.effectiveTo.toISOString().slice(0,10) : " → " + tr(locale, "current", "حالي")}</td>
+            <td>{locale === "ar" ? policy.createdBy.displayNameAr || policy.createdBy.displayNameEn : policy.createdBy.displayNameEn}</td>
+            <td>{statusLabel(locale, policy.status)}</td>
+          </tr>)}
+        </tbody>
+      </table></div>
+    </section>
     <section className="table-card detail-section">
       <div className="table-toolbar">
         <h2>{tr(locale, "Components & Reference Intervals", "المكونات والمديات المرجعية")}</h2>
