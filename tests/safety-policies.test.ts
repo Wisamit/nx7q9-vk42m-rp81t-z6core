@@ -5,6 +5,7 @@ import {
   branchScopeAllows,
   departmentScopeAllows,
   releaseEligibility,
+  scopedWorklistBranchIds,
   specimenActionError,
 } from "../src/lib/clinical-safety.ts";
 import { comparePricingCandidates } from "../src/lib/pricing-policy.ts";
@@ -16,6 +17,13 @@ import { buildClientStatementLedger, clientPaymentAllocationError, localDateStar
 import { agingBucket, aggregateAging, historicalInvoiceReceivable, invoiceDueDateSnapshot, localCalendarDate } from "../src/lib/accounts-receivable-aging.ts";
 import { creditLimitDecision, validCreditLimit } from "../src/lib/client-credit-control.ts";
 import { resolveTaxRule, taxCreditReversal, taxLineAmounts, taxScopeKey, validTaxRate } from "../src/lib/tax-policy.ts";
+
+test("worklist branch filtering never expands outside authorized active scopes", () => {
+  assert.deepEqual(scopedWorklistBranchIds(["B1", "B2"], null), ["B1", "B2"]);
+  assert.deepEqual(scopedWorklistBranchIds(["B1", "B2"], "B2"), ["B2"]);
+  assert.deepEqual(scopedWorklistBranchIds(["B1", "B2"], "B3"), []);
+  assert.deepEqual(scopedWorklistBranchIds([], "B1"), []);
+});
 
 test("specimen collection is only allowed from PLANNED with specimen type configured", () => {
   assert.equal(specimenActionError({ status: "PLANNED", action: "COLLECT", specimenTypeConfigured: true }), null);

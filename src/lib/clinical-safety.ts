@@ -67,6 +67,14 @@ export function branchScopeAllows(authorizedBranchIds: readonly string[], branch
   return Boolean(branchId && authorizedBranchIds.includes(branchId));
 }
 
+export function scopedWorklistBranchIds(
+  authorizedBranchIds: readonly string[],
+  requestedBranchId: string | null | undefined,
+) {
+  if (!requestedBranchId) return [...authorizedBranchIds];
+  return authorizedBranchIds.includes(requestedBranchId) ? [requestedBranchId] : [];
+}
+
 export function departmentScopeAllows(
   authorizedDepartmentIds: readonly string[],
   departmentId: string | null | undefined,
