@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
@@ -17,6 +18,16 @@ type RuleType =
   | "VALIDATION_HOLD_RULE"
   | "CRITICAL_ESCALATION_POLICY"
   | "RESULT_VALIDATION_POLICY";
+
+type ClinicalRuleDb = Pick<typeof prisma,
+  | "calculatedResultRule"
+  | "reflexRule"
+  | "deltaRule"
+  | "autoverificationPolicy"
+  | "validationHoldRule"
+  | "criticalEscalationPolicy"
+  | "resultValidationPolicy"
+>;
 
 const ruleTypes = new Set<RuleType>([
   "CALCULATED_RESULT_RULE",
@@ -49,10 +60,10 @@ function entityType(type: RuleType) {
   }[type];
 }
 
-async function loadRule(type: RuleType, id: string, organizationId: string): Promise<GovernedClinicalRule | null> {
+async function loadRule(db: ClinicalRuleDb, type: RuleType, id: string, organizationId: string): Promise<GovernedClinicalRule | null> {
   switch (type) {
     case "CALCULATED_RESULT_RULE": {
-      const rule = await prisma.calculatedResultRule.findFirst({ where: { id, organizationId } });
+      const rule = await db.calculatedResultRule.findFirst({ where: { id, organizationId } });
       return rule ? {
         id: rule.id,
         identityKey: ruleIdentity([rule.testId, rule.targetComponentId]),
@@ -64,7 +75,7 @@ async function loadRule(type: RuleType, id: string, organizationId: string): Pro
       } : null;
     }
     case "REFLEX_RULE": {
-      const rule = await prisma.reflexRule.findFirst({ where: { id, organizationId } });
+      const rule = await db.reflexRule.findFirst({ where: { id, organizationId } });
       return rule ? {
         id: rule.id,
         identityKey: ruleIdentity([
@@ -82,7 +93,7 @@ async function loadRule(type: RuleType, id: string, organizationId: string): Pro
       } : null;
     }
     case "DELTA_RULE": {
-      const rule = await prisma.deltaRule.findFirst({ where: { id, organizationId } });
+      const rule = await db.deltaRule.findFirst({ where: { id, organizationId } });
       return rule ? {
         id: rule.id,
         identityKey: ruleIdentity([rule.testId, rule.componentId, rule.branchId, rule.methodId]),
@@ -94,7 +105,7 @@ async function loadRule(type: RuleType, id: string, organizationId: string): Pro
       } : null;
     }
     case "AUTOVERIFICATION_POLICY": {
-      const rule = await prisma.autoverificationPolicy.findFirst({ where: { id, organizationId } });
+      const rule = await db.autoverificationPolicy.findFirst({ where: { id, organizationId } });
       return rule ? {
         id: rule.id,
         identityKey: ruleIdentity([rule.testId, rule.branchId]),
@@ -106,7 +117,7 @@ async function loadRule(type: RuleType, id: string, organizationId: string): Pro
       } : null;
     }
     case "VALIDATION_HOLD_RULE": {
-      const rule = await prisma.validationHoldRule.findFirst({ where: { id, organizationId } });
+      const rule = await db.validationHoldRule.findFirst({ where: { id, organizationId } });
       return rule ? {
         id: rule.id,
         identityKey: ruleIdentity([rule.testId, rule.branchId, rule.condition, rule.resultSource]),
@@ -118,7 +129,7 @@ async function loadRule(type: RuleType, id: string, organizationId: string): Pro
       } : null;
     }
     case "CRITICAL_ESCALATION_POLICY": {
-      const rule = await prisma.criticalEscalationPolicy.findFirst({ where: { id, organizationId } });
+      const rule = await db.criticalEscalationPolicy.findFirst({ where: { id, organizationId } });
       return rule ? {
         id: rule.id,
         identityKey: ruleIdentity([rule.testId, rule.branchId]),
@@ -130,7 +141,7 @@ async function loadRule(type: RuleType, id: string, organizationId: string): Pro
       } : null;
     }
     case "RESULT_VALIDATION_POLICY": {
-      const rule = await prisma.resultValidationPolicy.findFirst({
+      const rule = await db.resultValidationPolicy.findFirst({
         where: { id, organizationId },
         include: { department: { select: { branchId: true } } },
       });
@@ -147,10 +158,10 @@ async function loadRule(type: RuleType, id: string, organizationId: string): Pro
   }
 }
 
-async function loadActiveRules(type: RuleType, organizationId: string): Promise<GovernedClinicalRule[]> {
+async function loadActiveRules(db: ClinicalRuleDb, type: RuleType, organizationId: string): Promise<GovernedClinicalRule[]> {
   switch (type) {
     case "CALCULATED_RESULT_RULE":
-      return (await prisma.calculatedResultRule.findMany({ where: { organizationId, status: "ACTIVE" } })).map(rule => ({
+      return (await db.calculatedResultRule.findMany({ where: { organizationId, status: "ACTIVE" } })).map(rule => ({
         id: rule.id,
         identityKey: ruleIdentity([rule.testId, rule.targetComponentId]),
         effectiveFrom: rule.effectiveFrom,
@@ -159,7 +170,7 @@ async function loadActiveRules(type: RuleType, organizationId: string): Promise<
         deactivatedAt: rule.deactivatedAt,
       }));
     case "REFLEX_RULE":
-      return (await prisma.reflexRule.findMany({ where: { organizationId, status: "ACTIVE" } })).map(rule => ({
+      return (await db.reflexRule.findMany({ where: { organizationId, status: "ACTIVE" } })).map(rule => ({
         id: rule.id,
         identityKey: ruleIdentity([rule.sourceTestId, rule.sourceComponentId, rule.branchId, rule.targetTestId, rule.operator]),
         effectiveFrom: rule.effectiveFrom,
@@ -168,7 +179,7 @@ async function loadActiveRules(type: RuleType, organizationId: string): Promise<
         deactivatedAt: rule.deactivatedAt,
       }));
     case "DELTA_RULE":
-      return (await prisma.deltaRule.findMany({ where: { organizationId, status: "ACTIVE" } })).map(rule => ({
+      return (await db.deltaRule.findMany({ where: { organizationId, status: "ACTIVE" } })).map(rule => ({
         id: rule.id,
         identityKey: ruleIdentity([rule.testId, rule.componentId, rule.branchId, rule.methodId]),
         effectiveFrom: rule.effectiveFrom,
@@ -177,7 +188,7 @@ async function loadActiveRules(type: RuleType, organizationId: string): Promise<
         deactivatedAt: rule.deactivatedAt,
       }));
     case "AUTOVERIFICATION_POLICY":
-      return (await prisma.autoverificationPolicy.findMany({ where: { organizationId, status: "ACTIVE" } })).map(rule => ({
+      return (await db.autoverificationPolicy.findMany({ where: { organizationId, status: "ACTIVE" } })).map(rule => ({
         id: rule.id,
         identityKey: ruleIdentity([rule.testId, rule.branchId]),
         effectiveFrom: rule.effectiveFrom,
@@ -186,7 +197,7 @@ async function loadActiveRules(type: RuleType, organizationId: string): Promise<
         deactivatedAt: rule.deactivatedAt,
       }));
     case "VALIDATION_HOLD_RULE":
-      return (await prisma.validationHoldRule.findMany({ where: { organizationId, status: "ACTIVE" } })).map(rule => ({
+      return (await db.validationHoldRule.findMany({ where: { organizationId, status: "ACTIVE" } })).map(rule => ({
         id: rule.id,
         identityKey: ruleIdentity([rule.testId, rule.branchId, rule.condition, rule.resultSource]),
         effectiveFrom: rule.effectiveFrom,
@@ -195,7 +206,7 @@ async function loadActiveRules(type: RuleType, organizationId: string): Promise<
         deactivatedAt: rule.deactivatedAt,
       }));
     case "CRITICAL_ESCALATION_POLICY":
-      return (await prisma.criticalEscalationPolicy.findMany({ where: { organizationId, status: "ACTIVE" } })).map(rule => ({
+      return (await db.criticalEscalationPolicy.findMany({ where: { organizationId, status: "ACTIVE" } })).map(rule => ({
         id: rule.id,
         identityKey: ruleIdentity([rule.testId, rule.branchId]),
         effectiveFrom: rule.effectiveFrom,
@@ -204,7 +215,7 @@ async function loadActiveRules(type: RuleType, organizationId: string): Promise<
         deactivatedAt: rule.deactivatedAt,
       }));
     case "RESULT_VALIDATION_POLICY":
-      return (await prisma.resultValidationPolicy.findMany({ where: { organizationId, status: "ACTIVE" } })).map(rule => ({
+      return (await db.resultValidationPolicy.findMany({ where: { organizationId, status: "ACTIVE" } })).map(rule => ({
         id: rule.id,
         identityKey: ruleIdentity([rule.scope, rule.branchId, rule.departmentId, rule.testId]),
         effectiveFrom: rule.effectiveFrom,
@@ -215,8 +226,8 @@ async function loadActiveRules(type: RuleType, organizationId: string): Promise<
   }
 }
 
-async function validateCalculatedApproval(id: string, organizationId: string) {
-  const rule = await prisma.calculatedResultRule.findFirst({
+async function validateCalculatedApproval(db: ClinicalRuleDb, id: string, organizationId: string) {
+  const rule = await db.calculatedResultRule.findFirst({
     where: { id, organizationId },
     include: {
       test: {
@@ -264,7 +275,7 @@ export async function POST(request: Request) {
   }
 
   const organizationId = session.user.organizationId;
-  const existing = await loadRule(type, id, organizationId);
+  const existing = await loadRule(prisma, type, id, organizationId);
   if (!existing) return NextResponse.json({ error: "clinical_rule_not_found" }, { status: 404 });
   if (existing.authorizationBranchId && !canAccessBranch(session, existing.authorizationBranchId)) {
     return NextResponse.json({ error: "branch_forbidden" }, { status: 403 });
@@ -276,13 +287,13 @@ export async function POST(request: Request) {
     }
 
     if (type === "CALCULATED_RESULT_RULE") {
-      const formulaValidation = await validateCalculatedApproval(id, organizationId);
+      const formulaValidation = await validateCalculatedApproval(prisma, id, organizationId);
       if (!formulaValidation.ok) {
         return NextResponse.json(formulaValidation, { status: 409 });
       }
     }
 
-    const activeRules = await loadActiveRules(type, organizationId);
+    const activeRules = await loadActiveRules(prisma, type, organizationId);
     const plan = planClinicalRuleApproval(existing, activeRules);
     if (plan.conflicts.length > 0) {
       return NextResponse.json({
