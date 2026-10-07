@@ -45,7 +45,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     },
   });
   if (!parent) return NextResponse.json({ error: "specimen_not_found" }, { status: 404 });
-  const currentBranchId = currentBranchId;
+  const currentBranchId = parent.currentBranchId;
   if (!currentBranchId || !canAccessBranch(session, currentBranchId)) {
     return NextResponse.json({ error: "branch_forbidden" }, { status: 403 });
   }
