@@ -64,6 +64,7 @@ enum OrderQuestionResponseType {
   NUMERIC
   BOOLEAN
   DATE
+  DATETIME
   SINGLE_CHOICE
 }
 
@@ -6191,6 +6192,10 @@ model OrderQuestion {
   required       Boolean                   @default(false)
   options        Json?
   displayOrder   Int                       @default(0) @map("display_order")
+  version        Int                       @default(1)
+  effectiveFrom  DateTime                  @default(now()) @map("effective_from") @db.DateTime(3)
+  effectiveTo    DateTime?                 @map("effective_to") @db.DateTime(3)
+  supersedesQuestionId String?             @map("supersedes_question_id") @db.Char(36)
   status         RecordStatus              @default(ACTIVE)
   createdAt      DateTime                  @default(now()) @map("created_at") @db.DateTime(3)
   updatedAt      DateTime                  @updatedAt @map("updated_at") @db.DateTime(3)
@@ -6199,10 +6204,14 @@ model OrderQuestion {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   test         LabTest      @relation(fields: [testId], references: [id], onDelete: Restrict)
   answers      OrderAnswer[]
+  supersedes   OrderQuestion? @relation("OrderQuestionRevision", fields: [supersedesQuestionId], references: [id], onDelete: Restrict)
+  supersededBy OrderQuestion[] @relation("OrderQuestionRevision")
 
-  @@unique([testId, code])
+  @@unique([testId, code, version])
   @@index([organizationId, status])
   @@index([testId, status, displayOrder])
+  @@index([testId, code, status, effectiveFrom, effectiveTo])
+  @@index([supersedesQuestionId])
   @@map("order_questions")
 }
 
@@ -6216,11 +6225,16 @@ model OrderAnswer {
   questionTextEnSnapshot   String                    @map("question_text_en_snapshot") @db.VarChar(500)
   questionTextArSnapshot   String?                   @map("question_text_ar_snapshot") @db.VarChar(500)
   responseTypeSnapshot     OrderQuestionResponseType @map("response_type_snapshot")
+  questionVersionSnapshot  Int                       @default(1) @map("question_version_snapshot")
   answerText               String?                   @map("answer_text") @db.Text
   answerNumeric            Decimal?                  @map("answer_numeric") @db.Decimal(18, 6)
   answerBoolean            Boolean?                  @map("answer_boolean")
   answerDate               DateTime?                 @map("answer_date") @db.Date
+  answerDateTime           DateTime?                 @map("answer_date_time") @db.DateTime(3)
   selectedOptionSnapshot   String?                   @map("selected_option_snapshot") @db.VarChar(500)
+  selectedOptionCodeSnapshot String?                 @map("selected_option_code_snapshot") @db.VarChar(100)
+  selectedOptionTextEnSnapshot String?               @map("selected_option_text_en_snapshot") @db.VarChar(500)
+  selectedOptionTextArSnapshot String?               @map("selected_option_text_ar_snapshot") @db.VarChar(500)
   recordedByUserId         String                    @map("recorded_by_user_id") @db.Char(36)
   recordedAt               DateTime                  @default(now()) @map("recorded_at") @db.DateTime(3)
 
