@@ -78,7 +78,7 @@ Scope:
 - portal users can request a six-digit VERIFY_CONTACT OTP over EMAIL or SMS; successful OTP verification creates immutable destination-specific history with method `SELF_SERVICE_OTP`; challenges expire after 10 minutes, are rate-limited, have bounded attempts, and consumed/replaced OTP bodies are redacted from stored notifications;
 - authorized staff with `portal_accounts.manage` can confirm a current email/phone only with an explicit reason; the actor, reason, channel, masked destination and verification record are audited as `STAFF_CONFIRMED`;
 - existing `contactVerifiedAt`, `emailVerifiedAt` and `phoneVerifiedAt` remain compatibility/cache fields and are not the source of truth for report-delivery authorization;
-- migration preserves safe historical verification as `LEGACY_IMPORTED`: channel-specific timestamps are bound to their current destination, while the legacy aggregate marker is migrated only when exactly one contact method exists;
+- migration is fail-closed: existing timestamp fields are not promoted to destination-bound trust on multi-contact accounts; `LEGACY_IMPORTED` is created only when the legacy aggregate marker exists and exactly one contact method is configured;
 - a changed email/phone never inherits the previous destination's verification because authorization requires an exact current-destination match; the present application has no post-provisioning contact-edit API, so there is currently no mutation path that can change these fields without a new implementation explicitly handling revocation;
 - doctor delivery is allowed only to the order's associated referrer;
 - corporate delivery additionally requires active `CorporatePortalPatientAccess.canViewReports` for the order patient;
