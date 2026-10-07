@@ -221,6 +221,11 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
       methodId: item.test.methodId,
       patientSex: item.order.patient.sexAtBirth,
       dateOfBirth: item.order.patient.dateOfBirth,
+      pregnancyStatus: item.order.pregnancyStatus,
+      gestationalAgeWeeks: item.order.gestationalAgeWeeks,
+      analyzerId: latestResult?.analyzerId || null,
+      specimenTypeId: readySpecimen.specimenTypeId,
+      populationCode: item.order.referencePopulationCode,
     });
 
     const referenceDisplay = existing
@@ -307,7 +312,7 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
 
     <section className="detail-card detail-section result-entry-surface">
       <div className="section-title-row"><div><p className="eyebrow">{tr(locale, "Analytical workflow", "المسار التحليلي")}</p><h2>{tr(locale, "Result Values", "قيم النتائج")}</h2></div><span className="keyboard-hint">{tr(locale, "Enter values → review flags → verify", "أدخل القيم ← راجع العلامات ← تحقق")}</span></div>
-      <p className="muted">{tr(locale, "Reference intervals are matched by effective date, branch, method, sex and patient age when configured. The matched values are snapshotted with the result.", "تُطابق المجالات المرجعية حسب تاريخ السريان والفرع والطريقة والجنس وعمر المريض عند تهيئتها، وتُحفظ القيم المستخدمة تاريخيًا مع النتيجة.")}</p>
+      <p className="muted">{tr(locale, "Reference intervals are matched by effective date and configured clinical context, including branch, method, analyzer, specimen, sex, age, pregnancy and population. The matched values are snapshotted with the result.", "تُطابق المجالات المرجعية حسب تاريخ السريان والسياق السريري المهيأ، بما يشمل الفرع والطريقة والجهاز والعينة والجنس والعمر والحمل والمجموعة المرجعية، وتُحفظ القيم المستخدمة تاريخيًا مع النتيجة.")}</p>
       <ResultEntryForm
         orderItemId={item.id}
         testId={item.testId}
