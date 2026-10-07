@@ -337,3 +337,23 @@ html[data-density="compact"] :where(.detail-card,.dashboard-panel,.settings-card
   .result-entry-layout-compact-grid .result-field-width-narrow .result-field-input input,
   .result-entry-layout-compact-grid .result-field-width-narrow .result-field-input select{max-width:none}
 }
+
+
+/* Version-bound report PDF export */
+.report-pdf-action{display:grid;gap:4px;max-width:260px}
+.report-pdf-action small{font-size:10px;line-height:1.25}
+.diagnostic-report.pdf-exporting{
+  --fl-surface:#ffffff;
+  --fl-surface-soft:#f8fafc;
+  --fl-text:#111827;
+  --fl-muted:#4b5563;
+  --fl-border:#d1d5db;
+  --fl-danger:#b42318;
+  --fl-warning:#b54708;
+  --fl-success:#067647;
+  --fl-info:#175cd3;
+  color:#111827;
+  background:#ffffff;
+  box-shadow:none;
+}
+.diagnostic-report.pdf-exporting *{animation:none!important;transition:none!important}
