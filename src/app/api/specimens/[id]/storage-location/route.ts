@@ -34,8 +34,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         organizationId: session.user.organizationId,
         status: specimen.status,
         updatedAt: specimen.updatedAt,
+        preanalyticalVersion: specimen.preanalyticalVersion,
       },
-      data: { storageLocation },
+      data: {
+        storageLocation,
+        preanalyticalVersion: { increment: 1 },
+      },
     });
     if (changed.count !== 1) return null;
 
