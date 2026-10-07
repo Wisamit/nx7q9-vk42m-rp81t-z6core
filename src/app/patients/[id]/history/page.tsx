@@ -506,7 +506,7 @@ export default async function PatientHistoryPage({ params }: { params: Promise<{
           <td>{file.targetType}</td>
           <td><a className="table-link" href={"/api/attachments/" + file.id}>{file.originalName}</a></td>
           <td>{file.contentType}</td>
-          <td>{Math.ceil(file.sizeBytes / 1024)} KB</td>
+          <td>{Math.ceil(file.sizeBytes / 1024)} {tr(locale, "KB", "ك.ب")}</td>
         </tr>)}</tbody>
       </table></div>
     </section>}
