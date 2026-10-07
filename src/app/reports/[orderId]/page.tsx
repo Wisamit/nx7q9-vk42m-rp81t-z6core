@@ -8,6 +8,8 @@ import { canAccessBranch, permissionSet, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { PrintReportButton } from "@/components/print-report-button";
 import { ReportPdfButton } from "@/components/report-pdf-button";
+import { ReportOutboundDelivery } from "@/components/report-outbound-delivery";
+import { maskedDestination, resolveVerifiedPortalDestination, type ReportOutboundChannel } from "@/lib/report-outbound";
 import {
   effectiveReportLocale,
   localizedReportText,
@@ -150,7 +152,14 @@ export default async function DiagnosticReportPage({ params }: { params: Promise
   const report = await prisma.diagnosticReport.findFirst({
     where: { orderId, organizationId: session.user.organizationId },
     include: {
-      order: { include: { orderingBranch: true } },
+      order: {
+        include: {
+          orderingBranch: true,
+          patient: { include: { portalAccount: true } },
+          referrer: { include: { portalAccount: true } },
+          client: { include: { portalAccount: true } },
+        },
+      },
       versions: {
         include: { issuedBy: true, branch: true, deliveries: { include: { performedBy: true }, orderBy: { occurredAt: "desc" } } },
         orderBy: { version: "desc" },
@@ -199,6 +208,32 @@ export default async function DiagnosticReportPage({ params }: { params: Promise
   const baseUrl = configuredBaseUrl || (host ? protocol + "://" + host : "");
   const verificationUrl = baseUrl ? `${baseUrl}/verify/report/${latest.verificationToken}` : "";
   const qrDataUrl = verificationUrl ? await QRCode.toDataURL(verificationUrl, { width: 132, margin: 1 }) : "";
+
+  const outboundChannels: ReportOutboundChannel[] = ["EMAIL", "SMS", "WHATSAPP"];
+  const outboundRecipients = [
+    {
+      type: "PATIENT" as const,
+      label: `${tr(locale, "Patient", "المريض")} — ${locale === "ar" ? report.order.patient.fullNameAr || report.order.patient.fullNameEn : report.order.patient.fullNameEn}`,
+      account: report.order.patient.portalAccount,
+    },
+    ...(report.order.referrer ? [{
+      type: "REFERRER" as const,
+      label: `${tr(locale, "Referrer", "المحيل")} — ${locale === "ar" ? report.order.referrer.nameAr || report.order.referrer.nameEn : report.order.referrer.nameEn}`,
+      account: report.order.referrer.portalAccount,
+    }] : []),
+    ...(report.order.client ? [{
+      type: "CLIENT" as const,
+      label: `${tr(locale, "Client", "العميل")} — ${locale === "ar" ? report.order.client.nameAr || report.order.client.nameEn : report.order.client.nameEn}`,
+      account: report.order.client.portalAccount,
+    }] : []),
+  ].map(recipient => ({
+    type: recipient.type,
+    label: recipient.label,
+    channels: outboundChannels.flatMap(channel => {
+      const resolved = resolveVerifiedPortalDestination(recipient.account, channel);
+      return resolved.ok ? [{ channel, destinationMasked: maskedDestination(channel, resolved.destination) }] : [];
+    }),
+  })).filter(recipient => recipient.channels.length > 0);
 
   return <main className="report-shell">
     <div className="report-toolbar no-print">
@@ -364,6 +399,12 @@ export default async function DiagnosticReportPage({ params }: { params: Promise
         </div>
       </footer>
     </article>
+
+    {permissions.has("reports.deliver") && <ReportOutboundDelivery
+      reportVersionId={latest.id}
+      recipients={outboundRecipients}
+      locale={locale}
+    />}
 
     {latest.deliveries.length > 0 && <section className="table-card report-history no-print">
       <div className="table-toolbar"><h2>{tr(locale, "Delivery History", "سجل التسليم")}</h2><span>{latest.deliveries.length} {tr(locale, "event(s)", "حدث")}</span></div>
