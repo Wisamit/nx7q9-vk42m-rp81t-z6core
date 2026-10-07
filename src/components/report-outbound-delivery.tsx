@@ -9,17 +9,21 @@ type RecipientType = "PATIENT" | "REFERRER" | "CLIENT";
 type RecipientOption = {
   type: RecipientType;
   label: string;
+  portalAccountId: string;
   channels: Array<{ channel: Channel; destinationMasked: string }>;
+  verificationCandidates: Array<{ channel: "EMAIL" | "PHONE"; destinationMasked: string }>;
 };
 
 export function ReportOutboundDelivery({
   reportVersionId,
   recipients,
   locale,
+  canVerifyContacts,
 }: {
   reportVersionId: string;
   recipients: RecipientOption[];
   locale: "ar" | "en";
+  canVerifyContacts: boolean;
 }) {
   const router = useRouter();
   const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
@@ -37,6 +41,42 @@ export function ReportOutboundDelivery({
     const recipient = recipients.find(item => item.type === value);
     setChannel(recipient?.channels[0]?.channel || "EMAIL");
     setMessage("");
+  }
+
+  async function verifyContact(verificationChannel: "EMAIL" | "PHONE") {
+    if (!selectedRecipient || !canVerifyContacts) return;
+    const reason = window.prompt(tr(
+      verificationChannel === "EMAIL"
+        ? "Reason/evidence for confirming this email belongs to the portal recipient:"
+        : "Reason/evidence for confirming this phone belongs to the portal recipient:",
+      verificationChannel === "EMAIL"
+        ? "سبب/دليل تأكيد أن البريد الإلكتروني يعود لمستلم البوابة:"
+        : "سبب/دليل تأكيد أن رقم الهاتف يعود لمستلم البوابة:",
+    ));
+    if (!reason?.trim()) return;
+
+    setBusy(true);
+    setMessage("");
+    const response = await fetch(`/api/portal-accounts/${selectedRecipient.portalAccountId}/verify-contact`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ channel: verificationChannel, reason }),
+    });
+    const body = await response.json().catch(() => ({})) as { error?: string; destination?: string };
+    setBusy(false);
+
+    if (!response.ok) {
+      setMessage(body.error === "contact_already_verified"
+        ? tr("This contact is already verified.", "جهة الاتصال موثقة مسبقًا.")
+        : tr("Could not verify the portal contact.", "تعذر توثيق جهة اتصال البوابة."));
+      return;
+    }
+
+    setMessage(tr(
+      `Verified ${verificationChannel === "EMAIL" ? "email" : "phone"} ${body.destination || ""}.`,
+      `تم توثيق ${verificationChannel === "EMAIL" ? "البريد الإلكتروني" : "رقم الهاتف"} ${body.destination || ""}.`,
+    ));
+    router.refresh();
   }
 
   async function queueDelivery() {
@@ -87,8 +127,8 @@ export function ReportOutboundDelivery({
     )}</p>
 
     {recipients.length === 0 ? <p className="muted">{tr(
-      "No associated patient, doctor, or client has an active verified portal contact.",
-      "لا يوجد مريض أو طبيب أو عميل مرتبط يملك جهة اتصال موثقة في بوابة نشطة.",
+      "No associated patient, doctor, or client has an active portal account with an email or phone contact.",
+      "لا يوجد مريض أو طبيب أو عميل مرتبط لديه حساب بوابة نشط مع بريد إلكتروني أو رقم هاتف.",
     )}</p> : <div className="report-outbound-controls">
       <label>{tr("Recipient", "المستلم")}
         <select value={recipientType} onChange={event => selectRecipient(event.target.value as RecipientType)}>
@@ -96,7 +136,8 @@ export function ReportOutboundDelivery({
         </select>
       </label>
       <label>{tr("Channel", "القناة")}
-        <select value={channel} onChange={event => setChannel(event.target.value as Channel)}>
+        <select value={channel} disabled={!selectedRecipient?.channels.length} onChange={event => setChannel(event.target.value as Channel)}>
+          {(selectedRecipient?.channels || []).length === 0 && <option value="EMAIL">{tr("Verify a contact first", "وثّق جهة اتصال أولًا")}</option>}
           {(selectedRecipient?.channels || []).map(item =>
             <option key={item.channel} value={item.channel}>{channelLabel(item.channel)} · {item.destinationMasked}</option>
           )}
@@ -110,6 +151,22 @@ export function ReportOutboundDelivery({
       >
         {busy ? tr("Queueing…", "جارٍ الإضافة…") : tr("Queue Secure Delivery", "إضافة التسليم الآمن")}
       </button>
+    </div>}
+
+    {selectedRecipient && selectedRecipient.verificationCandidates.length > 0 && <div className="report-contact-verification">
+      <strong>{tr("Contact verification required", "يلزم توثيق جهة الاتصال")}</strong>
+      <p className="muted">{canVerifyContacts
+        ? tr("Confirm only after validating the destination with the recipient. The reason and staff actor are audited.", "قم بالتوثيق فقط بعد التحقق من جهة الاتصال مع المستلم. يتم تدقيق السبب وهوية الموظف.")
+        : tr("A user with portal account management permission must verify the destination before report delivery.", "يجب على مستخدم لديه صلاحية إدارة حسابات البوابة توثيق جهة الاتصال قبل إرسال التقرير.")}</p>
+      {canVerifyContacts && <div className="header-actions">
+        {selectedRecipient.verificationCandidates.map(candidate => <button
+          key={candidate.channel}
+          type="button"
+          className="secondary-button"
+          disabled={busy}
+          onClick={() => void verifyContact(candidate.channel)}
+        >{candidate.channel === "EMAIL" ? tr("Verify Email", "توثيق البريد") : tr("Verify Phone", "توثيق الهاتف")} · {candidate.destinationMasked}</button>)}
+      </div>}
     </div>}
 
     {message && <p className="muted">{message}</p>}
