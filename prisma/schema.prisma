@@ -2241,6 +2241,7 @@ model DiscountApprovalRequest {
   currency              String                 @db.Char(3)
   subtotalSnapshot      Decimal                @map("subtotal_snapshot") @db.Decimal(18, 4)
   discountTotalSnapshot Decimal                @map("discount_total_snapshot") @db.Decimal(18, 4)
+  taxTotalSnapshot      Decimal                @default(0) @map("tax_total_snapshot") @db.Decimal(18, 4)
   finalTotalSnapshot    Decimal                @map("final_total_snapshot") @db.Decimal(18, 4)
   pricingFingerprint    String                 @map("pricing_fingerprint") @db.Char(64)
   contextSnapshot       Json                   @map("context_snapshot")
