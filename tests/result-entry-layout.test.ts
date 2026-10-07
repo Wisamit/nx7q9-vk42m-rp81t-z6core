@@ -47,3 +47,44 @@ test("empty configured sections are omitted from result entry", () => {
   assert.equal(groups[0].id, "");
   assert.deepEqual(groups[0].fields.map(field => field.code), ["A"]);
 });
+
+
+test("section presentation metadata is preserved for configured groups", () => {
+  const sections = [
+    {
+      id: "MICRO",
+      code: "MICRO",
+      nameEn: "Microscopy",
+      nameAr: "الفحص المجهري",
+      columnCount: 4,
+      hintEn: "Enter counts per HPF.",
+      hintAr: "أدخل العدد لكل حقل عالي القوة.",
+    },
+  ];
+  const fields = [{ code: "WBC", resultSectionId: "MICRO" }];
+
+  const groups = groupResultFields(fields, sections);
+  assert.equal(groups[0].columnCount, 4);
+  assert.equal(groups[0].hintEn, "Enter counts per HPF.");
+  assert.equal(groups[0].hintAr, "أدخل العدد لكل حقل عالي القوة.");
+});
+
+test("ungrouped fields do not inherit another section presentation", () => {
+  const sections = [
+    {
+      id: "CBC",
+      code: "CBC",
+      nameEn: "CBC",
+      nameAr: null,
+      columnCount: 4,
+      hintEn: "Configured section hint",
+      hintAr: null,
+    },
+  ];
+  const fields = [{ code: "OTHER", resultSectionId: null }];
+
+  const groups = groupResultFields(fields, sections);
+  assert.equal(groups[0].id, "");
+  assert.equal(groups[0].columnCount, 1);
+  assert.equal(groups[0].hintEn, null);
+});
