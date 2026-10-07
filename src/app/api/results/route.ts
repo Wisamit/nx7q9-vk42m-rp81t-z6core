@@ -9,6 +9,7 @@ import { reflexMatches } from "@/lib/reflex-rules";
 import { evaluateAutoverification } from "@/lib/autoverification";
 import { validationHoldMatches } from "@/lib/validation-holds";
 import { parseResultValue } from "@/lib/result-value-parser";
+import { qualitativeFlag } from "@/lib/qualitative-result-options";
 
 function text(value: unknown, max = 5000) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -22,7 +23,7 @@ export async function POST(request: Request) {
     specimenId?: string;
     performingBranchId?: string;
     comments?: string;
-    values?: Array<{ componentId?: string | null; rawValue?: unknown }>;
+    values?: Array<{ componentId?: string | null; rawValue?: unknown; resultOptionId?: string | null }>;
   } | null;
 
   if (!body) return NextResponse.json({ error: "invalid_request" }, { status: 400 });
@@ -129,6 +130,18 @@ export async function POST(request: Request) {
   }
 
   const resultSource = "MANUAL" as const;
+  const resultAt = new Date();
+  const qualitativeOptions = await prisma.qualitativeResultOption.findMany({
+    where: {
+      organizationId: session.user.organizationId,
+      testId: orderItem.testId,
+      status: "ACTIVE",
+      effectiveFrom: { lte: resultAt },
+      OR: [{ effectiveTo: null }, { effectiveTo: { gte: resultAt } }],
+    },
+    orderBy: [{ displayOrder: "asc" }, { createdAt: "asc" }],
+  });
+
   const autoverificationPolicy =
     orderItem.test.autoverificationPolicies.find(policy => policy.branchId === performingBranchId)
     || orderItem.test.autoverificationPolicies.find(policy => policy.branchId === null)
@@ -157,7 +170,7 @@ export async function POST(request: Request) {
         decimalPrecision: orderItem.test.decimalPrecision,
       }];
 
-  const valueByComponent = new Map((body.values || []).map((entry) => [entry.componentId || "__TEST__", entry.rawValue]));
+  const valueByComponent = new Map((body.values || []).map((entry) => [entry.componentId || "__TEST__", entry]));
   const prepared: Array<{
     componentId: string | null;
     code: string;
@@ -174,6 +187,11 @@ export async function POST(request: Request) {
     calculatedRuleId: string | null;
     calculationExpression: string | null;
     calculationInputs: Record<string, string> | null;
+    flagSource: "NONE" | "REFERENCE_INTERVAL" | "RESULT_OPTION" | "ANALYZER" | "MANUAL";
+    qualitativeOptionId: string | null;
+    qualitativeOptionCode: string | null;
+    valueTextEnSnapshot: string | null;
+    valueTextArSnapshot: string | null;
   }> = [];
   const calculatedTargetIds = new Set(orderItem.test.calculatedRules.map(rule => rule.targetComponentId));
 
@@ -181,8 +199,30 @@ export async function POST(request: Request) {
     for (const component of expected) {
       if (component.componentId && calculatedTargetIds.has(component.componentId)) continue;
 
-      const raw = valueByComponent.get(component.componentId || "__TEST__");
-      const parsed = parseResultValue(component.resultType, raw);
+      const entry = valueByComponent.get(component.componentId || "__TEST__");
+      const raw = entry?.rawValue;
+      const fieldOptions = component.resultType === "QUALITATIVE"
+        ? qualitativeOptions.filter((option) => option.componentId === component.componentId)
+        : [];
+      const selectedOption = entry?.resultOptionId
+        ? fieldOptions.find((option) => option.id === entry.resultOptionId) || null
+        : null;
+
+      if (entry?.resultOptionId && !selectedOption) {
+        return NextResponse.json({
+          error: "qualitative_option_not_active_for_field",
+          componentId: component.componentId,
+          resultOptionId: entry.resultOptionId,
+        }, { status: 409 });
+      }
+      if (component.resultType === "QUALITATIVE" && fieldOptions.length > 0 && !selectedOption && String(raw || "").trim()) {
+        return NextResponse.json({
+          error: "qualitative_option_required",
+          componentId: component.componentId,
+        }, { status: 409 });
+      }
+
+      const parsed = parseResultValue(component.resultType, selectedOption ? selectedOption.valueEn : raw);
       if (!parsed) continue;
 
       const interval = component.componentId ? await resolveReferenceInterval(prisma, {
@@ -193,9 +233,19 @@ export async function POST(request: Request) {
         dateOfBirth: orderItem.order.patient.dateOfBirth,
       }) : null;
 
-      const flag = parsed.valueNumeric !== null
-        ? numericFlag(parsed.valueNumeric, interval)
-        : { flag: "UNKNOWN" as const, isCritical: false };
+      const flag = selectedOption
+        ? qualitativeFlag({
+            flag: selectedOption.flag as "NORMAL" | "ABNORMAL" | "POSITIVE" | "NEGATIVE" | "UNKNOWN",
+            isCritical: selectedOption.isCritical,
+          })
+        : parsed.valueNumeric !== null
+          ? numericFlag(parsed.valueNumeric, interval)
+          : { flag: "UNKNOWN" as const, isCritical: false };
+      const flagSource = selectedOption
+        ? "RESULT_OPTION" as const
+        : parsed.valueNumeric !== null && interval
+          ? "REFERENCE_INTERVAL" as const
+          : "NONE" as const;
 
       const delta = parsed.valueNumeric !== null
         ? await evaluateDelta(prisma, {
@@ -227,6 +277,11 @@ export async function POST(request: Request) {
         calculatedRuleId: null,
         calculationExpression: null,
         calculationInputs: null,
+        flagSource,
+        qualitativeOptionId: selectedOption?.id || null,
+        qualitativeOptionCode: selectedOption?.code || null,
+        valueTextEnSnapshot: selectedOption?.valueEn || null,
+        valueTextArSnapshot: selectedOption?.valueAr || null,
       });
     }
 
@@ -283,6 +338,11 @@ export async function POST(request: Request) {
         calculatedRuleId: rule.id,
         calculationExpression: rule.expression,
         calculationInputs,
+        flagSource: interval ? "REFERENCE_INTERVAL" : "NONE",
+        qualitativeOptionId: null,
+        qualitativeOptionCode: null,
+        valueTextEnSnapshot: null,
+        valueTextArSnapshot: null,
       });
     }
   } catch (error) {
@@ -381,7 +441,12 @@ export async function POST(request: Request) {
           criticalLowSnapshot: item.interval?.criticalLow || null,
           criticalHighSnapshot: item.interval?.criticalHigh || null,
           flag: item.flag.flag,
+          flagSource: item.flagSource,
           isCritical: item.flag.isCritical,
+          qualitativeOptionId: item.qualitativeOptionId,
+          qualitativeOptionCodeSnapshot: item.qualitativeOptionCode,
+          valueTextEnSnapshot: item.valueTextEnSnapshot,
+          valueTextArSnapshot: item.valueTextArSnapshot,
           deltaEvaluation: item.delta.evaluation,
           previousValueSnapshot: item.delta.previousValue,
           previousResultAtSnapshot: item.delta.previousResultAt,
@@ -582,7 +647,10 @@ export async function POST(request: Request) {
             componentCode: item.code,
             displayValue: item.parsed.displayValue,
             flag: item.flag.flag,
+            flagSource: item.flagSource,
             critical: item.flag.isCritical,
+            qualitativeOptionId: item.qualitativeOptionId,
+            qualitativeOptionCode: item.qualitativeOptionCode,
             referenceIntervalId: item.interval?.id || null,
             deltaEvaluation: item.delta.evaluation,
             deltaAbsolute: item.delta.deltaAbsolute?.toString() || null,
