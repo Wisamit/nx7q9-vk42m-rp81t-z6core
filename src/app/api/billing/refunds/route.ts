@@ -30,7 +30,9 @@ export async function POST(request: Request) {
   const invoiceId = text(body.invoiceId, 36);
   const reason = text(body.reason, 1000);
   const reference = text(body.reference, 150);
-  const method = ["CASH","CARD","BANK_TRANSFER","ONLINE","OTHER"].includes(String(body.method)) ? String(body.method) : null;
+  const method = ["CASH","CARD","BANK_TRANSFER","ONLINE","OTHER"].includes(String(body.method))
+    ? String(body.method) as "CASH" | "CARD" | "BANK_TRANSFER" | "ONLINE" | "OTHER"
+    : null;
   const amountText = typeof body.amount === "string" || typeof body.amount === "number" ? String(body.amount) : "";
 
   if (!paymentId || !invoiceId || !reason || !method || !/^\d+(\.\d{1,4})?$/.test(amountText)) {
