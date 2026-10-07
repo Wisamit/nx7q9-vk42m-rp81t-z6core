@@ -91,6 +91,7 @@ enum TatClockBasis {
 
 enum TatSnapshotSource {
   CATALOG_SNAPSHOT
+  SLA_POLICY
   NOT_CONFIGURED
   MIGRATED_BASELINE
 }
@@ -1127,6 +1128,7 @@ model Branch {
   activeSessions UserSession[] @relation("ActiveBranchSessions")
   testAvailability TestBranchAvailability[]
   referenceIntervals ReferenceInterval[]
+  tatPolicies TestTatPolicy[]
   priceLists PriceList[]
   orders LabOrder[] @relation("OrderingBranchOrders")
   performedOrderItems OrderItem[] @relation("PerformedBranchOrderItems")
@@ -1306,6 +1308,7 @@ model User {
   createdClientAccountStatements ClientAccountStatement[] @relation("ClientStatementCreator")
   createdClientCreditPolicies ClientCreditPolicy[] @relation("ClientCreditPolicyCreator")
   createdTaxRules TaxRule[] @relation("TaxRuleCreator")
+  createdTatPolicies TestTatPolicy[] @relation("TatPolicyCreator")
   updatedClientCreditPolicies ClientCreditPolicy[] @relation("ClientCreditPolicyUpdater")
   orderStatusChanges OrderStatusHistory[] @relation("OrderStatusChanger")
   collectedSpecimens Specimen[] @relation("SpecimenCollector")
@@ -1773,6 +1776,7 @@ model LabTest {
   priceListItems     PriceListItem[]
   taxRules           TaxRule[]
   orderItems         OrderItem[]
+  tatPolicies        TestTatPolicy[]
   orderQuestions     OrderQuestion[]
   deltaRules         DeltaRule[]
   commentTemplates   ResultCommentTemplate[]
@@ -1793,6 +1797,32 @@ model LabTest {
   @@index([organizationId, status])
   @@index([departmentId, status])
   @@map("lab_tests")
+}
+
+model TestTatPolicy {
+  id                 String        @id @default(uuid()) @db.Char(36)
+  testId             String        @map("test_id") @db.Char(36)
+  branchId           String?       @map("branch_id") @db.Char(36)
+  priority           OrderPriority?
+  tatMinutes         Int           @map("tat_minutes")
+  alertBeforeMinutes Int?          @map("alert_before_minutes")
+  effectiveFrom      DateTime      @map("effective_from") @db.DateTime(3)
+  effectiveTo        DateTime?     @map("effective_to") @db.DateTime(3)
+  status             RecordStatus  @default(ACTIVE)
+  createdByUserId    String        @map("created_by_user_id") @db.Char(36)
+  createdAt          DateTime      @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt          DateTime      @updatedAt @map("updated_at") @db.DateTime(3)
+
+  test      LabTest @relation(fields: [testId], references: [id], onDelete: Restrict)
+  branch    Branch? @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  createdBy User    @relation("TatPolicyCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  orderItems OrderItem[]
+
+  @@index([testId, status, effectiveFrom, effectiveTo])
+  @@index([branchId, status, effectiveFrom, effectiveTo])
+  @@index([testId, branchId, priority, status, effectiveFrom])
+  @@index([createdByUserId, createdAt])
+  @@map("test_tat_policies")
 }
 
 model TestComponent {
@@ -2477,12 +2507,16 @@ model OrderItem {
   tatClockBasisSnapshot TatClockBasis?  @map("tat_clock_basis_snapshot")
   tatClockStartedAt     DateTime?       @map("tat_clock_started_at") @db.DateTime(3)
   tatDueAt              DateTime?       @map("tat_due_at") @db.DateTime(3)
-  tatSnapshotSource     TatSnapshotSource @default(NOT_CONFIGURED) @map("tat_snapshot_source")
-  createdAt             DateTime        @default(now()) @map("created_at") @db.DateTime(3)
+  tatAlertBeforeMinutesSnapshot Int?      @map("tat_alert_before_minutes_snapshot")
+  tatAlertAt             DateTime?       @map("tat_alert_at") @db.DateTime(3)
+  tatPolicyId            String?         @map("tat_policy_id") @db.Char(36)
+  tatSnapshotSource      TatSnapshotSource @default(NOT_CONFIGURED) @map("tat_snapshot_source")
+  createdAt              DateTime        @default(now()) @map("created_at") @db.DateTime(3)
   updatedAt             DateTime        @updatedAt @map("updated_at") @db.DateTime(3)
 
   order           LabOrder       @relation(fields: [orderId], references: [id], onDelete: Restrict)
   test            LabTest        @relation(fields: [testId], references: [id], onDelete: Restrict)
+  tatPolicy       TestTatPolicy?  @relation(fields: [tatPolicyId], references: [id], onDelete: Restrict)
   performedBranch Branch?        @relation("PerformedBranchOrderItems", fields: [performedBranchId], references: [id], onDelete: Restrict)
   priceListItem   PriceListItem? @relation(fields: [priceListItemId], references: [id], onDelete: Restrict)
   invoiceLines    InvoiceLine[]
@@ -2502,6 +2536,8 @@ model OrderItem {
   @@index([performedBranchId, status])
   @@index([testId, status])
   @@index([tatDueAt, status])
+  @@index([tatAlertAt, tatDueAt, status])
+  @@index([tatPolicyId])
   @@map("order_items")
 }
 
