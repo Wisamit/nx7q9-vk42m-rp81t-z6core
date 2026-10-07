@@ -1529,6 +1529,12 @@ enum TestWorkflowType {
   MICROBIOLOGY
 }
 
+enum ResultEntryLayout {
+  STANDARD
+  SECTIONED
+  COMPACT_GRID
+}
+
 enum SexApplicability {
   ANY
   MALE
@@ -1661,6 +1667,7 @@ model LabTest {
   defaultUnitId          String?      @map("default_unit_id") @db.Char(36)
   resultType             ResultType   @default(NUMERIC) @map("result_type")
   workflowType           TestWorkflowType @default(GENERAL) @map("workflow_type")
+  resultEntryLayout      ResultEntryLayout @default(STANDARD) @map("result_entry_layout")
   decimalPrecision       Int?         @map("decimal_precision")
   minimumVolume          Decimal?     @map("minimum_volume") @db.Decimal(10, 3)
   minimumVolumeUnit      String?      @map("minimum_volume_unit") @db.VarChar(30)
@@ -1683,6 +1690,7 @@ model LabTest {
   method             Method? @relation(fields: [methodId], references: [id], onDelete: Restrict)
   defaultUnit        Unit? @relation(fields: [defaultUnitId], references: [id], onDelete: Restrict)
   components         TestComponent[]
+  resultSections     TestResultSection[]
   branchAvailability TestBranchAvailability[]
   panelItems         TestPanelItem[]
   commercialPackageItems CommercialPackageItem[]
@@ -1721,6 +1729,7 @@ model TestComponent {
   resultType       ResultType   @default(NUMERIC) @map("result_type")
   decimalPrecision Int?         @map("decimal_precision")
   displayOrder     Int          @default(0) @map("display_order")
+  resultSectionId  String?      @map("result_section_id") @db.Char(36)
   status           RecordStatus @default(ACTIVE)
   createdAt        DateTime     @default(now()) @map("created_at") @db.DateTime(3)
   updatedAt        DateTime     @updatedAt @map("updated_at") @db.DateTime(3)
@@ -1728,6 +1737,7 @@ model TestComponent {
 
   test               LabTest @relation(fields: [testId], references: [id], onDelete: Restrict)
   unit               Unit? @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  resultSection      TestResultSection? @relation(fields: [resultSectionId], references: [id], onDelete: Restrict)
   referenceIntervals ReferenceInterval[]
   resultValues LaboratoryResultValue[]
   deltaRules DeltaRule[]
@@ -1742,7 +1752,28 @@ model TestComponent {
 
   @@unique([testId, code])
   @@index([testId, displayOrder])
+  @@index([resultSectionId])
   @@map("test_components")
+}
+
+model TestResultSection {
+  id             String       @id @default(uuid()) @db.Char(36)
+  testId         String       @map("test_id") @db.Char(36)
+  code           String       @db.VarChar(80)
+  nameEn         String       @map("name_en") @db.VarChar(200)
+  nameAr         String?      @map("name_ar") @db.VarChar(200)
+  displayOrder   Int          @default(0) @map("display_order")
+  status         RecordStatus @default(ACTIVE)
+  createdAt      DateTime     @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt      DateTime     @updatedAt @map("updated_at") @db.DateTime(3)
+  deactivatedAt  DateTime?    @map("deactivated_at") @db.DateTime(3)
+
+  test       LabTest         @relation(fields: [testId], references: [id], onDelete: Restrict)
+  components TestComponent[]
+
+  @@unique([testId, code])
+  @@index([testId, status, displayOrder])
+  @@map("test_result_sections")
 }
 
 model QualitativeResultOption {
