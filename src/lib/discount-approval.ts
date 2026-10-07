@@ -20,6 +20,15 @@ export function discountApprovalFingerprint(input: {
   discountReason: string;
   currency: string;
   pricing: DiscountPricingEntry[];
+  tax?: Array<{
+    kind: "TEST" | "PACKAGE";
+    id: string;
+    ruleId: string | null;
+    ratePercent: string;
+    treatment: string;
+    priceMode: string;
+    taxAmount: string;
+  }>;
 }) {
   const normalized = {
     organizationId: input.organizationId,
@@ -39,6 +48,17 @@ export function discountApprovalFingerprint(input: {
         id: item.id,
         priceReferenceId: item.priceReferenceId,
         unitPrice: item.unitPrice,
+      }))
+      .sort((a, b) => (a.kind + ":" + a.id).localeCompare(b.kind + ":" + b.id)),
+    tax: [...(input.tax || [])]
+      .map(item => ({
+        kind: item.kind,
+        id: item.id,
+        ruleId: item.ruleId,
+        ratePercent: item.ratePercent,
+        treatment: item.treatment,
+        priceMode: item.priceMode,
+        taxAmount: item.taxAmount,
       }))
       .sort((a, b) => (a.kind + ":" + a.id).localeCompare(b.kind + ":" + b.id)),
   };
