@@ -10,6 +10,7 @@ type BulkQualitativeOption = {
   valueEn: string;
   valueAr?: string | null;
   flag: string;
+  isAbnormal: boolean;
   isCritical: boolean;
 };
 
@@ -67,7 +68,7 @@ function inputFor(
     <option value="">{tr("Select result…","اختر النتيجة…")}</option>
     {selectedOptionId === "__LEGACY__" && field.currentValue && <option value="__LEGACY__" disabled>{tr("Current legacy value","القيمة القديمة الحالية")}: {field.currentValue}</option>}
     {field.qualitativeOptions.map(option => <option key={option.id} value={option.id}>
-      {(locale === "ar" ? option.valueAr || option.valueEn : option.valueEn) + " · " + flagLabel(option.flag) + (option.isCritical ? " · " + tr("Critical","حرجة") : "")}
+      {(locale === "ar" ? option.valueAr || option.valueEn : option.valueEn) + " · " + flagLabel(option.flag) + (option.isAbnormal ? " · " + tr("Abnormal","غير طبيعي") : "") + (option.isCritical ? " · " + tr("Critical","حرجة") : "")}
     </option>)}
   </select>;
 
