@@ -154,6 +154,7 @@ export function specimenCollectionVolumeError(input: {
 export function specimenRequirementSnapshotFromDetails(details: unknown) {
   if (!details || typeof details !== "object" || Array.isArray(details)) return null;
   const record = details as Record<string, unknown>;
+  if (record.requirementsFinalized !== true) return null;
   const requiredVolume = typeof record.requiredVolume === "string" ? record.requiredVolume : null;
   const requiredVolumeUnit = typeof record.requiredVolumeUnit === "string" ? record.requiredVolumeUnit : null;
   const members = Array.isArray(record.requirementMembers) ? record.requirementMembers : [];
