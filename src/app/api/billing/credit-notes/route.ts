@@ -18,7 +18,7 @@ function documentNumber(prefix: string, branchCode: string) {
 export async function POST(request: Request) {
   const session = await requirePermission("billing.manage");
   const ctx = await requestContext();
-  const body = await request.json().catch(() => null);
+  const body = await request.json().catch(() => null) as Record<string, unknown> | null;
   if (!body) return NextResponse.json({ error: "invalid_request" }, { status: 400 });
 
   const invoiceId = text(body.invoiceId, 36);
@@ -29,7 +29,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "invalid_fields" }, { status: 400 });
   }
 
-  const rawLines = Array.isArray(body.lines) ? body.lines : [];
+  const rawLines: unknown[] = Array.isArray(body.lines) ? body.lines : [];
   const lines = rawLines.flatMap((value: unknown) => {
     if (!value || typeof value !== "object" || Array.isArray(value)) return [];
     const item = value as Record<string, unknown>;
