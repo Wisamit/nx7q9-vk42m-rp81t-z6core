@@ -6,7 +6,7 @@ import {
   specimenCollectionVolumeError,
   specimenRequirementSnapshotFromDetails,
 } from "@/lib/specimen-requirement-engine";
-import { specimenRejectionLineageError } from "@/lib/specimen-volume-policy";
+import { receptionAssessmentError } from "@/lib/specimen-reception-policy";
 
 function text(value: unknown, max = 500) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -20,8 +20,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     volume?: string | number;
     volumeUnit?: string;
     notes?: string;
-    rejectionReasonCode?: string;
-    rejectionReasonText?: string;
+    labelAssessment?: string;
+    conditionCode?: string;
+    temperatureC?: string | number;
+    observedContainerCode?: string;
+    discrepancyText?: string;
+    receptionNotes?: string;
   } | null;
 
   if (!body?.action) return NextResponse.json({ error: "invalid_action" }, { status: 400 });
@@ -95,9 +99,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     const result = await prisma.$transaction(async (tx) => {
       const changed = await tx.specimen.updateMany({
-        where: { id: specimen.id, status: "PLANNED" },
+        where: {
+          id: specimen.id,
+          status: "PLANNED",
+          preanalyticalVersion: specimen.preanalyticalVersion,
+        },
         data: {
           status: "COLLECTED",
+          preanalyticalVersion: { increment: 1 },
           collectionBranchId: branchId,
           currentBranchId: branchId,
           collectedByUserId: session.user.id,
@@ -112,7 +121,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       if (changed.count !== 1) throw new Error("SPECIMEN_STATE_CHANGED");
       const updated = await tx.specimen.findUniqueOrThrow({ where: { id: specimen.id } });
 
-      const linkedIds = specimen.orderItems.map((link) => link.orderItemId);
+      const linkedIds = specimen.orderItems.filter(link => link.status === "ACTIVE").map(link => link.orderItemId);
       if (linkedIds.length) {
         await tx.orderItem.updateMany({
           where: { id: { in: linkedIds }, status: "ORDERED" },
@@ -184,11 +193,35 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
 
   if (body.action === "RECEIVE") {
+    const labelAssessment = text(body.labelAssessment, 30);
+    const conditionCode = text(body.conditionCode, 80).toUpperCase();
+    const observedContainerCode = text(body.observedContainerCode, 80) || null;
+    const discrepancyText = text(body.discrepancyText, 1000) || null;
+    const receptionNotes = text(body.receptionNotes, 1000) || null;
+    const temperatureText = body.temperatureC == null || body.temperatureC === "" ? "" : String(body.temperatureC);
+
+    const receptionError = receptionAssessmentError({
+      labelAssessment,
+      conditionCode,
+      temperatureC: temperatureText,
+      expectedContainerCode: specimen.container?.code || null,
+      observedContainerCode,
+      discrepancyText,
+    });
+    if (receptionError) {
+      return NextResponse.json({ error: receptionError }, { status: 400 });
+    }
+
     const result = await prisma.$transaction(async (tx) => {
       const changed = await tx.specimen.updateMany({
-        where: { id: specimen.id, status: specimen.status },
+        where: {
+          id: specimen.id,
+          status: specimen.status,
+          preanalyticalVersion: specimen.preanalyticalVersion,
+        },
         data: {
           status: "RECEIVED",
+          preanalyticalVersion: { increment: 1 },
           currentBranchId: branchId,
           receivedByUserId: session.user.id,
           receivedAt: new Date(),
@@ -196,6 +229,23 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       });
       if (changed.count !== 1) throw new Error("SPECIMEN_STATE_CHANGED");
       const updated = await tx.specimen.findUniqueOrThrow({ where: { id: specimen.id } });
+
+      const assessment = await tx.specimenReceptionAssessment.create({
+        data: {
+          organizationId: session.user.organizationId,
+          specimenId: specimen.id,
+          branchId,
+          receivedByUserId: session.user.id,
+          barcodeSnapshot: specimen.barcode,
+          expectedContainerCodeSnapshot: specimen.container?.code || null,
+          observedContainerCode,
+          labelAssessment: labelAssessment as "MATCHED" | "UNLABELED" | "MISMATCHED",
+          conditionCode,
+          temperatureC: temperatureText || null,
+          discrepancyText,
+          notes: receptionNotes,
+        },
+      });
 
       await tx.specimenEvent.create({
         data: {
@@ -205,7 +255,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           actorUserId: session.user.id,
           fromStatus: specimen.status,
           toStatus: "RECEIVED",
-          details: { previousBranchId: specimen.currentBranchId },
+          details: {
+            previousBranchId: specimen.currentBranchId,
+            receptionAssessmentId: assessment.id,
+            labelAssessment,
+            conditionCode,
+            expectedContainerCode: specimen.container?.code || null,
+            observedContainerCode,
+            temperatureC: temperatureText || null,
+            discrepancyText,
+            notes: receptionNotes,
+          },
         },
       });
 
@@ -217,7 +277,18 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           action: "SPECIMEN_RECEIVED",
           entityType: "Specimen",
           entityId: specimen.id,
-          newValues: { barcode: specimen.barcode, status: "RECEIVED", currentBranchId: branchId },
+          newValues: {
+            barcode: specimen.barcode,
+            status: "RECEIVED",
+            currentBranchId: branchId,
+            receptionAssessmentId: assessment.id,
+            labelAssessment,
+            conditionCode,
+            expectedContainerCode: specimen.container?.code || null,
+            observedContainerCode,
+            temperatureC: temperatureText || null,
+            discrepancyText,
+          },
           ipAddress: ctx.ipAddress,
           userAgent: ctx.userAgent,
         },
@@ -229,219 +300,5 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ status: "ok", specimen: result });
   }
 
-  const reasonCode = text(body.rejectionReasonCode, 80);
-  const reasonText = text(body.rejectionReasonText, 500);
-  if (!reasonCode || !reasonText) return NextResponse.json({ error: "rejection_reason_required" }, { status: 400 });
-
-  const lineageError = specimenRejectionLineageError(specimen.childSpecimens);
-  if (lineageError) {
-    return NextResponse.json({
-      error: lineageError,
-      childBarcodes: specimen.childSpecimens
-        .filter(child => child.parentRelationType === "ALIQUOT" && !["REJECTED","DISPOSED"].includes(child.status))
-        .map(child => child.barcode),
-    }, { status: 409 });
-  }
-
-  if (specimen.parentRelationType === "ALIQUOT" && specimen.parentSpecimenId) {
-    const result = await prisma.$transaction(async tx => {
-      const rejected = await tx.specimen.updateMany({
-        where: { id: specimen.id, status: specimen.status },
-        data: {
-          status: "REJECTED",
-          currentBranchId: branchId,
-          rejectedByUserId: session.user.id,
-          rejectedAt: new Date(),
-          rejectionReasonCode: reasonCode,
-          rejectionReasonText: reasonText,
-        },
-      });
-      if (rejected.count !== 1) throw new Error("SPECIMEN_STATE_CHANGED");
-
-      await tx.specimenEvent.create({
-        data: {
-          specimenId: specimen.id,
-          eventType: "REJECTED",
-          branchId,
-          actorUserId: session.user.id,
-          fromStatus: specimen.status,
-          toStatus: "REJECTED",
-          details: {
-            reasonCode,
-            reasonText,
-            derivedAliquot: true,
-            parentSpecimenId: specimen.parentSpecimenId,
-            parentBarcode: specimen.parentSpecimen?.barcode || null,
-            replacementStrategy: "DERIVE_NEW_ALIQUOT_FROM_PARENT",
-          },
-        },
-      });
-
-      await tx.auditEvent.create({
-        data: {
-          organizationId: session.user.organizationId,
-          branchId,
-          actorUserId: session.user.id,
-          action: "SPECIMEN_ALIQUOT_REJECTED",
-          entityType: "Specimen",
-          entityId: specimen.id,
-          oldValues: { status: specimen.status },
-          newValues: {
-            status: "REJECTED",
-            reasonCode,
-            reasonText,
-            parentSpecimenId: specimen.parentSpecimenId,
-            parentBarcode: specimen.parentSpecimen?.barcode || null,
-            automaticPatientRecollectionCreated: false,
-          },
-          ipAddress: ctx.ipAddress,
-          userAgent: ctx.userAgent,
-        },
-      });
-
-      return true;
-    });
-
-    return NextResponse.json({
-      status: "ok",
-      rejectedSpecimenId: specimen.id,
-      replacementType: "ALIQUOT",
-      parentSpecimenId: specimen.parentSpecimenId,
-      parentBarcode: specimen.parentSpecimen?.barcode || null,
-    });
-  }
-
-  const result = await prisma.$transaction(async (tx) => {
-    const rejected = await tx.specimen.updateMany({
-      where: { id: specimen.id, status: specimen.status },
-      data: {
-        status: "REJECTED",
-        currentBranchId: branchId,
-        rejectedByUserId: session.user.id,
-        rejectedAt: new Date(),
-        rejectionReasonCode: reasonCode,
-        rejectionReasonText: reasonText,
-      },
-    });
-    if (rejected.count !== 1) throw new Error("SPECIMEN_STATE_CHANGED");
-
-    await tx.specimenEvent.create({
-      data: {
-        specimenId: specimen.id,
-        eventType: "REJECTED",
-        branchId,
-        actorUserId: session.user.id,
-        fromStatus: specimen.status,
-        toStatus: "REJECTED",
-        details: { reasonCode, reasonText },
-      },
-    });
-
-    const maxSequence = await tx.specimen.aggregate({
-      where: { orderId: specimen.orderId },
-      _max: { sequenceNumber: true },
-    });
-    const nextSequence = (maxSequence._max.sequenceNumber || 0) + 1;
-    const replacementBarcode = `${specimen.order.accessionNumber}-${String(nextSequence).padStart(2, "0")}`;
-
-    const replacement = await tx.specimen.create({
-      data: {
-        organizationId: specimen.organizationId,
-        orderId: specimen.orderId,
-        parentSpecimenId: specimen.id,
-        parentRelationType: "RECOLLECTION",
-        specimenTypeId: specimen.specimenTypeId,
-        containerId: specimen.containerId,
-        barcode: replacementBarcode,
-        sequenceNumber: nextSequence,
-        currentBranchId: specimen.order.orderingBranchId,
-        notes: `Recollection after rejection of ${specimen.barcode}`,
-      },
-    });
-
-    const linkedIds = specimen.orderItems.map((link) => link.orderItemId);
-    if (linkedIds.length) {
-      await tx.specimenOrderItem.createMany({
-        data: linkedIds.map((orderItemId) => ({ specimenId: replacement.id, orderItemId })),
-      });
-      await tx.orderItem.updateMany({
-        where: { id: { in: linkedIds }, status: { not: "CANCELLED" } },
-        data: { status: "ORDERED" },
-      });
-    }
-
-    await tx.specimenEvent.create({
-      data: {
-        specimenId: replacement.id,
-        eventType: "CREATED",
-        branchId: specimen.order.orderingBranchId,
-        actorUserId: session.user.id,
-        fromStatus: null,
-        toStatus: "PLANNED",
-        details: requirementSnapshot ? {
-          requirementsFinalized: true,
-          requirementEngineVersion: 1,
-          recollectionForSpecimenId: specimen.id,
-          rejectedBarcode: specimen.barcode,
-          requiredVolume: requirementSnapshot.requiredVolume,
-          requiredVolumeUnit: requirementSnapshot.requiredVolumeUnit,
-          volumeRequirementComplete: requirementSnapshot.volumeRequirementComplete,
-          collectionInstructions: requirementSnapshot.collectionInstructions,
-          storageConditions: requirementSnapshot.storageConditions,
-          stabilityMinutes: requirementSnapshot.stabilityMinutes,
-          shared: requirementSnapshot.shared,
-          configurationComplete: requirementSnapshot.configurationComplete,
-          requirementMembers: requirementSnapshot.requirementMembers,
-        } : {
-          recollectionForSpecimenId: specimen.id,
-          rejectedBarcode: specimen.barcode,
-          requirementsFinalized: false,
-        },
-      },
-    });
-
-    if (specimen.order.status !== "CANCELLED" && specimen.order.status !== "REGISTERED") {
-      await tx.labOrder.update({ where: { id: specimen.orderId }, data: { status: "REGISTERED" } });
-      await tx.orderStatusHistory.create({
-        data: {
-          orderId: specimen.orderId,
-          fromStatus: specimen.order.status,
-          toStatus: "REGISTERED",
-          reason: `Recollection required: ${reasonCode}`,
-          changedByUserId: session.user.id,
-        },
-      });
-    }
-
-    await tx.auditEvent.create({
-      data: {
-        organizationId: session.user.organizationId,
-        branchId,
-        actorUserId: session.user.id,
-        action: "SPECIMEN_REJECTED",
-        entityType: "Specimen",
-        entityId: specimen.id,
-        oldValues: { status: specimen.status },
-        newValues: {
-          status: "REJECTED",
-          reasonCode,
-          reasonText,
-          replacementSpecimenId: replacement.id,
-          replacementBarcode,
-          requirementSnapshotCarriedForward: Boolean(requirementSnapshot),
-        },
-        ipAddress: ctx.ipAddress,
-        userAgent: ctx.userAgent,
-      },
-    });
-
-    return replacement;
-  }, { timeout: 30000 });
-
-  return NextResponse.json({
-    status: "ok",
-    rejectedSpecimenId: specimen.id,
-    replacementSpecimenId: result.id,
-    replacementBarcode: result.barcode,
-  });
+  return NextResponse.json({ error: "dedicated_rejection_workflow_required" }, { status: 409 });
 }
