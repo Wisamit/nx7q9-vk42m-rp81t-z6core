@@ -67,20 +67,36 @@ export default async function PortalReportPage({ params }: { params: Promise<{ v
   if (!allowed) notFound();
 
   const ctx = await requestContext();
-  await prisma.auditEvent.create({
-    data: {
-      organizationId: account.organizationId,
-      branchId: version.branchId,
-      actorUserId: null,
-      action: "PORTAL_REPORT_VIEWED",
-      entityType: "DiagnosticReportVersion",
-      entityId: version.id,
-      sessionId: session.id,
-      newValues: { reportId: version.reportId, version: version.version, accountType: account.type },
-      ipAddress: ctx.ipAddress,
-      userAgent: ctx.userAgent,
-    },
-  });
+  await prisma.$transaction([
+    prisma.reportDeliveryEvent.create({
+      data: {
+        reportVersionId: version.id,
+        channel: "PORTAL",
+        status: "DELIVERED",
+        recipient: account.id,
+        externalRef: session.id,
+        details: {
+          portalAccountId: account.id,
+          accountType: account.type,
+          sessionId: session.id,
+        },
+      },
+    }),
+    prisma.auditEvent.create({
+      data: {
+        organizationId: account.organizationId,
+        branchId: version.branchId,
+        actorUserId: null,
+        action: "PORTAL_REPORT_VIEWED",
+        entityType: "DiagnosticReportVersion",
+        entityId: version.id,
+        sessionId: session.id,
+        newValues: { reportId: version.reportId, version: version.version, accountType: account.type },
+        ipAddress: ctx.ipAddress,
+        userAgent: ctx.userAgent,
+      },
+    }),
+  ]);
 
   const snapshot = version.contentSnapshot as unknown as ReportSnapshot;
   return <main className="catalog-shell" dir={locale === "ar" ? "rtl" : "ltr"}>
