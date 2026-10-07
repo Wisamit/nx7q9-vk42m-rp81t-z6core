@@ -1,3 +1,19 @@
+export const DEFAULT_SPECIMEN_REJECTION_REASONS = [
+  { code: "WRONG_TUBE", nameEn: "Wrong tube / container", nameAr: "أنبوب / حاوية غير صحيحة", sortOrder: 10 },
+  { code: "INSUFFICIENT_VOLUME", nameEn: "Insufficient volume", nameAr: "حجم غير كافٍ", sortOrder: 20 },
+  { code: "CLOTTED", nameEn: "Clotted", nameAr: "متخثرة", sortOrder: 30 },
+  { code: "HEMOLYZED", nameEn: "Hemolyzed", nameAr: "انحلال دم", sortOrder: 40 },
+  { code: "LIPEMIC", nameEn: "Lipemic", nameAr: "دهنية", sortOrder: 50 },
+  { code: "ICTERIC", nameEn: "Icteric", nameAr: "يرقانية", sortOrder: 60 },
+  { code: "LEAKING", nameEn: "Leaking", nameAr: "تسرب", sortOrder: 70 },
+  { code: "UNLABELED", nameEn: "Unlabeled", nameAr: "بدون ملصق", sortOrder: 80 },
+  { code: "MISLABELED", nameEn: "Mislabeled", nameAr: "ملصق خاطئ", sortOrder: 90 },
+  { code: "TRANSPORT_DELAY", nameEn: "Transport delay", nameAr: "تأخر النقل", sortOrder: 100 },
+  { code: "TEMPERATURE_FAILURE", nameEn: "Temperature failure", nameAr: "فشل درجة الحرارة", sortOrder: 110 },
+  { code: "CONTAMINATION", nameEn: "Contamination", nameAr: "تلوث", sortOrder: 120 },
+  { code: "OTHER", nameEn: "Other", nameAr: "أخرى", sortOrder: 999 },
+] as const;
+
 export type ReceptionLabelAssessment = "MATCHED" | "UNLABELED" | "MISMATCHED";
 
 const RECEPTION_CONDITIONS = new Set([
