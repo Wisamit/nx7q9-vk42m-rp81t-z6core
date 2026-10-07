@@ -77,6 +77,7 @@ Scope:
 - outbound report delivery requires an active portal account and channel-specific verified destination: `emailVerifiedAt` for EMAIL and `phoneVerifiedAt` for SMS/WHATSAPP;
 - portal users can request a six-digit VERIFY_CONTACT OTP over EMAIL or SMS; challenges expire after 10 minutes, are rate-limited, have bounded attempts, and consumed/replaced OTP bodies are redacted from stored notifications;
 - the existing generic `contactVerifiedAt` remains an aggregate compatibility marker, but is not sufficient by itself to authorize report delivery;
+- any future workflow that changes a portal email or phone must clear the corresponding `emailVerifiedAt` or `phoneVerifiedAt` before the new destination can receive reports;
 - doctor delivery is allowed only to the order's associated referrer;
 - corporate delivery additionally requires active `CorporatePortalPatientAccess.canViewReports` for the order patient;
 - report-delivery events are linked one-to-one to the corresponding notification delivery, preserving queue/provider traceability;
