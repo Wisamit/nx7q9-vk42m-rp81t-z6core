@@ -197,6 +197,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         valueText: summary,
         displayValue,
         flag: "UNKNOWN",
+        isAbnormal: false,
         isCritical: false,
         deltaEvaluation: "NOT_CONFIGURED",
       },
@@ -206,7 +207,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       if (rule.branchId && rule.branchId !== microbiologyCase.performingBranchId) continue;
       const matched = validationHoldMatches(rule, {
         source: "MANUAL",
-        values: [{ flag: "UNKNOWN", isCritical: false, deltaEvaluation: "NOT_CONFIGURED" }],
+        values: [{ flag: "UNKNOWN", isAbnormal: false, isCritical: false, deltaEvaluation: "NOT_CONFIGURED" }],
       });
 
       if (matched) {
