@@ -28,6 +28,7 @@ export async function POST(request: Request) {
   const valueEn = text(body.valueEn, 500);
   const valueAr = text(body.valueAr, 500) || null;
   const flag = text(body.flag, 30) || "UNKNOWN";
+  const isAbnormal = body.isAbnormal === true;
   const isCritical = body.isCritical === true;
   const displayOrder = body.displayOrder === "" || body.displayOrder == null ? 0 : Number(body.displayOrder);
   const effectiveFrom = new Date(String(body.effectiveFrom || ""));
@@ -91,6 +92,7 @@ export async function POST(request: Request) {
         valueEn,
         valueAr,
         flag: flag as "NORMAL" | "ABNORMAL" | "POSITIVE" | "NEGATIVE" | "UNKNOWN",
+        isAbnormal,
         isCritical,
         displayOrder,
         effectiveFrom,
@@ -114,6 +116,7 @@ export async function POST(request: Request) {
           valueEn,
           valueAr,
           flag,
+          isAbnormal,
           isCritical,
           displayOrder,
           effectiveFrom,
