@@ -1,4 +1,4 @@
-import { ResultFlag, ResultSource } from "../../generated/prisma/client";
+import type { ResultFlag, ResultSource } from "../../generated/prisma/client";
 
 type HoldRule = {
   condition: "ALWAYS" | "RESULT_SOURCE" | "ANY_ABNORMAL" | "ANY_CRITICAL" | "DELTA_EXCEEDED";
