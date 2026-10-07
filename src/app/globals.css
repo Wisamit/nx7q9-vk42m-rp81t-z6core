@@ -369,3 +369,8 @@ html[data-density="compact"] :where(.detail-card,.dashboard-panel,.settings-card
   .report-outbound-controls{grid-template-columns:1fr}
   .report-outbound-controls button{width:100%}
 }
+
+
+.report-contact-verification {
+  grid-column: 1 / -1;
+}
