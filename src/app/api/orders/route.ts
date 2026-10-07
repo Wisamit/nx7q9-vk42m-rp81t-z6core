@@ -10,6 +10,7 @@ import { invoiceDueDateSnapshot } from "@/lib/accounts-receivable-aging";
 import { creditLimitDecision } from "@/lib/client-credit-control";
 import { localCalendarDate } from "@/lib/accounts-receivable-aging";
 import { resolveTaxRule, taxLineAmounts, type EffectiveTaxRule } from "@/lib/tax-policy";
+import { buildOrderItemTatSnapshot } from "@/lib/tat";
 
 function text(value: unknown, max = 500) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -679,6 +680,7 @@ export async function POST(request: Request) {
       const createdItems: Array<{
         item: { id: string };
         test: (typeof tests)[number];
+        tatSnapshot: ReturnType<typeof buildOrderItemTatSnapshot>;
         unitPrice: Prisma.Decimal;
         discountAmount: Prisma.Decimal;
         finalPrice: Prisma.Decimal;
@@ -723,6 +725,7 @@ export async function POST(request: Request) {
       }
 
       for (const test of tests) {
+        const tatSnapshot = buildOrderItemTatSnapshot(test.tatMinutes, order.orderedAt);
         const packageId = packageTestOwner.get(test.id) || null;
         const directPrice = packageId ? null : directPriceMap.get(test.id);
         if (!packageId && !directPrice) throw new Error("DIRECT_PRICE_RESOLUTION_MISSING");
@@ -753,6 +756,11 @@ export async function POST(request: Request) {
             taxAmountSnapshot: testTax ? new Prisma.Decimal(testTax.amounts!.taxAmount) : new Prisma.Decimal(0),
             finalPriceSnapshot: grossPrice,
             currency,
+            tatMinutesSnapshot: tatSnapshot.tatMinutesSnapshot,
+            tatClockBasisSnapshot: tatSnapshot.tatClockBasisSnapshot,
+            tatClockStartedAt: tatSnapshot.tatClockStartedAt,
+            tatDueAt: tatSnapshot.tatDueAt,
+            tatSnapshotSource: tatSnapshot.tatSnapshotSource,
           },
           select: { id: true },
         });
@@ -788,7 +796,7 @@ export async function POST(request: Request) {
           });
         }
 
-        createdItems.push({ item, test, unitPrice, discountAmount, finalPrice: grossPrice, packageId });
+        createdItems.push({ item, test, tatSnapshot, unitPrice, discountAmount, finalPrice: grossPrice, packageId });
       }
 
       const specimenGroups = new Map<string, typeof createdItems>();
@@ -1004,6 +1012,16 @@ export async function POST(request: Request) {
             directTestIds,
             packageIds,
             expandedTestIds: allTestIds,
+            tatSnapshots: createdItems.map(entry => ({
+              orderItemId: entry.item.id,
+              testId: entry.test.id,
+              testCode: entry.test.code,
+              tatMinutesSnapshot: entry.tatSnapshot.tatMinutesSnapshot,
+              tatClockBasisSnapshot: entry.tatSnapshot.tatClockBasisSnapshot,
+              tatClockStartedAt: entry.tatSnapshot.tatClockStartedAt?.toISOString() || null,
+              tatDueAt: entry.tatSnapshot.tatDueAt?.toISOString() || null,
+              tatSnapshotSource: entry.tatSnapshot.tatSnapshotSource,
+            })),
             answeredOrderQuestionCodes: questions
               .filter(entry => preparedAnswers.has(entry.question.id))
               .map(entry => entry.question.code),

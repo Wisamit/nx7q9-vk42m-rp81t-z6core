@@ -129,9 +129,11 @@ Architecture guardrail:
 specialized CBC, urine, stool, semen, coagulation, hormone, tumor-marker and serology workspaces must be configured through generic layout/section metadata. They must not depend on hard-coded test names and must not introduce per-test result tables.
 
 
-## Phase 6E — Staged technical review and medical validation
+## Phase 6E — Runtime accepted
 
-Phase 6E is implemented on feature branch `phase-6e-staged-result-validation` and is pending CI/runtime acceptance.
+Runtime acceptance confirmed on Hostinger for main commit `4afe960df387c3d7364f1969a4993c9e54a2678a`.
+
+Phase 6E delivered staged technical review and medical validation.
 
 Source-aligned workflow:
 - technical review is always part of the result validation path;
@@ -162,3 +164,24 @@ Autoverification compatibility:
 - an eligible autoverification decision is treated as an automated technical review;
 - if medical validation is not required, the result completes validation as before;
 - if medical validation is required, autoverification stops at `MEDICAL_VALIDATION` and cannot bypass the human medical stage.
+
+
+## Phase 6F — Immutable TAT snapshot and due-time worklist
+
+Phase 6F is implemented on feature branch `phase-6f-immutable-tat-due-worklist` and is pending CI/runtime acceptance.
+
+Scope:
+- every newly registered order item snapshots the effective catalog TAT minutes inside the same order transaction;
+- TAT timing context is explicit and historical: minutes, clock basis, clock start, due timestamp, and snapshot source are stored on `OrderItem`;
+- current Phase 6 operational clock basis is explicitly `ORDERED_AT`; this is an operational worklist SLA and is not silently presented as a specimen-receipt TAT metric;
+- new tests with no catalog TAT are stored as `NOT_CONFIGURED`;
+- pre-Phase-6F order items are migrated as `MIGRATED_BASELINE` with no fabricated TAT minutes or due timestamp, because their historical catalog value cannot be recovered safely;
+- later changes to `LabTest.tatMinutes` do not alter existing order-item due times;
+- server-side catalog validation rejects invalid negative/out-of-range TAT values;
+- worklists add a Due/TAT column and filters for `OVERDUE`, `PENDING`, and `NO_TAT`;
+- completed/verified work is never labelled overdue by the work-state helper;
+- due timestamps are displayed in the ordering branch timezone;
+- order registration audit captures the exact TAT snapshot used for each created order item.
+
+Architecture guardrail:
+future collection-started or reception-started TAT clocks must be introduced as explicit clock-basis policies and snapshotted on the work item. They must not recompute historical deadlines from mutable catalog configuration.

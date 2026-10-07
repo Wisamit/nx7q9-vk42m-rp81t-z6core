@@ -28,6 +28,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "invalid_fields" }, { status: 400 });
   }
 
+  const tatMinutes = body.tatMinutes == null || body.tatMinutes === "" ? null : Number(body.tatMinutes);
+  if (tatMinutes !== null && (!Number.isInteger(tatMinutes) || tatMinutes < 0 || tatMinutes > 5_256_000)) {
+    return NextResponse.json({ error: "invalid_tat_minutes" }, { status: 400 });
+  }
+
   try {
     const test = await prisma.$transaction(async (tx) => {
       const created = await tx.labTest.create({
@@ -45,7 +50,7 @@ export async function POST(request: NextRequest) {
           methodId: body.methodId || null,
           defaultUnitId: body.defaultUnitId || null,
           decimalPrecision: Number.isInteger(body.decimalPrecision) ? body.decimalPrecision : null,
-          tatMinutes: Number.isInteger(body.tatMinutes) ? body.tatMinutes : null,
+          tatMinutes,
           loincCode: typeof body.loincCode === "string" ? body.loincCode.trim().slice(0, 30) || null : null,
         },
       });

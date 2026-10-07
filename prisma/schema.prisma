@@ -79,6 +79,16 @@ enum OrderItemStatus {
   CANCELLED
 }
 
+enum TatClockBasis {
+  ORDERED_AT
+}
+
+enum TatSnapshotSource {
+  CATALOG_SNAPSHOT
+  NOT_CONFIGURED
+  MIGRATED_BASELINE
+}
+
 enum PriceListScope {
   ORGANIZATION
   BRANCH
@@ -2379,6 +2389,11 @@ model OrderItem {
   finalPriceSnapshot    Decimal         @default(0) @map("final_price_snapshot") @db.Decimal(18, 4)
   currency              String          @db.Char(3)
   status                OrderItemStatus @default(ORDERED)
+  tatMinutesSnapshot    Int?            @map("tat_minutes_snapshot")
+  tatClockBasisSnapshot TatClockBasis?  @map("tat_clock_basis_snapshot")
+  tatClockStartedAt     DateTime?       @map("tat_clock_started_at") @db.DateTime(3)
+  tatDueAt              DateTime?       @map("tat_due_at") @db.DateTime(3)
+  tatSnapshotSource     TatSnapshotSource @default(NOT_CONFIGURED) @map("tat_snapshot_source")
   createdAt             DateTime        @default(now()) @map("created_at") @db.DateTime(3)
   updatedAt             DateTime        @updatedAt @map("updated_at") @db.DateTime(3)
 
@@ -2400,6 +2415,7 @@ model OrderItem {
   @@unique([orderId, testId])
   @@index([performedBranchId, status])
   @@index([testId, status])
+  @@index([tatDueAt, status])
   @@map("order_items")
 }
 

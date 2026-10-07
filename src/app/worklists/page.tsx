@@ -1,10 +1,12 @@
 import Link from "next/link";
+import type { Prisma } from "../../../generated/prisma/client";
 import { authorizedDepartmentIds, permissionSet, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { BulkResultEntry } from "@/components/bulk-result-entry";
 import { SystemIcon } from "@/components/system-icon";
 import { getUiLocale, statusLabel, tr } from "@/lib/ui-i18n";
 import { scopedWorklistBranchIds } from "@/lib/clinical-safety";
+import { tatRemainingMinutes, tatWorkState } from "@/lib/tat";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +20,7 @@ export default async function WorklistsPage({
     branch?: string;
     priority?: string;
     specimenStatus?: string;
+    due?: string;
   }>;
 }) {
   const session = await requirePermission("worklists.view");
@@ -30,6 +33,7 @@ export default async function WorklistsPage({
   const branchId = params.branch?.trim() || "";
   const priority = params.priority?.trim() || "";
   const specimenStatus = params.specimenStatus?.trim() || "";
+  const due = params.due?.trim() || "";
   const authorizedBranches = session.user.branchScopes
     .filter(scope => scope.branch.status === "ACTIVE")
     .map(scope => scope.branch);
@@ -41,6 +45,9 @@ export default async function WorklistsPage({
   const specimenStatusFilter = ["RECEIVED", "IN_PROCESS"].includes(specimenStatus)
     ? specimenStatus as "RECEIVED" | "IN_PROCESS"
     : null;
+  const dueFilter = ["OVERDUE", "PENDING", "NO_TAT"].includes(due)
+    ? due as "OVERDUE" | "PENDING" | "NO_TAT"
+    : null;
   const scopedDepartmentIds = authorizedDepartmentIds(session);
   const departmentRestricted = scopedDepartmentIds.length > 0;
   const departmentFilter = departmentId
@@ -49,6 +56,34 @@ export default async function WorklistsPage({
       : { departmentId })
     : (departmentRestricted ? { departmentId: { in: scopedDepartmentIds } } : {});
   const now = new Date();
+  const andFilters: Prisma.OrderItemWhereInput[] = [];
+
+  if (q) {
+    andFilters.push({
+      OR: [
+        { testCodeSnapshot: { contains: q } },
+        { testNameEnSnapshot: { contains: q } },
+        { order: { accessionNumber: { contains: q } } },
+        { order: { patient: { patientNumber: { contains: q } } } },
+        { order: { patient: { fullNameEn: { contains: q } } } },
+        { specimenLinks: { some: { status: "ACTIVE", specimen: { barcode: { contains: q } } } } },
+      ],
+    });
+  }
+
+  if (dueFilter === "OVERDUE") {
+    andFilters.push({
+      status: { notIn: ["VERIFIED", "CANCELLED"] },
+      tatDueAt: { lt: now },
+    });
+  } else if (dueFilter === "PENDING") {
+    andFilters.push({
+      status: { notIn: ["VERIFIED", "CANCELLED"] },
+      tatDueAt: { gte: now },
+    });
+  } else if (dueFilter === "NO_TAT") {
+    andFilters.push({ tatDueAt: null });
+  }
 
   const [items, departments] = await Promise.all([
     prisma.orderItem.findMany({
@@ -71,18 +106,7 @@ export default async function WorklistsPage({
           ? { status: status as "ORDERED" | "COLLECTED" | "IN_PROGRESS" | "RESULTED" | "VERIFIED" }
           : {}),
         ...(Object.keys(departmentFilter).length ? { test: departmentFilter } : {}),
-        ...(q ? {
-          AND: [{
-            OR: [
-              { testCodeSnapshot: { contains: q } },
-              { testNameEnSnapshot: { contains: q } },
-              { order: { accessionNumber: { contains: q } } },
-              { order: { patient: { patientNumber: { contains: q } } } },
-              { order: { patient: { fullNameEn: { contains: q } } } },
-              { specimenLinks: { some: { status: "ACTIVE", specimen: { barcode: { contains: q } } } } },
-            ],
-          }],
-        } : {}),
+        ...(andFilters.length ? { AND: andFilters } : {}),
       },
       include: {
         order: { include: { patient: true, orderingBranch: true } },
@@ -145,6 +169,24 @@ export default async function WorklistsPage({
     URGENT: tr(locale, "Urgent", "عاجل"),
     STAT: "STAT",
   }[value]);
+  const formatTatMinutes = (minutes: number) => {
+    const absolute = Math.abs(minutes);
+    if (absolute >= 1440) {
+      const days = Math.floor(absolute / 1440);
+      const hours = Math.floor((absolute % 1440) / 60);
+      return hours ? `${days}d ${hours}h` : `${days}d`;
+    }
+    if (absolute >= 60) {
+      const hours = Math.floor(absolute / 60);
+      const mins = absolute % 60;
+      return mins ? `${hours}h ${mins}m` : `${hours}h`;
+    }
+    return `${absolute}m`;
+  };
+  const formatTatDueAt = (value: Date, timezone: string) => new Intl.DateTimeFormat(
+    locale === "ar" ? "ar-AE" : "en-GB",
+    { timeZone: timezone, year: "numeric", month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" },
+  ).format(value);
 
   const pendingEntry = items.filter(item => !item.results[0]).length;
   const inProgress = items.filter(item => item.results[0] && !["VERIFIED","RELEASED","AMENDED"].includes(item.results[0].status)).length;
@@ -269,6 +311,12 @@ export default async function WorklistsPage({
             <option value="">{tr(locale, "All departments", "كل الأقسام")}</option>
             {departments.map(department => <option key={department.id} value={department.id}>{department.code} — {localizedName(department)}</option>)}
           </select>
+          <select name="due" defaultValue={due}>
+            <option value="">{tr(locale, "All TAT states", "كل حالات زمن الإنجاز")}</option>
+            <option value="OVERDUE">{tr(locale, "Overdue", "متأخر")}</option>
+            <option value="PENDING">{tr(locale, "Pending within TAT", "ضمن زمن الإنجاز")}</option>
+            <option value="NO_TAT">{tr(locale, "No TAT snapshot", "بدون لقطة زمن إنجاز")}</option>
+          </select>
           <select name="status" defaultValue={status}>
             <option value="">{tr(locale, "All statuses", "كل الحالات")}</option>
             <option value="COLLECTED">{statusLabel(locale, "COLLECTED")}</option>
@@ -277,15 +325,15 @@ export default async function WorklistsPage({
             <option value="VERIFIED">{statusLabel(locale, "VERIFIED")}</option>
           </select>
           <button className="secondary-button"><SystemIcon name="search" size={15} />{tr(locale, "Filter", "تصفية")}</button>
-          {(q || status || departmentId || branchId || priority || specimenStatus) && <Link className="secondary-link" href="/worklists">{tr(locale, "Clear", "مسح")}</Link>}
+          {(q || status || departmentId || branchId || priority || specimenStatus || due) && <Link className="secondary-link" href="/worklists">{tr(locale, "Clear", "مسح")}</Link>}
         </form>
       </div>
 
       <div className="table-wrap">
         <table>
-          <thead><tr><th>{tr(locale, "Accession", "رقم الطلب")}</th><th>{tr(locale, "Patient", "المريض")}</th><th>{tr(locale, "Test", "الفحص")}</th><th>{tr(locale, "Priority", "الأولوية")}</th><th>{tr(locale, "Department", "القسم")}</th><th>{tr(locale, "Specimen", "العينة")}</th><th>{tr(locale, "Location", "الموقع")}</th><th>{tr(locale, "Result", "النتيجة")}</th><th>{tr(locale, "Validation", "التحقق")}</th><th>{tr(locale, "Flags", "الإشارات")}</th><th></th></tr></thead>
+          <thead><tr><th>{tr(locale, "Accession", "رقم الطلب")}</th><th>{tr(locale, "Patient", "المريض")}</th><th>{tr(locale, "Test", "الفحص")}</th><th>{tr(locale, "Priority", "الأولوية")}</th><th>{tr(locale, "Department", "القسم")}</th><th>{tr(locale, "Specimen", "العينة")}</th><th>{tr(locale, "Location", "الموقع")}</th><th>{tr(locale, "TAT / Due", "زمن الإنجاز / الاستحقاق")}</th><th>{tr(locale, "Result", "النتيجة")}</th><th>{tr(locale, "Validation", "التحقق")}</th><th>{tr(locale, "Flags", "الإشارات")}</th><th></th></tr></thead>
           <tbody>
-            {items.length === 0 ? <tr><td colSpan={11} className="empty-state">{tr(locale, "No received specimens are waiting for laboratory work.", "لا توجد عينات مستلمة بانتظار العمل المخبري.")}</td></tr> :
+            {items.length === 0 ? <tr><td colSpan={12} className="empty-state">{tr(locale, "No received specimens are waiting for laboratory work.", "لا توجد عينات مستلمة بانتظار العمل المخبري.")}</td></tr> :
               items.map(item => {
                 const readySpecimen = item.specimenLinks.map(link => link.specimen).find(specimen =>
                   ["RECEIVED","IN_PROCESS"].includes(specimen.status) &&
@@ -296,6 +344,8 @@ export default async function WorklistsPage({
                 const result = item.results[0];
                 const criticalCount = result?.values.filter(value => value.isCritical).length || 0;
                 const abnormalCount = result?.values.filter(value => value.isAbnormal).length || 0;
+                const tatState = tatWorkState(item.tatDueAt, item.status, now);
+                const tatRemaining = tatRemainingMinutes(item.tatDueAt, now);
                 return <tr key={item.id}>
                   <td><strong>{item.order.accessionNumber}</strong></td>
                   <td>{item.order.patient.patientNumber}<br/><small>{patientName(item.order.patient)}</small></td>
@@ -304,6 +354,22 @@ export default async function WorklistsPage({
                   <td>{item.test.department ? localizedName(item.test.department) : tr(locale, "Unassigned", "غير معيّن")}</td>
                   <td><span className="barcode-text">{readySpecimen?.barcode || "—"}</span><br/><small>{readySpecimen?.status ? statusLabel(locale, readySpecimen.status) : "—"}</small></td>
                   <td>{readySpecimen?.currentBranch ? localizedName(readySpecimen.currentBranch) : item.performedBranch ? localizedName(item.performedBranch) : "—"}</td>
+                  <td>
+                    {item.tatDueAt ? <>
+                      <strong className={tatState === "OVERDUE" ? "critical-text" : ""}>
+                        {tatState === "OVERDUE" && tatRemaining !== null
+                          ? tr(locale, `Overdue ${formatTatMinutes(tatRemaining)}`, `متأخر ${formatTatMinutes(tatRemaining)}`)
+                          : tatState === "PENDING" && tatRemaining !== null
+                            ? tr(locale, `${formatTatMinutes(tatRemaining)} remaining`, `متبقٍ ${formatTatMinutes(tatRemaining)}`)
+                            : tr(locale, "Completed", "مكتمل")}
+                      </strong>
+                      <br/><small>{formatTatDueAt(item.tatDueAt, item.order.orderingBranch.timezone)} · {item.tatMinutesSnapshot ?? "—"} {tr(locale, "min", "دقيقة")}</small>
+                    </> : <span className="muted">
+                      {item.tatSnapshotSource === "MIGRATED_BASELINE"
+                        ? tr(locale, "Historical item — no TAT snapshot", "عنصر تاريخي — لا توجد لقطة زمن إنجاز")
+                        : tr(locale, "TAT not configured", "زمن الإنجاز غير مهيأ")}
+                    </span>}
+                  </td>
                   <td><span className={"status-badge status-" + (result?.status || item.status).toLowerCase().replaceAll("_","-")}>{statusLabel(locale, result?.status || item.status)}</span></td>
                   <td>{result ? (
                     result.validationStage === "MEDICAL_VALIDATION" ? tr(locale, "Medical validation", "تحقق طبي") :
