@@ -282,31 +282,48 @@ export async function POST(request: Request) {
   }
 
   if (action === "APPROVE") {
-    if (clinicalRuleLifecycleState(existing) !== "DRAFT") {
-      return NextResponse.json({ error: "clinical_rule_not_draft" }, { status: 409 });
-    }
+    const identityHash = createHash("sha256").update(existing.identityKey).digest("hex");
+    const outcome = await prisma.$transaction(async tx => {
+      const lockAt = new Date();
+      await tx.clinicalRuleGovernanceLock.upsert({
+        where: {
+          organizationId_ruleType_identityHash: {
+            organizationId,
+            ruleType: type,
+            identityHash,
+          },
+        },
+        create: { organizationId, ruleType: type, identityHash, updatedAt: lockAt },
+        update: { updatedAt: lockAt },
+      });
 
-    if (type === "CALCULATED_RESULT_RULE") {
-      const formulaValidation = await validateCalculatedApproval(prisma, id, organizationId);
-      if (!formulaValidation.ok) {
-        return NextResponse.json(formulaValidation, { status: 409 });
+      const lockedExisting = await loadRule(tx, type, id, organizationId);
+      if (!lockedExisting) return { error: "clinical_rule_not_found" as const };
+      if (lockedExisting.authorizationBranchId && !canAccessBranch(session, lockedExisting.authorizationBranchId)) {
+        return { error: "branch_forbidden" as const };
       }
-    }
+      if (clinicalRuleLifecycleState(lockedExisting) !== "DRAFT") {
+        return { error: "clinical_rule_not_draft" as const };
+      }
 
-    const activeRules = await loadActiveRules(prisma, type, organizationId);
-    const plan = planClinicalRuleApproval(existing, activeRules);
-    if (plan.conflicts.length > 0) {
-      return NextResponse.json({
-        error: "clinical_rule_effective_range_overlap",
-        conflictingRuleIds: plan.conflicts,
-      }, { status: 409 });
-    }
+      if (type === "CALCULATED_RESULT_RULE") {
+        const formulaValidation = await validateCalculatedApproval(tx, id, organizationId);
+        if (!formulaValidation.ok) return formulaValidation;
+      }
 
-    const approvedAt = new Date();
-    const predecessorEffectiveTo = new Date(existing.effectiveFrom.getTime() - 1);
-    const typeName = entityType(type);
+      const activeRules = await loadActiveRules(tx, type, organizationId);
+      const plan = planClinicalRuleApproval(lockedExisting, activeRules);
+      if (plan.conflicts.length > 0) {
+        return {
+          error: "clinical_rule_effective_range_overlap" as const,
+          conflictingRuleIds: plan.conflicts,
+        };
+      }
 
-    await prisma.$transaction(async tx => {
+      const approvedAt = new Date();
+      const predecessorEffectiveTo = new Date(lockedExisting.effectiveFrom.getTime() - 1);
+      const typeName = entityType(type);
+
       for (const predecessorId of plan.predecessorsToClose) {
         switch (type) {
           case "CALCULATED_RESULT_RULE":
@@ -383,7 +400,7 @@ export async function POST(request: Request) {
           action: "CLINICAL_RULE_APPROVED",
           entityType: typeName,
           entityId: id,
-          oldValues: { status: existing.status, lifecycle: "DRAFT" },
+          oldValues: { status: lockedExisting.status, lifecycle: "DRAFT" },
           newValues: {
             status: "ACTIVE",
             lifecycle: "APPROVED",
@@ -396,14 +413,22 @@ export async function POST(request: Request) {
           userAgent: ctx.userAgent,
         },
       });
+
+      return {
+        status: "ok" as const,
+        lifecycle: "APPROVED" as const,
+        approvedAt,
+        predecessorsClosed: plan.predecessorsToClose,
+      };
     }, { timeout: 30000 });
 
-    return NextResponse.json({
-      status: "ok",
-      lifecycle: "APPROVED",
-      approvedAt,
-      predecessorsClosed: plan.predecessorsToClose,
-    });
+    if ("error" in outcome) {
+      const status = outcome.error === "clinical_rule_not_found" ? 404
+        : outcome.error === "branch_forbidden" ? 403
+          : 409;
+      return NextResponse.json(outcome, { status });
+    }
+    return NextResponse.json(outcome);
   }
 
   if (clinicalRuleLifecycleState(existing) !== "APPROVED") {
