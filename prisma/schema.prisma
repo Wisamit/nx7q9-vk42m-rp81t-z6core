@@ -12,6 +12,12 @@ enum RecordStatus {
   INACTIVE
 }
 
+enum ReferenceIntervalApprovalStatus {
+  DRAFT
+  APPROVED
+  RETIRED
+}
+
 enum UserStatus {
   INVITED
   ACTIVE
@@ -1299,7 +1305,9 @@ model User {
   auditEvents      AuditEvent[]          @relation("AuditActor")
   sessions         UserSession[]
   mfaChallenges     StaffMfaChallenge[]
+  createdReferenceIntervals ReferenceInterval[] @relation("ReferenceIntervalCreator")
   approvedReferenceIntervals ReferenceInterval[] @relation("ReferenceIntervalApprover")
+  retiredReferenceIntervals ReferenceInterval[] @relation("ReferenceIntervalRetirer")
   createdCatalogImportMappings CatalogImportMapping[] @relation("CatalogImportMappingCreator")
   createdOrders LabOrder[] @relation("OrderCreator")
   recordedOrderAnswers OrderAnswer[] @relation("OrderAnswerRecorder")
@@ -1970,9 +1978,14 @@ model ReferenceInterval {
   notes             String?          @db.Text
   effectiveFrom     DateTime         @map("effective_from") @db.DateTime(3)
   effectiveTo       DateTime?        @map("effective_to") @db.DateTime(3)
+  approvalStatus    ReferenceIntervalApprovalStatus @default(DRAFT) @map("approval_status")
+  createdByUserId   String?          @map("created_by_user_id") @db.Char(36)
   approvedByUserId  String?          @map("approved_by_user_id") @db.Char(36)
   approvedAt        DateTime?        @map("approved_at") @db.DateTime(3)
-  status            RecordStatus     @default(ACTIVE)
+  retiredByUserId   String?          @map("retired_by_user_id") @db.Char(36)
+  retiredAt         DateTime?        @map("retired_at") @db.DateTime(3)
+  retirementReason  String?          @map("retirement_reason") @db.VarChar(1000)
+  status            RecordStatus     @default(INACTIVE)
   createdAt         DateTime         @default(now()) @map("created_at") @db.DateTime(3)
   updatedAt         DateTime         @updatedAt @map("updated_at") @db.DateTime(3)
 
@@ -1981,10 +1994,13 @@ model ReferenceInterval {
   method       Method? @relation(fields: [methodId], references: [id], onDelete: Restrict)
   analyzer     Analyzer? @relation(fields: [analyzerId], references: [id], onDelete: Restrict)
   specimenType SpecimenType? @relation(fields: [specimenTypeId], references: [id], onDelete: Restrict)
+  createdBy    User? @relation("ReferenceIntervalCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
   approvedBy   User? @relation("ReferenceIntervalApprover", fields: [approvedByUserId], references: [id], onDelete: Restrict)
+  retiredBy    User? @relation("ReferenceIntervalRetirer", fields: [retiredByUserId], references: [id], onDelete: Restrict)
   resultValues LaboratoryResultValue[]
 
   @@index([componentId, effectiveFrom, effectiveTo])
+  @@index([componentId, approvalStatus, status, effectiveFrom, effectiveTo])
   @@index([branchId, status])
   @@index([analyzerId, status])
   @@index([specimenTypeId, status])
