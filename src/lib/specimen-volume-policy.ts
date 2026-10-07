@@ -6,6 +6,7 @@ export type VolumeTrackedSpecimenStatus =
   | "RECEIVED"
   | "IN_PROCESS"
   | "PLANNED"
+  | "COLLECTION_FAILED"
   | "IN_TRANSIT"
   | "REJECTED"
   | "DISPOSED";

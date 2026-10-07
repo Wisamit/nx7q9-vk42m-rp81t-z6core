@@ -16,6 +16,7 @@ const STATUS_AR: Record<string, string> = {
   DRAFT: "مسودة",
   APPROVED: "معتمد",
   PLANNED: "مخطط",
+  COLLECTION_FAILED: "فشل السحب",
   COLLECTED: "تم الجمع",
   RECEIVED: "تم الاستلام",
   IN_TRANSIT: "قيد النقل",
