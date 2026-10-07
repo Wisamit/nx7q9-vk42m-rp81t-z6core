@@ -68,7 +68,7 @@ export function CreditNoteCreateModal({
   const selectedInvoice = invoices.find(item => item.id === selectedInvoiceId);
   const taxed = Boolean(selectedInvoice && Number(selectedInvoice.taxTotal) > 0);
   const selectedLineCredits = (selectedInvoice?.lines || [])
-    .filter(line => Number(lineAmounts[line.id] || 0) > 0)
+    .filter(line => /^\d+(?:\.\d{1,4})?$/.test(lineAmounts[line.id] || "") && Number(lineAmounts[line.id]) > 0)
     .map(line => ({ invoiceLineId: line.id, amount: lineAmounts[line.id] }));
   const allocatedTotal = selectedLineCredits.reduce((sum, line) => {
     const [whole, fraction = ""] = line.amount.split(".");
