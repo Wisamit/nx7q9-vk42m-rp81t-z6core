@@ -52,13 +52,26 @@ export default async function CriticalResultsPage() {
     <section className="table-card">
       <div className="table-toolbar"><h2>{tr(locale, "Active critical events", "الأحداث الحرجة النشطة")}</h2><span>{events.length} {tr(locale, "shown", "معروضة")}</span></div>
       <div className="table-wrap"><table>
-        <thead><tr><th>{tr(locale, "Patient / Order", "المريض / الطلب")}</th><th>{tr(locale, "Test", "الفحص")}</th><th>{tr(locale, "Branch", "الفرع")}</th><th>{tr(locale, "Detected", "تم الاكتشاف")}</th><th>{tr(locale, "Acknowledgement due", "موعد الإقرار")}</th><th>{tr(locale, "Escalation", "التصعيد")}</th><th>{tr(locale, "Last communication", "آخر تواصل")}</th><th>{tr(locale, "Action", "الإجراء")}</th></tr></thead>
-        <tbody>{events.length === 0 ? <tr><td colSpan={8} className="empty-state">{tr(locale, "No open critical result events in your authorized branches.", "لا توجد نتائج حرجة مفتوحة ضمن الفروع المصرح لك بها.")}</td></tr> : events.map(event => {
+        <thead><tr><th>{tr(locale, "Patient / Order", "المريض / الطلب")}</th><th>{tr(locale, "Test", "الفحص")}</th><th>{tr(locale, "Critical value(s)", "القيم الحرجة")}</th><th>{tr(locale, "Branch", "الفرع")}</th><th>{tr(locale, "Detected", "تم الاكتشاف")}</th><th>{tr(locale, "Acknowledgement due", "موعد الإقرار")}</th><th>{tr(locale, "Escalation", "التصعيد")}</th><th>{tr(locale, "Last communication", "آخر تواصل")}</th><th>{tr(locale, "Action", "الإجراء")}</th></tr></thead>
+        <tbody>{events.length === 0 ? <tr><td colSpan={9} className="empty-state">{tr(locale, "No open critical result events in your authorized branches.", "لا توجد نتائج حرجة مفتوحة ضمن الفروع المصرح لك بها.")}</td></tr> : events.map(event => {
           const overdue = Boolean(event.acknowledgementDueAt && event.acknowledgementDueAt < now);
           const last = event.communications[0];
+          const criticalSnapshot = Array.isArray(event.criticalValueSnapshot)
+            ? event.criticalValueSnapshot.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item))
+            : [];
           return <tr key={event.id}>
             <td><strong>{event.result.orderItem.order.patient.fullNameEn}</strong><br/><small>{event.result.orderItem.order.accessionNumber}</small></td>
             <td><strong>{event.result.orderItem.test.code}</strong><br/><small>{event.result.orderItem.test.nameEn}</small></td>
+            <td>{criticalSnapshot.length === 0 ? "—" : criticalSnapshot.map((value, index) => {
+              const component = locale === "ar"
+                ? String(value.componentNameAr || value.componentNameEn || value.componentName || value.componentCode || "")
+                : String(value.componentNameEn || value.componentName || value.componentCode || "");
+              const display = locale === "ar"
+                ? String(value.valueTextAr || value.valueTextEn || value.displayValue || "")
+                : String(value.valueTextEn || value.displayValue || "");
+              const optionCode = value.qualitativeOptionCode ? String(value.qualitativeOptionCode) : "";
+              return <div key={index}><strong>{component}: {display}</strong>{optionCode ? <><br/><small>{optionCode} · {String(value.flag || "")}</small></> : <><br/><small>{String(value.flag || "")}</small></>}</div>;
+            })}</td>
             <td>{event.result.performingBranch.nameEn}</td>
             <td>{event.detectedAt.toISOString().replace("T"," ").slice(0,19)}</td>
             <td>{event.acknowledgementDueAt

@@ -61,6 +61,8 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
               qualitativeResultOptions: {
                 where: {
                   status: "ACTIVE",
+                  approvalStatus: "APPROVED",
+                  approvedAt: { not: null },
                   effectiveFrom: { lte: now },
                   OR: [{ effectiveTo: null }, { effectiveTo: { gte: now } }],
                 },
@@ -73,6 +75,8 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
             where: {
               componentId: null,
               status: "ACTIVE",
+              approvalStatus: "APPROVED",
+              approvedAt: { not: null },
               effectiveFrom: { lte: now },
               OR: [{ effectiveTo: null }, { effectiveTo: { gte: now } }],
             },

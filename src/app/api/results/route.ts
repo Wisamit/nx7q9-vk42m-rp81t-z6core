@@ -160,6 +160,8 @@ export async function POST(request: Request) {
       organizationId: session.user.organizationId,
       testId: orderItem.testId,
       status: "ACTIVE",
+      approvalStatus: "APPROVED",
+      approvedAt: { not: null },
       effectiveFrom: { lte: resultAt },
       OR: [{ effectiveTo: null }, { effectiveTo: { gte: resultAt } }],
     },

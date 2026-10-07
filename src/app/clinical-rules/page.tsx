@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { requirePermission } from "@/lib/auth";
+import { permissionSet, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { ClinicalRulesManager } from "@/components/clinical-rules-manager";
 import { AdvancedClinicalRulesManager } from "@/components/advanced-clinical-rules-manager";
@@ -14,6 +14,7 @@ export const dynamic = "force-dynamic";
 
 export default async function ClinicalRulesPage() {
   const session = await requirePermission("clinical_rules.manage");
+  const permissions = permissionSet(session);
   const locale = session.user.preferredLocale === "ar" ? "ar" : "en";
 
   const [tests, branches, departments, methods, deltaRules, commentTemplates, calculatedRules, reflexRules, autoverificationPolicies, validationHoldRules, criticalEscalationPolicies, qualitativeResultOptions, resultValidationPolicies] = await Promise.all([
@@ -81,7 +82,7 @@ export default async function ClinicalRulesPage() {
     }),
     prisma.qualitativeResultOption.findMany({
       where: { organizationId: session.user.organizationId },
-      include: { test: true, component: true },
+      include: { test: true, component: true, createdBy: true, approvedBy: true, retiredBy: true },
       orderBy: [{ testId: "asc" }, { componentId: "asc" }, { displayOrder: "asc" }, { createdAt: "asc" }],
       take: 500,
     }),
@@ -203,6 +204,7 @@ export default async function ClinicalRulesPage() {
 
         <QualitativeResultOptionsManager
       locale={locale}
+      canApprove={permissions.has("clinical_rules.qualitative_options.approve")}
       tests={tests.map(test => ({
         id: test.id,
         code: test.code,
@@ -230,7 +232,17 @@ export default async function ClinicalRulesPage() {
         displayOrder: option.displayOrder,
         effectiveFrom: option.effectiveFrom.toISOString().slice(0,10),
         effectiveTo: option.effectiveTo?.toISOString().slice(0,10) || null,
+        approvalStatus: option.approvalStatus,
         status: option.status,
+        approvedAt: option.approvedAt?.toISOString().replace("T"," ").slice(0,19) || null,
+        retiredAt: option.retiredAt?.toISOString().replace("T"," ").slice(0,19) || null,
+        retirementReason: option.retirementReason,
+        createdByNameEn: option.createdBy.displayNameEn,
+        createdByNameAr: option.createdBy.displayNameAr,
+        approvedByNameEn: option.approvedBy?.displayNameEn || null,
+        approvedByNameAr: option.approvedBy?.displayNameAr || null,
+        retiredByNameEn: option.retiredBy?.displayNameEn || null,
+        retiredByNameAr: option.retiredBy?.displayNameAr || null,
         testCode: option.test.code,
         testNameEn: option.test.nameEn,
         testNameAr: option.test.nameAr,

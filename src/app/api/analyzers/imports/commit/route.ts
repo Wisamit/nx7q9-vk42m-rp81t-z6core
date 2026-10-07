@@ -99,6 +99,8 @@ export async function POST(request: Request) {
               qualitativeResultOptions: {
                 where: {
                   status: "ACTIVE",
+                  approvalStatus: "APPROVED",
+                  approvedAt: { not: null },
                   effectiveFrom: { lte: now },
                   OR: [{ effectiveTo: null }, { effectiveTo: { gte: now } }],
                 },
@@ -111,6 +113,8 @@ export async function POST(request: Request) {
             where: {
               componentId: null,
               status: "ACTIVE",
+              approvalStatus: "APPROVED",
+              approvedAt: { not: null },
               effectiveFrom: { lte: now },
               OR: [{ effectiveTo: null }, { effectiveTo: { gte: now } }],
             },
