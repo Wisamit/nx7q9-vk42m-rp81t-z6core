@@ -150,7 +150,10 @@ export function OrderCreateForm({
       const creditWarning = body.creditControl?.decision === "WARN_EXCEEDED"
         ? tr(" · WARNING: client credit limit exceeded (recorded).", " · تحذير: تم تجاوز حد ائتمان العميل وتسجيل الحالة.")
         : "";
-      const success = `${tr("Order", "الطلب")} ${body.accessionNumber} ${tr("created", "تم إنشاؤه")} · ${tr("Invoice", "الفاتورة")} ${body.invoiceNumber} · ${body.total} ${body.currency}${creditWarning}`;
+      const taxSummary = Number(body.taxTotal || 0) > 0
+        ? ` · ${tr("Tax", "الضريبة")}: ${body.taxTotal} ${body.currency}`
+        : "";
+      const success = `${tr("Order", "الطلب")} ${body.accessionNumber} ${tr("created", "تم إنشاؤه")} · ${tr("Invoice", "الفاتورة")} ${body.invoiceNumber} · ${body.total} ${body.currency}${taxSummary}${creditWarning}`;
       setMessage(success);
       setPatientId("");
       setPatientSearch("");
@@ -162,6 +165,10 @@ export function OrderCreateForm({
       event.currentTarget.reset();
       router.refresh();
       onSuccess?.(success);
+    } else if (body.error === "tax_configuration_changed") {
+      setMessage(tr("Tax configuration changed while registering this order. Review the amounts and submit again.", "تغير إعداد الضريبة أثناء تسجيل الطلب. راجع المبالغ ثم أعد الإرسال."));
+    } else if (body.error === "invalid_tax_rule") {
+      setMessage(tr("One or more active tax rules are invalid. Contact Billing Administration.", "توجد قاعدة ضريبية فعالة غير صالحة. تواصل مع إدارة الفوترة."));
     } else if (body.error === "credit_limit_exceeded") {
       setMessage(`${tr("Credit limit exceeded; no order or invoice was created.", "تم تجاوز حد الائتمان ولم يتم إنشاء طلب أو فاتورة.")} ${tr("Limit", "الحد")}: ${body.limitAmount} ${body.currency} · ${tr("Outstanding", "القائم")}: ${body.exposureBefore} · ${tr("Projected", "المتوقع")}: ${body.projectedExposure}`);
     } else if (body.error === "client_credit_state_changed") {

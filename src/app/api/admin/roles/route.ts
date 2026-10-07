@@ -85,6 +85,9 @@ export async function POST(request: Request) {
   if (selectedPermissions.some(permission => permission.code === "billing.credit.limits.manage") && !permissions.has("billing.credit.limits.manage")) {
     return NextResponse.json({ error: "credit_authority_forbidden" }, { status: 403 });
   }
+  if (selectedPermissions.some(permission => permission.code === "billing.tax.manage") && !permissions.has("billing.tax.manage")) {
+    return NextResponse.json({ error: "tax_authority_forbidden" }, { status: 403 });
+  }
 
   const ctx = await requestContext();
   try {

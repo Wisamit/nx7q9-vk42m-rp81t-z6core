@@ -136,6 +136,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "credit_authority_forbidden" }, { status: 403 });
   }
 
+  if (roles.some(role => role.permissions.some(grant => grant.permission.code === "billing.tax.manage"))
+      && !permissions.has("billing.tax.manage")) {
+    return NextResponse.json({ error: "tax_authority_forbidden" }, { status: 403 });
+  }
+
   const passwordHash = await hash(password, 12);
   const ctx = await requestContext();
 

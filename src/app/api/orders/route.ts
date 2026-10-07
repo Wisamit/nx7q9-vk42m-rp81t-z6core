@@ -8,10 +8,14 @@ import { discountApprovalMode, effectiveDiscountLimit } from "@/lib/discount-pol
 import { discountApprovalFingerprint } from "@/lib/discount-approval";
 import { invoiceDueDateSnapshot } from "@/lib/accounts-receivable-aging";
 import { creditLimitDecision } from "@/lib/client-credit-control";
+import { localCalendarDate } from "@/lib/accounts-receivable-aging";
+import { resolveTaxRule, taxLineAmounts, type EffectiveTaxRule } from "@/lib/tax-policy";
 
 function text(value: unknown, max = 500) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
 }
+
+class TaxConfigurationChanged extends Error {}
 
 class CreditControlError extends Error {
   constructor(
@@ -143,7 +147,7 @@ export async function POST(request: Request) {
     prisma.orderSource.findFirst({ where: { id: sourceId, organizationId: session.user.organizationId, status: "ACTIVE" }, select: { id: true, code: true, category: true } }),
     referrerId ? prisma.referrer.findFirst({ where: { id: referrerId, organizationId: session.user.organizationId, status: "ACTIVE" }, select: { id: true, clientId: true } }) : null,
     clientId ? prisma.client.findFirst({ where: { id: clientId, organizationId: session.user.organizationId, status: "ACTIVE" }, select: { id: true, paymentTermsDays: true, creditControlVersion: true } }) : null,
-    prisma.branch.findFirst({ where: { id: branchId, organizationId: session.user.organizationId, status: "ACTIVE" }, select: { id: true, timezone: true } }),
+    prisma.branch.findFirst({ where: { id: branchId, organizationId: session.user.organizationId, status: "ACTIVE" }, select: { id: true, timezone: true, taxConfigVersion: true } }),
   ]);
 
   if (!patient) return NextResponse.json({ error: "patient_not_found" }, { status: 404 });
@@ -322,7 +326,53 @@ export async function POST(request: Request) {
       new Prisma.Decimal(amount.mul(requestedDiscountPercent).div(100).toFixed(4)),
     );
   }
-  const quoteFinalTotal = quoteSubtotal.sub(quoteDiscountTotal);
+  const localTaxDay = localCalendarDate(invoiceIssuedAt, orderingBranch.timezone);
+  if (!localTaxDay) return NextResponse.json({ error: "invalid_tax_date" }, { status: 409 });
+  const selectedTaxRules = await prisma.taxRule.findMany({
+    where: {
+      organizationId: session.user.organizationId,
+      effectiveFrom: { lte: new Date(localTaxDay + "T00:00:00.000Z") },
+      AND: [
+        { OR: [{ branchId }, { branchId: null }] },
+        { OR: [
+          { testId: { in: directTestIds } },
+          { packageId: { in: packageIds } },
+        ] },
+      ],
+    },
+  });
+  const ruleInputs: EffectiveTaxRule[] = selectedTaxRules.map(rule => ({
+    id: rule.id,
+    branchId: rule.branchId,
+    testId: rule.testId,
+    packageId: rule.packageId,
+    code: rule.code,
+    treatment: rule.treatment,
+    priceMode: rule.priceMode,
+    ratePercent: rule.ratePercent.toFixed(2),
+    effectiveFrom: rule.effectiveFrom.toISOString().slice(0, 10),
+  }));
+  const taxQuotes = [
+    ...directPrices.map(entry => {
+      const unitPrice = new Prisma.Decimal(entry.price!.unitPrice);
+      const netAfterDiscount = unitPrice.sub(new Prisma.Decimal(unitPrice.mul(requestedDiscountPercent).div(100).toFixed(4)));
+      const rule = resolveTaxRule(ruleInputs, branchId, "TEST", entry.test.id, localTaxDay);
+      const amounts = taxLineAmounts({ netAfterDiscount: netAfterDiscount.toFixed(4), rule });
+      return { kind: "TEST" as const, id: entry.test.id, rule, amounts };
+    }),
+    ...packagePrices.map(entry => {
+      const unitPrice = new Prisma.Decimal(entry.price!.unitPrice);
+      const netAfterDiscount = unitPrice.sub(new Prisma.Decimal(unitPrice.mul(requestedDiscountPercent).div(100).toFixed(4)));
+      const rule = resolveTaxRule(ruleInputs, branchId, "PACKAGE", entry.package.id, localTaxDay);
+      const amounts = taxLineAmounts({ netAfterDiscount: netAfterDiscount.toFixed(4), rule });
+      return { kind: "PACKAGE" as const, id: entry.package.id, rule, amounts };
+    }),
+  ];
+  if (taxQuotes.some(item => !item.amounts)) return NextResponse.json({ error: "invalid_tax_rule" }, { status: 409 });
+  const taxQuoteByService = new Map(taxQuotes.map(item => [item.kind + ":" + item.id, item]));
+  const quoteTaxTotal = taxQuotes.reduce((sum, item) => sum.add(item.amounts!.taxAmount), new Prisma.Decimal(0));
+  const quoteExclusiveTaxTotal = taxQuotes.reduce((sum, item) => sum.add(item.amounts!.exclusiveTax), new Prisma.Decimal(0));
+  const quoteFinalTotal = quoteSubtotal.sub(quoteDiscountTotal).add(quoteExclusiveTaxTotal);
   const pricingFingerprint = discountApprovalFingerprint({
     organizationId: session.user.organizationId,
     branchId,
@@ -335,6 +385,15 @@ export async function POST(request: Request) {
     discountPercent: requestedDiscountPercent.toFixed(2),
     discountReason,
     currency,
+    tax: taxQuotes.map(item => ({
+      kind: item.kind,
+      id: item.id,
+      ruleId: item.rule?.id || null,
+      ratePercent: item.rule?.ratePercent || "0.00",
+      treatment: item.rule?.treatment || "NO_RULE",
+      priceMode: item.rule?.priceMode || "EXCLUSIVE",
+      taxAmount: item.amounts!.taxAmount,
+    })),
     pricing: [
       ...directPrices.map(entry => ({
         kind: "TEST" as const,
@@ -432,6 +491,7 @@ export async function POST(request: Request) {
               currency,
               subtotalSnapshot: quoteSubtotal,
               discountTotalSnapshot: quoteDiscountTotal,
+              taxTotalSnapshot: quoteTaxTotal,
               finalTotalSnapshot: quoteFinalTotal,
               pricingFingerprint,
               contextSnapshot: {
@@ -474,6 +534,7 @@ export async function POST(request: Request) {
                 currency,
                 subtotal: quoteSubtotal.toString(),
                 discountTotal: quoteDiscountTotal.toString(),
+                taxTotal: quoteTaxTotal.toString(),
                 finalTotal: quoteFinalTotal.toString(),
                 expiresAt,
               },
@@ -493,6 +554,7 @@ export async function POST(request: Request) {
         currency,
         subtotal: quoteSubtotal.toString(),
         discountTotal: quoteDiscountTotal.toString(),
+        taxTotal: quoteTaxTotal.toString(),
         total: quoteFinalTotal.toString(),
         expiresAt: approvalRequest.expiresAt,
       }, { status: 409 });
@@ -569,6 +631,18 @@ export async function POST(request: Request) {
         }
       }
 
+      // Serializes tax rule changes with invoice issuance for this branch.
+      const taxGuard = await tx.branch.updateMany({
+        where: {
+          id: branchId,
+          organizationId: session.user.organizationId,
+          status: "ACTIVE",
+          taxConfigVersion: orderingBranch.taxConfigVersion,
+        },
+        data: { taxConfigVersion: { increment: 1 } },
+      });
+      if (taxGuard.count !== 1) throw new TaxConfigurationChanged();
+
       let accessionNumber = documentNumber("ORD");
       while (await tx.labOrder.findUnique({ where: { organizationId_accessionNumber: { organizationId: session.user.organizationId, accessionNumber } } })) {
         accessionNumber = documentNumber("ORD");
@@ -618,6 +692,7 @@ export async function POST(request: Request) {
         unitPrice: Prisma.Decimal;
         discountAmount: Prisma.Decimal;
         finalPrice: Prisma.Decimal;
+        taxQuote: (typeof taxQuotes)[number];
       }>();
 
       for (const pkg of packages) {
@@ -625,6 +700,8 @@ export async function POST(request: Request) {
         const unitPrice = new Prisma.Decimal(price.unitPrice);
         const discountAmount = new Prisma.Decimal(unitPrice.mul(requestedDiscountPercent).div(100).toFixed(4));
         const finalPrice = unitPrice.sub(discountAmount);
+        const taxQuote = taxQuoteByService.get("PACKAGE:" + pkg.id)!;
+        const grossPrice = new Prisma.Decimal(taxQuote.amounts!.lineTotal);
         subtotal = subtotal.add(unitPrice);
         discountTotal = discountTotal.add(discountAmount);
         const orderPackage = await tx.orderPackage.create({
@@ -637,12 +714,12 @@ export async function POST(request: Request) {
             packageNameArSnapshot: pkg.nameAr,
             unitPriceSnapshot: unitPrice,
             discountAmountSnapshot: discountAmount,
-            taxAmountSnapshot: new Prisma.Decimal(0),
-            finalPriceSnapshot: finalPrice,
+            taxAmountSnapshot: new Prisma.Decimal(taxQuote.amounts!.taxAmount),
+            finalPriceSnapshot: grossPrice,
             currency,
           },
         });
-        createdOrderPackages.set(pkg.id, { id: orderPackage.id, package: pkg, unitPrice, discountAmount, finalPrice });
+        createdOrderPackages.set(pkg.id, { id: orderPackage.id, package: pkg, unitPrice, discountAmount, finalPrice, taxQuote });
       }
 
       for (const test of tests) {
@@ -654,6 +731,8 @@ export async function POST(request: Request) {
           ? new Prisma.Decimal(0)
           : new Prisma.Decimal(unitPrice.mul(requestedDiscountPercent).div(100).toFixed(4));
         const finalPrice = unitPrice.sub(discountAmount);
+        const testTax = packageId ? null : taxQuoteByService.get("TEST:" + test.id)!;
+        const grossPrice = testTax ? new Prisma.Decimal(testTax.amounts!.lineTotal) : finalPrice;
         if (!packageId) {
           subtotal = subtotal.add(unitPrice);
           discountTotal = discountTotal.add(discountAmount);
@@ -671,8 +750,8 @@ export async function POST(request: Request) {
             unitSnapshot: test.defaultUnit?.symbol || null,
             unitPriceSnapshot: unitPrice,
             discountAmountSnapshot: discountAmount,
-            taxAmountSnapshot: new Prisma.Decimal(0),
-            finalPriceSnapshot: finalPrice,
+            taxAmountSnapshot: testTax ? new Prisma.Decimal(testTax.amounts!.taxAmount) : new Prisma.Decimal(0),
+            finalPriceSnapshot: grossPrice,
             currency,
           },
           select: { id: true },
@@ -709,7 +788,7 @@ export async function POST(request: Request) {
           });
         }
 
-        createdItems.push({ item, test, unitPrice, discountAmount, finalPrice, packageId });
+        createdItems.push({ item, test, unitPrice, discountAmount, finalPrice: grossPrice, packageId });
       }
 
       const specimenGroups = new Map<string, typeof createdItems>();
@@ -789,7 +868,8 @@ export async function POST(request: Request) {
         invoiceNumber = documentNumber("INV");
       }
 
-      const finalTotal = subtotal.sub(discountTotal);
+      const finalTotal = subtotal.sub(discountTotal).add(quoteExclusiveTaxTotal);
+      if (!finalTotal.equals(quoteFinalTotal)) throw new Error("TAX_QUOTE_MISMATCH");
       const invoice = await tx.invoice.create({
         data: {
           organizationId: session.user.organizationId,
@@ -805,7 +885,19 @@ export async function POST(request: Request) {
           discountApprovalMethod,
           discountApprovedByUserId,
           discountApprovedAt: requestedDiscountPercent > 0 ? discountApprovedAt : null,
-          taxTotal: new Prisma.Decimal(0),
+          taxTotal: quoteTaxTotal,
+          taxBreakdownSnapshot: taxQuotes.map(item => ({
+            kind: item.kind,
+            id: item.id,
+            ruleId: item.rule?.id || null,
+            code: item.rule?.code || null,
+            treatment: item.rule?.treatment || "NO_RULE",
+            ratePercent: item.rule?.ratePercent || "0.00",
+            priceMode: item.rule?.priceMode || "EXCLUSIVE",
+            taxableBase: item.amounts!.taxableBase,
+            taxAmount: item.amounts!.taxAmount,
+            lineTotal: item.amounts!.lineTotal,
+          })),
           total: finalTotal,
           paidAmount: new Prisma.Decimal(0),
           balanceAmount: finalTotal,
@@ -830,7 +922,12 @@ export async function POST(request: Request) {
             quantity: new Prisma.Decimal(1),
             unitPrice: entry.unitPrice,
             discountAmount: entry.discountAmount,
-            taxAmount: new Prisma.Decimal(0),
+            taxAmount: new Prisma.Decimal(taxQuoteByService.get("TEST:" + entry.test.id)!.amounts!.taxAmount),
+            taxRuleId: taxQuoteByService.get("TEST:" + entry.test.id)!.rule?.id || null,
+            taxCodeSnapshot: taxQuoteByService.get("TEST:" + entry.test.id)!.rule?.code || null,
+            taxRateSnapshot: taxQuoteByService.get("TEST:" + entry.test.id)!.rule?.ratePercent || null,
+            taxTreatmentSnapshot: taxQuoteByService.get("TEST:" + entry.test.id)!.rule?.treatment || null,
+            taxPriceModeSnapshot: taxQuoteByService.get("TEST:" + entry.test.id)!.rule?.priceMode || null,
             lineTotal: entry.finalPrice,
           },
         });
@@ -847,8 +944,13 @@ export async function POST(request: Request) {
             quantity: new Prisma.Decimal(1),
             unitPrice: orderPackage.unitPrice,
             discountAmount: orderPackage.discountAmount,
-            taxAmount: new Prisma.Decimal(0),
-            lineTotal: orderPackage.finalPrice,
+            taxAmount: new Prisma.Decimal(orderPackage.taxQuote.amounts!.taxAmount),
+            taxRuleId: orderPackage.taxQuote.rule?.id || null,
+            taxCodeSnapshot: orderPackage.taxQuote.rule?.code || null,
+            taxRateSnapshot: orderPackage.taxQuote.rule?.ratePercent || null,
+            taxTreatmentSnapshot: orderPackage.taxQuote.rule?.treatment || null,
+            taxPriceModeSnapshot: orderPackage.taxQuote.rule?.priceMode || null,
+            lineTotal: new Prisma.Decimal(orderPackage.taxQuote.amounts!.lineTotal),
           },
         });
       }
@@ -959,10 +1061,14 @@ export async function POST(request: Request) {
       subtotal: result.subtotal,
       discountPercent: requestedDiscountPercent.toFixed(2),
       discountTotal: result.discountTotal,
+      taxTotal: result.invoice.taxTotal.toFixed(4),
       total: result.total,
       ...(result.creditControlSnapshot ? { creditControl: result.creditControlSnapshot } : {}),
     }, { status: 201 });
   } catch (error) {
+    if (error instanceof TaxConfigurationChanged) {
+      return NextResponse.json({ error: "tax_configuration_changed" }, { status: 409 });
+    }
     if (error instanceof CreditControlError) {
       if (error.code === "credit_limit_exceeded") {
         await prisma.auditEvent.create({

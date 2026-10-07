@@ -77,6 +77,13 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     return NextResponse.json({ error: "credit_authority_forbidden" }, { status: 403 });
   }
 
+  const previouslyGrantedTax = current.permissions.some(grant => grant.permission.code === "billing.tax.manage");
+  const requestedTax = selectedPermissions.some(permission => permission.code === "billing.tax.manage");
+  if ((previouslyGrantedTax !== requestedTax || (current.status !== "ACTIVE" && status === "ACTIVE" && previouslyGrantedTax))
+    && !permissions.has("billing.tax.manage")) {
+    return NextResponse.json({ error: "tax_authority_forbidden" }, { status: 403 });
+  }
+
   const ctx = await requestContext();
   await prisma.$transaction(async tx => {
     await tx.role.update({ where: { id }, data: { nameEn, nameAr: nameAr || null, discountLimitPercent: discountLimitPercent.toFixed(2), status } });

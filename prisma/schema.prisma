@@ -107,6 +107,17 @@ enum CreditControlMode {
   BLOCK
 }
 
+enum TaxTreatment {
+  STANDARD
+  ZERO_RATED
+  EXEMPT
+}
+
+enum TaxPriceMode {
+  EXCLUSIVE
+  INCLUSIVE
+}
+
 enum DiscountApprovalMethod {
   SELF_LIMIT
   APPROVAL_WORKFLOW
@@ -865,6 +876,7 @@ model Organization {
   cashierShifts CashierShift[]
   clientAccountStatements ClientAccountStatement[]
   clientCreditPolicies ClientCreditPolicy[]
+  taxRules TaxRule[]
   specimens Specimen[]
   transferManifests SpecimenTransferManifest[]
   results LaboratoryResult[]
@@ -972,6 +984,7 @@ model Branch {
   addressEn       String?      @map("address_en") @db.Text
   addressAr       String?      @map("address_ar") @db.Text
   isCentralLab    Boolean      @default(false) @map("is_central_lab")
+  taxConfigVersion Int @default(0) @map("tax_config_version")
   status          RecordStatus @default(ACTIVE)
   createdAt       DateTime     @default(now()) @map("created_at") @db.DateTime(3)
   updatedAt       DateTime     @updatedAt @map("updated_at") @db.DateTime(3)
@@ -998,6 +1011,7 @@ model Branch {
   refunds Refund[]
   cashierShifts CashierShift[]
   clientAccountStatements ClientAccountStatement[]
+  taxRules TaxRule[]
   collectedSpecimens Specimen[] @relation("SpecimenCollectionBranch")
   currentSpecimens Specimen[] @relation("SpecimenCurrentBranch")
   specimenEvents SpecimenEvent[]
@@ -1160,6 +1174,7 @@ model User {
   processedRefunds Refund[] @relation("RefundProcessor")
   createdClientAccountStatements ClientAccountStatement[] @relation("ClientStatementCreator")
   createdClientCreditPolicies ClientCreditPolicy[] @relation("ClientCreditPolicyCreator")
+  createdTaxRules TaxRule[] @relation("TaxRuleCreator")
   updatedClientCreditPolicies ClientCreditPolicy[] @relation("ClientCreditPolicyUpdater")
   orderStatusChanges OrderStatusHistory[] @relation("OrderStatusChanger")
   collectedSpecimens Specimen[] @relation("SpecimenCollector")
@@ -1595,6 +1610,7 @@ model LabTest {
   commercialPackageItems CommercialPackageItem[]
   importMappings     CatalogImportMapping[]
   priceListItems     PriceListItem[]
+  taxRules           TaxRule[]
   orderItems         OrderItem[]
   orderQuestions     OrderQuestion[]
   deltaRules         DeltaRule[]
@@ -1756,6 +1772,7 @@ model CommercialPackage {
   items          CommercialPackageItem[]
   priceListItems PriceListPackageItem[]
   orderPackages  OrderPackage[]
+  taxRules       TaxRule[]
 
   @@unique([organizationId, code])
   @@index([organizationId, status])
@@ -2224,6 +2241,7 @@ model DiscountApprovalRequest {
   currency              String                 @db.Char(3)
   subtotalSnapshot      Decimal                @map("subtotal_snapshot") @db.Decimal(18, 4)
   discountTotalSnapshot Decimal                @map("discount_total_snapshot") @db.Decimal(18, 4)
+  taxTotalSnapshot      Decimal                @default(0) @map("tax_total_snapshot") @db.Decimal(18, 4)
   finalTotalSnapshot    Decimal                @map("final_total_snapshot") @db.Decimal(18, 4)
   pricingFingerprint    String                 @map("pricing_fingerprint") @db.Char(64)
   contextSnapshot       Json                   @map("context_snapshot")
@@ -2248,6 +2266,38 @@ model DiscountApprovalRequest {
   @@index([approvedByUserId, approvedAt])
   @@index([pricingFingerprint, status, expiresAt])
   @@map("discount_approval_requests")
+}
+
+model TaxRule {
+  id              String        @id @default(uuid()) @db.Char(36)
+  organizationId  String        @map("organization_id") @db.Char(36)
+  branchId        String?       @map("branch_id") @db.Char(36)
+  testId          String?       @map("test_id") @db.Char(36)
+  packageId       String?       @map("package_id") @db.Char(36)
+  scopeKey        String        @map("scope_key") @db.VarChar(160)
+  code            String        @db.VarChar(60)
+  nameEn          String        @map("name_en") @db.VarChar(200)
+  nameAr          String?       @map("name_ar") @db.VarChar(200)
+  treatment       TaxTreatment
+  priceMode       TaxPriceMode @map("price_mode")
+  ratePercent     Decimal       @map("rate_percent") @db.Decimal(5, 2)
+  effectiveFrom   DateTime      @map("effective_from") @db.Date
+  reason          String        @db.VarChar(1000)
+  createdByUserId String        @map("created_by_user_id") @db.Char(36)
+  createdAt       DateTime      @default(now()) @map("created_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  branch       Branch?      @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  test         LabTest?     @relation(fields: [testId], references: [id], onDelete: Restrict)
+  package      CommercialPackage? @relation(fields: [packageId], references: [id], onDelete: Restrict)
+  createdBy    User         @relation("TaxRuleCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  invoiceLines InvoiceLine[]
+
+  @@unique([organizationId, scopeKey, effectiveFrom])
+  @@index([organizationId, branchId, effectiveFrom])
+  @@index([testId, effectiveFrom])
+  @@index([packageId, effectiveFrom])
+  @@map("tax_rules")
 }
 
 model ClientCreditPolicy {
@@ -2291,6 +2341,7 @@ model Invoice {
   discountApprovedAt DateTime? @map("discount_approved_at") @db.DateTime(3)
   discountApprovalRequestId String? @unique @map("discount_approval_request_id") @db.Char(36)
   taxTotal        Decimal       @default(0) @map("tax_total") @db.Decimal(18, 4)
+  taxBreakdownSnapshot Json?   @map("tax_breakdown_snapshot")
   total           Decimal       @default(0) @db.Decimal(18, 4)
   creditedAmount  Decimal       @default(0) @map("credited_amount") @db.Decimal(18, 4)
   paidAmount      Decimal       @default(0) @map("paid_amount") @db.Decimal(18, 4)
@@ -2336,15 +2387,22 @@ model InvoiceLine {
   unitPrice          Decimal  @map("unit_price") @db.Decimal(18, 4)
   discountAmount     Decimal  @default(0) @map("discount_amount") @db.Decimal(18, 4)
   taxAmount          Decimal  @default(0) @map("tax_amount") @db.Decimal(18, 4)
+  taxRuleId          String?  @map("tax_rule_id") @db.Char(36)
+  taxCodeSnapshot    String?  @map("tax_code_snapshot") @db.VarChar(60)
+  taxRateSnapshot    Decimal? @map("tax_rate_snapshot") @db.Decimal(5, 2)
+  taxTreatmentSnapshot TaxTreatment? @map("tax_treatment_snapshot")
+  taxPriceModeSnapshot TaxPriceMode? @map("tax_price_mode_snapshot")
   lineTotal          Decimal  @map("line_total") @db.Decimal(18, 4)
   createdAt          DateTime @default(now()) @map("created_at") @db.DateTime(3)
 
   invoice      Invoice       @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  taxRule      TaxRule?      @relation(fields: [taxRuleId], references: [id], onDelete: Restrict)
   orderItem    OrderItem?    @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
   orderPackage OrderPackage? @relation(fields: [orderPackageId], references: [id], onDelete: Restrict)
   creditNoteLines CreditNoteLine[]
 
   @@index([invoiceId])
+  @@index([taxRuleId])
   @@index([orderItemId])
   @@index([orderPackageId])
   @@map("invoice_lines")
@@ -2403,6 +2461,7 @@ model CreditNote {
   amount                 Decimal          @db.Decimal(18, 4)
   reason                 String           @db.VarChar(1000)
   invoiceTotalSnapshot   Decimal          @map("invoice_total_snapshot") @db.Decimal(18, 4)
+  taxTotalSnapshot      Decimal          @default(0) @map("tax_total_snapshot") @db.Decimal(18, 4)
   creditedBeforeSnapshot Decimal          @map("credited_before_snapshot") @db.Decimal(18, 4)
   balanceBeforeSnapshot  Decimal          @map("balance_before_snapshot") @db.Decimal(18, 4)
   creditedAfterSnapshot  Decimal          @map("credited_after_snapshot") @db.Decimal(18, 4)
@@ -2431,6 +2490,7 @@ model CreditNoteLine {
   description   String   @db.VarChar(255)
   quantity      Decimal  @default(1) @db.Decimal(12, 3)
   amount        Decimal  @db.Decimal(18, 4)
+  taxAmountSnapshot Decimal @default(0) @map("tax_amount_snapshot") @db.Decimal(18, 4)
   createdAt     DateTime @default(now()) @map("created_at") @db.DateTime(3)
 
   creditNote  CreditNote   @relation(fields: [creditNoteId], references: [id], onDelete: Restrict)
