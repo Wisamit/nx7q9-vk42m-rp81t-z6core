@@ -43,7 +43,7 @@ export function AdvancedClinicalRulesManager({ tests, branches, locale }: { test
         effectiveTo: form.get("effectiveTo"),
       }),
     });
-    setMessage(response.ok ? tr("Calculated result rule created.", "تم إنشاء قاعدة النتيجة المحسوبة.") : tr("Could not create calculated result rule.", "تعذر إنشاء قاعدة النتيجة المحسوبة."));
+    setMessage(response.ok ? tr("Calculated result rule draft created. Approval is required before clinical use.", "تم إنشاء مسودة قاعدة النتيجة المحسوبة. يلزم اعتمادها قبل الاستخدام السريري.") : tr("Could not create calculated result rule.", "تعذر إنشاء قاعدة النتيجة المحسوبة."));
     setBusy("");
     if (response.ok) { event.currentTarget.reset(); setCalcTestId(""); router.refresh(); }
   }
@@ -69,7 +69,7 @@ export function AdvancedClinicalRulesManager({ tests, branches, locale }: { test
         effectiveTo: form.get("effectiveTo"),
       }),
     });
-    setMessage(response.ok ? tr("Reflex recommendation rule created.", "تم إنشاء قاعدة التوصية الانعكاسية.") : tr("Could not create reflex rule.", "تعذر إنشاء قاعدة التوصية الانعكاسية."));
+    setMessage(response.ok ? tr("Reflex recommendation rule draft created. Approval is required before clinical use.", "تم إنشاء مسودة قاعدة التوصية الانعكاسية. يلزم اعتمادها قبل الاستخدام السريري.") : tr("Could not create reflex rule.", "تعذر إنشاء قاعدة التوصية الانعكاسية."));
     setBusy("");
     if (response.ok) {
       event.currentTarget.reset();
@@ -99,7 +99,7 @@ export function AdvancedClinicalRulesManager({ tests, branches, locale }: { test
         <label>{tr("Decimal precision", "عدد المنازل العشرية")}<input name="decimalPrecision" type="number" min="0" max="12" defaultValue="2" /></label>
         <label>{tr("Effective from", "ساري من")}<input name="effectiveFrom" type="date" defaultValue={new Date().toISOString().slice(0,10)} required /></label>
         <label>{tr("Effective to", "ساري حتى")}<input name="effectiveTo" type="date" /></label>
-        <button className="primary-button form-span" disabled={busy === "calculated"}>{busy === "calculated" ? tr("Saving…", "جارٍ الحفظ…") : tr("Create Calculated Rule", "إنشاء القاعدة المحسوبة")}</button>
+        <button className="primary-button form-span" disabled={busy === "calculated"}>{busy === "calculated" ? tr("Saving…", "جارٍ الحفظ…") : tr("Create Calculated Rule Draft", "إنشاء مسودة القاعدة المحسوبة")}</button>
       </form>
     </article>
 
@@ -131,7 +131,7 @@ export function AdvancedClinicalRulesManager({ tests, branches, locale }: { test
         <label className="form-span">{tr("Note (Arabic)", "الملاحظة بالعربية")}<textarea name="noteAr" rows={2} dir="rtl" /></label>
         <label>{tr("Effective from", "ساري من")}<input name="effectiveFrom" type="date" defaultValue={new Date().toISOString().slice(0,10)} required /></label>
         <label>{tr("Effective to", "ساري حتى")}<input name="effectiveTo" type="date" /></label>
-        <button className="primary-button form-span" disabled={busy === "reflex"}>{busy === "reflex" ? tr("Saving…", "جارٍ الحفظ…") : tr("Create Reflex Rule", "إنشاء قاعدة التوصية")}</button>
+        <button className="primary-button form-span" disabled={busy === "reflex"}>{busy === "reflex" ? tr("Saving…", "جارٍ الحفظ…") : tr("Create Reflex Rule Draft", "إنشاء مسودة قاعدة التوصية")}</button>
       </form>
     </article>
     {message && <div className="form-success form-span">{message}</div>}
