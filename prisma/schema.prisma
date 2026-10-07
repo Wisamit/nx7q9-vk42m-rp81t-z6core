@@ -3276,13 +3276,14 @@ model ResultValidationReview {
   resultId       String              @map("result_id") @db.Char(36)
   stage          ResultReviewStage
   outcome        ResultReviewOutcome @default(APPROVED)
-  reviewerUserId String              @map("reviewer_user_id") @db.Char(36)
+  reviewerUserId String?             @map("reviewer_user_id") @db.Char(36)
   reviewedAt     DateTime            @default(now()) @map("reviewed_at") @db.DateTime(3)
+  automated      Boolean             @default(false)
   notes          String?             @db.VarChar(1000)
   policySnapshot Json?               @map("policy_snapshot")
 
   result   LaboratoryResult @relation(fields: [resultId], references: [id], onDelete: Restrict)
-  reviewer User             @relation("ResultValidationReviewer", fields: [reviewerUserId], references: [id], onDelete: Restrict)
+  reviewer User?            @relation("ResultValidationReviewer", fields: [reviewerUserId], references: [id], onDelete: Restrict)
 
   @@index([resultId, stage, reviewedAt])
   @@index([reviewerUserId, reviewedAt])
