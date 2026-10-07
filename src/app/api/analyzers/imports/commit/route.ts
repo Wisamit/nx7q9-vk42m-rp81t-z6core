@@ -284,6 +284,7 @@ export async function POST(request: Request) {
             valueEn: option.valueEn,
             valueAr: option.valueAr,
             flag: option.flag as "NORMAL" | "ABNORMAL" | "POSITIVE" | "NEGATIVE" | "UNKNOWN",
+            isAbnormal: option.isAbnormal,
             isCritical: option.isCritical,
           })), staged.rawValue)
         : null;
@@ -315,7 +316,7 @@ export async function POST(request: Request) {
         ? qualitativeFlag(selectedOption)
         : parsed.valueNumeric !== null
           ? numericFlag(parsed.valueNumeric, interval)
-          : { flag: "UNKNOWN" as const, isCritical: false };
+          : { flag: "UNKNOWN" as const, isAbnormal: false, isCritical: false };
       const flagSource = selectedOption
         ? "RESULT_OPTION" as const
         : parsed.valueNumeric !== null && interval
@@ -368,6 +369,7 @@ export async function POST(request: Request) {
     valueText: string | null;
     displayValue: string;
     flag: "NORMAL" | "LOW" | "HIGH" | "CRITICAL_LOW" | "CRITICAL_HIGH" | "ABNORMAL" | "POSITIVE" | "NEGATIVE" | "UNKNOWN";
+    isAbnormal: boolean;
     isCritical: boolean;
     deltaEvaluation: "NOT_CONFIGURED" | "NO_PREVIOUS_RESULT" | "WITHIN_LIMIT" | "EXCEEDED";
   }>();
@@ -381,6 +383,7 @@ export async function POST(request: Request) {
       valueText: value.valueText,
       displayValue: value.displayValue,
       flag: value.flag,
+      isAbnormal: value.isAbnormal,
       isCritical: value.isCritical,
       deltaEvaluation: value.deltaEvaluation,
     });
@@ -393,6 +396,7 @@ export async function POST(request: Request) {
       valueText: item.parsed.valueText,
       displayValue: item.parsed.displayValue,
       flag: item.flag.flag,
+      isAbnormal: item.flag.isAbnormal,
       isCritical: item.flag.isCritical,
       deltaEvaluation: item.delta.evaluation,
     });
@@ -480,6 +484,7 @@ export async function POST(request: Request) {
     textValue: string | null;
     displayValue: string;
     flag: "NORMAL" | "LOW" | "HIGH" | "CRITICAL_LOW" | "CRITICAL_HIGH" | "ABNORMAL" | "POSITIVE" | "NEGATIVE" | "UNKNOWN";
+    isAbnormal: boolean;
     isCritical: boolean;
     deltaEvaluation: "NOT_CONFIGURED" | "NO_PREVIOUS_RESULT" | "WITHIN_LIMIT" | "EXCEEDED";
   }>();
@@ -491,6 +496,7 @@ export async function POST(request: Request) {
       textValue: item.valueText,
       displayValue: item.displayValue,
       flag: item.flag,
+      isAbnormal: item.isAbnormal,
       isCritical: item.isCritical,
       deltaEvaluation: item.deltaEvaluation,
     });
@@ -502,6 +508,7 @@ export async function POST(request: Request) {
       textValue: item.parsed.valueText,
       displayValue: item.parsed.displayValue,
       flag: item.flag.flag,
+      isAbnormal: item.flag.isAbnormal,
       isCritical: item.flag.isCritical,
       deltaEvaluation: item.delta.evaluation,
     });
@@ -609,6 +616,7 @@ export async function POST(request: Request) {
           criticalHighSnapshot: item.interval?.criticalHigh || null,
           flag: item.flag.flag,
           flagSource: item.flagSource,
+          isAbnormal: item.flag.isAbnormal,
           isCritical: item.flag.isCritical,
           qualitativeOptionId: item.qualitativeOptionId,
           qualitativeOptionCodeSnapshot: item.qualitativeOptionCode,
@@ -650,6 +658,7 @@ export async function POST(request: Request) {
           criticalHighSnapshot: item.interval?.criticalHigh || null,
           flag: item.flag.flag,
           flagSource: item.flagSource,
+          isAbnormal: item.flag.isAbnormal,
           isCritical: item.flag.isCritical,
           qualitativeOptionId: item.qualitativeOptionId,
           qualitativeOptionCodeSnapshot: item.qualitativeOptionCode,
@@ -692,6 +701,7 @@ export async function POST(request: Request) {
           criticalHighSnapshot: item.interval?.criticalHigh || null,
           flag: item.flag.flag,
           flagSource: item.flagSource,
+          isAbnormal: item.flag.isAbnormal,
           isCritical: item.flag.isCritical,
           qualitativeOptionId: item.qualitativeOptionId,
           qualitativeOptionCodeSnapshot: item.qualitativeOptionCode,
@@ -765,6 +775,7 @@ export async function POST(request: Request) {
 
     const holdValues = [...ruleValues.values()].map(item => ({
       flag: item.flag,
+      isAbnormal: item.isAbnormal,
       isCritical: item.isCritical,
       deltaEvaluation: item.deltaEvaluation,
     }));
