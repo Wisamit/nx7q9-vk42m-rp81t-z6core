@@ -40,6 +40,6 @@ export function validCreditLimit(value: unknown): string | null {
   if (typeof value !== "string" && typeof value !== "number") return null;
   const original = String(value);
   const amount = money4ToMinor(original);
-  if (amount === null || amount < BigInt(0) || amount > BigInt("9999999999999999999999")) return null;
+  if (amount === null || amount < BigInt(0) || amount > BigInt("999999999999999999")) return null;
   return minorToMoney4(amount);
 }
