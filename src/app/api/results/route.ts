@@ -4,6 +4,7 @@ import { canAccessBranch, canAccessDepartment, requirePermission, requestContext
 import { prisma } from "@/lib/db";
 import { numericFlag, resolveReferenceInterval } from "@/lib/result-reference";
 import { evaluateDelta } from "@/lib/delta-check";
+import { syncDeltaReviewEvents } from "@/lib/delta-review";
 import { evaluateFormula, formulaVariables } from "@/lib/formula-engine";
 import { reflexMatches } from "@/lib/reflex-rules";
 import { evaluateAutoverification } from "@/lib/autoverification";
@@ -297,6 +298,8 @@ export async function POST(request: Request) {
             deltaPercent: null,
             absoluteLimit: null,
             percentLimit: null,
+            ruleId: null,
+            lookbackDays: null,
           };
 
       prepared.push({
@@ -513,6 +516,8 @@ export async function POST(request: Request) {
           deltaPercentSnapshot: item.delta.deltaPercent,
           deltaAbsoluteLimitSnapshot: item.delta.absoluteLimit,
           deltaPercentLimitSnapshot: item.delta.percentLimit,
+          deltaRuleId: item.delta.ruleId,
+          deltaLookbackDaysSnapshot: item.delta.lookbackDays,
           isCalculated: item.isCalculated,
           calculatedRuleId: item.calculatedRuleId,
           calculationExpressionSnapshot: item.calculationExpression,
@@ -520,6 +525,13 @@ export async function POST(request: Request) {
         },
       });
     }
+
+    await syncDeltaReviewEvents(tx, {
+      resultId: result.id,
+      performingBranchId,
+      methodId: orderItem.test.methodId,
+      detectedAt: resultAt,
+    });
 
     for (const rule of orderItem.test.sourceReflexRules) {
       if (rule.branchId && rule.branchId !== performingBranchId) continue;
@@ -811,6 +823,7 @@ export async function POST(request: Request) {
         values: { orderBy: { componentCodeSnapshot: "asc" } },
         reflexEvents: true,
         validationHoldEvents: true,
+        deltaReviewEvents: true,
       },
     });
   }, { timeout: 30000 }).catch(error => {
@@ -828,6 +841,7 @@ export async function POST(request: Request) {
     complete,
     criticalCount: saved?.values.filter((value) => value.isCritical).length || 0,
     deltaExceededCount: saved?.values.filter((value) => value.deltaEvaluation === "EXCEEDED").length || 0,
+    pendingDeltaReviewCount: saved?.deltaReviewEvents.filter((event) => event.status === "PENDING").length || 0,
     pendingReflexCount: saved?.reflexEvents.filter((event) => event.status === "PENDING").length || 0,
     blockingValidationHoldCount: saved?.validationHoldEvents.filter((event) => event.status === "ACTIVE" && event.severitySnapshot === "BLOCK").length || 0,
     warningValidationHoldCount: saved?.validationHoldEvents.filter((event) => event.status === "ACTIVE" && event.severitySnapshot === "WARNING").length || 0,
