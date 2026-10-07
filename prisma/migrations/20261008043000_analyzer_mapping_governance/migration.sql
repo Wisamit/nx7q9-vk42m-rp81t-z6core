@@ -19,6 +19,7 @@ SET `approval_status`='DRAFT', `status`='INACTIVE',
 
 ALTER TABLE `analyzer_test_mappings`
   MODIFY `status` ENUM('ACTIVE','INACTIVE') NOT NULL DEFAULT 'INACTIVE',
+  DROP INDEX `analyzer_test_mappings_analyzer_status_dates_idx`,
   ADD INDEX `analyzer_mapping_approval_effective_idx` (`analyzer_id`,`approval_status`,`status`,`effective_from`,`effective_to`),
   ADD INDEX `analyzer_mapping_creator_idx` (`created_by_user_id`,`created_at`),
   ADD INDEX `analyzer_mapping_approver_idx` (`approved_by_user_id`,`approved_at`),

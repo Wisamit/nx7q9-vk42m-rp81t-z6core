@@ -24,7 +24,7 @@ test("analyzer mappings are clinically usable only when approved active and effe
 });
 
 test("mapping clinical identity is analyzer plus analyzer test code",()=>{
-  assert.equal(sameAnalyzerMappingIdentity(base,{...base,id:"MAP-2"}),true);
+  assert.equal(sameAnalyzerMappingIdentity(base,{analyzerId:"AN-1",analyzerTestCode:"GLU"}),true);
   assert.equal(sameAnalyzerMappingIdentity(base,{...base,analyzerId:"AN-2"}),false);
   assert.equal(sameAnalyzerMappingIdentity(base,{...base,analyzerTestCode:"GLU2"}),false);
   assert.equal(analyzerMappingIdentityKey(base),JSON.stringify(["AN-1","GLU"]));
