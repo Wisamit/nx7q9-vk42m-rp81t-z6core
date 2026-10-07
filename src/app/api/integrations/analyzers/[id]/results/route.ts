@@ -84,6 +84,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       },
       include: {
         orderItems: {
+          where: { status: "ACTIVE" },
           include: { orderItem: true },
         },
       },
