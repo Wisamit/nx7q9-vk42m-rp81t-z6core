@@ -372,5 +372,11 @@ html[data-density="compact"] :where(.detail-card,.dashboard-panel,.settings-card
 
 
 .report-contact-verification {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--fl-border);
+  border-radius: var(--fl-radius);
+  background: var(--fl-surface-soft);
   grid-column: 1 / -1;
 }
