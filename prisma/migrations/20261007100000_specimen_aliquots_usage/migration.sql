@@ -1,9 +1,15 @@
 -- Phase 5C: derived aliquot traceability, available-volume accounting and specimen usage history.
 -- Historical specimens deliberately keep remaining_volume NULL because pre-5C consumption cannot be inferred safely.
 ALTER TABLE `specimens`
+  ADD COLUMN `parent_relation_type` ENUM('RECOLLECTION','ALIQUOT') NULL AFTER `parent_specimen_id`,
   ADD COLUMN `remaining_volume` DECIMAL(10,3) NULL AFTER `volume_unit`,
   ADD COLUMN `remaining_volume_unit` VARCHAR(30) NULL AFTER `remaining_volume`,
   ADD COLUMN `storage_location` VARCHAR(200) NULL AFTER `remaining_volume_unit`;
+
+-- Before Phase 5C parent_specimen_id was used only for recollection lineage.
+UPDATE `specimens`
+SET `parent_relation_type` = 'RECOLLECTION'
+WHERE `parent_specimen_id` IS NOT NULL;
 
 ALTER TABLE `specimen_events`
   MODIFY COLUMN `event_type`
