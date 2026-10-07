@@ -232,14 +232,33 @@ export default async function DiagnosticReportPage({ params }: { params: Promise
       label: `${tr(locale, "Client", "العميل")} — ${locale === "ar" ? report.order.client.nameAr || report.order.client.nameEn : report.order.client.nameEn}`,
       account: report.order.client.portalAccount,
     }] : []),
-  ].map(recipient => ({
-    type: recipient.type,
-    label: recipient.label,
-    channels: outboundChannels.flatMap(channel => {
-      const resolved = resolveVerifiedPortalDestination(recipient.account, channel);
+  ].flatMap(recipient => {
+    const account = recipient.account;
+    if (!account || account.status !== "ACTIVE") return [];
+
+    const channels = outboundChannels.flatMap(channel => {
+      const resolved = resolveVerifiedPortalDestination(account, channel);
       return resolved.ok ? [{ channel, destinationMasked: maskedDestination(channel, resolved.destination) }] : [];
-    }),
-  })).filter(recipient => recipient.channels.length > 0);
+    });
+
+    const verificationCandidates = [
+      ...(account.email && !resolveVerifiedPortalDestination(account, "EMAIL").ok
+        ? [{ channel: "EMAIL" as const, destinationMasked: maskedDestination("EMAIL", account.email) }]
+        : []),
+      ...(account.phone && !resolveVerifiedPortalDestination(account, "SMS").ok
+        ? [{ channel: "PHONE" as const, destinationMasked: maskedDestination("SMS", account.phone) }]
+        : []),
+    ];
+
+    if (channels.length === 0 && verificationCandidates.length === 0) return [];
+    return [{
+      type: recipient.type,
+      label: recipient.label,
+      portalAccountId: account.id,
+      channels,
+      verificationCandidates,
+    }];
+  });
 
   return <main className="report-shell">
     <div className="report-toolbar no-print">
@@ -410,6 +429,7 @@ export default async function DiagnosticReportPage({ params }: { params: Promise
       reportVersionId={latest.id}
       recipients={outboundRecipients}
       locale={locale}
+      canVerifyContacts={permissions.has("portal_accounts.manage")}
     />}
 
     {latest.deliveries.length > 0 && <section className="table-card report-history no-print">
