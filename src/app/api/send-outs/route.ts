@@ -38,7 +38,7 @@ export async function POST(request: Request) {
       where: { id: orderItemId, order: { organizationId: session.user.organizationId } },
       include: {
         order: { select: { orderingBranchId: true, accessionNumber: true } },
-        specimenLinks: { include: { specimen: true } },
+        specimenLinks: { where: { status: "ACTIVE" }, include: { specimen: true } },
       },
     }),
     prisma.externalLaboratory.findFirst({
@@ -50,6 +50,12 @@ export async function POST(request: Request) {
   if (specimenId && !orderItem.specimenLinks.some(link => link.specimenId === specimenId)) {
     return NextResponse.json({ error: "specimen_not_linked_to_order_item" }, { status: 409 });
   }
+  const selectedSpecimen = specimenId
+    ? orderItem.specimenLinks.find(link => link.specimenId === specimenId)?.specimen || null
+    : null;
+  if (selectedSpecimen && !["COLLECTED","RECEIVED","IN_PROCESS"].includes(selectedSpecimen.status)) {
+    return NextResponse.json({ error: "specimen_not_ready_for_sendout", status: selectedSpecimen.status }, { status: 409 });
+  }
   const active = await prisma.sendOutReferral.findFirst({
     where: { orderItemId, status: { notIn: ["COMPLETED", "CANCELLED"] } },
     select: { id: true },
@@ -57,6 +63,19 @@ export async function POST(request: Request) {
   if (active) return NextResponse.json({ error: "active_sendout_exists", referralId: active.id }, { status: 409 });
 
   const created = await prisma.$transaction(async tx => {
+    if (selectedSpecimen && selectedSpecimen.status !== "IN_PROCESS") {
+      const claimed = await tx.specimen.updateMany({
+        where: {
+          id: selectedSpecimen.id,
+          status: selectedSpecimen.status,
+          preanalyticalVersion: selectedSpecimen.preanalyticalVersion,
+          orderItems: { some: { orderItemId, status: "ACTIVE" } },
+        },
+        data: { preanalyticalVersion: { increment: 1 } },
+      });
+      if (claimed.count !== 1) throw new Error("SPECIMEN_PREANALYTICAL_STATE_CHANGED");
+    }
+
     const referral = await tx.sendOutReferral.create({
       data: {
         organizationId: session.user.organizationId,
@@ -103,7 +122,13 @@ export async function POST(request: Request) {
       },
     });
     return referral;
+  }).catch(error => {
+    if (error instanceof Error && error.message === "SPECIMEN_PREANALYTICAL_STATE_CHANGED") return null;
+    throw error;
   });
 
+  if (!created) {
+    return NextResponse.json({ error: "specimen_preanalytical_state_changed" }, { status: 409 });
+  }
   return NextResponse.json({ status: "ok", referral: created }, { status: 201 });
 }

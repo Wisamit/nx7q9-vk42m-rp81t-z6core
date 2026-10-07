@@ -84,6 +84,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       },
       include: {
         orderItems: {
+          where: { status: "ACTIVE" },
           include: { orderItem: true },
         },
       },
@@ -130,6 +131,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const staged = await prisma.$transaction(async tx => {
     const output: Array<{ observationId: string; importId: string; status: string; errorCode: string | null }> = [];
+    const claimedSpecimenIds = new Set<string>();
     let errorCount = 0;
 
     for (const item of processableItems) {
@@ -171,6 +173,44 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           errorText = "More than one order item matches the mapped LIS test for this specimen.";
         } else {
           orderItemId = linkedItems[0].id;
+
+          if (specimen.status === "RECEIVED" && !claimedSpecimenIds.has(specimen.id)) {
+            const claimed = await tx.specimen.updateMany({
+              where: {
+                id: specimen.id,
+                status: "RECEIVED",
+                currentBranchId: credential.analyzer.branchId,
+                preanalyticalVersion: specimen.preanalyticalVersion,
+                orderItems: { some: { orderItemId, status: "ACTIVE" } },
+              },
+              data: {
+                status: "IN_PROCESS",
+                preanalyticalVersion: { increment: 1 },
+              },
+            });
+            if (claimed.count !== 1) {
+              errorCode = "SPECIMEN_PREANALYTICAL_STATE_CHANGED";
+              errorText = "Specimen state or test linkage changed while analyzer observations were being staged.";
+              orderItemId = null;
+            } else {
+              claimedSpecimenIds.add(specimen.id);
+              await tx.specimenEvent.create({
+                data: {
+                  specimenId: specimen.id,
+                  eventType: "PROCESSING_STARTED",
+                  branchId: credential.analyzer.branchId,
+                  actorUserId: null,
+                  fromStatus: "RECEIVED",
+                  toStatus: "IN_PROCESS",
+                  details: {
+                    workflow: "ANALYZER_STAGING",
+                    analyzerId: credential.analyzer.id,
+                    messageId: message.id,
+                  },
+                },
+              });
+            }
+          }
         }
       }
 

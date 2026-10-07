@@ -1,6 +1,7 @@
 import { hash } from "bcryptjs";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { DEFAULT_SPECIMEN_REJECTION_REASONS } from "@/lib/specimen-reception-policy";
 
 const FOUNDATION_PERMISSIONS = [
   ["organization.view", "organization", "View organization settings"],
@@ -32,6 +33,7 @@ const FOUNDATION_PERMISSIONS = [
   ["specimens.collect", "specimens", "Collect and label specimens"],
   ["specimens.receive", "specimens", "Receive specimens into laboratory custody"],
   ["specimens.reject", "specimens", "Reject unsuitable specimens with reason"],
+  ["specimens.aliquot", "specimens", "Create aliquots, reconcile available volume and record specimen usage"],
   ["transfers.view", "specimens", "View inter-branch specimen manifests"],
   ["transfers.create", "specimens", "Create inter-branch specimen manifests"],
   ["transfers.dispatch", "specimens", "Dispatch specimen manifests"],
@@ -149,6 +151,16 @@ export async function POST(request: NextRequest) {
           defaultCurrency: "EGP",
           defaultTimezone: "Africa/Cairo",
         },
+      });
+
+      await tx.specimenRejectionReason.createMany({
+        data: DEFAULT_SPECIMEN_REJECTION_REASONS.map(reason => ({
+          organizationId: organization.id,
+          code: reason.code,
+          nameEn: reason.nameEn,
+          nameAr: reason.nameAr,
+          sortOrder: reason.sortOrder,
+        })),
       });
 
       const branch = await tx.branch.create({

@@ -63,10 +63,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       });
 
       for (const item of manifest.items) {
-        await tx.specimen.update({
-          where: { id: item.specimenId },
-          data: { status: "IN_TRANSIT" },
+        const moved = await tx.specimen.updateMany({
+          where: {
+            id: item.specimenId,
+            status: item.specimen.status,
+            currentBranchId: manifest.sourceBranchId,
+            preanalyticalVersion: item.specimen.preanalyticalVersion,
+          },
+          data: {
+            status: "IN_TRANSIT",
+            preanalyticalVersion: { increment: 1 },
+          },
         });
+        if (moved.count !== 1) throw new Error("SPECIMEN_PREANALYTICAL_STATE_CHANGED");
         await tx.specimenEvent.create({
           data: {
             specimenId: item.specimenId,
@@ -105,8 +114,18 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           userAgent: ctx.userAgent,
         },
       });
-    }, { timeout: 30000 });
+    }, { timeout: 30000 }).catch(error => {
+      if (error instanceof Error && error.message === "SPECIMEN_PREANALYTICAL_STATE_CHANGED") return null;
+      throw error;
+    });
 
+    const refreshed = await prisma.specimenTransferManifest.findUnique({
+      where: { id: manifest.id },
+      select: { status: true },
+    });
+    if (refreshed?.status !== "DISPATCHED") {
+      return NextResponse.json({ error: "specimen_preanalytical_state_changed" }, { status: 409 });
+    }
     return NextResponse.json({ status: "ok", manifestStatus: "DISPATCHED" });
   }
 
@@ -139,15 +158,22 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       },
     });
 
-    await tx.specimen.update({
-      where: { id: item.specimenId },
+    const moved = await tx.specimen.updateMany({
+      where: {
+        id: item.specimenId,
+        status: "IN_TRANSIT",
+        currentBranchId: item.specimen.currentBranchId,
+        preanalyticalVersion: item.specimen.preanalyticalVersion,
+      },
       data: {
         status: "RECEIVED",
         currentBranchId: manifest.destinationBranchId,
         receivedByUserId: session.user.id,
         receivedAt,
+        preanalyticalVersion: { increment: 1 },
       },
     });
+    if (moved.count !== 1) throw new Error("SPECIMEN_PREANALYTICAL_STATE_CHANGED");
 
     await tx.specimenEvent.create({
       data: {
@@ -204,8 +230,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     });
 
     return { remaining, manifestStatus };
+  }).catch(error => {
+    if (error instanceof Error && error.message === "SPECIMEN_PREANALYTICAL_STATE_CHANGED") return null;
+    throw error;
   });
 
+  if (!result) {
+    return NextResponse.json({ error: "specimen_preanalytical_state_changed" }, { status: 409 });
+  }
   return NextResponse.json({
     status: "ok",
     barcode,

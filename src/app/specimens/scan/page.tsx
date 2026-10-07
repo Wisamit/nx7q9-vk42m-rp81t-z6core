@@ -24,7 +24,7 @@ export default async function SpecimenScanPage({
   const barcode = params.barcode?.trim().slice(0, 80) || "";
   const branchIds = session.user.branchScopes.filter(scope => scope.branch.status === "ACTIVE").map(scope => scope.branchId);
 
-  const [branches, containers, specimen] = await Promise.all([
+  const [branches, containers, rejectionReasons, specimen] = await Promise.all([
     prisma.branch.findMany({
       where: { id: { in: branchIds }, organizationId: session.user.organizationId, status: "ACTIVE" },
       select: { id: true, code: true, nameEn: true, nameAr: true },
@@ -34,6 +34,10 @@ export default async function SpecimenScanPage({
       where: { organizationId: session.user.organizationId, status: "ACTIVE" },
       select: { id: true, code: true, nameEn: true, nameAr: true },
       orderBy: { code: "asc" },
+    }),
+    prisma.specimenRejectionReason.findMany({
+      where: { organizationId: session.user.organizationId, status: "ACTIVE" },
+      orderBy: [{ sortOrder: "asc" }, { code: "asc" }],
     }),
     barcode ? prisma.specimen.findFirst({
       where: {
@@ -50,6 +54,19 @@ export default async function SpecimenScanPage({
         currentBranch: true,
         collectionBranch: true,
         orderItems: { include: { orderItem: true } },
+        receptionAssessments: {
+          orderBy: { receivedAt: "desc" },
+          take: 1,
+          include: { receivedBy: true, branch: true },
+        },
+        rejectionRecords: {
+          orderBy: { rejectedAt: "desc" },
+          take: 20,
+          include: {
+            rejectedBy: true,
+            affectedLinks: { include: { orderItem: true } },
+          },
+        },
         parentSpecimen: { select: { id: true, barcode: true } },
         childSpecimens: {
           where: { parentRelationType: "ALIQUOT" },
@@ -128,7 +145,8 @@ export default async function SpecimenScanPage({
         <div><span>{tr(locale, "Container", "الحاوية")}</span><strong>{specimen.container ? localizedName(specimen.container) : "—"}</strong></div>
         <div><span>{tr(locale, "Order branch", "فرع الطلب")}</span><strong>{localizedName(specimen.order.orderingBranch)}</strong></div>
         <div><span>{tr(locale, "Current branch", "الفرع الحالي")}</span><strong>{specimen.currentBranch ? localizedName(specimen.currentBranch) : "—"}</strong></div>
-        <div><span>{tr(locale, "Linked tests", "الفحوصات المرتبطة")}</span><strong>{specimen.orderItems.map(link => link.orderItem.testCodeSnapshot).join(", ") || "—"}</strong></div>
+        <div><span>{tr(locale, "Active tests", "الفحوصات الفعالة")}</span><strong>{specimen.orderItems.filter(link => link.status === "ACTIVE").map(link => link.orderItem.testCodeSnapshot).join(", ") || "—"}</strong></div>
+        <div><span>{tr(locale, "Rejected test links", "روابط الفحوصات المرفوضة")}</span><strong>{specimen.orderItems.filter(link => link.status === "REJECTED").map(link => link.orderItem.testCodeSnapshot).join(", ") || "—"}</strong></div>
         <div><span>{tr(locale, "Required volume", "الحجم المطلوب")}</span><strong>{specimen.parentRelationType === "ALIQUOT" ? tr(locale, "Derived aliquot", "جزء مشتق") : requirement?.requiredVolume ? `${requirement.requiredVolume} ${requirement.requiredVolumeUnit || ""}` : requirement ? tr(locale, "Not specified", "غير محدد") : tr(locale, "Not finalized", "غير مثبت")}</strong></div>
         <div><span>{tr(locale, "Available volume", "الحجم المتاح")}</span><strong>{specimen.remainingVolume ? `${specimen.remainingVolume.toFixed(3)} ${specimen.remainingVolumeUnit || ""}` : "—"}</strong></div>
         <div><span>{tr(locale, "Lineage", "التسلسل")}</span><strong>{specimen.parentSpecimen
@@ -136,6 +154,19 @@ export default async function SpecimenScanPage({
   : tr(locale, "Primary specimen", "عينة أصلية")}</strong></div>
         <div><span>{tr(locale, "Physical storage", "التخزين الفعلي")}</span><strong>{specimen.storageLocation || "—"}</strong></div>
       </div>
+
+      {specimen.receptionAssessments[0] && <div className="form-warning">
+        <strong>{tr(locale, "Latest reception assessment", "آخر تقييم استلام")}</strong>
+        <span>
+          {specimen.receptionAssessments[0].receivedAt.toISOString().replace("T"," ").slice(0,19)}
+          {" · "}{specimen.receptionAssessments[0].branch.code}
+          {" · "}{locale === "ar" ? specimen.receptionAssessments[0].receivedBy.displayNameAr || specimen.receptionAssessments[0].receivedBy.displayNameEn : specimen.receptionAssessments[0].receivedBy.displayNameEn}
+          {" · "}{tr(locale, "Label", "الملصق")}: {specimen.receptionAssessments[0].labelAssessment}
+          {" · "}{tr(locale, "Condition", "الحالة")}: {specimen.receptionAssessments[0].conditionCode}
+          {specimen.receptionAssessments[0].temperatureC != null ? ` · ${tr(locale, "Temp", "الحرارة")}: ${specimen.receptionAssessments[0].temperatureC.toFixed(2)} °C` : ""}
+        </span>
+        {specimen.receptionAssessments[0].discrepancyText && <small>{specimen.receptionAssessments[0].discrepancyText}</small>}
+      </div>}
 
       <SpecimenActions
         specimenId={specimen.id}
@@ -147,17 +178,44 @@ export default async function SpecimenScanPage({
         requiredVolume={requirement?.requiredVolume || null}
         requiredVolumeUnit={requirement?.requiredVolumeUnit || null}
         collectionInstructions={requirement?.collectionInstructions || []}
+        expectedContainerCode={specimen.container?.code || null}
+        orderItems={specimen.orderItems
+          .filter(link => link.status === "ACTIVE" && link.orderItem.status !== "CANCELLED")
+          .map(link => ({
+            id: link.orderItemId,
+            code: link.orderItem.testCodeSnapshot,
+            name: locale === "ar"
+              ? link.orderItem.testNameArSnapshot || link.orderItem.testNameEnSnapshot
+              : link.orderItem.testNameEnSnapshot,
+          }))}
+        rejectionReasons={rejectionReasons.map(reason => ({
+          id: reason.id,
+          code: reason.code,
+          name: locale === "ar" ? reason.nameAr || reason.nameEn : reason.nameEn,
+        }))}
         branches={branches.map(branch => ({
           id: branch.id,
           code: branch.code,
           nameEn: localizedName(branch),
         }))}
         activeBranchId={session.activeBranchId}
+        currentBranchId={specimen.currentBranchId}
         locale={locale}
         canCollect={canCollect}
         canReceive={canReceive}
         canReject={canReject}
       />
+
+      {specimen.rejectionRecords.length > 0 && <details className="specimen-history">
+        <summary>{tr(locale, "Rejection history", "سجل الرفض")} ({specimen.rejectionRecords.length})</summary>
+        <div className="summary-list">
+          {specimen.rejectionRecords.map(rejection => <div key={rejection.id}>
+            <span>{rejection.rejectedAt.toISOString().replace("T"," ").slice(0,19)} · {locale === "ar" ? rejection.rejectedBy.displayNameAr || rejection.rejectedBy.displayNameEn : rejection.rejectedBy.displayNameEn}</span>
+            <strong>{rejection.scope === "WHOLE_SPECIMEN" ? tr(locale, "Whole specimen", "العينة كاملة") : tr(locale, "Selected tests", "فحوصات محددة")} · {locale === "ar" ? rejection.reasonNameArSnapshot || rejection.reasonNameEnSnapshot : rejection.reasonNameEnSnapshot}</strong>
+            <small>{rejection.affectedLinks.map(link => link.orderItem.testCodeSnapshot).join(", ")} · {rejection.reasonDetails}</small>
+          </div>)}
+        </div>
+      </details>}
 
       <SpecimenAliquotManager
         specimenId={specimen.id}
@@ -173,7 +231,7 @@ export default async function SpecimenScanPage({
           name: localizedName(item),
         }))}
         orderItems={specimen.orderItems
-          .filter(link => link.orderItem.status !== "CANCELLED")
+          .filter(link => link.status === "ACTIVE" && link.orderItem.status !== "CANCELLED")
           .map(link => ({
             id: link.orderItemId,
             code: link.orderItem.testCodeSnapshot,
