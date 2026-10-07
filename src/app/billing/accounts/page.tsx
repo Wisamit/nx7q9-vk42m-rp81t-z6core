@@ -14,7 +14,12 @@ export default async function ClientAccountsPage() {
   const accessibleScopes = session.user.branchScopes.filter(scope => scope.branch.status === "ACTIVE");
   const branchIds = accessibleScopes.map(scope => scope.branchId);
 
-  const [clients, openInvoices, activeBranchCount, statements] = await Promise.all([
+  const activeBranchCount = await prisma.branch.count({
+    where: { organizationId: session.user.organizationId, status: "ACTIVE" },
+  });
+  const hasAllBranches = branchIds.length === activeBranchCount;
+
+  const [clients, openInvoices, statements] = await Promise.all([
     prisma.client.findMany({
       where: { organizationId: session.user.organizationId, status: "ACTIVE" },
       orderBy: { nameEn: "asc" },
@@ -32,22 +37,18 @@ export default async function ClientAccountsPage() {
       orderBy: { issuedAt: "asc" },
       take: 1000,
     }),
-    prisma.branch.count({ where: { organizationId: session.user.organizationId, status: "ACTIVE" } }),
     prisma.clientAccountStatement.findMany({
       where: {
         organizationId: session.user.organizationId,
         OR: [
           { branchId: { in: branchIds } },
-          ...(accessibleScopes.length > 0 ? [{ branchId: null }] : []),
+          ...(hasAllBranches ? [{ branchId: null }] : []),
         ],
       },
       orderBy: { generatedAt: "desc" },
       take: 200,
     }),
   ]);
-
-  const hasAllBranches = branchIds.length === activeBranchCount;
-  const visibleStatements = hasAllBranches ? statements : statements.filter(statement => statement.branchId !== null);
 
   return <main className="catalog-shell">
     <header className="page-header">
@@ -89,7 +90,7 @@ export default async function ClientAccountsPage() {
         balanceAmount: invoice.balanceAmount.toFixed(4),
         issuedAt: invoice.issuedAt.toISOString(),
       }))}
-      statements={visibleStatements.map(statement => ({
+      statements={statements.map(statement => ({
         id: statement.id,
         statementNumber: statement.statementNumber,
         clientName: locale === "ar" ? statement.clientNameArSnapshot || statement.clientNameEnSnapshot : statement.clientNameEnSnapshot,
