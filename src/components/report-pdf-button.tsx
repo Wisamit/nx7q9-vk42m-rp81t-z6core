@@ -55,6 +55,8 @@ export function ReportPdfButton({
     try {
       if ("fonts" in document) await document.fonts.ready;
       node.classList.add("pdf-exporting");
+      const pdfSurface = getComputedStyle(node).getPropertyValue("--fl-report-pdf-surface").trim();
+      if (!pdfSurface) throw new Error("PDF_SURFACE_COLOR_MISSING");
 
       const [{ toPng }, { jsPDF }] = await Promise.all([
         import("html-to-image"),
@@ -64,7 +66,7 @@ export function ReportPdfButton({
       const dataUrl = await toPng(node, {
         cacheBust: true,
         pixelRatio: Math.min(2, Math.max(1, window.devicePixelRatio || 1)),
-        backgroundColor: "#ffffff",
+        backgroundColor: pdfSurface,
         filter: candidate => !(candidate instanceof HTMLElement && candidate.classList.contains("no-print")),
       });
 
@@ -95,7 +97,7 @@ export function ReportPdfButton({
         const context = canvas.getContext("2d");
         if (!context) throw new Error("PDF_CANVAS_UNAVAILABLE");
 
-        context.fillStyle = "#ffffff";
+        context.fillStyle = pdfSurface;
         context.fillRect(0, 0, canvas.width, canvas.height);
         context.drawImage(
           image,
