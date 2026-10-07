@@ -22,6 +22,7 @@ export function SpecimenActions({
   rejectionReasons,
   branches,
   activeBranchId,
+  currentBranchId,
   locale,
   canCollect,
   canReceive,
@@ -41,6 +42,7 @@ export function SpecimenActions({
   rejectionReasons: RejectionReasonOption[];
   branches: BranchOption[];
   activeBranchId: string | null;
+  currentBranchId: string | null;
   locale: "ar" | "en";
   canCollect: boolean;
   canReceive: boolean;
@@ -181,10 +183,16 @@ export function SpecimenActions({
 
     {mode && <form className="catalog-form specimen-action-form" onSubmit={submit}>
       <label className="form-span">{tr("Branch", "الفرع")}
-        <select name="branchId" required defaultValue={activeBranchId || ""}>
+        <select
+          name="branchId"
+          required
+          defaultValue={mode === "REJECT" ? currentBranchId || activeBranchId || "" : activeBranchId || currentBranchId || ""}
+          disabled={mode === "REJECT" && Boolean(currentBranchId)}
+        >
           <option value="">{tr("Select branch…", "اختر الفرع…")}</option>
           {branches.map(branch => <option key={branch.id} value={branch.id}>{branch.code} — {branch.nameEn}</option>)}
         </select>
+        {mode === "REJECT" && currentBranchId && <input type="hidden" name="branchId" value={currentBranchId} />}
       </label>
 
       {mode === "COLLECT" && <>
