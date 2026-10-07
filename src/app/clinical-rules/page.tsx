@@ -5,6 +5,7 @@ import { ClinicalRulesManager } from "@/components/clinical-rules-manager";
 import { AdvancedClinicalRulesManager } from "@/components/advanced-clinical-rules-manager";
 import { AutoverificationValidationManager } from "@/components/autoverification-validation-manager";
 import { CriticalEscalationManager } from "@/components/critical-escalation-manager";
+import { QualitativeResultOptionsManager } from "@/components/qualitative-result-options-manager";
 import { statusLabel, tr } from "@/lib/ui-i18n";
 
 export const dynamic = "force-dynamic";
@@ -13,7 +14,7 @@ export default async function ClinicalRulesPage() {
   const session = await requirePermission("clinical_rules.manage");
   const locale = session.user.preferredLocale === "ar" ? "ar" : "en";
 
-  const [tests, branches, methods, deltaRules, commentTemplates, calculatedRules, reflexRules, autoverificationPolicies, validationHoldRules, criticalEscalationPolicies] = await Promise.all([
+  const [tests, branches, methods, deltaRules, commentTemplates, calculatedRules, reflexRules, autoverificationPolicies, validationHoldRules, criticalEscalationPolicies, qualitativeResultOptions] = await Promise.all([
     prisma.labTest.findMany({
       where: { organizationId: session.user.organizationId, status: "ACTIVE" },
       include: { components: { where: { status: "ACTIVE" }, orderBy: { displayOrder: "asc" } } },
@@ -70,6 +71,12 @@ export default async function ClinicalRulesPage() {
       include: { test: true, branch: true },
       orderBy: { createdAt: "desc" },
       take: 200,
+    }),
+    prisma.qualitativeResultOption.findMany({
+      where: { organizationId: session.user.organizationId },
+      include: { test: true, component: true },
+      orderBy: [{ testId: "asc" }, { componentId: "asc" }, { displayOrder: "asc" }, { createdAt: "asc" }],
+      take: 500,
     }),
   ]);
 
@@ -154,6 +161,45 @@ export default async function ClinicalRulesPage() {
         })),
       }))}
       branches={branches}
+    />
+
+    <QualitativeResultOptionsManager
+      locale={locale}
+      tests={tests.map(test => ({
+        id: test.id,
+        code: test.code,
+        nameEn: test.nameEn,
+        nameAr: test.nameAr,
+        resultType: test.resultType,
+        components: test.components.map(component => ({
+          id: component.id,
+          code: component.code,
+          nameEn: component.nameEn,
+          nameAr: component.nameAr,
+          resultType: component.resultType,
+        })),
+      }))}
+      options={qualitativeResultOptions.map(option => ({
+        id: option.id,
+        testId: option.testId,
+        componentId: option.componentId,
+        code: option.code,
+        valueEn: option.valueEn,
+        valueAr: option.valueAr,
+        flag: option.flag,
+        isAbnormal: option.isAbnormal,
+        isCritical: option.isCritical,
+        displayOrder: option.displayOrder,
+        effectiveFrom: option.effectiveFrom.toISOString().slice(0,10),
+        effectiveTo: option.effectiveTo?.toISOString().slice(0,10) || null,
+        status: option.status,
+        testCode: option.test.code,
+        testNameEn: option.test.nameEn,
+        testNameAr: option.test.nameAr,
+        componentCode: option.component?.code || null,
+        componentNameEn: option.component?.nameEn || null,
+        componentNameAr: option.component?.nameAr || null,
+      }))}
     />
 
     <AutoverificationValidationManager

@@ -84,22 +84,22 @@ export function numericFlag(
     criticalHigh: Prisma.Decimal | null;
   } | null,
 ) {
-  if (!interval) return { flag: "UNKNOWN" as const, isCritical: false };
+  if (!interval) return { flag: "UNKNOWN" as const, isAbnormal: false, isCritical: false };
 
   if (interval.criticalLow !== null && value.lt(interval.criticalLow)) {
-    return { flag: "CRITICAL_LOW" as const, isCritical: true };
+    return { flag: "CRITICAL_LOW" as const, isAbnormal: true, isCritical: true };
   }
   if (interval.criticalHigh !== null && value.gt(interval.criticalHigh)) {
-    return { flag: "CRITICAL_HIGH" as const, isCritical: true };
+    return { flag: "CRITICAL_HIGH" as const, isAbnormal: true, isCritical: true };
   }
   if (interval.lowValue !== null && value.lt(interval.lowValue)) {
-    return { flag: "LOW" as const, isCritical: false };
+    return { flag: "LOW" as const, isAbnormal: true, isCritical: false };
   }
   if (interval.highValue !== null && value.gt(interval.highValue)) {
-    return { flag: "HIGH" as const, isCritical: false };
+    return { flag: "HIGH" as const, isAbnormal: true, isCritical: false };
   }
   if (interval.lowValue !== null || interval.highValue !== null) {
-    return { flag: "NORMAL" as const, isCritical: false };
+    return { flag: "NORMAL" as const, isAbnormal: false, isCritical: false };
   }
-  return { flag: "UNKNOWN" as const, isCritical: false };
+  return { flag: "UNKNOWN" as const, isAbnormal: false, isCritical: false };
 }

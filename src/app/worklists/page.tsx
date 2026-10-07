@@ -47,6 +47,7 @@ export default async function WorklistsPage({
       ? { departmentId: "__FORBIDDEN__" }
       : { departmentId })
     : (departmentRestricted ? { departmentId: { in: scopedDepartmentIds } } : {});
+  const now = new Date();
 
   const [items, departments] = await Promise.all([
     prisma.orderItem.findMany({
@@ -90,8 +91,27 @@ export default async function WorklistsPage({
             defaultUnit: true,
             components: {
               where: { status: "ACTIVE" },
-              include: { unit: true },
+              include: {
+                unit: true,
+                qualitativeResultOptions: {
+                  where: {
+                    status: "ACTIVE",
+                    effectiveFrom: { lte: now },
+                    OR: [{ effectiveTo: null }, { effectiveTo: { gte: now } }],
+                  },
+                  orderBy: [{ displayOrder: "asc" }, { createdAt: "asc" }],
+                },
+              },
               orderBy: [{ displayOrder: "asc" }, { code: "asc" }],
+            },
+            qualitativeResultOptions: {
+              where: {
+                componentId: null,
+                status: "ACTIVE",
+                effectiveFrom: { lte: now },
+                OR: [{ effectiveTo: null }, { effectiveTo: { gte: now } }],
+              },
+              orderBy: [{ displayOrder: "asc" }, { createdAt: "asc" }],
             },
           },
         },
@@ -141,7 +161,7 @@ export default async function WorklistsPage({
     if (!readySpecimen?.currentBranchId) return [];
     if (latest && (latest.source !== "MANUAL" || ["VERIFIED","RELEASED","AMENDED","CANCELLED"].includes(latest.status))) return [];
 
-    const currentByComponent = new Map((latest?.values || []).map(value => [value.componentId || "__TEST__", value.displayValue]));
+    const currentByComponent = new Map((latest?.values || []).map(value => [value.componentId || "__TEST__", value]));
     const fields = item.test.components.length > 0
       ? item.test.components.map(component => ({
           componentId: component.id,
@@ -149,7 +169,17 @@ export default async function WorklistsPage({
           nameEn: component.nameEn,
           nameAr: component.nameAr,
           resultType: component.resultType,
-          currentValue: currentByComponent.get(component.id) || "",
+          currentValue: currentByComponent.get(component.id)?.displayValue || "",
+          currentOptionId: currentByComponent.get(component.id)?.qualitativeOptionId || null,
+          qualitativeOptions: component.qualitativeResultOptions.map(option => ({
+            id: option.id,
+            code: option.code,
+            valueEn: option.valueEn,
+            valueAr: option.valueAr,
+            flag: option.flag,
+            isAbnormal: option.isAbnormal,
+            isCritical: option.isCritical,
+          })),
         }))
       : [{
           componentId: null,
@@ -157,7 +187,17 @@ export default async function WorklistsPage({
           nameEn: item.test.nameEn,
           nameAr: item.test.nameAr,
           resultType: item.test.resultType,
-          currentValue: currentByComponent.get("__TEST__") || "",
+          currentValue: currentByComponent.get("__TEST__")?.displayValue || "",
+          currentOptionId: currentByComponent.get("__TEST__")?.qualitativeOptionId || null,
+          qualitativeOptions: item.test.qualitativeResultOptions.map(option => ({
+            id: option.id,
+            code: option.code,
+            valueEn: option.valueEn,
+            valueAr: option.valueAr,
+            flag: option.flag,
+            isAbnormal: option.isAbnormal,
+            isCritical: option.isCritical,
+          })),
         }];
 
     return [{
@@ -250,7 +290,7 @@ export default async function WorklistsPage({
                 );
                 const result = item.results[0];
                 const criticalCount = result?.values.filter(value => value.isCritical).length || 0;
-                const abnormalCount = result?.values.filter(value => ["LOW","HIGH","CRITICAL_LOW","CRITICAL_HIGH","ABNORMAL"].includes(value.flag)).length || 0;
+                const abnormalCount = result?.values.filter(value => value.isAbnormal).length || 0;
                 return <tr key={item.id}>
                   <td><strong>{item.order.accessionNumber}</strong></td>
                   <td>{item.order.patient.patientNumber}<br/><small>{patientName(item.order.patient)}</small></td>
