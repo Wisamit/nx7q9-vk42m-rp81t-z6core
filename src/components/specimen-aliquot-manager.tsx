@@ -80,6 +80,10 @@ export function SpecimenAliquotManager({
       usage_order_item_not_linked: tr("The selected test is not linked to this specimen.", "الفحص المحدد غير مرتبط بهذه العينة."),
       specimen_volume_changed: tr("Available volume changed concurrently. Review the updated balance and try again.", "تغير الحجم المتاح بالتزامن. راجع الرصيد الجديد وحاول مجددًا."),
       container_not_found: tr("Selected aliquot container is unavailable.", "حاوية الجزء المشتق المحددة غير متاحة."),
+      storage_location_required: tr("Storage location is required.", "موقع التخزين مطلوب."),
+      storage_relocation_reason_required: tr("A storage relocation reason is required.", "سبب تغيير موقع التخزين مطلوب."),
+      specimen_status_not_relocatable: tr("This specimen status does not allow storage relocation.", "حالة هذه العينة لا تسمح بتغيير موقع التخزين."),
+      specimen_state_changed: tr("Specimen state changed concurrently. Refresh and try again.", "تغيرت حالة العينة بالتزامن. حدّث الصفحة وحاول مجددًا."),
     };
     return messages[key] || key || tr("Specimen volume action failed.", "فشلت عملية حجم العينة.");
   }
@@ -137,6 +141,16 @@ export function SpecimenAliquotManager({
     }
   }
 
+  async function relocateStorage(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const ok = await post(`/api/specimens/${specimenId}/storage-location`, {
+      storageLocation: form.get("storageLocation"),
+      reason: form.get("reason"),
+    });
+    if (ok) setMessage(tr("Physical storage location updated and audited.", "تم تحديث موقع التخزين الفعلي وتسجيله."));
+  }
+
   async function recordUsage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
@@ -152,6 +166,14 @@ export function SpecimenAliquotManager({
       setMessage(tr("Specimen usage recorded and available volume updated.", "تم تسجيل استخدام العينة وتحديث الحجم المتاح."));
     }
   }
+
+  const usageLabel = (value: string) => ({
+    ALIQUOT: tr("Aliquot", "جزء مشتق"),
+    TESTING: tr("Testing", "فحص"),
+    REPEAT_TESTING: tr("Repeat testing", "إعادة فحص"),
+    SEND_OUT: tr("Send-out", "إرسال خارجي"),
+    OTHER: tr("Other", "أخرى"),
+  }[value] || value);
 
   return <section className="specimen-aliquot-panel">
     <div className="table-toolbar">
@@ -175,6 +197,15 @@ export function SpecimenAliquotManager({
         <label>{tr("Volume unit", "وحدة الحجم")}<input name="availableVolumeUnit" maxLength={30} defaultValue={originalVolumeUnit || ""} required /></label>
         <label className="form-span">{tr("Reconciliation reason", "سبب التسوية")}<textarea name="reason" rows={2} maxLength={1000} required /></label>
         <button className="primary-button form-span" disabled={busy}>{tr("Save Reconciled Volume", "حفظ الحجم بعد التسوية")}</button>
+      </form>
+    </details>}
+
+    {canManage && usable && <details className="specimen-history">
+      <summary>{tr("Update Physical Storage", "تحديث موقع التخزين الفعلي")}</summary>
+      <form className="catalog-form specimen-action-form" onSubmit={relocateStorage}>
+        <label className="form-span">{tr("Storage / physical location", "التخزين / الموقع الفعلي")}<input name="storageLocation" defaultValue={storageLocation || ""} maxLength={200} placeholder={tr("Example: Fridge 2 · Rack B3", "مثال: الثلاجة 2 · الرف B3")} required /></label>
+        <label className="form-span">{tr("Relocation reason", "سبب تغيير الموقع")}<textarea name="reason" rows={2} maxLength={1000} required /></label>
+        <button className="secondary-button form-span" disabled={busy}>{tr("Update Storage Location", "تحديث موقع التخزين")}</button>
       </form>
     </details>}
 
@@ -260,7 +291,7 @@ export function SpecimenAliquotManager({
       <div className="summary-list">
         {usageEvents.map(item => <div key={item.id}>
           <span>{item.usedAt.replace("T", " ").slice(0, 19)} · {item.volumeUsed} {item.volumeUnit}</span>
-          <strong>{item.usageType}{item.orderItemCode ? ` · ${item.orderItemCode}` : ""}{item.childBarcode ? ` · → ${item.childBarcode}` : ""}</strong>
+          <strong>{usageLabel(item.usageType)}{item.orderItemCode ? ` · ${item.orderItemCode}` : ""}{item.childBarcode ? ` · → ${item.childBarcode}` : ""}</strong>
           {item.notes && <small>{item.notes}</small>}
         </div>)}
       </div>
