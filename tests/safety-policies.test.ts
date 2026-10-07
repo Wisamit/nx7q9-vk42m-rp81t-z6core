@@ -15,6 +15,7 @@ import { cashierClosingSnapshot, cashierClosureReviewError, cashierShiftActiveKe
 import { buildClientStatementLedger, clientPaymentAllocationError, localDateStartUtc, nextDateString } from "../src/lib/client-accounting.ts";
 import { agingBucket, aggregateAging, historicalInvoiceReceivable, invoiceDueDateSnapshot, localCalendarDate } from "../src/lib/accounts-receivable-aging.ts";
 import { creditLimitDecision, validCreditLimit } from "../src/lib/client-credit-control.ts";
+import { resolveTaxRule, taxCreditReversal, taxLineAmounts, taxScopeKey, validTaxRate } from "../src/lib/tax-policy.ts";
 
 test("specimen collection is only allowed from PLANNED with specimen type configured", () => {
   assert.equal(specimenActionError({ status: "PLANNED", action: "COLLECT", specimenTypeConfigured: true }), null);
@@ -585,4 +586,73 @@ test("credit policy limits validate scale, range and nonnegative input", () => {
   assert.equal(validCreditLimit("-1.0000"), null);
   assert.equal(validCreditLimit("1.00001"), null);
   assert.equal(validCreditLimit("1e2"), null);
+});
+
+
+test("service tax rules prioritize branch overrides and revision effective dates", () => {
+  const base = { testId: "T1", packageId: null, treatment: "STANDARD" as const, priceMode: "EXCLUSIVE" as const };
+  const rules = [
+    { ...base, id: "a", branchId: null, code: "ORG", ratePercent: "5.00", effectiveFrom: "2026-01-01" },
+    { ...base, id: "b", branchId: "B1", code: "BR", ratePercent: "6.00", effectiveFrom: "2026-05-01" },
+    { ...base, id: "c", branchId: "B1", code: "BR", ratePercent: "7.00", effectiveFrom: "2026-11-01" },
+  ];
+  assert.equal(resolveTaxRule(rules, "B1", "TEST", "T1", "2026-10-07")?.id, "b");
+  assert.equal(resolveTaxRule(rules, "B2", "TEST", "T1", "2026-10-07")?.id, "a");
+  assert.equal(resolveTaxRule(rules, "B1", "TEST", "T1", "2026-12-01")?.id, "c");
+  assert.equal(resolveTaxRule(rules, "B1", "TEST", "T2", "2026-10-07"), null);
+  assert.notEqual(taxScopeKey(null, "TEST", "T1"), taxScopeKey("B1", "TEST", "T1"));
+});
+
+test("tax-inclusive and tax-exclusive calculations preserve exact four-decimal totals", () => {
+  assert.deepEqual(taxLineAmounts({
+    netAfterDiscount: "100.0000",
+    rule: { treatment: "STANDARD", priceMode: "EXCLUSIVE", ratePercent: "5.00" },
+  }), {
+    taxableBase: "100.0000", taxAmount: "5.0000", exclusiveTax: "5.0000", lineTotal: "105.0000",
+  });
+  assert.deepEqual(taxLineAmounts({
+    netAfterDiscount: "105.0000",
+    rule: { treatment: "STANDARD", priceMode: "INCLUSIVE", ratePercent: "5.00" },
+  }), {
+    taxableBase: "100.0000", taxAmount: "5.0000", exclusiveTax: "0.0000", lineTotal: "105.0000",
+  });
+  assert.equal(taxLineAmounts({ netAfterDiscount: "100.0000", rule: null })?.taxAmount, "0.0000");
+  assert.equal(taxLineAmounts({
+    netAfterDiscount: "100.0000",
+    rule: { treatment: "ZERO_RATED", priceMode: "EXCLUSIVE", ratePercent: "0.00" },
+  })?.lineTotal, "100.0000");
+  assert.equal(taxLineAmounts({
+    netAfterDiscount: "1.0000",
+    rule: { treatment: "EXEMPT", priceMode: "EXCLUSIVE", ratePercent: "5.00" },
+  }), null);
+});
+
+test("tax percentages reject exponent and out-of-range inputs", () => {
+  assert.equal(validTaxRate("5"), "5.00");
+  assert.equal(validTaxRate("100.00"), "100.00");
+  assert.equal(validTaxRate("5.001"), null);
+  assert.equal(validTaxRate("-1"), null);
+  assert.equal(validTaxRate("100.01"), null);
+  assert.equal(validTaxRate("1e1"), null);
+});
+
+test("credit-note tax reversals are cumulative and cannot overcredit invoice lines", () => {
+  const first = taxCreditReversal({
+    originalGross: "105.0000", originalTax: "5.0000",
+    previouslyCreditedGross: "0.0000", previouslyCreditedTax: "0.0000",
+    additionalGross: "35.0000",
+  });
+  assert.equal(first?.taxAmount, "1.6667");
+  const second = taxCreditReversal({
+    originalGross: "105.0000", originalTax: "5.0000",
+    previouslyCreditedGross: "35.0000", previouslyCreditedTax: "1.6667",
+    additionalGross: "70.0000",
+  });
+  assert.equal(second?.taxAmount, "3.3333");
+  assert.equal(second?.totalTaxCredited, "5.0000");
+  assert.equal(taxCreditReversal({
+    originalGross: "105.0000", originalTax: "5.0000",
+    previouslyCreditedGross: "35.0000", previouslyCreditedTax: "1.6667",
+    additionalGross: "70.0001",
+  }), null);
 });
