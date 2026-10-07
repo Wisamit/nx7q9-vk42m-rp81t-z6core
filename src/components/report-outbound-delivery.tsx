@@ -1,0 +1,117 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+
+type Channel = "EMAIL" | "SMS" | "WHATSAPP";
+type RecipientType = "PATIENT" | "REFERRER" | "CLIENT";
+
+type RecipientOption = {
+  type: RecipientType;
+  label: string;
+  channels: Array<{ channel: Channel; destinationMasked: string }>;
+};
+
+export function ReportOutboundDelivery({
+  reportVersionId,
+  recipients,
+  locale,
+}: {
+  reportVersionId: string;
+  recipients: RecipientOption[];
+  locale: "ar" | "en";
+}) {
+  const router = useRouter();
+  const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
+  const [recipientType, setRecipientType] = useState<RecipientType>(recipients[0]?.type || "PATIENT");
+  const selectedRecipient = useMemo(
+    () => recipients.find(item => item.type === recipientType) || recipients[0] || null,
+    [recipientType, recipients],
+  );
+  const [channel, setChannel] = useState<Channel>(selectedRecipient?.channels[0]?.channel || "EMAIL");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+
+  function selectRecipient(value: RecipientType) {
+    setRecipientType(value);
+    const recipient = recipients.find(item => item.type === value);
+    setChannel(recipient?.channels[0]?.channel || "EMAIL");
+    setMessage("");
+  }
+
+  async function queueDelivery() {
+    if (!selectedRecipient || !selectedRecipient.channels.some(item => item.channel === channel)) return;
+    setBusy(true);
+    setMessage("");
+
+    const response = await fetch(`/api/reports/${reportVersionId}/outbound`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ recipientType, channel }),
+    });
+    const body = await response.json().catch(() => ({})) as { error?: string; destination?: string };
+    setBusy(false);
+
+    if (!response.ok) {
+      const errors: Record<string, string> = {
+        active_portal_account_required: tr("An active portal account is required for this recipient.", "يلزم حساب بوابة نشط لهذا المستلم."),
+        verified_portal_contact_required: tr("The portal contact must be verified before sending a report notification.", "يجب التحقق من جهة اتصال البوابة قبل إرسال إشعار التقرير."),
+        verified_email_required: tr("A verified portal email is required.", "يلزم بريد إلكتروني موثق في البوابة."),
+        verified_phone_required: tr("A verified portal phone is required.", "يلزم رقم هاتف موثق في البوابة."),
+        public_app_url_required: tr("A public application URL is required before secure links can be sent.", "يلزم عنوان عام للتطبيق قبل إرسال الروابط الآمنة."),
+        corporate_report_access_required: tr("This corporate portal does not have active report access for the patient.", "لا تملك بوابة العميل المؤسسي صلاحية فعالة لعرض تقارير هذا المريض."),
+        portal_account_type_mismatch: tr("The linked portal account type does not match the recipient.", "نوع حساب البوابة المرتبط لا يطابق نوع المستلم."),
+        retracted_report_cannot_be_delivered: tr("A retracted report cannot be delivered.", "لا يمكن تسليم تقرير مسحوب."),
+      };
+      setMessage(errors[body.error || ""] || tr("Could not queue report delivery.", "تعذر وضع تسليم التقرير في قائمة الإرسال."));
+      return;
+    }
+
+    setMessage(tr(
+      `Queued for secure delivery to ${body.destination || "verified contact"}.`,
+      `تمت إضافة التسليم الآمن إلى قائمة الإرسال نحو ${body.destination || "جهة الاتصال الموثقة"}.`,
+    ));
+    router.refresh();
+  }
+
+  const channelLabel = (value: Channel) =>
+    value === "EMAIL" ? tr("Email", "البريد الإلكتروني")
+      : value === "SMS" ? tr("SMS", "رسالة نصية")
+        : tr("WhatsApp", "واتساب");
+
+  return <section className="detail-card report-outbound-card no-print">
+    <h2>{tr("Secure Report Delivery", "التسليم الآمن للتقرير")}</h2>
+    <p className="muted">{tr(
+      "External messages never contain laboratory result values. They notify a verified portal recipient and link to the authenticated portal report.",
+      "الرسائل الخارجية لا تحتوي قيم النتائج المخبرية. يتم إشعار مستلم موثق وربطه بالتقرير داخل البوابة بعد تسجيل الدخول.",
+    )}</p>
+
+    {recipients.length === 0 ? <p className="muted">{tr(
+      "No associated patient, doctor, or client has an active verified portal contact.",
+      "لا يوجد مريض أو طبيب أو عميل مرتبط يملك جهة اتصال موثقة في بوابة نشطة.",
+    )}</p> : <div className="report-outbound-controls">
+      <label>{tr("Recipient", "المستلم")}
+        <select value={recipientType} onChange={event => selectRecipient(event.target.value as RecipientType)}>
+          {recipients.map(recipient => <option key={recipient.type} value={recipient.type}>{recipient.label}</option>)}
+        </select>
+      </label>
+      <label>{tr("Channel", "القناة")}
+        <select value={channel} onChange={event => setChannel(event.target.value as Channel)}>
+          {(selectedRecipient?.channels || []).map(item =>
+            <option key={item.channel} value={item.channel}>{channelLabel(item.channel)} · {item.destinationMasked}</option>
+          )}
+        </select>
+      </label>
+      <button
+        className="primary-button"
+        type="button"
+        disabled={busy || !selectedRecipient || selectedRecipient.channels.length === 0}
+        onClick={() => void queueDelivery()}
+      >
+        {busy ? tr("Queueing…", "جارٍ الإضافة…") : tr("Queue Secure Delivery", "إضافة التسليم الآمن")}
+      </button>
+    </div>}
+
+    {message && <p className="muted">{message}</p>}
+  </section>;
+}

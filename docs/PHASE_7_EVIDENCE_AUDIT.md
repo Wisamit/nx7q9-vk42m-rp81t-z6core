@@ -31,9 +31,11 @@ Authoritative roadmap scope:
 | Delivery logs | Implemented foundation | `ReportDeliveryEvent`, report delivery API and report history table | Baseline delivery endpoint is organization-scoped but lacks an explicit branch-scope check. |
 | Longitudinal/trend report | Outside Phase 7 roadmap / master-scope gap | patient history scope requires result trends | Track separately; do not silently redefine Phase 7. |
 
-## Phase 7A — Version-bound PDF fidelity and export
+## Phase 7A — Runtime accepted
 
-Phase 7A is implemented on feature branch `phase-7a-version-bound-pdf-export` and is pending CI/runtime acceptance.
+Runtime acceptance confirmed on Hostinger for main commit `08f4dfd1e341d47bb234e6c2d3bb132358dc79e2`.
+
+Phase 7A delivered version-bound PDF export and immutable report language-mode fidelity.
 
 Scope:
 - applies the immutable report-template `languageMode` to released report rendering;
@@ -61,3 +63,36 @@ After runtime acceptance of 7A, audit and close:
 2. patient/doctor/corporate portal report-delivery evidence where required;
 3. any remaining report-template fidelity gaps;
 4. provider-backed infrastructure acceptance remains environment-specific and must not be declared complete without real provider tests.
+
+
+## Phase 7B — Secure outbound report delivery orchestration
+
+Phase 7B is implemented on feature branch `phase-7b-secure-outbound-report-delivery` and is pending CI/runtime acceptance.
+
+Scope:
+- adds explicit report-version outbound delivery actions for EMAIL, SMS and WHATSAPP;
+- external report messages contain no laboratory result values; they provide a secure authenticated portal link to the exact `DiagnosticReportVersion`;
+- the user selects only an associated recipient type (patient, referrer or client) and channel; arbitrary free-text destinations are not accepted for clinical report delivery;
+- destinations resolve server-side from the recipient's active portal account;
+- outbound report delivery requires an active portal account with verified contact state and the required email/phone destination;
+- doctor delivery is allowed only to the order's associated referrer;
+- corporate delivery additionally requires active `CorporatePortalPatientAccess.canViewReports` for the order patient;
+- report-delivery events are linked one-to-one to the corresponding notification delivery, preserving queue/provider traceability;
+- report delivery starts as QUEUED, changes to SENT only after provider-gateway success, and changes to FAILED only when delivery is terminal/skipped; retryable failures remain QUEUED;
+- provider message IDs are copied to `ReportDeliveryEvent.externalRef`;
+- notification dispatch is scoped to the caller's organization and dashboard delivery counts are organization-scoped;
+- dispatcher claims each delivery atomically before contacting a provider to reduce duplicate sends during concurrent dispatch runs;
+- templates use event code `REPORT_RELEASED` and support `{{recipientName}}`, `{{patientName}}`, `{{accessionNumber}}`, `{{reportVersion}}`, `{{reportStatus}}` and `{{portalUrl}}`;
+- safe bilingual fallback messages are used when no enabled channel template exists.
+
+Clinical/privacy guardrails:
+- SMS/WhatsApp/email bodies do not embed clinical values, reference intervals, flags or result comments;
+- the public QR verification endpoint is not used as a replacement for authenticated report delivery;
+- retracted report versions cannot be queued for external delivery;
+- queue audit records mask the destination even though the authorized report delivery event retains the actual destination required for operational evidence;
+- provider-backed sending remains infrastructure-dependent and cannot be declared Production Accepted until real gateway credentials are tested.
+
+Remaining Phase 7 after 7B:
+1. verify portal-delivery evidence and any remaining template fidelity gaps;
+2. provider-backed EMAIL/SMS/WHATSAPP acceptance in the deployment environment;
+3. close Phase 7 only after runtime acceptance of application-side orchestration and explicit infrastructure status documentation.

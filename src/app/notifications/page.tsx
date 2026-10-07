@@ -34,6 +34,7 @@ export default async function NotificationsPage() {
     permissions.has("notifications.dispatch")
       ? prisma.notificationDelivery.groupBy({
           by: ["status"],
+          where: { notification: { organizationId: session.user.organizationId } },
           _count: { _all: true },
         })
       : Promise.resolve([]),
