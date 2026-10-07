@@ -10,6 +10,7 @@ export type PortalDeliveryAccount = {
 };
 
 export type ReportMessageContext = {
+  recipientName: string;
   patientName: string;
   accessionNumber: string;
   reportVersion: number;
@@ -48,6 +49,7 @@ export function renderReportTemplate(
   context: ReportMessageContext,
 ) {
   const replacements: Record<string, string> = {
+    "{{recipientName}}": context.recipientName,
     "{{patientName}}": context.patientName,
     "{{accessionNumber}}": context.accessionNumber,
     "{{reportVersion}}": String(context.reportVersion),
@@ -64,17 +66,22 @@ export function renderReportTemplate(
 
 export function defaultReportReadyMessage(
   locale: "ar" | "en",
+  recipientType: ReportOutboundRecipientType,
   context: ReportMessageContext,
 ) {
   if (locale === "ar") {
     return {
       title: "تقرير المختبر جاهز",
-      body: `مرحباً ${context.patientName}، تقرير المختبر للطلب ${context.accessionNumber} (الإصدار ${context.reportVersion}) جاهز. افتح التقرير بأمان بعد تسجيل الدخول إلى بوابتك: ${context.portalUrl}`,
+      body: recipientType === "PATIENT"
+        ? `مرحباً ${context.recipientName}، تقرير المختبر للطلب ${context.accessionNumber} (الإصدار ${context.reportVersion}) جاهز. افتح التقرير بأمان بعد تسجيل الدخول إلى بوابتك: ${context.portalUrl}`
+        : `مرحباً ${context.recipientName}، تقرير المختبر للمريض ${context.patientName} للطلب ${context.accessionNumber} (الإصدار ${context.reportVersion}) جاهز. افتح التقرير بأمان بعد تسجيل الدخول إلى بوابتك: ${context.portalUrl}`,
     };
   }
   return {
     title: "Laboratory report ready",
-    body: `Hello ${context.patientName}, your laboratory report for accession ${context.accessionNumber} (version ${context.reportVersion}) is ready. Sign in to your secure portal to view it: ${context.portalUrl}`,
+    body: recipientType === "PATIENT"
+      ? `Hello ${context.recipientName}, your laboratory report for accession ${context.accessionNumber} (version ${context.reportVersion}) is ready. Sign in to your secure portal to view it: ${context.portalUrl}`
+      : `Hello ${context.recipientName}, the laboratory report for patient ${context.patientName}, accession ${context.accessionNumber} (version ${context.reportVersion}), is ready. Sign in to your secure portal to view it: ${context.portalUrl}`,
   };
 }
 
