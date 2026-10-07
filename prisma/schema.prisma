@@ -1122,7 +1122,6 @@ model Branch {
   reflexRules ReflexRule[]
   autoverificationPolicies AutoverificationPolicy[]
   validationHoldRules ValidationHoldRule[]
-  resultValidationPolicies ResultValidationPolicy[]
   criticalEscalationPolicies CriticalEscalationPolicy[]
   microbiologyCases MicrobiologyCase[]
   branchStocks BranchStock[]
@@ -1738,6 +1737,7 @@ model LabTest {
   analyzerMappings AnalyzerTestMapping[]
   autoverificationPolicies AutoverificationPolicy[]
   validationHoldRules ValidationHoldRule[]
+  resultValidationPolicies ResultValidationPolicy[]
   criticalEscalationPolicies CriticalEscalationPolicy[]
   qcTargets QcTarget[]
 
