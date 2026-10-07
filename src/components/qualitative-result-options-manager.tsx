@@ -160,7 +160,7 @@ export function QualitativeResultOptionsManager({
       </label>
 
       <label>{tr("Code", "الرمز")}<input name="code" placeholder="POSITIVE" /></label>
-      <label>{tr("Value (English)", "القيمة بالإنجليزية")}<input name="valueEn" required placeholder="Positive" /></label>
+      <label>{tr("Value (English)", "القيمة بالإنجليزية")}<input name="valueEn" required placeholder={tr("Positive", "إيجابي")} /></label>
       <label>{tr("Value (Arabic)", "القيمة بالعربية")}<input name="valueAr" dir="rtl" placeholder="إيجابي" /></label>
 
       <label>{tr("Result flag", "إشارة النتيجة")}
