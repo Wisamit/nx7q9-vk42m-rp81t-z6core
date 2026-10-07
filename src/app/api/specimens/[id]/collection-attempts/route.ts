@@ -48,6 +48,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!branchId || !canAccessBranch(session, branchId)) {
     return NextResponse.json({ error: "branch_forbidden" }, { status: 403 });
   }
+  const collectionBranch = await prisma.branch.findFirst({
+    where: {
+      id: branchId,
+      organizationId: session.user.organizationId,
+      status: "ACTIVE",
+    },
+    select: { id: true, code: true, nameEn: true, nameAr: true },
+  });
+  if (!collectionBranch) return NextResponse.json({ error: "branch_not_found" }, { status: 404 });
 
   const locationError = collectionLocationError({ locationType, locationText });
   if (locationError) return NextResponse.json({ error: locationError }, { status: 400 });
@@ -181,6 +190,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           specimenId: specimen.id,
           branchId,
           collectorUserId: session.user.id,
+          branchCodeSnapshot: collectionBranch.code,
+          branchNameEnSnapshot: collectionBranch.nameEn,
+          branchNameArSnapshot: collectionBranch.nameAr,
+          collectorNameEnSnapshot: session.user.displayNameEn,
+          collectorNameArSnapshot: session.user.displayNameAr,
           outcome: "SUCCESS",
           patientNameSnapshot: verification.matchedNameSnapshot,
           patientNumberSnapshot: verification.patientNumberSnapshot,
@@ -386,6 +400,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
             replacementSpecimenId: replacement.id,
             branchId,
             collectorUserId: session.user.id,
+            branchCodeSnapshot: collectionBranch.code,
+            branchNameEnSnapshot: collectionBranch.nameEn,
+            branchNameArSnapshot: collectionBranch.nameAr,
+            collectorNameEnSnapshot: session.user.displayNameEn,
+            collectorNameArSnapshot: session.user.displayNameAr,
             outcome: "FAILED",
             patientNameSnapshot: verification.matchedNameSnapshot,
             patientNumberSnapshot: verification.patientNumberSnapshot,
