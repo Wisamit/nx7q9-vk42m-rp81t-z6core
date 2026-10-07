@@ -1,4 +1,5 @@
 import type { Prisma } from "../../generated/prisma/client";
+import { compareReportPresentation, reportValueVisible } from "@/lib/report-presentation";
 
 export async function buildDiagnosticReportSnapshot(db: Prisma.TransactionClient, orderId: string) {
   const order = await db.labOrder.findUnique({
@@ -76,26 +77,51 @@ export async function buildDiagnosticReportSnapshot(db: Prisma.TransactionClient
         collectedAt: specimen.collectedAt?.toISOString() || null,
         receivedAt: specimen.receivedAt?.toISOString() || null,
       } : null,
-      values: result!.values.map((value) => ({
-        componentId: value.componentId,
-        componentCode: value.componentCodeSnapshot,
-        componentNameEn: value.componentNameEnSnapshot,
-        componentNameAr: value.componentNameArSnapshot,
-        displayValue: value.displayValue,
-        unit: value.unitSnapshot,
-        flag: value.flag,
-        flagSource: value.flagSource,
-        isAbnormal: value.isAbnormal,
-        isCritical: value.isCritical,
-        qualitativeOptionCode: value.qualitativeOptionCodeSnapshot,
-        valueTextEn: value.valueTextEnSnapshot,
-        valueTextAr: value.valueTextArSnapshot,
-        comments: value.comments,
-        referenceLow: value.referenceLowSnapshot?.toString() || null,
-        referenceHigh: value.referenceHighSnapshot?.toString() || null,
-        referenceTextEn: value.referenceTextEnSnapshot,
-        referenceTextAr: value.referenceTextArSnapshot,
-      })),
+      values: result!.values
+        .filter((value) => reportValueVisible({ reportVisible: value.reportVisibleSnapshot }))
+        .sort((left, right) => compareReportPresentation(
+          {
+            componentCode: left.componentCodeSnapshot,
+            reportDisplayOrder: left.reportDisplayOrderSnapshot,
+            reportVisible: left.reportVisibleSnapshot,
+            reportSectionCode: left.reportSectionCodeSnapshot,
+            reportSectionOrder: left.reportSectionOrderSnapshot,
+          },
+          {
+            componentCode: right.componentCodeSnapshot,
+            reportDisplayOrder: right.reportDisplayOrderSnapshot,
+            reportVisible: right.reportVisibleSnapshot,
+            reportSectionCode: right.reportSectionCodeSnapshot,
+            reportSectionOrder: right.reportSectionOrderSnapshot,
+          },
+        ))
+        .map((value) => ({
+          componentId: value.componentId,
+          componentCode: value.componentCodeSnapshot,
+          componentNameEn: value.reportNameEnSnapshot || value.componentNameEnSnapshot,
+          componentNameAr: value.reportNameArSnapshot || value.componentNameArSnapshot,
+          originalComponentNameEn: value.componentNameEnSnapshot,
+          originalComponentNameAr: value.componentNameArSnapshot,
+          reportDisplayOrder: value.reportDisplayOrderSnapshot,
+          reportSectionCode: value.reportSectionCodeSnapshot,
+          reportSectionNameEn: value.reportSectionNameEnSnapshot,
+          reportSectionNameAr: value.reportSectionNameArSnapshot,
+          reportSectionOrder: value.reportSectionOrderSnapshot,
+          displayValue: value.displayValue,
+          unit: value.unitSnapshot,
+          flag: value.flag,
+          flagSource: value.flagSource,
+          isAbnormal: value.isAbnormal,
+          isCritical: value.isCritical,
+          qualitativeOptionCode: value.qualitativeOptionCodeSnapshot,
+          valueTextEn: value.valueTextEnSnapshot,
+          valueTextAr: value.valueTextArSnapshot,
+          comments: value.comments,
+          referenceLow: value.referenceLowSnapshot?.toString() || null,
+          referenceHigh: value.referenceHighSnapshot?.toString() || null,
+          referenceTextEn: value.referenceTextEnSnapshot,
+          referenceTextAr: value.referenceTextArSnapshot,
+        })),
       comments: result!.comments,
       microbiology: result!.microbiologySnapshot,
       validationStage: result!.validationStage,

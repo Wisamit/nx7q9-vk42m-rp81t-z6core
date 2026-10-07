@@ -467,3 +467,5 @@ html[data-density="compact"] :where(.detail-card,.dashboard-panel,.settings-card
     min-width: 0;
   }
 }
+
+.report-section-heading td{background:var(--fl-surface-soft);border-top:1px solid var(--fl-border);font-size:11px;letter-spacing:.02em;color:var(--fl-primary)}

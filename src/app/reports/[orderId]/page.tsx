@@ -25,6 +25,11 @@ type ReportValue = {
   componentCode: string;
   componentNameEn: string;
   componentNameAr: string | null;
+  reportDisplayOrder: number | null;
+  reportSectionCode: string | null;
+  reportSectionNameEn: string | null;
+  reportSectionNameAr: string | null;
+  reportSectionOrder: number | null;
   displayValue: string;
   unit: string | null;
   flag: string;
@@ -359,19 +364,33 @@ export default async function DiagnosticReportPage({ params }: { params: Promise
                   <small> · {localizedReportText(templateConfig.languageMode, locale, { en: result.performingBranch.nameEn, ar: result.performingBranch.nameAr })} · {reportTr("Result", "النتيجة")} v{result.resultVersion}{result.analyzer ? ` · ${reportTr("Analyzer", "جهاز التحليل")}: ${result.analyzer.code}${result.analyzer.name ? " — " + result.analyzer.name : ""}` : ""}</small>
                 </td>
               </tr>,
-              ...result.values.map((value) => <Fragment key={`${result.testCode}-${value.componentCode}`}>
-                <tr className={value.isCritical ? "report-critical-row" : ""}>
-                  {reportColumns.has("TEST") && <td>
-                    <strong>{localizedReportText(templateConfig.languageMode, locale, { en: value.componentNameEn, ar: value.componentNameAr })}</strong>
-                    {secondaryReportText(templateConfig.languageMode, locale, { en: value.componentNameEn, ar: value.componentNameAr }) && <small>{secondaryReportText(templateConfig.languageMode, locale, { en: value.componentNameEn, ar: value.componentNameAr })}</small>}
-                  </td>}
-                  {reportColumns.has("RESULT") && <td><strong>{value.displayValue}</strong></td>}
-                  {reportColumns.has("FLAG") && <td>{value.flag === "UNKNOWN" ? "—" : <span className={"result-flag-badge flag-" + value.flag.toLowerCase().replaceAll("_","-")}>{value.flag}</span>}</td>}
-                  {reportColumns.has("UNIT") && <td>{value.unit || "—"}</td>}
-                  {reportColumns.has("REFERENCE") && <td>{referenceText(value, reportLocale)}</td>}
-                </tr>
-                {value.comments && <tr className="report-component-comment"><td colSpan={reportColumnCount}><strong>{reportTr("Component comment", "تعليق المكوّن")}:</strong> {value.comments}</td></tr>}
-              </Fragment>),
+              ...result.values.map((value, valueIndex) => {
+                const previous = valueIndex > 0 ? result.values[valueIndex - 1] : null;
+                const showSectionHeading = Boolean(
+                  value.reportSectionCode
+                  && value.reportSectionCode !== previous?.reportSectionCode
+                  && (value.reportSectionNameEn || value.reportSectionNameAr),
+                );
+                return <Fragment key={`${result.testCode}-${value.componentCode}`}>
+                  {showSectionHeading && <tr className="report-section-heading">
+                    <td colSpan={reportColumnCount}>
+                      <strong>{localizedReportText(templateConfig.languageMode, locale, { en: value.reportSectionNameEn || value.reportSectionCode || "", ar: value.reportSectionNameAr })}</strong>
+                      {secondaryReportText(templateConfig.languageMode, locale, { en: value.reportSectionNameEn || value.reportSectionCode || "", ar: value.reportSectionNameAr }) && <span> · {secondaryReportText(templateConfig.languageMode, locale, { en: value.reportSectionNameEn || value.reportSectionCode || "", ar: value.reportSectionNameAr })}</span>}
+                    </td>
+                  </tr>}
+                  <tr className={value.isCritical ? "report-critical-row" : ""}>
+                    {reportColumns.has("TEST") && <td>
+                      <strong>{localizedReportText(templateConfig.languageMode, locale, { en: value.componentNameEn, ar: value.componentNameAr })}</strong>
+                      {secondaryReportText(templateConfig.languageMode, locale, { en: value.componentNameEn, ar: value.componentNameAr }) && <small>{secondaryReportText(templateConfig.languageMode, locale, { en: value.componentNameEn, ar: value.componentNameAr })}</small>}
+                    </td>}
+                    {reportColumns.has("RESULT") && <td><strong>{value.displayValue}</strong></td>}
+                    {reportColumns.has("FLAG") && <td>{value.flag === "UNKNOWN" ? "—" : <span className={"result-flag-badge flag-" + value.flag.toLowerCase().replaceAll("_","-")}>{value.flag}</span>}</td>}
+                    {reportColumns.has("UNIT") && <td>{value.unit || "—"}</td>}
+                    {reportColumns.has("REFERENCE") && <td>{referenceText(value, reportLocale)}</td>}
+                  </tr>
+                  {value.comments && <tr className="report-component-comment"><td colSpan={reportColumnCount}><strong>{reportTr("Component comment", "تعليق المكوّن")}:</strong> {value.comments}</td></tr>}
+                </Fragment>;
+              }),
               result.microbiology ? <tr key={`${result.testCode}-microbiology`}>
                 <td colSpan={reportColumnCount}>
                   <div className="report-notes">
