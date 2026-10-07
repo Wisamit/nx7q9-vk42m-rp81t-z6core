@@ -1,7 +1,8 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, KeyboardEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { focusNextResultEntryControl, shouldAdvanceResultEntryOnEnter } from "@/lib/result-entry-keyboard";
 
 type BulkField = {
   componentId: string | null;
@@ -31,14 +32,15 @@ function inputFor(
   value: string,
   onChange: (value: string) => void,
   locale: "ar" | "en",
+  onKeyDown: (event: KeyboardEvent<HTMLInputElement>) => void,
 ) {
   const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
-  if (field.resultType === "BOOLEAN") return <select value={value} onChange={event => onChange(event.target.value)}>
+  if (field.resultType === "BOOLEAN") return <select data-result-entry-control="true" value={value} onChange={event => onChange(event.target.value)}>
     <option value="">—</option><option value="true">{tr("True","نعم")}</option><option value="false">{tr("False","لا")}</option>
   </select>;
-  if (field.resultType === "DATE") return <input type="date" value={value} onChange={event => onChange(event.target.value)} />;
-  if (field.resultType === "NUMERIC") return <input inputMode="decimal" value={value} onChange={event => onChange(event.target.value)} placeholder={tr("Value","القيمة")} />;
-  return <input value={value} onChange={event => onChange(event.target.value)} placeholder={field.resultType === "TEXT" ? tr("Text result","نتيجة نصية") : tr("Result","النتيجة")} />;
+  if (field.resultType === "DATE") return <input data-result-entry-control="true" type="date" value={value} onChange={event => onChange(event.target.value)} onKeyDown={onKeyDown} />;
+  if (field.resultType === "NUMERIC") return <input data-result-entry-control="true" inputMode="decimal" value={value} onChange={event => onChange(event.target.value)} onKeyDown={onKeyDown} placeholder={tr("Value","القيمة")} />;
+  return <input data-result-entry-control="true" value={value} onChange={event => onChange(event.target.value)} onKeyDown={onKeyDown} placeholder={field.resultType === "TEXT" ? tr("Text result","نتيجة نصية") : tr("Result","النتيجة")} />;
 }
 
 export function BulkResultEntry({ rows, locale }: { rows: BulkRow[]; locale: "ar" | "en" }) {
@@ -58,6 +60,16 @@ export function BulkResultEntry({ rows, locale }: { rows: BulkRow[]; locale: "ar
     row.fields.some(field => (values[row.orderItemId]?.[field.componentId || "__TEST__"] || "").trim() !== "")
     || (comments[row.orderItemId] || "").trim() !== ""
   ).length;
+
+  function handleEntryKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (!shouldAdvanceResultEntryOnEnter({
+      key: event.key,
+      shiftKey: event.shiftKey,
+      isComposing: event.nativeEvent.isComposing,
+    })) return;
+
+    if (focusNextResultEntryControl(event.currentTarget)) event.preventDefault();
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -136,9 +148,9 @@ export function BulkResultEntry({ rows, locale }: { rows: BulkRow[]; locale: "ar
                 return <label key={key}><span>{field.code}</span>{inputFor(field, values[row.orderItemId]?.[key] || "", value => setValues(current => ({
                   ...current,
                   [row.orderItemId]: { ...(current[row.orderItemId] || {}), [key]: value },
-                })), locale)}</label>;
+                })), locale, handleEntryKeyDown)}</label>;
               })}
-              <label className="bulk-comment"><span>{tr("Comment","تعليق")}</span><input value={comments[row.orderItemId] || ""} onChange={event => setComments(current => ({ ...current, [row.orderItemId]: event.target.value }))} /></label>
+              <label className="bulk-comment"><span>{tr("Comment","تعليق")}</span><input data-result-entry-control="true" value={comments[row.orderItemId] || ""} onChange={event => setComments(current => ({ ...current, [row.orderItemId]: event.target.value }))} onKeyDown={handleEntryKeyDown} /></label>
             </div>
             <div className="bulk-row-state">
               {state.status === "saving" ? tr("Saving…","جارٍ الحفظ…") : state.message || tr("Ready","جاهز")}
@@ -148,7 +160,7 @@ export function BulkResultEntry({ rows, locale }: { rows: BulkRow[]; locale: "ar
       </div>
       <div className="bulk-actions">
         <span>{enteredCount} {tr("row(s) with entered data","صف يحتوي بيانات مدخلة")}</span>
-        <button className="primary-button" disabled={busy || enteredCount === 0}>{busy ? tr("Saving batch…","جارٍ حفظ الدفعة…") : tr("Save Entered Results","حفظ النتائج المدخلة")}</button>
+        <button className="primary-button" data-result-entry-control="true" disabled={busy || enteredCount === 0}>{busy ? tr("Saving batch…","جارٍ حفظ الدفعة…") : tr("Save Entered Results","حفظ النتائج المدخلة")}</button>
       </div>
     </form>}
   </section>;
