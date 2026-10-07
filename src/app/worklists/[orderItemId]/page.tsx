@@ -31,7 +31,7 @@ function rangeDisplay(interval: {
 }
 
 export default async function WorklistResultPage({ params }: { params: Promise<{ orderItemId: string }> }) {
-  const session = await requirePermission("results.enter");
+  const session = await requirePermission("worklists.view");
   const { orderItemId } = await params;
   const permissions = permissionSet(session);
   const locale = getUiLocale(session.user.preferredLocale);
@@ -100,6 +100,12 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
           performingBranch: true,
           enteredBy: true,
           verifiedBy: true,
+          technicalReviewedBy: true,
+          medicallyValidatedBy: true,
+          validationReviews: {
+            include: { reviewer: true },
+            orderBy: { reviewedAt: "asc" },
+          },
           releasedBy: true,
           amendedFrom: true,
           criticalEvents: {
@@ -309,7 +315,9 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
         analyzerLabel={latestResult?.analyzerCodeSnapshot
           ? latestResult.analyzerCodeSnapshot + (latestResult.analyzerNameSnapshot ? " — " + latestResult.analyzerNameSnapshot : "")
           : null}
-        canVerify={permissions.has("results.verify")}
+        validationStage={latestResult?.validationStage || "ENTRY"}
+        canEnter={permissions.has("results.enter")}
+        canTechnicalReview={permissions.has("results.technical_review")}
         commentTemplates={commentTemplates}
         locale={locale}
       />
@@ -365,6 +373,30 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
       <ResultWorkflowActions
         resultId={latestResult.id}
         resultStatus={latestResult.status}
+        validationStage={latestResult.validationStage}
+        validationPolicySnapshot={latestResult.validationPolicySnapshot}
+        technicalReviewer={latestResult.technicalReviewedBy ? {
+          id: latestResult.technicalReviewedBy.id,
+          nameEn: latestResult.technicalReviewedBy.displayNameEn,
+          nameAr: latestResult.technicalReviewedBy.displayNameAr,
+          reviewedAt: latestResult.technicalReviewedAt?.toISOString() || null,
+        } : null}
+        medicalValidator={latestResult.medicallyValidatedBy ? {
+          id: latestResult.medicallyValidatedBy.id,
+          nameEn: latestResult.medicallyValidatedBy.displayNameEn,
+          nameAr: latestResult.medicallyValidatedBy.displayNameAr,
+          reviewedAt: latestResult.medicallyValidatedAt?.toISOString() || null,
+        } : null}
+        validationReviews={latestResult.validationReviews.map(review => ({
+          id: review.id,
+          stage: review.stage,
+          outcome: review.outcome,
+          automated: review.automated,
+          reviewerNameEn: review.reviewer?.displayNameEn || null,
+          reviewerNameAr: review.reviewer?.displayNameAr || null,
+          reviewedAt: review.reviewedAt.toISOString(),
+          notes: review.notes,
+        }))}
         criticalCount={latestResult.values.filter(value => value.isCritical).length}
         criticalEventStatus={latestResult.criticalEvents[0]?.status || null}
         criticalAcknowledgementDueAt={latestResult.criticalEvents[0]?.acknowledgementDueAt?.toISOString() || null}
@@ -384,6 +416,7 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
           communicatedBy: item.communicatedBy.displayNameEn,
         }))}
         canCommunicate={permissions.has("critical.communicate")}
+        canMedicalValidate={permissions.has("results.medical_validate")}
         canRelease={permissions.has("results.release")}
         canAmend={permissions.has("results.amend")}
         locale={locale}
