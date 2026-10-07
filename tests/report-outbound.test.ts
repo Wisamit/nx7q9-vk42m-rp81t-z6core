@@ -10,15 +10,19 @@ import {
 const active = {
   status: "ACTIVE",
   contactVerifiedAt: new Date("2026-10-07T00:00:00Z"),
+  emailVerifiedAt: new Date("2026-10-07T00:00:00Z"),
+  phoneVerifiedAt: new Date("2026-10-07T00:00:00Z"),
   email: "patient@example.com",
   phone: "+971501234567",
   preferredLocale: "en",
 };
 
-test("report outbound requires active verified portal contact", () => {
+test("report outbound requires active channel-specific verified portal contact", () => {
   assert.equal(resolveVerifiedPortalDestination(null, "EMAIL").ok, false);
   assert.equal(resolveVerifiedPortalDestination({ ...active, status: "LOCKED" }, "EMAIL").ok, false);
-  assert.equal(resolveVerifiedPortalDestination({ ...active, contactVerifiedAt: null }, "EMAIL").ok, false);
+  assert.equal(resolveVerifiedPortalDestination({ ...active, emailVerifiedAt: null }, "EMAIL").ok, false);
+  assert.equal(resolveVerifiedPortalDestination({ ...active, phoneVerifiedAt: null }, "SMS").ok, false);
+  assert.equal(resolveVerifiedPortalDestination({ ...active, phoneVerifiedAt: null }, "WHATSAPP").ok, false);
 });
 
 test("email and phone channels resolve from verified portal account", () => {
