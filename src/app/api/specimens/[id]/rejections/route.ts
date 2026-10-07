@@ -365,9 +365,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
             data: { status: "ORDERED" },
           });
 
-          if (scope === "WHOLE_SPECIMEN"
-            && specimen.order.status !== "REGISTERED"
-            && specimen.order.status !== "CANCELLED") {
+          if (specimen.order.status === "COLLECTED") {
             await tx.labOrder.update({
               where: { id: specimen.orderId },
               data: { status: "REGISTERED" },
@@ -375,9 +373,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
             await tx.orderStatusHistory.create({
               data: {
                 orderId: specimen.orderId,
-                fromStatus: specimen.order.status,
+                fromStatus: "COLLECTED",
                 toStatus: "REGISTERED",
-                reason: `Whole specimen recollection required: ${reason.code}`,
+                reason: `${scope === "WHOLE_SPECIMEN" ? "Whole specimen" : "Targeted test"} recollection required: ${reason.code}`,
                 changedByUserId: session.user.id,
               },
             });
