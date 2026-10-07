@@ -12,6 +12,7 @@ import { validationHoldMatches } from "@/lib/validation-holds";
 import { evaluateAutoverification } from "@/lib/autoverification";
 import { resolveAnalyzerQcGate } from "@/lib/qc-gate";
 import { matchQualitativeOption, qualitativeFlag } from "@/lib/qualitative-result-options";
+import { selectValidationPolicy, snapshotValidationPolicy, type ValidationPolicySnapshot } from "@/lib/result-validation";
 
 function emptyDelta() {
   return {
@@ -186,6 +187,9 @@ export async function POST(request: Request) {
   const existing = orderItem.results[0] || null;
   if (existing && ["VERIFIED","RELEASED","AMENDED","CANCELLED"].includes(existing.status)) {
     return NextResponse.json({ error: "result_locked_requires_explicit_workflow", resultId: existing.id, status: existing.status }, { status: 409 });
+  }
+  if (existing && ["MEDICAL_VALIDATION","COMPLETE"].includes(existing.validationStage)) {
+    return NextResponse.json({ error: "result_locked_by_validation_stage", resultId: existing.id, validationStage: existing.validationStage }, { status: 409 });
   }
   if (existing && existing.source !== "ANALYZER") {
     return NextResponse.json({
@@ -534,6 +538,31 @@ export async function POST(request: Request) {
   const finalCodes = new Set(ruleValues.keys());
   const complete = expected.every(item => finalCodes.has(item.code));
   const resultStatus = complete ? "ENTERED" : "DRAFT";
+  const existingValidationSnapshot = existing?.validationPolicySnapshot
+    ? existing.validationPolicySnapshot as unknown as ValidationPolicySnapshot
+    : null;
+  let validationSnapshot = existingValidationSnapshot;
+  if (!validationSnapshot && complete) {
+    const validationPolicies = await prisma.resultValidationPolicy.findMany({
+      where: {
+        organizationId: session.user.organizationId,
+        status: "ACTIVE",
+        effectiveFrom: { lte: now },
+        AND: [
+          { OR: [{ effectiveTo: null }, { effectiveTo: { gte: now } }] },
+          { OR: [{ branchId: null }, { branchId: analyzer.branchId }] },
+        ],
+      },
+    });
+    validationSnapshot = snapshotValidationPolicy(selectValidationPolicy(validationPolicies, {
+      branchId: analyzer.branchId,
+      testId: orderItem.testId,
+      departmentId: orderItem.test.departmentId,
+    }));
+  }
+  const validationPolicyId = existing?.validationPolicyId
+    || (validationSnapshot?.source === "CONFIGURED" ? validationSnapshot.policyId : null);
+  const entryValidationStage = complete ? "TECHNICAL_REVIEW" as const : "ENTRY" as const;
   const autoverificationPolicy =
     orderItem.test.autoverificationPolicies.find(policy => policy.branchId === analyzer.branchId)
     || orderItem.test.autoverificationPolicies.find(policy => policy.branchId === null)
@@ -577,6 +606,13 @@ export async function POST(request: Request) {
             enteredByUserId: session.user.id,
             enteredAt: new Date(),
             autoVerified: false,
+            validationStage: entryValidationStage,
+            validationPolicyId,
+            validationPolicySnapshot: validationSnapshot ? validationSnapshot as unknown as Prisma.InputJsonValue : Prisma.DbNull,
+            technicalReviewedByUserId: null,
+            technicalReviewedAt: null,
+            medicallyValidatedByUserId: null,
+            medicallyValidatedAt: null,
             verifiedByUserId: null,
             verifiedAt: null,
           },
@@ -595,6 +631,9 @@ export async function POST(request: Request) {
             status: resultStatus,
             source: "ANALYZER",
             enteredByUserId: session.user.id,
+            validationStage: entryValidationStage,
+            validationPolicyId,
+            validationPolicySnapshot: validationSnapshot ? validationSnapshot as unknown as Prisma.InputJsonValue : undefined,
           },
         });
 
@@ -861,20 +900,46 @@ export async function POST(request: Request) {
       blockingHoldCount,
       qcGate,
     });
-    const finalResultStatus = decision.eligible ? "VERIFIED" : resultStatus;
+    const requiresMedicalValidation = validationSnapshot?.requiresMedicalValidation === true;
+    const finalResultStatus = decision.eligible && !requiresMedicalValidation ? "VERIFIED" : resultStatus;
+    const finalValidationStage = decision.eligible
+      ? requiresMedicalValidation ? "MEDICAL_VALIDATION" : "COMPLETE"
+      : entryValidationStage;
     const autoverifiedAt = decision.eligible ? new Date() : null;
 
     await tx.laboratoryResult.update({
       where: { id: result.id },
       data: {
         status: finalResultStatus,
+        validationStage: finalValidationStage,
+        validationPolicyId,
+        validationPolicySnapshot: validationSnapshot ? validationSnapshot as unknown as Prisma.InputJsonValue : Prisma.DbNull,
+        technicalReviewedByUserId: null,
+        technicalReviewedAt: autoverifiedAt,
+        medicallyValidatedByUserId: null,
+        medicallyValidatedAt: null,
         autoVerified: decision.eligible,
         autoverificationPolicyId: decision.policyId,
         autoverificationDecisionSnapshot: decision as Prisma.InputJsonValue,
         verifiedByUserId: null,
-        verifiedAt: autoverifiedAt,
+        verifiedAt: decision.eligible && !requiresMedicalValidation ? autoverifiedAt : null,
       },
     });
+
+    if (decision.eligible) {
+      await tx.resultValidationReview.create({
+        data: {
+          resultId: result.id,
+          stage: "TECHNICAL_REVIEW",
+          outcome: "APPROVED",
+          reviewerUserId: null,
+          automated: true,
+          reviewedAt: autoverifiedAt!,
+          notes: "Technical review completed by configured analyzer autoverification policy",
+          policySnapshot: validationSnapshot ? validationSnapshot as unknown as Prisma.InputJsonValue : undefined,
+        },
+      });
+    }
 
     const importedAt = new Date();
     await tx.analyzerResultImport.updateMany({
@@ -886,7 +951,7 @@ export async function POST(request: Request) {
       where: { id: orderItem.id },
       data: {
         performedBranchId: analyzer.branchId,
-        status: decision.eligible ? "VERIFIED" : "IN_PROGRESS",
+        status: finalResultStatus === "VERIFIED" ? "VERIFIED" : "IN_PROGRESS",
       },
     });
 
@@ -904,7 +969,7 @@ export async function POST(request: Request) {
       });
     }
 
-    const remainingOrderItems = decision.eligible
+    const remainingOrderItems = finalResultStatus === "VERIFIED"
       ? await tx.orderItem.count({
           where: {
             orderId: orderItem.orderId,
@@ -913,7 +978,7 @@ export async function POST(request: Request) {
         })
       : null;
 
-    if (decision.eligible && remainingOrderItems === 0) {
+    if (finalResultStatus === "VERIFIED" && remainingOrderItems === 0) {
       const currentOrder = await tx.labOrder.findUnique({ where: { id: orderItem.orderId }, select: { status: true } });
       if (currentOrder && currentOrder.status !== "COMPLETED") {
         await tx.labOrder.update({ where: { id: orderItem.orderId }, data: { status: "COMPLETED" } });
@@ -966,6 +1031,9 @@ export async function POST(request: Request) {
           complete,
           autoverificationEligible: decision.eligible,
           autoverificationReasons: decision.reasons,
+          validationStage: finalValidationStage,
+          validationPolicyId,
+          medicalValidationRequired: requiresMedicalValidation,
           qcGateStatus: qcGate.status,
           qcGateReasons: qcGate.reasons,
           values: incoming.map(item => ({
@@ -991,14 +1059,20 @@ export async function POST(request: Request) {
           entityId: result.id,
           oldValues: { status: resultStatus },
           newValues: {
-            status: "VERIFIED",
-            verifiedAt: autoverifiedAt,
+            status: finalResultStatus,
+            validationStage: finalValidationStage,
+            verifiedAt: decision.eligible && !requiresMedicalValidation ? autoverifiedAt : null,
+            technicalReviewedAt: autoverifiedAt,
+            medicalValidationRequired: requiresMedicalValidation,
             policyId: decision.policyId,
+            validationPolicyId,
             analyzerId: analyzer.id,
             qcGateStatus: qcGate.status,
             qcGateReasons: qcGate.reasons,
           },
-          reason: "Analyzer result met all autoverification rules and QC gate passed",
+          reason: requiresMedicalValidation
+            ? "Analyzer result met autoverification rules and QC gate; medical validation remains required"
+            : "Analyzer result met all autoverification rules and QC gate passed",
           ipAddress: ctx.ipAddress,
           userAgent: ctx.userAgent,
         },
