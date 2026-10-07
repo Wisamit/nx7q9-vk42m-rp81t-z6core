@@ -1,0 +1,67 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import {
+  aliquotPurposeRequiresTests,
+  minorToVolume3,
+  reconciledVolumeError,
+  remainingAfterUse,
+  specimenVolumeUseError,
+  volume3ToMinor,
+  volumeUnitsMatch,
+} from "../src/lib/specimen-volume-policy.ts";
+
+test("specimen volume math is exact to three decimals", () => {
+  assert.equal(volume3ToMinor("1.250"), BigInt(1250));
+  assert.equal(volume3ToMinor("0.001"), BigInt(1));
+  assert.equal(minorToVolume3(BigInt(1250)), "1.250");
+  assert.equal(remainingAfterUse("2.000", "0.333"), "1.667");
+  assert.equal(volume3ToMinor("1e2"), null);
+  assert.equal(volume3ToMinor("1.0001"), null);
+  assert.equal(volume3ToMinor("-1"), null);
+});
+
+test("aliquot and usage volume require usable status, known balance and matching unit", () => {
+  assert.equal(specimenVolumeUseError({
+    status: "RECEIVED", remainingVolume: "2.000", remainingVolumeUnit: "mL",
+    requestedVolume: "0.500", requestedVolumeUnit: "ml",
+  }), null);
+  assert.equal(specimenVolumeUseError({
+    status: "RECEIVED", remainingVolume: null, remainingVolumeUnit: null,
+    requestedVolume: "0.500", requestedVolumeUnit: "mL",
+  }), "available_volume_reconciliation_required");
+  assert.equal(specimenVolumeUseError({
+    status: "IN_TRANSIT", remainingVolume: "2.000", remainingVolumeUnit: "mL",
+    requestedVolume: "0.500", requestedVolumeUnit: "mL",
+  }), "specimen_status_not_usable");
+  assert.equal(specimenVolumeUseError({
+    status: "RECEIVED", remainingVolume: "0.250", remainingVolumeUnit: "mL",
+    requestedVolume: "0.500", requestedVolumeUnit: "mL",
+  }), "insufficient_available_volume");
+  assert.equal(specimenVolumeUseError({
+    status: "RECEIVED", remainingVolume: "2.000", remainingVolumeUnit: "mL",
+    requestedVolume: "0.500", requestedVolumeUnit: "uL",
+  }), "volume_unit_mismatch");
+});
+
+test("historical volume reconciliation never silently exceeds known collected volume", () => {
+  assert.equal(reconciledVolumeError({
+    status: "COLLECTED", originalVolume: "3.000", originalVolumeUnit: "mL",
+    availableVolume: "2.500", availableVolumeUnit: "ml",
+  }), null);
+  assert.equal(reconciledVolumeError({
+    status: "COLLECTED", originalVolume: "3.000", originalVolumeUnit: "mL",
+    availableVolume: "3.001", availableVolumeUnit: "mL",
+  }), "available_volume_exceeds_original");
+  assert.equal(reconciledVolumeError({
+    status: "REJECTED", originalVolume: "3.000", originalVolumeUnit: "mL",
+    availableVolume: "1.000", availableVolumeUnit: "mL",
+  }), "specimen_status_not_reconcilable");
+  assert.equal(volumeUnitsMatch("mL", " ml "), true);
+});
+
+test("testing and send-out aliquots require explicit linked tests", () => {
+  assert.equal(aliquotPurposeRequiresTests("TESTING"), true);
+  assert.equal(aliquotPurposeRequiresTests("SEND_OUT"), true);
+  assert.equal(aliquotPurposeRequiresTests("STORAGE"), false);
+  assert.equal(aliquotPurposeRequiresTests("OTHER"), false);
+});
