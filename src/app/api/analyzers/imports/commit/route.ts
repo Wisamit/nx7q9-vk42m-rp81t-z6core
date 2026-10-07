@@ -10,6 +10,7 @@ import { reflexMatches } from "@/lib/reflex-rules";
 import { validationHoldMatches } from "@/lib/validation-holds";
 import { evaluateAutoverification } from "@/lib/autoverification";
 import { resolveAnalyzerQcGate } from "@/lib/qc-gate";
+import { matchQualitativeOption, qualitativeFlag } from "@/lib/qualitative-result-options";
 
 function emptyDelta() {
   return {
@@ -71,6 +72,7 @@ export async function POST(request: Request) {
   }
 
   const analyzer = imports[0].analyzer;
+  const now = new Date();
   if (!canAccessBranch(session, analyzer.branchId)) {
     return NextResponse.json({ error: "branch_forbidden" }, { status: 403 });
   }
@@ -88,31 +90,50 @@ export async function POST(request: Request) {
           method: true,
           components: {
             where: { status: "ACTIVE" },
-            include: { unit: true },
+            include: {
+              unit: true,
+              qualitativeResultOptions: {
+                where: {
+                  status: "ACTIVE",
+                  effectiveFrom: { lte: now },
+                  OR: [{ effectiveTo: null }, { effectiveTo: { gte: now } }],
+                },
+                orderBy: [{ displayOrder: "asc" }, { createdAt: "asc" }],
+              },
+            },
             orderBy: [{ displayOrder: "asc" }, { code: "asc" }],
+          },
+          qualitativeResultOptions: {
+            where: {
+              componentId: null,
+              status: "ACTIVE",
+              effectiveFrom: { lte: now },
+              OR: [{ effectiveTo: null }, { effectiveTo: { gte: now } }],
+            },
+            orderBy: [{ displayOrder: "asc" }, { createdAt: "asc" }],
           },
           calculatedRules: {
             where: {
               status: "ACTIVE",
-              effectiveFrom: { lte: new Date() },
-              OR: [{ effectiveTo: null }, { effectiveTo: { gte: new Date() } }],
+              effectiveFrom: { lte: now },
+              OR: [{ effectiveTo: null }, { effectiveTo: { gte: now } }],
             },
             include: { targetComponent: true },
           },
           sourceReflexRules: {
             where: {
               status: "ACTIVE",
-              effectiveFrom: { lte: new Date() },
-              OR: [{ effectiveTo: null }, { effectiveTo: { gte: new Date() } }],
+              effectiveFrom: { lte: now },
+              OR: [{ effectiveTo: null }, { effectiveTo: { gte: now } }],
             },
             include: { targetTest: true },
           },
           validationHoldRules: {
             where: {
               status: "ACTIVE",
-              effectiveFrom: { lte: new Date() },
+              effectiveFrom: { lte: now },
               AND: [
-                { OR: [{ effectiveTo: null }, { effectiveTo: { gte: new Date() } }] },
+                { OR: [{ effectiveTo: null }, { effectiveTo: { gte: now } }] },
                 { OR: [{ branchId: null }, { branchId: analyzer.branchId }] },
               ],
             },
@@ -121,9 +142,9 @@ export async function POST(request: Request) {
           autoverificationPolicies: {
             where: {
               status: "ACTIVE",
-              effectiveFrom: { lte: new Date() },
+              effectiveFrom: { lte: now },
               AND: [
-                { OR: [{ effectiveTo: null }, { effectiveTo: { gte: new Date() } }] },
+                { OR: [{ effectiveTo: null }, { effectiveTo: { gte: now } }] },
                 { OR: [{ branchId: null }, { branchId: analyzer.branchId }] },
               ],
             },
@@ -190,6 +211,7 @@ export async function POST(request: Request) {
         unitId: component.unitId,
         unitSnapshot: component.unit?.symbol || null,
         decimalPrecision: component.decimalPrecision,
+        qualitativeOptions: component.qualitativeResultOptions,
       }))
     : [{
         componentId: null,
@@ -200,6 +222,7 @@ export async function POST(request: Request) {
         unitId: orderItem.test.defaultUnitId,
         unitSnapshot: orderItem.test.defaultUnit?.symbol || null,
         decimalPrecision: orderItem.test.decimalPrecision,
+        qualitativeOptions: orderItem.test.qualitativeResultOptions,
       }];
 
   const calculatedTargetIds = new Set(orderItem.test.calculatedRules.map(rule => rule.targetComponentId));
@@ -231,6 +254,11 @@ export async function POST(request: Request) {
     calculationExpression: string | null;
     calculationInputs: Record<string, string> | null;
     analyzerImportId: string | null;
+    flagSource: "NONE" | "REFERENCE_INTERVAL" | "RESULT_OPTION" | "ANALYZER" | "MANUAL";
+    qualitativeOptionId: string | null;
+    qualitativeOptionCode: string | null;
+    valueTextEnSnapshot: string | null;
+    valueTextArSnapshot: string | null;
   };
 
   const incoming: PreparedValue[] = [];
@@ -247,7 +275,28 @@ export async function POST(request: Request) {
         }, { status: 409 });
       }
 
-      const parsed = parseResultValue(definition.resultType, staged.rawValue);
+      const selectedOption = definition.resultType === "QUALITATIVE" && definition.qualitativeOptions.length > 0
+        ? matchQualitativeOption(definition.qualitativeOptions.map(option => ({
+            id: option.id,
+            testId: option.testId,
+            componentId: option.componentId,
+            code: option.code,
+            valueEn: option.valueEn,
+            valueAr: option.valueAr,
+            flag: option.flag as "NORMAL" | "ABNORMAL" | "POSITIVE" | "NEGATIVE" | "UNKNOWN",
+            isCritical: option.isCritical,
+          })), staged.rawValue)
+        : null;
+
+      if (definition.resultType === "QUALITATIVE" && definition.qualitativeOptions.length > 0 && !selectedOption) {
+        return NextResponse.json({
+          error: "analyzer_qualitative_option_not_mapped",
+          importId: staged.id,
+          analyzerTestCode: staged.analyzerTestCode,
+        }, { status: 409 });
+      }
+
+      const parsed = parseResultValue(definition.resultType, selectedOption ? selectedOption.valueEn : staged.rawValue);
       if (!parsed) {
         return NextResponse.json({ error: "empty_analyzer_result_value", importId: staged.id }, { status: 400 });
       }
@@ -262,9 +311,16 @@ export async function POST(request: Request) {
           })
         : null;
 
-      const flag = parsed.valueNumeric !== null
-        ? numericFlag(parsed.valueNumeric, interval)
-        : { flag: "UNKNOWN" as const, isCritical: false };
+      const flag = selectedOption
+        ? qualitativeFlag(selectedOption)
+        : parsed.valueNumeric !== null
+          ? numericFlag(parsed.valueNumeric, interval)
+          : { flag: "UNKNOWN" as const, isCritical: false };
+      const flagSource = selectedOption
+        ? "RESULT_OPTION" as const
+        : parsed.valueNumeric !== null && interval
+          ? "REFERENCE_INTERVAL" as const
+          : "NONE" as const;
 
       const delta = parsed.valueNumeric !== null
         ? await evaluateDelta(prisma, {
@@ -289,6 +345,11 @@ export async function POST(request: Request) {
         calculationExpression: null,
         calculationInputs: null,
         analyzerImportId: staged.id,
+        flagSource,
+        qualitativeOptionId: selectedOption?.id || null,
+        qualitativeOptionCode: selectedOption?.code || null,
+        valueTextEnSnapshot: selectedOption?.valueEn || null,
+        valueTextArSnapshot: selectedOption?.valueAr || null,
       });
     }
   } catch (error) {
@@ -306,7 +367,7 @@ export async function POST(request: Request) {
     valueNumeric: Prisma.Decimal | null;
     valueText: string | null;
     displayValue: string;
-    flag: "NORMAL" | "LOW" | "HIGH" | "CRITICAL_LOW" | "CRITICAL_HIGH" | "ABNORMAL" | "UNKNOWN";
+    flag: "NORMAL" | "LOW" | "HIGH" | "CRITICAL_LOW" | "CRITICAL_HIGH" | "ABNORMAL" | "POSITIVE" | "NEGATIVE" | "UNKNOWN";
     isCritical: boolean;
     deltaEvaluation: "NOT_CONFIGURED" | "NO_PREVIOUS_RESULT" | "WITHIN_LIMIT" | "EXCEEDED";
   }>();
@@ -393,6 +454,11 @@ export async function POST(request: Request) {
         calculationExpression: rule.expression,
         calculationInputs,
         analyzerImportId: null,
+        flagSource: interval ? "REFERENCE_INTERVAL" : "NONE",
+        qualitativeOptionId: null,
+        qualitativeOptionCode: null,
+        valueTextEnSnapshot: null,
+        valueTextArSnapshot: null,
       });
       numericInputs[target.code.toUpperCase()] = value;
     }
@@ -413,7 +479,7 @@ export async function POST(request: Request) {
     numericValue: Prisma.Decimal | null;
     textValue: string | null;
     displayValue: string;
-    flag: "NORMAL" | "LOW" | "HIGH" | "CRITICAL_LOW" | "CRITICAL_HIGH" | "ABNORMAL" | "UNKNOWN";
+    flag: "NORMAL" | "LOW" | "HIGH" | "CRITICAL_LOW" | "CRITICAL_HIGH" | "ABNORMAL" | "POSITIVE" | "NEGATIVE" | "UNKNOWN";
     isCritical: boolean;
     deltaEvaluation: "NOT_CONFIGURED" | "NO_PREVIOUS_RESULT" | "WITHIN_LIMIT" | "EXCEEDED";
   }>();
@@ -542,7 +608,12 @@ export async function POST(request: Request) {
           criticalLowSnapshot: item.interval?.criticalLow || null,
           criticalHighSnapshot: item.interval?.criticalHigh || null,
           flag: item.flag.flag,
+          flagSource: item.flagSource,
           isCritical: item.flag.isCritical,
+          qualitativeOptionId: item.qualitativeOptionId,
+          qualitativeOptionCodeSnapshot: item.qualitativeOptionCode,
+          valueTextEnSnapshot: item.valueTextEnSnapshot,
+          valueTextArSnapshot: item.valueTextArSnapshot,
           deltaEvaluation: item.delta.evaluation,
           previousValueSnapshot: item.delta.previousValue,
           previousResultAtSnapshot: item.delta.previousResultAt,
@@ -578,7 +649,12 @@ export async function POST(request: Request) {
           criticalLowSnapshot: item.interval?.criticalLow || null,
           criticalHighSnapshot: item.interval?.criticalHigh || null,
           flag: item.flag.flag,
+          flagSource: item.flagSource,
           isCritical: item.flag.isCritical,
+          qualitativeOptionId: item.qualitativeOptionId,
+          qualitativeOptionCodeSnapshot: item.qualitativeOptionCode,
+          valueTextEnSnapshot: item.valueTextEnSnapshot,
+          valueTextArSnapshot: item.valueTextArSnapshot,
           deltaEvaluation: item.delta.evaluation,
           previousValueSnapshot: item.delta.previousValue,
           previousResultAtSnapshot: item.delta.previousResultAt,
@@ -615,7 +691,12 @@ export async function POST(request: Request) {
           criticalLowSnapshot: item.interval?.criticalLow || null,
           criticalHighSnapshot: item.interval?.criticalHigh || null,
           flag: item.flag.flag,
+          flagSource: item.flagSource,
           isCritical: item.flag.isCritical,
+          qualitativeOptionId: item.qualitativeOptionId,
+          qualitativeOptionCodeSnapshot: item.qualitativeOptionCode,
+          valueTextEnSnapshot: item.valueTextEnSnapshot,
+          valueTextArSnapshot: item.valueTextArSnapshot,
           deltaEvaluation: item.delta.evaluation,
           previousValueSnapshot: item.delta.previousValue,
           previousResultAtSnapshot: item.delta.previousResultAt,
