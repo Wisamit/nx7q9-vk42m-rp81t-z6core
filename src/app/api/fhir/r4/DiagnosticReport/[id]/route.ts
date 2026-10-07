@@ -18,6 +18,7 @@ type Snapshot = {
       displayValue: string;
       unit: string | null;
       flag: string;
+      comments: string | null;
       referenceLow: string | null;
       referenceHigh: string | null;
       referenceTextEn: string | null;
@@ -53,6 +54,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
           basedOn: [{ reference: `ServiceRequest/${result.orderItemId}` }],
           effectiveDateTime: result.releasedAt || version.issuedAt.toISOString(),
           valueString: value.displayValue,
+          note: value.comments ? [{ text: value.comments }] : undefined,
           interpretation: value.flag === "NORMAL" || value.flag === "UNKNOWN" ? undefined : [{ text: value.flag }],
           referenceRange: value.referenceLow || value.referenceHigh || value.referenceTextEn ? [{
             low: value.referenceLow ? { value: Number(value.referenceLow), unit: value.unit || undefined } : undefined,
