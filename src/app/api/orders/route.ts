@@ -6,6 +6,7 @@ import { prisma } from "@/lib/db";
 import { resolvePackagePrice, resolveTestPrice } from "@/lib/pricing";
 import { discountApprovalMode, effectiveDiscountLimit } from "@/lib/discount-policy";
 import { discountApprovalFingerprint } from "@/lib/discount-approval";
+import { invoiceDueDateSnapshot } from "@/lib/accounts-receivable-aging";
 
 function text(value: unknown, max = 500) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -117,7 +118,7 @@ export async function POST(request: Request) {
   const packageTestIds = [...packageTestOwner.keys()];
   const allTestIds = [...directTestIds, ...packageTestIds];
 
-  const [patient, tests, source, referrer, client] = await Promise.all([
+  const [patient, tests, source, referrer, client, orderingBranch] = await Promise.all([
     prisma.patient.findFirst({ where: { id: patientId, organizationId: session.user.organizationId, status: "ACTIVE" }, select: { id: true, patientNumber: true, fullNameEn: true } }),
     prisma.labTest.findMany({
       where: { id: { in: allTestIds }, organizationId: session.user.organizationId, status: "ACTIVE" },
@@ -131,7 +132,8 @@ export async function POST(request: Request) {
     }),
     prisma.orderSource.findFirst({ where: { id: sourceId, organizationId: session.user.organizationId, status: "ACTIVE" }, select: { id: true, code: true, category: true } }),
     referrerId ? prisma.referrer.findFirst({ where: { id: referrerId, organizationId: session.user.organizationId, status: "ACTIVE" }, select: { id: true, clientId: true } }) : null,
-    clientId ? prisma.client.findFirst({ where: { id: clientId, organizationId: session.user.organizationId, status: "ACTIVE" }, select: { id: true } }) : null,
+    clientId ? prisma.client.findFirst({ where: { id: clientId, organizationId: session.user.organizationId, status: "ACTIVE" }, select: { id: true, paymentTermsDays: true } }) : null,
+    prisma.branch.findFirst({ where: { id: branchId, organizationId: session.user.organizationId, status: "ACTIVE" }, select: { id: true, timezone: true } }),
   ]);
 
   if (!patient) return NextResponse.json({ error: "patient_not_found" }, { status: 404 });
@@ -139,6 +141,7 @@ export async function POST(request: Request) {
   if (!source) return NextResponse.json({ error: "source_not_found" }, { status: 404 });
   if (referrerId && !referrer) return NextResponse.json({ error: "referrer_not_found" }, { status: 404 });
   if (clientId && !client) return NextResponse.json({ error: "client_not_found" }, { status: 404 });
+  if (!orderingBranch) return NextResponse.json({ error: "branch_not_found" }, { status: 404 });
 
   const answerInput: unknown[] = Array.isArray(body.answers) ? body.answers : [];
   const rawAnswers = answerInput.filter((entry): entry is { questionId: string; value: unknown } =>
@@ -219,6 +222,26 @@ export async function POST(request: Request) {
   }
 
   const effectiveClientId = clientId || referrer?.clientId || null;
+  const effectiveClient = effectiveClientId
+    ? (client?.id === effectiveClientId
+      ? client
+      : await prisma.client.findFirst({
+          where: { id: effectiveClientId, organizationId: session.user.organizationId, status: "ACTIVE" },
+          select: { id: true, paymentTermsDays: true },
+        }))
+    : null;
+  if (effectiveClientId && !effectiveClient) {
+    return NextResponse.json({ error: "client_not_found" }, { status: 404 });
+  }
+  const invoiceIssuedAt = new Date();
+  const paymentTermsDaysSnapshot = effectiveClient ? effectiveClient.paymentTermsDays ?? 0 : null;
+  const invoiceDueDate = effectiveClient
+    ? invoiceDueDateSnapshot(invoiceIssuedAt, orderingBranch.timezone, paymentTermsDaysSnapshot ?? 0)
+    : null;
+  if (effectiveClient && !invoiceDueDate) {
+    return NextResponse.json({ error: "invalid_invoice_due_date" }, { status: 409 });
+  }
+
   const directTestIdSet = new Set(directTestIds);
   const directTests = tests.filter(test => directTestIdSet.has(test.id));
 
@@ -708,6 +731,10 @@ export async function POST(request: Request) {
           total: finalTotal,
           paidAmount: new Prisma.Decimal(0),
           balanceAmount: finalTotal,
+          paymentTermsDaysSnapshot,
+          dueDate: invoiceDueDate,
+          dueDateBasis: effectiveClient ? "ISSUANCE_SNAPSHOT" : null,
+          issuedAt: invoiceIssuedAt,
           createdByUserId: session.user.id,
         },
       });
@@ -808,6 +835,9 @@ export async function POST(request: Request) {
             discountApprovalMethod,
             discountApprovedByUserId,
             total: finalTotal.toString(),
+            paymentTermsDaysSnapshot,
+            dueDate: invoiceDueDate?.toISOString().slice(0, 10) || null,
+            dueDateBasis: effectiveClient ? "ISSUANCE_SNAPSHOT" : null,
           },
           ipAddress: ctx.ipAddress,
           userAgent: ctx.userAgent,
