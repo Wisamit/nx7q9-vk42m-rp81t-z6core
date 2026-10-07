@@ -69,6 +69,8 @@ export default async function SpecimenScanPage({
           include: {
             orderItem: { select: { testCodeSnapshot: true } },
             childSpecimen: { select: { barcode: true } },
+            usedBy: { select: { displayNameEn: true, displayNameAr: true } },
+            branch: { select: { code: true } },
           },
           orderBy: { usedAt: "desc" },
           take: 50,
@@ -197,6 +199,8 @@ export default async function SpecimenScanPage({
           notes: item.notes,
           orderItemCode: item.orderItem?.testCodeSnapshot || null,
           childBarcode: item.childSpecimen?.barcode || null,
+          usedByName: locale === "ar" ? item.usedBy.displayNameAr || item.usedBy.displayNameEn : item.usedBy.displayNameEn,
+          branchCode: item.branch.code,
         }))}
         canManage={canAliquot}
         canPrintLabels={canCollect}
