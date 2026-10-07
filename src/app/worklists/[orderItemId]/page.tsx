@@ -64,6 +64,7 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
         },
       },
       specimenLinks: {
+        where: { status: "ACTIVE" },
         include: { specimen: { include: { currentBranch: true, specimenType: true, container: true } } },
         orderBy: { createdAt: "desc" },
       },
