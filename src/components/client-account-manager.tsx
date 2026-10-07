@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { CrudModal } from "@/components/crud-modal";
 import { statusLabel } from "@/lib/ui-i18n";
@@ -222,7 +223,7 @@ export function ClientAccountManager({
       <div className="table-wrap"><table>
         <thead><tr><th>{tr("Statement", "الكشف")}</th><th>{tr("Client", "العميل")}</th><th>{tr("Scope", "النطاق")}</th><th>{tr("Period", "الفترة")}</th><th>{tr("Opening", "الافتتاحي")}</th><th>{tr("Charges", "الرسوم")}</th><th>{tr("Credits", "الدائن")}</th><th>{tr("Payments", "المدفوعات")}</th><th>{tr("Refunds", "الاستردادات")}</th><th>{tr("Closing", "الختامي")}</th><th>{tr("Status", "الحالة")}</th></tr></thead>
         <tbody>{statements.length === 0 ? <tr><td colSpan={11} className="empty-state">{tr("No statements issued yet.", "لا توجد كشوف حساب صادرة بعد.")}</td></tr> : statements.map(statement => <tr key={statement.id}>
-          <td><a href={"/billing/accounts/statements/" + statement.id}><strong>{statement.statementNumber}</strong></a><small className="table-subtext">{statement.generatedAt.slice(0,16).replace("T"," ")}</small></td>
+          <td><Link href={"/billing/accounts/statements/" + statement.id}><strong>{statement.statementNumber}</strong></Link><small className="table-subtext">{statement.generatedAt.slice(0,16).replace("T"," ")}</small></td>
           <td>{statement.clientCode} — {statement.clientName}</td><td>{statement.branchLabel}</td><td>{statement.periodStart} → {statement.periodEnd}</td>
           <td>{statement.openingBalance} {statement.currency}</td><td>{statement.invoiceCharges} {statement.currency}</td><td>{statement.creditNotes} {statement.currency}</td><td>{statement.payments} {statement.currency}</td><td>{statement.refunds} {statement.currency}</td><td><strong>{statement.closingBalance} {statement.currency}</strong></td>
           <td><span className={"status-badge status-" + statement.status.toLowerCase()}>{statusLabel(locale, statement.status)}</span></td>
