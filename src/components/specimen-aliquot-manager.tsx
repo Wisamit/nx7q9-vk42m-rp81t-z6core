@@ -24,6 +24,8 @@ type UsageRow = {
   notes: string | null;
   orderItemCode: string | null;
   childBarcode: string | null;
+  usedByName: string;
+  branchCode: string;
 };
 
 export function SpecimenAliquotManager({
@@ -292,7 +294,7 @@ export function SpecimenAliquotManager({
       <summary>{tr("Volume Usage History", "سجل استخدام الحجم")} ({usageEvents.length})</summary>
       <div className="summary-list">
         {usageEvents.map(item => <div key={item.id}>
-          <span>{item.usedAt.replace("T", " ").slice(0, 19)} · {item.volumeUsed} {item.volumeUnit}</span>
+          <span>{item.usedAt.replace("T", " ").slice(0, 19)} · {item.branchCode} · {item.usedByName} · {item.volumeUsed} {item.volumeUnit}</span>
           <strong>{usageLabel(item.usageType)}{item.orderItemCode ? ` · ${item.orderItemCode}` : ""}{item.childBarcode ? ` · → ${item.childBarcode}` : ""}</strong>
           {item.notes && <small>{item.notes}</small>}
         </div>)}
