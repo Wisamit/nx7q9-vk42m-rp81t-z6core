@@ -2,6 +2,7 @@ import Link from "next/link";
 import { permissionSet, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { SpecimenActions } from "@/components/specimen-actions";
+import { SpecimenAliquotManager } from "@/components/specimen-aliquot-manager";
 import { SystemIcon } from "@/components/system-icon";
 import { getUiLocale, statusLabel, tr } from "@/lib/ui-i18n";
 import { specimenRequirementSnapshotFromDetails } from "@/lib/specimen-requirement-engine";
@@ -19,12 +20,13 @@ export default async function SpecimensPage({
   const canCollect = permissions.has("specimens.collect");
   const canReceive = permissions.has("specimens.receive");
   const canReject = permissions.has("specimens.reject");
+  const canAliquot = permissions.has("specimens.aliquot");
   const params = await searchParams;
   const q = params.q?.trim() || "";
   const status = params.status?.trim() || "";
   const branchIds = session.user.branchScopes.map(scope => scope.branchId);
 
-  const [specimens, branches] = await Promise.all([
+  const [specimens, branches, containers] = await Promise.all([
     prisma.specimen.findMany({
       where: {
         organizationId: session.user.organizationId,
@@ -57,6 +59,28 @@ export default async function SpecimensPage({
         receivedBy: true,
         rejectedBy: true,
         orderItems: { include: { orderItem: true } },
+        parentSpecimen: { select: { id: true, barcode: true } },
+        childSpecimens: {
+          select: {
+            id: true,
+            barcode: true,
+            status: true,
+            volume: true,
+            volumeUnit: true,
+            remainingVolume: true,
+            remainingVolumeUnit: true,
+            storageLocation: true,
+          },
+          orderBy: { createdAt: "desc" },
+        },
+        sourceUsageEvents: {
+          include: {
+            orderItem: { select: { testCodeSnapshot: true } },
+            childSpecimen: { select: { barcode: true } },
+          },
+          orderBy: { usedAt: "desc" },
+          take: 50,
+        },
         events: { orderBy: { occurredAt: "asc" }, include: { actor: true, branch: true } },
       },
       orderBy: [{ status: "asc" }, { createdAt: "desc" }],
@@ -66,6 +90,11 @@ export default async function SpecimensPage({
       where: { id: { in: branchIds }, organizationId: session.user.organizationId, status: "ACTIVE" },
       select: { id: true, code: true, nameEn: true, nameAr: true },
       orderBy: { nameEn: "asc" },
+    }),
+    prisma.container.findMany({
+      where: { organizationId: session.user.organizationId, status: "ACTIVE" },
+      select: { id: true, code: true, nameEn: true, nameAr: true },
+      orderBy: { code: "asc" },
     }),
   ]);
 
@@ -80,6 +109,9 @@ export default async function SpecimensPage({
     RELOCATED: tr(locale, "Relocated", "تم تغيير الموقع"),
     TRANSFERRED: tr(locale, "Transferred", "تم النقل"),
     PROCESSING_STARTED: tr(locale, "Processing started", "بدأت المعالجة"),
+    ALIQUOT_CREATED: tr(locale, "Aliquot created", "تم إنشاء جزء مشتق"),
+    VOLUME_RECONCILED: tr(locale, "Volume reconciled", "تمت تسوية الحجم"),
+    USED: tr(locale, "Specimen used", "تم استخدام العينة"),
     DISPOSED: tr(locale, "Disposed", "تم التخلص"),
   }[value] || value);
 
@@ -156,12 +188,15 @@ export default async function SpecimensPage({
               <div><span>{tr(locale, "Order branch", "فرع الطلب")}</span><strong>{localizedName(specimen.order.orderingBranch)}</strong></div>
               <div><span>{tr(locale, "Current branch", "الفرع الحالي")}</span><strong>{specimen.currentBranch ? localizedName(specimen.currentBranch) : "—"}</strong></div>
               <div><span>{tr(locale, "Linked tests", "الفحوصات المرتبطة")}</span><strong>{specimen.orderItems.map(link => link.orderItem.testCodeSnapshot).join(", ") || "—"}</strong></div>
-              <div><span>{tr(locale, "Required volume", "الحجم المطلوب")}</span><strong>{requirement?.requiredVolume ? `${requirement.requiredVolume} ${requirement.requiredVolumeUnit || ""}` : requirement ? tr(locale, "Not specified", "غير محدد") : tr(locale, "Not finalized", "غير مثبت")}</strong></div>
+              <div><span>{tr(locale, "Required volume", "الحجم المطلوب")}</span><strong>{specimen.parentSpecimenId ? tr(locale, "Derived aliquot", "جزء مشتق") : requirement?.requiredVolume ? `${requirement.requiredVolume} ${requirement.requiredVolumeUnit || ""}` : requirement ? tr(locale, "Not specified", "غير محدد") : tr(locale, "Not finalized", "غير مثبت")}</strong></div>
               <div><span>{tr(locale, "Storage", "التخزين")}</span><strong>{requirement?.storageConditions || "—"}</strong></div>
               <div><span>{tr(locale, "Stability", "الثبات")}</span><strong>{requirement?.stabilityMinutes == null ? "—" : `${requirement.stabilityMinutes} ${tr(locale, "min", "دقيقة")}`}</strong></div>
               <div><span>{tr(locale, "Collected", "تم الجمع")}</span><strong>{specimen.collectedAt ? specimen.collectedAt.toISOString().replace("T"," ").slice(0,19) : "—"}</strong></div>
               <div><span>{tr(locale, "Received", "تم الاستلام")}</span><strong>{specimen.receivedAt ? specimen.receivedAt.toISOString().replace("T"," ").slice(0,19) : "—"}</strong></div>
-              <div><span>{tr(locale, "Collected volume", "الحجم المجموعة")}</span><strong>{specimen.volume ? `${specimen.volume.toString()} ${specimen.volumeUnit || ""}` : "—"}</strong></div>
+              <div><span>{tr(locale, specimen.parentSpecimenId ? "Initial aliquot volume" : "Collected volume", specimen.parentSpecimenId ? "الحجم الابتدائي للجزء" : "الحجم المجموعة")}</span><strong>{specimen.volume ? `${specimen.volume.toFixed(3)} ${specimen.volumeUnit || ""}` : "—"}</strong></div>
+              <div><span>{tr(locale, "Available volume", "الحجم المتاح")}</span><strong>{specimen.remainingVolume ? `${specimen.remainingVolume.toFixed(3)} ${specimen.remainingVolumeUnit || ""}` : "—"}</strong></div>
+              <div><span>{tr(locale, "Lineage", "التسلسل")}</span><strong>{specimen.parentSpecimen ? `${tr(locale, "Aliquot of", "جزء مشتق من")} ${specimen.parentSpecimen.barcode}` : tr(locale, "Primary specimen", "عينة أصلية")}</strong></div>
+              <div><span>{tr(locale, "Physical storage", "التخزين الفعلي")}</span><strong>{specimen.storageLocation || "—"}</strong></div>
               <div><span>{tr(locale, "Sharing", "المشاركة")}</span><strong>{requirement ? requirement.shared ? tr(locale, "Shared tube", "أنبوب مشترك") : tr(locale, "Dedicated", "مخصص") : "—"}</strong></div>
             </div>
 
@@ -191,6 +226,51 @@ export default async function SpecimensPage({
               canCollect={canCollect}
               canReceive={canReceive}
               canReject={canReject}
+            />
+
+            <SpecimenAliquotManager
+              specimenId={specimen.id}
+              status={specimen.status}
+              originalVolume={specimen.volume?.toFixed(3) || null}
+              originalVolumeUnit={specimen.volumeUnit}
+              remainingVolume={specimen.remainingVolume?.toFixed(3) || null}
+              remainingVolumeUnit={specimen.remainingVolumeUnit}
+              storageLocation={specimen.storageLocation}
+              containers={containers.map(item => ({
+                id: item.id,
+                code: item.code,
+                name: localizedName(item),
+              }))}
+              orderItems={specimen.orderItems
+                .filter(link => link.orderItem.status !== "CANCELLED")
+                .map(link => ({
+                  id: link.orderItemId,
+                  code: link.orderItem.testCodeSnapshot,
+                  name: locale === "ar"
+                    ? link.orderItem.testNameArSnapshot || link.orderItem.testNameEnSnapshot
+                    : link.orderItem.testNameEnSnapshot,
+                }))}
+              childAliquots={specimen.childSpecimens.map(child => ({
+                id: child.id,
+                barcode: child.barcode,
+                status: statusLabel(locale, child.status),
+                volume: child.volume?.toFixed(3) || null,
+                remainingVolume: child.remainingVolume?.toFixed(3) || null,
+                volumeUnit: child.remainingVolumeUnit || child.volumeUnit,
+                storageLocation: child.storageLocation,
+              }))}
+              usageEvents={specimen.sourceUsageEvents.map(item => ({
+                id: item.id,
+                usageType: item.usageType,
+                volumeUsed: item.volumeUsed.toFixed(3),
+                volumeUnit: item.volumeUnit,
+                usedAt: item.usedAt.toISOString(),
+                notes: item.notes,
+                orderItemCode: item.orderItem?.testCodeSnapshot || null,
+                childBarcode: item.childSpecimen?.barcode || null,
+              }))}
+              canManage={canAliquot}
+              locale={locale}
             />
 
             <details className="specimen-history">
