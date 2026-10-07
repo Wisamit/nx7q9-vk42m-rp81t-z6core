@@ -6,6 +6,7 @@ export type QualitativeOptionLike = {
   valueEn: string;
   valueAr: string | null;
   flag: "NORMAL" | "ABNORMAL" | "POSITIVE" | "NEGATIVE" | "UNKNOWN";
+  isAbnormal: boolean;
   isCritical: boolean;
 };
 
@@ -38,10 +39,11 @@ export function matchQualitativeOption(
 }
 
 export function qualitativeFlag(
-  option: Pick<QualitativeOptionLike, "flag" | "isCritical">,
+  option: Pick<QualitativeOptionLike, "flag" | "isAbnormal" | "isCritical">,
 ) {
   return {
     flag: option.flag,
+    isAbnormal: option.isAbnormal,
     isCritical: option.isCritical,
   };
 }
