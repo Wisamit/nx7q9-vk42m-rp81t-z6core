@@ -78,14 +78,10 @@ test("verification is tied to the exact current destination", () => {
   }, "WHATSAPP").ok, false);
 });
 
-test("legacy generic verification is accepted only for a single configured contact", () => {
+test("generic legacy verification alone never verifies an exact outbound destination", () => {
   assert.equal(resolveVerifiedPortalDestination({
     ...active,
     phone: null,
-    contactVerifications: [],
-  }, "EMAIL").ok, true);
-  assert.equal(resolveVerifiedPortalDestination({
-    ...active,
     contactVerifications: [],
   }, "EMAIL").ok, false);
 });
