@@ -117,6 +117,29 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     return NextResponse.json({ error: "discount_authority_forbidden" }, { status: 403 });
   }
 
+  const cashierSensitiveCodes = new Set(["billing.cashier.approve", "billing.cashier.authority.manage"]);
+  const currentCashierPermissions = new Set(
+    target.roles
+      .filter(assignment => assignment.role.status === "ACTIVE")
+      .flatMap(assignment => assignment.role.permissions.map(grant => grant.permission.code))
+      .filter(code => cashierSensitiveCodes.has(code)),
+  );
+  const desiredCashierPermissions = new Set(
+    roles
+      .flatMap(role => role.permissions.map(grant => grant.permission.code))
+      .filter(code => cashierSensitiveCodes.has(code)),
+  );
+  const cashierPermissionExpanded = [...desiredCashierPermissions].some(code => !currentCashierPermissions.has(code));
+  const hasDesiredCashierAuthority = desiredCashierPermissions.size > 0;
+  const cashierBranchAuthorityExpanded = branchIds.some(branchId => !currentBranchIds.has(branchId)) && hasDesiredCashierAuthority;
+  const cashierAuthorityIncreased =
+    cashierPermissionExpanded
+    || cashierBranchAuthorityExpanded
+    || (target.status !== "ACTIVE" && status === "ACTIVE" && hasDesiredCashierAuthority);
+  if (cashierAuthorityIncreased && !permissions.has("billing.cashier.authority.manage")) {
+    return NextResponse.json({ error: "cashier_authority_forbidden" }, { status: 403 });
+  }
+
   const hadSystemAdmin = target.roles.some(x => x.role.code === "SYSTEM_ADMIN" && x.role.status === "ACTIVE");
   const keepsSystemAdmin = roles.some(x => x.code === "SYSTEM_ADMIN") && status === "ACTIVE";
   if (hadSystemAdmin && !keepsSystemAdmin) {
