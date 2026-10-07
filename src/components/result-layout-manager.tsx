@@ -10,6 +10,9 @@ type ResultSection = {
   nameEn: string;
   nameAr: string | null;
   displayOrder: number;
+  columnCount: number;
+  hintEn: string | null;
+  hintAr: string | null;
   status: "ACTIVE" | "INACTIVE";
 };
 type ComponentOption = {
@@ -18,6 +21,9 @@ type ComponentOption = {
   nameEn: string;
   nameAr: string | null;
   resultSectionId: string | null;
+  entryWidth: "AUTO" | "NARROW" | "STANDARD" | "WIDE" | "FULL";
+  entryHintEn: string | null;
+  entryHintAr: string | null;
 };
 
 export function ResultLayoutManager({
@@ -37,6 +43,15 @@ export function ResultLayoutManager({
   const [selectedLayout, setSelectedLayout] = useState<ResultEntryLayout>(layout);
   const [componentId, setComponentId] = useState(components[0]?.id || "");
   const [sectionId, setSectionId] = useState(components[0]?.resultSectionId || "");
+  const [presentationSectionId, setPresentationSectionId] = useState(sections.find(section => section.status === "ACTIVE")?.id || sections[0]?.id || "");
+  const initialPresentationSection = sections.find(section => section.id === (sections.find(item => item.status === "ACTIVE")?.id || sections[0]?.id));
+  const [sectionColumnCount, setSectionColumnCount] = useState(initialPresentationSection?.columnCount || 3);
+  const [sectionHintEn, setSectionHintEn] = useState(initialPresentationSection?.hintEn || "");
+  const [sectionHintAr, setSectionHintAr] = useState(initialPresentationSection?.hintAr || "");
+  const [presentationComponentId, setPresentationComponentId] = useState(components[0]?.id || "");
+  const [entryWidth, setEntryWidth] = useState<ComponentOption["entryWidth"]>(components[0]?.entryWidth || "AUTO");
+  const [entryHintEn, setEntryHintEn] = useState(components[0]?.entryHintEn || "");
+  const [entryHintAr, setEntryHintAr] = useState(components[0]?.entryHintAr || "");
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
   const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
@@ -95,6 +110,32 @@ export function ResultLayoutManager({
     }
   }
 
+  async function updateSectionPresentation(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!presentationSectionId) return;
+    if (await post("UPDATE_SECTION_PRESENTATION", {
+      sectionId: presentationSectionId,
+      columnCount: sectionColumnCount,
+      hintEn: sectionHintEn,
+      hintAr: sectionHintAr,
+    })) {
+      setMessage(tr("Section presentation updated.", "تم تحديث عرض القسم."));
+    }
+  }
+
+  async function updateComponentPresentation(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!presentationComponentId) return;
+    if (await post("UPDATE_COMPONENT_PRESENTATION", {
+      componentId: presentationComponentId,
+      entryWidth,
+      entryHintEn,
+      entryHintAr,
+    })) {
+      setMessage(tr("Component presentation updated.", "تم تحديث عرض المكوّن."));
+    }
+  }
+
   async function setSectionStatus(id: string, status: "ACTIVE" | "INACTIVE") {
     if (status === "INACTIVE" && !confirm(tr(
       "Deactivate this section? Components remain linked and will appear as ungrouped until the section is reactivated or reassigned.",
@@ -137,10 +178,65 @@ export function ResultLayoutManager({
           <label>{tr("English name", "الاسم بالإنجليزية")}<input name="nameEn" required /></label>
           <label>{tr("Arabic name", "الاسم بالعربية")}<input name="nameAr" dir="rtl" /></label>
           <label>{tr("Display order", "ترتيب العرض")}<input name="displayOrder" type="number" min="0" max="10000" defaultValue="0" /></label>
-          <button className="primary-button" disabled={busy !== ""}>{busy === "CREATE_SECTION" ? tr("Saving…", "جارٍ الحفظ…") : tr("Create Section", "إنشاء القسم")}</button>
+          <label>{tr("Grid columns", "أعمدة الشبكة")}<select name="columnCount" defaultValue="3">
+            <option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option>
+          </select></label>
+          <label className="form-span">{tr("Section hint (English)", "تعليمات القسم بالإنجليزية")}<input name="hintEn" maxLength={500} /></label>
+          <label className="form-span">{tr("Section hint (Arabic)", "تعليمات القسم بالعربية")}<input name="hintAr" dir="rtl" maxLength={500} /></label>
+          <button className="primary-button form-span" disabled={busy !== ""}>{busy === "CREATE_SECTION" ? tr("Saving…", "جارٍ الحفظ…") : tr("Create Section", "إنشاء القسم")}</button>
         </form>
       </article>
     </div>
+
+    {sections.length > 0 && <article className="detail-card">
+      <h3>{tr("Section Presentation", "عرض القسم")}</h3>
+      <p className="muted">{tr("Choose the compact-grid density and optional instructions for each configured section.", "حدد كثافة الشبكة المدمجة وتعليمات اختيارية لكل قسم مهيأ.")}</p>
+      <form className="catalog-form" onSubmit={updateSectionPresentation}>
+        <label>{tr("Section", "القسم")}<select value={presentationSectionId} onChange={event => {
+          const id = event.target.value;
+          setPresentationSectionId(id);
+          const selected = sections.find(section => section.id === id);
+          setSectionColumnCount(selected?.columnCount || 3);
+          setSectionHintEn(selected?.hintEn || "");
+          setSectionHintAr(selected?.hintAr || "");
+        }}>
+          {sections.map(section => <option key={section.id} value={section.id}>{section.code} — {localizedName(section)}</option>)}
+        </select></label>
+        <label>{tr("Grid columns", "أعمدة الشبكة")}<select value={sectionColumnCount} onChange={event => setSectionColumnCount(Number(event.target.value))}>
+          <option value={1}>1</option><option value={2}>2</option><option value={3}>3</option><option value={4}>4</option>
+        </select></label>
+        <label className="form-span">{tr("English hint", "التعليمات بالإنجليزية")}<input value={sectionHintEn} onChange={event => setSectionHintEn(event.target.value)} maxLength={500} /></label>
+        <label className="form-span">{tr("Arabic hint", "التعليمات بالعربية")}<input dir="rtl" value={sectionHintAr} onChange={event => setSectionHintAr(event.target.value)} maxLength={500} /></label>
+        <button className="secondary-button form-span" disabled={busy !== ""}>{busy === "UPDATE_SECTION_PRESENTATION" ? tr("Saving…", "جارٍ الحفظ…") : tr("Save Section Presentation", "حفظ عرض القسم")}</button>
+      </form>
+    </article>}
+
+    {components.length > 0 && <article className="detail-card">
+      <h3>{tr("Component Presentation", "عرض المكوّن")}</h3>
+      <p className="muted">{tr("Control field width and optional operator guidance without changing result storage or report names.", "تحكم بعرض الحقل وتعليمات المشغل دون تغيير تخزين النتيجة أو أسماء التقرير.")}</p>
+      <form className="catalog-form" onSubmit={updateComponentPresentation}>
+        <label>{tr("Component", "المكوّن")}<select value={presentationComponentId} onChange={event => {
+          const id = event.target.value;
+          setPresentationComponentId(id);
+          const selected = components.find(component => component.id === id);
+          setEntryWidth(selected?.entryWidth || "AUTO");
+          setEntryHintEn(selected?.entryHintEn || "");
+          setEntryHintAr(selected?.entryHintAr || "");
+        }}>
+          {components.map(component => <option key={component.id} value={component.id}>{component.code} — {localizedName(component)}</option>)}
+        </select></label>
+        <label>{tr("Field width", "عرض الحقل")}<select value={entryWidth} onChange={event => setEntryWidth(event.target.value as ComponentOption["entryWidth"])}>
+          <option value="AUTO">{tr("Automatic", "تلقائي")}</option>
+          <option value="NARROW">{tr("Narrow", "ضيق")}</option>
+          <option value="STANDARD">{tr("Standard", "قياسي")}</option>
+          <option value="WIDE">{tr("Wide", "عريض")}</option>
+          <option value="FULL">{tr("Full row", "صف كامل")}</option>
+        </select></label>
+        <label className="form-span">{tr("English entry hint", "تعليمات الإدخال بالإنجليزية")}<input value={entryHintEn} onChange={event => setEntryHintEn(event.target.value)} maxLength={500} /></label>
+        <label className="form-span">{tr("Arabic entry hint", "تعليمات الإدخال بالعربية")}<input dir="rtl" value={entryHintAr} onChange={event => setEntryHintAr(event.target.value)} maxLength={500} /></label>
+        <button className="secondary-button form-span" disabled={busy !== ""}>{busy === "UPDATE_COMPONENT_PRESENTATION" ? tr("Saving…", "جارٍ الحفظ…") : tr("Save Component Presentation", "حفظ عرض المكوّن")}</button>
+      </form>
+    </article>}
 
     {components.length > 0 && <article className="detail-card">
       <h3>{tr("Assign Components to Sections", "ربط المكوّنات بالأقسام")}</h3>
@@ -171,15 +267,17 @@ export function ResultLayoutManager({
           <th>{tr("Code", "الرمز")}</th>
           <th>{tr("Name", "الاسم")}</th>
           <th>{tr("Components", "المكوّنات")}</th>
+          <th>{tr("Grid", "الشبكة")}</th>
           <th>{tr("Status", "الحالة")}</th>
           <th></th>
         </tr></thead>
-        <tbody>{sections.length === 0 ? <tr><td colSpan={6} className="empty-state">{tr("No result sections configured.", "لا توجد أقسام نتائج مهيأة.")}</td></tr> :
+        <tbody>{sections.length === 0 ? <tr><td colSpan={7} className="empty-state">{tr("No result sections configured.", "لا توجد أقسام نتائج مهيأة.")}</td></tr> :
           sections.map(section => <tr key={section.id}>
             <td>{section.displayOrder}</td>
             <td><strong>{section.code}</strong></td>
             <td>{localizedName(section)}{locale !== "ar" && section.nameAr ? <><br/><small dir="rtl">{section.nameAr}</small></> : null}</td>
             <td>{components.filter(component => component.resultSectionId === section.id).map(component => component.code).join(", ") || "—"}</td>
+            <td>{section.columnCount} {tr("col", "عمود")}{(locale === "ar" ? section.hintAr || section.hintEn : section.hintEn) ? <><br/><small>{locale === "ar" ? section.hintAr || section.hintEn : section.hintEn}</small></> : null}</td>
             <td>{section.status === "ACTIVE" ? tr("Active", "نشط") : tr("Inactive", "غير نشط")}</td>
             <td><button
               type="button"
