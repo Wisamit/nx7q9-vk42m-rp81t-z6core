@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { OrderQuestionManager } from "@/components/order-question-manager";
 import { ResultLayoutManager } from "@/components/result-layout-manager";
 import { getUiLocale, statusLabel, tr } from "@/lib/ui-i18n";
+import { normalizeOrderQuestionOptions } from "@/lib/order-questions";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +22,7 @@ export default async function TestDetailPage({ params }: { params: Promise<{ id:
       components: { include: { unit: true, resultSection: true, referenceIntervals: { include: { branch: true, method: true, analyzer: true, specimenType: true }, orderBy: { effectiveFrom: "desc" } } }, orderBy: { displayOrder: "asc" } },
       tatPolicies: { include: { branch: true, createdBy: true }, orderBy: [{ effectiveFrom: "desc" }, { createdAt: "desc" }] },
       resultSections: { orderBy: [{ displayOrder: "asc" }, { code: "asc" }] },
-      orderQuestions: { where: { status: "ACTIVE" }, orderBy: [{ displayOrder: "asc" }, { code: "asc" }] },
+      orderQuestions: { orderBy: [{ code: "asc" }, { version: "desc" }, { effectiveFrom: "desc" }] },
     },
   });
   if (!test) notFound();
@@ -40,6 +41,7 @@ export default async function TestDetailPage({ params }: { params: Promise<{ id:
     NUMERIC: tr(locale, "Numeric", "رقمي"),
     BOOLEAN: tr(locale, "Yes / No", "نعم / لا"),
     DATE: tr(locale, "Date", "تاريخ"),
+    DATETIME: tr(locale, "Date & time", "التاريخ والوقت"),
     SINGLE_CHOICE: tr(locale, "Single choice", "اختيار واحد"),
   }[value] || value);
   const sexLabel = (value: string) =>
@@ -160,18 +162,32 @@ export default async function TestDetailPage({ params }: { params: Promise<{ id:
     </section>
 
     <section className="table-card detail-section">
-      <div className="table-toolbar"><h2>{tr(locale, "Ask-at-Order Questions", "أسئلة تُطرح عند الطلب")}</h2><span>{test.orderQuestions.length} {tr(locale, "active", "نشط")}</span></div>
+      <div className="table-toolbar"><h2>{tr(locale, "Ask-at-Order Questions", "أسئلة تُطرح عند الطلب")}</h2><span>{test.orderQuestions.length} {tr(locale, "version(s)", "إصدار")}</span></div>
       <div className="table-wrap"><table>
-        <thead><tr><th>{tr(locale, "Order", "الترتيب")}</th><th>{tr(locale, "Code", "الرمز")}</th><th>{tr(locale, "Question", "السؤال")}</th><th>{tr(locale, "Type", "النوع")}</th><th>{tr(locale, "Required", "مطلوب")}</th><th>{tr(locale, "Options", "الخيارات")}</th></tr></thead>
-        <tbody>{test.orderQuestions.length === 0 ? <tr><td colSpan={6} className="empty-state">{tr(locale, "No test-specific order questions configured.", "لا توجد أسئلة طلب خاصة بهذا الفحص.")}</td></tr> :
-          test.orderQuestions.map(question => <tr key={question.id}>
-            <td>{question.displayOrder}</td>
-            <td><strong>{question.code}</strong></td>
-            <td>{locale === "ar" ? question.questionAr || question.questionEn : question.questionEn}{locale !== "ar" && question.questionAr && <><br/><small dir="rtl">{question.questionAr}</small></>}</td>
-            <td>{responseTypeLabel(question.responseType)}</td>
-            <td>{question.required ? tr(locale, "Yes", "نعم") : tr(locale, "No", "لا")}</td>
-            <td>{Array.isArray(question.options) ? (question.options as string[]).join(" · ") : "—"}</td>
-          </tr>)}
+        <thead><tr>
+          <th>{tr(locale, "Order", "الترتيب")}</th>
+          <th>{tr(locale, "Code / version", "الرمز / الإصدار")}</th>
+          <th>{tr(locale, "Question", "السؤال")}</th>
+          <th>{tr(locale, "Type", "النوع")}</th>
+          <th>{tr(locale, "Required", "مطلوب")}</th>
+          <th>{tr(locale, "Options", "الخيارات")}</th>
+          <th>{tr(locale, "Effective", "السريان")}</th>
+          <th>{tr(locale, "Status", "الحالة")}</th>
+        </tr></thead>
+        <tbody>{test.orderQuestions.length === 0 ? <tr><td colSpan={8} className="empty-state">{tr(locale, "No test-specific order questions configured.", "لا توجد أسئلة طلب خاصة بهذا الفحص.")}</td></tr> :
+          test.orderQuestions.map(question => {
+            const options = normalizeOrderQuestionOptions(question.options);
+            return <tr key={question.id}>
+              <td>{question.displayOrder}</td>
+              <td><strong>{question.code}</strong><br/><small>v{question.version}</small></td>
+              <td>{locale === "ar" ? question.questionAr || question.questionEn : question.questionEn}{locale !== "ar" && question.questionAr && <><br/><small dir="rtl">{question.questionAr}</small></>}</td>
+              <td>{responseTypeLabel(question.responseType)}</td>
+              <td>{question.required ? tr(locale, "Yes", "نعم") : tr(locale, "No", "لا")}</td>
+              <td>{options.length ? options.map(option => locale === "ar" ? option.valueAr || option.valueEn : option.valueEn).join(" · ") : "—"}</td>
+              <td>{question.effectiveFrom.toISOString().slice(0,10)} → {question.effectiveTo?.toISOString().slice(0,10) || tr(locale, "current", "حالي")}</td>
+              <td>{statusLabel(locale, question.status)}</td>
+            </tr>;
+          })}
         </tbody>
       </table></div>
     </section>
@@ -208,8 +224,8 @@ export default async function TestDetailPage({ params }: { params: Promise<{ id:
     </section>}
 
     {permissions.has("catalog.manage") && <section className="detail-card detail-section">
-      <h2>{tr(locale, "Add Ask-at-Order Question", "إضافة سؤال يُطرح عند الطلب")}</h2>
-      <p className="muted">{tr(locale, "Questions configured here appear automatically when this test is selected during order entry.", "تظهر الأسئلة المهيأة هنا تلقائياً عند اختيار هذا الفحص أثناء إدخال الطلب.")}</p>
+      <h2>{tr(locale, "Add / Revise Ask-at-Order Question", "إضافة / إصدار جديد لسؤال الطلب")}</h2>
+      <p className="muted">{tr(locale, "Questions are effective-dated and versioned. Reusing a code creates a new version while historical orders keep their original question and answer snapshots.", "الأسئلة مؤرخة بالسريان ومقسمة إلى إصدارات. إعادة استخدام الرمز تنشئ إصدارًا جديدًا بينما تحتفظ الطلبات التاريخية بنسخة السؤال والإجابة الأصلية.")}</p>
       <OrderQuestionManager testId={test.id} locale={locale} />
     </section>}
   </main>;
