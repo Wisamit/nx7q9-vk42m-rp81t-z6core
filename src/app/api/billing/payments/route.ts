@@ -8,6 +8,12 @@ function text(value: unknown, max = 150) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
 }
 
+class PostingConflict extends Error {
+  constructor(public readonly code: "invoice_changed" | "cashier_shift_changed") {
+    super(code);
+  }
+}
+
 export async function POST(request: Request) {
   const session = await requirePermission("billing.manage");
   const ctx = await requestContext();
@@ -37,7 +43,9 @@ export async function POST(request: Request) {
   if (!invoice) return NextResponse.json({ error: "invoice_not_payable" }, { status: 404 });
   if (!canAccessBranch(session, invoice.branchId)) return NextResponse.json({ error: "branch_forbidden" }, { status: 403 });
 
-  const result = await prisma.$transaction(async tx => {
+  let result;
+  try {
+    result = await prisma.$transaction(async tx => {
     const current = await tx.invoice.findFirst({
       where: {
         id: invoiceId,
@@ -46,6 +54,17 @@ export async function POST(request: Request) {
       },
     });
     if (!current) return { error: "invoice_not_payable", httpStatus: 409 } as const;
+
+    const cashierShift = await tx.cashierShift.findFirst({
+      where: {
+        organizationId: session.user.organizationId,
+        branchId: current.branchId,
+        cashierUserId: session.user.id,
+        currency: current.currency,
+        status: "OPEN",
+      },
+    });
+    if (!cashierShift) return { error: "cashier_shift_required", httpStatus: 409 } as const;
 
     const balance = new Prisma.Decimal(current.balanceAmount);
     if (amount.gt(balance)) {
@@ -74,7 +93,17 @@ export async function POST(request: Request) {
         status: state.status,
       },
     });
-    if (updated.count !== 1) return { error: "invoice_changed", httpStatus: 409 } as const;
+    if (updated.count !== 1) throw new PostingConflict("invoice_changed");
+
+    const shiftUpdated = await tx.cashierShift.updateMany({
+      where: {
+        id: cashierShift.id,
+        status: "OPEN",
+        activityVersion: cashierShift.activityVersion,
+      },
+      data: { activityVersion: { increment: 1 } },
+    });
+    if (shiftUpdated.count !== 1) throw new PostingConflict("cashier_shift_changed");
 
     const payment = await tx.payment.create({
       data: {
@@ -85,6 +114,7 @@ export async function POST(request: Request) {
         method,
         reference: reference || null,
         cashierUserId: session.user.id,
+        cashierShiftId: cashierShift.id,
       },
     });
 
@@ -111,6 +141,8 @@ export async function POST(request: Request) {
           currency: current.currency,
           method,
           reference: reference || null,
+          cashierShiftId: cashierShift.id,
+          shiftNumber: cashierShift.shiftNumber,
           creditedAmount: current.creditedAmount.toString(),
           invoiceBalance: state.balance,
         },
@@ -127,7 +159,13 @@ export async function POST(request: Request) {
       balanceAmount: state.balance,
       invoiceStatus: state.status,
     } as const;
-  }, { timeout: 30000 });
+    }, { timeout: 30000 });
+  } catch (error) {
+    if (error instanceof PostingConflict) {
+      return NextResponse.json({ error: error.code }, { status: 409 });
+    }
+    throw error;
+  }
 
   if ("error" in result) {
     return NextResponse.json(
