@@ -273,6 +273,7 @@ export default async function SpecimensPage({
                 childBarcode: item.childSpecimen?.barcode || null,
               }))}
               canManage={canAliquot}
+              canPrintLabels={canCollect}
               locale={locale}
             />
 
