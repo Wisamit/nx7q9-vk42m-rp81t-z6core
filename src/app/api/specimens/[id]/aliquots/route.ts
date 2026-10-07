@@ -59,7 +59,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   });
   if (volumeError) return NextResponse.json({ error: volumeError }, { status: 409 });
 
-  const linkedIds = new Set(parent.orderItems.filter(link => link.orderItem.status !== "CANCELLED").map(link => link.orderItemId));
+  const linkedIds = new Set(parent.orderItems.filter(link => link.status === "ACTIVE" && link.orderItem.status !== "CANCELLED").map(link => link.orderItemId));
   if (requestedOrderItemIds.some(orderItemId => !linkedIds.has(orderItemId))) {
     return NextResponse.json({ error: "aliquot_order_item_not_linked_to_parent" }, { status: 409 });
   }
@@ -82,8 +82,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
             status: parent.status,
             currentBranchId: currentBranchId,
             remainingVolume: { gte: volume },
+            preanalyticalVersion: parent.preanalyticalVersion,
           },
-          data: { remainingVolume: { decrement: volume } },
+          data: {
+            remainingVolume: { decrement: volume },
+            preanalyticalVersion: { increment: 1 },
+          },
         });
         if (consumed.count !== 1) throw new SpecimenVolumeChanged();
 
