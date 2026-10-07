@@ -18,7 +18,7 @@ export default async function TestDetailPage({ params }: { params: Promise<{ id:
     include: {
       department: true, specimenType: true, container: true, method: true, defaultUnit: true,
       branchAvailability: { include: { branch: true } },
-      components: { include: { unit: true, resultSection: true, referenceIntervals: { include: { branch: true, method: true }, orderBy: { effectiveFrom: "desc" } } }, orderBy: { displayOrder: "asc" } },
+      components: { include: { unit: true, resultSection: true, referenceIntervals: { include: { branch: true, method: true, analyzer: true, specimenType: true }, orderBy: { effectiveFrom: "desc" } } }, orderBy: { displayOrder: "asc" } },
       resultSections: { orderBy: [{ displayOrder: "asc" }, { code: "asc" }] },
       orderQuestions: { where: { status: "ACTIVE" }, orderBy: [{ displayOrder: "asc" }, { code: "asc" }] },
     },
@@ -47,8 +47,13 @@ export default async function TestDetailPage({ params }: { params: Promise<{ id:
     value === "ALL" || value === "ANY" ? tr(locale, "All", "الكل") : value;
   const ageUnitLabel = (value: string) =>
     value === "DAY" || value === "DAYS" ? tr(locale, "days", "أيام") :
+    value === "WEEK" || value === "WEEKS" ? tr(locale, "weeks", "أسابيع") :
     value === "MONTH" || value === "MONTHS" ? tr(locale, "months", "أشهر") :
     value === "YEAR" || value === "YEARS" ? tr(locale, "years", "سنوات") : value.toLowerCase();
+  const pregnancyLabel = (value: string | null) =>
+    value === "PREGNANT" ? tr(locale, "Pregnant", "حامل") :
+    value === "NOT_PREGNANT" ? tr(locale, "Not pregnant", "غير حامل") :
+    tr(locale, "Any pregnancy context", "أي سياق حمل");
 
   return <main className="catalog-shell">
     <header className="page-header">
@@ -103,7 +108,18 @@ export default async function TestDetailPage({ params }: { params: Promise<{ id:
                 <td>{index===0 ? <><strong>{component.code}</strong><br/>{localizedName(component)}</> : ""}</td>
                 <td>{index===0 ? resultTypeLabel(component.resultType) : ""}</td>
                 <td>{index===0 ? (component.unit?.symbol||"—") : ""}</td>
-                <td>{(locale === "ar" ? range.normalTextAr || range.normalTextEn : range.normalTextEn) || [range.lowValue?.toString(),range.highValue?.toString()].filter(Boolean).join(" – ") || "—"} · {sexLabel(range.sex)}{range.ageUnit ? ` · ${range.ageFrom?.toString()||"0"}–${range.ageTo?.toString()||"∞"} ${ageUnitLabel(range.ageUnit)}` : ""}</td>
+                 <td>
+                   {(locale === "ar" ? range.normalTextAr || range.normalTextEn : range.normalTextEn) || [range.lowValue?.toString(),range.highValue?.toString()].filter(Boolean).join(" – ") || "—"}
+                   {" · "}{sexLabel(range.sex)}
+                   {range.ageUnit ? ` · ${range.ageFrom?.toString()||"0"}–${range.ageTo?.toString()||"∞"} ${ageUnitLabel(range.ageUnit)}` : ""}
+                   {range.pregnancyStatus ? ` · ${pregnancyLabel(range.pregnancyStatus)}` : ""}
+                   {range.gestationalAgeFromWeeks !== null || range.gestationalAgeToWeeks !== null ? ` · ${tr(locale, "GA", "عمر الحمل")} ${range.gestationalAgeFromWeeks?.toString()||"0"}–${range.gestationalAgeToWeeks?.toString()||"∞"} ${tr(locale, "weeks", "أسبوع")}` : ""}
+                   {range.specimenType ? ` · ${tr(locale, "Specimen", "العينة")}: ${localizedName(range.specimenType)}` : ""}
+                   {range.analyzer ? ` · ${tr(locale, "Analyzer", "الجهاز")}: ${range.analyzer.code}` : ""}
+                   {range.method ? ` · ${tr(locale, "Method", "الطريقة")}: ${localizedName(range.method)}` : ""}
+                   {range.branch ? ` · ${tr(locale, "Branch", "الفرع")}: ${localizedName(range.branch)}` : ""}
+                   {range.populationCode ? ` · ${tr(locale, "Population", "المجموعة")}: ${range.populationCode}` : ""}
+                 </td>
                 <td>{[range.criticalLow?.toString(),range.criticalHigh?.toString()].filter(Boolean).join(" / ")||"—"}</td>
                 <td>{range.effectiveFrom.toISOString().slice(0,10)}{range.effectiveTo ? ` → ${range.effectiveTo.toISOString().slice(0,10)}` : ` → ${tr(locale, "current", "حالي")}`}</td>
               </tr>
