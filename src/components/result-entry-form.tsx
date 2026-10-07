@@ -1,8 +1,9 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, KeyboardEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { statusLabel as sharedStatusLabel } from "@/lib/ui-i18n";
+import { focusNextResultEntryControl, shouldAdvanceResultEntryOnEnter } from "@/lib/result-entry-keyboard";
 
 type ResultField = {
   componentId: string | null;
@@ -92,6 +93,16 @@ export function ResultEntryForm({
   const [busy, setBusy] = useState<"save" | "verify" | "">("");
   const [message, setMessage] = useState("");
 
+  function handleEntryKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (!shouldAdvanceResultEntryOnEnter({
+      key: event.key,
+      shiftKey: event.shiftKey,
+      isComposing: event.nativeEvent.isComposing,
+    })) return;
+
+    if (focusNextResultEntryControl(event.currentTarget)) event.preventDefault();
+  }
+
   function fieldInput(field: ResultField) {
     const key = field.componentId || "__TEST__";
     if (field.calculated) return <div className="calculated-value-box"><strong>{values[key] || tr("Calculated on save", "يُحسب عند الحفظ")}</strong><small>{tr("Derived from configured formula", "مشتق من معادلة مهيأة")}</small></div>;
@@ -103,16 +114,16 @@ export function ResultEntryForm({
     };
 
     if (field.resultType === "BOOLEAN") {
-      return <select {...common}>
+      return <select data-result-entry-control="true" {...common}>
         <option value="">—</option>
         <option value="true">{tr("True", "نعم")}</option>
         <option value="false">{tr("False", "لا")}</option>
       </select>;
     }
-    if (field.resultType === "DATE") return <input type="date" {...common} />;
-    if (field.resultType === "NUMERIC") return <input inputMode="decimal" placeholder={tr("Numeric result", "نتيجة رقمية")} {...common} />;
-    if (field.resultType === "TEXT") return <textarea rows={2} placeholder={tr("Result text", "نص النتيجة")} {...common} />;
-    return <input placeholder={tr("Qualitative result", "نتيجة وصفية")} {...common} />;
+    if (field.resultType === "DATE") return <input data-result-entry-control="true" type="date" onKeyDown={handleEntryKeyDown} {...common} />;
+    if (field.resultType === "NUMERIC") return <input data-result-entry-control="true" inputMode="decimal" onKeyDown={handleEntryKeyDown} placeholder={tr("Numeric result", "نتيجة رقمية")} {...common} />;
+    if (field.resultType === "TEXT") return <textarea data-result-entry-control="true" rows={2} placeholder={tr("Result text", "نص النتيجة")} {...common} />;
+    return <input data-result-entry-control="true" onKeyDown={handleEntryKeyDown} placeholder={tr("Qualitative result", "نتيجة وصفية")} {...common} />;
   }
 
   async function save(event: FormEvent<HTMLFormElement>) {
@@ -262,13 +273,13 @@ export function ResultEntryForm({
         <option value="">{tr("Insert comment template…", "إدراج قالب تعليق…")}</option>
         {commentTemplates.map((template) => <option key={template.id} value={template.id}>{template.code} — {template.nameEn}</option>)}
       </select>}
-      <textarea rows={3} value={note} onChange={(event) => setNote(event.target.value)} disabled={locked} />
+      <textarea data-result-entry-control="true" rows={3} value={note} onChange={(event) => setNote(event.target.value)} disabled={locked} />
     </label>
 
     {message && <div className="form-success">{message}</div>}
 
     <div className="result-actions">
-      {!locked && <button className="primary-button" disabled={busy !== ""}>{busy === "save" ? tr("Saving…", "جارٍ الحفظ…") : tr("Save Result", "حفظ النتيجة")}</button>}
+      {!locked && <button className="primary-button" data-result-entry-control="true" disabled={busy !== ""}>{busy === "save" ? tr("Saving…", "جارٍ الحفظ…") : tr("Save Result", "حفظ النتيجة")}</button>}
       {!statusLocked && canVerify && savedResultId && complete && <button className="secondary-button" type="button" disabled={busy !== ""} onClick={() => void verify()}>{busy === "verify" ? tr("Verifying…", "جارٍ التحقق…") : tr("Verify Result", "التحقق من النتيجة")}</button>}
       {statusLocked && <span className="muted">{tr("Verified/released results are locked. Future edits must use an amendment workflow.", "النتائج التي تم التحقق منها أو إصدارها مقفلة، وأي تعديل لاحق يجب أن يتم عبر مسار التعديل الرسمي.")}</span>}
       {!statusLocked && sourceLocked && <span className="muted">{tr("Analyzer/import-origin values are read-only here. Use the analyzer integration workflow for additional observations or corrections.", "القيم الواردة من الجهاز أو الاستيراد للقراءة فقط هنا. استخدم مسار تكامل أجهزة التحليل لإضافة مشاهدات أو تصحيحات.")}</span>}
