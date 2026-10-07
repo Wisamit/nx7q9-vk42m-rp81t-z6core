@@ -45,7 +45,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       specimenType: true,
       container: true,
       parentSpecimen: { select: { id: true, barcode: true, status: true } },
-      childSpecimens: { select: { id: true, barcode: true, status: true } },
+      childSpecimens: { select: { id: true, barcode: true, status: true, parentRelationType: true } },
       events: { where: { eventType: "CREATED" }, orderBy: { occurredAt: "asc" } },
     },
   });
@@ -232,15 +232,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const reasonText = text(body.rejectionReasonText, 500);
   if (!reasonCode || !reasonText) return NextResponse.json({ error: "rejection_reason_required" }, { status: 400 });
 
-  const activeChildAliquots = specimen.childSpecimens.filter(child => !["REJECTED","DISPOSED"].includes(child.status));
-  if (!specimen.parentSpecimenId && activeChildAliquots.length > 0) {
+  const activeChildAliquots = specimen.childSpecimens.filter(child =>
+    child.parentRelationType === "ALIQUOT" && !["REJECTED","DISPOSED"].includes(child.status));
+  if (specimen.parentRelationType !== "ALIQUOT" && activeChildAliquots.length > 0) {
     return NextResponse.json({
       error: "active_child_aliquots_require_resolution",
       childBarcodes: activeChildAliquots.map(child => child.barcode),
     }, { status: 409 });
   }
 
-  if (specimen.parentSpecimenId) {
+  if (specimen.parentRelationType === "ALIQUOT" && specimen.parentSpecimenId) {
     const result = await prisma.$transaction(async tx => {
       const rejected = await tx.specimen.updateMany({
         where: { id: specimen.id, status: specimen.status },
@@ -346,6 +347,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         organizationId: specimen.organizationId,
         orderId: specimen.orderId,
         parentSpecimenId: specimen.id,
+        parentRelationType: "RECOLLECTION",
         specimenTypeId: specimen.specimenTypeId,
         containerId: specimen.containerId,
         barcode: replacementBarcode,
