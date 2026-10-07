@@ -7,9 +7,9 @@ ALTER TABLE `specimen_order_items`
   ADD COLUMN `status` ENUM('ACTIVE','REJECTED') NOT NULL DEFAULT 'ACTIVE' AFTER `order_item_id`,
   ADD COLUMN `rejection_id` CHAR(36) NULL AFTER `status`;
 
-DROP INDEX `specimen_order_items_order_item_id_idx` ON `specimen_order_items`;
 CREATE INDEX `specimen_order_items_order_item_status_idx`
   ON `specimen_order_items` (`order_item_id`, `status`);
+DROP INDEX `specimen_order_items_order_item_id_idx` ON `specimen_order_items`;
 CREATE INDEX `specimen_order_items_rejection_id_idx`
   ON `specimen_order_items` (`rejection_id`);
 
