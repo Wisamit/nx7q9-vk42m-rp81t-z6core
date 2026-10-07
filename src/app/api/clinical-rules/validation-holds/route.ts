@@ -61,6 +61,7 @@ export async function POST(request: Request) {
         reasonAr,
         effectiveFrom,
         effectiveTo,
+        status: "INACTIVE",
       },
     });
 
@@ -69,7 +70,7 @@ export async function POST(request: Request) {
         organizationId: session.user.organizationId,
         branchId: session.activeBranchId,
         actorUserId: session.user.id,
-        action: "VALIDATION_HOLD_RULE_CREATED",
+        action: "VALIDATION_HOLD_RULE_DRAFT_CREATED",
         entityType: "ValidationHoldRule",
         entityId: created.id,
         newValues: { testId, branchId, condition, resultSource, severity, reasonEn, reasonAr, effectiveFrom, effectiveTo },
