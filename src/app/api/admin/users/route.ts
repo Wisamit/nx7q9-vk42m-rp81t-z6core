@@ -124,6 +124,12 @@ export async function POST(request: Request) {
   if ((roleGrantsFinancialAuthority || overrideGrantsFinancialAuthority) && !permissions.has("billing.discount.limits.manage")) {
     return NextResponse.json({ error: "discount_authority_forbidden" }, { status: 403 });
   }
+  const roleGrantsCashierAuthority = roles.some(role =>
+    role.permissions.some(grant => ["billing.cashier.approve", "billing.cashier.authority.manage"].includes(grant.permission.code))
+  );
+  if (roleGrantsCashierAuthority && !permissions.has("billing.cashier.authority.manage")) {
+    return NextResponse.json({ error: "cashier_authority_forbidden" }, { status: 403 });
+  }
 
   const passwordHash = await hash(password, 12);
   const ctx = await requestContext();
