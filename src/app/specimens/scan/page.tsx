@@ -141,7 +141,7 @@ export default async function SpecimenScanPage({
         </div>
         <div className="header-actions">
           {canCollect && specimen.status === "PLANNED" && <Link className="primary-button" href={`/phlebotomy?specimen=${specimen.id}`}>{tr(locale, "Open Phlebotomy", "فتح شاشة السحب")}</Link>}
-          {canCollect && (specimen.status !== "PLANNED" || Boolean(requirement)) && <Link className="secondary-link" href={`/specimens/${specimen.id}/label`}>{tr(locale, "Print Label", "طباعة الملصق")}</Link>}
+          {canCollect && !["COLLECTION_FAILED","REJECTED","DISPOSED"].includes(specimen.status) && (specimen.status !== "PLANNED" || Boolean(requirement)) && <Link className="secondary-link" href={`/specimens/${specimen.id}/label`}>{tr(locale, "Print Label", "طباعة الملصق")}</Link>}
           <Link className="secondary-link" href={`/orders/${specimen.orderId}`}>{tr(locale, "Open Order", "فتح الطلب")}</Link>
         </div>
       </div>
@@ -166,8 +166,8 @@ export default async function SpecimenScanPage({
         <strong>{tr(locale, "Latest collection attempt", "آخر محاولة سحب")}</strong>
         <span>
           {specimen.collectionAttempts[0].attemptedAt.toISOString().replace("T"," ").slice(0,19)}
-          {" · "}{specimen.collectionAttempts[0].branch.code}
-          {" · "}{locale === "ar" ? specimen.collectionAttempts[0].collector.displayNameAr || specimen.collectionAttempts[0].collector.displayNameEn : specimen.collectionAttempts[0].collector.displayNameEn}
+          {" · "}{specimen.collectionAttempts[0].branchCodeSnapshot}
+          {" · "}{locale === "ar" ? specimen.collectionAttempts[0].collectorNameArSnapshot || specimen.collectionAttempts[0].collectorNameEnSnapshot : specimen.collectionAttempts[0].collectorNameEnSnapshot}
           {" · "}{specimen.collectionAttempts[0].outcome === "SUCCESS" ? tr(locale, "Success", "ناجحة") : tr(locale, "Failed", "فاشلة")}
           {specimen.collectionAttempts[0].failureReasonCode ? ` · ${specimen.collectionAttempts[0].failureReasonCode}` : ""}
           {specimen.collectionAttempts[0].replacementSpecimen ? ` · ${tr(locale, "Replacement", "البديل")}: ${specimen.collectionAttempts[0].replacementSpecimen.barcode}` : ""}
@@ -229,7 +229,7 @@ export default async function SpecimenScanPage({
         <summary>{tr(locale, "Collection attempt history", "سجل محاولات السحب")} ({specimen.collectionAttempts.length})</summary>
         <div className="summary-list">
           {specimen.collectionAttempts.map(attempt => <div key={attempt.id}>
-            <span>{attempt.attemptedAt.toISOString().replace("T"," ").slice(0,19)} · {attempt.branch.code} · {locale === "ar" ? attempt.collector.displayNameAr || attempt.collector.displayNameEn : attempt.collector.displayNameEn}</span>
+            <span>{attempt.attemptedAt.toISOString().replace("T"," ").slice(0,19)} · {attempt.branchCodeSnapshot} · {locale === "ar" ? attempt.collectorNameArSnapshot || attempt.collectorNameEnSnapshot : attempt.collectorNameEnSnapshot}</span>
             <strong>{attempt.outcome === "SUCCESS" ? tr(locale, "Successful collection", "سحب ناجح") : tr(locale, "Failed collection", "فشل السحب")} · {attempt.collectionLocationType}{attempt.collectionLocationText ? ` · ${attempt.collectionLocationText}` : ""}</strong>
             <small>{attempt.outcome === "FAILED" ? `${attempt.failureReasonCode || "—"} · ${attempt.failureReasonText || "—"}` : `${attempt.volume?.toFixed(3) || "—"} ${attempt.volumeUnit || ""}`}{attempt.replacementSpecimen ? ` · ${tr(locale, "Recollection", "إعادة السحب")}: ${attempt.replacementSpecimen.barcode}` : ""}</small>
           </div>)}
