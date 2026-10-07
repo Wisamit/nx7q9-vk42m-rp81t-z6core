@@ -153,6 +153,15 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     return NextResponse.json({ error: "credit_authority_forbidden" }, { status: 403 });
   }
 
+  const previouslyGrantedTax = target.roles.some(assignment =>
+    assignment.role.status === "ACTIVE"
+    && assignment.role.permissions.some(grant => grant.permission.code === "billing.tax.manage"));
+  const requestedTax = roles.some(role => role.permissions.some(grant => grant.permission.code === "billing.tax.manage"));
+  if (requestedTax && (!previouslyGrantedTax || branchIds.some(branchId => !currentBranchIds.has(branchId))
+      || (target.status !== "ACTIVE" && status === "ACTIVE")) && !permissions.has("billing.tax.manage")) {
+    return NextResponse.json({ error: "tax_authority_forbidden" }, { status: 403 });
+  }
+
   const hadSystemAdmin = target.roles.some(x => x.role.code === "SYSTEM_ADMIN" && x.role.status === "ACTIVE");
   const keepsSystemAdmin = roles.some(x => x.code === "SYSTEM_ADMIN") && status === "ACTIVE";
   if (hadSystemAdmin && !keepsSystemAdmin) {
