@@ -198,7 +198,18 @@ enum SpecimenEventType {
   RELOCATED
   TRANSFERRED
   PROCESSING_STARTED
+  ALIQUOT_CREATED
+  VOLUME_RECONCILED
+  USED
   DISPOSED
+}
+
+enum SpecimenUsageType {
+  ALIQUOT
+  TESTING
+  REPEAT_TESTING
+  SEND_OUT
+  OTHER
 }
 
 enum TransferManifestStatus {
@@ -878,6 +889,7 @@ model Organization {
   clientCreditPolicies ClientCreditPolicy[]
   taxRules TaxRule[]
   specimens Specimen[]
+  specimenUsageEvents SpecimenUsageEvent[]
   transferManifests SpecimenTransferManifest[]
   results LaboratoryResult[]
   resultRepeatEvents ResultRepeatEvent[]
@@ -1015,6 +1027,7 @@ model Branch {
   collectedSpecimens Specimen[] @relation("SpecimenCollectionBranch")
   currentSpecimens Specimen[] @relation("SpecimenCurrentBranch")
   specimenEvents SpecimenEvent[]
+  specimenUsageEvents SpecimenUsageEvent[]
   outgoingTransferManifests SpecimenTransferManifest[] @relation("TransferSourceBranch")
   incomingTransferManifests SpecimenTransferManifest[] @relation("TransferDestinationBranch")
   laboratoryResults LaboratoryResult[] @relation("ResultPerformingBranch")
@@ -1181,6 +1194,7 @@ model User {
   receivedSpecimens Specimen[] @relation("SpecimenReceiver")
   rejectedSpecimens Specimen[] @relation("SpecimenRejector")
   specimenEvents SpecimenEvent[] @relation("SpecimenEventActor")
+  specimenUsageEvents SpecimenUsageEvent[] @relation("SpecimenUsageActor")
   createdTransferManifests SpecimenTransferManifest[] @relation("TransferManifestCreator")
   dispatchedTransferManifests SpecimenTransferManifest[] @relation("TransferManifestDispatcher")
   receivedTransferManifests SpecimenTransferManifest[] @relation("TransferManifestReceiver")
@@ -2215,6 +2229,7 @@ model OrderItem {
   priceListItem   PriceListItem? @relation(fields: [priceListItemId], references: [id], onDelete: Restrict)
   invoiceLines    InvoiceLine[]
   specimenLinks   SpecimenOrderItem[]
+  specimenUsageEvents SpecimenUsageEvent[]
   results          LaboratoryResult[]
   resultRepeatEvents ResultRepeatEvent[]
   analyzerResultImports AnalyzerResultImport[]
@@ -2710,6 +2725,9 @@ model Specimen {
   rejectionReasonText String?        @map("rejection_reason_text") @db.VarChar(500)
   volume              Decimal?       @db.Decimal(10, 3)
   volumeUnit          String?        @map("volume_unit") @db.VarChar(30)
+  remainingVolume     Decimal?       @map("remaining_volume") @db.Decimal(10, 3)
+  remainingVolumeUnit String?        @map("remaining_volume_unit") @db.VarChar(30)
+  storageLocation     String?        @map("storage_location") @db.VarChar(200)
   notes               String?        @db.Text
   createdAt           DateTime       @default(now()) @map("created_at") @db.DateTime(3)
   updatedAt           DateTime       @updatedAt @map("updated_at") @db.DateTime(3)
@@ -2728,6 +2746,8 @@ model Specimen {
   rejectedBy       User?         @relation("SpecimenRejector", fields: [rejectedByUserId], references: [id], onDelete: Restrict)
   orderItems       SpecimenOrderItem[]
   events           SpecimenEvent[]
+  sourceUsageEvents SpecimenUsageEvent[] @relation("SpecimenUsageSource")
+  childUsageEvent   SpecimenUsageEvent?  @relation("SpecimenUsageChild")
   transferItems    SpecimenTransferItem[]
   microbiologyCases MicrobiologyCase[]
   results          LaboratoryResult[]
@@ -2776,6 +2796,34 @@ model SpecimenEvent {
   @@map("specimen_events")
 }
 
+
+model SpecimenUsageEvent {
+  id              String            @id @default(uuid()) @db.Char(36)
+  organizationId  String            @map("organization_id") @db.Char(36)
+  specimenId      String            @map("specimen_id") @db.Char(36)
+  childSpecimenId String?           @unique @map("child_specimen_id") @db.Char(36)
+  orderItemId     String?           @map("order_item_id") @db.Char(36)
+  branchId        String            @map("branch_id") @db.Char(36)
+  usageType       SpecimenUsageType @map("usage_type")
+  volumeUsed      Decimal           @map("volume_used") @db.Decimal(10, 3)
+  volumeUnit      String            @map("volume_unit") @db.VarChar(30)
+  notes           String?           @db.VarChar(1000)
+  usedByUserId    String            @map("used_by_user_id") @db.Char(36)
+  usedAt          DateTime          @default(now()) @map("used_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  specimen     Specimen     @relation("SpecimenUsageSource", fields: [specimenId], references: [id], onDelete: Restrict)
+  childSpecimen Specimen?   @relation("SpecimenUsageChild", fields: [childSpecimenId], references: [id], onDelete: Restrict)
+  orderItem    OrderItem?   @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
+  branch       Branch       @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  usedBy       User         @relation("SpecimenUsageActor", fields: [usedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, usedAt])
+  @@index([specimenId, usedAt])
+  @@index([orderItemId, usedAt])
+  @@index([branchId, usedAt])
+  @@map("specimen_usage_events")
+}
 
 model SpecimenTransferManifest {
   id                  String                 @id @default(uuid()) @db.Char(36)
