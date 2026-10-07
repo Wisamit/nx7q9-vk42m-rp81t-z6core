@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { Prisma } from "../../../../../../generated/prisma/client";
 import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
+import {
+  analyzerMappingClinicallyUsable,
+  analyzerMappingTargetUnitStillMatches,
+} from "@/lib/analyzer-mapping-governance";
 import { prisma } from "@/lib/db";
 import { parseResultValue } from "@/lib/result-value-parser";
 import { numericFlag, resolveReferenceInterval } from "@/lib/result-reference";
@@ -48,7 +52,12 @@ export async function POST(request: Request) {
     },
     include: {
       analyzer: true,
-      mapping: true,
+      mapping: {
+        include: {
+          test: { include: { defaultUnit: true } },
+          component: { include: { unit: true } },
+        },
+      },
       specimen: true,
       orderItem: true,
     },
@@ -187,6 +196,21 @@ export async function POST(request: Request) {
   for (const item of imports) {
     if (!item.mapping || item.mapping.testId !== orderItem.testId || item.mapping.analyzerId !== analyzer.id) {
       return NextResponse.json({ error: "staged_mapping_no_longer_matches_order_item", importId: item.id }, { status: 409 });
+    }
+    if (!analyzerMappingClinicallyUsable(item.mapping, now)) {
+      return NextResponse.json({ error: "staged_mapping_no_longer_clinically_usable", importId: item.id }, { status: 409 });
+    }
+    const currentTargetUnit = item.mapping.componentId
+      ? item.mapping.component?.unit || null
+      : item.mapping.test.defaultUnit;
+    if (!analyzerMappingTargetUnitStillMatches(item.mapping, currentTargetUnit)) {
+      return NextResponse.json({ error: "staged_mapping_target_unit_changed", importId: item.id }, { status: 409 });
+    }
+    if (item.mapping.analyzerUnitCode && item.rawUnit !== item.mapping.analyzerUnitCode) {
+      return NextResponse.json({ error: "staged_analyzer_unit_mismatch", importId: item.id }, { status: 409 });
+    }
+    if (!item.mapping.analyzerUnitCode && item.rawUnit) {
+      return NextResponse.json({ error: "staged_analyzer_unit_unexpected", importId: item.id }, { status: 409 });
     }
   }
 

@@ -112,7 +112,7 @@ export function AnalyzerManager({
     if (body) {
       event.currentTarget.reset();
       setMappingTestId("");
-      setMessage(tr("Analyzer test mapping created.", "تم إنشاء ربط فحص الجهاز."));
+      setMessage(tr("Analyzer mapping draft created. It cannot receive clinical results until approved.", "تم إنشاء مسودة ربط الجهاز. لا يمكنها استقبال نتائج سريرية قبل الاعتماد."));
       setOpen("");
     }
   }
@@ -155,7 +155,7 @@ export function AnalyzerManager({
       {message && <div className="form-success">{message}</div>}
     </CrudModal>
 
-    <CrudModal open={open === "mapping"} onClose={() => setOpen("")} title={tr("Create Test Mapping","إنشاء ربط فحص")} description={tr("Map analyzer codes to LIS tests/components using effective dates.","اربط أكواد الجهاز بفحوصات/مكونات LIS مع تواريخ سريان.")} size="lg">
+    <CrudModal open={open === "mapping"} onClose={() => setOpen("")} title={tr("Create Test Mapping Draft","إنشاء مسودة ربط فحص")} description={tr("Create a governed analyzer-to-LIS mapping draft. Unit-bearing targets require the exact analyzer unit code; approval is required before clinical use and no unit conversion is performed.","أنشئ مسودة ربط محكومة بين الجهاز وLIS. الأهداف ذات الوحدة تتطلب رمز وحدة الجهاز بدقة، ويلزم الاعتماد قبل الاستخدام السريري ولا يتم إجراء تحويل للوحدات.")} size="lg">
       <form className="catalog-form" onSubmit={createMapping}>
         <label>{tr("Analyzer","الجهاز")}<select name="analyzerId" required defaultValue=""><option value="">{tr("Select analyzer…","اختر الجهاز…")}</option>{analyzers.map(item => <option key={item.id} value={item.id}>{item.code} — {item.name}</option>)}</select></label>
         <label>{tr("Analyzer test code","رمز الفحص في الجهاز")}<input name="analyzerTestCode" required maxLength={120} /></label>
@@ -164,7 +164,7 @@ export function AnalyzerManager({
         <label>{tr("Component","المكوّن")}<select name="componentId" defaultValue="" disabled={!mappingTestId || mappingComponents.length === 0}><option value="">{mappingComponents.length ? tr("Select component…","اختر المكوّن…") : tr("Simple test","فحص بسيط")}</option>{mappingComponents.map(item => <option key={item.id} value={item.id}>{item.code} — {localizedName(item)}</option>)}</select></label>
         <label>{tr("Effective from","ساري من")}<input name="effectiveFrom" type="date" defaultValue={new Date().toISOString().slice(0,10)} required /></label>
         <label>{tr("Effective to","ساري حتى")}<input name="effectiveTo" type="date" /></label>
-        <button className="primary-button form-span" disabled={busy !== ""}>{busy === "mapping" ? tr("Saving…","جارٍ الحفظ…") : tr("Create Mapping","إنشاء الربط")}</button>
+        <button className="primary-button form-span" disabled={busy !== ""}>{busy === "mapping" ? tr("Saving…","جارٍ الحفظ…") : tr("Create Draft","إنشاء المسودة")}</button>
         {message && <div className="form-success form-span">{message}</div>}
       </form>
     </CrudModal>

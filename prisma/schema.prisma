@@ -24,6 +24,12 @@ enum QualitativeOptionApprovalStatus {
   RETIRED
 }
 
+enum AnalyzerMappingApprovalStatus {
+  DRAFT
+  APPROVED
+  RETIRED
+}
+
 enum UserStatus {
   INVITED
   ACTIVE
@@ -1327,6 +1333,9 @@ model User {
   createdReferenceIntervals ReferenceInterval[] @relation("ReferenceIntervalCreator")
   approvedReferenceIntervals ReferenceInterval[] @relation("ReferenceIntervalApprover")
   retiredReferenceIntervals ReferenceInterval[] @relation("ReferenceIntervalRetirer")
+  createdAnalyzerTestMappings AnalyzerTestMapping[] @relation("AnalyzerTestMappingCreator")
+  approvedAnalyzerTestMappings AnalyzerTestMapping[] @relation("AnalyzerTestMappingApprover")
+  retiredAnalyzerTestMappings AnalyzerTestMapping[] @relation("AnalyzerTestMappingRetirer")
   createdCatalogImportMappings CatalogImportMapping[] @relation("CatalogImportMappingCreator")
   createdOrders LabOrder[] @relation("OrderCreator")
   recordedOrderAnswers OrderAnswer[] @relation("OrderAnswerRecorder")
@@ -4377,27 +4386,43 @@ model AnalyzerCredential {
 }
 
 model AnalyzerTestMapping {
-  id               String       @id @default(uuid()) @db.Char(36)
-  analyzerId       String       @map("analyzer_id") @db.Char(36)
-  analyzerTestCode String       @map("analyzer_test_code") @db.VarChar(120)
-  analyzerUnitCode String?      @map("analyzer_unit_code") @db.VarChar(80)
-  testId           String       @map("test_id") @db.Char(36)
-  componentId      String?      @map("component_id") @db.Char(36)
-  effectiveFrom    DateTime     @map("effective_from") @db.DateTime(3)
-  effectiveTo      DateTime?    @map("effective_to") @db.DateTime(3)
-  status           RecordStatus @default(ACTIVE)
-  createdAt        DateTime     @default(now()) @map("created_at") @db.DateTime(3)
-  updatedAt        DateTime     @updatedAt @map("updated_at") @db.DateTime(3)
-  deactivatedAt    DateTime?    @map("deactivated_at") @db.DateTime(3)
+  id                      String                        @id @default(uuid()) @db.Char(36)
+  analyzerId              String                        @map("analyzer_id") @db.Char(36)
+  analyzerTestCode        String                        @map("analyzer_test_code") @db.VarChar(120)
+  analyzerUnitCode        String?                       @map("analyzer_unit_code") @db.VarChar(80)
+  testId                  String                        @map("test_id") @db.Char(36)
+  componentId             String?                       @map("component_id") @db.Char(36)
+  effectiveFrom           DateTime                      @map("effective_from") @db.DateTime(3)
+  effectiveTo             DateTime?                     @map("effective_to") @db.DateTime(3)
+  approvalStatus          AnalyzerMappingApprovalStatus @default(DRAFT) @map("approval_status")
+  lisUnitIdSnapshot       String?                       @map("lis_unit_id_snapshot") @db.Char(36)
+  lisUnitCodeSnapshot     String?                       @map("lis_unit_code_snapshot") @db.VarChar(50)
+  lisUnitSymbolSnapshot   String?                       @map("lis_unit_symbol_snapshot") @db.VarChar(50)
+  lisUnitUcumCodeSnapshot String?                       @map("lis_unit_ucum_code_snapshot") @db.VarChar(50)
+  createdByUserId         String?                       @map("created_by_user_id") @db.Char(36)
+  approvedByUserId        String?                       @map("approved_by_user_id") @db.Char(36)
+  approvedAt              DateTime?                     @map("approved_at") @db.DateTime(3)
+  retiredByUserId         String?                       @map("retired_by_user_id") @db.Char(36)
+  retiredAt               DateTime?                     @map("retired_at") @db.DateTime(3)
+  retirementReason        String?                       @map("retirement_reason") @db.VarChar(1000)
+  status                  RecordStatus                  @default(INACTIVE)
+  createdAt               DateTime                      @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt               DateTime                      @updatedAt @map("updated_at") @db.DateTime(3)
+  deactivatedAt           DateTime?                     @map("deactivated_at") @db.DateTime(3)
 
-  analyzer  Analyzer       @relation(fields: [analyzerId], references: [id], onDelete: Restrict)
-  test      LabTest        @relation(fields: [testId], references: [id], onDelete: Restrict)
-  component TestComponent? @relation(fields: [componentId], references: [id], onDelete: Restrict)
-  imports   AnalyzerResultImport[]
+  analyzer   Analyzer       @relation(fields: [analyzerId], references: [id], onDelete: Restrict)
+  test       LabTest        @relation(fields: [testId], references: [id], onDelete: Restrict)
+  component  TestComponent? @relation(fields: [componentId], references: [id], onDelete: Restrict)
+  createdBy  User?          @relation("AnalyzerTestMappingCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  approvedBy User?          @relation("AnalyzerTestMappingApprover", fields: [approvedByUserId], references: [id], onDelete: Restrict)
+  retiredBy  User?          @relation("AnalyzerTestMappingRetirer", fields: [retiredByUserId], references: [id], onDelete: Restrict)
+  imports    AnalyzerResultImport[]
 
   @@unique([analyzerId, analyzerTestCode, effectiveFrom])
   @@index([testId, componentId, status, effectiveFrom, effectiveTo])
-  @@index([analyzerId, status, effectiveFrom, effectiveTo])
+  @@index([analyzerId, approvalStatus, status, effectiveFrom, effectiveTo], map: "analyzer_mapping_approval_effective_idx")
+  @@index([createdByUserId, createdAt], map: "analyzer_mapping_creator_idx")
+  @@index([approvedByUserId, approvedAt], map: "analyzer_mapping_approver_idx")
   @@map("analyzer_test_mappings")
 }
 
