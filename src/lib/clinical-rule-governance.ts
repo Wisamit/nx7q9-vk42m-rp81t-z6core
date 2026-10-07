@@ -7,6 +7,7 @@ export type GovernedClinicalRule = {
   effectiveTo: Date | null;
   status: "ACTIVE" | "INACTIVE";
   deactivatedAt: Date | null;
+  authorizationBranchId?: string | null;
 };
 
 export function clinicalRuleLifecycleState(input: Pick<GovernedClinicalRule, "status" | "deactivatedAt">): ClinicalRuleLifecycleState {
