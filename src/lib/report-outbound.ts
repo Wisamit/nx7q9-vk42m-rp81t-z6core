@@ -7,6 +7,11 @@ export type PortalDeliveryAccount = {
   email: string | null;
   phone: string | null;
   preferredLocale: string;
+  contactVerifications?: Array<{
+    channel: "EMAIL" | "PHONE";
+    destinationSnapshot: string;
+    revokedAt: Date | null;
+  }>;
 };
 
 export type ReportMessageContext = {
@@ -25,15 +30,31 @@ export function resolveVerifiedPortalDestination(
   if (!account || account.status !== "ACTIVE") {
     return { ok: false as const, error: "active_portal_account_required" };
   }
-  if (!account.contactVerifiedAt) {
-    return { ok: false as const, error: "verified_portal_contact_required" };
-  }
-
   const destination = channel === "EMAIL" ? account.email?.trim() : account.phone?.trim();
   if (!destination) {
     return {
       ok: false as const,
       error: channel === "EMAIL" ? "verified_email_required" : "verified_phone_required",
+    };
+  }
+
+  const verificationChannel = channel === "EMAIL" ? "EMAIL" : "PHONE";
+  const verified = account.contactVerifications?.some(item =>
+    item.channel === verificationChannel
+    && item.revokedAt === null
+    && item.destinationSnapshot === destination
+  ) || false;
+
+  const legacySingleContactVerification = Boolean(
+    account.contactVerifiedAt
+    && ((verificationChannel === "EMAIL" && account.email && !account.phone)
+      || (verificationChannel === "PHONE" && account.phone && !account.email))
+  );
+
+  if (!verified && !legacySingleContactVerification) {
+    return {
+      ok: false as const,
+      error: verificationChannel === "EMAIL" ? "verified_email_required" : "verified_phone_required",
     };
   }
 
