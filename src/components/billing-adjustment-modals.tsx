@@ -11,6 +11,8 @@ type CreditInvoiceOption = {
   currency: string;
   remainingCredit: string;
   balanceAmount: string;
+  taxTotal: string;
+  lines: Array<{ id: string; description: string; amountRemaining: string; taxAmount: string }>;
 };
 
 type RefundOption = {
@@ -36,6 +38,10 @@ function errorMessage(locale: "ar" | "en", code: string) {
     refund_exceeds_allocation: tr("Refund amount exceeds the remaining refundable allocation.", "مبلغ الاسترداد يتجاوز المبلغ المتبقي القابل للاسترداد."),
     refund_exceeds_payment: tr("Refund amount exceeds the remaining payment amount.", "مبلغ الاسترداد يتجاوز الرصيد المتبقي من الدفعة."),
     refund_exceeds_invoice_net_payment: tr("Refund amount exceeds the invoice net paid amount.", "مبلغ الاسترداد يتجاوز صافي المدفوع على الفاتورة."),
+    credit_lines_required_for_tax_invoice: tr("A taxed credit note must allocate the amount by invoice line.", "يجب توزيع الإشعار الدائن الضريبي على بنود الفاتورة."),
+    invalid_credit_lines: tr("Invalid or duplicate invoice line allocation.", "تخصيص بنود الفاتورة غير صالح أو مكرر."),
+    credit_exceeds_invoice_line: tr("A line credit exceeds its remaining amount.", "أحد مبالغ الإشعار يتجاوز المتبقي من البند."),
+    credit_allocation_total_mismatch: tr("Line allocations must equal the credit amount.", "يجب أن يساوي مجموع البنود مبلغ الإشعار."),
     invoice_changed: tr("The invoice changed while processing. Review the latest balance and try again.", "تغيرت الفاتورة أثناء المعالجة. راجع الرصيد الحالي ثم أعد المحاولة."),
     payment_changed: tr("The payment changed while processing. Review it and try again.", "تغيرت الدفعة أثناء المعالجة. راجعها ثم أعد المحاولة."),
     cashier_shift_required: tr("Open a cashier shift for this branch and currency first.", "افتح وردية أمين صندوق لهذا الفرع وهذه العملة أولاً."),
@@ -57,6 +63,18 @@ export function CreditNoteCreateModal({
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [message, setMessage] = useState("");
+  const [selectedInvoiceId, setSelectedInvoiceId] = useState("");
+  const [lineAmounts, setLineAmounts] = useState<Record<string, string>>({});
+  const selectedInvoice = invoices.find(item => item.id === selectedInvoiceId);
+  const taxed = Boolean(selectedInvoice && Number(selectedInvoice.taxTotal) > 0);
+  const selectedLineCredits = (selectedInvoice?.lines || [])
+    .filter(line => Number(lineAmounts[line.id] || 0) > 0)
+    .map(line => ({ invoiceLineId: line.id, amount: lineAmounts[line.id] }));
+  const allocatedTotal = selectedLineCredits.reduce((sum, line) => {
+    const [whole, fraction = ""] = line.amount.split(".");
+    return sum + BigInt(whole || 0) * BigInt(10000) + BigInt((fraction + "0000").slice(0,4));
+  }, BigInt(0));
+  const allocatedAmount = (allocatedTotal / BigInt(10000)).toString() + "." + (allocatedTotal % BigInt(10000)).toString().padStart(4, "0");
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -71,6 +89,7 @@ export function CreditNoteCreateModal({
         invoiceId: form.get("invoiceId"),
         amount: form.get("amount"),
         reason: form.get("reason"),
+        ...(taxed ? { lines: selectedLineCredits } : {}),
       }),
     });
     const body = await response.json().catch(() => ({}));
@@ -79,6 +98,8 @@ export function CreditNoteCreateModal({
       const success = `${tr("Credit note issued", "تم إصدار الإشعار الدائن")} · ${body.creditNoteNumber} · ${tr("Balance", "الرصيد")}: ${body.balanceAmount}`;
       setNotice(success);
       setOpen(false);
+      setSelectedInvoiceId("");
+      setLineAmounts({});
       event.currentTarget.reset();
       router.refresh();
     } else {
@@ -103,14 +124,30 @@ export function CreditNoteCreateModal({
     >
       <form className="catalog-form" onSubmit={submit}>
         <label className="form-span">{tr("Invoice", "الفاتورة")}
-          <select name="invoiceId" required defaultValue="">
+          <select name="invoiceId" required value={selectedInvoiceId} onChange={event => { setSelectedInvoiceId(event.target.value); setLineAmounts({}); }}>
             <option value="">{tr("Select invoice…", "اختر الفاتورة…")}</option>
             {invoices.map(invoice => <option key={invoice.id} value={invoice.id}>{invoice.invoiceNumber} — {invoice.remainingCredit} {invoice.currency} · {tr("balance", "الرصيد")} {invoice.balanceAmount}</option>)}
           </select>
         </label>
-        <label>{tr("Credit amount", "مبلغ الإشعار")}<input name="amount" type="number" min="0.0001" step="0.0001" required /></label>
+        {taxed && selectedInvoice && <div className="form-span table-wrap">
+          <p className="muted">{tr("Allocate credit per original invoice line to reverse the correct tax amount.", "وزّع الإشعار على بنود الفاتورة الأصلية لاحتساب الضريبة المعكوسة بدقة.")}</p>
+          <table>
+            <thead><tr><th>{tr("Invoice line", "بند الفاتورة")}</th><th>{tr("Remaining", "المتبقي")}</th><th>{tr("Credit", "الإشعار")}</th></tr></thead>
+            <tbody>{selectedInvoice.lines.map(line => <tr key={line.id}>
+              <td>{line.description}</td><td>{line.amountRemaining} {selectedInvoice.currency}</td>
+              <td><input type="number" min="0" max={line.amountRemaining} step="0.0001"
+                aria-label={tr("Line credit", "إشعار البند")}
+                value={lineAmounts[line.id] || ""}
+                onChange={event => setLineAmounts(current => ({ ...current, [line.id]: event.target.value }))} /></td>
+            </tr>)}</tbody>
+          </table>
+        </div>}
+        <label>{tr("Credit amount", "مبلغ الإشعار")}
+          <input name="amount" type="number" min="0.0001" step="0.0001" required
+            readOnly={taxed} value={taxed ? allocatedAmount : undefined} />
+        </label>
         <label className="form-span">{tr("Reason", "السبب")}<textarea name="reason" maxLength={1000} required /></label>
-        <button className="primary-button form-span" disabled={busy}>{busy ? tr("Issuing…", "جارٍ الإصدار…") : tr("Issue Credit Note", "إصدار الإشعار الدائن")}</button>
+        <button className="primary-button form-span" disabled={busy || (taxed && allocatedTotal <= BigInt(0))}>{busy ? tr("Issuing…", "جارٍ الإصدار…") : tr("Issue Credit Note", "إصدار الإشعار الدائن")}</button>
         {message && <div className="form-error form-span">{message}</div>}
       </form>
     </CrudModal>
