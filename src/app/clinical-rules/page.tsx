@@ -187,6 +187,7 @@ export default async function ClinicalRulesPage() {
         valueEn: option.valueEn,
         valueAr: option.valueAr,
         flag: option.flag,
+        isAbnormal: option.isAbnormal,
         isCritical: option.isCritical,
         displayOrder: option.displayOrder,
         effectiveFrom: option.effectiveFrom.toISOString().slice(0,10),
