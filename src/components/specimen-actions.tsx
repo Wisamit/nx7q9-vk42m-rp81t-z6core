@@ -55,6 +55,7 @@ export function SpecimenActions({
       incompatible_specimen_requirements: tr("Linked tests have incompatible specimen requirements. Review the test catalog before collection.", "الفحوصات المرتبطة لها متطلبات عينات غير متوافقة. راجع دليل الفحوصات قبل الجمع."),
       specimen_plan_catalog_mismatch: tr("The planned specimen no longer matches its catalog configuration.", "العينة المخططة لم تعد مطابقة لإعداد دليل الفحوصات."),
       non_planned_specimen_without_requirement_snapshot: tr("This historical specimen cannot be finalized after its lifecycle has started.", "لا يمكن تثبيت متطلبات هذه العينة التاريخية بعد بدء دورة حياتها."),
+      active_child_aliquots_require_resolution: tr("Reject or dispose active child aliquots before rejecting their primary specimen.", "يجب رفض أو التخلص من الأجزاء المشتقة الفعالة قبل رفض العينة الأصلية."),
     };
     return errors[code] || code || tr("Specimen action failed.", "فشل إجراء العينة.");
   }
@@ -97,7 +98,9 @@ export function SpecimenActions({
 
     if (response.ok) {
       setMessage(mode === "REJECT"
-        ? `${tr("Rejected. Recollection barcode created", "تم رفض العينة. تم إنشاء باركود لإعادة السحب")}: ${body.replacementBarcode}`
+        ? body.replacementType === "ALIQUOT"
+          ? `${tr("Aliquot rejected. Derive any replacement from parent", "تم رفض الجزء المشتق. أنشئ أي بديل من العينة الأصلية")}: ${body.parentBarcode || "—"}`
+          : `${tr("Rejected. Recollection barcode created", "تم رفض العينة. تم إنشاء باركود لإعادة السحب")}: ${body.replacementBarcode}`
         : `${barcode} ${tr("updated successfully.", "تم تحديثه بنجاح.")}`);
       setMode(null);
       router.refresh();
