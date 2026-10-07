@@ -58,6 +58,7 @@ export function OrderCreateForm({
   const [busy, setBusy] = useState(false);
   const [discountPercent, setDiscountPercent] = useState(0);
   const [discountApprovalRequestId, setDiscountApprovalRequestId] = useState("");
+  const [pregnancyStatus, setPregnancyStatus] = useState<"UNKNOWN" | "NOT_PREGNANT" | "PREGNANT">("UNKNOWN");
 
   const patientOptions = useMemo(() => patients.map(p => ({
     ...p,
@@ -136,6 +137,9 @@ export function OrderCreateForm({
         diagnosis: form.get("diagnosis"),
         clinicalNotes: form.get("clinicalNotes"),
         pregnancyInfo: form.get("pregnancyInfo"),
+        pregnancyStatus: form.get("pregnancyStatus"),
+        gestationalAgeWeeks: form.get("gestationalAgeWeeks"),
+        referencePopulationCode: form.get("referencePopulationCode"),
         discountPercent,
         discountReason: form.get("discountReason"),
         discountApprovalRequestId: discountApprovalRequestId || null,
@@ -162,9 +166,14 @@ export function OrderCreateForm({
       setPackageSearch("");
       setDiscountPercent(0);
       setDiscountApprovalRequestId("");
+      setPregnancyStatus("UNKNOWN");
       event.currentTarget.reset();
       router.refresh();
       onSuccess?.(success);
+    } else if (body.error === "invalid_gestational_age") {
+      setMessage(tr("Gestational age must be a non-negative number.", "يجب أن يكون عمر الحمل رقمًا غير سالب."));
+    } else if (body.error === "gestational_age_requires_pregnant_status") {
+      setMessage(tr("Gestational age can only be recorded when pregnancy status is Pregnant.", "لا يمكن تسجيل عمر الحمل إلا عندما تكون حالة الحمل: حامل."));
     } else if (body.error === "tax_configuration_changed") {
       setMessage(tr("Tax configuration changed while registering this order. Review the amounts and submit again.", "تغير إعداد الضريبة أثناء تسجيل الطلب. راجع المبالغ ثم أعد الإرسال."));
     } else if (body.error === "invalid_tax_rule") {
@@ -262,6 +271,30 @@ export function OrderCreateForm({
         <select name="fasting" defaultValue=""><option value="">{tr("Unknown / not stated", "غير معروف / غير مذكور")}</option><option value="YES">{tr("Yes", "نعم")}</option><option value="NO">{tr("No", "لا")}</option></select>
       </label>
       <label>{tr("Diagnosis / indication", "التشخيص / سبب الطلب")}<input name="diagnosis" maxLength={500} /></label>
+      <label>{tr("Pregnancy status", "حالة الحمل")}
+        <select
+          name="pregnancyStatus"
+          value={pregnancyStatus}
+          onChange={event => setPregnancyStatus(event.target.value as "UNKNOWN" | "NOT_PREGNANT" | "PREGNANT")}
+        >
+          <option value="UNKNOWN">{tr("Unknown / not stated", "غير معروف / غير مذكور")}</option>
+          <option value="NOT_PREGNANT">{tr("Not pregnant", "غير حامل")}</option>
+          <option value="PREGNANT">{tr("Pregnant", "حامل")}</option>
+        </select>
+      </label>
+      <label>{tr("Gestational age (weeks)", "عمر الحمل (بالأسابيع)")}
+        <input
+          name="gestationalAgeWeeks"
+          type="number"
+          min="0"
+          step="0.01"
+          disabled={pregnancyStatus !== "PREGNANT"}
+          placeholder={pregnancyStatus === "PREGNANT" ? tr("Optional", "اختياري") : tr("Requires pregnant status", "يتطلب حالة حامل")}
+        />
+      </label>
+      <label>{tr("Reference population code", "رمز المجموعة المرجعية")}
+        <input name="referencePopulationCode" maxLength={80} placeholder={tr("Optional configured code", "رمز اختياري مُهيأ")} />
+      </label>
       <label className="form-span">{tr("Pregnancy information", "معلومات الحمل")}<input name="pregnancyInfo" maxLength={500} /></label>
       <label className="form-span">{tr("Clinical notes", "ملاحظات سريرية")}<textarea name="clinicalNotes" rows={3} /></label>
 
