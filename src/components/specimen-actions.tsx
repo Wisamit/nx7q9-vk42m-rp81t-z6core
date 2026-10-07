@@ -7,17 +7,27 @@ type BranchOption = { id: string; code: string; nameEn: string };
 
 export function SpecimenActions({
   specimenId,
+  orderId,
   barcode,
   status,
   specimenTypeConfigured,
+  requirementsFinalized,
+  requiredVolume,
+  requiredVolumeUnit,
+  collectionInstructions,
   branches,
   activeBranchId,
   locale,
 }: {
   specimenId: string;
+  orderId: string;
   barcode: string;
   status: string;
   specimenTypeConfigured: boolean;
+  requirementsFinalized: boolean;
+  requiredVolume: string | null;
+  requiredVolumeUnit: string | null;
+  collectionInstructions: string[];
   branches: BranchOption[];
   activeBranchId: string | null;
   locale: "ar" | "en";
@@ -27,6 +37,35 @@ export function SpecimenActions({
   const [mode, setMode] = useState<"COLLECT" | "RECEIVE" | "REJECT" | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+
+  function actionError(body: Record<string, unknown>) {
+    const code = typeof body.error === "string" ? body.error : "";
+    const errors: Record<string, string> = {
+      specimen_requirements_not_finalized: tr("Collection requirements must be finalized first.", "يجب تثبيت متطلبات العينة قبل الجمع."),
+      specimen_requirement_configuration_incomplete: tr("Collection is blocked because the specimen requirement configuration is incomplete.", "تم منع الجمع لأن إعداد متطلبات العينة غير مكتمل."),
+      specimen_volume_required: tr("Collected volume is required for this specimen.", "حجم العينة المجموعة مطلوب لهذه العينة."),
+      specimen_volume_unit_mismatch: tr("Collected volume unit must match the planned requirement.", "يجب أن تطابق وحدة الحجم المجموعة وحدة المتطلب المخطط."),
+      insufficient_specimen_volume: tr("Collected volume is below the required minimum.", "الحجم المجموعة أقل من الحد الأدنى المطلوب."),
+      incompatible_specimen_requirements: tr("Linked tests have incompatible specimen requirements. Review the test catalog before collection.", "الفحوصات المرتبطة لها متطلبات عينات غير متوافقة. راجع دليل الفحوصات قبل الجمع."),
+      specimen_plan_catalog_mismatch: tr("The planned specimen no longer matches its catalog configuration.", "العينة المخططة لم تعد مطابقة لإعداد دليل الفحوصات."),
+      non_planned_specimen_without_requirement_snapshot: tr("This historical specimen cannot be finalized after its lifecycle has started.", "لا يمكن تثبيت متطلبات هذه العينة التاريخية بعد بدء دورة حياتها."),
+    };
+    return errors[code] || code || tr("Specimen action failed.", "فشل إجراء العينة.");
+  }
+
+  async function finalizeRequirements() {
+    setBusy(true);
+    setMessage("");
+    const response = await fetch(`/api/orders/${orderId}/specimen-requirements/finalize`, { method: "POST" });
+    const body = await response.json().catch(() => ({}));
+    if (response.ok) {
+      setMessage(tr("Specimen requirements finalized. Collection controls are now active.", "تم تثبيت متطلبات العينات وأصبحت ضوابط الجمع فعالة."));
+      router.refresh();
+    } else {
+      setMessage(actionError(body));
+    }
+    setBusy(false);
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -57,19 +96,23 @@ export function SpecimenActions({
       setMode(null);
       router.refresh();
     } else {
-      setMessage(body.error || tr("Specimen action failed.", "فشل إجراء العينة."));
+      setMessage(actionError(body));
     }
     setBusy(false);
   }
 
   return <div className="specimen-actions">
     <div className="specimen-action-buttons">
-      {status === "PLANNED" && <button className="primary-button" disabled={!specimenTypeConfigured} onClick={() => setMode("COLLECT")}>{tr("Collect", "جمع")}</button>}
-      {["COLLECTED","IN_TRANSIT"].includes(status) && <button className="primary-button" onClick={() => setMode("RECEIVE")}>{tr("Receive", "استلام")}</button>}
-      {["COLLECTED","RECEIVED"].includes(status) && <button className="danger-button" onClick={() => setMode("REJECT")}>{tr("Reject", "رفض")}</button>}
+      {status === "PLANNED" && !requirementsFinalized && <button type="button" className="secondary-button" disabled={busy} onClick={finalizeRequirements}>{tr("Finalize Requirements", "تثبيت المتطلبات")}</button>}
+      {status === "PLANNED" && requirementsFinalized && <button type="button" className="primary-button" disabled={!specimenTypeConfigured} onClick={() => setMode("COLLECT")}>{tr("Collect", "جمع")}</button>}
+      {["COLLECTED","IN_TRANSIT"].includes(status) && <button type="button" className="primary-button" onClick={() => setMode("RECEIVE")}>{tr("Receive", "استلام")}</button>}
+      {["COLLECTED","RECEIVED"].includes(status) && <button type="button" className="danger-button" onClick={() => setMode("REJECT")}>{tr("Reject", "رفض")}</button>}
     </div>
 
+    {status === "PLANNED" && !requirementsFinalized && <p className="form-warning">{tr("Collection is locked until the order's specimen requirements are finalized.", "الجمع مقفل حتى يتم تثبيت متطلبات عينات الطلب.")}</p>}
     {!specimenTypeConfigured && status === "PLANNED" && <p className="form-error">{tr("Collection blocked: specimen type is not configured for this test.", "تعذر جمع العينة لأن نوع العينة غير مهيأ لهذا الفحص.")}</p>}
+    {requirementsFinalized && requiredVolume && status === "PLANNED" && <p className="muted"><strong>{tr("Minimum required volume", "الحد الأدنى المطلوب")}: {requiredVolume} {requiredVolumeUnit || ""}</strong></p>}
+    {requirementsFinalized && collectionInstructions.length > 0 && status === "PLANNED" && <div className="muted"><strong>{tr("Collection instructions", "تعليمات الجمع")}:</strong> {collectionInstructions.join(" · ")}</div>}
     {message && <p className="form-success">{message}</p>}
 
     {mode && <form className="catalog-form specimen-action-form" onSubmit={submit}>
@@ -81,8 +124,8 @@ export function SpecimenActions({
       </label>
 
       {mode === "COLLECT" && <>
-        <label>{tr("Volume", "الحجم")}<input name="volume" type="number" min="0" step="0.001" /></label>
-        <label>{tr("Volume unit", "وحدة الحجم")}<input name="volumeUnit" maxLength={30} placeholder="mL" /></label>
+        <label>{tr("Volume", "الحجم")}<input name="volume" type="number" step="0.001" required={Boolean(requiredVolume)} min={requiredVolume || "0"} /></label>
+        <label>{tr("Volume unit", "وحدة الحجم")}<input name="volumeUnit" maxLength={30} placeholder="mL" required={Boolean(requiredVolumeUnit)} defaultValue={requiredVolumeUnit || ""} readOnly={Boolean(requiredVolumeUnit)} /></label>
         <label className="form-span">{tr("Collection notes", "ملاحظات الجمع")}<textarea name="notes" rows={2} /></label>
       </>}
 

@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { SpecimenActions } from "@/components/specimen-actions";
 import { SystemIcon } from "@/components/system-icon";
 import { getUiLocale, statusLabel, tr } from "@/lib/ui-i18n";
+import { specimenRequirementSnapshotFromDetails } from "@/lib/specimen-requirement-engine";
 
 export const dynamic = "force-dynamic";
 
@@ -52,7 +53,7 @@ export default async function SpecimensPage({
         receivedBy: true,
         rejectedBy: true,
         orderItems: { include: { orderItem: true } },
-        events: { orderBy: { occurredAt: "desc" }, take: 5, include: { actor: true, branch: true } },
+        events: { orderBy: { occurredAt: "asc" }, include: { actor: true, branch: true } },
       },
       orderBy: [{ status: "asc" }, { createdAt: "desc" }],
       take: 200,
@@ -126,52 +127,72 @@ export default async function SpecimensPage({
 
     <div className="specimen-card-list">
       {specimens.length === 0 ? <section className="detail-card"><p className="empty-state">{tr(locale, "No matching specimens.", "لا توجد عينات مطابقة.")}</p></section> :
-        specimens.map(specimen => <section className="detail-card specimen-card" key={specimen.id}>
-          <div className="specimen-card-head">
-            <div>
-              <span className={"status-badge status-" + specimen.status.toLowerCase().replaceAll("_","-")}>{statusLabel(locale, specimen.status)}</span>
-              <h2 className="barcode-text">{specimen.barcode}</h2>
-              <p className="muted">{specimen.order.accessionNumber} · {specimen.order.patient.patientNumber} · {patientName(specimen.order.patient)}</p>
+        specimens.map(specimen => {
+          const requirement = specimen.events
+            .map(event => specimenRequirementSnapshotFromDetails(event.details))
+            .find(Boolean) || null;
+          const recentEvents = [...specimen.events].slice(-5).reverse();
+          return <section className="detail-card specimen-card" key={specimen.id}>
+            <div className="specimen-card-head">
+              <div>
+                <span className={"status-badge status-" + specimen.status.toLowerCase().replaceAll("_","-")}>{statusLabel(locale, specimen.status)}</span>
+                <h2 className="barcode-text">{specimen.barcode}</h2>
+                <p className="muted">{specimen.order.accessionNumber} · {specimen.order.patient.patientNumber} · {patientName(specimen.order.patient)}</p>
+              </div>
+              <Link className="secondary-link" href={`/orders/${specimen.orderId}`}><SystemIcon name="orders" size={15} />{tr(locale, "Open Order", "فتح الطلب")}</Link>
             </div>
-            <Link className="secondary-link" href={`/orders/${specimen.orderId}`}><SystemIcon name="orders" size={15} />{tr(locale, "Open Order", "فتح الطلب")}</Link>
-          </div>
 
-          <div className="specimen-metadata">
-            <div><span>{tr(locale, "Specimen", "العينة")}</span><strong>{specimen.specimenType ? localizedName(specimen.specimenType) : tr(locale, "Not configured", "غير مهيأة")}</strong></div>
-            <div><span>{tr(locale, "Container", "الحاوية")}</span><strong>{specimen.container ? localizedName(specimen.container) : "—"}</strong></div>
-            <div><span>{tr(locale, "Order branch", "فرع الطلب")}</span><strong>{localizedName(specimen.order.orderingBranch)}</strong></div>
-            <div><span>{tr(locale, "Current branch", "الفرع الحالي")}</span><strong>{specimen.currentBranch ? localizedName(specimen.currentBranch) : "—"}</strong></div>
-            <div><span>{tr(locale, "Linked tests", "الفحوصات المرتبطة")}</span><strong>{specimen.orderItems.map(link => link.orderItem.testCodeSnapshot).join(", ") || "—"}</strong></div>
-            <div><span>{tr(locale, "Collected", "تم الجمع")}</span><strong>{specimen.collectedAt ? specimen.collectedAt.toISOString().replace("T"," ").slice(0,19) : "—"}</strong></div>
-            <div><span>{tr(locale, "Received", "تم الاستلام")}</span><strong>{specimen.receivedAt ? specimen.receivedAt.toISOString().replace("T"," ").slice(0,19) : "—"}</strong></div>
-            <div><span>{tr(locale, "Volume", "الحجم")}</span><strong>{specimen.volume ? `${specimen.volume.toString()} ${specimen.volumeUnit || ""}` : "—"}</strong></div>
-          </div>
-
-          {specimen.status === "REJECTED" && <div className="specimen-rejection">
-            <strong>{specimen.rejectionReasonCode}</strong>
-            <span>{specimen.rejectionReasonText}</span>
-          </div>}
-
-          <SpecimenActions
-            specimenId={specimen.id}
-            barcode={specimen.barcode}
-            status={specimen.status}
-            specimenTypeConfigured={Boolean(specimen.specimenTypeId)}
-            branches={branches}
-            activeBranchId={session.activeBranchId}
-            locale={locale}
-          />
-
-          <details className="specimen-history">
-            <summary>{tr(locale, "Chain of custody", "سلسلة الحيازة")} ({specimen.events.length} {tr(locale, "recent events", "أحداث حديثة")})</summary>
-            <div className="summary-list">
-              {specimen.events.map(event => <div key={event.id}>
-                <span>{event.occurredAt.toISOString().replace("T"," ").slice(0,19)} · {event.branch?.code || "—"} · {event.actor ? userName(event.actor) : tr(locale, "System", "النظام")}</span>
-                <strong>{eventLabel(event.eventType)}{event.fromStatus || event.toStatus ? ` · ${event.fromStatus ? statusLabel(locale, event.fromStatus) : tr(locale, "New", "جديد")} → ${event.toStatus ? statusLabel(locale, event.toStatus) : "—"}` : ""}</strong>
-              </div>)}
+            <div className="specimen-metadata">
+              <div><span>{tr(locale, "Specimen", "العينة")}</span><strong>{specimen.specimenType ? localizedName(specimen.specimenType) : tr(locale, "Not configured", "غير مهيأة")}</strong></div>
+              <div><span>{tr(locale, "Container", "الحاوية")}</span><strong>{specimen.container ? localizedName(specimen.container) : "—"}</strong></div>
+              <div><span>{tr(locale, "Order branch", "فرع الطلب")}</span><strong>{localizedName(specimen.order.orderingBranch)}</strong></div>
+              <div><span>{tr(locale, "Current branch", "الفرع الحالي")}</span><strong>{specimen.currentBranch ? localizedName(specimen.currentBranch) : "—"}</strong></div>
+              <div><span>{tr(locale, "Linked tests", "الفحوصات المرتبطة")}</span><strong>{specimen.orderItems.map(link => link.orderItem.testCodeSnapshot).join(", ") || "—"}</strong></div>
+              <div><span>{tr(locale, "Required volume", "الحجم المطلوب")}</span><strong>{requirement?.requiredVolume ? `${requirement.requiredVolume} ${requirement.requiredVolumeUnit || ""}` : requirement ? tr(locale, "Not specified", "غير محدد") : tr(locale, "Not finalized", "غير مثبت")}</strong></div>
+              <div><span>{tr(locale, "Storage", "التخزين")}</span><strong>{requirement?.storageConditions || "—"}</strong></div>
+              <div><span>{tr(locale, "Stability", "الثبات")}</span><strong>{requirement?.stabilityMinutes == null ? "—" : `${requirement.stabilityMinutes} ${tr(locale, "min", "دقيقة")}`}</strong></div>
+              <div><span>{tr(locale, "Collected", "تم الجمع")}</span><strong>{specimen.collectedAt ? specimen.collectedAt.toISOString().replace("T"," ").slice(0,19) : "—"}</strong></div>
+              <div><span>{tr(locale, "Received", "تم الاستلام")}</span><strong>{specimen.receivedAt ? specimen.receivedAt.toISOString().replace("T"," ").slice(0,19) : "—"}</strong></div>
+              <div><span>{tr(locale, "Collected volume", "الحجم المجموعة")}</span><strong>{specimen.volume ? `${specimen.volume.toString()} ${specimen.volumeUnit || ""}` : "—"}</strong></div>
+              <div><span>{tr(locale, "Sharing", "المشاركة")}</span><strong>{requirement ? requirement.shared ? tr(locale, "Shared tube", "أنبوب مشترك") : tr(locale, "Dedicated", "مخصص") : "—"}</strong></div>
             </div>
-          </details>
-        </section>)
+
+            {requirement && requirement.collectionInstructions.length > 0 && <div className="form-warning">
+              <strong>{tr(locale, "Collection instructions", "تعليمات الجمع")}</strong>
+              <span>{requirement.collectionInstructions.join(" · ")}</span>
+            </div>}
+
+            {specimen.status === "REJECTED" && <div className="specimen-rejection">
+              <strong>{specimen.rejectionReasonCode}</strong>
+              <span>{specimen.rejectionReasonText}</span>
+            </div>}
+
+            <SpecimenActions
+              specimenId={specimen.id}
+              orderId={specimen.orderId}
+              barcode={specimen.barcode}
+              status={specimen.status}
+              specimenTypeConfigured={Boolean(specimen.specimenTypeId)}
+              requirementsFinalized={Boolean(requirement)}
+              requiredVolume={requirement?.requiredVolume || null}
+              requiredVolumeUnit={requirement?.requiredVolumeUnit || null}
+              collectionInstructions={requirement?.collectionInstructions || []}
+              branches={branches}
+              activeBranchId={session.activeBranchId}
+              locale={locale}
+            />
+
+            <details className="specimen-history">
+              <summary>{tr(locale, "Chain of custody", "سلسلة الحيازة")} ({recentEvents.length} {tr(locale, "recent events", "أحداث حديثة")})</summary>
+              <div className="summary-list">
+                {recentEvents.map(event => <div key={event.id}>
+                  <span>{event.occurredAt.toISOString().replace("T"," ").slice(0,19)} · {event.branch?.code || "—"} · {event.actor ? userName(event.actor) : tr(locale, "System", "النظام")}</span>
+                  <strong>{eventLabel(event.eventType)}{event.fromStatus || event.toStatus ? ` · ${event.fromStatus ? statusLabel(locale, event.fromStatus) : tr(locale, "New", "جديد")} → ${event.toStatus ? statusLabel(locale, event.toStatus) : "—"}` : ""}</strong>
+                </div>)}
+              </div>
+            </details>
+          </section>;
+        })
       }
     </div>
   </main>;
