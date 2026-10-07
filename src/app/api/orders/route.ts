@@ -10,7 +10,7 @@ import { invoiceDueDateSnapshot } from "@/lib/accounts-receivable-aging";
 import { creditLimitDecision } from "@/lib/client-credit-control";
 import { localCalendarDate } from "@/lib/accounts-receivable-aging";
 import { resolveTaxRule, taxLineAmounts, type EffectiveTaxRule } from "@/lib/tax-policy";
-import { buildOrderItemTatSnapshot } from "@/lib/tat";
+import { buildOrderItemTatSnapshot, resolveTatPolicy, type TatPriority } from "@/lib/tat";
 
 function text(value: unknown, max = 500) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -50,7 +50,9 @@ export async function POST(request: Request) {
   const clientId = text(body.clientId, 36) || null;
   const directTestIds = uniqueIds(body.testIds);
   const packageIds = uniqueIds(body.packageIds);
-  const priority = ["ROUTINE", "URGENT", "STAT"].includes(body.priority) ? body.priority : "ROUTINE";
+  const priority: TatPriority = ["ROUTINE", "URGENT", "STAT"].includes(body.priority)
+    ? body.priority as TatPriority
+    : "ROUTINE";
   const clinicalNotes = text(body.clinicalNotes, 5000);
   const diagnosis = text(body.diagnosis, 500);
   const pregnancyInfo = text(body.pregnancyInfo, 500);
@@ -748,7 +750,21 @@ export async function POST(request: Request) {
       }
 
       for (const test of tests) {
-        const tatSnapshot = buildOrderItemTatSnapshot(test.tatMinutes, order.orderedAt);
+        const tatPolicy = await resolveTatPolicy(tx, {
+          testId: test.id,
+          branchId,
+          priority,
+          at: order.orderedAt,
+        });
+        const tatSnapshot = buildOrderItemTatSnapshot(
+          tatPolicy?.tatMinutes ?? test.tatMinutes,
+          order.orderedAt,
+          tatPolicy ? {
+            source: "SLA_POLICY",
+            policyId: tatPolicy.id,
+            alertBeforeMinutes: tatPolicy.alertBeforeMinutes,
+          } : {},
+        );
         const packageId = packageTestOwner.get(test.id) || null;
         const directPrice = packageId ? null : directPriceMap.get(test.id);
         if (!packageId && !directPrice) throw new Error("DIRECT_PRICE_RESOLUTION_MISSING");
@@ -783,6 +799,9 @@ export async function POST(request: Request) {
             tatClockBasisSnapshot: tatSnapshot.tatClockBasisSnapshot,
             tatClockStartedAt: tatSnapshot.tatClockStartedAt,
             tatDueAt: tatSnapshot.tatDueAt,
+            tatAlertBeforeMinutesSnapshot: tatSnapshot.tatAlertBeforeMinutesSnapshot,
+            tatAlertAt: tatSnapshot.tatAlertAt,
+            tatPolicyId: tatSnapshot.tatPolicyId,
             tatSnapshotSource: tatSnapshot.tatSnapshotSource,
           },
           select: { id: true },
