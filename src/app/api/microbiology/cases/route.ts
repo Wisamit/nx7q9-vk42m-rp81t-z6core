@@ -29,7 +29,7 @@ export async function POST(request: Request) {
     },
     include: {
       test: true,
-      specimenLinks: { where: { specimenId }, include: { specimen: true } },
+      specimenLinks: { where: { specimenId, status: "ACTIVE" }, include: { specimen: true } },
     },
   });
   if (!orderItem) return NextResponse.json({ error: "order_item_not_found" }, { status: 404 });
