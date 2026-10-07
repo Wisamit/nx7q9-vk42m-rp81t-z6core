@@ -28,6 +28,7 @@ type ExistingOption = {
   valueEn: string;
   valueAr?: string | null;
   flag: string;
+  isAbnormal: boolean;
   isCritical: boolean;
   displayOrder: number;
   effectiveFrom: string;
@@ -84,6 +85,7 @@ export function QualitativeResultOptionsManager({
         valueEn: form.get("valueEn"),
         valueAr: form.get("valueAr"),
         flag: form.get("flag"),
+        isAbnormal: form.get("isAbnormal") === "on",
         isCritical: form.get("isCritical") === "on",
         displayOrder: form.get("displayOrder"),
         effectiveFrom: form.get("effectiveFrom"),
@@ -174,6 +176,7 @@ export function QualitativeResultOptionsManager({
       <label>{tr("Display order", "ترتيب العرض")}<input name="displayOrder" type="number" min="0" max="10000" defaultValue="0" /></label>
       <label>{tr("Effective from", "ساري من")}<input name="effectiveFrom" type="date" required defaultValue={new Date().toISOString().slice(0, 10)} /></label>
       <label>{tr("Effective to", "ساري حتى")}<input name="effectiveTo" type="date" /></label>
+      <label className="checkbox-row"><input name="isAbnormal" type="checkbox" /> {tr("Treat this option as abnormal", "اعتبر هذا الخيار غير طبيعي")}</label>
       <label className="checkbox-row"><input name="isCritical" type="checkbox" /> {tr("Treat this option as a critical result", "اعتبر هذا الخيار نتيجة حرجة")}</label>
       <button className="primary-button form-span" disabled={busy === "create" || !testId || (requiresComponent && !componentId)}>
         {busy === "create" ? tr("Saving…", "جارٍ الحفظ…") : tr("Create Qualitative Option", "إنشاء الخيار النوعي")}
@@ -189,13 +192,14 @@ export function QualitativeResultOptionsManager({
           <th>{tr("Code", "الرمز")}</th>
           <th>{tr("Value", "القيمة")}</th>
           <th>{tr("Flag", "الإشارة")}</th>
+          <th>{tr("Abnormal", "غير طبيعية")}</th>
           <th>{tr("Critical", "حرجة")}</th>
           <th>{tr("Effective", "السريان")}</th>
           <th>{tr("Status", "الحالة")}</th>
           <th></th>
         </tr></thead>
         <tbody>
-          {options.length === 0 ? <tr><td colSpan={8} className="empty-state">{tr("No qualitative result options configured.", "لا توجد خيارات نتائج نوعية مهيأة.")}</td></tr> :
+          {options.length === 0 ? <tr><td colSpan={9} className="empty-state">{tr("No qualitative result options configured.", "لا توجد خيارات نتائج نوعية مهيأة.")}</td></tr> :
             options.map((option) => {
               const target = option.componentId
                 ? option.testCode + " / " + (option.componentCode || "")
@@ -206,6 +210,7 @@ export function QualitativeResultOptionsManager({
                 <td>{option.code}</td>
                 <td>{label}</td>
                 <td>{flagLabel(option.flag)}</td>
+                <td>{option.isAbnormal ? tr("YES", "نعم") : tr("NO", "لا")}</td>
                 <td>{option.isCritical ? tr("YES", "نعم") : tr("NO", "لا")}</td>
                 <td>{option.effectiveFrom} → {option.effectiveTo || tr("Open", "مفتوح")}</td>
                 <td>{option.status}</td>
