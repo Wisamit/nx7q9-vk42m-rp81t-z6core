@@ -70,7 +70,6 @@ export function CreditNoteCreateModal({
       body: JSON.stringify({
         invoiceId: form.get("invoiceId"),
         amount: form.get("amount"),
-        method: form.get("method"),
         reason: form.get("reason"),
       }),
     });
@@ -147,6 +146,7 @@ export function RefundCreateModal({
         paymentId,
         invoiceId,
         amount: form.get("amount"),
+        method: form.get("method"),
         reason: form.get("reason"),
         reference: form.get("reference"),
       }),
