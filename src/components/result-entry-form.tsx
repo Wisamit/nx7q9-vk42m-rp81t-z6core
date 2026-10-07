@@ -4,6 +4,7 @@ import { FormEvent, KeyboardEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { statusLabel as sharedStatusLabel } from "@/lib/ui-i18n";
 import { focusNextResultEntryControl, shouldAdvanceResultEntryOnEnter } from "@/lib/result-entry-keyboard";
+import { commentTemplateTargetMatches } from "@/lib/result-comments";
 
 type QualitativeResultOption = {
   id: string;
@@ -48,6 +49,7 @@ type CommentTemplateOption = {
 
 export function ResultEntryForm({
   orderItemId,
+  testId,
   specimenId,
   performingBranchId,
   fields,
@@ -61,6 +63,7 @@ export function ResultEntryForm({
   locale,
 }: {
   orderItemId: string;
+  testId: string;
   specimenId: string;
   performingBranchId: string;
   fields: ResultField[];
@@ -289,7 +292,7 @@ export function ResultEntryForm({
   const statusLocked = ["VERIFIED", "RELEASED", "AMENDED", "CANCELLED"].includes(savedStatus || "");
   const sourceLocked = resultSource !== "MANUAL";
   const locked = statusLocked || sourceLocked;
-  const resultLevelTemplates = commentTemplates.filter((template) => template.scope !== "COMPONENT");
+  const resultLevelTemplates = commentTemplates.filter((template) => commentTemplateTargetMatches(template, testId, null));
 
   return <form className="result-entry-form" onSubmit={save}>
     <div className="result-entry-header">
@@ -309,10 +312,10 @@ export function ResultEntryForm({
           <div className="result-field-input">
             {locked ? <strong>{values[key] || "—"}</strong> : fieldInput(field)}
             {field.componentId && <div className="component-comment-editor">
-              {!locked && commentTemplates.some((template) => template.scope === "COMPONENT" && template.componentId === field.componentId) && <select
+              {!locked && commentTemplates.some((template) => commentTemplateTargetMatches(template, testId, field.componentId)) && <select
                 defaultValue=""
                 onChange={(event) => {
-                  const template = commentTemplates.find((item) => item.id === event.target.value && item.componentId === field.componentId);
+                  const template = commentTemplates.find((item) => item.id === event.target.value && commentTemplateTargetMatches(item, testId, field.componentId));
                   if (template) {
                     const templateText = locale === "ar" ? template.textAr || template.textEn : template.textEn;
                     setComponentComments((current) => ({
@@ -325,7 +328,7 @@ export function ResultEntryForm({
               >
                 <option value="">{tr("Insert component comment…", "إدراج تعليق للمكوّن…")}</option>
                 {commentTemplates
-                  .filter((template) => template.scope === "COMPONENT" && template.componentId === field.componentId)
+                  .filter((template) => commentTemplateTargetMatches(template, testId, field.componentId))
                   .map((template) => <option key={template.id} value={template.id}>
                     {template.code} — {locale === "ar" ? template.nameAr || template.nameEn : template.nameEn}
                   </option>)}
