@@ -132,7 +132,7 @@ export async function POST(request: Request) {
         },
       },
       specimenLinks: {
-        where: { specimenId },
+        where: { specimenId, status: "ACTIVE" },
         include: { specimen: true },
       },
       results: {
