@@ -236,11 +236,12 @@ export async function POST(request: Request) {
       const flag = selectedOption
         ? qualitativeFlag({
             flag: selectedOption.flag as "NORMAL" | "ABNORMAL" | "POSITIVE" | "NEGATIVE" | "UNKNOWN",
+            isAbnormal: selectedOption.isAbnormal,
             isCritical: selectedOption.isCritical,
           })
         : parsed.valueNumeric !== null
           ? numericFlag(parsed.valueNumeric, interval)
-          : { flag: "UNKNOWN" as const, isCritical: false };
+          : { flag: "UNKNOWN" as const, isAbnormal: false, isCritical: false };
       const flagSource = selectedOption
         ? "RESULT_OPTION" as const
         : parsed.valueNumeric !== null && interval
@@ -442,6 +443,7 @@ export async function POST(request: Request) {
           criticalHighSnapshot: item.interval?.criticalHigh || null,
           flag: item.flag.flag,
           flagSource: item.flagSource,
+          isAbnormal: item.flag.isAbnormal,
           isCritical: item.flag.isCritical,
           qualitativeOptionId: item.qualitativeOptionId,
           qualitativeOptionCodeSnapshot: item.qualitativeOptionCode,
@@ -518,6 +520,7 @@ export async function POST(request: Request) {
         source: resultSource,
         values: prepared.map(item => ({
           flag: item.flag.flag,
+          isAbnormal: item.flag.isAbnormal,
           isCritical: item.flag.isCritical,
           deltaEvaluation: item.delta.evaluation,
         })),
@@ -648,6 +651,7 @@ export async function POST(request: Request) {
             displayValue: item.parsed.displayValue,
             flag: item.flag.flag,
             flagSource: item.flagSource,
+            abnormal: item.flag.isAbnormal,
             critical: item.flag.isCritical,
             qualitativeOptionId: item.qualitativeOptionId,
             qualitativeOptionCode: item.qualitativeOptionCode,
