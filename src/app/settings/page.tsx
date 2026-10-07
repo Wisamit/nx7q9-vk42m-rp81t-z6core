@@ -21,6 +21,7 @@ export default async function SettingsPage() {
           : "Manage center identity, appearance, timezone, date/time formats and system-wide defaults."}</p>
       </div>
       <div className="header-actions">
+        <Link className="secondary-link" href="/settings/specimens"><SystemIcon name="specimen" size={15} />{locale === "ar" ? "إعدادات العينات" : "Specimen Settings"}</Link>
         <Link className="secondary-link" href="/security"><SystemIcon name="security" size={15} />{locale === "ar" ? "الأمان والملف الشخصي" : "Security & Profile"}</Link>
       </div>
     </header>
