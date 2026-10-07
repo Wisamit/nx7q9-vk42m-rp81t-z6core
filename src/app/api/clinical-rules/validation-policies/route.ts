@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requirePermission, requestContext } from "@/lib/auth";
+import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 
 function text(value: unknown, max = 500) {
@@ -50,6 +50,7 @@ export async function POST(request: Request) {
       select: { id: true },
     });
     if (!branch) return NextResponse.json({ error: "branch_not_found" }, { status: 404 });
+    if (!canAccessBranch(session, branchId)) return NextResponse.json({ error: "branch_forbidden" }, { status: 403 });
   }
 
   if (departmentId) {
@@ -58,6 +59,9 @@ export async function POST(request: Request) {
       select: { id: true, branchId: true },
     });
     if (!department) return NextResponse.json({ error: "department_not_found" }, { status: 404 });
+    if (!branchId && department.branchId && !canAccessBranch(session, department.branchId)) {
+      return NextResponse.json({ error: "branch_forbidden" }, { status: 403 });
+    }
     if (branchId && department.branchId && department.branchId !== branchId) {
       return NextResponse.json({ error: "department_branch_mismatch" }, { status: 409 });
     }
