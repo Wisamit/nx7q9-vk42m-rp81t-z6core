@@ -95,7 +95,7 @@ export function ClinicalCatalogManager({
       {mode === "tat" && <form className="catalog-form" onSubmit={e => send(e, "/api/catalog/tat-policies")}>
         <label>{tr("Test", "الفحص")}<select name="testId" required value={testId} onChange={e => setTestId(e.target.value)}>{tests.map(t => <option key={t.id} value={t.id}>{t.code} — {name(t)}</option>)}</select></label>
         <label>{tr("Branch scope", "نطاق الفرع")}<select name="branchId"><option value="">{tr("Organization default / any branch", "افتراضي المؤسسة / كل الفروع")}</option>{branches.map(b => <option key={b.id} value={b.id}>{name(b)}</option>)}</select></label>
-        <label>{tr("Priority scope", "نطاق الأولوية")}<select name="priority"><option value="ANY">{tr("Any priority", "كل الأولويات")}</option><option value="ROUTINE">{tr("Routine", "عادي")}</option><option value="URGENT">{tr("Urgent", "عاجل")}</option><option value="STAT">STAT</option></select></label>
+        <label>{tr("Priority scope", "نطاق الأولوية")}<select name="priority"><option value="ANY">{tr("Any priority", "كل الأولويات")}</option><option value="ROUTINE">{tr("Routine", "عادي")}</option><option value="URGENT">{tr("Urgent", "عاجل")}</option><option value="STAT">{tr("STAT", "STAT")}</option></select></label>
         <label>{tr("TAT minutes", "زمن الإنجاز بالدقائق")}<input name="tatMinutes" type="number" min="0" max="5256000" required /></label>
         <label>{tr("Alert before due (minutes)", "التنبيه قبل الاستحقاق (دقائق)")}<input name="alertBeforeMinutes" type="number" min="0" placeholder={tr("Optional", "اختياري")} /></label>
         <label>{tr("Effective from", "ساري من")}<input name="effectiveFrom" type="date" required defaultValue={new Date().toISOString().slice(0, 10)} /></label>
