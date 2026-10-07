@@ -75,7 +75,7 @@ export default async function ClinicalRulesPage() {
     prisma.qualitativeResultOption.findMany({
       where: { organizationId: session.user.organizationId },
       include: { test: true, component: true },
-      orderBy: [{ test: { code: "asc" } }, { component: { code: "asc" } }, { displayOrder: "asc" }, { createdAt: "asc" }],
+      orderBy: [{ testId: "asc" }, { componentId: "asc" }, { displayOrder: "asc" }, { createdAt: "asc" }],
       take: 500,
     }),
   ]);
