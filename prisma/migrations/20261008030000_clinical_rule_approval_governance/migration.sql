@@ -54,6 +54,17 @@ ALTER TABLE `result_validation_policies`
   DROP INDEX `result_validation_policies_org_code_key`,
   ADD INDEX `result_validation_policies_org_code_idx` (`organization_id`, `code`);
 
+CREATE TABLE `clinical_rule_governance_locks` (
+  `organization_id` CHAR(36) NOT NULL,
+  `rule_type` VARCHAR(80) NOT NULL,
+  `identity_hash` CHAR(64) NOT NULL,
+  `updated_at` DATETIME(3) NOT NULL,
+  PRIMARY KEY (`organization_id`, `rule_type`, `identity_hash`),
+  CONSTRAINT `clinical_rule_governance_locks_org_fk`
+    FOREIGN KEY (`organization_id`) REFERENCES `organizations`(`id`)
+    ON DELETE RESTRICT ON UPDATE CASCADE
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
 INSERT IGNORE INTO `permissions` (`id`,`code`,`module`,`description`,`created_at`) VALUES
 (UUID(),'clinical_rules.approve','clinical_rules','Approve and retire advanced clinical rules and validation policies',CURRENT_TIMESTAMP(3));
 
