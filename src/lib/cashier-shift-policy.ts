@@ -1,4 +1,4 @@
-import { minorToMoney4, money4ToMinor } from "@/lib/billing-adjustments";
+import { minorToMoney4, money4ToMinor } from "./billing-adjustments.ts";
 
 export function cashierShiftActiveKey(branchId: string, cashierUserId: string, currency: string) {
   return `${branchId}:${cashierUserId}:${currency.trim().toUpperCase()}`;
