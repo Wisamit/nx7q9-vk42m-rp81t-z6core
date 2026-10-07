@@ -30,6 +30,13 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
   if (!canAccessDepartment(session, result.orderItem.test.departmentId)) {
     return NextResponse.json({ error: "department_forbidden" }, { status: 403 });
   }
+  if (result.validationStage !== "COMPLETE") {
+    return NextResponse.json({
+      error: "required_validation_not_complete",
+      status: result.status,
+      validationStage: result.validationStage,
+    }, { status: 409 });
+  }
   const qcGate = result.source === "ANALYZER" && result.analyzerId
     ? await resolveAnalyzerQcGate(prisma, {
         analyzerId: result.analyzerId,
