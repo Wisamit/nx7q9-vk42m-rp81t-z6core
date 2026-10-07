@@ -4,6 +4,7 @@ import { permissionSet, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { OrderQuestionManager } from "@/components/order-question-manager";
 import { ResultLayoutManager } from "@/components/result-layout-manager";
+import { ReferenceIntervalGovernanceActions } from "@/components/reference-interval-governance-actions";
 import { getUiLocale, statusLabel, tr } from "@/lib/ui-i18n";
 import { normalizeOrderQuestionOptions } from "@/lib/order-questions";
 
@@ -19,7 +20,7 @@ export default async function TestDetailPage({ params }: { params: Promise<{ id:
     include: {
       department: true, specimenType: true, container: true, method: true, defaultUnit: true,
       branchAvailability: { include: { branch: true } },
-      components: { include: { unit: true, resultSection: true, referenceIntervals: { include: { branch: true, method: true, analyzer: true, specimenType: true }, orderBy: { effectiveFrom: "desc" } } }, orderBy: { displayOrder: "asc" } },
+      components: { include: { unit: true, resultSection: true, referenceIntervals: { include: { branch: true, method: true, analyzer: true, specimenType: true, createdBy: true, approvedBy: true, retiredBy: true }, orderBy: { effectiveFrom: "desc" } } }, orderBy: { displayOrder: "asc" } },
       tatPolicies: { include: { branch: true, createdBy: true }, orderBy: [{ effectiveFrom: "desc" }, { createdAt: "desc" }] },
       resultSections: { orderBy: [{ displayOrder: "asc" }, { code: "asc" }] },
       orderQuestions: { orderBy: [{ code: "asc" }, { version: "desc" }, { effectiveFrom: "desc" }] },
@@ -29,6 +30,13 @@ export default async function TestDetailPage({ params }: { params: Promise<{ id:
 
   const localizedName = (item: { nameEn: string; nameAr?: string | null }) =>
     locale === "ar" ? item.nameAr || item.nameEn : item.nameEn;
+  const referenceApprovalLabel = (value: string) => ({
+    DRAFT: tr(locale, "Draft", "مسودة"),
+    APPROVED: tr(locale, "Approved", "معتمد"),
+    RETIRED: tr(locale, "Retired", "موقوف"),
+  }[value] || value);
+  const actorName = (user: { displayNameEn: string; displayNameAr: string | null } | null) =>
+    user ? (locale === "ar" ? user.displayNameAr || user.displayNameEn : user.displayNameEn) : "—";
   const resultTypeLabel = (value: string) => ({
     NUMERIC: tr(locale, "Numeric", "رقمي"),
     TEXT: tr(locale, "Text", "نصي"),
@@ -130,7 +138,11 @@ export default async function TestDetailPage({ params }: { params: Promise<{ id:
       <div className="table-wrap"><table>
         <thead><tr>
           <th>{tr(locale, "Component", "المكوّن")}</th><th>{tr(locale, "Type", "النوع")}</th><th>{tr(locale, "Unit", "الوحدة")}</th>
-          <th>{tr(locale, "Reference interval", "المدى المرجعي")}</th><th>{tr(locale, "Critical limits", "الحدود الحرجة")}</th><th>{tr(locale, "Effective", "السريان")}</th>
+          <th>{tr(locale, "Reference interval", "المدى المرجعي")}</th>
+          <th>{tr(locale, "Critical limits", "الحدود الحرجة")}</th>
+          <th>{tr(locale, "Effective", "السريان")}</th>
+          <th>{tr(locale, "Governance", "الحوكمة")}</th>
+          {permissions.has("catalog.reference_ranges.approve") && <th>{tr(locale, "Action", "الإجراء")}</th>}
         </tr></thead>
         <tbody>
           {test.components.length===0 ? <tr><td colSpan={6} className="empty-state">{tr(locale, "No components configured.", "لا توجد مكونات مهيأة.")}</td></tr> :
@@ -153,9 +165,22 @@ export default async function TestDetailPage({ params }: { params: Promise<{ id:
                  </td>
                 <td>{[range.criticalLow?.toString(),range.criticalHigh?.toString()].filter(Boolean).join(" / ")||"—"}</td>
                 <td>{range.effectiveFrom.toISOString().slice(0,10)}{range.effectiveTo ? ` → ${range.effectiveTo.toISOString().slice(0,10)}` : ` → ${tr(locale, "current", "حالي")}`}</td>
+                <td>
+                  <strong>{referenceApprovalLabel(range.approvalStatus)}</strong>
+                  {range.source ? <><br/><small>{tr(locale, "Source", "المصدر")}: {range.source}</small></> : null}
+                  <br/><small>{tr(locale, "Created by", "أُنشئ بواسطة")}: {actorName(range.createdBy)}</small>
+                  {range.approvedAt ? <><br/><small>{tr(locale, "Approved by", "اعتمد بواسطة")}: {actorName(range.approvedBy)} · {range.approvedAt.toISOString().replace("T"," ").slice(0,19)}</small></> : null}
+                  {range.retiredAt ? <><br/><small>{tr(locale, "Retired by", "أُوقف بواسطة")}: {actorName(range.retiredBy)} · {range.retiredAt.toISOString().replace("T"," ").slice(0,19)}</small></> : null}
+                  {range.retirementReason ? <><br/><small>{tr(locale, "Reason", "السبب")}: {range.retirementReason}</small></> : null}
+                </td>
+                {permissions.has("catalog.reference_ranges.approve") && <td><ReferenceIntervalGovernanceActions id={range.id} approvalStatus={range.approvalStatus} locale={locale} /></td>}
               </tr>
             ) : [<tr key={component.id}>
-              <td><strong>{component.code}</strong><br/>{localizedName(component)}</td><td>{resultTypeLabel(component.resultType)}</td><td>{component.unit?.symbol||"—"}</td><td>—</td><td>—</td><td>—</td>
+              <td><strong>{component.code}</strong><br/>{localizedName(component)}</td>
+              <td>{resultTypeLabel(component.resultType)}</td>
+              <td>{component.unit?.symbol||"—"}</td>
+              <td>—</td><td>—</td><td>—</td><td>—</td>
+              {permissions.has("catalog.reference_ranges.approve") && <td>—</td>}
             </tr>])}
         </tbody>
       </table></div>
