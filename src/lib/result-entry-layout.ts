@@ -3,28 +3,25 @@ export type ResultLayoutSection = {
   code: string;
   nameEn: string;
   nameAr: string | null;
+  columnCount?: number;
+  hintEn?: string | null;
+  hintAr?: string | null;
 };
 
 export type ResultLayoutField = {
   resultSectionId: string | null;
 };
 
-export type ResultFieldGroup<
-  TField extends ResultLayoutField,
-  TSection extends ResultLayoutSection = ResultLayoutSection,
-> = TSection & {
-  fields: TField[];
+export type ResultFieldGroup<T extends ResultLayoutField> = ResultLayoutSection & {
+  fields: T[];
 };
 
-export function groupResultFields<
-  TField extends ResultLayoutField,
-  TSection extends ResultLayoutSection,
->(
-  fields: TField[],
-  sections: TSection[],
-): ResultFieldGroup<TField, TSection>[] {
+export function groupResultFields<T extends ResultLayoutField>(
+  fields: T[],
+  sections: ResultLayoutSection[],
+): ResultFieldGroup<T>[] {
   const activeSectionIds = new Set(sections.map(section => section.id));
-  const groups: ResultFieldGroup<TField, TSection>[] = sections
+  const groups: ResultFieldGroup<T>[] = sections
     .map(section => ({
       ...section,
       fields: fields.filter(field => field.resultSectionId === section.id),
@@ -36,20 +33,16 @@ export function groupResultFields<
   );
 
   if (ungrouped.length > 0) {
-    const fallback = {
-      ...(sections[0] || {
-        id: "",
-        code: "",
-        nameEn: "Other / Ungrouped",
-        nameAr: "أخرى / بدون قسم",
-      }),
+    groups.push({
       id: "",
       code: "",
       nameEn: "Other / Ungrouped",
       nameAr: "أخرى / بدون قسم",
+      columnCount: 1,
+      hintEn: null,
+      hintAr: null,
       fields: ungrouped,
-    } as ResultFieldGroup<TField, TSection>;
-    groups.push(fallback);
+    });
   }
 
   return groups;
