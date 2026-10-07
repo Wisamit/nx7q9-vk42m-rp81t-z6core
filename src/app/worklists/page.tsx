@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { BulkResultEntry } from "@/components/bulk-result-entry";
 import { SystemIcon } from "@/components/system-icon";
 import { getUiLocale, statusLabel, tr } from "@/lib/ui-i18n";
+import { scopedWorklistBranchIds } from "@/lib/clinical-safety";
 
 export const dynamic = "force-dynamic";
 
@@ -32,9 +33,7 @@ export default async function WorklistsPage({
     .filter(scope => scope.branch.status === "ACTIVE")
     .map(scope => scope.branch);
   const branchIds = authorizedBranches.map(branch => branch.id);
-  const worklistBranchIds = branchId
-    ? (branchIds.includes(branchId) ? [branchId] : ["__FORBIDDEN__"])
-    : branchIds;
+  const worklistBranchIds = scopedWorklistBranchIds(branchIds, branchId || null);
   const priorityFilter = ["ROUTINE", "URGENT", "STAT"].includes(priority)
     ? priority as "ROUTINE" | "URGENT" | "STAT"
     : null;
