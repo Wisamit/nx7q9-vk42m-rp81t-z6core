@@ -390,7 +390,14 @@ export default async function WorklistsPage({
                 const abnormalCount = result?.values.filter(value => value.isAbnormal).length || 0;
                 const tatState = tatWorkState(item.tatDueAt, item.status, now);
                 const tatRemaining = tatRemainingMinutes(item.tatDueAt, now);
-                const readySpecimenBranchIds = readySpecimen?.currentBranchId ? [readySpecimen.currentBranchId] : [];
+                const readySpecimenBranchIds = [...new Set(item.specimenLinks
+                  .map(link => link.specimen)
+                  .filter(specimen =>
+                    ["RECEIVED","IN_PROCESS"].includes(specimen.status)
+                    && Boolean(specimen.currentBranchId)
+                    && worklistBranchIds.includes(specimen.currentBranchId!)
+                  )
+                  .map(specimen => specimen.currentBranchId!))];
                 const analyzerCandidates = analyzers
                   .filter(candidate => analyzerCanRouteWorkItem({
                     analyzerId: candidate.id,
