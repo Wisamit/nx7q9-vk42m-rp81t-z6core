@@ -258,6 +258,10 @@ export async function POST(request: Request) {
         methodId: orderItem.test.methodId,
         patientSex: orderItem.order.patient.sexAtBirth,
         dateOfBirth: orderItem.order.patient.dateOfBirth,
+        pregnancyStatus: orderItem.order.pregnancyStatus,
+        gestationalAgeWeeks: orderItem.order.gestationalAgeWeeks,
+        specimenTypeId: specimen.specimenTypeId,
+        populationCode: orderItem.order.referencePopulationCode,
       }) : null;
 
       const flag = selectedOption
@@ -345,6 +349,10 @@ export async function POST(request: Request) {
         methodId: orderItem.test.methodId,
         patientSex: orderItem.order.patient.sexAtBirth,
         dateOfBirth: orderItem.order.patient.dateOfBirth,
+        pregnancyStatus: orderItem.order.pregnancyStatus,
+        gestationalAgeWeeks: orderItem.order.gestationalAgeWeeks,
+        specimenTypeId: specimen.specimenTypeId,
+        populationCode: orderItem.order.referencePopulationCode,
       });
       const flag = numericFlag(calculated, interval);
       const delta = await evaluateDelta(prisma, {
