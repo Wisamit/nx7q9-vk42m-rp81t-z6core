@@ -34,8 +34,8 @@ export default async function SpecimensPage({
           { currentBranchId: { in: branchIds } },
           { order: { orderingBranchId: { in: branchIds } } },
         ],
-        ...(status && ["PLANNED","COLLECTED","RECEIVED","IN_TRANSIT","IN_PROCESS","REJECTED","DISPOSED"].includes(status)
-          ? { status: status as "PLANNED" | "COLLECTED" | "RECEIVED" | "IN_TRANSIT" | "IN_PROCESS" | "REJECTED" | "DISPOSED" }
+        ...(status && ["PLANNED","COLLECTION_FAILED","COLLECTED","RECEIVED","IN_TRANSIT","IN_PROCESS","REJECTED","DISPOSED"].includes(status)
+          ? { status: status as "PLANNED" | "COLLECTION_FAILED" | "COLLECTED" | "RECEIVED" | "IN_TRANSIT" | "IN_PROCESS" | "REJECTED" | "DISPOSED" }
           : {}),
         ...(q ? {
           AND: [{
@@ -59,6 +59,11 @@ export default async function SpecimensPage({
         receivedBy: true,
         rejectedBy: true,
         orderItems: { include: { orderItem: true } },
+        collectionAttempts: {
+          orderBy: { attemptedAt: "desc" },
+          take: 20,
+          include: { collector: true, branch: true, replacementSpecimen: true },
+        },
         receptionAssessments: {
           orderBy: { receivedAt: "desc" },
           take: 1,
@@ -123,6 +128,7 @@ export default async function SpecimensPage({
   const userName = (item: { displayNameEn: string; displayNameAr?: string | null }) => locale === "ar" ? item.displayNameAr || item.displayNameEn : item.displayNameEn;
   const eventLabel = (value: string) => ({
     CREATED: tr(locale, "Created", "تم الإنشاء"),
+    COLLECTION_FAILED: tr(locale, "Collection failed", "فشل السحب"),
     COLLECTED: tr(locale, "Collected", "تم الجمع"),
     RECEIVED: tr(locale, "Received", "تم الاستلام"),
     REJECTED: tr(locale, "Rejected", "مرفوض"),
@@ -136,6 +142,7 @@ export default async function SpecimensPage({
   }[value] || value);
 
   const planned = specimens.filter(item => item.status === "PLANNED").length;
+  const collectionFailed = specimens.filter(item => item.status === "COLLECTION_FAILED").length;
   const collected = specimens.filter(item => item.status === "COLLECTED").length;
   const received = specimens.filter(item => ["RECEIVED","IN_PROCESS"].includes(item.status)).length;
   const rejected = specimens.filter(item => item.status === "REJECTED").length;
@@ -148,6 +155,7 @@ export default async function SpecimensPage({
         <p className="muted">{tr(locale, "Trace each specimen from planned collection through receipt, rejection and recollection using organization-unique barcodes.", "تتبع كل عينة من التخطيط للجمع حتى الاستلام والرفض وإعادة السحب باستخدام باركود فريد على مستوى المؤسسة.")}</p>
       </div>
       <div className="header-actions">
+        {canCollect && <Link className="secondary-link" href="/phlebotomy"><SystemIcon name="specimen" size={15} />{tr(locale, "Phlebotomy", "سحب العينات")}</Link>}
         <Link className="secondary-link" href="/specimens/scan"><SystemIcon name="search" size={15} />{tr(locale, "Scan Station", "محطة المسح")}</Link>
         <Link className="secondary-link" href="/orders"><SystemIcon name="orders" size={15} />{tr(locale, "Orders", "الطلبات")}</Link>
         <Link className="secondary-link" href="/transfers"><SystemIcon name="transfer" size={15} />{tr(locale, "Transfers", "النقل بين الفروع")}</Link>
@@ -157,6 +165,7 @@ export default async function SpecimensPage({
 
     <section className="workflow-summary">
       <article><span>{tr(locale, "Planned", "مخطط")}</span><strong>{planned}</strong><small>{tr(locale, "awaiting collection", "بانتظار الجمع")}</small></article>
+      <article className={collectionFailed ? "summary-attention" : ""}><span>{tr(locale, "Collection failed", "فشل السحب")}</span><strong>{collectionFailed}</strong><small>{tr(locale, "closed barcode / recollection created", "باركود مغلق / تم إنشاء إعادة سحب")}</small></article>
       <article><span>{tr(locale, "Collected", "تم الجمع")}</span><strong>{collected}</strong><small>{tr(locale, "awaiting receipt / routing", "بانتظار الاستلام / التوجيه")}</small></article>
       <article><span>{tr(locale, "Lab ready", "جاهزة للمختبر")}</span><strong>{received}</strong><small>{tr(locale, "received or in process", "مستلمة أو قيد المعالجة")}</small></article>
       <article className={rejected ? "summary-attention" : ""}><span>{tr(locale, "Rejected", "مرفوضة")}</span><strong>{rejected}</strong><small>{tr(locale, "requires attention / recollection", "تتطلب متابعة / إعادة سحب")}</small></article>
@@ -170,6 +179,7 @@ export default async function SpecimensPage({
           <select name="status" defaultValue={status}>
             <option value="">{tr(locale, "All statuses", "كل الحالات")}</option>
             <option value="PLANNED">{statusLabel(locale, "PLANNED")}</option>
+            <option value="COLLECTION_FAILED">{statusLabel(locale, "COLLECTION_FAILED")}</option>
             <option value="COLLECTED">{statusLabel(locale, "COLLECTED")}</option>
             <option value="RECEIVED">{statusLabel(locale, "RECEIVED")}</option>
             <option value="IN_TRANSIT">{statusLabel(locale, "IN_TRANSIT")}</option>
@@ -208,6 +218,7 @@ export default async function SpecimensPage({
               <div><span>{tr(locale, "Order branch", "فرع الطلب")}</span><strong>{localizedName(specimen.order.orderingBranch)}</strong></div>
               <div><span>{tr(locale, "Current branch", "الفرع الحالي")}</span><strong>{specimen.currentBranch ? localizedName(specimen.currentBranch) : "—"}</strong></div>
               <div><span>{tr(locale, "Active tests", "الفحوصات الفعالة")}</span><strong>{specimen.orderItems.filter(link => link.status === "ACTIVE").map(link => link.orderItem.testCodeSnapshot).join(", ") || "—"}</strong></div>
+              <div><span>{tr(locale, "Failed collection links", "روابط فشل السحب")}</span><strong>{specimen.orderItems.filter(link => link.status === "FAILED_COLLECTION").map(link => link.orderItem.testCodeSnapshot).join(", ") || "—"}</strong></div>
               <div><span>{tr(locale, "Rejected test links", "روابط الفحوصات المرفوضة")}</span><strong>{specimen.orderItems.filter(link => link.status === "REJECTED").map(link => link.orderItem.testCodeSnapshot).join(", ") || "—"}</strong></div>
               <div><span>{tr(locale, "Required volume", "الحجم المطلوب")}</span><strong>{specimen.parentRelationType === "ALIQUOT" ? tr(locale, "Derived aliquot", "جزء مشتق") : requirement?.requiredVolume ? `${requirement.requiredVolume} ${requirement.requiredVolumeUnit || ""}` : requirement ? tr(locale, "Not specified", "غير محدد") : tr(locale, "Not finalized", "غير مثبت")}</strong></div>
               <div><span>{tr(locale, "Storage", "التخزين")}</span><strong>{requirement?.storageConditions || "—"}</strong></div>
@@ -226,6 +237,18 @@ export default async function SpecimensPage({
             {requirement && requirement.collectionInstructions.length > 0 && <div className="form-warning">
               <strong>{tr(locale, "Collection instructions", "تعليمات الجمع")}</strong>
               <span>{requirement.collectionInstructions.join(" · ")}</span>
+            </div>}
+
+            {specimen.collectionAttempts[0] && <div className={specimen.collectionAttempts[0].outcome === "FAILED" ? "specimen-rejection" : "form-warning"}>
+              <strong>{tr(locale, "Latest collection attempt", "آخر محاولة سحب")}</strong>
+              <span>
+                {specimen.collectionAttempts[0].attemptedAt.toISOString().replace("T"," ").slice(0,19)}
+                {" · "}{specimen.collectionAttempts[0].branch.code}
+                {" · "}{userName(specimen.collectionAttempts[0].collector)}
+                {" · "}{specimen.collectionAttempts[0].outcome === "SUCCESS" ? tr(locale, "Success", "ناجحة") : tr(locale, "Failed", "فاشلة")}
+                {specimen.collectionAttempts[0].failureReasonCode ? ` · ${specimen.collectionAttempts[0].failureReasonCode}` : ""}
+                {specimen.collectionAttempts[0].replacementSpecimen ? ` · ${tr(locale, "Replacement", "البديل")}: ${specimen.collectionAttempts[0].replacementSpecimen.barcode}` : ""}
+              </span>
             </div>}
 
             {specimen.receptionAssessments[0] && <div className="form-warning">
@@ -327,6 +350,17 @@ export default async function SpecimensPage({
               canPrintLabels={canCollect}
               locale={locale}
             />
+
+            {specimen.collectionAttempts.length > 0 && <details className="specimen-history">
+              <summary>{tr(locale, "Collection attempt history", "سجل محاولات السحب")} ({specimen.collectionAttempts.length})</summary>
+              <div className="summary-list">
+                {specimen.collectionAttempts.map(attempt => <div key={attempt.id}>
+                  <span>{attempt.attemptedAt.toISOString().replace("T"," ").slice(0,19)} · {attempt.branch.code} · {userName(attempt.collector)}</span>
+                  <strong>{attempt.outcome === "SUCCESS" ? tr(locale, "Successful collection", "سحب ناجح") : tr(locale, "Failed collection", "فشل السحب")} · {attempt.collectionLocationType}{attempt.collectionLocationText ? ` · ${attempt.collectionLocationText}` : ""}</strong>
+                  <small>{attempt.outcome === "FAILED" ? `${attempt.failureReasonCode || "—"} · ${attempt.failureReasonText || "—"}` : `${attempt.volume?.toFixed(3) || "—"} ${attempt.volumeUnit || ""}`}{attempt.replacementSpecimen ? ` · ${tr(locale, "Recollection", "إعادة السحب")}: ${attempt.replacementSpecimen.barcode}` : ""}</small>
+                </div>)}
+              </div>
+            </details>}
 
             {specimen.rejectionRecords.length > 0 && <details className="specimen-history">
               <summary>{tr(locale, "Rejection history", "سجل الرفض")} ({specimen.rejectionRecords.length})</summary>
