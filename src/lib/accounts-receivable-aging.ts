@@ -102,3 +102,14 @@ export function aggregateAging(rows: Array<{
     creditBalanceTotal: minorToMoney4(creditBalanceTotal),
   };
 }
+
+
+export function sumMoney4(values: string[]) {
+  let total = BigInt(0);
+  for (const value of values) {
+    const amount = money4ToMinor(value);
+    if (amount === null) return null;
+    total += amount;
+  }
+  return minorToMoney4(total);
+}
