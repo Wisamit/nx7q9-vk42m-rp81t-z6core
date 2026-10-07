@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { specimenActionError } from "@/lib/clinical-safety";
+import {
+  specimenCollectionVolumeError,
+  specimenRequirementSnapshotFromDetails,
+} from "@/lib/specimen-requirement-engine";
 
 function text(value: unknown, max = 500) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -40,9 +44,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       orderItems: { include: { orderItem: true } },
       specimenType: true,
       container: true,
+      events: { where: { eventType: "CREATED" }, orderBy: { occurredAt: "asc" } },
     },
   });
   if (!specimen) return NextResponse.json({ error: "specimen_not_found" }, { status: 404 });
+
+  const requirementSnapshot = specimen.events
+    .map(event => specimenRequirementSnapshotFromDetails(event.details))
+    .find(Boolean) || null;
 
   const lifecycleError = specimenActionError({
     status: specimen.status,
@@ -54,15 +63,36 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
 
   if (body.action === "COLLECT") {
+    if (!requirementSnapshot) {
+      return NextResponse.json({ error: "specimen_requirements_not_finalized" }, { status: 409 });
+    }
+    if (!requirementSnapshot.configurationComplete) {
+      return NextResponse.json({ error: "specimen_requirement_configuration_incomplete" }, { status: 409 });
+    }
+
     const volumeText = body.volume == null || body.volume === "" ? "" : String(body.volume);
     const volume = volumeText ? Number(volumeText) : null;
     if (volume !== null && (!Number.isFinite(volume) || volume < 0)) {
       return NextResponse.json({ error: "invalid_volume" }, { status: 400 });
     }
+    const volumeUnit = text(body.volumeUnit, 30) || null;
+    const volumeError = specimenCollectionVolumeError({
+      requiredVolume: requirementSnapshot.requiredVolume,
+      requiredVolumeUnit: requirementSnapshot.requiredVolumeUnit,
+      collectedVolume: volumeText || null,
+      collectedVolumeUnit: volumeUnit,
+    });
+    if (volumeError) {
+      return NextResponse.json({
+        error: volumeError,
+        requiredVolume: requirementSnapshot.requiredVolume,
+        requiredVolumeUnit: requirementSnapshot.requiredVolumeUnit,
+      }, { status: volumeError === "invalid_volume" ? 400 : 409 });
+    }
 
     const result = await prisma.$transaction(async (tx) => {
-      const updated = await tx.specimen.update({
-        where: { id: specimen.id },
+      const changed = await tx.specimen.updateMany({
+        where: { id: specimen.id, status: "PLANNED" },
         data: {
           status: "COLLECTED",
           collectionBranchId: branchId,
@@ -70,10 +100,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           collectedByUserId: session.user.id,
           collectedAt: new Date(),
           volume: volume === null ? null : volume.toFixed(3),
-          volumeUnit: text(body.volumeUnit, 30) || null,
+          volumeUnit,
           notes: text(body.notes, 5000) || null,
         },
       });
+      if (changed.count !== 1) throw new Error("SPECIMEN_STATE_CHANGED");
+      const updated = await tx.specimen.findUniqueOrThrow({ where: { id: specimen.id } });
 
       const linkedIds = specimen.orderItems.map((link) => link.orderItemId);
       if (linkedIds.length) {
@@ -107,7 +139,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           toStatus: "COLLECTED",
           details: {
             volume: volume === null ? null : volume.toFixed(3),
-            volumeUnit: text(body.volumeUnit, 30) || null,
+            volumeUnit,
+            requiredVolume: requirementSnapshot.requiredVolume,
+            requiredVolumeUnit: requirementSnapshot.requiredVolumeUnit,
+            volumeRequirementMet: true,
             notes: text(body.notes, 5000) || null,
           },
         },
@@ -121,7 +156,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           action: "SPECIMEN_COLLECTED",
           entityType: "Specimen",
           entityId: specimen.id,
-          newValues: { barcode: specimen.barcode, status: "COLLECTED", collectionBranchId: branchId },
+          newValues: {
+            barcode: specimen.barcode,
+            status: "COLLECTED",
+            collectionBranchId: branchId,
+            requiredVolume: requirementSnapshot.requiredVolume,
+            requiredVolumeUnit: requirementSnapshot.requiredVolumeUnit,
+            collectedVolume: volume === null ? null : volume.toFixed(3),
+            collectedVolumeUnit: volumeUnit,
+          },
           ipAddress: ctx.ipAddress,
           userAgent: ctx.userAgent,
         },
@@ -135,8 +178,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   if (body.action === "RECEIVE") {
     const result = await prisma.$transaction(async (tx) => {
-      const updated = await tx.specimen.update({
-        where: { id: specimen.id },
+      const changed = await tx.specimen.updateMany({
+        where: { id: specimen.id, status: specimen.status },
         data: {
           status: "RECEIVED",
           currentBranchId: branchId,
@@ -144,6 +187,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           receivedAt: new Date(),
         },
       });
+      if (changed.count !== 1) throw new Error("SPECIMEN_STATE_CHANGED");
+      const updated = await tx.specimen.findUniqueOrThrow({ where: { id: specimen.id } });
 
       await tx.specimenEvent.create({
         data: {
@@ -182,8 +227,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!reasonCode || !reasonText) return NextResponse.json({ error: "rejection_reason_required" }, { status: 400 });
 
   const result = await prisma.$transaction(async (tx) => {
-    await tx.specimen.update({
-      where: { id: specimen.id },
+    const rejected = await tx.specimen.updateMany({
+      where: { id: specimen.id, status: specimen.status },
       data: {
         status: "REJECTED",
         currentBranchId: branchId,
@@ -193,6 +238,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         rejectionReasonText: reasonText,
       },
     });
+    if (rejected.count !== 1) throw new Error("SPECIMEN_STATE_CHANGED");
 
     await tx.specimenEvent.create({
       data: {
@@ -246,7 +292,25 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         actorUserId: session.user.id,
         fromStatus: null,
         toStatus: "PLANNED",
-        details: { recollectionForSpecimenId: specimen.id, rejectedBarcode: specimen.barcode },
+        details: requirementSnapshot ? {
+          requirementsFinalized: true,
+          requirementEngineVersion: 1,
+          recollectionForSpecimenId: specimen.id,
+          rejectedBarcode: specimen.barcode,
+          requiredVolume: requirementSnapshot.requiredVolume,
+          requiredVolumeUnit: requirementSnapshot.requiredVolumeUnit,
+          volumeRequirementComplete: requirementSnapshot.volumeRequirementComplete,
+          collectionInstructions: requirementSnapshot.collectionInstructions,
+          storageConditions: requirementSnapshot.storageConditions,
+          stabilityMinutes: requirementSnapshot.stabilityMinutes,
+          shared: requirementSnapshot.shared,
+          configurationComplete: requirementSnapshot.configurationComplete,
+          requirementMembers: requirementSnapshot.requirementMembers,
+        } : {
+          recollectionForSpecimenId: specimen.id,
+          rejectedBarcode: specimen.barcode,
+          requirementsFinalized: false,
+        },
       },
     });
 
@@ -278,6 +342,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           reasonText,
           replacementSpecimenId: replacement.id,
           replacementBarcode,
+          requirementSnapshotCarriedForward: Boolean(requirementSnapshot),
         },
         ipAddress: ctx.ipAddress,
         userAgent: ctx.userAgent,
