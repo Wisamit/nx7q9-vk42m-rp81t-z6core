@@ -6,6 +6,7 @@ import {
   specimenCollectionVolumeError,
   specimenRequirementSnapshotFromDetails,
 } from "@/lib/specimen-requirement-engine";
+import { specimenRejectionLineageError } from "@/lib/specimen-volume-policy";
 
 function text(value: unknown, max = 500) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -232,12 +233,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const reasonText = text(body.rejectionReasonText, 500);
   if (!reasonCode || !reasonText) return NextResponse.json({ error: "rejection_reason_required" }, { status: 400 });
 
-  const activeChildAliquots = specimen.childSpecimens.filter(child =>
-    child.parentRelationType === "ALIQUOT" && !["REJECTED","DISPOSED"].includes(child.status));
-  if (specimen.parentRelationType !== "ALIQUOT" && activeChildAliquots.length > 0) {
+  const lineageError = specimenRejectionLineageError(specimen.childSpecimens);
+  if (lineageError) {
     return NextResponse.json({
-      error: "active_child_aliquots_require_resolution",
-      childBarcodes: activeChildAliquots.map(child => child.barcode),
+      error: lineageError,
+      childBarcodes: specimen.childSpecimens
+        .filter(child => child.parentRelationType === "ALIQUOT" && !["REJECTED","DISPOSED"].includes(child.status))
+        .map(child => child.barcode),
     }, { status: 409 });
   }
 
