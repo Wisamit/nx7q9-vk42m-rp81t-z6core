@@ -82,3 +82,75 @@ export function nextQuestionVersion(
     supersedesVersion: latest.version,
   };
 }
+
+
+function localDateTimeParts(at: Date, timeZone: string) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(at);
+  const map = Object.fromEntries(parts.filter(part => part.type !== "literal").map(part => [part.type, part.value]));
+  return {
+    year: Number(map.year),
+    month: Number(map.month),
+    day: Number(map.day),
+    hour: Number(map.hour),
+    minute: Number(map.minute),
+    second: Number(map.second),
+  };
+}
+
+export function localDateTimeToUtc(value: string, timeZone: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(value);
+  if (!match) return null;
+
+  const target = {
+    year: Number(match[1]),
+    month: Number(match[2]),
+    day: Number(match[3]),
+    hour: Number(match[4]),
+    minute: Number(match[5]),
+    second: Number(match[6] || "0"),
+  };
+  const validity = new Date(Date.UTC(target.year, target.month - 1, target.day, target.hour, target.minute, target.second));
+  if (
+    validity.getUTCFullYear() !== target.year ||
+    validity.getUTCMonth() + 1 !== target.month ||
+    validity.getUTCDate() !== target.day ||
+    validity.getUTCHours() !== target.hour ||
+    validity.getUTCMinutes() !== target.minute ||
+    validity.getUTCSeconds() !== target.second
+  ) return null;
+
+  let guess = validity.getTime();
+  try {
+    for (let iteration = 0; iteration < 4; iteration += 1) {
+      const observed = localDateTimeParts(new Date(guess), timeZone);
+      const observedAsUtc = Date.UTC(observed.year, observed.month - 1, observed.day, observed.hour, observed.minute, observed.second);
+      const desiredAsUtc = Date.UTC(target.year, target.month - 1, target.day, target.hour, target.minute, target.second);
+      const delta = desiredAsUtc - observedAsUtc;
+      if (delta === 0) break;
+      guess += delta;
+    }
+
+    const finalParts = localDateTimeParts(new Date(guess), timeZone);
+    if (
+      finalParts.year !== target.year ||
+      finalParts.month !== target.month ||
+      finalParts.day !== target.day ||
+      finalParts.hour !== target.hour ||
+      finalParts.minute !== target.minute ||
+      finalParts.second !== target.second
+    ) return null;
+
+    return new Date(guess);
+  } catch {
+    return null;
+  }
+}
