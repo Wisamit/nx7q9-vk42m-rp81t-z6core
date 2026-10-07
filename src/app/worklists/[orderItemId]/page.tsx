@@ -50,6 +50,10 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
           department: true,
           defaultUnit: true,
           method: true,
+          resultSections: {
+            where: { status: "ACTIVE" },
+            orderBy: [{ displayOrder: "asc" }, { code: "asc" }],
+          },
           components: {
             where: { status: "ACTIVE" },
             include: {
@@ -176,6 +180,7 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
         nameAr: component.nameAr,
         resultType: component.resultType,
         unit: component.unit?.symbol || null,
+        resultSectionId: component.resultSectionId,
         qualitativeOptions: component.qualitativeResultOptions,
       }))
     : [{
@@ -185,6 +190,7 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
         nameAr: item.test.nameAr,
         resultType: item.test.resultType,
         unit: item.test.defaultUnit?.symbol || null,
+        resultSectionId: null,
         qualitativeOptions: item.test.qualitativeResultOptions,
       }];
 
@@ -289,6 +295,13 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
         specimenId={readySpecimen.id}
         performingBranchId={latestResult?.performingBranchId || readySpecimen.currentBranchId}
         fields={fields}
+        resultEntryLayout={item.test.resultEntryLayout}
+        resultSections={item.test.resultSections.map(section => ({
+          id: section.id,
+          code: section.code,
+          nameEn: section.nameEn,
+          nameAr: section.nameAr,
+        }))}
         comments={latestResult?.comments || ""}
         resultId={latestResult?.id || null}
         resultStatus={latestResult?.status || null}

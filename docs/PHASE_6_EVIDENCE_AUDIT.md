@@ -85,9 +85,11 @@ Clinical guardrail:
 `POSITIVE` and `NEGATIVE` are interpretations, not automatic abnormality states. `isAbnormal` is configured independently; critical implies abnormal. Existing historical numeric abnormal flags are backfilled during migration.
 
 
-## Phase 6C — Context-aware result comments
+## Phase 6C — Runtime accepted
 
-Phase 6C is implemented on feature branch `phase-6c-result-comments-context` and is pending CI/runtime acceptance.
+Runtime acceptance confirmed on Hostinger for main commit `088470b5a234c038ea91049eb4dda0ae016365e1`.
+
+Phase 6C delivered context-aware result comments.
 
 Scope:
 - result-level comments remain on `LaboratoryResult`;
@@ -105,3 +107,21 @@ Scope:
 
 Clinical/data-integrity guardrail:
 component comments are versioned with result values. Later template edits or deactivation do not rewrite historical result comments or released reports.
+
+
+## Phase 6D — Configurable specialized result-layout foundation
+
+Phase 6D is implemented on feature branch `phase-6d-configurable-result-layouts` and is pending CI/runtime acceptance.
+
+Scope:
+- adds a per-test result-entry layout mode: `STANDARD`, `SECTIONED`, or `COMPACT_GRID`;
+- adds configuration-driven bilingual result sections inside a test;
+- components can be assigned to a configured section without changing the generic result-value model;
+- result workspace groups components by active section in configured order;
+- components with no section or a deactivated section remain visible under Other / Ungrouped;
+- section creation, component assignment, layout changes, deactivation and reactivation are audited;
+- existing tests remain `STANDARD` after migration, so no current workflow changes automatically;
+- pure grouping tests protect against hidden components when section configuration changes.
+
+Architecture guardrail:
+specialized CBC, urine, stool, semen, coagulation, hormone, tumor-marker and serology workspaces must be configured through generic layout/section metadata. They must not depend on hard-coded test names and must not introduce per-test result tables.

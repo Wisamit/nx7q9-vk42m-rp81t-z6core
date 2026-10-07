@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { permissionSet, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { OrderQuestionManager } from "@/components/order-question-manager";
+import { ResultLayoutManager } from "@/components/result-layout-manager";
 import { getUiLocale, statusLabel, tr } from "@/lib/ui-i18n";
 
 export const dynamic = "force-dynamic";
@@ -17,7 +18,8 @@ export default async function TestDetailPage({ params }: { params: Promise<{ id:
     include: {
       department: true, specimenType: true, container: true, method: true, defaultUnit: true,
       branchAvailability: { include: { branch: true } },
-      components: { include: { unit: true, referenceIntervals: { include: { branch: true, method: true }, orderBy: { effectiveFrom: "desc" } } }, orderBy: { displayOrder: "asc" } },
+      components: { include: { unit: true, resultSection: true, referenceIntervals: { include: { branch: true, method: true }, orderBy: { effectiveFrom: "desc" } } }, orderBy: { displayOrder: "asc" } },
+      resultSections: { orderBy: [{ displayOrder: "asc" }, { code: "asc" }] },
       orderQuestions: { where: { status: "ACTIVE" }, orderBy: [{ displayOrder: "asc" }, { code: "asc" }] },
     },
   });
@@ -68,6 +70,7 @@ export default async function TestDetailPage({ params }: { params: Promise<{ id:
           <dt>{tr(locale, "Method", "الطريقة")}</dt><dd>{test.method ? localizedName(test.method) : "—"}</dd>
           <dt>{tr(locale, "Default unit", "الوحدة الافتراضية")}</dt><dd>{test.defaultUnit?.symbol || "—"}</dd>
           <dt>{tr(locale, "Result type", "نوع النتيجة")}</dt><dd>{resultTypeLabel(test.resultType)}</dd>
+          <dt>{tr(locale, "Result layout", "تخطيط النتائج")}</dt><dd>{test.resultEntryLayout === "SECTIONED" ? tr(locale, "Sectioned", "مقسّم إلى أقسام") : test.resultEntryLayout === "COMPACT_GRID" ? tr(locale, "Compact grid", "شبكة مدمجة") : tr(locale, "Standard list", "قائمة قياسية")}</dd>
           <dt>TAT</dt><dd>{test.tatMinutes ? `${test.tatMinutes} ${tr(locale, "min", "دقيقة")}` : "—"}</dd>
           <dt>LOINC</dt><dd>{test.loincCode || "—"}</dd>
         </dl>
@@ -127,6 +130,31 @@ export default async function TestDetailPage({ params }: { params: Promise<{ id:
         </tbody>
       </table></div>
     </section>
+
+    {permissions.has("catalog.manage") && <section className="detail-card detail-section">
+      <h2>{tr(locale, "Result Entry Layout", "تخطيط إدخال النتائج")}</h2>
+      <p className="muted">{tr(locale, "Configure how components are grouped and presented in the result workspace. This does not change the underlying result model.", "هيئ طريقة تجميع وعرض المكوّنات في مساحة النتائج دون تغيير نموذج تخزين النتائج.")}</p>
+      <ResultLayoutManager
+        testId={test.id}
+        layout={test.resultEntryLayout}
+        sections={test.resultSections.map(section => ({
+          id: section.id,
+          code: section.code,
+          nameEn: section.nameEn,
+          nameAr: section.nameAr,
+          displayOrder: section.displayOrder,
+          status: section.status,
+        }))}
+        components={test.components.map(component => ({
+          id: component.id,
+          code: component.code,
+          nameEn: component.nameEn,
+          nameAr: component.nameAr,
+          resultSectionId: component.resultSectionId,
+        }))}
+        locale={locale}
+      />
+    </section>}
 
     {permissions.has("catalog.manage") && <section className="detail-card detail-section">
       <h2>{tr(locale, "Add Ask-at-Order Question", "إضافة سؤال يُطرح عند الطلب")}</h2>

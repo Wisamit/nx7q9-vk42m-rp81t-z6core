@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { statusLabel as sharedStatusLabel } from "@/lib/ui-i18n";
 import { focusNextResultEntryControl, shouldAdvanceResultEntryOnEnter } from "@/lib/result-entry-keyboard";
 import { commentTemplateTargetMatches } from "@/lib/result-comments";
+import { groupResultFields } from "@/lib/result-entry-layout";
 
 type QualitativeResultOption = {
   id: string;
@@ -16,6 +17,15 @@ type QualitativeResultOption = {
   isCritical: boolean;
 };
 
+type ResultEntryLayout = "STANDARD" | "SECTIONED" | "COMPACT_GRID";
+
+type ResultSection = {
+  id: string;
+  code: string;
+  nameEn: string;
+  nameAr: string | null;
+};
+
 type ResultField = {
   componentId: string | null;
   code: string;
@@ -23,6 +33,7 @@ type ResultField = {
   nameAr: string | null;
   resultType: "NUMERIC" | "TEXT" | "QUALITATIVE" | "BOOLEAN" | "DATE";
   unit: string | null;
+  resultSectionId: string | null;
   currentValue: string;
   currentComment: string;
   currentOptionId: string | null;
@@ -53,6 +64,8 @@ export function ResultEntryForm({
   specimenId,
   performingBranchId,
   fields,
+  resultEntryLayout,
+  resultSections,
   comments,
   resultId,
   resultStatus,
@@ -67,6 +80,8 @@ export function ResultEntryForm({
   specimenId: string;
   performingBranchId: string;
   fields: ResultField[];
+  resultEntryLayout: ResultEntryLayout;
+  resultSections: ResultSection[];
   comments: string;
   resultId: string | null;
   resultStatus: string | null;
@@ -293,6 +308,59 @@ export function ResultEntryForm({
   const sourceLocked = resultSource !== "MANUAL";
   const locked = statusLocked || sourceLocked;
   const resultLevelTemplates = commentTemplates.filter((template) => commentTemplateTargetMatches(template, testId, null));
+  const fieldGroups = groupResultFields(fields, resultSections);
+
+  function renderFieldRow(field: ResultField) {
+    const key = field.componentId || "__TEST__";
+    return <div className={`result-field-row ${field.critical ? "result-critical" : ""}`} key={key}>
+      <div className="result-field-name">
+        <strong>{field.code} — {locale === "ar" ? field.nameAr || field.nameEn : field.nameEn}</strong>
+        {locale !== "ar" && field.nameAr && <small dir="rtl">{field.nameAr}</small>}
+        <small>{resultTypeLabel(field.resultType)}{field.unit ? ` · ${field.unit}` : ""}</small>
+      </div>
+      <div className="result-field-input">
+        {locked ? <strong>{values[key] || "—"}</strong> : fieldInput(field)}
+        {field.componentId && <div className="component-comment-editor">
+          {!locked && commentTemplates.some((template) => commentTemplateTargetMatches(template, testId, field.componentId)) && <select
+            defaultValue=""
+            onChange={(event) => {
+              const template = commentTemplates.find((item) => item.id === event.target.value && commentTemplateTargetMatches(item, testId, field.componentId));
+              if (template) {
+                const templateText = locale === "ar" ? template.textAr || template.textEn : template.textEn;
+                setComponentComments((current) => ({
+                  ...current,
+                  [key]: current[key] ? current[key] + "\n" + templateText : templateText,
+                }));
+              }
+              event.target.value = "";
+            }}
+          >
+            <option value="">{tr("Insert component comment…", "إدراج تعليق للمكوّن…")}</option>
+            {commentTemplates
+              .filter((template) => commentTemplateTargetMatches(template, testId, field.componentId))
+              .map((template) => <option key={template.id} value={template.id}>
+                {template.code} — {locale === "ar" ? template.nameAr || template.nameEn : template.nameEn}
+              </option>)}
+          </select>}
+          <textarea
+            data-result-entry-control="true"
+            rows={2}
+            value={componentComments[key] || ""}
+            onChange={(event) => setComponentComments((current) => ({ ...current, [key]: event.target.value }))}
+            disabled={locked}
+            placeholder={tr("Component comment", "تعليق المكوّن")}
+          />
+        </div>}
+      </div>
+      <div className="result-field-reference">
+        <span>{field.referenceDisplay || tr("No active reference interval", "لا يوجد مدى مرجعي نشط")}</span>
+        {field.currentFlag && <strong>{flagLabel(field.currentFlag)}</strong>}
+        {field.deltaEvaluation && field.deltaEvaluation !== "NOT_CONFIGURED" && <span className={field.deltaEvaluation === "EXCEEDED" ? "delta-exceeded" : "delta-ok"}>
+          {tr("Delta", "دلتا")}: {field.deltaDisplay || deltaLabel(field.deltaEvaluation)}
+        </span>}
+      </div>
+    </div>;
+  }
 
   return <form className="result-entry-form" onSubmit={save}>
     <div className="result-entry-header">
@@ -300,59 +368,20 @@ export function ResultEntryForm({
       <div><strong>{tr("Source", "المصدر")}</strong><span>{sourceLabel(resultSource)}{analyzerLabel ? ` · ${analyzerLabel}` : ""}</span></div>
     </div>
 
-    <div className="result-field-list">
-      {fields.map((field) => {
-        const key = field.componentId || "__TEST__";
-        return <div className={`result-field-row ${field.critical ? "result-critical" : ""}`} key={key}>
-          <div className="result-field-name">
-            <strong>{field.code} — {locale === "ar" ? field.nameAr || field.nameEn : field.nameEn}</strong>
-            {locale !== "ar" && field.nameAr && <small dir="rtl">{field.nameAr}</small>}
-            <small>{resultTypeLabel(field.resultType)}{field.unit ? ` · ${field.unit}` : ""}</small>
+    {resultEntryLayout === "STANDARD" ? <div className="result-field-list">
+      {fields.map(renderFieldRow)}
+    </div> : <div className={`result-entry-layout result-entry-layout-${resultEntryLayout.toLowerCase().replaceAll("_", "-")}`}>
+      {fieldGroups.map(group => <section className="result-entry-section" key={group.id || "__UNGROUPED__"}>
+        <div className="result-entry-section-head">
+          <div>
+            <strong>{group.id ? (locale === "ar" ? group.nameAr || group.nameEn : group.nameEn) : tr("Other / Ungrouped", "أخرى / بدون قسم")}</strong>
+            {group.id && <small>{group.code}</small>}
           </div>
-          <div className="result-field-input">
-            {locked ? <strong>{values[key] || "—"}</strong> : fieldInput(field)}
-            {field.componentId && <div className="component-comment-editor">
-              {!locked && commentTemplates.some((template) => commentTemplateTargetMatches(template, testId, field.componentId)) && <select
-                defaultValue=""
-                onChange={(event) => {
-                  const template = commentTemplates.find((item) => item.id === event.target.value && commentTemplateTargetMatches(item, testId, field.componentId));
-                  if (template) {
-                    const templateText = locale === "ar" ? template.textAr || template.textEn : template.textEn;
-                    setComponentComments((current) => ({
-                      ...current,
-                      [key]: current[key] ? current[key] + "\n" + templateText : templateText,
-                    }));
-                  }
-                  event.target.value = "";
-                }}
-              >
-                <option value="">{tr("Insert component comment…", "إدراج تعليق للمكوّن…")}</option>
-                {commentTemplates
-                  .filter((template) => commentTemplateTargetMatches(template, testId, field.componentId))
-                  .map((template) => <option key={template.id} value={template.id}>
-                    {template.code} — {locale === "ar" ? template.nameAr || template.nameEn : template.nameEn}
-                  </option>)}
-              </select>}
-              <textarea
-                data-result-entry-control="true"
-                rows={2}
-                value={componentComments[key] || ""}
-                onChange={(event) => setComponentComments((current) => ({ ...current, [key]: event.target.value }))}
-                disabled={locked}
-                placeholder={tr("Component comment", "تعليق المكوّن")}
-              />
-            </div>}
-          </div>
-          <div className="result-field-reference">
-            <span>{field.referenceDisplay || tr("No active reference interval", "لا يوجد مدى مرجعي نشط")}</span>
-            {field.currentFlag && <strong>{flagLabel(field.currentFlag)}</strong>}
-            {field.deltaEvaluation && field.deltaEvaluation !== "NOT_CONFIGURED" && <span className={field.deltaEvaluation === "EXCEEDED" ? "delta-exceeded" : "delta-ok"}>
-              {tr("Delta", "دلتا")}: {field.deltaDisplay || deltaLabel(field.deltaEvaluation)}
-            </span>}
-          </div>
-        </div>;
-      })}
-    </div>
+          <span>{group.fields.length} {tr("component(s)", "مكوّن")}</span>
+        </div>
+        <div className="result-field-list">{group.fields.map(renderFieldRow)}</div>
+      </section>)}
+    </div>}
 
     <label className="result-comments">{tr("Comments", "التعليقات")}
       {!locked && resultLevelTemplates.length > 0 && <select
