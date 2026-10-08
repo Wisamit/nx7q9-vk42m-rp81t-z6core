@@ -50,7 +50,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "medical_validation_not_required_by_snapshot" }, { status: 409 });
   }
 
-  const action = body.action === "RETURN" ? "RETURN" : "APPROVE";
+  // Never infer clinical approval from malformed or missing action input.
+  if (body.action !== "APPROVE" && body.action !== "RETURN") {
+    return NextResponse.json({ error: "invalid_medical_validation_action" }, { status: 400 });
+  }
+  const action = body.action;
   const reason = typeof body.reason === "string" ? body.reason.trim().slice(0, 1000) : "";
   const notes = typeof body.notes === "string" ? body.notes.trim().slice(0, 1000) || null : null;
 
