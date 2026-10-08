@@ -108,3 +108,21 @@ test("effective date breaks ties deterministically after equal specificity", () 
   const newer = interval({ id: "NEWER", analyzerId: "A1", effectiveFrom: new Date("2026-06-01T00:00:00.000Z") });
   assert.equal(selectBestReferenceInterval([older, newer], { ...baseContext, analyzerId: "A1" })?.id, "NEWER");
 });
+
+test("recorded six-month infant age matches same-day month intervals without inventing DOB", () => {
+  const recordedAt = new Date("2026-10-08T09:00:00.000Z");
+  const context = { ...baseContext, dateOfBirth: null, recordedAgeValue: 6, recordedAgeUnit: "MONTH", recordedAgeAt, at: new Date("2026-10-08T10:00:00.000Z") };
+  assert.equal(referenceIntervalMatchesContext(interval({ ageFrom: 3, ageTo: 9, ageUnit: "MONTH" }), context), true);
+  assert.equal(referenceIntervalMatchesContext(interval({ ageFrom: 7, ageTo: 11, ageUnit: "MONTH" }), context), false);
+  assert.equal(referenceIntervalMatchesContext(interval({ ageFrom: 0, ageTo: 1, ageUnit: "YEAR" }), context), false);
+});
+
+test("recorded age fails closed if timestamp missing, stale, future, or unit mismatched", () => {
+  const candidate = interval({ ageFrom: 5, ageTo: 7, ageUnit: "MONTH" });
+  const recordedAt = new Date("2026-10-08T09:00:00.000Z");
+  const context = { ...baseContext, dateOfBirth: null, recordedAgeValue: 6, recordedAgeUnit: "MONTH", recordedAgeAt, at: new Date("2026-10-08T10:00:00.000Z") };
+  assert.equal(referenceIntervalMatchesContext(candidate, { ...context, recordedAgeAt: null }), false);
+  assert.equal(referenceIntervalMatchesContext(candidate, { ...context, at: new Date("2026-10-09T09:00:00.000Z") }), false);
+  assert.equal(referenceIntervalMatchesContext(candidate, { ...context, at: new Date("2026-10-08T08:00:00.000Z") }), false);
+  assert.equal(referenceIntervalMatchesContext(candidate, { ...context, recordedAgeUnit: "YEAR" }), false);
+});
