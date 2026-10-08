@@ -39,15 +39,17 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const fullNameEn = text(body.fullNameEn);
   const fullNameAr = text(body.fullNameAr);
   const dob = dateValue(body.dateOfBirth);
-  const sexAtBirth = ["MALE", "FEMALE", "UNKNOWN"].includes(String(body.sexAtBirth))
+  const sexAtBirth = ["MALE", "FEMALE"].includes(String(body.sexAtBirth))
     ? String(body.sexAtBirth) as "MALE" | "FEMALE" | "UNKNOWN"
     : undefined;
   const phone = text(body.phone, 50);
   const whatsapp = text(body.whatsapp, 50);
   const email = text(body.email, 191).toLowerCase();
   const nationalityCode = text(body.nationalityCode, 2).toUpperCase();
-  const addressEn = text(body.addressEn, 4000);
-  const addressAr = text(body.addressAr, 4000);
+  const address = text(body.address, 4000);
+  const ageText = text(body.recordedAgeValue, 4);
+  const ageUnit = text(body.recordedAgeUnit, 8);
+  const recordedAgeValue = /^(0|[1-9][0-9]{0,2})$/.test(ageText) ? Number(ageText) : null;
   const notes = text(body.notes, 4000);
   const clinicalInformation = text(body.clinicalInformation, 4000);
   const duplicateReviewOverride = body.duplicateReviewOverride === true;
@@ -56,7 +58,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (!fullNameEn) return NextResponse.json({ error: "name_required" }, { status: 400 });
   if (dob === undefined) return NextResponse.json({ error: "invalid_date_of_birth" }, { status: 400 });
   if (dob && dob.getTime() > Date.now()) return NextResponse.json({ error: "future_date_of_birth" }, { status: 400 });
-  if (!sexAtBirth) return NextResponse.json({ error: "invalid_sex_at_birth" }, { status: 400 });
+  if (!sexAtBirth) return NextResponse.json({ error: "invalid_sex" }, { status: 400 });
+  if (recordedAgeValue === null || !["DAY","MONTH","YEAR"].includes(ageUnit) ||
+      (ageUnit === "YEAR" && recordedAgeValue > 150) ||
+      (ageUnit === "MONTH" && recordedAgeValue > 1800) ||
+      (ageUnit === "DAY" && recordedAgeValue > 54787)) {
+    return NextResponse.json({ error: "invalid_recorded_age" }, { status: 400 });
+  }
   if (nationalityCode && !/^[A-Z]{2}$/.test(nationalityCode)) {
     return NextResponse.json({ error: "invalid_nationality_code" }, { status: 400 });
   }
@@ -134,8 +142,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     whatsapp: patient.whatsapp,
     email: patient.email,
     nationalityCode: patient.nationalityCode,
-    addressEn: patient.addressEn,
-    addressAr: patient.addressAr,
+    address: patient.address,
+    recordedAgeValue: patient.recordedAgeValue,
+    recordedAgeUnit: patient.recordedAgeUnit,
     notes: patient.notes,
     clinicalInformation: patient.clinicalInformation,
   };
@@ -148,8 +157,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     whatsapp: whatsapp || null,
     email: email || null,
     nationalityCode: nationalityCode || null,
-    addressEn: addressEn || null,
-    addressAr: addressAr || null,
+    address: address || null,
+    recordedAgeValue,
+    recordedAgeUnit: ageUnit,
     notes: notes || null,
     clinicalInformation: clinicalInformation || null,
   };
@@ -174,14 +184,16 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         fullNameAr: fullNameAr || null,
         normalizedName,
         dateOfBirth: dob,
+        recordedAgeValue,
+        recordedAgeUnit: ageUnit,
+        recordedAgeAt: new Date(),
+        address: address || null,
         sexAtBirth,
         phone: phone || null,
         normalizedPhone,
         whatsapp: whatsapp || null,
         email: email || null,
         nationalityCode: nationalityCode || null,
-        addressEn: addressEn || null,
-        addressAr: addressAr || null,
         notes: notes || null,
         clinicalInformation: clinicalInformation || null,
       },
