@@ -87,3 +87,14 @@ test("result operator gets bilingual guidance for concurrent saves and reviews",
   assert.ok(ui.includes("result_state_changed_retry"));
   assert.ok(ui.includes("تغيرت النتيجة أو حالة العينة"));
 });
+
+test("medical RETURN remains available for corrective action after specimen quarantine", () => {
+  const route = source("../src/app/api/results/[id]/medical-validate/route.ts");
+  const start = route.indexOf("const returned = await prisma.$transaction");
+  const end = route.indexOf("const validated = await prisma.$transaction", start);
+  const correctiveAction = route.slice(start,end);
+  assert.ok(correctiveAction.includes("if (custody.length !== 1)"));
+  assert.ok(!correctiveAction.includes("validationSpecimenCustodyError({"));
+  const approve = route.slice(end);
+  assert.ok(approve.includes("validationSpecimenCustodyError({"));
+});
