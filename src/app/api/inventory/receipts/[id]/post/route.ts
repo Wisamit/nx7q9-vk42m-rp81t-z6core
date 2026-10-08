@@ -183,7 +183,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ status: "ok", receipt: posted });
   } catch (error) {
     const code = error instanceof Error ? error.message : "POST_FAILED";
-    const known = ["RECEIPT_STATE_CHANGED","INVALID_RECEIPT_LINE","EXPIRY_REQUIRED","LOT_SUPPLIER_CONFLICT","LOT_EXPIRY_CONFLICT","PO_OVER_RECEIPT"];
+    const known = ["RECEIPT_STATE_CHANGED","INVALID_RECEIPT_LINE","EXPIRY_REQUIRED","LOT_SUPPLIER_CONFLICT","LOT_EXPIRY_CONFLICT","PO_OVER_RECEIPT","PO_ITEM_MISMATCH"];
     return NextResponse.json({ error: known.includes(code) ? code.toLowerCase() : "goods_receipt_post_failed" }, { status: 409 });
   }
 }
