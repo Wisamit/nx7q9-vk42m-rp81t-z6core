@@ -30,9 +30,23 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (!owner) return NextResponse.json({ error: "owner_not_found" }, { status: 404 });
   }
 
-  const action = await prisma.$transaction(async tx => {
-    const created = await tx.capaAction.create({ data: { capaId: id, actionType, description, ownerUserId, dueDate } });
-    if (capa.status === "OPEN") await tx.capa.update({ where: { id }, data: { status: "IN_PROGRESS" } });
+  let action;
+  try {
+    action = await prisma.$transaction(async tx => {
+      // All action additions and CAPA reviews claim the same parent row first.
+      const locked = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM capas WHERE id = ${id}
+        AND organization_id = ${session.user.organizationId} FOR UPDATE
+      `;
+      if (locked.length !== 1) throw new Error("CAPA_STATE_CHANGED");
+      const current = await tx.capa.findUniqueOrThrow({ where: { id } });
+      if (["CLOSED", "CANCELLED", "EFFECTIVENESS_REVIEW"].includes(current.status)) {
+        throw new Error("CAPA_LOCKED");
+      }
+      const created = await tx.capaAction.create({ data: { capaId: id, actionType, description, ownerUserId, dueDate } });
+      if (current.status === "OPEN" || current.status === "DRAFT") {
+        await tx.capa.update({ where: { id }, data: { status: "IN_PROGRESS", effectiveness: "UNKNOWN", effectivenessReview: null, effectivenessReviewedAt: null, effectivenessReviewedByUserId: null } });
+      }
     await tx.auditEvent.create({
       data: {
         organizationId: session.user.organizationId,
@@ -46,8 +60,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         userAgent: ctx.userAgent,
       },
     });
-    return created;
-  });
+      return created;
+    }, { isolationLevel: "Serializable", timeout: 30000 });
+  } catch {
+    return NextResponse.json({ error: "capa_action_conflict_or_locked" }, { status: 409 });
+  }
   return NextResponse.json({ status: "ok", action }, { status: 201 });
 }
 
@@ -73,14 +90,22 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (!action) return NextResponse.json({ error: "capa_action_not_found" }, { status: 404 });
   if (action.capa.branchId && !canAccessBranch(session, action.capa.branchId)) return NextResponse.json({ error: "branch_forbidden" }, { status: 403 });
 
-  const saved = await prisma.$transaction(async tx => {
-    const updated = await tx.capaAction.update({
-      where: { id: action.id },
-      data: {
-        status,
-        completedAt: status === "COMPLETED" ? new Date() : null,
-      },
-    });
+  let saved;
+  try {
+    saved = await prisma.$transaction(async tx => {
+      const parent = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM capas WHERE id = ${id}
+        AND organization_id = ${session.user.organizationId} FOR UPDATE
+      `;
+      if (parent.length !== 1) throw new Error("CAPA_STATE_CHANGED");
+      const currentCapa = await tx.capa.findUniqueOrThrow({ where: { id } });
+      if (["CLOSED", "CANCELLED", "EFFECTIVENESS_REVIEW"].includes(currentCapa.status)) throw new Error("CAPA_LOCKED");
+      const claim = await tx.capaAction.updateMany({
+        where: { id: action.id, capaId: id, status: action.status, updatedAt: action.updatedAt },
+        data: { status, completedAt: status === "COMPLETED" ? new Date() : null },
+      });
+      if (claim.count !== 1) throw new Error("CAPA_ACTION_STATE_CHANGED");
+      const updated = await tx.capaAction.findUniqueOrThrow({ where: { id: action.id } });
     await tx.auditEvent.create({
       data: {
         organizationId: session.user.organizationId,
@@ -95,7 +120,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         userAgent: ctx.userAgent,
       },
     });
-    return updated;
-  });
+      return updated;
+    }, { isolationLevel: "Serializable", timeout: 30000 });
+  } catch {
+    return NextResponse.json({ error: "capa_action_conflict_or_locked" }, { status: 409 });
+  }
   return NextResponse.json({ status: "ok", action: saved });
 }
