@@ -32,4 +32,6 @@ test("goods receipt aggregates repeated purchase order lines before posting", ()
   const once = route.indexOf("data: { receivedQty: { increment: increase } }", inventory);
   assert.ok(tx >= 0 && aggregate > tx && cap > aggregate && inventory > cap && once > inventory);
   assert.ok(route.includes('throw new Error("PO_OVER_RECEIPT")'));
+  assert.ok(route.includes("currentLine.itemId !== expectedItems.get(poItemId)"));
+  assert.ok(route.includes('throw new Error("PO_ITEM_MISMATCH")'));
 });
