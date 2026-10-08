@@ -13,7 +13,7 @@ test("financial report implements every master-scope filter without changing pos
     "sourceId",
     "referrerId",
     "testId",
-    "paymentMethod",
+    "paymentMethodId",
     "cashierUserId",
     "clientId",
   ]) {
