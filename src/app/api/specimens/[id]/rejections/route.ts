@@ -266,6 +266,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
             id: specimen.id,
             organizationId: session.user.organizationId,
             status: specimen.status,
+            currentBranchId: branchId,
+            order: { status: { notIn: ["COMPLETED", "CANCELLED"] } },
             preanalyticalVersion: specimen.preanalyticalVersion,
           },
           data: scope === "WHOLE_SPECIMEN"
@@ -283,6 +285,27 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
               },
         });
         if (sourceChange.count !== 1) throw new SpecimenRejectionStateChanged();
+        // Recheck derived custody after locking the parent version. A new
+        // aliquot or another rejection must not slip past the earlier review.
+        const currentChildren = await tx.specimen.findMany({
+          where: {
+            parentSpecimenId: specimen.id,
+            parentRelationType: "ALIQUOT",
+            status: { notIn: ["REJECTED", "DISPOSED"] },
+          },
+          select: {
+            barcode: true,
+            orderItems: { where: { status: "ACTIVE" }, select: { orderItemId: true } },
+          },
+        });
+        if (scope === "WHOLE_SPECIMEN" && currentChildren.length > 0) {
+          throw new SpecimenRejectionStateChanged();
+        }
+        if (scope === "SELECTED_TESTS" && currentChildren.some(child =>
+          child.orderItems.some(link => affectedSet.has(link.orderItemId))
+        )) {
+          throw new SpecimenRejectionStateChanged();
+        }
 
         const rejection = await tx.specimenRejection.create({
           data: {

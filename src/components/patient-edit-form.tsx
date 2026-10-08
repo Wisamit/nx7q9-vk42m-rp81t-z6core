@@ -26,6 +26,9 @@ type PatientEditValue = {
   nationalityCode: string | null;
   addressEn: string | null;
   addressAr: string | null;
+  address?: string | null;
+  recordedAgeValue?: number | null;
+  recordedAgeUnit?: string | null;
   notes: string | null;
   clinicalInformation: string | null;
 };
@@ -36,6 +39,7 @@ export function PatientEditForm({ patient, locale }: { patient: PatientEditValue
   const router = useRouter();
   const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
   const [busy, setBusy] = useState(false);
+  const [recordedAgeUnit, setRecordedAgeUnit] = useState<string>(patient.recordedAgeUnit || "YEAR");
   const [message, setMessage] = useState("");
   const [duplicateReview, setDuplicateReview] = useState<{ payload: PatientPayload; candidates: DuplicateCandidate[] } | null>(null);
   const [duplicateReason, setDuplicateReason] = useState("");
@@ -50,8 +54,9 @@ export function PatientEditForm({ patient, locale }: { patient: PatientEditValue
       whatsapp: form.get("whatsapp"),
       email: form.get("email"),
       nationalityCode: form.get("nationalityCode"),
-      addressEn: form.get("addressEn"),
-      addressAr: form.get("addressAr"),
+      address: form.get("address"),
+      recordedAgeValue: form.get("recordedAgeValue"),
+      recordedAgeUnit: form.get("recordedAgeUnit"),
       notes: form.get("notes"),
       clinicalInformation: form.get("clinicalInformation"),
       changeReason: form.get("changeReason"),
@@ -136,14 +141,15 @@ export function PatientEditForm({ patient, locale }: { patient: PatientEditValue
     <form className="catalog-form" onSubmit={submit}>
       <label>{tr("Full name (English)", "الاسم الكامل بالإنجليزية")}<input name="fullNameEn" required maxLength={220} defaultValue={patient.fullNameEn} /></label>
       <label dir="rtl">الاسم الكامل بالعربية<input name="fullNameAr" maxLength={220} dir="rtl" defaultValue={patient.fullNameAr || ""} /></label>
-      <label>{tr("Date of birth", "تاريخ الميلاد")}<input name="dateOfBirth" type="date" defaultValue={patient.dateOfBirth || ""} /></label>
-      <label>{tr("Sex at birth", "الجنس عند الولادة")}<select name="sexAtBirth" defaultValue={patient.sexAtBirth}><option value="UNKNOWN">{tr("Unknown", "غير محدد")}</option><option value="MALE">{tr("Male", "ذكر")}</option><option value="FEMALE">{tr("Female", "أنثى")}</option></select></label>
+      <label>{tr("Date of birth (optional)", "تاريخ الميلاد (اختياري)")}<input name="dateOfBirth" type="date" defaultValue={patient.dateOfBirth || ""} /></label>
+      <label>{tr("Age", "العمر")}<input name="recordedAgeValue" type="number" min="0" max={recordedAgeUnit === "DAY" ? 54787 : recordedAgeUnit === "MONTH" ? 1800 : 150} step="1" defaultValue={patient.recordedAgeValue ?? ""} required /></label>
+      <label>{tr("Age unit", "وحدة العمر")}<select name="recordedAgeUnit" value={recordedAgeUnit} onChange={event => setRecordedAgeUnit(event.target.value)} required><option value="YEAR">{tr("Years", "سنوات")}</option><option value="MONTH">{tr("Months", "أشهر")}</option><option value="DAY">{tr("Days", "أيام")}</option></select></label>
+      <label>{tr("Sex", "الجنس")}<select name="sexAtBirth" defaultValue={patient.sexAtBirth} required>{patient.sexAtBirth === "UNKNOWN" && <option value="UNKNOWN" disabled>{tr("Select sex", "اختر الجنس")}</option>}<option value="MALE">{tr("Male", "ذكر")}</option><option value="FEMALE">{tr("Female", "أنثى")}</option></select></label>
       <label>{tr("Phone", "الهاتف")}<input name="phone" maxLength={50} defaultValue={patient.phone || ""} /></label>
       <label>{tr("WhatsApp", "واتساب")}<input name="whatsapp" maxLength={50} defaultValue={patient.whatsapp || ""} /></label>
       <label>{tr("Email", "البريد الإلكتروني")}<input name="email" type="email" maxLength={191} defaultValue={patient.email || ""} /></label>
       <label>{tr("Nationality code", "رمز الجنسية")}<input name="nationalityCode" maxLength={2} defaultValue={patient.nationalityCode || ""} placeholder={tr("ISO code", "رمز ISO")} /></label>
-      <label>{tr("Address (English)", "العنوان بالإنجليزية")}<textarea name="addressEn" maxLength={4000} rows={2} defaultValue={patient.addressEn || ""} /></label>
-      <label dir="rtl">{tr("Address (Arabic)", "العنوان بالعربية")}<textarea name="addressAr" maxLength={4000} rows={2} dir="rtl" defaultValue={patient.addressAr || ""} /></label>
+      <label className="form-span">{tr("Address", "العنوان")}<textarea name="address" maxLength={4000} rows={2} dir="auto" defaultValue={patient.address ?? patient.addressAr ?? patient.addressEn ?? ""} /></label>
       <label>{tr("Clinical information", "المعلومات السريرية")}<textarea name="clinicalInformation" maxLength={4000} rows={3} defaultValue={patient.clinicalInformation || ""} /></label>
       <label>{tr("Notes", "ملاحظات")}<textarea name="notes" maxLength={4000} rows={3} defaultValue={patient.notes || ""} /></label>
       <label className="form-span">{tr("Change reason", "سبب التعديل")}<textarea name="changeReason" required maxLength={1000} rows={2} /></label>

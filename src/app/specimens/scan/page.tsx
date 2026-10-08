@@ -43,10 +43,7 @@ export default async function SpecimenScanPage({
       where: {
         organizationId: session.user.organizationId,
         barcode,
-        OR: [
-          { currentBranchId: { in: branchIds } },
-          { order: { orderingBranchId: { in: branchIds } } },
-        ],
+        currentBranchId: { in: branchIds },
       },
       include: {
         specimenType: true,
@@ -145,6 +142,8 @@ export default async function SpecimenScanPage({
           <Link className="secondary-link" href={`/orders/${specimen.orderId}`}>{tr(locale, "Open Order", "فتح الطلب")}</Link>
         </div>
       </div>
+
+      {specimen.status === "QUARANTINED" && <div className="specimen-rejection" role="alert"><strong>{tr(locale, "Clinical quarantine — processing blocked", "حجر سريري — المعالجة محظورة")}</strong><p>{tr(locale, "This specimen has an unresolved reception exception. Only the documented rejection/recollection pathway is permitted until a clinical release policy is approved.", "هذه العينة عليها مخالفة استلام لم تُحل. يُسمح فقط بمسار الرفض وإعادة السحب الموثق حتى اعتماد سياسة رفع الحجر السريري.")}</p></div>}
 
       <div className="specimen-metadata">
         <div><span>{tr(locale, "Specimen", "العينة")}</span><strong>{specimen.specimenType ? localizedName(specimen.specimenType) : tr(locale, "Not configured", "غير مهيأة")}</strong></div>
@@ -248,6 +247,8 @@ export default async function SpecimenScanPage({
       </details>}
 
       <SpecimenAliquotManager
+        currentBranchId={specimen.currentBranchId}
+        canManageStorageSettings={permissions.has("settings.manage")}
         specimenId={specimen.id}
         status={specimen.status}
         originalVolume={specimen.volume?.toFixed(3) || null}

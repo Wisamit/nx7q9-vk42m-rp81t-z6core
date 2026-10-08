@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { Prisma } from "../../../../generated/prisma/client";
 import { canAccessBranch, canAccessDepartment, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { numericFlag, resolveReferenceInterval } from "@/lib/result-reference";
+import { numericFlag, referencePatientSex, resolveReferenceInterval } from "@/lib/result-reference";
 import { evaluateDelta } from "@/lib/delta-check";
 import { syncDeltaReviewEvents } from "@/lib/delta-review";
 import { evaluateFormula, formulaVariables } from "@/lib/formula-engine";
@@ -302,8 +302,12 @@ export async function POST(request: Request) {
         componentId: component.componentId,
         branchId: performingBranchId,
         methodId: orderItem.test.methodId,
-        patientSex: orderItem.order.patient.sexAtBirth,
-        dateOfBirth: orderItem.order.patient.dateOfBirth,
+        patientSex: referencePatientSex(orderItem.order.patientSexSnapshot),
+        dateOfBirth: orderItem.order.patientDobSnapshot,
+        recordedAgeValue: orderItem.order.patientAgeValueSnapshot,
+        recordedAgeUnit: orderItem.order.patientAgeUnitSnapshot,
+        recordedAgeAt: orderItem.order.patientAgeRecordedAtSnapshot,
+        ageAsOf: orderItem.order.orderedAt,
         pregnancyStatus: orderItem.order.pregnancyStatus,
         gestationalAgeWeeks: orderItem.order.gestationalAgeWeeks,
         specimenTypeId: specimen.specimenTypeId,
@@ -395,8 +399,12 @@ export async function POST(request: Request) {
         componentId: rule.targetComponentId,
         branchId: performingBranchId,
         methodId: orderItem.test.methodId,
-        patientSex: orderItem.order.patient.sexAtBirth,
-        dateOfBirth: orderItem.order.patient.dateOfBirth,
+        patientSex: referencePatientSex(orderItem.order.patientSexSnapshot),
+        dateOfBirth: orderItem.order.patientDobSnapshot,
+        recordedAgeValue: orderItem.order.patientAgeValueSnapshot,
+        recordedAgeUnit: orderItem.order.patientAgeUnitSnapshot,
+        recordedAgeAt: orderItem.order.patientAgeRecordedAtSnapshot,
+        ageAsOf: orderItem.order.orderedAt,
         pregnancyStatus: orderItem.order.pregnancyStatus,
         gestationalAgeWeeks: orderItem.order.gestationalAgeWeeks,
         specimenTypeId: specimen.specimenTypeId,

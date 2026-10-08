@@ -42,6 +42,7 @@ export function PatientCreateForm({
   const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
   const [busy, setBusy] = useState(false);
+  const [recordedAgeUnit, setRecordedAgeUnit] = useState<string>("YEAR");
   const [message, setMessage] = useState("");
   const [duplicateReview, setDuplicateReview] = useState<{ payload: PatientPayload; candidates: DuplicateCandidate[] } | null>(null);
   const [duplicateReason, setDuplicateReason] = useState("");
@@ -57,11 +58,10 @@ export function PatientCreateForm({
       whatsapp: form.get("whatsapp"),
       email: form.get("email"),
       nationalId: form.get("nationalId"),
-      passportNumber: form.get("passportNumber"),
-      passportIssuingCountry: form.get("passportIssuingCountry"),
       nationalityCode: form.get("nationalityCode"),
-      addressEn: form.get("addressEn"),
-      addressAr: form.get("addressAr"),
+      address: form.get("address"),
+      recordedAgeValue: form.get("recordedAgeValue"),
+      recordedAgeUnit: form.get("recordedAgeUnit"),
       notes: form.get("notes"),
       clinicalInformation: form.get("clinicalInformation"),
       customIdentifiers: additionalIdentifiers
@@ -147,14 +147,14 @@ export function PatientCreateForm({
   return <form ref={formRef} className="catalog-form" onSubmit={submit}>
     <label>{tr("Full name (English)", "الاسم الكامل بالإنجليزية")}<input name="fullNameEn" required maxLength={220} /></label>
     <label dir="rtl">الاسم الكامل بالعربية<input name="fullNameAr" maxLength={220} dir="rtl" /></label>
-    <label>{tr("Date of birth", "تاريخ الميلاد")}<input name="dateOfBirth" type="date" /></label>
-    <label>{tr("Sex at birth", "الجنس عند الولادة")}<select name="sexAtBirth" defaultValue="UNKNOWN"><option value="UNKNOWN">{tr("Unknown", "غير محدد")}</option><option value="MALE">{tr("Male", "ذكر")}</option><option value="FEMALE">{tr("Female", "أنثى")}</option></select></label>
+    <label>{tr("Date of birth (optional)", "تاريخ الميلاد (اختياري)")}<input name="dateOfBirth" type="date" /></label>
+    <label>{tr("Age", "العمر")}<input name="recordedAgeValue" type="number" min="0" max={recordedAgeUnit === "DAY" ? 54787 : recordedAgeUnit === "MONTH" ? 1800 : 150} step="1" required /></label>
+    <label>{tr("Age unit", "وحدة العمر")}<select name="recordedAgeUnit" value={recordedAgeUnit} onChange={event => setRecordedAgeUnit(event.target.value)} required><option value="YEAR">{tr("Years", "سنوات")}</option><option value="MONTH">{tr("Months", "أشهر")}</option><option value="DAY">{tr("Days", "أيام")}</option></select></label>
+    <label>{tr("Sex", "الجنس")}<select name="sexAtBirth" defaultValue="" required><option value="" disabled>{tr("Select", "اختر")}</option><option value="MALE">{tr("Male", "ذكر")}</option><option value="FEMALE">{tr("Female", "أنثى")}</option></select></label>
     <label>{tr("Phone", "الهاتف")}<input name="phone" maxLength={50} /></label>
     <label>{tr("WhatsApp", "واتساب")}<input name="whatsapp" maxLength={50} /></label>
     <label>{tr("Email", "البريد الإلكتروني")}<input name="email" type="email" maxLength={191} /></label>
     <label>{tr("National ID", "الرقم الوطني")}<input name="nationalId" maxLength={120} /></label>
-    <label>{tr("Passport number", "رقم جواز السفر")}<input name="passportNumber" maxLength={120} /></label>
-    <label>{tr("Passport issuing country", "بلد إصدار الجواز")}<input name="passportIssuingCountry" maxLength={2} placeholder={tr("ISO code", "رمز ISO")} /></label>
     <label>{tr("Nationality code", "رمز الجنسية")}<input name="nationalityCode" maxLength={2} placeholder={tr("ISO code", "رمز ISO")} /></label>
 
     {identifierSchemes.length > 0 && <section className="detail-card form-span">
@@ -184,8 +184,7 @@ export function PatientCreateForm({
           </div>;
         })}</div>}
     </section>}
-    <label>{tr("Address (English)", "العنوان بالإنجليزية")}<textarea name="addressEn" maxLength={4000} rows={2} /></label>
-    <label dir="rtl">{tr("Address (Arabic)", "العنوان بالعربية")}<textarea name="addressAr" maxLength={4000} rows={2} dir="rtl" /></label>
+    <label className="form-span">{tr("Address", "العنوان")}<textarea name="address" maxLength={4000} rows={2} dir="auto" /></label>
     <label>{tr("Clinical information", "المعلومات السريرية")}<textarea name="clinicalInformation" maxLength={4000} rows={3} /></label>
     <label>{tr("Notes", "ملاحظات")}<textarea name="notes" maxLength={4000} rows={3} /></label>
     <button className="primary-button form-span" disabled={busy}>{busy ? tr("Saving…", "جارٍ الحفظ…") : tr("Create Patient", "إنشاء المريض")}</button>

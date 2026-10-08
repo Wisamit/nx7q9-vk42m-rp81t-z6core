@@ -236,6 +236,7 @@ enum SpecimenStatus {
   RECEIVED
   IN_TRANSIT
   IN_PROCESS
+  QUARANTINED
   REJECTED
   DISPOSED
 }
@@ -245,9 +246,11 @@ enum SpecimenEventType {
   COLLECTION_FAILED
   COLLECTED
   RECEIVED
+  QUARANTINED
   REJECTED
   RELOCATED
   TRANSFERRED
+  TRANSFER_EXCEPTION
   PROCESSING_STARTED
   ALIQUOT_CREATED
   VOLUME_RECONCILED
@@ -1002,6 +1005,7 @@ model Organization {
   deactivatedAt   DateTime?    @map("deactivated_at") @db.DateTime(3)
 
   organizationSetting OrganizationSetting?
+  specimenStorageLocations SpecimenStorageLocation[]
   branches    Branch[]
   users       User[]
   roles       Role[]
@@ -1160,6 +1164,7 @@ model Branch {
   deactivatedAt   DateTime?    @map("deactivated_at") @db.DateTime(3)
 
   organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  specimenStorageLocations SpecimenStorageLocation[]
   settings     BranchSetting[]
   departments Department[]
   workstations Workstation[]
@@ -2270,6 +2275,10 @@ model Patient {
   fullNameAr      String?      @map("full_name_ar") @db.VarChar(220)
   normalizedName  String       @map("normalized_name") @db.VarChar(220)
   dateOfBirth     DateTime?    @map("date_of_birth") @db.Date
+  recordedAgeValue Int? @map("recorded_age_value")
+  recordedAgeUnit  String? @map("recorded_age_unit") @db.VarChar(8)
+  recordedAgeAt    DateTime? @map("recorded_age_at") @db.DateTime(3)
+  address          String? @db.Text
   sexAtBirth      PatientSex   @default(UNKNOWN) @map("sex_at_birth")
   phone           String?      @db.VarChar(50)
   normalizedPhone String?      @map("normalized_phone") @db.VarChar(50)
@@ -2579,6 +2588,11 @@ model LabOrder {
   accessionNumber  String        @map("accession_number") @db.VarChar(50)
   orderingBranchId String        @map("ordering_branch_id") @db.Char(36)
   patientId        String        @map("patient_id") @db.Char(36)
+  patientSexSnapshot String? @map("patient_sex_snapshot") @db.VarChar(10)
+  patientDobSnapshot DateTime? @map("patient_dob_snapshot") @db.Date
+  patientAgeValueSnapshot Int? @map("patient_age_value_snapshot")
+  patientAgeUnitSnapshot String? @map("patient_age_unit_snapshot") @db.VarChar(8)
+  patientAgeRecordedAtSnapshot DateTime? @map("patient_age_recorded_at_snapshot") @db.DateTime(3)
   referrerId       String?       @map("referrer_id") @db.Char(36)
   clientId         String?       @map("client_id") @db.Char(36)
   sourceId         String?       @map("source_id") @db.Char(36)
@@ -3284,6 +3298,7 @@ model Specimen {
   remainingVolume     Decimal?       @map("remaining_volume") @db.Decimal(10, 3)
   remainingVolumeUnit String?        @map("remaining_volume_unit") @db.VarChar(30)
   storageLocation     String?        @map("storage_location") @db.VarChar(200)
+  storageLocationId   String?        @map("storage_location_id") @db.Char(36)
   preanalyticalVersion Int           @default(0) @map("preanalytical_version")
   notes               String?        @db.Text
   createdAt           DateTime       @default(now()) @map("created_at") @db.DateTime(3)
@@ -3298,6 +3313,7 @@ model Specimen {
   container        Container?    @relation(fields: [containerId], references: [id], onDelete: Restrict)
   collectionBranch Branch?       @relation("SpecimenCollectionBranch", fields: [collectionBranchId], references: [id], onDelete: Restrict)
   currentBranch    Branch?       @relation("SpecimenCurrentBranch", fields: [currentBranchId], references: [id], onDelete: Restrict)
+  registeredStorageLocation SpecimenStorageLocation? @relation(fields: [storageLocationId], references: [id], onDelete: Restrict)
   collectedBy      User?         @relation("SpecimenCollector", fields: [collectedByUserId], references: [id], onDelete: Restrict)
   receivedBy       User?         @relation("SpecimenReceiver", fields: [receivedByUserId], references: [id], onDelete: Restrict)
   rejectedBy       User?         @relation("SpecimenRejector", fields: [rejectedByUserId], references: [id], onDelete: Restrict)
@@ -3320,6 +3336,7 @@ model Specimen {
   @@unique([orderId, sequenceNumber])
   @@index([orderId, status])
   @@index([currentBranchId, status])
+  @@index([storageLocationId, currentBranchId])
   @@index([collectionBranchId, collectedAt])
   @@index([specimenTypeId, status])
   @@map("specimens")
@@ -3425,6 +3442,28 @@ model SpecimenReceptionAssessment {
   @@index([specimenId, receivedAt])
   @@index([branchId, receivedAt])
   @@map("specimen_reception_assessments")
+}
+
+model SpecimenStorageLocation {
+  id             String       @id @default(uuid()) @db.Char(36)
+  organizationId String       @map("organization_id") @db.Char(36)
+  branchId       String       @map("branch_id") @db.Char(36)
+  path           String       @db.VarChar(200)
+  zone           String       @db.VarChar(40)
+  unit           String       @db.VarChar(40)
+  rack           String       @db.VarChar(40)
+  slot           String       @db.VarChar(40)
+  status         RecordStatus @default(ACTIVE)
+  createdAt      DateTime     @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt      DateTime     @updatedAt @map("updated_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  branch       Branch       @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  specimens    Specimen[]
+
+  @@unique([branchId, path])
+  @@index([organizationId, branchId, status])
+  @@map("specimen_storage_locations")
 }
 
 model SpecimenRejectionReason {

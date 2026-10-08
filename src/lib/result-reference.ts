@@ -4,6 +4,10 @@ type DbClient = PrismaClient | Prisma.TransactionClient;
 
 type PregnancyStatusValue = "UNKNOWN" | "NOT_PREGNANT" | "PREGNANT";
 type SexValue = "MALE" | "FEMALE" | "UNKNOWN";
+
+export function referencePatientSex(value: string | null | undefined): SexValue {
+  return value === "MALE" || value === "FEMALE" ? value : "UNKNOWN";
+}
 type SexApplicabilityValue = "ANY" | "MALE" | "FEMALE";
 type AgeUnitValue = "DAY" | "WEEK" | "MONTH" | "YEAR";
 
@@ -16,6 +20,10 @@ export type ReferenceIntervalContext = {
   specimenTypeId?: string | null;
   patientSex: SexValue;
   dateOfBirth?: Date | null;
+  recordedAgeValue?: number | null;
+  recordedAgeUnit?: string | null;
+  recordedAgeAt?: Date | null;
+  ageAsOf?: Date | null;
   pregnancyStatus?: PregnancyStatusValue | null;
   gestationalAgeWeeks?: NumericLike | null;
   populationCode?: string | null;
@@ -89,8 +97,24 @@ export function referenceIntervalMatchesContext(
 
   const hasAgeBound = interval.ageFrom !== null || interval.ageTo !== null;
   if (hasAgeBound) {
-    if (!input.dateOfBirth || !interval.ageUnit) return false;
-    const age = ageInUnit(input.dateOfBirth, input.at ?? new Date(), interval.ageUnit);
+    if (!interval.ageUnit) return false;
+    let age: number;
+    if (input.dateOfBirth) {
+      age = ageInUnit(input.dateOfBirth, input.ageAsOf ?? input.at ?? new Date(), interval.ageUnit);
+    } else {
+      // Manually reported age is not a date of birth. Only exact matching units
+      // within the same recorded UTC calendar day are supported. Other cases
+      // cannot establish a safe reference-interval context.
+      const at = input.ageAsOf ?? input.at ?? new Date();
+      const recordedAt = input.recordedAgeAt;
+      if (recordedAt == null || !Number.isFinite(recordedAt.getTime()) ||
+          at.getTime() < recordedAt.getTime() ||
+          at.toISOString().slice(0, 10) !== recordedAt.toISOString().slice(0, 10) ||
+          input.recordedAgeUnit !== interval.ageUnit ||
+          input.recordedAgeValue == null ||
+          !Number.isInteger(input.recordedAgeValue) || input.recordedAgeValue < 0) return false;
+      age = input.recordedAgeValue;
+    }
     const from = numberValue(interval.ageFrom);
     const to = numberValue(interval.ageTo);
     if ((from !== null && age < from) || (to !== null && age > to)) return false;

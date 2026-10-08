@@ -103,7 +103,9 @@ export default async function PatientDetailPage({ params }: { params: Promise<{ 
     : [];
 
   const sourceMerge = patient.mergeEventsAsSource[0] || null;
-  const age = calculatePatientAge(patient.dateOfBirth);
+  const age = patient.recordedAgeValue !== null && patient.recordedAgeUnit
+    ? { value: patient.recordedAgeValue, unit: patient.recordedAgeUnit }
+    : calculatePatientAge(patient.dateOfBirth);
   const ageLabel = age
     ? age.value + " " + (
         age.unit === "YEAR"
@@ -154,8 +156,8 @@ export default async function PatientDetailPage({ params }: { params: Promise<{ 
           <dt>{tr(locale, "English name", "الاسم بالإنجليزية")}</dt><dd>{patient.fullNameEn}</dd>
           <dt>{tr(locale, "Arabic name", "الاسم بالعربية")}</dt><dd dir="rtl">{patient.fullNameAr || "—"}</dd>
           <dt>{tr(locale, "Date of birth", "تاريخ الميلاد")}</dt><dd>{patient.dateOfBirth ? patient.dateOfBirth.toISOString().slice(0,10) : "—"}</dd>
-          <dt>{tr(locale, "Calculated age", "العمر المحسوب")}</dt><dd>{ageLabel}</dd>
-          <dt>{tr(locale, "Sex at birth", "الجنس عند الولادة")}</dt><dd>{sexLabel(locale, patient.sexAtBirth)}</dd>
+          <dt>{tr(locale, "Recorded age", "العمر المسجّل")}</dt><dd>{ageLabel}</dd>
+          <dt>{tr(locale, "Sex", "الجنس")}</dt><dd>{sexLabel(locale, patient.sexAtBirth)}</dd>
           <dt>{tr(locale, "Phone", "الهاتف")}</dt><dd>{patient.phone || "—"}</dd>
           <dt>{tr(locale, "WhatsApp", "واتساب")}</dt><dd>{patient.whatsapp || "—"}</dd>
           <dt>{tr(locale, "Email", "البريد الإلكتروني")}</dt><dd>{patient.email || "—"}</dd>
@@ -205,18 +207,21 @@ export default async function PatientDetailPage({ params }: { params: Promise<{ 
         nationalityCode: patient.nationalityCode,
         addressEn: patient.addressEn,
         addressAr: patient.addressAr,
+        address: patient.address,
+        recordedAgeValue: patient.recordedAgeValue,
+        recordedAgeUnit: patient.recordedAgeUnit,
         notes: patient.notes,
         clinicalInformation: patient.clinicalInformation,
       }}
       locale={locale}
     />}
 
-    {(patient.addressEn || patient.addressAr || patient.clinicalInformation || patient.notes) && <section className="detail-grid">
+    {(patient.address || patient.addressEn || patient.addressAr || patient.clinicalInformation || patient.notes) && <section className="detail-grid">
       <article className="detail-card">
         <h2>{tr(locale, "Address", "العنوان")}</h2>
         <dl>
-          <dt>{tr(locale, "English", "الإنجليزية")}</dt><dd>{patient.addressEn || "—"}</dd>
-          <dt>{tr(locale, "Arabic", "العربية")}</dt><dd dir="rtl">{patient.addressAr || "—"}</dd>
+          <dt>{tr(locale, "Address", "العنوان")}</dt><dd dir="auto">{patient.address || patient.addressAr || patient.addressEn || "—"}</dd>
+          
         </dl>
       </article>
       <article className="detail-card">

@@ -9,11 +9,13 @@ function text(value: unknown, max = 500) {
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const body = await request.json().catch(() => null) as {
-    action?: "DISPATCH" | "RECEIVE_ITEM";
+    action?: "DISPATCH" | "RECEIVE_ITEM" | "REPORT_EXCEPTION";
     barcode?: string;
+    exceptionType?: string;
+    exceptionText?: string;
   } | null;
 
-  if (!body?.action) return NextResponse.json({ error: "invalid_action" }, { status: 400 });
+  if (body?.action !== "DISPATCH" && body?.action !== "RECEIVE_ITEM" && body?.action !== "REPORT_EXCEPTION") return NextResponse.json({ error: "invalid_action" }, { status: 400 });
 
   const permission = body.action === "DISPATCH" ? "transfers.dispatch" : "transfers.receive";
   const session = await requirePermission(permission);
@@ -45,22 +47,24 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       }, { status: 409 });
     }
 
-    await prisma.$transaction(async (tx) => {
+    const dispatched = await prisma.$transaction(async (tx) => {
       const dispatchedAt = new Date();
 
-      await tx.specimenTransferManifest.update({
-        where: { id: manifest.id },
+      const claimedManifest = await tx.specimenTransferManifest.updateMany({
+        where: { id: manifest.id, status: "DRAFT" },
         data: {
           status: "DISPATCHED",
           dispatchedByUserId: session.user.id,
           dispatchedAt,
         },
       });
+      if (claimedManifest.count !== 1) throw new Error("SPECIMEN_PREANALYTICAL_STATE_CHANGED");
 
-      await tx.specimenTransferItem.updateMany({
+      const dispatchedItems = await tx.specimenTransferItem.updateMany({
         where: { manifestId: manifest.id, status: "PLANNED" },
         data: { status: "DISPATCHED" },
       });
+      if (dispatchedItems.count !== manifest.items.length) throw new Error("SPECIMEN_PREANALYTICAL_STATE_CHANGED");
 
       for (const item of manifest.items) {
         const moved = await tx.specimen.updateMany({
@@ -72,6 +76,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           },
           data: {
             status: "IN_TRANSIT",
+            storageLocation: null,
+            storageLocationId: null,
             preanalyticalVersion: { increment: 1 },
           },
         });
@@ -89,6 +95,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
               manifestNumber: manifest.manifestNumber,
               sourceBranchId: manifest.sourceBranchId,
               destinationBranchId: manifest.destinationBranchId,
+              priorStorageLocation: item.specimen.storageLocation,
+              priorStorageLocationId: item.specimen.storageLocationId,
             },
           },
         });
@@ -114,16 +122,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           userAgent: ctx.userAgent,
         },
       });
+      return true;
     }, { timeout: 30000 }).catch(error => {
       if (error instanceof Error && error.message === "SPECIMEN_PREANALYTICAL_STATE_CHANGED") return null;
       throw error;
     });
 
-    const refreshed = await prisma.specimenTransferManifest.findUnique({
-      where: { id: manifest.id },
-      select: { status: true },
-    });
-    if (refreshed?.status !== "DISPATCHED") {
+    if (!dispatched) {
       return NextResponse.json({ error: "specimen_preanalytical_state_changed" }, { status: 409 });
     }
     return NextResponse.json({ status: "ok", manifestStatus: "DISPATCHED" });
@@ -142,32 +147,161 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const item = manifest.items.find((entry) => entry.barcodeSnapshot === barcode);
   if (!item) return NextResponse.json({ error: "barcode_not_in_manifest" }, { status: 404 });
   if (item.status === "RECEIVED") return NextResponse.json({ error: "item_already_received" }, { status: 409 });
+  if (item.status !== "DISPATCHED") return NextResponse.json({ error: "transfer_item_not_dispatched" }, { status: 409 });
   if (item.specimen.status !== "IN_TRANSIT") {
     return NextResponse.json({ error: "specimen_not_in_transit", status: item.specimen.status }, { status: 409 });
+  }
+
+  if (body.action === "REPORT_EXCEPTION") {
+    const exceptionType = text(body.exceptionType, 40).toUpperCase();
+    const exceptionText = text(body.exceptionText, 400);
+    if (!["MISSING", "DAMAGED", "LABEL_MISMATCH", "TEMPERATURE_FAILURE", "OTHER"].includes(exceptionType) || !exceptionText) {
+      return NextResponse.json({ error: "transfer_exception_type_and_reason_required" }, { status: 400 });
+    }
+    const notedAt = new Date();
+    const reasonSnapshot = `${exceptionType}: ${exceptionText}`.slice(0, 500);
+    const recorded = await prisma.$transaction(async tx => {
+      const locked = await tx.$queryRaw<Array<{ id: string; status: string }>>`
+        SELECT id, status FROM specimen_transfer_manifests
+        WHERE id = ${manifest.id} AND organization_id = ${session.user.organizationId}
+        FOR UPDATE
+      `;
+      if (locked.length !== 1 || !["DISPATCHED", "PARTIALLY_RECEIVED"].includes(locked[0].status)) {
+        throw new Error("SPECIMEN_PREANALYTICAL_STATE_CHANGED");
+      }
+      const claim = await tx.specimenTransferItem.updateMany({
+        where: { manifestId: manifest.id, specimenId: item.specimenId, status: "DISPATCHED" },
+        data: { status: "EXCEPTION", exceptionText: reasonSnapshot },
+      });
+      if (claim.count !== 1) throw new Error("SPECIMEN_PREANALYTICAL_STATE_CHANGED");
+      if (exceptionType === "MISSING") {
+        const stillInTransit = await tx.specimen.count({
+          where: {
+            id: item.specimenId,
+            organizationId: session.user.organizationId,
+            currentBranchId: manifest.sourceBranchId,
+            status: "IN_TRANSIT",
+            preanalyticalVersion: item.specimen.preanalyticalVersion,
+          },
+        });
+        if (stillInTransit !== 1) throw new Error("SPECIMEN_PREANALYTICAL_STATE_CHANGED");
+      } else {
+        // Material physically received with a discrepancy remains quarantined,
+        // never accepted for analysis or automatic result release.
+        const held = await tx.specimen.updateMany({
+          where: {
+            id: item.specimenId,
+            organizationId: session.user.organizationId,
+            status: "IN_TRANSIT",
+            currentBranchId: manifest.sourceBranchId,
+            preanalyticalVersion: item.specimen.preanalyticalVersion,
+          },
+          data: {
+            status: "QUARANTINED",
+            currentBranchId: manifest.destinationBranchId,
+            storageLocation: null,
+            storageLocationId: null,
+            preanalyticalVersion: { increment: 1 },
+          },
+        });
+        if (held.count !== 1) throw new Error("SPECIMEN_PREANALYTICAL_STATE_CHANGED");
+      }
+      await tx.specimenEvent.create({
+        data: {
+          specimenId: item.specimenId,
+          eventType: exceptionType === "MISSING" ? "TRANSFER_EXCEPTION" : "QUARANTINED",
+          branchId: manifest.destinationBranchId,
+          actorUserId: session.user.id,
+          fromStatus: "IN_TRANSIT",
+          toStatus: exceptionType === "MISSING" ? "IN_TRANSIT" : "QUARANTINED",
+          details: {
+            manifestId: manifest.id,
+            barcode,
+            receiptException: true,
+            exceptionType,
+            exceptionText,
+            notedAt,
+            sourceBranchId: manifest.sourceBranchId,
+            destinationBranchId: manifest.destinationBranchId,
+            physicalCustodyAccepted: exceptionType !== "MISSING",
+          },
+        },
+      });
+      await tx.specimenTransferManifest.update({
+        where: { id: manifest.id },
+        data: { status: "PARTIALLY_RECEIVED" },
+      });
+      await tx.auditEvent.create({
+        data: {
+          organizationId: session.user.organizationId,
+          branchId: manifest.destinationBranchId,
+          actorUserId: session.user.id,
+          action: "TRANSFER_SPECIMEN_RECEIPT_EXCEPTION",
+          entityType: "SpecimenTransferManifest",
+          entityId: manifest.id,
+          reason: reasonSnapshot,
+          newValues: {
+            barcode,
+            specimenId: item.specimenId,
+            manifestNumber: manifest.manifestNumber,
+            itemStatus: "EXCEPTION",
+            specimenStatus: exceptionType === "MISSING" ? "IN_TRANSIT" : "QUARANTINED",
+            exceptionType,
+            physicalCustodyAccepted: exceptionType !== "MISSING",
+          },
+          ipAddress: ctx.ipAddress,
+          userAgent: ctx.userAgent,
+        },
+      });
+      return true;
+    }, { timeout: 30000 }).catch(error => {
+      if (error instanceof Error && error.message === "SPECIMEN_PREANALYTICAL_STATE_CHANGED") return false;
+      throw error;
+    });
+    if (!recorded) return NextResponse.json({ error: "specimen_preanalytical_state_changed" }, { status: 409 });
+    return NextResponse.json({ status: "ok", barcode, itemStatus: "EXCEPTION", exceptionType });
   }
 
   const receivedAt = new Date();
 
   const result = await prisma.$transaction(async (tx) => {
-    await tx.specimenTransferItem.update({
-      where: { manifestId_specimenId: { manifestId: manifest.id, specimenId: item.specimenId } },
+    // Serialize receipts on the manifest, including receipts of different
+    // barcodes. Otherwise two operators can both write PARTIALLY_RECEIVED.
+    const lockedManifest = await tx.$queryRaw<Array<{ id: string; status: string }>>`
+      SELECT id, status FROM specimen_transfer_manifests
+      WHERE id = ${manifest.id} AND organization_id = ${session.user.organizationId}
+      FOR UPDATE
+    `;
+    if (lockedManifest.length !== 1 || !["DISPATCHED", "PARTIALLY_RECEIVED"].includes(lockedManifest[0].status)) {
+      throw new Error("SPECIMEN_PREANALYTICAL_STATE_CHANGED");
+    }
+    const claimed = await tx.specimenTransferItem.updateMany({
+      where: {
+        manifestId: manifest.id,
+        specimenId: item.specimenId,
+        status: "DISPATCHED",
+      },
       data: {
         status: "RECEIVED",
         receivedByUserId: session.user.id,
         receivedAt,
       },
     });
+    if (claimed.count !== 1) throw new Error("SPECIMEN_PREANALYTICAL_STATE_CHANGED");
 
     const moved = await tx.specimen.updateMany({
       where: {
         id: item.specimenId,
+        organizationId: session.user.organizationId,
         status: "IN_TRANSIT",
-        currentBranchId: item.specimen.currentBranchId,
+        currentBranchId: manifest.sourceBranchId,
         preanalyticalVersion: item.specimen.preanalyticalVersion,
       },
       data: {
         status: "RECEIVED",
         currentBranchId: manifest.destinationBranchId,
+        storageLocation: null,
+        storageLocationId: null,
         receivedByUserId: session.user.id,
         receivedAt,
         preanalyticalVersion: { increment: 1 },

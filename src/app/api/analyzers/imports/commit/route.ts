@@ -7,7 +7,7 @@ import {
 } from "@/lib/analyzer-mapping-governance";
 import { prisma } from "@/lib/db";
 import { parseResultValue } from "@/lib/result-value-parser";
-import { numericFlag, resolveReferenceInterval } from "@/lib/result-reference";
+import { numericFlag, referencePatientSex, resolveReferenceInterval } from "@/lib/result-reference";
 import { evaluateDelta } from "@/lib/delta-check";
 import { syncDeltaReviewEvents } from "@/lib/delta-review";
 import { evaluateFormula, formulaVariables } from "@/lib/formula-engine";
@@ -386,8 +386,12 @@ export async function POST(request: Request) {
             componentId: definition.componentId,
             branchId: analyzer.branchId,
             methodId: orderItem.test.methodId,
-            patientSex: orderItem.order.patient.sexAtBirth,
-            dateOfBirth: orderItem.order.patient.dateOfBirth,
+            patientSex: referencePatientSex(orderItem.order.patientSexSnapshot),
+            dateOfBirth: orderItem.order.patientDobSnapshot,
+        recordedAgeValue: orderItem.order.patientAgeValueSnapshot,
+        recordedAgeUnit: orderItem.order.patientAgeUnitSnapshot,
+        recordedAgeAt: orderItem.order.patientAgeRecordedAtSnapshot,
+        ageAsOf: orderItem.order.orderedAt,
             pregnancyStatus: orderItem.order.pregnancyStatus,
             gestationalAgeWeeks: orderItem.order.gestationalAgeWeeks,
             analyzerId: analyzer.id,
@@ -517,8 +521,12 @@ export async function POST(request: Request) {
         componentId: rule.targetComponentId,
         branchId: analyzer.branchId,
         methodId: orderItem.test.methodId,
-        patientSex: orderItem.order.patient.sexAtBirth,
-        dateOfBirth: orderItem.order.patient.dateOfBirth,
+        patientSex: referencePatientSex(orderItem.order.patientSexSnapshot),
+        dateOfBirth: orderItem.order.patientDobSnapshot,
+        recordedAgeValue: orderItem.order.patientAgeValueSnapshot,
+        recordedAgeUnit: orderItem.order.patientAgeUnitSnapshot,
+        recordedAgeAt: orderItem.order.patientAgeRecordedAtSnapshot,
+        ageAsOf: orderItem.order.orderedAt,
         pregnancyStatus: orderItem.order.pregnancyStatus,
         gestationalAgeWeeks: orderItem.order.gestationalAgeWeeks,
         analyzerId: analyzer.id,

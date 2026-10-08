@@ -17,6 +17,7 @@ type ManifestItem = {
   specimenId: string;
   barcodeSnapshot: string;
   status: string;
+  exceptionText?: string | null;
   specimen: {
     order: { accessionNumber: string; patient: { patientNumber: string; fullNameEn: string; fullNameAr?: string | null } };
     specimenType: { nameEn: string; nameAr?: string | null } | null;
@@ -59,6 +60,8 @@ export function TransferManager({
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
   const [receiveBarcodes, setReceiveBarcodes] = useState<Record<string, string>>({});
+  const [exceptionTypes, setExceptionTypes] = useState<Record<string, string>>({});
+  const [exceptionNotes, setExceptionNotes] = useState<Record<string, string>>({});
   const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
   const localizedName = (item: { nameEn: string; nameAr?: string | null }) => locale === "ar" ? item.nameAr || item.nameEn : item.nameEn;
   const patientName = (item: { fullNameEn: string; fullNameAr?: string | null }) => locale === "ar" ? item.fullNameAr || item.fullNameEn : item.fullNameEn;
@@ -145,6 +148,36 @@ export function TransferManager({
     setBusy("");
   }
 
+  async function reportException(manifestId: string) {
+    const barcode = receiveBarcodes[manifestId]?.trim();
+    const exceptionType = exceptionTypes[manifestId] || "";
+    const exceptionText = exceptionNotes[manifestId]?.trim();
+    if (!barcode || !exceptionType || !exceptionText) {
+      setMessage(tr("Scan the barcode and select an exception type with a reason.", "امسح الباركود واختر نوع المشكلة واكتب السبب."));
+      return;
+    }
+    setBusy(`exception:${manifestId}`); setMessage("");
+    try {
+      const response = await fetch(`/api/transfers/${manifestId}/actions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "REPORT_EXCEPTION", barcode, exceptionType, exceptionText }),
+      });
+      setMessage(response.ok
+        ? tr("Specimen exception recorded and held for reconciliation.", "تم تسجيل مشكلة العينة وحظر استخدامها لحين التسوية.")
+        : tr("Could not record the specimen exception.", "تعذر تسجيل مشكلة العينة."));
+      if (response.ok) {
+        setReceiveBarcodes(values => ({ ...values, [manifestId]: "" }));
+        setExceptionNotes(values => ({ ...values, [manifestId]: "" }));
+        router.refresh();
+      }
+    } catch {
+      setMessage(tr("Network error while reporting the exception.", "حدث خطأ بالشبكة أثناء تسجيل المشكلة."));
+    } finally {
+      setBusy("");
+    }
+  }
+
   return <div className="transfer-layout">
     <section className="detail-card">
       <h2>{tr("Create Transfer Manifest","إنشاء بيان نقل")}</h2>
@@ -212,7 +245,7 @@ export function TransferManager({
             <div className="transfer-items">
               {manifest.items.map(item => <div className="transfer-item-row" key={item.specimenId}>
                 <span><strong>{item.barcodeSnapshot}</strong><small>{item.specimen.specimenType ? localizedName(item.specimen.specimenType) : tr("Specimen","عينة")} · {item.specimen.order.accessionNumber} · {patientName(item.specimen.order.patient)}</small></span>
-                <strong>{transferStatusLabel(item.status)}</strong>
+                <strong>{transferStatusLabel(item.status)}{item.exceptionText ? <small> · {item.exceptionText}</small> : null}</strong>
               </div>)}
             </div>
 
@@ -223,7 +256,21 @@ export function TransferManager({
                 onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void receiveItem(manifest.id); } }}
                 placeholder={tr("Scan specimen barcode to receive…","امسح باركود العينة لاستلامها…")}
               />
-              <button className="primary-button" type="button" disabled={busy === `receive:${manifest.id}`} onClick={() => void receiveItem(manifest.id)}>{tr("Receive Item","استلام العينة")}</button>
+              <button className="primary-button" type="button" disabled={Boolean(busy)} onClick={() => void receiveItem(manifest.id)}>{tr("Receive Item","استلام العينة")}</button>
+              <label>{tr("Exception type", "نوع مشكلة الاستلام")}
+                <select value={exceptionTypes[manifest.id] || ""} onChange={event => setExceptionTypes(values => ({ ...values, [manifest.id]: event.target.value }))}>
+                  <option value="">{tr("Select an exception", "اختر نوع المشكلة")}</option>
+                  <option value="MISSING">{tr("Specimen missing", "العينة مفقودة")}</option>
+                  <option value="DAMAGED">{tr("Damaged specimen", "العينة تالفة")}</option>
+                  <option value="LABEL_MISMATCH">{tr("Label mismatch", "عدم تطابق الملصق")}</option>
+                  <option value="TEMPERATURE_FAILURE">{tr("Temperature excursion", "خلل بدرجة الحرارة")}</option>
+                  <option value="OTHER">{tr("Other", "أخرى")}</option>
+                </select>
+              </label>
+              <label>{tr("Document discrepancy", "تفاصيل المشكلة")}
+                <input value={exceptionNotes[manifest.id] || ""} onChange={event => setExceptionNotes(values => ({ ...values, [manifest.id]: event.target.value }))} maxLength={400} placeholder={tr("Describe observed discrepancy", "صف المشكلة عند الاستلام")} />
+              </label>
+              <button className="danger-button" type="button" disabled={Boolean(busy)} onClick={() => void reportException(manifest.id)}>{tr("Report exception / hold", "تسجيل مشكلة / حجز العينة")}</button>
             </div>}
           </article>;
         })

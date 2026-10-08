@@ -8,6 +8,8 @@ import { queueReportIntegrations } from "@/lib/integration-outbox";
 import { resolveEffectiveReportTemplate } from "@/lib/report-template";
 import { releaseEligibility } from "@/lib/clinical-safety";
 
+class SpecimenClinicalHold extends Error {}
+
 export async function POST(_: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await requirePermission("results.release");
   const ctx = await requestContext();
@@ -76,6 +78,22 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
   const releasedAt = new Date();
 
   const released = await prisma.$transaction(async (tx) => {
+    // Lock related specimens before releasing. A failed reception may place
+    // material into quarantine; release must fail closed even for a result
+    // that was verified before the reception exception was recorded.
+    const associatedSpecimens = await tx.$queryRaw<Array<{ id: string; status: string }>>`
+      SELECT DISTINCT s.id, s.status FROM specimens s
+      LEFT JOIN specimen_order_items soi ON soi.specimen_id = s.id
+      WHERE s.organization_id = ${session.user.organizationId}
+        AND (
+          s.id = ${result.specimenId || ""}
+          OR (soi.order_item_id = ${result.orderItemId} AND soi.status = 'ACTIVE')
+        )
+      ORDER BY s.id FOR UPDATE
+    `;
+    if (associatedSpecimens.some(specimen => specimen.status === "QUARANTINED")) {
+      throw new SpecimenClinicalHold();
+    }
     const updatedResult = await tx.laboratoryResult.update({
       where: { id: result.id },
       data: {
@@ -217,7 +235,13 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
       reportStatus,
       integrationQueue,
     };
-  }, { timeout: 30000 });
+  }, { timeout: 30000 }).catch(error => {
+    if (error instanceof SpecimenClinicalHold) return null;
+    throw error;
+  });
+  if (!released) {
+    return NextResponse.json({ error: "specimen_clinical_quarantine_blocks_release" }, { status: 409 });
+  }
 
   return NextResponse.json({
     status: "ok",

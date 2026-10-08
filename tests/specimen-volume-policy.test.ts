@@ -1,9 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   aliquotPurposeRequiresTests,
   minorToVolume3,
   reconciledVolumeError,
+  reconciliationUsageFloorError,
   remainingAfterUse,
   specimenVolumeUseError,
   volume3ToMinor,
@@ -89,4 +91,40 @@ test("derived aliquots never inherit an in-process state without their own proce
   assert.equal(derivedAliquotInitialStatus("RECEIVED"), "RECEIVED");
   assert.equal(derivedAliquotInitialStatus("IN_PROCESS"), "RECEIVED");
   assert.equal(derivedAliquotInitialStatus("IN_TRANSIT"), null);
+});
+
+test("aliquot API rejects closed orders and requires active parent-linked tests", () => {
+  const route = readFileSync(new URL("../src/app/api/specimens/[id]/aliquots/route.ts", import.meta.url), "utf8");
+  assert.ok(route.includes('parent.order.status === "CANCELLED"'));
+  assert.ok(route.includes('parent.order.status === "COMPLETED"'));
+  assert.ok(route.includes('error: "aliquot_no_active_order_items"'));
+  assert.ok(route.includes('orderItems: { some: { status: "ACTIVE"'));
+});
+
+test("reconciliation cannot reissue volume already consumed by aliquots or testing", () => {
+  assert.equal(reconciliationUsageFloorError({ originalVolume: "5.000", availableVolume: "3.500", usageTotal: "1.500" }), null);
+  assert.equal(reconciliationUsageFloorError({ originalVolume: "5.000", availableVolume: "4.000", usageTotal: "1.500" }), "reconciliation_would_restore_consumed_volume");
+  assert.equal(reconciliationUsageFloorError({ originalVolume: null, availableVolume: "2.000", usageTotal: "1.000" }), "reconciliation_original_volume_required_after_usage");
+  assert.equal(reconciliationUsageFloorError({ originalVolume: null, availableVolume: "2.000", usageTotal: "0.000" }), null);
+});
+
+test("volume reconciliation locks specimen custody and checks usage inside transaction", () => {
+  const route = readFileSync(new URL("../src/app/api/specimens/[id]/volume-reconcile/route.ts", import.meta.url), "utf8");
+  assert.ok(route.includes("currentBranchId: specimen.currentBranchId"));
+  assert.ok(route.indexOf("specimen.updateMany") < route.indexOf("specimenUsageEvent.aggregate"));
+  assert.ok(route.includes("reconciliationUsageFloorError"));
+});
+
+test("specimen usage checks order and linked test eligibility in the atomic update", () => {
+  const route = readFileSync(new URL("../src/app/api/specimens/[id]/usage/route.ts", import.meta.url), "utf8");
+  assert.ok(route.includes('error: "usage_order_not_active"'));
+  assert.ok(route.includes('order: { status: { notIn: ["CANCELLED", "COMPLETED"] } }'));
+  assert.ok(route.includes('orderItems: { some: { orderItemId, status: "ACTIVE"'));
+});
+
+test("storage relocation enforces current branch in the atomic specimen update", () => {
+  const route = readFileSync(new URL("../src/app/api/specimens/[id]/storage-location/route.ts", import.meta.url), "utf8");
+  const update = route.slice(route.indexOf("const changed = await tx.specimen.updateMany"));
+  assert.ok(update.includes("currentBranchId: specimen.currentBranchId"));
+  assert.ok(update.includes("preanalyticalVersion: specimen.preanalyticalVersion"));
 });

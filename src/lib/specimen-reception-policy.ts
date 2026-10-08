@@ -99,3 +99,18 @@ export function rejectionAnalyticalWorkError(affectedLinks: Array<{
   if (affectedLinks.some(link => link.analyzerWorkCount > 0)) return "affected_tests_analyzer_work_started";
   return null;
 }
+
+/** Enforce safe acceptance; discrepancy assessment alone does not authorize processing. */
+export function receptionAcceptanceError(input: {
+  labelAssessment: string;
+  conditionCode: string;
+  expectedContainerCode: string | null;
+  observedContainerCode: string | null;
+}) {
+  if (input.labelAssessment !== "MATCHED") return "reception_label_exception_requires_resolution";
+  if (input.conditionCode !== "GOOD") return "reception_condition_exception_requires_resolution";
+  const expected = input.expectedContainerCode?.trim().toUpperCase();
+  const observed = input.observedContainerCode?.trim().toUpperCase();
+  if (expected && observed && expected !== observed) return "reception_container_mismatch_requires_resolution";
+  return null;
+}

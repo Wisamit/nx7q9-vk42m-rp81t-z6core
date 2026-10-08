@@ -8,6 +8,7 @@ export type VolumeTrackedSpecimenStatus =
   | "PLANNED"
   | "COLLECTION_FAILED"
   | "IN_TRANSIT"
+  | "QUARANTINED"
   | "REJECTED"
   | "DISPOSED";
 
@@ -103,4 +104,19 @@ export function derivedAliquotInitialStatus(parentStatus: VolumeTrackedSpecimenS
   if (parentStatus === "IN_PROCESS") return "RECEIVED" as const;
   if (parentStatus === "COLLECTED" || parentStatus === "RECEIVED") return parentStatus;
   return null;
+}
+
+/** A reconciliation may not restore material already allocated to testing or aliquots. */
+export function reconciliationUsageFloorError(input: {
+  originalVolume: string | null;
+  availableVolume: string;
+  usageTotal: string;
+}) {
+  const available = volume3ToMinor(input.availableVolume);
+  const used = volume3ToMinor(input.usageTotal);
+  if (available === null || used === null) return "invalid_volume";
+  if (used === BigInt(0)) return null;
+  const original = volume3ToMinor(input.originalVolume);
+  if (original === null) return "reconciliation_original_volume_required_after_usage";
+  return available + used > original ? "reconciliation_would_restore_consumed_volume" : null;
 }

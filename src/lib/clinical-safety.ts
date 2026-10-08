@@ -5,6 +5,7 @@ export type SpecimenLifecycleStatus =
   | "RECEIVED"
   | "IN_TRANSIT"
   | "IN_PROCESS"
+  | "QUARANTINED"
   | "REJECTED"
   | "DISPOSED";
 
@@ -22,10 +23,11 @@ export function specimenActionError(input: {
   }
 
   if (input.action === "RECEIVE") {
-    return ["COLLECTED", "IN_TRANSIT"].includes(input.status) ? null : "specimen_not_receivable";
+    // IN_TRANSIT specimens must be received through the manifest custody API.
+    return input.status === "COLLECTED" ? null : "specimen_not_receivable";
   }
 
-  return ["COLLECTED", "RECEIVED"].includes(input.status) ? null : "specimen_not_rejectable";
+  return ["COLLECTED", "RECEIVED", "QUARANTINED"].includes(input.status) ? null : "specimen_not_rejectable";
 }
 
 export function releaseEligibility(input: {

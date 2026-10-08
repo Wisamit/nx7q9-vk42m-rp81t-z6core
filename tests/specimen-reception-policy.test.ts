@@ -1,8 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   activeDerivedAliquotConflict,
   receptionAssessmentError,
+  receptionAcceptanceError,
   selectedRejectionOrderItemIds,
   selectiveRejectionNeedsPatientRecollection,
   rejectionAnalyticalWorkError,
@@ -87,4 +89,60 @@ test("pre-analytical rejection stops once any affected analytical workflow has s
   assert.equal(rejectionAnalyticalWorkError([{ ...clean, microbiologyCount: 1 }]), "affected_tests_microbiology_work_started");
   assert.equal(rejectionAnalyticalWorkError([{ ...clean, activeSendOutCount: 1 }]), "affected_tests_sendout_active");
   assert.equal(rejectionAnalyticalWorkError([{ ...clean, analyzerWorkCount: 1 }]), "affected_tests_analyzer_work_started");
+});
+
+
+test("discrepant reception fails closed before specimen becomes RECEIVED", () => {
+  const valid = { labelAssessment: "MATCHED", conditionCode: "GOOD", expectedContainerCode: "EDTA", observedContainerCode: "EDTA" };
+  assert.equal(receptionAcceptanceError(valid), null);
+  assert.equal(receptionAcceptanceError({ ...valid, labelAssessment: "UNLABELED" }), "reception_label_exception_requires_resolution");
+  assert.equal(receptionAcceptanceError({ ...valid, labelAssessment: "MISMATCHED" }), "reception_label_exception_requires_resolution");
+  assert.equal(receptionAcceptanceError({ ...valid, conditionCode: "CLOTTED" }), "reception_condition_exception_requires_resolution");
+  assert.equal(receptionAcceptanceError({ ...valid, observedContainerCode: "SERUM" }), "reception_container_mismatch_requires_resolution");
+});
+
+test("denied reception atomically quarantines and audits without accepting the specimen", () => {
+  const fs = requireSource();
+  const accepted = fs.indexOf("const acceptanceError = receptionAcceptanceError(");
+  const hold = fs.indexOf("const quarantined = await prisma.$transaction", accepted);
+  const denied = fs.indexOf('action: "SPECIMEN_RECEPTION_QUARANTINED"', hold);
+  const receipt = fs.indexOf('status: "RECEIVED"', denied);
+  assert.ok(accepted >= 0 && hold > accepted && denied > hold && receipt > denied);
+  assert.ok(fs.includes('data: {\n            status: "QUARANTINED"'));
+});
+
+function requireSource() {
+  return readFileSync(new URL("../src/app/api/specimens/[id]/actions/route.ts", import.meta.url), "utf8");
+}
+
+test("rejection rechecks source branch, order state and child aliquots inside transaction", () => {
+  const route = readFileSync(new URL("../src/app/api/specimens/[id]/rejections/route.ts", import.meta.url), "utf8");
+  const lockIndex = route.indexOf("const sourceChange = await tx.specimen.updateMany");
+  const childIndex = route.indexOf("const currentChildren = await tx.specimen.findMany");
+  const recordIndex = route.indexOf("const rejection = await tx.specimenRejection.create");
+  assert.ok(lockIndex >= 0 && childIndex > lockIndex && recordIndex > childIndex);
+  assert.ok(route.includes("currentBranchId: branchId,\n            order: { status: { notIn:"));
+  assert.ok(route.includes("parentRelationType: \"ALIQUOT\""));
+  assert.ok(route.includes("currentChildren.some(child =>"));
+});
+
+test("successful and failed collection require active orders and current custody branch atomically", () => {
+  const route = readFileSync(new URL("../src/app/api/specimens/[id]/collection-attempts/route.ts", import.meta.url), "utf8");
+  assert.equal(route.split('order: { status: { notIn: ["CANCELLED", "COMPLETED"] } }').length - 1, 2);
+  assert.equal(route.split('currentBranchId: branchId,\n').length >= 3, true);
+  assert.ok(route.includes('specimen.order.status === "CANCELLED" || specimen.order.status === "COMPLETED"'));
+});
+
+
+test("reception CAS requires matching branch custody and organization", () => {
+  const route = readFileSync(new URL("../src/app/api/specimens/[id]/actions/route.ts", import.meta.url), "utf8");
+  const receive = route.indexOf('if (body.action === "RECEIVE")');
+  const claim = route.indexOf("const changed = await tx.specimen.updateMany", receive);
+  const assessment = route.indexOf("tx.specimenReceptionAssessment.create", claim);
+  assert.ok(receive >= 0 && claim > receive && assessment > claim);
+  const guard = route.slice(claim, assessment);
+  assert.ok(guard.includes("organizationId: session.user.organizationId"));
+  assert.ok(guard.includes("currentBranchId: branchId"));
+  assert.ok(guard.includes("preanalyticalVersion: specimen.preanalyticalVersion"));
+  assert.ok(guard.includes('if (changed.count !== 1) throw new Error("SPECIMEN_STATE_CHANGED")'));
 });

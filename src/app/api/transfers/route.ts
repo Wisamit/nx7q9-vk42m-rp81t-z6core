@@ -6,6 +6,7 @@ import { prisma } from "@/lib/db";
 function text(value: unknown, max = 500) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
 }
+class ManifestStateChanged extends Error {}
 function uniqueIds(value: unknown) {
   if (!Array.isArray(value)) return [];
   return [...new Set(value.filter((x): x is string => typeof x === "string" && x.length > 0))];
@@ -68,6 +69,27 @@ export async function POST(request: Request) {
   }
 
   const created = await prisma.$transaction(async (tx) => {
+    // Serialize manifest creation per specimen to prevent concurrent DRAFT
+    // manifests for the same specimen. Stable lock ordering avoids deadlocks.
+    for (const specimenId of [...specimenIds].sort()) {
+      const locked = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM specimens
+        WHERE id = ${specimenId}
+          AND organization_id = ${session.user.organizationId}
+          AND current_branch_id = ${sourceBranchId}
+          AND status IN ('COLLECTED', 'RECEIVED')
+        FOR UPDATE
+      `;
+      if (locked.length !== 1) throw new ManifestStateChanged();
+    }
+    const concurrentTransfers = await tx.specimenTransferItem.count({
+      where: {
+        specimenId: { in: specimenIds },
+        manifest: { status: { in: ["DRAFT", "DISPATCHED", "PARTIALLY_RECEIVED"] } },
+      },
+    });
+    if (concurrentTransfers !== 0) throw new ManifestStateChanged();
+
     let number = manifestNumber();
     while (await tx.specimenTransferManifest.findUnique({
       where: { organizationId_manifestNumber: { organizationId: session.user.organizationId, manifestNumber: number } },
@@ -118,7 +140,11 @@ export async function POST(request: Request) {
     });
 
     return manifest;
+  }).catch(error => {
+    if (error instanceof ManifestStateChanged) return null;
+    throw error;
   });
 
+  if (!created) return NextResponse.json({ error: "specimen_already_in_active_manifest_or_state_changed" }, { status: 409 });
   return NextResponse.json({ status: "ok", manifest: created }, { status: 201 });
 }

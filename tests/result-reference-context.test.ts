@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   referenceIntervalMatchesContext,
+  referencePatientSex,
   referenceIntervalSpecificityScore,
   selectBestReferenceInterval,
   type ReferenceIntervalCandidate,
@@ -107,4 +108,45 @@ test("effective date breaks ties deterministically after equal specificity", () 
   const older = interval({ id: "OLDER", analyzerId: "A1", effectiveFrom: new Date("2026-01-01T00:00:00.000Z") });
   const newer = interval({ id: "NEWER", analyzerId: "A1", effectiveFrom: new Date("2026-06-01T00:00:00.000Z") });
   assert.equal(selectBestReferenceInterval([older, newer], { ...baseContext, analyzerId: "A1" })?.id, "NEWER");
+});
+
+test("recorded six-month infant age matches same-day month intervals without inventing DOB", () => {
+  const recordedAt = new Date("2026-10-08T09:00:00.000Z");
+  const context = { ...baseContext, dateOfBirth: null, recordedAgeValue: 6, recordedAgeUnit: "MONTH", recordedAgeAt: recordedAt, at: new Date("2026-10-08T10:00:00.000Z") };
+  assert.equal(referenceIntervalMatchesContext(interval({ ageFrom: 3, ageTo: 9, ageUnit: "MONTH" }), context), true);
+  assert.equal(referenceIntervalMatchesContext(interval({ ageFrom: 7, ageTo: 11, ageUnit: "MONTH" }), context), false);
+  assert.equal(referenceIntervalMatchesContext(interval({ ageFrom: 0, ageTo: 1, ageUnit: "YEAR" }), context), false);
+});
+
+test("recorded age fails closed if timestamp missing, stale, future, or unit mismatched", () => {
+  const candidate = interval({ ageFrom: 5, ageTo: 7, ageUnit: "MONTH" });
+  const recordedAt = new Date("2026-10-08T09:00:00.000Z");
+  const context = { ...baseContext, dateOfBirth: null, recordedAgeValue: 6, recordedAgeUnit: "MONTH", recordedAgeAt: recordedAt, at: new Date("2026-10-08T10:00:00.000Z") };
+  assert.equal(referenceIntervalMatchesContext(candidate, { ...context, recordedAgeAt: null }), false);
+  assert.equal(referenceIntervalMatchesContext(candidate, { ...context, at: new Date("2026-10-09T09:00:00.000Z") }), false);
+  assert.equal(referenceIntervalMatchesContext(candidate, { ...context, at: new Date("2026-10-08T08:00:00.000Z") }), false);
+  assert.equal(referenceIntervalMatchesContext(candidate, { ...context, recordedAgeUnit: "YEAR" }), false);
+});
+
+test("age at order time remains stable when result entry happens a day later", () => {
+  const intervalForInfant = interval({ ageFrom: 3, ageTo: 9, ageUnit: "MONTH" });
+  const context = {
+    ...baseContext,
+    dateOfBirth: null,
+    recordedAgeValue: 6,
+    recordedAgeUnit: "MONTH",
+    recordedAgeAt: new Date("2026-10-08T09:00:00.000Z"),
+    ageAsOf: new Date("2026-10-08T10:00:00.000Z"),
+    at: new Date("2026-10-15T10:00:00.000Z"),
+  };
+  assert.equal(referenceIntervalMatchesContext(intervalForInfant, context), true);
+  assert.equal(referenceIntervalMatchesContext(intervalForInfant, { ...context, ageAsOf: null }), false);
+});
+
+test("unrecognized legacy order sex snapshots fail closed", () => {
+  assert.equal(referencePatientSex("MALE"), "MALE");
+  assert.equal(referencePatientSex("FEMALE"), "FEMALE");
+  assert.equal(referencePatientSex(null), "UNKNOWN");
+  assert.equal(referencePatientSex("UNEXPECTED"), "UNKNOWN");
+  assert.equal(referenceIntervalMatchesContext(interval({ sex: "FEMALE" }), { ...baseContext, patientSex: referencePatientSex(null) }), false);
 });

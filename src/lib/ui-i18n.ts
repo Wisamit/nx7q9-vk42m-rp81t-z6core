@@ -21,6 +21,7 @@ const STATUS_AR: Record<string, string> = {
   RECEIVED: "تم الاستلام",
   IN_TRANSIT: "قيد النقل",
   IN_PROCESS: "قيد المعالجة",
+  QUARANTINED: "محجور سريرياً",
   REJECTED: "مرفوض",
   DISPOSED: "تم التخلص",
   ORDERED: "مطلوب",

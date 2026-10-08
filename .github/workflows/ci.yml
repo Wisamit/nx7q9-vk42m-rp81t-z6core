@@ -41,6 +41,8 @@ jobs:
       - run: npx prisma migrate status
       - run: npx prisma generate
       - run: npm run test:safety
+      - run: node --experimental-strip-types --test tests/specimen-storage-mariadb.integration.test.ts
+      - run: node --experimental-strip-types --test tests/specimen-transfer-mariadb.integration.test.ts
       - run: npx tsc --noEmit
       - run: npm run lint
       - run: npm run test:ui-theme

@@ -31,9 +31,9 @@ test("specimen collection is only allowed from PLANNED with specimen type config
   assert.equal(specimenActionError({ status: "PLANNED", action: "COLLECT", specimenTypeConfigured: false }), "specimen_type_required_before_collection");
 });
 
-test("specimen receive accepts COLLECTED and IN_TRANSIT only", () => {
+test("direct specimen receive permits COLLECTED only; in-transit uses manifest", () => {
   assert.equal(specimenActionError({ status: "COLLECTED", action: "RECEIVE", specimenTypeConfigured: true }), null);
-  assert.equal(specimenActionError({ status: "IN_TRANSIT", action: "RECEIVE", specimenTypeConfigured: true }), null);
+  assert.equal(specimenActionError({ status: "IN_TRANSIT", action: "RECEIVE", specimenTypeConfigured: true }), "specimen_not_receivable");
   assert.equal(specimenActionError({ status: "PLANNED", action: "RECEIVE", specimenTypeConfigured: true }), "specimen_not_receivable");
   assert.equal(specimenActionError({ status: "REJECTED", action: "RECEIVE", specimenTypeConfigured: true }), "specimen_not_receivable");
 });
