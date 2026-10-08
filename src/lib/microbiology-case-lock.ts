@@ -51,3 +51,23 @@ export async function lockMicrobiologyCaseForEdit(
   if (cases[0].result_id && !input.allowSubmittedResult) return "RESULT_ALREADY_SUBMITTED";
   return "READY";
 }
+
+export class MicrobiologyEditRejected extends Error {
+  constructor(public readonly code: string) {
+    super(code);
+  }
+}
+
+export async function requireEditableMicrobiologyCase(
+  tx: Prisma.TransactionClient,
+  input: Parameters<typeof lockMicrobiologyCaseForEdit>[1],
+): Promise<void> {
+  const state = await lockMicrobiologyCaseForEdit(tx, input);
+  if (state !== "READY") {
+    const code = state === "SPECIMEN_CHANGED" ? "specimen_not_ready_for_microbiology"
+      : state === "CASE_LOCKED" ? "microbiology_case_locked"
+        : state === "RESULT_ALREADY_SUBMITTED" ? "microbiology_result_submitted_withdraw_before_edit"
+          : "microbiology_case_state_changed";
+    throw new MicrobiologyEditRejected(code);
+  }
+}
