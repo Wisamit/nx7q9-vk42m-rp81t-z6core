@@ -1,9 +1,13 @@
 import type { Prisma, PrismaClient } from "../../generated/prisma/client";
-import { comparePricingCandidates } from "@/lib/pricing-policy";
+import { comparePricingCandidates, samePricingPrecedence } from "@/lib/pricing-policy";
 
 export class PricingConfigurationError extends Error {
   constructor(
-    public readonly code: "ambiguous_test_price_revision" | "ambiguous_package_price_revision",
+    public readonly code:
+      | "ambiguous_test_price_revision"
+      | "ambiguous_package_price_revision"
+      | "ambiguous_test_price_list"
+      | "ambiguous_package_price_list",
     public readonly priceListId: string,
   ) {
     super(code);
@@ -83,6 +87,10 @@ export async function resolveTestPrice(
 
   const selected = ranked[0]?.list;
   if (!selected) return null;
+  const competing = ranked[1]?.list;
+  if (competing && samePricingPrecedence(selected, competing)) {
+    throw new PricingConfigurationError("ambiguous_test_price_list", selected.id);
+  }
   if (selected.items.length !== 1) {
     throw new PricingConfigurationError("ambiguous_test_price_revision", selected.id);
   }
@@ -170,6 +178,10 @@ export async function resolvePackagePrice(
 
   const selected = ranked[0]?.list;
   if (!selected) return null;
+  const competing = ranked[1]?.list;
+  if (competing && samePricingPrecedence(selected, competing)) {
+    throw new PricingConfigurationError("ambiguous_package_price_list", selected.id);
+  }
   if (selected.packageItems.length !== 1) {
     throw new PricingConfigurationError("ambiguous_package_price_revision", selected.id);
   }
