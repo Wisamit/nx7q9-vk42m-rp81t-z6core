@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { Prisma } from "../../../../../generated/prisma/client";
+import type { Prisma } from "../../../../generated/prisma/client";
 import { requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { aggregateFinancialReport } from "@/lib/financial-reporting";
