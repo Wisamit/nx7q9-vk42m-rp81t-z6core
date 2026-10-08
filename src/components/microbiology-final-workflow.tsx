@@ -11,6 +11,7 @@ export function MicrobiologyFinalWorkflow({
   canEnter,
   canVerify,
   canRelease,
+  specimenReadyForProcessing,
   orderId,
   locale,
 }: {
@@ -21,6 +22,7 @@ export function MicrobiologyFinalWorkflow({
   canEnter: boolean;
   canVerify: boolean;
   canRelease: boolean;
+  specimenReadyForProcessing: boolean;
   orderId: string;
   locale: "ar" | "en";
 }) {
@@ -47,7 +49,14 @@ export function MicrobiologyFinalWorkflow({
       setMessage(tr("Final microbiology content submitted for verification.", "تم إرسال المحتوى النهائي للأحياء الدقيقة للتحقق."));
       router.refresh();
     } else {
-      setMessage(body.error || tr("Could not submit final microbiology result.", "تعذر إرسال نتيجة الأحياء الدقيقة النهائية."));
+      const errors: Record<string, string> = {
+        microbiology_result_changed_or_under_review: tr("This result was changed or reviewed by another operator. Refresh before any correction.", "تم تعديل هذه النتيجة أو مراجعتها بواسطة مستخدم آخر. حدّث البيانات قبل التصحيح."),
+        microbiology_case_state_changed: tr("Culture content changed while submitting. Refresh and review all observations.", "تغيرت بيانات الزرع أثناء الإرسال. حدّث الصفحة وراجع الملاحظات."),
+        microbiology_result_version_conflict: tr("Another result version was created. Refresh to prevent duplicate clinical history.", "تم إنشاء إصدار نتيجة آخر. حدّث الصفحة لمنع تكرار السجل السريري."),
+        specimen_not_ready_for_microbiology: tr("The specimen is no longer available for microbiology processing.", "العينة لم تعد متاحة لمعالجة الأحياء الدقيقة."),
+        no_growth_conflicts_with_isolates: tr("A no-growth result cannot contain recorded isolates.", "نتيجة عدم وجود نمو لا يمكن أن تتضمن عزلات مسجلة."),
+      };
+      setMessage(errors[body.error] || tr("Could not submit final microbiology result.", "تعذر إرسال نتيجة الأحياء الدقيقة النهائية."));
     }
   }
 
@@ -66,7 +75,9 @@ export function MicrobiologyFinalWorkflow({
       setMessage(tr("Final submission withdrawn. Culture data is editable again; resubmission will create a new result version.", "تم سحب الإرسال النهائي. أصبحت بيانات الزرع قابلة للتعديل مجددًا، وسيؤدي الإرسال الجديد إلى إنشاء إصدار نتيجة جديد."));
       router.refresh();
     } else {
-      setMessage(body.error || tr("Could not withdraw microbiology submission.", "تعذر سحب إرسال الأحياء الدقيقة."));
+      setMessage(body.error === "microbiology_result_changed_or_under_review"
+        ? tr("The result has already been reviewed or changed; use the controlled review/return workflow.", "تمت مراجعة النتيجة أو تعديلها؛ استخدم مسار المراجعة أو الإرجاع المعتمد.")
+        : tr("Could not withdraw microbiology submission. Refresh and try again.", "تعذر سحب إرسال الأحياء الدقيقة. حدّث الصفحة ثم أعد المحاولة."));
     }
   }
 
@@ -118,7 +129,7 @@ export function MicrobiologyFinalWorkflow({
     <h2>{tr("Final Microbiology Result", "نتيجة الأحياء الدقيقة النهائية")}</h2>
     <p className="muted">{tr("Submitting creates or updates a versioned LaboratoryResult. Verification and release remain separate controlled steps.", "يؤدي الإرسال إلى إنشاء أو تحديث LaboratoryResult ذي إصدار محفوظ، بينما يبقى التحقق والإصدار خطوتين مستقلتين ومضبوطتين.")}</p>
 
-    {canEnter && (!resultStatus || ["DRAFT","ENTERED"].includes(resultStatus)) && <form className="catalog-form" onSubmit={submitFinal}>
+    {canEnter && specimenReadyForProcessing && (!resultStatus || ["DRAFT","ENTERED"].includes(resultStatus)) && <form className="catalog-form" onSubmit={submitFinal}>
       <label className="form-span">{tr("Final interpretive comment", "التعليق التفسيري النهائي")}
         <textarea name="finalComment" rows={4} required defaultValue={finalComment} />
       </label>
@@ -136,11 +147,11 @@ export function MicrobiologyFinalWorkflow({
         <button className="secondary-button" type="button" disabled={busy !== ""} onClick={() => void withdraw()}>
           {busy === "withdraw" ? tr("Withdrawing…", "جارٍ السحب…") : tr("Withdraw for Correction", "سحب للتصحيح")}
         </button>}
-      {resultId && resultStatus === "ENTERED" && canVerify &&
+      {resultId && resultStatus === "ENTERED" && canVerify && specimenReadyForProcessing &&
         <button className="secondary-button" type="button" disabled={busy !== ""} onClick={() => void verify()}>
           {busy === "verify" ? tr("Verifying…", "جارٍ التحقق…") : tr("Verify Microbiology Result", "التحقق من نتيجة الأحياء الدقيقة")}
         </button>}
-      {resultId && resultStatus === "VERIFIED" && canRelease &&
+      {resultId && resultStatus === "VERIFIED" && canRelease && specimenReadyForProcessing &&
         <button className="primary-button" type="button" disabled={busy !== ""} onClick={() => void release()}>
           {busy === "release" ? tr("Releasing…", "جارٍ الإصدار…") : tr("Release Microbiology Result", "إصدار نتيجة الأحياء الدقيقة")}
         </button>}

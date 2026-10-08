@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { canAccessBranch, canAccessDepartment, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { MicrobiologyEditRejected, requireEditableMicrobiologyCase } from "@/lib/microbiology-case-lock";
 
 function text(value: unknown, max = 5000) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -41,6 +42,20 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const status = body.markPreliminary === true ? "PRELIMINARY" : "IN_PROGRESS";
 
   const updated = await prisma.$transaction(async tx => {
+    await requireEditableMicrobiologyCase(tx, {
+      organizationId: session.user.organizationId,
+      caseId: microbiologyCase.id,
+      specimenId: microbiologyCase.specimenId,
+      performingBranchId: microbiologyCase.performingBranchId,
+      expectedCaseUpdatedAt: microbiologyCase.updatedAt,
+    });
+    // A no-growth clinical finding cannot coexist with documented isolates.
+    if (cultureStatus === "NO_GROWTH") {
+      const isolateCount = await tx.microbiologyIsolate.count({ where: { caseId: id } });
+      if (isolateCount > 0) {
+        throw new MicrobiologyEditRejected("no_growth_conflicts_with_isolates");
+      }
+    }
     const item = await tx.microbiologyCase.update({
       where: { id },
       data: {
@@ -70,7 +85,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     });
 
     return item;
+  }).catch(error => {
+    if (error instanceof MicrobiologyEditRejected) return error;
+    throw error;
   });
+  if (updated instanceof MicrobiologyEditRejected) {
+    return NextResponse.json({ error: updated.code }, { status: 409 });
+  }
 
   return NextResponse.json({ status: "ok", case: updated });
 }

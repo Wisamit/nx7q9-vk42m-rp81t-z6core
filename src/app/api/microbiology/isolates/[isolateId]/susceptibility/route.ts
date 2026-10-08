@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { canAccessBranch, canAccessDepartment, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { MicrobiologyEditRejected, requireEditableMicrobiologyCase } from "@/lib/microbiology-case-lock";
+import { parseAstInterpretation, parseAstMeasurement, type AstInterpretation } from "@/lib/microbiology-ast";
 
 function text(value: unknown, max = 1000) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -56,34 +58,53 @@ export async function POST(request: Request, { params }: { params: Promise<{ iso
 
   const prepared: Array<{
     antibiotic: (typeof antibiotics)[number];
-    interpretation: "S" | "I" | "R" | "NON_SUSCEPTIBLE" | "UNKNOWN";
-    micValue: number | null;
+    interpretation: AstInterpretation;
+    micValue: string | null;
     micUnit: string | null;
-    zoneDiameterMm: number | null;
+    zoneDiameterMm: string | null;
     breakpointSnapshot: string | null;
   }> = [];
   for (const item of body.results) {
     const antibioticId = text(item.antibioticId, 36);
     const antibiotic = byId.get(antibioticId);
-    const interpretation = ["S","I","R","NON_SUSCEPTIBLE","UNKNOWN"].includes(item.interpretation || "")
-      ? item.interpretation as "S" | "I" | "R" | "NON_SUSCEPTIBLE" | "UNKNOWN"
-      : "UNKNOWN";
-    const micValue = item.micValue === "" || item.micValue == null ? null : Number(item.micValue);
-    const zoneDiameterMm = item.zoneDiameterMm === "" || item.zoneDiameterMm == null ? null : Number(item.zoneDiameterMm);
-    if (!antibiotic || (micValue !== null && !Number.isFinite(micValue)) || (zoneDiameterMm !== null && !Number.isFinite(zoneDiameterMm))) {
+    const interpretation = parseAstInterpretation(item.interpretation);
+    const micValue = parseAstMeasurement(item.micValue, 12, 6);
+    const zoneDiameterMm = parseAstMeasurement(item.zoneDiameterMm, 7, 3);
+    const micUnit = text(item.micUnit, 40) || null;
+    if (!antibiotic || interpretation === null || micValue === undefined || zoneDiameterMm === undefined
+      || (micValue !== null && !micUnit)) {
       return NextResponse.json({ error: "invalid_susceptibility_value", antibioticId }, { status: 400 });
     }
     prepared.push({
       antibiotic,
       interpretation,
       micValue,
-      micUnit: text(item.micUnit, 40) || null,
+      micUnit,
       zoneDiameterMm,
       breakpointSnapshot: text(item.breakpointSnapshot, 255) || null,
     });
   }
 
   const susceptibilityTest = await prisma.$transaction(async tx => {
+    await requireEditableMicrobiologyCase(tx, {
+      organizationId: session.user.organizationId,
+      caseId: isolate.case.id,
+      specimenId: isolate.case.specimenId,
+      performingBranchId: isolate.case.performingBranchId,
+      expectedCaseUpdatedAt: isolate.case.updatedAt,
+    });
+    // The parent isolate and selected antimicrobial definitions must still
+    // belong to the authorized organization and active catalog at commit time.
+    const liveIsolate = await tx.microbiologyIsolate.findFirst({
+      where: { id: isolateId, caseId: isolate.case.id },
+      select: { id: true },
+    });
+    const liveAntibiotics = await tx.antibiotic.count({
+      where: { id: { in: ids }, organizationId: session.user.organizationId, status: "ACTIVE" },
+    });
+    if (!liveIsolate || liveAntibiotics !== ids.length) {
+      throw new MicrobiologyEditRejected("microbiology_ast_catalog_changed");
+    }
     const created = await tx.susceptibilityTest.create({
       data: {
         isolateId,
@@ -110,6 +131,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ iso
       });
     }
 
+    await tx.microbiologyCase.update({
+      where: { id: isolate.case.id },
+      data: { updatedAt: new Date(Math.max(Date.now(), isolate.case.updatedAt.getTime() + 1)) },
+    });
     await tx.auditEvent.create({
       data: {
         organizationId: session.user.organizationId,
@@ -136,7 +161,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ iso
     });
 
     return created;
+  }).catch(error => {
+    if (error instanceof MicrobiologyEditRejected) return error;
+    throw error;
   });
+  if (susceptibilityTest instanceof MicrobiologyEditRejected) {
+    return NextResponse.json({ error: susceptibilityTest.code }, { status: 409 });
+  }
 
   return NextResponse.json({ status: "ok", susceptibilityTestId: susceptibilityTest.id }, { status: 201 });
 }

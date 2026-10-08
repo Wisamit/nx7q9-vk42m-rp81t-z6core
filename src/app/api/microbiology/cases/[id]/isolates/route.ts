@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { canAccessBranch, canAccessDepartment, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { MicrobiologyEditRejected, requireEditableMicrobiologyCase } from "@/lib/microbiology-case-lock";
 
 function text(value: unknown, max = 1000) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -30,14 +31,22 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "microbiology_case_locked", status: microbiologyCase.status }, { status: 409 });
   }
 
-  const last = await prisma.microbiologyIsolate.findFirst({
-    where: { caseId: id },
-    orderBy: { sequenceNumber: "desc" },
-    select: { sequenceNumber: true },
-  });
-  const sequenceNumber = (last?.sequenceNumber || 0) + 1;
-
   const isolate = await prisma.$transaction(async tx => {
+    await requireEditableMicrobiologyCase(tx, {
+      organizationId: session.user.organizationId,
+      caseId: microbiologyCase.id,
+      specimenId: microbiologyCase.specimenId,
+      performingBranchId: microbiologyCase.performingBranchId,
+      expectedCaseUpdatedAt: microbiologyCase.updatedAt,
+    });
+    // A case row is locked, so sequence allocation is serialized even
+    // when two operators register isolates at the same instant.
+    const last = await tx.microbiologyIsolate.findFirst({
+      where: { caseId: id },
+      orderBy: { sequenceNumber: "desc" },
+      select: { sequenceNumber: true },
+    });
+    const sequenceNumber = (last?.sequenceNumber || 0) + 1;
     const created = await tx.microbiologyIsolate.create({
       data: {
         caseId: id,
@@ -65,7 +74,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       },
     });
     return created;
+  }).catch(error => {
+    if (error instanceof MicrobiologyEditRejected) return error;
+    throw error;
   });
+  if (isolate instanceof MicrobiologyEditRejected) {
+    return NextResponse.json({ error: isolate.code }, { status: 409 });
+  }
 
   return NextResponse.json({ status: "ok", isolate }, { status: 201 });
 }

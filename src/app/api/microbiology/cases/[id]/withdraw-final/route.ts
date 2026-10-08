@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { canAccessBranch, canAccessDepartment, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { MicrobiologyEditRejected, requireEditableMicrobiologyCase } from "@/lib/microbiology-case-lock";
 
 export async function POST(_: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await requirePermission("microbiology.enter");
@@ -30,11 +31,32 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
   }
 
   const withdrawnAt = new Date();
-  await prisma.$transaction(async tx => {
-    await tx.laboratoryResult.update({
-      where: { id: microbiologyCase.result!.id },
+  const withdrawn = await prisma.$transaction(async tx => {
+    await requireEditableMicrobiologyCase(tx, {
+      organizationId: session.user.organizationId,
+      caseId: microbiologyCase.id,
+      specimenId: microbiologyCase.specimenId,
+      performingBranchId: microbiologyCase.performingBranchId,
+      expectedCaseUpdatedAt: microbiologyCase.updatedAt,
+      expectedResultId: microbiologyCase.result!.id,
+      allowSubmittedResult: true,
+      allowCorrectionWhenSpecimenUnready: true,
+    });
+    // A reviewer may have verified the result since the operator opened
+    // this page. Only the same editable revision can be withdrawn.
+    const claimed = await tx.laboratoryResult.updateMany({
+      where: {
+        id: microbiologyCase.result!.id,
+        organizationId: session.user.organizationId,
+        status: "ENTERED",
+        validationStage: { in: ["ENTRY", "TECHNICAL_REVIEW"] },
+        updatedAt: microbiologyCase.result!.updatedAt,
+      },
       data: { status: "CANCELLED" },
     });
+    if (claimed.count !== 1) {
+      throw new MicrobiologyEditRejected("microbiology_result_changed_or_under_review");
+    }
 
     await tx.microbiologyCase.update({
       where: { id: microbiologyCase.id },
@@ -74,7 +96,13 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
         userAgent: ctx.userAgent,
       },
     });
+  }).then(() => true).catch(error => {
+    if (error instanceof MicrobiologyEditRejected) return error;
+    throw error;
   });
+  if (withdrawn instanceof MicrobiologyEditRejected) {
+    return NextResponse.json({ error: withdrawn.code }, { status: 409 });
+  }
 
   return NextResponse.json({
     status: "ok",

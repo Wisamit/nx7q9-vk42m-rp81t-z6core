@@ -76,7 +76,10 @@ export default async function MicrobiologyCasePage({ params }: { params: Promise
     }),
   ]);
 
-  const locked = ["FINAL","CANCELLED"].includes(microbiologyCase.status) || Boolean(microbiologyCase.result);
+  const specimenReadyForProcessing = microbiologyCase.specimen.status === "IN_PROCESS"
+    && microbiologyCase.specimen.currentBranchId === microbiologyCase.performingBranchId;
+  const locked = ["FINAL","CANCELLED"].includes(microbiologyCase.status)
+    || Boolean(microbiologyCase.result) || !specimenReadyForProcessing;
 
   return <main className="catalog-shell">
     <header className="page-header">
@@ -93,8 +96,8 @@ export default async function MicrobiologyCasePage({ params }: { params: Promise
         <h2>{tr(locale, "Patient & Order", "المريض والطلب")}</h2>
         <dl>
           <dt>{tr(locale, "Patient", "المريض")}</dt><dd>{locale === "ar" ? microbiologyCase.orderItem.order.patient.fullNameAr || microbiologyCase.orderItem.order.patient.fullNameEn : microbiologyCase.orderItem.order.patient.fullNameEn}</dd>
-          <dt>{tr(locale, "Date of birth", "تاريخ الميلاد")}</dt><dd>{microbiologyCase.orderItem.order.patient.dateOfBirth?.toISOString().slice(0,10) || "—"}</dd>
-          <dt>{tr(locale, "Sex at birth", "الجنس عند الولادة")}</dt><dd>{sexLabel(locale, microbiologyCase.orderItem.order.patient.sexAtBirth)}</dd>
+          <dt>{tr(locale, "Date of birth", "تاريخ الميلاد")}</dt><dd>{microbiologyCase.orderItem.order.patientDobSnapshot?.toISOString().slice(0,10) || "—"}</dd>
+          <dt>{tr(locale, "Sex at birth", "الجنس عند الولادة")}</dt><dd>{sexLabel(locale, microbiologyCase.orderItem.order.patientSexSnapshot || "UNKNOWN")}</dd>
           <dt>{tr(locale, "Accession", "رقم الطلب")}</dt><dd>{microbiologyCase.orderItem.order.accessionNumber}</dd>
           <dt>{tr(locale, "Ordering branch", "فرع الطلب")}</dt><dd>{microbiologyCase.orderItem.order.orderingBranch.nameEn}</dd>
         </dl>
@@ -111,6 +114,11 @@ export default async function MicrobiologyCasePage({ params }: { params: Promise
         </dl>
       </article>
     </section>
+
+    {!specimenReadyForProcessing && <section className="detail-card" role="alert">
+      <strong>{tr(locale, "Specimen unavailable for microbiology processing", "العينة غير متاحة لمعالجة الأحياء الدقيقة")}</strong>
+      <p className="muted">{tr(locale, "The specimen may be quarantined, rejected, transferred or outside the performing branch. The culture history remains visible, but new observations and susceptibility tests are blocked.", "قد تكون العينة محجورة أو مرفوضة أو منقولة أو خارج فرع التنفيذ. يبقى سجل الزرع ظاهراً، لكن تُمنع الملاحظات الجديدة واختبارات الحساسية.")}</p>
+    </section>}
 
     {!locked && permissions.has("microbiology.enter") && <MicrobiologyCaseEditor
       locale={locale}
@@ -161,6 +169,7 @@ export default async function MicrobiologyCasePage({ params }: { params: Promise
       resultStatus={microbiologyCase.result?.status || null}
       finalComment={microbiologyCase.finalComment || ""}
       canEnter={permissions.has("microbiology.enter")}
+      specimenReadyForProcessing={specimenReadyForProcessing}
       canVerify={permissions.has("results.verify")}
       canRelease={permissions.has("results.release")}
       orderId={microbiologyCase.orderItem.order.id}
