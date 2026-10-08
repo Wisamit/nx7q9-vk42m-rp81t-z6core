@@ -57,3 +57,12 @@ Scope source: `02_MASTER_SCOPE.md` sections 20–28, with related specimen secur
 - Added source regression guards in `tests/specimen-storage-location.test.ts` and `tests/patient-recorded-age-bounds.test.ts`.
 - **Still open / acceptance blocked:** exact FK-backed physical occupancy and location history; safe concurrent activation/deactivation and assignment proved with real MariaDB tests; nonconformance quarantine; retention/disposal governance; Stage 6 end-to-end specimen/barcode and bilingual operational acceptance. Existing checks include source-pattern assertions and do not demonstrate race-free runtime behavior.
 - This checkpoint does **not** authorize Stage 6 merge, Hostinger deployment, or Stage 7. CI outcome must be recorded against the current HEAD.
+
+
+## Storage location lock-order hardening (2026-10-08)
+
+- Relocation now obtains an InnoDB `SELECT ... FOR UPDATE` lock on the selected ACTIVE branch-scoped `specimen_storage_locations` record **before** mutating the specimen. Deactivation takes the corresponding location UPDATE lock before counting occupants, so the two entry points serialize on the same location record.
+- Locking the row via SELECT avoids writing an unchanged status value merely to acquire a lock. It also ensures a concurrently deactivated destination returns a conflict rather than silently accepting the move.
+- Source regression checks lock ordering. **This is not a claim of full concurrency acceptance**: add real MariaDB two-connection tests and account for legacy free-text location assignments and every other specimen status/branch transition.
+- Existing transfers may leave a stale path during IN_TRANSIT. Physical custody and storage occupancy must be explicitly modeled before declaring exact occupancy, implementing the nullable `storageLocationId` FK and migrated location history without guessing mappings for existing specimens.
+- Stage 6 remains Draft and acceptance-blocked; no merge or production deployment.
