@@ -101,3 +101,10 @@ Scope source: `02_MASTER_SCOPE.md` sections 20–28, with related specimen secur
 
 - Extended the MariaDB integration fixture to perform an actual tentative INACTIVE update while a specimen references the location, then query occupied specimens within the **same transaction** and roll back. Verify the location remains ACTIVE after rollback.
 - Coverage now tests registered specimen FK occupancy, the conservative free-text fallback predicate, and two-connection row locking. This does not yet emulate authenticated API calls or all specimen lifecycle transitions; do not mark Stage 6 accepted from this alone.
+
+
+## Disposal and physical occupancy consistency
+
+- Rejected-only disposal now atomically clears `storageLocation` and `storageLocationId` as it transitions to DISPOSED, preventing a disposed specimen from retaining a current physical assignment.
+- Disposal specimen event and audit old values preserve both previous location path and registered ID for traceability. The existing conservative policy still prohibits accepted/processed retained specimens from being disposed by this endpoint.
+- Added source regression in `tests/specimen-disposal-safety.test.ts`. Real API/database concurrency coverage and medically approved retention rules remain acceptance blockers.
