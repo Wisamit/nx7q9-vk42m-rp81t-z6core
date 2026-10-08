@@ -114,3 +114,11 @@ test("microbiology UI preserves history but blocks active work when specimen cus
   assert.ok(workflow.includes("canRelease && specimenReadyForProcessing"));
   assert.ok(workflow.includes('resultStatus === "ENTERED" && canEnter'));
 });
+
+test("microbiology patient age/sex preview is frozen at order registration", () => {
+  const page=source("../src/app/microbiology/[id]/page.tsx");
+  assert.ok(page.includes("microbiologyCase.orderItem.order.patientDobSnapshot"));
+  assert.ok(page.includes("microbiologyCase.orderItem.order.patientSexSnapshot"));
+  assert.ok(!page.includes("microbiologyCase.orderItem.order.patient.dateOfBirth"));
+  assert.ok(!page.includes("microbiologyCase.orderItem.order.patient.sexAtBirth"));
+});
