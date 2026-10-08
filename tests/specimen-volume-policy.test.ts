@@ -5,6 +5,7 @@ import {
   aliquotPurposeRequiresTests,
   minorToVolume3,
   reconciledVolumeError,
+  reconciliationUsageFloorError,
   remainingAfterUse,
   specimenVolumeUseError,
   volume3ToMinor,
@@ -98,4 +99,18 @@ test("aliquot API rejects closed orders and requires active parent-linked tests"
   assert.ok(route.includes('parent.order.status === "COMPLETED"'));
   assert.ok(route.includes('error: "aliquot_no_active_order_items"'));
   assert.ok(route.includes('orderItems: { some: { status: "ACTIVE"'));
+});
+
+test("reconciliation cannot reissue volume already consumed by aliquots or testing", () => {
+  assert.equal(reconciliationUsageFloorError({ originalVolume: "5.000", availableVolume: "3.500", usageTotal: "1.500" }), null);
+  assert.equal(reconciliationUsageFloorError({ originalVolume: "5.000", availableVolume: "4.000", usageTotal: "1.500" }), "reconciliation_would_restore_consumed_volume");
+  assert.equal(reconciliationUsageFloorError({ originalVolume: null, availableVolume: "2.000", usageTotal: "1.000" }), "reconciliation_original_volume_required_after_usage");
+  assert.equal(reconciliationUsageFloorError({ originalVolume: null, availableVolume: "2.000", usageTotal: "0.000" }), null);
+});
+
+test("volume reconciliation locks specimen custody and checks usage inside transaction", () => {
+  const route = readFileSync(new URL("../src/app/api/specimens/[id]/volume-reconcile/route.ts", import.meta.url), "utf8");
+  assert.ok(route.includes("currentBranchId: specimen.currentBranchId"));
+  assert.ok(route.indexOf("specimen.updateMany") < route.indexOf("specimenUsageEvent.aggregate"));
+  assert.ok(route.includes("reconciliationUsageFloorError"));
 });
