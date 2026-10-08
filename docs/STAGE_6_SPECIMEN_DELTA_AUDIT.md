@@ -115,3 +115,10 @@ Scope source: `02_MASTER_SCOPE.md` sections 20–28, with related specimen secur
 - The aliquot stores `storageLocationId` alongside the path and includes the registered ID in creation/audit metadata. An unspecified position remains nullable rather than inventing a placement.
 - The aliquot UI offers a select of registered ACTIVE branch positions rather than unrestricted free text, and refresh retains the inactive list for authorized storage managers.
 - Added source regressions; full authenticated API race coverage and clinical hold/retention remain acceptance blockers.
+
+
+## Reception custody race hardening
+
+- Receiving a specimen now includes the organization and expected **current branch** in its optimistic `updateMany` predicate, alongside status and `preanalyticalVersion`. An intervening branch/custody change cannot be accepted solely on a stale read.
+- Added a source regression for the guarded atomic claim before reception-assessment creation.
+- This protects a specific reception transition but does not replace real concurrent authenticated HTTP integration, barcode scanner acceptance, quarantine governance, or retention/disposal approvals.
