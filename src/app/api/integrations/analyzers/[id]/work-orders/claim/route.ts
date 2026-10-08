@@ -58,6 +58,21 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         WHERE id = ${candidate.specimenId} AND organization_id = ${credential.analyzer.organizationId}
         FOR UPDATE
       `;
+      // Paused equipment must not dispatch physical analyzer commands.
+      // Do not CANCEL the queued job: a later qualified restoration may retry it.
+      const equipmentRows = await tx.$queryRaw<Array<{ id: string; status: string }>>`
+        SELECT id, status FROM equipment
+        WHERE analyzer_id = ${credential.analyzer.id}
+        AND organization_id = ${credential.analyzer.organizationId}
+        AND branch_id = ${credential.analyzer.branchId}
+        FOR UPDATE
+      `;
+      if (equipmentRows.length !== 1 || equipmentRows[0].status !== "ACTIVE") return null;
+      const openDowntime = await tx.equipmentDowntime.count({
+        where: { equipmentId: equipmentRows[0].id, status: "OPEN" },
+      });
+      if (openDowntime > 0) return null;
+
       const workItem = await tx.orderItem.findFirst({
         where: {
           id: candidate.orderItemId,
