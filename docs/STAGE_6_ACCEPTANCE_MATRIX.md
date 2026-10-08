@@ -71,3 +71,8 @@ Keep `stage-6-specimen-operations-completion` and PR #124 in Draft; no merge, no
 
 - Scanning a known barcode now resolves patient/specimen details only when its **current custody branch** is in the user's active branch scopes. Access to the historical ordering branch alone cannot expose a transferred specimen in another branch.
 - Added source regression and explicit dispatch/receipt action-enum validation. Multi-branch authenticated E2E review remains required.
+
+## Transfer source-custody CAS safeguard
+
+- Manifest item receipt now enforces organization and the manifest's source branch in the optimistic `IN_TRANSIT` specimen claim, rather than copying an untrusted/stale specimen current branch into the predicate. This rejects inconsistent custody that could otherwise be reassigned to the destination.
+- Added a source regression. Final CI on exact HEAD, authenticated multi-branch acceptance, clinically approved hold/retention policy and hardware validation remain required.
