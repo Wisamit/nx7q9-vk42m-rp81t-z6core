@@ -53,7 +53,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
       if (action === "OPEN") {
         if (open) throw new Error("DOWNTIME_ALREADY_OPEN");
-        if (current.status === "INACTIVE") throw new Error("EQUIPMENT_INACTIVE");
+        if (current.status === "RETIRED") throw new Error("EQUIPMENT_INACTIVE");
         const created = await tx.equipmentDowntime.create({
           data: {
             equipmentId: current.id,
