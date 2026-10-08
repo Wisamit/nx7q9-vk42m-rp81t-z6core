@@ -34,3 +34,16 @@ test("storage positions are branch-scoped, registered and selected from the mast
   assert.ok(ui.includes("registerStorage"));
   assert.ok(ui.includes("selectedLocation"));
 });
+
+test("deactivation records a reason and blocks occupied storage positions", () => {
+  const api = readFileSync(new URL("../src/app/api/settings/specimen-storage-locations/route.ts", import.meta.url), "utf8");
+  const ui = readFileSync(new URL("../src/components/specimen-aliquot-manager.tsx", import.meta.url), "utf8");
+  assert.ok(api.includes('export async function PATCH(request: Request)'));
+  assert.ok(api.includes('requirePermission("settings.manage")'));
+  assert.ok(api.includes('status === "INACTIVE"'));
+  assert.ok(api.includes("tx.specimen.count"));
+  assert.ok(api.includes('storageLocation: location.path'));
+  assert.ok(api.includes('action: "SPECIMEN_STORAGE_LOCATION_STATUS_CHANGED"'));
+  assert.ok(ui.includes("changeStorageStatus"));
+  assert.ok(ui.includes("storage_location_has_active_specimens"));
+});
