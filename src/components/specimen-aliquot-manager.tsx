@@ -175,7 +175,7 @@ export function SpecimenAliquotManager({
       },
     });
     if (ok && currentBranchId) {
-      const response = await fetch(`/api/settings/specimen-storage-locations?branchId=${encodeURIComponent(currentBranchId)}`);
+      const response = await fetch(`/api/settings/specimen-storage-locations?branchId=${encodeURIComponent(currentBranchId)}${canManageStorageSettings ? "&includeInactive=true" : ""}`);
       if (response.ok) {
         const data = await response.json();
         setLocations(data.locations || []);
@@ -334,7 +334,7 @@ export function SpecimenAliquotManager({
             <option value="">{tr("Inherit parent container", "استخدام حاوية العينة الأصلية")}</option>
             {containers.map(item => <option key={item.id} value={item.id}>{item.code} — {item.name}</option>)}
           </select></label>
-          <label className="form-span">{tr("Storage / physical location", "التخزين / الموقع الفعلي")}<input name="storageLocation" maxLength={200} placeholder={tr("Example: Fridge 2 · Rack B3", "مثال: الثلاجة 2 · الرف B3")} /></label>
+          <label className="form-span">{tr("Storage / physical location", "التخزين / الموقع الفعلي")}<select name="storageLocation" defaultValue=""><option value="">{tr("Not assigned", "غير محدد")}</option>{locations.filter(item => item.status === "ACTIVE").map(item => <option key={item.id} value={item.path}>{item.path}</option>)}</select></label>
           <fieldset className="form-span">
             <legend>{tr("Linked tests for this aliquot", "الفحوصات المرتبطة بهذا الجزء")}</legend>
             <div className="permission-grid">
