@@ -101,13 +101,14 @@ test("discrepant reception fails closed before specimen becomes RECEIVED", () =>
   assert.equal(receptionAcceptanceError({ ...valid, observedContainerCode: "SERUM" }), "reception_container_mismatch_requires_resolution");
 });
 
-test("denied reception is audited and never transitions a discrepant specimen to RECEIVED", () => {
+test("denied reception atomically quarantines and audits without accepting the specimen", () => {
   const fs = requireSource();
   const accepted = fs.indexOf("const acceptanceError = receptionAcceptanceError(");
-  const denied = fs.indexOf('action: "SPECIMEN_RECEPTION_EXCEPTION_OBSERVED"');
-  const receipt = fs.indexOf('status: "RECEIVED"');
-  assert.ok(accepted >= 0 && denied > accepted && receipt > denied);
-  assert.ok(fs.includes("specimenStatusUnchanged: specimen.status"));
+  const hold = fs.indexOf("const quarantined = await prisma.$transaction", accepted);
+  const denied = fs.indexOf('action: "SPECIMEN_RECEPTION_QUARANTINED"', hold);
+  const receipt = fs.indexOf('status: "RECEIVED"', denied);
+  assert.ok(accepted >= 0 && hold > accepted && denied > hold && receipt > denied);
+  assert.ok(fs.includes('data: {\n            status: "QUARANTINED"'));
 });
 
 function requireSource() {
