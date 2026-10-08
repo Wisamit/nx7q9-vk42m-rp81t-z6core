@@ -11,6 +11,7 @@
     "db:migrate:deploy": "prisma migrate deploy",
     "db:migrate:status": "prisma migrate status",
     "test:safety": "node --experimental-strip-types --test tests/*.test.ts",
+    "test:bridge": "node --test tests/analyzer-bridge.test.mjs",
     "test:ui-theme": "node scripts/check-ui-theme.mjs",
     "test:ui-i18n": "node scripts/check-ui-i18n.mjs"
   },
