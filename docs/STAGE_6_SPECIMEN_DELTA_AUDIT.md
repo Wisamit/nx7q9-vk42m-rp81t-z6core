@@ -47,3 +47,13 @@ Scope source: `02_MASTER_SCOPE.md` sections 20–28, with related specimen secur
 - Rejected-only physical disposal is available through a bilingual operator action and audited endpoint; mandatory reason, scoped authorization, branch custody CAS, active aliquot guard, lifecycle event and immutable audit evidence.
 - Clinical retention/disposal for received, processed or released-result specimens is **not** authorized by this feature; requires explicit documented retention and approval policy. Hierarchical cold storage / slot allocation also remains open.
 - CI #611 SUCCESS on `172cd7374c69d7e0de8c386d15df708aa3fda067` before this documentation update. Final branch CI must be rerun for the current head.
+
+
+## Checkpoint — Storage authorization and patient age bounds (2026-10-08)
+
+- Restricted inactive storage master listings to `settings.manage`; ordinary `specimens.view` receives active locations only, including scanner views.
+- Added status PATCH duplicate-submit guard, network error handling and refresh failure feedback in bilingual specimen UI.
+- Corrected patient create/edit recorded age parsing: decimal integer input accepts 0–54787 days, 0–1800 months, or 0–150 years. UI maximum follows the selected unit. Existing historical demographic snapshots are unchanged.
+- Added source regression guards in `tests/specimen-storage-location.test.ts` and `tests/patient-recorded-age-bounds.test.ts`.
+- **Still open / acceptance blocked:** exact FK-backed physical occupancy and location history; safe concurrent activation/deactivation and assignment proved with real MariaDB tests; nonconformance quarantine; retention/disposal governance; Stage 6 end-to-end specimen/barcode and bilingual operational acceptance. Existing checks include source-pattern assertions and do not demonstrate race-free runtime behavior.
+- This checkpoint does **not** authorize Stage 6 merge, Hostinger deployment, or Stage 7. CI outcome must be recorded against the current HEAD.
