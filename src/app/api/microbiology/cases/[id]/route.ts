@@ -49,6 +49,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       performingBranchId: microbiologyCase.performingBranchId,
       expectedCaseUpdatedAt: microbiologyCase.updatedAt,
     });
+    // A no-growth clinical finding cannot coexist with documented isolates.
+    if (cultureStatus === "NO_GROWTH") {
+      const isolateCount = await tx.microbiologyIsolate.count({ where: { caseId: id } });
+      if (isolateCount > 0) {
+        throw new MicrobiologyEditRejected("no_growth_conflicts_with_isolates");
+      }
+    }
     const item = await tx.microbiologyCase.update({
       where: { id },
       data: {
