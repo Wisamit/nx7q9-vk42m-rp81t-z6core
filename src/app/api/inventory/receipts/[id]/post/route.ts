@@ -26,6 +26,28 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
       const current = await tx.goodsReceipt.findUnique({ where: { id: receipt.id }, select: { status: true } });
       if (!current || current.status !== "DRAFT") throw new Error("RECEIPT_STATE_CHANGED");
 
+      // A receipt may contain multiple rows for one PO item. Aggregate all
+      // quantities before writing any stock to avoid stale receivedQty reuse.
+      const increments = new Map<string, Prisma.Decimal>();
+      for (const line of receipt.items) {
+        if (line.purchaseOrderItemId) {
+          increments.set(line.purchaseOrderItemId,
+            (increments.get(line.purchaseOrderItemId) || new Prisma.Decimal(0)).add(line.quantity));
+        }
+      }
+      for (const [poItemId, increase] of increments) {
+        const currentLine = await tx.purchaseOrderItem.findFirst({
+          where: {
+            id: poItemId,
+            purchaseOrderId: receipt.purchaseOrderId || undefined,
+          },
+        });
+        if (!currentLine || !receipt.purchaseOrderId ||
+          currentLine.purchaseOrderId !== receipt.purchaseOrderId ||
+          currentLine.receivedQty.add(increase).gt(currentLine.orderedQty)) {
+          throw new Error("PO_OVER_RECEIPT");
+        }
+      }
       for (const line of receipt.items) {
         if (line.quantity.lte(0) || line.unitCost.lt(0)) throw new Error("INVALID_RECEIPT_LINE");
         if (line.item.expiryTracking && !line.expiryDate) throw new Error("EXPIRY_REQUIRED");
@@ -97,14 +119,15 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
           },
         });
 
-        if (line.purchaseOrderItemId && line.purchaseOrderItem) {
-          const nextReceived = line.purchaseOrderItem.receivedQty.add(line.quantity);
-          if (nextReceived.gt(line.purchaseOrderItem.orderedQty)) throw new Error("PO_OVER_RECEIPT");
-          await tx.purchaseOrderItem.update({
-            where: { id: line.purchaseOrderItemId },
-            data: { receivedQty: nextReceived },
-          });
-        }
+        // Purchase-order totals are posted once per item after all rows.
+
+      }
+
+      for (const [poItemId, increase] of increments) {
+        await tx.purchaseOrderItem.update({
+          where: { id: poItemId },
+          data: { receivedQty: { increment: increase } },
+        });
       }
 
       if (receipt.purchaseOrderId) {
