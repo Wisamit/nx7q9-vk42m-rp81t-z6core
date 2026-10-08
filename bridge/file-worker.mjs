@@ -1,5 +1,6 @@
 import { readFile, readdir, rename, mkdir, writeFile } from "node:fs/promises";
 import { join, basename, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { normalizeAnalyzerMessage, UnsupportedAnalyzerFrame } from "./protocols.mjs";
 
@@ -108,7 +109,7 @@ export async function pollReadyFiles(settings,token,sender=fetch) {
   return results;
 }
 
-if (process.argv[1] && resolve(process.argv[1])===resolve(new URL(import.meta.url).pathname)) {
+if (process.argv[1] && resolve(process.argv[1])===fileURLToPath(import.meta.url)) {
   const file=process.argv[2];
   if(!file) throw Error("Usage: node bridge/file-worker.mjs /path/to/bridge-config.json");
   const settings=validateBridgeSettings(JSON.parse(await readFile(file,"utf8")));
