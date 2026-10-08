@@ -162,7 +162,7 @@ test("ASTM E1381 frame checksums and frame sequencing are checked before normali
   const frames=[encode(1,raw.slice(0,22),false),encode(2,raw.slice(22),true)];
   assert.equal(parseE1381Frame(frames[0]).frameNumber,1);
   assert.equal(decodeE1381Message(frames),raw);
-  const badChecksum=Buffer.from(frames[0]);badChecksum[badChecksum.length-3]=0x30;
+  const badChecksum=Buffer.from(frames[0]);badChecksum[badChecksum.length-3]=badChecksum[badChecksum.length-3]===0x30?0x31:0x30;
   assert.throws(()=>parseE1381Frame(badChecksum),/ASTM_FRAME_CHECKSUM_INVALID/);
   assert.throws(()=>decodeE1381Message([frames[1],frames[0]]),/ASTM_FRAME_SEQUENCE_INVALID/);
   assert.throws(()=>decodeE1381Message([encode(1,"H|test\r",true),encode(2,"L|1\r",true)]),/ASTM_FRAME_FINALITY_INVALID/);
