@@ -60,6 +60,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       },
       data: {
         storageLocation,
+        storageLocationId: registered.id,
         preanalyticalVersion: { increment: 1 },
       },
     });
@@ -75,6 +76,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         details: {
           relocationType: "PHYSICAL_STORAGE",
           previousStorageLocation: specimen.storageLocation,
+          previousStorageLocationId: specimen.storageLocationId,
           storageLocation,
           storagePosition: position.segments,
           storageLocationId: registered.id,
@@ -92,7 +94,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         entityType: "Specimen",
         entityId: specimen.id,
         reason,
-        oldValues: { storageLocation: specimen.storageLocation },
+        oldValues: { storageLocation: specimen.storageLocation, storageLocationId: specimen.storageLocationId },
         newValues: { storageLocation, storagePosition: position.segments, storageLocationId: registered.id },
         ipAddress: ctx.ipAddress,
         userAgent: ctx.userAgent,
