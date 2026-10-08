@@ -64,3 +64,16 @@ test("QMS console provides bilingual operator feedback for conflicts and clinica
   assert.ok(consoleSource.includes("أغلق CAPA المرتبط"));
   assert.ok(consoleSource.includes("تغيّرت حالة"));
 });
+
+test("training authorization is serialized with failed competency and CAS revocation", () => {
+  const authorizations = source("../src/app/api/quality/analyzer-authorizations/route.ts");
+  const competency = source("../src/app/api/quality/competency/route.ts");
+  assert.ok(authorizations.includes("SELECT id FROM analyzers"));
+  assert.ok(authorizations.includes("tx.analyzerAuthorization.count"));
+  assert.ok(authorizations.includes("tx.competencyAssessment.findFirst"));
+  assert.ok(authorizations.includes("tx.analyzerAuthorization.updateMany"));
+  assert.ok(competency.includes("SELECT id FROM analyzers"));
+  assert.ok(competency.includes("tx.analyzerAuthorization.findMany"));
+  assert.ok(competency.includes('status: "SUSPENDED"'));
+  assert.ok(competency.indexOf("SELECT id FROM analyzers") < competency.indexOf("tx.analyzerAuthorization.findMany"));
+});
