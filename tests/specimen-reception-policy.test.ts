@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   activeDerivedAliquotConflict,
   receptionAssessmentError,
@@ -99,3 +100,16 @@ test("discrepant reception fails closed before specimen becomes RECEIVED", () =>
   assert.equal(receptionAcceptanceError({ ...valid, conditionCode: "CLOTTED" }), "reception_condition_exception_requires_resolution");
   assert.equal(receptionAcceptanceError({ ...valid, observedContainerCode: "SERUM" }), "reception_container_mismatch_requires_resolution");
 });
+
+test("denied reception is audited and never transitions a discrepant specimen to RECEIVED", () => {
+  const fs = requireSource();
+  const accepted = fs.indexOf("const acceptanceError = receptionAcceptanceError(");
+  const denied = fs.indexOf('action: "SPECIMEN_RECEPTION_EXCEPTION_OBSERVED"');
+  const receipt = fs.indexOf('status: "RECEIVED"');
+  assert.ok(accepted >= 0 && denied > accepted && receipt > denied);
+  assert.ok(fs.includes("specimenStatusUnchanged: specimen.status"));
+});
+
+function requireSource() {
+  return readFileSync(new URL("../src/app/api/specimens/[id]/actions/route.ts", import.meta.url), "utf8");
+}
