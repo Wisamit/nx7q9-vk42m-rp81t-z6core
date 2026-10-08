@@ -26,7 +26,7 @@ test("standard methods are backfilled before snapshot fields become required", (
   assert.match(migration, /UPDATE `payments` p[\s\S]*payment_method_code_snapshot/);
   assert.match(migration, /UPDATE `refunds` r[\s\S]*payment_method_code_snapshot/);
   assert.match(migration, /MODIFY COLUMN `payment_method_config_id` CHAR\(36\) NOT NULL/);
-  assert.match(migration, /'CREDIT_ACCOUNT'.*FALSE/s);
+  assert.match(migration, /\'CREDIT_ACCOUNT\'[\s\S]*FALSE/);
 });
 
 test("all settlement posting routes resolve configured methods and persist snapshots", () => {
