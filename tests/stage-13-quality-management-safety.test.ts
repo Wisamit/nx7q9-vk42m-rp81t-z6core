@@ -12,6 +12,8 @@ test("CAPA review checks current action completion under a parent row lock", () 
   const claim = review.indexOf("tx.capa.updateMany", actions);
   assert.ok(tx >= 0 && lock > tx && actions > lock && claim > actions);
   assert.ok(review.includes('isolationLevel: "Serializable"'));
+  assert.ok(review.includes("NO_COMPLETED_CAPA_ACTIONS"));
+  assert.ok(review.includes("completed_capa_action_required"));
 });
 
 test("CAPA actions lock the same parent and reject stale writes after closure", () => {
