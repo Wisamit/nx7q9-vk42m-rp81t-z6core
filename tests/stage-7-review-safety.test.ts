@@ -106,3 +106,13 @@ test("result workspace preserves history but disables entry and technical approv
   assert.ok(page.includes('canTechnicalReview={permissions.has("results.technical_review") && specimenReadyForValidation}'));
   assert.ok(page.includes("العينة غير مؤهلة لإدخال النتائج أو اعتمادها"));
 });
+
+test("review endpoints reject null, arrays and malformed bodies rather than throwing or assuming approval", () => {
+  for (const file of ["../src/app/api/results/[id]/verify/route.ts","../src/app/api/results/[id]/medical-validate/route.ts"]) {
+    const route=source(file);
+    assert.ok(route.includes('const rawBody = await request.json().catch(() => null)'));
+    assert.ok(route.includes('Array.isArray(rawBody)'));
+    assert.ok(route.includes('error: "invalid_request"'));
+  }
+  assert.ok(source("../src/app/api/results/[id]/medical-validate/route.ts").includes('error: "invalid_medical_validation_action"'));
+});
