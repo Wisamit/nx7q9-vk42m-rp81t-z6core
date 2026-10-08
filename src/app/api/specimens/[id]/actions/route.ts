@@ -124,6 +124,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       const changed = await tx.specimen.updateMany({
         where: {
           id: specimen.id,
+          organizationId: session.user.organizationId,
+          currentBranchId: branchId,
           status: specimen.status,
           preanalyticalVersion: specimen.preanalyticalVersion,
         },
