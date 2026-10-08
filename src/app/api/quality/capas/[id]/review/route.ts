@@ -46,6 +46,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         where: { capaId: id, status: { notIn: ["COMPLETED", "CANCELLED"] } },
       });
       if (remainingActions !== 0) throw new Error("OPEN_CAPA_ACTIONS");
+      if (close) {
+        const completedActions = await tx.capaAction.count({ where: { capaId: id, status: "COMPLETED" } });
+        if (completedActions === 0) throw new Error("NO_COMPLETED_CAPA_ACTIONS");
+      }
       const claim = await tx.capa.updateMany({
         where: { id, organizationId: session.user.organizationId, status: current.status, updatedAt: current.updatedAt },
         data: {
@@ -79,7 +83,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     }, { isolationLevel: "Serializable", timeout: 30000 });
   } catch (error) {
     const reason = error instanceof Error ? error.message : "";
-    return NextResponse.json({ error: reason === "OPEN_CAPA_ACTIONS" ? "open_capa_actions" : "capa_review_conflict_or_locked" }, { status: 409 });
+    return NextResponse.json({ error: reason === "OPEN_CAPA_ACTIONS" ? "open_capa_actions"
+      : reason === "NO_COMPLETED_CAPA_ACTIONS" ? "completed_capa_action_required" : "capa_review_conflict_or_locked" }, { status: 409 });
   }
   return NextResponse.json({ status: "ok", capa: saved });
 }
