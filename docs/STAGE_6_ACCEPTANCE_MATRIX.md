@@ -7,7 +7,7 @@ This is an evidence-oriented checklist, not a statement of completed acceptance.
 | ID | Acceptance scenario | Existing evidence | Current status | Final required evidence |
 |---|---|---|---|---|
 | S6-01 | Reception: positive exact barcode/label/container and acceptable specimen condition | Reception guard, assessment and audit route; policy tests | Implemented, operationally unverified | Operator E2E positive flow in both locales |
-| S6-02 | Reception: mislabeled, unlabeled, wrong container, unacceptable condition | Fail-closed acceptance and exception audit | Partial | Clinically approved quarantine/hold and adjudication; no implicit processing or release |
+| S6-02 | Reception: mislabeled, unlabeled, wrong container, unacceptable condition | Atomic persisted QUARANTINED state, event/audit and result release hold | Implemented, automated/clinical acceptance pending | Confirm migration + CI, deferred clinical review of approved override/adjudication policy; no implicit processing or release |
 | S6-03 | Collection attempt/recollection preserves original specimen and clinical snapshots | Collection/rejection routes and safety regressions | Partial | Multi-operator E2E and source-to-replacement audit verification |
 | S6-04 | Parent/child aliquot barcode lineage, exact volume and usage | Aliquot/usage CAS; volume tests | Partial | Real MariaDB multi-operator duplicate/overuse race and barcode printing |
 | S6-05 | Branch-scoped registered zone/unit/rack/slot storage | Nullable FK and master; active-location lock | Partial | Branch authorization E2E, legacy unlinked locations adjudication, physical location audits |
@@ -98,3 +98,8 @@ Keep `stage-6-specimen-operations-completion` and PR #124 in Draft; no merge, no
 - **No quarantine-clearance/override permission is implied or implemented.** Any future release of quarantined material requires a clinically approved policy and independent authorization workflow. Until then the safe path is documented rejection/recollection.
 - MariaDB integration now verifies quarantine is an allowed persisted state and still counts as physical storage occupancy; the fixture rolls the simulated transition back to preserve subsequent tests.
 - Manual device/UAT remain deferred until whole-project testing, without claiming they passed.
+
+## Direct in-transit reception bypass closed
+
+- Specimen `RECEIVE` action now permits `COLLECTED` only. In-transit material must be received through the audited manifest `RECEIVE_ITEM` route; source-branch operators cannot bypass the transfer chain of custody with the generic reception endpoint. The scanner UI follows the same lifecycle rule.
+- Source and clinical lifecycle regressions cover `IN_TRANSIT` rejection from direct RECEIVE, and the explicit `QUARANTINED` state permits only controlled rejection/recollection without an unauthorized waiver.
