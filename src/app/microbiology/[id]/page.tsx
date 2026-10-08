@@ -96,8 +96,8 @@ export default async function MicrobiologyCasePage({ params }: { params: Promise
         <h2>{tr(locale, "Patient & Order", "المريض والطلب")}</h2>
         <dl>
           <dt>{tr(locale, "Patient", "المريض")}</dt><dd>{locale === "ar" ? microbiologyCase.orderItem.order.patient.fullNameAr || microbiologyCase.orderItem.order.patient.fullNameEn : microbiologyCase.orderItem.order.patient.fullNameEn}</dd>
-          <dt>{tr(locale, "Date of birth", "تاريخ الميلاد")}</dt><dd>{microbiologyCase.orderItem.order.patient.dateOfBirth?.toISOString().slice(0,10) || "—"}</dd>
-          <dt>{tr(locale, "Sex at birth", "الجنس عند الولادة")}</dt><dd>{sexLabel(locale, microbiologyCase.orderItem.order.patient.sexAtBirth)}</dd>
+          <dt>{tr(locale, "Date of birth", "تاريخ الميلاد")}</dt><dd>{microbiologyCase.orderItem.order.patientDobSnapshot?.toISOString().slice(0,10) || "—"}</dd>
+          <dt>{tr(locale, "Sex at birth", "الجنس عند الولادة")}</dt><dd>{sexLabel(locale, microbiologyCase.orderItem.order.patientSexSnapshot || "UNKNOWN")}</dd>
           <dt>{tr(locale, "Accession", "رقم الطلب")}</dt><dd>{microbiologyCase.orderItem.order.accessionNumber}</dd>
           <dt>{tr(locale, "Ordering branch", "فرع الطلب")}</dt><dd>{microbiologyCase.orderItem.order.orderingBranch.nameEn}</dd>
         </dl>
