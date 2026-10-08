@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { NextResponse } from "next/server";
 import { requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { patientDuplicateEvidence, sortDuplicateCandidates } from "@/lib/patient-duplicate-review";
 
 function text(value: unknown, max = 220) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -42,6 +43,8 @@ export async function POST(request: Request) {
   const addressAr = text(body.addressAr, 4000);
   const notes = text(body.notes, 4000);
   const clinicalInformation = text(body.clinicalInformation, 4000);
+  const duplicateReviewOverride = body.duplicateReviewOverride === true;
+  const duplicateReviewReason = text(body.duplicateReviewReason, 1000);
 
   if (!fullNameEn) return NextResponse.json({ error: "name_required" }, { status: 400 });
   if (nationalityCode && !/^[A-Z]{2}$/.test(nationalityCode)) {
@@ -56,18 +59,53 @@ export async function POST(request: Request) {
   const dob = dateOfBirth ? new Date(`${dateOfBirth}T00:00:00.000Z`) : null;
   if (dateOfBirth && Number.isNaN(dob?.getTime())) return NextResponse.json({ error: "invalid_date_of_birth" }, { status: 400 });
 
-  const possibleDuplicate = await prisma.patient.findFirst({
-    where: {
-      organizationId: session.user.organizationId,
-      normalizedName: nameKey,
-      ...(dob ? { dateOfBirth: dob } : {}),
-      ...(phoneKey ? { normalizedPhone: phoneKey } : {}),
-      status: "ACTIVE",
-    },
-    select: { id: true, patientNumber: true, fullNameEn: true, dateOfBirth: true, phone: true },
-  });
-  if (possibleDuplicate) {
-    return NextResponse.json({ error: "possible_duplicate", patient: possibleDuplicate }, { status: 409 });
+  const duplicateOr = [
+    ...(dob ? [{ normalizedName: nameKey, dateOfBirth: dob }] : []),
+    ...(phoneKey ? [{ normalizedPhone: phoneKey }] : []),
+  ];
+  const duplicateRows = duplicateOr.length > 0
+    ? await prisma.patient.findMany({
+        where: {
+          organizationId: session.user.organizationId,
+          status: "ACTIVE",
+          mergedIntoPatientId: null,
+          OR: duplicateOr,
+        },
+        select: {
+          id: true,
+          patientNumber: true,
+          fullNameEn: true,
+          fullNameAr: true,
+          normalizedName: true,
+          dateOfBirth: true,
+          phone: true,
+          normalizedPhone: true,
+        },
+        take: 10,
+      })
+    : [];
+  const duplicateCandidates = sortDuplicateCandidates(
+    duplicateRows
+      .map(candidate => ({
+        id: candidate.id,
+        patientNumber: candidate.patientNumber,
+        fullNameEn: candidate.fullNameEn,
+        fullNameAr: candidate.fullNameAr,
+        dateOfBirth: candidate.dateOfBirth,
+        phone: candidate.phone,
+        evidence: patientDuplicateEvidence(
+          { normalizedName: nameKey, dateOfBirth: dob, normalizedPhone: phoneKey },
+          candidate,
+        ),
+      }))
+      .filter(candidate => candidate.evidence.length > 0),
+  );
+
+  if (duplicateCandidates.length > 0 && !duplicateReviewOverride) {
+    return NextResponse.json({ error: "possible_duplicates", candidates: duplicateCandidates }, { status: 409 });
+  }
+  if (duplicateCandidates.length > 0 && duplicateReviewOverride && !duplicateReviewReason) {
+    return NextResponse.json({ error: "duplicate_review_reason_required" }, { status: 400 });
   }
 
   const idKey = nationalId ? normalizedIdentifier(nationalId) : null;
@@ -180,6 +218,31 @@ export async function POST(request: Request) {
         userAgent: ctx.userAgent,
       },
     });
+
+    if (duplicateCandidates.length > 0 && duplicateReviewOverride) {
+      await tx.auditEvent.create({
+        data: {
+          organizationId: session.user.organizationId,
+          branchId: session.activeBranchId,
+          actorUserId: session.user.id,
+          action: "PATIENT_DUPLICATE_REVIEW_OVERRIDE",
+          entityType: "Patient",
+          entityId: patient.id,
+          newValues: {
+            patientNumber: patient.patientNumber,
+            reviewedCandidateIds: duplicateCandidates.map(candidate => candidate.id),
+            evidence: duplicateCandidates.map(candidate => ({
+              patientId: candidate.id,
+              patientNumber: candidate.patientNumber,
+              evidence: candidate.evidence,
+            })),
+          },
+          reason: duplicateReviewReason,
+          ipAddress: ctx.ipAddress,
+          userAgent: ctx.userAgent,
+        },
+      });
+    }
 
     return patient;
   });
