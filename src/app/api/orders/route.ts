@@ -163,7 +163,7 @@ export async function POST(request: Request) {
   const orderQuestionAsOf = new Date();
 
   const [patient, tests, source, referrer, client, orderingBranch] = await Promise.all([
-    prisma.patient.findFirst({ where: { id: patientId, organizationId: session.user.organizationId, status: "ACTIVE" }, select: { id: true, patientNumber: true, fullNameEn: true } }),
+    prisma.patient.findFirst({ where: { id: patientId, organizationId: session.user.organizationId, status: "ACTIVE" }, select: { id: true, patientNumber: true, fullNameEn: true, sexAtBirth: true, dateOfBirth: true, recordedAgeValue: true, recordedAgeUnit: true, recordedAgeAt: true } }),
     prisma.labTest.findMany({
       where: { id: { in: allTestIds }, organizationId: session.user.organizationId, status: "ACTIVE" },
       include: {
@@ -739,6 +739,11 @@ export async function POST(request: Request) {
           accessionNumber,
           orderingBranchId: branchId,
           patientId,
+          patientSexSnapshot: patient.sexAtBirth,
+          patientDobSnapshot: patient.dateOfBirth,
+          patientAgeValueSnapshot: patient.recordedAgeValue,
+          patientAgeUnitSnapshot: patient.recordedAgeUnit,
+          patientAgeRecordedAtSnapshot: patient.recordedAgeAt,
           referrerId,
           clientId: effectiveClientId,
           sourceId,
