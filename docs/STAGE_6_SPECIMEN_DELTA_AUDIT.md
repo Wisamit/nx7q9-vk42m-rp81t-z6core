@@ -66,3 +66,13 @@ Scope source: `02_MASTER_SCOPE.md` sections 20–28, with related specimen secur
 - Source regression checks lock ordering. **This is not a claim of full concurrency acceptance**: add real MariaDB two-connection tests and account for legacy free-text location assignments and every other specimen status/branch transition.
 - Existing transfers may leave a stale path during IN_TRANSIT. Physical custody and storage occupancy must be explicitly modeled before declaring exact occupancy, implementing the nullable `storageLocationId` FK and migrated location history without guessing mappings for existing specimens.
 - Stage 6 remains Draft and acceptance-blocked; no merge or production deployment.
+
+
+## Registered storage reference and transfer custody checkpoint
+
+- Added nullable `specimens.storage_location_id` FK to the branch storage master. The migration deliberately does **not** backfill unverified legacy free-text paths.
+- Physical relocation now records both registered location ID and path snapshot and audits previous ID/path.
+- Deactivation occupancy checks explicit IDs plus unmatched historical text conservatively, including non-disposed material regardless of workflow state; an exact physical-location inventory has **not** yet been proven.
+- Manifest dispatch and destination receipt clear *current* path and registered FK atomically with the specimen status transition. The dispatch event retains prior path/ID for audit and chain of custody.
+- **Acceptance blockers**: MariaDB concurrent integration tests for every storage/transfer transition; reconciliation policy for historical unlinked paths; clarify quarantined, rejected, and physically retained specimens, as well as retention/disposal policy. Physical scanner/printer checks remain outstanding.
+- No historical patient/result/financial backfill. No Stage 6 merge or Hostinger deployment.
