@@ -78,18 +78,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         // transferred; only approval is gated on ready specimen custody.
         if (custody.length !== 1) throw new Error("RESULT_STATE_CHANGED");
       }
-      if (result.specimenId) {
-      const custody = await tx.$queryRaw<Array<{ id: string; status: string; current_branch_id: string | null }>>`
-        SELECT id, status, current_branch_id FROM specimens
-        WHERE id = ${result.specimenId} AND organization_id = ${session.user.organizationId}
-        FOR UPDATE
-      `;
-      if (custody.length !== 1 || validationSpecimenCustodyError({
-        status: custody[0].status,
-        currentBranchId: custody[0].current_branch_id,
-        performingBranchId: result.performingBranchId,
-      })) throw new Error("RESULT_STATE_CHANGED");
-    }
     const claimed = await tx.laboratoryResult.updateMany({
         where: {
           id: result.id,
@@ -209,6 +197,20 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const validatedAt = new Date();
   const validated = await prisma.$transaction(async tx => {
+    // Approval requires live, ready specimen custody. Returning for correction
+    // is separately permitted even when the specimen has been quarantined.
+    if (result.specimenId) {
+      const custody = await tx.$queryRaw<Array<{ id: string; status: string; current_branch_id: string | null }>>`
+        SELECT id, status, current_branch_id FROM specimens
+        WHERE id = ${result.specimenId} AND organization_id = ${session.user.organizationId}
+        FOR UPDATE
+      `;
+      if (custody.length !== 1 || validationSpecimenCustodyError({
+        status: custody[0].status,
+        currentBranchId: custody[0].current_branch_id,
+        performingBranchId: result.performingBranchId,
+      })) throw new Error("RESULT_STATE_CHANGED");
+    }
     const claimed = await tx.laboratoryResult.updateMany({
       where: {
         id: result.id,
