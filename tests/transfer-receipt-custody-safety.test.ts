@@ -38,3 +38,15 @@ test("manifest transfer actions reject unsupported action names before selecting
   const route = readFileSync(new URL("../src/app/api/transfers/[id]/actions/route.ts", import.meta.url), "utf8");
   assert.ok(route.includes('body?.action !== "DISPATCH" && body?.action !== "RECEIVE_ITEM"'));
 });
+
+test("manifest receipt requires source custody and tenant in optimistic specimen claim", () => {
+  const route = readFileSync(new URL("../src/app/api/transfers/[id]/actions/route.ts", import.meta.url), "utf8");
+  const receipt = route.indexOf("const result = await prisma.$transaction");
+  const claim = route.indexOf("const moved = await tx.specimen.updateMany", receipt);
+  const event = route.indexOf("await tx.specimenEvent.create", claim);
+  assert.ok(claim > receipt && event > claim);
+  const guarded = route.slice(claim, event);
+  assert.ok(guarded.includes("organizationId: session.user.organizationId"));
+  assert.ok(guarded.includes("currentBranchId: manifest.sourceBranchId"));
+  assert.ok(guarded.includes('status: "IN_TRANSIT"'));
+});
