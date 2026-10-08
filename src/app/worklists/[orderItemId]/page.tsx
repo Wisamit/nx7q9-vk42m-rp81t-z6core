@@ -231,7 +231,9 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
       recordedAgeUnit: item.order.patientAgeUnitSnapshot,
       recordedAgeAt: item.order.patientAgeRecordedAtSnapshot,
       ageAsOf: item.order.orderedAt,
-      at: item.order.orderedAt,
+      // Reference policy effective date must match result entry (today),
+      // while patient sex and age remain frozen at the original order.
+      at: now,
       pregnancyStatus: item.order.pregnancyStatus,
       gestationalAgeWeeks: item.order.gestationalAgeWeeks,
       analyzerId: latestResult?.analyzerId || null,
