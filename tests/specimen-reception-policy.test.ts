@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   activeDerivedAliquotConflict,
   receptionAssessmentError,
+  receptionAcceptanceError,
   selectedRejectionOrderItemIds,
   selectiveRejectionNeedsPatientRecollection,
   rejectionAnalyticalWorkError,
@@ -87,4 +88,14 @@ test("pre-analytical rejection stops once any affected analytical workflow has s
   assert.equal(rejectionAnalyticalWorkError([{ ...clean, microbiologyCount: 1 }]), "affected_tests_microbiology_work_started");
   assert.equal(rejectionAnalyticalWorkError([{ ...clean, activeSendOutCount: 1 }]), "affected_tests_sendout_active");
   assert.equal(rejectionAnalyticalWorkError([{ ...clean, analyzerWorkCount: 1 }]), "affected_tests_analyzer_work_started");
+});
+
+
+test("discrepant reception fails closed before specimen becomes RECEIVED", () => {
+  const valid = { labelAssessment: "MATCHED", conditionCode: "GOOD", expectedContainerCode: "EDTA", observedContainerCode: "EDTA" };
+  assert.equal(receptionAcceptanceError(valid), null);
+  assert.equal(receptionAcceptanceError({ ...valid, labelAssessment: "UNLABELED" }), "reception_label_exception_requires_resolution");
+  assert.equal(receptionAcceptanceError({ ...valid, labelAssessment: "MISMATCHED" }), "reception_label_exception_requires_resolution");
+  assert.equal(receptionAcceptanceError({ ...valid, conditionCode: "CLOTTED" }), "reception_condition_exception_requires_resolution");
+  assert.equal(receptionAcceptanceError({ ...valid, observedContainerCode: "SERUM" }), "reception_container_mismatch_requires_resolution");
 });
