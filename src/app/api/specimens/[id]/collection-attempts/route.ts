@@ -379,7 +379,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
             toStatus: "PLANNED",
             details: {
               requirementsFinalized: true,
-              requirementEngineVersion: 1,
               failedCollectionForSpecimenId: specimen.id,
               failedBarcode: specimen.barcode,
               failureReasonCode: reasonCode,
