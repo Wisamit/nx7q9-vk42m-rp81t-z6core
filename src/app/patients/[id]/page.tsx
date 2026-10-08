@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { permissionSet, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { PatientMergePanel } from "@/components/patient-merge-panel";
+import { calculatePatientAge } from "@/lib/patient-demographics";
 import { getUiLocale, sexLabel, statusLabel, tr } from "@/lib/ui-i18n";
 
 export const dynamic = "force-dynamic";
@@ -18,6 +19,7 @@ export default async function PatientDetailPage({ params }: { params: Promise<{ 
     where: { id, organizationId: session.user.organizationId },
     include: {
       identifiers: { orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }] },
+      creationBranch: { select: { code: true, nameEn: true, nameAr: true } },
       portalAccount: { select: { id: true } },
       mergedInto: {
         select: { id: true, patientNumber: true, fullNameEn: true, fullNameAr: true },
@@ -78,6 +80,16 @@ export default async function PatientDetailPage({ params }: { params: Promise<{ 
     : [];
 
   const sourceMerge = patient.mergeEventsAsSource[0] || null;
+  const age = calculatePatientAge(patient.dateOfBirth);
+  const ageLabel = age
+    ? age.value + " " + (
+        age.unit === "YEAR"
+          ? tr(locale, "year(s)", "سنة")
+          : age.unit === "MONTH"
+            ? tr(locale, "month(s)", "شهر")
+            : tr(locale, "day(s)", "يوم")
+      )
+    : "—";
 
   return <main className="catalog-shell">
     <header className="page-header">
@@ -119,10 +131,13 @@ export default async function PatientDetailPage({ params }: { params: Promise<{ 
           <dt>{tr(locale, "English name", "الاسم بالإنجليزية")}</dt><dd>{patient.fullNameEn}</dd>
           <dt>{tr(locale, "Arabic name", "الاسم بالعربية")}</dt><dd dir="rtl">{patient.fullNameAr || "—"}</dd>
           <dt>{tr(locale, "Date of birth", "تاريخ الميلاد")}</dt><dd>{patient.dateOfBirth ? patient.dateOfBirth.toISOString().slice(0,10) : "—"}</dd>
+          <dt>{tr(locale, "Calculated age", "العمر المحسوب")}</dt><dd>{ageLabel}</dd>
           <dt>{tr(locale, "Sex at birth", "الجنس عند الولادة")}</dt><dd>{sexLabel(locale, patient.sexAtBirth)}</dd>
           <dt>{tr(locale, "Phone", "الهاتف")}</dt><dd>{patient.phone || "—"}</dd>
+          <dt>{tr(locale, "WhatsApp", "واتساب")}</dt><dd>{patient.whatsapp || "—"}</dd>
           <dt>{tr(locale, "Email", "البريد الإلكتروني")}</dt><dd>{patient.email || "—"}</dd>
           <dt>{tr(locale, "Nationality", "الجنسية")}</dt><dd>{patient.nationalityCode || "—"}</dd>
+          <dt>{tr(locale, "Creation branch", "فرع الإنشاء")}</dt><dd>{patient.creationBranch ? patient.creationBranch.code + " — " + (locale === "ar" ? patient.creationBranch.nameAr || patient.creationBranch.nameEn : patient.creationBranch.nameEn) : "—"}</dd>
           <dt>{tr(locale, "Status", "الحالة")}</dt><dd>{statusLabel(locale, patient.status)}</dd>
         </dl>
       </article>
@@ -135,6 +150,22 @@ export default async function PatientDetailPage({ params }: { params: Promise<{ 
           )}</div>}
       </article>
     </section>
+
+    {(patient.addressEn || patient.addressAr || patient.clinicalInformation || patient.notes) && <section className="detail-grid">
+      <article className="detail-card">
+        <h2>{tr(locale, "Address", "العنوان")}</h2>
+        <dl>
+          <dt>{tr(locale, "English", "الإنجليزية")}</dt><dd>{patient.addressEn || "—"}</dd>
+          <dt>{tr(locale, "Arabic", "العربية")}</dt><dd dir="rtl">{patient.addressAr || "—"}</dd>
+        </dl>
+      </article>
+      <article className="detail-card">
+        <h2>{tr(locale, "Clinical Information", "المعلومات السريرية")}</h2>
+        <p>{patient.clinicalInformation || "—"}</p>
+        <h3>{tr(locale, "Notes", "ملاحظات")}</h3>
+        <p>{patient.notes || "—"}</p>
+      </article>
+    </section>}
 
     {patient.mergedFrom.length > 0 && <section className="detail-card">
       <h2>{tr(locale, "Merged Aliases", "السجلات المدمجة")}</h2>
