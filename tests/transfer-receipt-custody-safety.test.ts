@@ -21,3 +21,15 @@ test("dispatch atomically claims draft manifest and does not mistake another use
   assert.ok(route.includes('if (dispatchedItems.count !== manifest.items.length) throw new Error("SPECIMEN_PREANALYTICAL_STATE_CHANGED")'));
   assert.ok(route.includes('if (!dispatched)'));
 });
+
+test("concurrent distinct-item receipts serialize before recalculating manifest completion", () => {
+  const route = readFileSync(new URL("../src/app/api/transfers/[id]/actions/route.ts", import.meta.url), "utf8");
+  const receipt = route.indexOf("const result = await prisma.$transaction");
+  const lock = route.indexOf("FROM specimen_transfer_manifests", receipt);
+  const claimed = route.indexOf("const claimed = await tx.specimenTransferItem.updateMany", receipt);
+  const remaining = route.indexOf("const remaining = await tx.specimenTransferItem.count", receipt);
+  const manifestUpdate = route.indexOf("await tx.specimenTransferManifest.update", receipt);
+  assert.ok(receipt >= 0 && lock > receipt && claimed > lock && remaining > claimed && manifestUpdate > remaining);
+  assert.ok(route.slice(lock, claimed).includes("FOR UPDATE"));
+  assert.ok(route.slice(lock, claimed).includes('["DISPATCHED", "PARTIALLY_RECEIVED"]'));
+});
