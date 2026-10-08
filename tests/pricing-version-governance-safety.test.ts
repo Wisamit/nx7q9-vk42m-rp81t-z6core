@@ -52,3 +52,24 @@ test("price resolution fails closed on multiple effective revisions", () => {
   assert.match(orders, /error instanceof PricingConfigurationError/);
   assert.match(orders, /status: 409/);
 });
+
+
+test("referrer pricing wiring is present end to end", () => {
+  const schema = source("prisma/schema.prisma");
+  const migration = source("prisma/migrations/20261008081000_referrer_pricing_scope/migration.sql");
+  const pricing = source("src/lib/pricing.ts");
+  const orders = source("src/app/api/orders/route.ts");
+  const route = source("src/app/api/pricing/price-lists/route.ts");
+  const manager = source("src/components/pricing-manager.tsx");
+
+  assert.ok(schema.includes("REFERRER"));
+  assert.ok(schema.includes("referrerId"));
+  assert.ok(migration.includes("referrer_id"));
+  assert.ok(migration.includes("REFERENCES `referrers`"));
+  assert.equal(pricing.split('scopeType: "REFERRER" as const').length - 1, 2);
+  assert.equal(orders.split("referrerId,").length - 1 >= 3, true);
+  assert.ok(route.includes('scopeType === "REFERRER"'));
+  assert.ok(route.includes("referrer_not_found"));
+  assert.ok(manager.includes('<option value="REFERRER">'));
+  assert.ok(manager.includes('name="referrerId"'));
+});
