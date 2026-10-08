@@ -181,7 +181,7 @@ export async function POST(request: NextRequest) {
             nameEn: "Passport",
             nameAr: "جواز السفر",
             identifierType: "PASSPORT",
-            requiresIssuingCountry: true,
+            requiresIssuingCountry: false,
           },
           {
             organizationId: organization.id,
