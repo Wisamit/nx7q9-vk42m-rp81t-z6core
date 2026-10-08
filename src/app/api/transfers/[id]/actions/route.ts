@@ -180,8 +180,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const moved = await tx.specimen.updateMany({
       where: {
         id: item.specimenId,
+        organizationId: session.user.organizationId,
         status: "IN_TRANSIT",
-        currentBranchId: item.specimen.currentBranchId,
+        currentBranchId: manifest.sourceBranchId,
         preanalyticalVersion: item.specimen.preanalyticalVersion,
       },
       data: {
