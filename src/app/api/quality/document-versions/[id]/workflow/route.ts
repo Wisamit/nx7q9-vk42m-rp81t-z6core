@@ -59,7 +59,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
               : { status: "EFFECTIVE", effectiveFrom, retiredAt: null },
       });
       if (claim.count !== 1) throw new Error("DOCUMENT_VERSION_STATE_CHANGED");
-      let updated = await tx.qualityDocumentVersion.findUniqueOrThrow({ where: { id } });
+      const updated = await tx.qualityDocumentVersion.findUniqueOrThrow({ where: { id } });
       if (action === "MAKE_EFFECTIVE") {
       const currentlyEffective = await tx.qualityDocumentVersion.findMany({
         where: { documentId: version.documentId, status: "EFFECTIVE", id: { not: id } },
