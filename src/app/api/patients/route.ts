@@ -32,11 +32,24 @@ export async function POST(request: Request) {
   const dateOfBirth = text(body.dateOfBirth, 20);
   const sexAtBirth = ["MALE","FEMALE","UNKNOWN"].includes(body.sexAtBirth) ? body.sexAtBirth : "UNKNOWN";
   const phone = text(body.phone, 50);
+  const whatsapp = text(body.whatsapp, 50);
   const email = text(body.email, 191).toLowerCase();
   const nationalId = text(body.nationalId, 120);
+  const passportNumber = text(body.passportNumber, 120);
+  const passportIssuingCountry = text(body.passportIssuingCountry, 2).toUpperCase();
   const nationalityCode = text(body.nationalityCode, 2).toUpperCase();
+  const addressEn = text(body.addressEn, 4000);
+  const addressAr = text(body.addressAr, 4000);
+  const notes = text(body.notes, 4000);
+  const clinicalInformation = text(body.clinicalInformation, 4000);
 
   if (!fullNameEn) return NextResponse.json({ error: "name_required" }, { status: 400 });
+  if (nationalityCode && !/^[A-Z]{2}$/.test(nationalityCode)) {
+    return NextResponse.json({ error: "invalid_nationality_code" }, { status: 400 });
+  }
+  if (passportIssuingCountry && !/^[A-Z]{2}$/.test(passportIssuingCountry)) {
+    return NextResponse.json({ error: "invalid_passport_issuing_country" }, { status: 400 });
+  }
 
   const nameKey = normalizedName(fullNameEn);
   const phoneKey = phone ? normalizedPhone(phone) : null;
@@ -58,18 +71,29 @@ export async function POST(request: Request) {
   }
 
   const idKey = nationalId ? normalizedIdentifier(nationalId) : null;
-  if (idKey) {
+  const passportKey = passportNumber ? normalizedIdentifier(passportNumber) : null;
+  const identifierChecks = [
+    ...(idKey ? [{ identifierType: "NATIONAL_ID" as const, normalizedValue: idKey }] : []),
+    ...(passportKey ? [{ identifierType: "PASSPORT" as const, normalizedValue: passportKey }] : []),
+  ];
+  for (const identifier of identifierChecks) {
     const existingId = await prisma.patientIdentifier.findUnique({
       where: {
         organizationId_identifierType_normalizedValue: {
           organizationId: session.user.organizationId,
-          identifierType: "NATIONAL_ID",
-          normalizedValue: idKey,
+          identifierType: identifier.identifierType,
+          normalizedValue: identifier.normalizedValue,
         },
       },
       include: { patient: { select: { id: true, patientNumber: true, fullNameEn: true } } },
     });
-    if (existingId) return NextResponse.json({ error: "identifier_already_used", patient: existingId.patient }, { status: 409 });
+    if (existingId) {
+      return NextResponse.json({
+        error: "identifier_already_used",
+        identifierType: identifier.identifierType,
+        patient: existingId.patient,
+      }, { status: 409 });
+    }
   }
 
   const created = await prisma.$transaction(async (tx) => {
@@ -89,8 +113,14 @@ export async function POST(request: Request) {
         sexAtBirth,
         phone: phone || null,
         normalizedPhone: phoneKey,
+        whatsapp: whatsapp || null,
         email: email || null,
         nationalityCode: nationalityCode || null,
+        addressEn: addressEn || null,
+        addressAr: addressAr || null,
+        notes: notes || null,
+        clinicalInformation: clinicalInformation || null,
+        creationBranchId: session.activeBranchId || null,
       },
     });
 
@@ -107,6 +137,20 @@ export async function POST(request: Request) {
       });
     }
 
+    if (passportKey) {
+      await tx.patientIdentifier.create({
+        data: {
+          organizationId: session.user.organizationId,
+          patientId: patient.id,
+          identifierType: "PASSPORT",
+          value: passportNumber,
+          normalizedValue: passportKey,
+          issuingCountry: passportIssuingCountry || null,
+          isPrimary: !idKey,
+        },
+      });
+    }
+
     await tx.auditEvent.create({
       data: {
         organizationId: session.user.organizationId,
@@ -115,7 +159,23 @@ export async function POST(request: Request) {
         action: "PATIENT_CREATED",
         entityType: "Patient",
         entityId: patient.id,
-        newValues: { patientNumber, fullNameEn, fullNameAr: fullNameAr || null, dateOfBirth: dateOfBirth || null, sexAtBirth },
+        newValues: {
+          patientNumber,
+          fullNameEn,
+          fullNameAr: fullNameAr || null,
+          dateOfBirth: dateOfBirth || null,
+          sexAtBirth,
+          phone: phone || null,
+          whatsapp: whatsapp || null,
+          email: email || null,
+          nationalityCode: nationalityCode || null,
+          addressEn: addressEn || null,
+          addressAr: addressAr || null,
+          notes: notes || null,
+          clinicalInformation: clinicalInformation || null,
+          creationBranchId: session.activeBranchId || null,
+          identifierTypes: identifierChecks.map(item => item.identifierType),
+        },
         ipAddress: ctx.ipAddress,
         userAgent: ctx.userAgent,
       },
