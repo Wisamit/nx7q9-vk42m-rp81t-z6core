@@ -187,6 +187,9 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
     </main>;
   }
 
+  const specimenReadyForValidation = ["RECEIVED", "IN_PROCESS"].includes(readySpecimen.status)
+    && (latestResult?.performingBranchId || readySpecimen.currentBranchId) === readySpecimen.currentBranchId;
+
   const existingByCode = new Map((latestResult?.values || []).map(value => [value.componentCodeSnapshot, value]));
   const calculatedTargetIds = new Set(item.test.calculatedRules.map(rule => rule.targetComponentId));
   const componentDefinitions = item.test.components.length > 0
@@ -291,6 +294,11 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
       <Link className="secondary-link" href="/worklists">{tr(locale, "Back to Worklists", "العودة لقوائم العمل")}</Link>
     </header>
 
+    {!specimenReadyForValidation && <section className="detail-card" role="alert">
+      <strong>{tr(locale, "Specimen not eligible for result entry or approval", "العينة غير مؤهلة لإدخال النتائج أو اعتمادها")}</strong>
+      <p className="muted">{tr(locale, "The specimen may be quarantined, rejected, transferred or outside the performing branch. Historic results remain visible, but clinical processing requires a valid current-custody specimen.", "قد تكون العينة محجورة أو مرفوضة أو منقولة أو خارج الفرع المنفذ. تبقى النتائج التاريخية معروضة، لكن العمل السريري يتطلب عينة مؤهلة في الفرع الحالي.")}</p>
+    </section>}
+
     <section className="result-context-strip">
       <div><span>{tr(locale, "Accession", "رقم الطلب")}</span><strong>{item.order.accessionNumber}</strong></div>
       <div><span>{tr(locale, "Patient", "المريض")}</span><strong>{item.order.patient.patientNumber}</strong><small>{locale === "ar" ? item.order.patient.fullNameAr || item.order.patient.fullNameEn : item.order.patient.fullNameEn}</small></div>
@@ -350,8 +358,8 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
           ? latestResult.analyzerCodeSnapshot + (latestResult.analyzerNameSnapshot ? " — " + latestResult.analyzerNameSnapshot : "")
           : null}
         validationStage={latestResult?.validationStage || "ENTRY"}
-        canEnter={permissions.has("results.enter")}
-        canTechnicalReview={permissions.has("results.technical_review")}
+        canEnter={permissions.has("results.enter") && specimenReadyForValidation}
+        canTechnicalReview={permissions.has("results.technical_review") && specimenReadyForValidation}
         commentTemplates={commentTemplates}
         locale={locale}
       />
