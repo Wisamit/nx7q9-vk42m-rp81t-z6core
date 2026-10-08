@@ -61,3 +61,8 @@ Keep `stage-6-specimen-operations-completion` and PR #124 in Draft; no merge, no
 
 - Added a dedicated two-connection MariaDB test with organization, branch, user, patient, order, two distinct barcoded specimens, transfer manifest and two manifest items. It verifies locking the parent manifest blocks a competing receiver, followed by an authoritative remaining-item count and transition from `PARTIALLY_RECEIVED` to `RECEIVED` when both barcodes have arrived.
 - Added this regression to CI after migrations. It proves the database locking sequence on real records; authenticated HTTP and real interbranch hardware/operator acceptance still require evidence. Test completion remains pending final CI on exact SHA.
+
+## Two-branch custody assertions
+
+- The manifest concurrency integration fixture now uses **distinct source and destination branches**, real two-specimen optimistic CAS state changes (`IN_TRANSIT` to `RECEIVED`, source to destination), and asserts both specimen custody records together with final manifest completion. No shortcuts using a source==destination fixture.
+- Live authenticated end-to-end operator acceptance and clinical retention/quarantine policy are still outstanding; database integration alone is not an operational release signoff.
