@@ -1,4 +1,4 @@
-ALTER TABLE `lab_orders`
+ALTER TABLE `orders`
   ADD COLUMN `patient_sex_snapshot` VARCHAR(10) NULL AFTER `patient_id`,
   ADD COLUMN `patient_dob_snapshot` DATE NULL AFTER `patient_sex_snapshot`,
   ADD COLUMN `patient_age_value_snapshot` INT NULL AFTER `patient_dob_snapshot`,
