@@ -45,6 +45,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     },
   });
   if (!parent) return NextResponse.json({ error: "specimen_not_found" }, { status: 404 });
+  if (parent.order.status === "CANCELLED" || parent.order.status === "COMPLETED") {
+    return NextResponse.json({ error: "aliquot_order_not_active" }, { status: 409 });
+  }
+  if (parent.orderItems.every(link => link.status !== "ACTIVE" || link.orderItem.status === "CANCELLED")) {
+    return NextResponse.json({ error: "aliquot_no_active_order_items" }, { status: 409 });
+  }
   const currentBranchId = parent.currentBranchId;
   if (!currentBranchId || !canAccessBranch(session, currentBranchId)) {
     return NextResponse.json({ error: "branch_forbidden" }, { status: 403 });
@@ -83,6 +89,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
             currentBranchId: currentBranchId,
             remainingVolume: { gte: volume },
             preanalyticalVersion: parent.preanalyticalVersion,
+            orderItems: { some: { status: "ACTIVE", orderItem: { status: { not: "CANCELLED" } } } },
           },
           data: {
             remainingVolume: { decrement: volume },
