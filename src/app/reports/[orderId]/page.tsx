@@ -2,10 +2,10 @@ import { Fragment } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import QRCode from "qrcode";
-import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { canAccessBranch, permissionSet, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { canonicalReportOrigin } from "@/lib/report-origin";
 import { PrintReportButton } from "@/components/print-report-button";
 import { ReportPdfButton } from "@/components/report-pdf-button";
 import { ReportOutboundDelivery } from "@/components/report-outbound-delivery";
@@ -226,11 +226,10 @@ export default async function DiagnosticReportPage({ params }: { params: Promise
   const showEnglish = reportShowsEnglish(templateConfig.languageMode);
   const showArabic = reportShowsArabic(templateConfig.languageMode);
   const reportTr = <T,>(en: T, ar: T) => tr(reportLocale, en, ar);
-  const headerStore = await headers();
-  const host = headerStore.get("x-forwarded-host") || headerStore.get("host") || "";
-  const protocol = headerStore.get("x-forwarded-proto") || "https";
-  const configuredBaseUrl = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "");
-  const baseUrl = configuredBaseUrl || (host ? protocol + "://" + host : "");
+  const baseUrl = canonicalReportOrigin(
+    process.env.NEXT_PUBLIC_APP_URL,
+    process.env.NODE_ENV === "production",
+  );
   const verificationUrl = baseUrl ? `${baseUrl}/verify/report/${latest.verificationToken}` : "";
   const qrDataUrl = verificationUrl ? await QRCode.toDataURL(verificationUrl, { width: 132, margin: 1 }) : "";
 

@@ -1,4 +1,3 @@
-import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import {
   NotificationChannel,
@@ -7,6 +6,7 @@ import {
 } from "../../../../../../generated/prisma/client";
 import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { canonicalReportOrigin } from "@/lib/report-origin";
 import { enqueueNotification } from "@/lib/notifications";
 import {
   defaultReportReadyMessage,
@@ -18,14 +18,8 @@ import {
   type ReportOutboundRecipientType,
 } from "@/lib/report-outbound";
 
-function appBaseUrl(headerStore: Awaited<ReturnType<typeof headers>>) {
-  const configured = process.env.NEXT_PUBLIC_APP_URL?.trim().replace(/\/$/, "");
-  if (configured) return configured;
-  const host = headerStore.get("x-forwarded-host") || headerStore.get("host");
-  if (!host) return null;
-  const protocol = headerStore.get("x-forwarded-proto") || "https";
-  return `${protocol}://${host}`;
-}
+class OutboundReportVersionChanged extends Error {}
+class OutboundReportDuplicateDelivery extends Error {}
 
 function recipientTypeEnum(value: ReportOutboundRecipientType) {
   if (value === "PATIENT") return NotificationRecipientType.PATIENT;
@@ -147,8 +141,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ ver
     return NextResponse.json({ error: destination.error }, { status: 409 });
   }
 
-  const headerStore = await headers();
-  const baseUrl = appBaseUrl(headerStore);
+  const baseUrl = canonicalReportOrigin(
+    process.env.NEXT_PUBLIC_APP_URL,
+    process.env.NODE_ENV === "production",
+  );
   if (!baseUrl) {
     return NextResponse.json({ error: "public_app_url_required" }, { status: 503 });
   }
@@ -191,6 +187,37 @@ export async function POST(request: Request, { params }: { params: Promise<{ ver
   const messageBody = renderReportTemplate(bodyTemplate || fallback.body, messageContext);
 
   const queued = await prisma.$transaction(async tx => {
+    // The report parent is locked by the clinical release workflow before
+    // allocating a new version. Lock it here too so a concurrent amendment
+    // cannot supersede the report between preflight and notification queue.
+    const lockedReport = await tx.$queryRaw<Array<{ id: string }>>`
+      SELECT id FROM diagnostic_reports
+      WHERE id = ${version.reportId} AND organization_id = ${session.user.organizationId}
+      FOR UPDATE
+    `;
+    if (lockedReport.length !== 1) throw new OutboundReportVersionChanged();
+    const current = await tx.diagnosticReportVersion.findFirst({
+      where: { reportId: version.reportId },
+      orderBy: { version: "desc" },
+      select: { id: true, status: true },
+    });
+    if (!current || current.id !== version.id || current.status === "RETRACTED") {
+      throw new OutboundReportVersionChanged();
+    }
+    // Serialize replays and double clicks while the same parent is locked.
+    // A failed terminal delivery may be retried by a new authorized request,
+    // but never silently resend a still queued or already sent report.
+    const duplicate = await tx.reportDeliveryEvent.findFirst({
+      where: {
+        reportVersionId: version.id,
+        channel,
+        recipient: destination.destination,
+        status: { in: ["QUEUED", "SENT", "DELIVERED"] },
+      },
+      select: { id: true },
+    });
+    if (duplicate) throw new OutboundReportDuplicateDelivery();
+
     const reportDelivery = await tx.reportDeliveryEvent.create({
       data: {
         reportVersionId: version.id,
@@ -271,7 +298,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ ver
     });
 
     return { reportDeliveryId: reportDelivery.id, notificationId: notification.id };
+  }).catch(error => {
+    if (error instanceof OutboundReportVersionChanged) return "VERSION_CHANGED" as const;
+    if (error instanceof OutboundReportDuplicateDelivery) return "DUPLICATE" as const;
+    throw error;
   });
+  if (queued === "VERSION_CHANGED") {
+    return NextResponse.json({ error: "report_version_changed_retry" }, { status: 409 });
+  }
+  if (queued === "DUPLICATE") {
+    return NextResponse.json({ error: "report_delivery_already_pending_or_sent" }, { status: 409 });
+  }
 
   return NextResponse.json({
     status: "queued",

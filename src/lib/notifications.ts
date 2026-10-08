@@ -169,6 +169,38 @@ export async function dispatchPendingNotifications(db: PrismaClient, organizatio
     });
     if (claim.count !== 1) continue;
 
+    // A queued report link must be checked again when the provider is about
+    // to send it. Clinical amendments may have superseded the version after
+    // a legitimate queue request. Never dispatch a withdrawn/outdated link.
+    if (delivery.reportDeliveryEventId) {
+      const version = await db.diagnosticReportVersion.findFirst({
+        where: {
+          id: delivery.reportDeliveryEvent!.reportVersionId,
+          report: { organizationId },
+        },
+        include: { report: { select: { currentVersion: true } } },
+      });
+      if (!version || version.status === "RETRACTED" || version.version !== version.report.currentVersion) {
+        await db.$transaction(async tx => {
+          await tx.notificationDelivery.update({
+            where: { id: delivery.id },
+            data: {
+              status: NotificationDeliveryStatus.SKIPPED,
+              attemptCount: attempt,
+              lastError: "report_version_superseded_or_retracted",
+              nextAttemptAt: null,
+            },
+          });
+          await tx.reportDeliveryEvent.update({
+            where: { id: delivery.reportDeliveryEventId! },
+            data: { status: "FAILED" },
+          });
+        });
+        results.push({ id: delivery.id, status: NotificationDeliveryStatus.SKIPPED, error: "report_version_superseded_or_retracted" });
+        continue;
+      }
+    }
+
     const config = gatewayConfig(delivery.channel);
 
     if (!delivery.destination) {

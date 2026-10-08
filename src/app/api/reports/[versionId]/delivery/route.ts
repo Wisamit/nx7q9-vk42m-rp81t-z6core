@@ -3,27 +3,50 @@ import { Prisma } from "../../../../../../generated/prisma/client";
 import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 
-function text(value: unknown, max = 255) {
-  return typeof value === "string" ? value.trim().slice(0, max) : "";
-}
-
 export async function POST(request: Request, { params }: { params: Promise<{ versionId: string }> }) {
   const session = await requirePermission("reports.deliver");
   const ctx = await requestContext();
   const { versionId } = await params;
-  const body = await request.json().catch(() => null) as {
-    channel?: string;
-    recipient?: string;
-    status?: string;
-    externalRef?: string;
-    details?: unknown;
-  } | null;
-
-  if (!body) return NextResponse.json({ error: "invalid_request" }, { status: 400 });
-
-  const channel = ["PRINT","DOWNLOAD","EMAIL","SMS","WHATSAPP","PORTAL","OTHER"].includes(body.channel || "") ? body.channel! : null;
-  const status = ["RECORDED","QUEUED","SENT","DELIVERED","FAILED"].includes(body.status || "") ? body.status! : "RECORDED";
-  if (!channel) return NextResponse.json({ error: "invalid_channel" }, { status: 400 });
+  const rawBody = await request.json().catch(() => null);
+  if (!rawBody || typeof rawBody !== "object" || Array.isArray(rawBody)) {
+    return NextResponse.json({ error: "invalid_request" }, { status: 400 });
+  }
+  const body = rawBody as { channel?: unknown; status?: unknown; details?: unknown };
+  // Staff can record only the browser's print and PDF preparation attempts
+  // here. Provider/portal SENT and DELIVERED evidence must come from their
+  // trusted dispatcher or authenticated portal session, never the browser.
+  if (body.channel !== "PRINT" && body.channel !== "DOWNLOAD") {
+    return NextResponse.json({ error: "trusted_delivery_channel_required" }, { status: 400 });
+  }
+  if (body.status !== "RECORDED") {
+    return NextResponse.json({ error: "delivery_status_not_client_assignable" }, { status: 400 });
+  }
+  const channel = body.channel;
+  let details: Prisma.InputJsonValue = { action: "BROWSER_PRINT_REQUESTED", verifiedPhysicalPrint: false };
+  if (channel === "DOWNLOAD") {
+    const metadata = body.details;
+    if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
+      return NextResponse.json({ error: "invalid_pdf_metadata" }, { status: 400 });
+    }
+    const input = metadata as Record<string, unknown>;
+    if (typeof input.fileName !== "string" || !/^[a-zA-Z0-9._-]{1,180}\.pdf$/.test(input.fileName)
+      || input.mimeType !== "application/pdf"
+      || typeof input.sha256 !== "string" || !/^[0-9a-f]{64}$/i.test(input.sha256)
+      || typeof input.pageCount !== "number" || !Number.isInteger(input.pageCount)
+      || input.pageCount < 1 || input.pageCount > 200
+      || input.renderer !== "browser-dom-raster-v1") {
+      return NextResponse.json({ error: "invalid_pdf_metadata" }, { status: 400 });
+    }
+    details = {
+      action: "BROWSER_PDF_PREPARED",
+      fileName: input.fileName,
+      mimeType: "application/pdf",
+      sha256: input.sha256.toLowerCase(),
+      pageCount: input.pageCount,
+      renderer: "browser-dom-raster-v1",
+      verifiedRecipientDownload: false,
+    };
+  }
 
   const version = await prisma.diagnosticReportVersion.findFirst({
     where: {
@@ -41,11 +64,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ ver
     const created = await tx.reportDeliveryEvent.create({
       data: {
         reportVersionId: version.id,
-        channel: channel as "PRINT" | "DOWNLOAD" | "EMAIL" | "SMS" | "WHATSAPP" | "PORTAL" | "OTHER",
-        status: status as "RECORDED" | "QUEUED" | "SENT" | "DELIVERED" | "FAILED",
-        recipient: text(body.recipient) || null,
-        externalRef: text(body.externalRef) || null,
-        details: body.details && typeof body.details === "object" ? body.details as Prisma.InputJsonValue : undefined,
+        channel,
+        status: "RECORDED",
+        recipient: null,
+        externalRef: null,
+        details,
         performedByUserId: session.user.id,
       },
     });
@@ -62,8 +85,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ ver
           reportId: version.reportId,
           reportVersion: version.version,
           channel,
-          status,
-          recipient: text(body.recipient) || null,
+          status: "RECORDED",
+          evidenceType: channel === "PRINT" ? "PRINT_REQUESTED" : "PDF_PREPARED",
+          actualPhysicalDeliveryConfirmed: false,
         },
         ipAddress: ctx.ipAddress,
         userAgent: ctx.userAgent,

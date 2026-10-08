@@ -103,6 +103,8 @@ export function ReportOutboundDelivery({
         portal_account_type_mismatch: tr("The linked portal account type does not match the recipient.", "نوع حساب البوابة المرتبط لا يطابق نوع المستلم."),
         retracted_report_cannot_be_delivered: tr("A retracted report cannot be delivered.", "لا يمكن تسليم تقرير مسحوب."),
         superseded_report_cannot_be_delivered: tr("Only the latest report version can be delivered.", "يمكن تسليم أحدث إصدار من التقرير فقط."),
+        report_version_changed_retry: tr("The report version changed during queueing. Refresh and review the latest report.", "تغير إصدار التقرير أثناء إضافته للإرسال. حدّث الصفحة وراجع التقرير الأحدث."),
+        report_delivery_already_pending_or_sent: tr("This report is already queued or sent to the selected verified contact.", "هذا التقرير موجود بالفعل في قائمة الإرسال أو تم إرساله إلى جهة الاتصال المحددة."),
       };
       setMessage(errors[body.error || ""] || tr("Could not queue report delivery.", "تعذر وضع تسليم التقرير في قائمة الإرسال."));
       return;
