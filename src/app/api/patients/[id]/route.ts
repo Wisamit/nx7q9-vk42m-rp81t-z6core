@@ -49,7 +49,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const address = text(body.address, 4000);
   const ageText = text(body.recordedAgeValue, 4);
   const ageUnit = text(body.recordedAgeUnit, 8);
-  const recordedAgeValue = /^(0|[1-9][0-9]{0,2})$/.test(ageText) ? Number(ageText) : null;
+  const recordedAgeValue = /^(0|[1-9][0-9]{0,4})$/.test(ageText) ? Number(ageText) : null;
   const notes = text(body.notes, 4000);
   const clinicalInformation = text(body.clinicalInformation, 4000);
   const duplicateReviewOverride = body.duplicateReviewOverride === true;
