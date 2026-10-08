@@ -76,7 +76,6 @@ export function SpecimenActions({
       reception_label_exception_requires_resolution: tr("Receiving is blocked: the specimen label is missing or mismatched. Resolve identity using the controlled rejection/recollection process.", "تم منع الاستلام: ملصق العينة مفقود أو غير مطابق. عالج الهوية عبر مسار الرفض وإعادة السحب المنضبط."),
       reception_condition_exception_requires_resolution: tr("Receiving is blocked: specimen condition is unsuitable. Use the controlled rejection/recollection workflow.", "تم منع الاستلام: حالة العينة غير مقبولة. استخدم مسار الرفض وإعادة السحب المنضبط."),
       reception_container_mismatch_requires_resolution: tr("Receiving is blocked: observed container does not match the order-time requirement.", "تم منع الاستلام: الحاوية الملاحظة لا تطابق متطلبات الطلب الأصلية."),
-      specimen_preanalytical_state_changed: tr("Specimen state changed; refresh the barcode station before proceeding.", "تغيرت حالة العينة؛ حدث محطة المسح قبل المتابعة."),
       specimen_clinical_quarantine_blocks_release: tr("Quarantined material cannot be released.", "لا يمكن إصدار نتائج العينات المحجورة سريرياً."),
       specimen_reception_branch_must_match_current_location: tr("Receiving at another branch requires the transfer manifest and chain-of-custody process.", "الاستلام في فرع آخر يتطلب بيان نقل العينات وإجراءات سلسلة الحيازة."),
       rejection_reason_scope_required: tr("Rejection reason, scope and details are required.", "سبب الرفض ونطاقه والتفاصيل مطلوبة."),
