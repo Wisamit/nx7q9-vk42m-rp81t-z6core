@@ -15,7 +15,7 @@ export default async function AnalyzersPage() {
   const locale = getUiLocale(session.user.preferredLocale);
   const branchIds = session.user.branchScopes.map(scope => scope.branchId);
 
-  const [analyzers, branches, departments, tests, messages, resultImports] = await Promise.all([
+  const [analyzers, branches, departments, tests, messages, resultImports, workOrders] = await Promise.all([
     prisma.analyzer.findMany({
       where: { organizationId: session.user.organizationId, branchId: { in: branchIds } },
       include: {
@@ -80,6 +80,15 @@ export default async function AnalyzersPage() {
       },
       orderBy: { createdAt: "desc" },
       take: 200,
+    }),
+    prisma.analyzerWorkOrder.findMany({
+      where: {
+        organizationId: session.user.organizationId,
+        branchId: { in: branchIds },
+      },
+      include: { analyzer: { select: { code: true, name: true } } },
+      orderBy: { createdAt: "desc" },
+      take: 100,
     }),
   ]);
 
@@ -147,6 +156,28 @@ export default async function AnalyzersPage() {
           <td>{item.credentials.filter(credential => credential.status === "ACTIVE").length} {tr(locale, "active", "نشط")}</td>
           <td>{item.mappings.filter(mapping => mapping.status === "ACTIVE" && mapping.approvalStatus === "APPROVED" && mapping.approvedAt).length} {tr(locale, "approved active", "معتمد ونشط")}</td>
           <td>{statusLabel(locale, item.status)}</td>
+        </tr>)}</tbody>
+      </table></div>
+    </section>
+
+    <section className="table-card detail-section">
+      <div className="table-toolbar"><h2>{tr(locale, "Outbound Analyzer Work Orders", "أوامر التحليل المرسلة للأجهزة")}</h2><span>{workOrders.length} {tr(locale, "recent", "حديثة")}</span></div>
+      <p className="muted">{tr(locale,
+        "Bridge acknowledgement means the Bridge accepted a command, not proof of analyzer completion. Queued and failed commands stay traceable per attempt.",
+        "تأكيد الجسر يعني قبول أمر التحليل من الجسر، ولا يثبت انتهاء التنفيذ على الجهاز. تبقى الأوامر المعلّقة والمتعثرة قابلة للتتبع حسب المحاولة."
+      )}</p>
+      <div className="table-wrap"><table>
+        <thead><tr><th>{tr(locale,"Created","التاريخ")}</th><th>{tr(locale,"Analyzer","الجهاز")}</th><th>{tr(locale,"Accession","رقم الطلب")}</th><th>{tr(locale,"Barcode","الباركود")}</th><th>{tr(locale,"Test mapping","رمز الفحص في الجهاز")}</th><th>{tr(locale,"Status","الحالة")}</th><th>{tr(locale,"Attempts","المحاولات")}</th><th>{tr(locale,"Next retry","المحاولة التالية")}</th><th>{tr(locale,"Error / ACK","الخطأ / التأكيد")}</th></tr></thead>
+        <tbody>{workOrders.length === 0 ? <tr><td colSpan={9} className="empty-state">{tr(locale,"No outbound analyzer work orders have been queued.","لم تُنشأ أي أوامر تحليل صادرة للأجهزة.")}</td></tr> : workOrders.map(item => <tr key={item.id}>
+          <td>{item.createdAt.toISOString().replace("T"," ").slice(0,19)}</td>
+          <td>{item.analyzer.code} — {item.analyzer.name}</td>
+          <td>{item.accessionNumberSnapshot}</td>
+          <td><strong>{item.barcodeSnapshot}</strong></td>
+          <td>{item.analyzerTestCodeSnapshot}</td>
+          <td>{statusLabel(locale, item.status)}</td>
+          <td>{item.attemptCount}/{item.maxAttempts}</td>
+          <td>{item.nextAttemptAt?.toISOString().replace("T"," ").slice(0,19) || "—"}</td>
+          <td>{item.lastError || item.acknowledgement || "—"}</td>
         </tr>)}</tbody>
       </table></div>
     </section>

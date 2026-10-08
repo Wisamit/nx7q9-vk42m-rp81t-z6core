@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { Prisma } from "../../../../../../generated/prisma/client";
 import { canAccessBranch, canAccessDepartment, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { analyzerCanRouteWorkItem } from "@/lib/analyzer-routing";
@@ -12,6 +13,7 @@ async function loadOrderItem(orderItemId: string, organizationId: string) {
     where: { id: orderItemId, order: { organizationId } },
     include: {
       test: true,
+      order: { select: { accessionNumber: true } },
       specimenLinks: {
         where: { status: "ACTIVE" },
         include: { specimen: true },
@@ -107,6 +109,47 @@ export async function POST(request: Request, { params }: { params: Promise<{ ord
   }
 
   const route = await prisma.$transaction(async tx => {
+    // Lock the order item so simultaneous route edits serialize and cannot
+    // race clinical verification or changes to branch custody.
+    const work = await tx.$queryRaw<Array<{ id: string; status: string }>>`
+      SELECT oi.id, oi.status FROM order_items oi
+      JOIN orders o ON o.id = oi.order_id
+      WHERE oi.id = ${item.id} AND o.organization_id = ${session.user.organizationId}
+      FOR UPDATE
+    `;
+    if (work.length !== 1 || work[0].status === "CANCELLED") throw new Error("ANALYZER_ROUTING_STATE_CHANGED");
+    const ready = await tx.specimenOrderItem.findFirst({
+      where: {
+        orderItemId: item.id,
+        status: "ACTIVE",
+        specimen: {
+          organizationId: session.user.organizationId,
+          status: { in: ["RECEIVED", "IN_PROCESS"] },
+          currentBranchId: analyzer.branchId,
+        },
+      },
+      select: { specimenId: true, specimen: { select: { barcode: true } } },
+    });
+    const mapped = await tx.analyzerTestMapping.count({
+      where: {
+        analyzerId: analyzer.id,
+        testId: item.testId,
+        status: "ACTIVE",
+        approvalStatus: "APPROVED",
+        effectiveFrom: { lte: new Date() },
+        OR: [{ effectiveTo: null }, { effectiveTo: { gte: new Date() } }],
+      },
+    });
+    const reviewed = await tx.laboratoryResult.count({
+      where: {
+        orderItemId: item.id,
+        OR: [
+          { status: { in: ["VERIFIED", "RELEASED", "AMENDED", "CANCELLED"] } },
+          { validationStage: "COMPLETE" },
+        ],
+      },
+    });
+    if (!ready || mapped === 0 || reviewed > 0) throw new Error("ANALYZER_ROUTING_STATE_CHANGED");
     const created = await tx.orderItemAnalyzerRoute.create({
       data: {
         orderItemId: item.id,
@@ -118,7 +161,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ ord
       },
     });
 
-    await tx.orderItemAnalyzerRouteEvent.create({
+    const assignment = await tx.orderItemAnalyzerRouteEvent.create({
       data: {
         orderItemId: item.id,
         analyzerId: analyzer.id,
@@ -129,6 +172,43 @@ export async function POST(request: Request, { params }: { params: Promise<{ ord
         actorUserId: session.user.id,
       },
     });
+
+    // Outbound transmission is opt-in per configured device. A single,
+    // unambiguous approved analyzer test code is mandatory; never guess how
+    // a mapped panel should be encoded on a physical instrument.
+    let workOrderId: string | null = null;
+    if (analyzer.bridgeDeviceKey) {
+      const candidateMappings = await tx.analyzerTestMapping.findMany({
+        where: {
+          analyzerId: analyzer.id,
+          testId: item.testId,
+          status: "ACTIVE",
+          approvalStatus: "APPROVED",
+          effectiveFrom: { lte: now },
+          OR: [{ effectiveTo: null }, { effectiveTo: { gte: now } }],
+        },
+        select: { analyzerTestCode: true },
+      });
+      const codes = [...new Set(candidateMappings.map(mapping => mapping.analyzerTestCode))];
+      if (codes.length === 1) {
+        const outbound = await tx.analyzerWorkOrder.create({
+          data: {
+            organizationId: session.user.organizationId,
+            branchId: analyzer.branchId,
+            analyzerId: analyzer.id,
+            orderItemId: item.id,
+            specimenId: ready.specimenId,
+            assignmentEventId: assignment.id,
+            accessionNumberSnapshot: item.order.accessionNumber,
+            barcodeSnapshot: ready.specimen.barcode,
+            testCodeSnapshot: item.testCodeSnapshot,
+            analyzerTestCodeSnapshot: codes[0],
+            bridgeDeviceKeySnapshot: analyzer.bridgeDeviceKey,
+          },
+        });
+        workOrderId = outbound.id;
+      }
+    }
 
     await tx.auditEvent.create({
       data: {
@@ -144,14 +224,22 @@ export async function POST(request: Request, { params }: { params: Promise<{ ord
           analyzerName: analyzer.name,
           analyzerBranchId: analyzer.branchId,
           testId: item.testId,
+          outboundWorkOrderId: workOrderId,
+          outboundQueued: workOrderId !== null,
+          outboundReason: workOrderId ? "QUEUED" : analyzer.bridgeDeviceKey ? "AMBIGUOUS_ANALYZER_TEST_CODE" : "BRIDGE_NOT_CONFIGURED",
         },
         ipAddress: ctx.ipAddress,
         userAgent: ctx.userAgent,
       },
     });
 
-    return created;
+    return { ...created, workOrderId };
+  }).catch(error => {
+    if (error instanceof Error && error.message === "ANALYZER_ROUTING_STATE_CHANGED") return null;
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") return null;
+    throw error;
   });
+  if (!route) return NextResponse.json({ error: "analyzer_routing_state_changed" }, { status: 409 });
 
   return NextResponse.json({ status: "ok", route }, { status: 201 });
 }
@@ -188,9 +276,44 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ o
     return NextResponse.json({ error: "work_item_validation_complete" }, { status: 409 });
   }
 
-  await prisma.$transaction(async tx => {
-    await tx.orderItemAnalyzerRoute.delete({
-      where: { orderItemId_analyzerId: { orderItemId: item.id, analyzerId } },
+  const cleared = await prisma.$transaction(async tx => {
+    const work = await tx.$queryRaw<Array<{ id: string; status: string }>>`
+      SELECT oi.id, oi.status FROM order_items oi
+      JOIN orders o ON o.id = oi.order_id
+      WHERE oi.id = ${item.id} AND o.organization_id = ${session.user.organizationId}
+      FOR UPDATE
+    `;
+    if (work.length !== 1 || work[0].status === "CANCELLED") {
+      throw new Error("ANALYZER_ROUTING_STATE_CHANGED");
+    }
+    const resultLocked = await tx.laboratoryResult.count({
+      where: {
+        orderItemId: item.id,
+        OR: [
+          { status: { in: ["VERIFIED", "RELEASED", "AMENDED", "CANCELLED"] } },
+          { validationStage: "COMPLETE" },
+        ],
+      },
+    });
+    if (resultLocked) throw new Error("ANALYZER_ROUTING_STATE_CHANGED");
+    const removed = await tx.orderItemAnalyzerRoute.deleteMany({
+      where: { orderItemId: item.id, analyzerId },
+    });
+    if (removed.count !== 1) throw new Error("ANALYZER_ROUTING_STATE_CHANGED");
+    const cancelled = await tx.analyzerWorkOrder.updateMany({
+      where: {
+        orderItemId: item.id,
+        analyzerId,
+        organizationId: session.user.organizationId,
+        status: { in: ["QUEUED", "CLAIMED", "RETRY_WAIT"] },
+      },
+      data: {
+        status: "CANCELLED",
+        claimTokenHash: null,
+        leaseExpiresAt: null,
+        nextAttemptAt: null,
+        lastError: "analyzer_assignment_cleared_by_operator",
+      },
     });
 
     await tx.orderItemAnalyzerRouteEvent.create({
@@ -225,7 +348,12 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ o
         userAgent: ctx.userAgent,
       },
     });
+    return cancelled.count;
+  }).catch(error => {
+    if (error instanceof Error && error.message === "ANALYZER_ROUTING_STATE_CHANGED") return null;
+    throw error;
   });
+  if (cleared === null) return NextResponse.json({ error: "analyzer_routing_state_changed" }, { status: 409 });
 
-  return NextResponse.json({ status: "ok" });
+  return NextResponse.json({ status: "ok", cancelledPendingWorkOrders: cleared });
 }

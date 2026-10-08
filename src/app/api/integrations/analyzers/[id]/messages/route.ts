@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
+import { Prisma } from "../../../../../../../generated/prisma/client";
 import { prisma } from "@/lib/db";
 import { authenticateAnalyzerBridge } from "@/lib/analyzer-auth";
 
@@ -55,7 +56,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     });
   }
 
-  const message = await prisma.$transaction(async tx => {
+  const stored = await prisma.$transaction(async tx => {
     const created = await tx.analyzerMessage.create({
       data: {
         analyzerId: credential.analyzer.id,
@@ -90,13 +91,31 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       },
     });
 
-    return created;
+    return { message: created, duplicate: false };
+  }).catch(async error => {
+    if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;
+    // A concurrent Bridge retry won the unique (analyzer, bridgeMessageId)
+    // race. Return an idempotent response only for byte-identical payloads.
+    const existing = await prisma.analyzerMessage.findUnique({
+      where: {
+        analyzerId_bridgeMessageId: {
+          analyzerId: credential.analyzer.id,
+          bridgeMessageId,
+        },
+      },
+    });
+    return existing ? { message: existing, duplicate: true } : null;
   });
-
+  if (!stored) return NextResponse.json({ error: "bridge_message_conflict_retry" }, { status: 409 });
+  const message = stored.message;
+  if (message.payloadHash !== payloadHash) {
+    return NextResponse.json({ error: "bridge_message_id_payload_conflict", messageId: message.id }, { status: 409 });
+  }
+  const duplicate = stored.duplicate;
   return NextResponse.json({
     status: "ok",
-    duplicate: false,
+    duplicate,
     messageId: message.id,
     messageStatus: message.status,
-  }, { status: 202 });
+  }, { status: duplicate ? 200 : 202 });
 }
