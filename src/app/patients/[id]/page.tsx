@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { permissionSet, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { PatientMergePanel } from "@/components/patient-merge-panel";
+import { PatientEditForm } from "@/components/patient-edit-form";
 import { calculatePatientAge } from "@/lib/patient-demographics";
 import { patientDuplicateEvidence, sortDuplicateCandidates } from "@/lib/patient-duplicate-review";
 import { getUiLocale, sexLabel, statusLabel, tr } from "@/lib/ui-i18n";
@@ -15,6 +16,7 @@ export default async function PatientDetailPage({ params }: { params: Promise<{ 
   const locale = getUiLocale(session.user.preferredLocale);
   const permissions = permissionSet(session);
   const canMerge = permissions.has("patients.merge");
+  const canManage = permissions.has("patients.manage");
 
   const patient = await prisma.patient.findFirst({
     where: { id, organizationId: session.user.organizationId },
@@ -153,6 +155,26 @@ export default async function PatientDetailPage({ params }: { params: Promise<{ 
           )}</div>}
       </article>
     </section>
+
+    {canManage && patient.status === "ACTIVE" && !patient.mergedIntoPatientId && <PatientEditForm
+      patient={{
+        id: patient.id,
+        updatedAt: patient.updatedAt.toISOString(),
+        fullNameEn: patient.fullNameEn,
+        fullNameAr: patient.fullNameAr,
+        dateOfBirth: patient.dateOfBirth?.toISOString().slice(0,10) || null,
+        sexAtBirth: patient.sexAtBirth,
+        phone: patient.phone,
+        whatsapp: patient.whatsapp,
+        email: patient.email,
+        nationalityCode: patient.nationalityCode,
+        addressEn: patient.addressEn,
+        addressAr: patient.addressAr,
+        notes: patient.notes,
+        clinicalInformation: patient.clinicalInformation,
+      }}
+      locale={locale}
+    />}
 
     {(patient.addressEn || patient.addressAr || patient.clinicalInformation || patient.notes) && <section className="detail-grid">
       <article className="detail-card">
