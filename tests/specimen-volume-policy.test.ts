@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   aliquotPurposeRequiresTests,
   minorToVolume3,
@@ -89,4 +90,12 @@ test("derived aliquots never inherit an in-process state without their own proce
   assert.equal(derivedAliquotInitialStatus("RECEIVED"), "RECEIVED");
   assert.equal(derivedAliquotInitialStatus("IN_PROCESS"), "RECEIVED");
   assert.equal(derivedAliquotInitialStatus("IN_TRANSIT"), null);
+});
+
+test("aliquot API rejects closed orders and requires active parent-linked tests", () => {
+  const route = readFileSync(new URL("../src/app/api/specimens/[id]/aliquots/route.ts", import.meta.url), "utf8");
+  assert.ok(route.includes('parent.order.status === "CANCELLED"'));
+  assert.ok(route.includes('parent.order.status === "COMPLETED"'));
+  assert.ok(route.includes('error: "aliquot_no_active_order_items"'));
+  assert.ok(route.includes('orderItems: { some: { status: "ACTIVE"'));
 });
