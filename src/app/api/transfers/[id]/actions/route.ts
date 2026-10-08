@@ -209,7 +209,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       await tx.specimenEvent.create({
         data: {
           specimenId: item.specimenId,
-          eventType: exceptionType === "MISSING" ? "TRANSFERRED" : "QUARANTINED",
+          eventType: exceptionType === "MISSING" ? "TRANSFER_EXCEPTION" : "QUARANTINED",
           branchId: manifest.destinationBranchId,
           actorUserId: session.user.id,
           fromStatus: "IN_TRANSIT",
