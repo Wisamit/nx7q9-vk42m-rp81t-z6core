@@ -1,0 +1,96 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { mkdtemp, writeFile, readdir, readFile, rm } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { randomUUID } from "node:crypto";
+import { parseHl7Oru, parseAstmRecords, normalizeAnalyzerMessage } from "../bridge/protocols.mjs";
+import { validateBridgeSettings, pollReadyFiles } from "../bridge/file-worker.mjs";
+
+const hl7="MSH|^~\\&|A|LAB|LIS|LAB|202610081200||ORU^R01|MSG-001|P|2.5\r"
+  +"PID|1\rOBR|1||BC001|CULTURE^Test\rOBX|1|NM|GLU^Glucose||5.2|mmol/L\rOBX|2|ST|COLOR^Colour||yellow|\r";
+
+test("HL7 ORU normalization uses explicit barcode profile and stable observation IDs",()=>{
+  const parsed=parseHl7Oru(hl7,{barcodeSource:"OBR_3"});
+  assert.equal(parsed.bridgeMessageId,"MSG-001");
+  assert.deepEqual(parsed.observations,[
+    {observationId:"MSG-001:1:1",barcode:"BC001",analyzerTestCode:"GLU",rawValue:"5.2",rawUnit:"mmol/L"},
+    {observationId:"MSG-001:1:2",barcode:"BC001",analyzerTestCode:"COLOR",rawValue:"yellow",rawUnit:null},
+  ]);
+  const spm=hl7.replace("OBR|1||BC001|CULTURE^Test\r","OBR|1|||CULTURE^Test\rSPM|1|SAMPLE-22\r");
+  assert.equal(parseHl7Oru(spm,{barcodeSource:"SPM_2"}).observations[0].barcode,"SAMPLE-22");
+});
+
+test("bridge rejects unapproved and ambiguous protocol fields rather than guessing clinically",()=>{
+  const cases=[
+    ()=>parseHl7Oru(hl7,{}),
+    ()=>parseHl7Oru(hl7.replace("ORU^R01","ORM^O01"),{barcodeSource:"OBR_3"}),
+    ()=>parseHl7Oru(hl7.replace("OBX|1|NM","OBX|1|CWE"),{barcodeSource:"OBR_3"}),
+    ()=>parseHl7Oru(hl7.replace("BC001","BC001\\F\\BAD"),{barcodeSource:"OBR_3"}),
+    ()=>parseHl7Oru(hl7.replace("OBX|2|ST","OBX|1|ST"),{barcodeSource:"OBR_3"}),
+    ()=>parseHl7Oru(hl7.replace("5.2|mmol/L","5.2~6.1|mmol/L"),{barcodeSource:"OBR_3"}),
+    ()=>normalizeAnalyzerMessage(hl7,"FILE",{}),
+  ];
+  for (const fail of cases) assert.throws(fail,/INVALID|REQUIRED|UNSUPPORTED|COMPLEX|DUPLICATE|PROFILE/);
+});
+
+test("ASTM record parser requires approved field profile and verified transport framing",()=>{
+  const raw="H|\\^&|||ANALYZER\rP|1\rO|1|BAR-9\rR|1|^^^GLU|6.8|mmol/L\rL|1\r";
+  const profile={approved:true,sampleIdField:2,testCodeField:2,valueField:3,unitField:4};
+  assert.throws(()=>parseAstmRecords(raw,{}),/APPROVED_PROFILE/);
+  const parsed=parseAstmRecords(raw,profile);
+  assert.equal(parsed.observations.length,1);
+  assert.equal(parsed.observations[0].analyzerTestCode,"GLU");
+  assert.equal(parsed.observations[0].barcode,"BAR-9");
+  assert.equal(parsed.observations[0].rawValue,"6.8");
+  assert.ok(parsed.bridgeMessageId.startsWith("astm-"));
+  assert.throws(()=>parseAstmRecords("\x02"+raw+"\x03",profile),/ASTM_HEADER_REQUIRED|TRANSPORT_FRAME/);
+});
+
+test("file bridge preserves exact raw bytes and leaves files pending on transient HTTP errors",async()=>{
+  const root=await mkdtemp(join(tmpdir(),"analyzer-bridge-"));
+  const inputDir=join(root,"input"),archivedDir=join(root,"archive"),rejectedDir=join(root,"reject");
+  try {
+    const {mkdir}=await import("node:fs/promises");await mkdir(inputDir);
+    const settings=validateBridgeSettings({analyzerId:randomUUID(),lisOrigin:"https://lis.example.org/",protocol:"HL7_V2",
+      profile:{barcodeSource:"OBR_3"},inputDir,archivedDir,rejectedDir});
+    const raw=hl7+"   \r";
+    await writeFile(join(inputDir,"message.ready"),raw,"utf8");
+    let first=true;const seen=[];
+    const sender=async(url,options)=>{
+      seen.push({url,options});
+      if(first){first=false;throw Error("network disconnected");}
+      return {ok:true,status:202,json:async()=>({status:"ok"})};
+    };
+    const pending=await pollReadyFiles(settings,"x".repeat(40),sender);
+    assert.equal(pending[0].status,"RETRY_PENDING");
+    assert.equal((await readdir(inputDir)).length,1);
+    const delivered=await pollReadyFiles(settings,"x".repeat(40),sender);
+    assert.equal(delivered[0].status,"SENT_TO_LIS_STAGING");
+    assert.equal((await readdir(inputDir)).length,0);
+    assert.equal((await readdir(archivedDir)).length,1);
+    const rawRequest=seen.find(x=>x.url.endsWith("/messages")&&x.options);
+    assert.ok(rawRequest);
+    assert.equal(JSON.parse(rawRequest.options.body).rawPayload,raw);
+    assert.equal(rawRequest.options.headers.authorization,"Bearer "+"x".repeat(40));
+    assert.equal((await readFile(join(archivedDir,(await readdir(archivedDir))[0]),"utf8")),raw);
+  } finally {await rm(root,{recursive:true,force:true});}
+});
+
+test("malformed frame is quarantined with metadata but not clinical content",async()=>{
+  const root=await mkdtemp(join(tmpdir(),"analyzer-bridge-bad-"));
+  try {
+    const {mkdir}=await import("node:fs/promises");await mkdir(join(root,"in"));
+    const settings=validateBridgeSettings({analyzerId:randomUUID(),lisOrigin:"https://lis.example.org",protocol:"HL7_V2",
+      profile:{barcodeSource:"OBR_3"},inputDir:join(root,"in"),archivedDir:join(root,"archive"),rejectedDir:join(root,"reject")});
+    await writeFile(join(settings.inputDir,"bad.ready"),"TEST PATIENT clinical content","utf8");
+    const outcome=await pollReadyFiles(settings,"x".repeat(40),async()=>{throw Error("should never send");});
+    assert.equal(outcome[0].status,"REJECTED");
+    assert.equal((await readdir(settings.inputDir)).length,0);
+    const filenames=await readdir(settings.rejectedDir);
+    const manifest=filenames.find(x=>x.endsWith(".error.json"));
+    assert.ok(manifest);
+    const errors=await readFile(join(settings.rejectedDir,manifest),"utf8");
+    assert.ok(!errors.includes("TEST PATIENT"));
+  } finally {await rm(root,{recursive:true,force:true});}
+});
