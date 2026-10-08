@@ -21,6 +21,7 @@
 | Internal audit completion and findings | New finding could arrive after audit's preflight closure count | Shared audit row lock and refreshed unfinished-finding count; conditional state transition |
 | Finding closure | Repeat closure or linked unresolved CAPA could be marked complete | Conditional claim and audit parent lock; linked CAPA must already be CLOSED |
 | SOP version activation | Simultaneous activations or older approved version overwrote a newer effective version | Lock document parent, check workflow source state, atomically transition and retire prior effective version; deny implicit rollback |
+| Analyzer staff authorization / competency | Concurrent authorization grants could duplicate active permission; competency failure could race a new grant | Lock analyzer row when granting/revoking and recording competency, check latest passing evidence in transaction, CAS suspend grants after non-PASS assessment |
 | Regression testing | No focused QMS MariaDB concurrency tests in CI | Source-level guard tests plus two-connection MariaDB transactional lock tests registered in CI |
 
 ## Release and clinical governance
