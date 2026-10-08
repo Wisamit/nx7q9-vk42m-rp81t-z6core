@@ -156,8 +156,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     : null;
 
   const updated = await prisma.$transaction(async (tx) => {
-    const verified = await tx.laboratoryResult.update({
-      where: { id: result.id },
+    // Claim this exact result revision before recording clinical review.
+    // Two reviewers or a concurrent result edit cannot both validate the same snapshot.
+    const claim = await tx.laboratoryResult.updateMany({
+      where: {
+        id: result.id,
+        organizationId: session.user.organizationId,
+        status: { in: ["DRAFT", "ENTERED"] },
+        validationStage: { in: ["ENTRY", "TECHNICAL_REVIEW"] },
+        updatedAt: result.updatedAt,
+      },
       data: {
         status: finalValidationComplete ? "VERIFIED" : "ENTERED",
         validationStage: nextValidationStage,
@@ -171,6 +179,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         verifiedAt: finalValidationComplete ? verifiedAt : null,
       },
     });
+
+    if (claim.count !== 1) throw new Error("RESULT_STATE_CHANGED");
 
     await tx.resultValidationReview.create({
       data: {
@@ -403,8 +413,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       },
     });
 
-    return verified;
-  }, { timeout: 30000 });
+    return { id: result.id, status: finalValidationComplete ? "VERIFIED" as const : "ENTERED" as const, validationStage: nextValidationStage };
+  }, { timeout: 30000 }).catch(error => {
+    if (error instanceof Error && error.message === "RESULT_STATE_CHANGED") return null;
+    throw error;
+  });
+  if (!updated) {
+    return NextResponse.json({ error: "result_state_changed_retry" }, { status: 409 });
+  }
 
   return NextResponse.json({
     status: "ok",
