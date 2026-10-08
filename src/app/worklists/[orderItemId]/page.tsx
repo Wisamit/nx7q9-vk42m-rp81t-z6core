@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { canAccessDepartment, permissionSet, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { resolveReferenceInterval } from "@/lib/result-reference";
+import { referencePatientSex, resolveReferenceInterval } from "@/lib/result-reference";
 import { ResultEntryForm } from "@/components/result-entry-form";
 import { ResultWorkflowActions } from "@/components/result-workflow-actions";
 import { ReflexReviewPanel } from "@/components/reflex-review-panel";
@@ -223,8 +223,15 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
       componentId: component.componentId,
       branchId: latestResult?.performingBranchId || readySpecimen.currentBranchId!,
       methodId: item.test.methodId,
-      patientSex: item.order.patient.sexAtBirth,
-      dateOfBirth: item.order.patient.dateOfBirth,
+      // Reference context is frozen at order registration. Later patient edits
+      // must never silently change the clinical interpretation shown here.
+      patientSex: referencePatientSex(item.order.patientSexSnapshot),
+      dateOfBirth: item.order.patientDobSnapshot,
+      recordedAgeValue: item.order.patientAgeValueSnapshot,
+      recordedAgeUnit: item.order.patientAgeUnitSnapshot,
+      recordedAgeAt: item.order.patientAgeRecordedAtSnapshot,
+      ageAsOf: item.order.orderedAt,
+      at: item.order.orderedAt,
       pregnancyStatus: item.order.pregnancyStatus,
       gestationalAgeWeeks: item.order.gestationalAgeWeeks,
       analyzerId: latestResult?.analyzerId || null,
