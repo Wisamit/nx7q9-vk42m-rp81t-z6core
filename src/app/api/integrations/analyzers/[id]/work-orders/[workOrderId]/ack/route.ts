@@ -20,7 +20,7 @@ export async function POST(
   if (!body || typeof body !== "object" || Array.isArray(body)) {
     return NextResponse.json({ error: "invalid_request" }, { status: 400 });
   }
-  const { code, leaseToken, message } = body as Record<string, unknown>;
+  const { code, leaseToken, message, rawPayload } = body as Record<string, unknown>;
   if (code !== "ACCEPTED" && code !== "RETRY" && code !== "REJECTED") {
     return NextResponse.json({ error: "invalid_work_order_acknowledgement" }, { status: 400 });
   }
@@ -29,6 +29,15 @@ export async function POST(
   }
   if (message !== undefined && (typeof message !== "string" || message.length > 2000)) {
     return NextResponse.json({ error: "invalid_acknowledgement_details" }, { status: 400 });
+  }
+  // An accepted device transmission must retain the exact ASTM/HL7/etc.
+  // bytes-as-text sent over the Bridge transport. A bare "sent" flag is
+  // insufficient evidence for a clinical analyzer interface.
+  if (code === "ACCEPTED" && (typeof rawPayload !== "string" || rawPayload.length === 0 || rawPayload.length > 1_000_000)) {
+    return NextResponse.json({ error: "outbound_raw_payload_required" }, { status: 400 });
+  }
+  if (rawPayload !== undefined && (typeof rawPayload !== "string" || rawPayload.length > 1_000_000)) {
+    return NextResponse.json({ error: "invalid_outbound_raw_payload" }, { status: 400 });
   }
   const claimTokenHash = createHash("sha256").update(leaseToken).digest("hex");
   const note = typeof message === "string" ? message.trim() : "";
@@ -76,6 +85,27 @@ export async function POST(
     });
     if (updated.count !== 1) return "STALE_CLAIM" as const;
 
+    let wireMessageId: string | null = null;
+    if (typeof rawPayload === "string" && rawPayload.length > 0) {
+      const messageRecord = await tx.analyzerMessage.create({
+        data: {
+          analyzerId: credential.analyzer.id,
+          branchId: credential.analyzer.branchId,
+          direction: "OUTBOUND",
+          protocol: credential.analyzer.protocol,
+          bridgeMessageId: `${current.id}:${current.attemptCount}`,
+          payloadHash: createHash("sha256").update(rawPayload).digest("hex"),
+          rawPayload,
+          attempts: current.attemptCount,
+          status: accepted ? "PROCESSED" : "ERROR",
+          processedAt: now,
+          errorCode: accepted ? null : `WORK_ORDER_${code}`,
+          errorText: accepted ? null : note || "Analyzer Bridge reported a rejected work order",
+        },
+      });
+      wireMessageId = messageRecord.id;
+    }
+
     await tx.auditEvent.create({
       data: {
         organizationId: credential.analyzer.organizationId,
@@ -90,11 +120,12 @@ export async function POST(
           code,
           status: nextStatus,
           nextAttemptAt: nextAttemptAt?.toISOString() ?? null,
+          outboundAnalyzerMessageId: wireMessageId,
         },
         reason: note || "Authenticated Analyzer Bridge acknowledgement",
       },
     });
-    return { status: nextStatus, nextAttemptAt, workOrderId: current.id };
+    return { status: nextStatus, nextAttemptAt, workOrderId: current.id, outboundAnalyzerMessageId: wireMessageId };
   });
 
   if (outcome === "NOT_FOUND") {
