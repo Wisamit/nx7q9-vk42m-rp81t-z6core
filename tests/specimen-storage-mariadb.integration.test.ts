@@ -58,6 +58,29 @@ test("MariaDB serializes a storage deactivation behind a relocation location loc
     const [inactive] = await setup.execute<mysql.RowDataPacket[]>(
       "SELECT status FROM specimen_storage_locations WHERE id = ?", [locationId]);
     assert.equal(inactive[0]?.status, "INACTIVE");
+
+    // Inverse ordering: a pending relocation cannot lock an inactive location.
+    await deactivating.beginTransaction();
+    const [reactivated] = await deactivating.execute<mysql.ResultSetHeader>(
+      "UPDATE specimen_storage_locations SET status = 'ACTIVE' WHERE id = ?", [locationId]);
+    assert.equal(reactivated.affectedRows, 1);
+    await relocating.query("SET SESSION innodb_lock_wait_timeout = 1");
+    await relocating.beginTransaction();
+    await assert.rejects(
+      relocating.execute("SELECT id FROM specimen_storage_locations WHERE id = ? AND status = 'ACTIVE' FOR UPDATE", [locationId]),
+      (error: unknown) => typeof error === "object" && error !== null && "code" in error && error.code === "ER_LOCK_WAIT_TIMEOUT",
+    );
+    await relocating.rollback();
+    await deactivating.rollback();
+
+    const [stillInactive] = await setup.execute<mysql.RowDataPacket[]>(
+      "SELECT status FROM specimen_storage_locations WHERE id = ?", [locationId]);
+    assert.equal(stillInactive[0]?.status, "INACTIVE");
+    await relocating.beginTransaction();
+    const [notAssigned] = await relocating.execute<mysql.RowDataPacket[]>(
+      "SELECT id FROM specimen_storage_locations WHERE id = ? AND status = 'ACTIVE' FOR UPDATE", [locationId]);
+    assert.equal(notAssigned.length, 0);
+    await relocating.commit();
   } finally {
     await relocating.rollback().catch(() => {});
     await deactivating.rollback().catch(() => {});
