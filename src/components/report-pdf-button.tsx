@@ -131,7 +131,7 @@ export function ReportPdfButton({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           channel: "DOWNLOAD",
-          status: "DELIVERED",
+          status: "RECORDED",
           details: {
             fileName,
             mimeType: "application/pdf",
