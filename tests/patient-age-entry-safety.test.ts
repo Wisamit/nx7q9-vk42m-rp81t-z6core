@@ -18,7 +18,7 @@ test("new patient registration requires binary sex selection and explicit age un
   assert.ok(api.includes('error: "sex_required"'));
   assert.ok(api.includes('error: "invalid_recorded_age"'));
   assert.ok(api.includes("recordedAgeAt: new Date()"));
-  assert.ok(!api.includes("new Date(Date.now() - recordedAgeValue")));
+  assert.ok(!api.includes("new Date(Date.now() - recordedAgeValue"));
 });
 
 test("new patient form has no passport field and a single free-language address", () => {
