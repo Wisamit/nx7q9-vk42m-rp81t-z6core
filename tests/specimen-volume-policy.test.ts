@@ -114,3 +114,17 @@ test("volume reconciliation locks specimen custody and checks usage inside trans
   assert.ok(route.indexOf("specimen.updateMany") < route.indexOf("specimenUsageEvent.aggregate"));
   assert.ok(route.includes("reconciliationUsageFloorError"));
 });
+
+test("specimen usage checks order and linked test eligibility in the atomic update", () => {
+  const route = readFileSync(new URL("../src/app/api/specimens/[id]/usage/route.ts", import.meta.url), "utf8");
+  assert.ok(route.includes('error: "usage_order_not_active"'));
+  assert.ok(route.includes('order: { status: { notIn: ["CANCELLED", "COMPLETED"] } }'));
+  assert.ok(route.includes('orderItems: { some: { orderItemId, status: "ACTIVE"'));
+});
+
+test("storage relocation enforces current branch in the atomic specimen update", () => {
+  const route = readFileSync(new URL("../src/app/api/specimens/[id]/storage-location/route.ts", import.meta.url), "utf8");
+  const update = route.slice(route.indexOf("const changed = await tx.specimen.updateMany"));
+  assert.ok(update.includes("currentBranchId: specimen.currentBranchId"));
+  assert.ok(update.includes("preanalyticalVersion: specimen.preanalyticalVersion"));
+});
