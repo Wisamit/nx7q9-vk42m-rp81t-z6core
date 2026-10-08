@@ -62,6 +62,23 @@ test("MariaDB serializes a storage deactivation behind a relocation location loc
       [branchId, locationId]);
     assert.equal(Number(occupied[0]?.occupied), 1);
 
+    // Exercise the deactivation transaction's occupied-position rejection with a real FK.
+    await deactivating.beginTransaction();
+    const [tentativeDisable] = await deactivating.execute<mysql.ResultSetHeader>(
+      "UPDATE specimen_storage_locations SET status = 'INACTIVE' WHERE id = ? AND status = 'ACTIVE'", [locationId]);
+    assert.equal(tentativeDisable.affectedRows, 1);
+    const [liveOccupants] = await deactivating.execute<mysql.RowDataPacket[]>(
+      `SELECT COUNT(*) AS occupied FROM specimens
+       WHERE organization_id = ? AND current_branch_id = ?
+       AND (storage_location_id = ? OR (storage_location_id IS NULL AND storage_location = ?))
+       AND status <> 'DISPOSED'`,
+      [organizationId, branchId, locationId, "Integration / Fridge / Rack / Slot"]);
+    assert.equal(Number(liveOccupants[0]?.occupied), 1);
+    await deactivating.rollback();
+    const [afterRejectedDisable] = await setup.execute<mysql.RowDataPacket[]>(
+      "SELECT status FROM specimen_storage_locations WHERE id = ?", [locationId]);
+    assert.equal(afterRejectedDisable[0]?.status, "ACTIVE");
+
     await relocating.beginTransaction();
     const [locked] = await relocating.execute<mysql.RowDataPacket[]>(
       "SELECT id FROM specimen_storage_locations WHERE id = ? AND branch_id = ? AND status = 'ACTIVE' FOR UPDATE",
