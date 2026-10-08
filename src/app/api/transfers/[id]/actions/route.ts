@@ -142,6 +142,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const item = manifest.items.find((entry) => entry.barcodeSnapshot === barcode);
   if (!item) return NextResponse.json({ error: "barcode_not_in_manifest" }, { status: 404 });
   if (item.status === "RECEIVED") return NextResponse.json({ error: "item_already_received" }, { status: 409 });
+  if (item.status !== "DISPATCHED") return NextResponse.json({ error: "transfer_item_not_dispatched" }, { status: 409 });
   if (item.specimen.status !== "IN_TRANSIT") {
     return NextResponse.json({ error: "specimen_not_in_transit", status: item.specimen.status }, { status: 409 });
   }
@@ -149,14 +150,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const receivedAt = new Date();
 
   const result = await prisma.$transaction(async (tx) => {
-    await tx.specimenTransferItem.update({
-      where: { manifestId_specimenId: { manifestId: manifest.id, specimenId: item.specimenId } },
+    const claimed = await tx.specimenTransferItem.updateMany({
+      where: {
+        manifestId: manifest.id,
+        specimenId: item.specimenId,
+        status: "DISPATCHED",
+      },
       data: {
         status: "RECEIVED",
         receivedByUserId: session.user.id,
         receivedAt,
       },
     });
+    if (claimed.count !== 1) throw new Error("SPECIMEN_PREANALYTICAL_STATE_CHANGED");
 
     const moved = await tx.specimen.updateMany({
       where: {
