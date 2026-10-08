@@ -56,3 +56,8 @@ Keep `stage-6-specimen-operations-completion` and PR #124 in Draft; no merge, no
 
 - Item receipts now lock the parent manifest row with `FOR UPDATE` before claiming an individual barcode and computing remaining unreceived items. Concurrent operators receiving different barcodes serialize, preventing a stale `PARTIALLY_RECEIVED` manifest after all items have been received.
 - Added source-level lock-order regression. Actual simultaneous authenticated two-branch receipt API acceptance remains required before operational signoff.
+
+## MariaDB manifest receipt concurrency coverage
+
+- Added a dedicated two-connection MariaDB test with organization, branch, user, patient, order, two distinct barcoded specimens, transfer manifest and two manifest items. It verifies locking the parent manifest blocks a competing receiver, followed by an authoritative remaining-item count and transition from `PARTIALLY_RECEIVED` to `RECEIVED` when both barcodes have arrived.
+- Added this regression to CI after migrations. It proves the database locking sequence on real records; authenticated HTTP and real interbranch hardware/operator acceptance still require evidence. Test completion remains pending final CI on exact SHA.
