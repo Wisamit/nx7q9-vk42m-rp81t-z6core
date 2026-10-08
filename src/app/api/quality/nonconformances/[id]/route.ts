@@ -46,10 +46,28 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
 
   const now = new Date();
-  const updated = await prisma.$transaction(async tx => {
-    const saved = await tx.nonconformance.update({
-      where: { id },
-      data: {
+  let updated;
+  try {
+    updated = await prisma.$transaction(async tx => {
+      // CAPA creation takes the same parent lock before opening new work.
+      const locked = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM nonconformances WHERE id = ${id}
+        AND organization_id = ${session.user.organizationId} FOR UPDATE
+      `;
+      if (locked.length !== 1) throw new Error("NONCONFORMANCE_STATE_CHANGED");
+      const current = await tx.nonconformance.findUniqueOrThrow({ where: { id } });
+      if (["CLOSED", "CANCELLED"].includes(current.status) || current.updatedAt.getTime() !== record.updatedAt.getTime()) {
+        throw new Error("NONCONFORMANCE_STATE_CHANGED");
+      }
+      if (status === "CLOSED") {
+        const unfinished = await tx.capa.count({
+          where: { nonconformanceId: id, status: { notIn: ["CLOSED", "CANCELLED"] } },
+        });
+        if (unfinished > 0) throw new Error("NONCONFORMANCE_HAS_OPEN_CAPA");
+      }
+      const claimed = await tx.nonconformance.updateMany({
+        where: { id, organizationId: session.user.organizationId, status: current.status, updatedAt: current.updatedAt },
+        data: {
         status,
         rootCause,
         immediateAction,
@@ -59,6 +77,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         closedAt: status === "CLOSED" ? now : null,
       },
     });
+      if (claimed.count !== 1) throw new Error("NONCONFORMANCE_STATE_CHANGED");
+      const saved = await tx.nonconformance.findUniqueOrThrow({ where: { id } });
     await tx.auditEvent.create({
       data: {
         organizationId: session.user.organizationId,
@@ -74,8 +94,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         userAgent: ctx.userAgent,
       },
     });
-    return saved;
-  });
+      return saved;
+    }, { isolationLevel: "Serializable", timeout: 30000 });
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : "";
+    return NextResponse.json({ error: reason === "NONCONFORMANCE_HAS_OPEN_CAPA"
+      ? "open_capa_blocks_nonconformance_closure" : "nonconformance_state_conflict" }, { status: 409 });
+  }
 
   return NextResponse.json({ status: "ok", nonconformance: updated });
 }

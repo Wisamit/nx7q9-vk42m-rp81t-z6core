@@ -37,9 +37,26 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (ownerUserId && !owner) return NextResponse.json({ error: "owner_not_found" }, { status: 404 });
   if (capaId && !capa) return NextResponse.json({ error: "capa_not_found" }, { status: 404 });
 
-  const finding = await prisma.$transaction(async tx => {
-    if (audit.status === "PLANNED") await tx.internalAudit.update({ where: { id }, data: { status: "IN_PROGRESS", startedAt: new Date() } });
-    const created = await tx.internalAuditFinding.create({
+  if (capa && audit.branchId && capa.branchId && capa.branchId !== audit.branchId) {
+    return NextResponse.json({ error: "capa_audit_branch_mismatch" }, { status: 409 });
+  }
+  if (capa && capa.branchId && !canAccessBranch(session, capa.branchId)) {
+    return NextResponse.json({ error: "capa_branch_forbidden" }, { status: 403 });
+  }
+  let finding;
+  try {
+    finding = await prisma.$transaction(async tx => {
+      const locked = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM internal_audits WHERE id = ${id}
+        AND organization_id = ${session.user.organizationId} FOR UPDATE
+      `;
+      if (locked.length !== 1) throw new Error("AUDIT_STATE_CHANGED");
+      const current = await tx.internalAudit.findUniqueOrThrow({ where: { id } });
+      if (["COMPLETED", "CANCELLED"].includes(current.status)) throw new Error("AUDIT_LOCKED");
+      if (current.status === "PLANNED") {
+        await tx.internalAudit.update({ where: { id }, data: { status: "IN_PROGRESS", startedAt: new Date() } });
+      }
+      const created = await tx.internalAuditFinding.create({
       data: {
         auditId: id,
         findingNumber: `F-${randomUUID().slice(0,8).toUpperCase()}`,
@@ -65,8 +82,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         userAgent: ctx.userAgent,
       },
     });
-    return created;
-  });
+      return created;
+    }, { isolationLevel: "Serializable", timeout: 30000 });
+  } catch {
+    return NextResponse.json({ error: "audit_finding_creation_conflict" }, { status: 409 });
+  }
 
   return NextResponse.json({ status: "ok", finding }, { status: 201 });
 }
@@ -89,11 +109,28 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (finding.status === "CLOSED") return NextResponse.json({ error: "finding_already_closed" }, { status: 409 });
   if (finding.severity === "CRITICAL" && !finding.capaId) return NextResponse.json({ error: "critical_finding_requires_capa" }, { status: 409 });
 
-  const saved = await prisma.$transaction(async tx => {
-    const updated = await tx.internalAuditFinding.update({
-      where: { id: finding.id },
-      data: { status: "CLOSED", closedByUserId: session.user.id, closedAt: new Date(), closureNote },
-    });
+  let saved;
+  try {
+    saved = await prisma.$transaction(async tx => {
+      const locked = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM internal_audits WHERE id = ${id}
+        AND organization_id = ${session.user.organizationId} FOR UPDATE
+      `;
+      if (locked.length !== 1) throw new Error("AUDIT_STATE_CHANGED");
+      const currentAudit = await tx.internalAudit.findUniqueOrThrow({ where: { id } });
+      if (["COMPLETED", "CANCELLED"].includes(currentAudit.status)) throw new Error("AUDIT_LOCKED");
+      if (finding.capaId) {
+        const linkedCapa = await tx.capa.findFirst({
+          where: { id: finding.capaId, organizationId: session.user.organizationId },
+        });
+        if (!linkedCapa || linkedCapa.status !== "CLOSED") throw new Error("LINKED_CAPA_NOT_CLOSED");
+      }
+      const claim = await tx.internalAuditFinding.updateMany({
+        where: { id: finding.id, auditId: id, status: finding.status, updatedAt: finding.updatedAt },
+        data: { status: "CLOSED", closedByUserId: session.user.id, closedAt: new Date(), closureNote },
+      });
+      if (claim.count !== 1) throw new Error("FINDING_STATE_CHANGED");
+      const updated = await tx.internalAuditFinding.findUniqueOrThrow({ where: { id: finding.id } });
     await tx.auditEvent.create({
       data: {
         organizationId: session.user.organizationId,
@@ -109,7 +146,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         userAgent: ctx.userAgent,
       },
     });
-    return updated;
-  });
+      return updated;
+    }, { isolationLevel: "Serializable", timeout: 30000 });
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : "";
+    return NextResponse.json({ error: reason === "LINKED_CAPA_NOT_CLOSED"
+      ? "linked_capa_must_be_closed" : "audit_finding_closure_conflict" }, { status: 409 });
+  }
   return NextResponse.json({ status: "ok", finding: saved });
 }

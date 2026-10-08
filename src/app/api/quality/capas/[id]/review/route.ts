@@ -32,10 +32,27 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
 
   const now = new Date();
-  const saved = await prisma.$transaction(async tx => {
-    const updated = await tx.capa.update({
-      where: { id },
-      data: {
+  let saved;
+  try {
+    saved = await prisma.$transaction(async tx => {
+      const locked = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM capas WHERE id = ${id}
+        AND organization_id = ${session.user.organizationId} FOR UPDATE
+      `;
+      if (locked.length !== 1) throw new Error("CAPA_STATE_CHANGED");
+      const current = await tx.capa.findUniqueOrThrow({ where: { id } });
+      if (["CLOSED", "CANCELLED"].includes(current.status)) throw new Error("CAPA_LOCKED");
+      const remainingActions = await tx.capaAction.count({
+        where: { capaId: id, status: { notIn: ["COMPLETED", "CANCELLED"] } },
+      });
+      if (remainingActions !== 0) throw new Error("OPEN_CAPA_ACTIONS");
+      if (close) {
+        const completedActions = await tx.capaAction.count({ where: { capaId: id, status: "COMPLETED" } });
+        if (completedActions === 0) throw new Error("NO_COMPLETED_CAPA_ACTIONS");
+      }
+      const claim = await tx.capa.updateMany({
+        where: { id, organizationId: session.user.organizationId, status: current.status, updatedAt: current.updatedAt },
+        data: {
         status: close ? "CLOSED" : "EFFECTIVENESS_REVIEW",
         effectiveness,
         effectivenessReview,
@@ -45,6 +62,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         closedAt: close ? now : null,
       },
     });
+      if (claim.count !== 1) throw new Error("CAPA_STATE_CHANGED");
+      const updated = await tx.capa.findUniqueOrThrow({ where: { id } });
     await tx.auditEvent.create({
       data: {
         organizationId: session.user.organizationId,
@@ -60,7 +79,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         userAgent: ctx.userAgent,
       },
     });
-    return updated;
-  });
+      return updated;
+    }, { isolationLevel: "Serializable", timeout: 30000 });
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : "";
+    return NextResponse.json({ error: reason === "OPEN_CAPA_ACTIONS" ? "open_capa_actions"
+      : reason === "NO_COMPLETED_CAPA_ACTIONS" ? "completed_capa_action_required" : "capa_review_conflict_or_locked" }, { status: 409 });
+  }
   return NextResponse.json({ status: "ok", capa: saved });
 }
