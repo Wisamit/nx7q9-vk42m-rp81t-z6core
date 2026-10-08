@@ -38,18 +38,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
 
   const result = await prisma.$transaction(async tx => {
-    // Claim the registered location row before the specimen row, matching the
-    // deactivation lock order. The guarded UPDATE obtains an InnoDB row lock.
-    const activeLocation = await tx.specimenStorageLocation.updateMany({
-      where: {
-        id: registered.id,
-        organizationId: session.user.organizationId,
-        branchId: specimen.currentBranchId!,
-        status: "ACTIVE",
-      },
-      data: { status: "ACTIVE" },
-    });
-    if (activeLocation.count !== 1) return null;
+    // Lock the physical location before the specimen, matching deactivation
+    // lock order without changing the storage master record.
+    const lockedLocations = await tx.$queryRaw<Array<{ id: string }>>`
+      SELECT id FROM specimen_storage_locations
+      WHERE id = ${registered.id}
+        AND organization_id = ${session.user.organizationId}
+        AND branch_id = ${specimen.currentBranchId!}
+        AND status = 'ACTIVE'
+      FOR UPDATE
+    `;
+    if (lockedLocations.length !== 1) return null;
     const changed = await tx.specimen.updateMany({
       where: {
         id: specimen.id,
