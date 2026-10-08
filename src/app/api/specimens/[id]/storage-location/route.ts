@@ -26,6 +26,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!specimen.currentBranchId || !canAccessBranch(session, specimen.currentBranchId)) {
     return NextResponse.json({ error: "branch_forbidden" }, { status: 403 });
   }
+  const registered = await prisma.specimenStorageLocation.findUnique({
+    where: { branchId_path: { branchId: specimen.currentBranchId, path: storageLocation } },
+    select: { id: true, status: true, organizationId: true },
+  });
+  if (!registered || registered.organizationId !== session.user.organizationId || registered.status !== "ACTIVE") {
+    return NextResponse.json({ error: "storage_location_not_registered" }, { status: 409 });
+  }
   if (!["COLLECTED","RECEIVED","IN_PROCESS"].includes(specimen.status)) {
     return NextResponse.json({ error: "specimen_status_not_relocatable" }, { status: 409 });
   }
@@ -46,6 +53,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       },
     });
     if (changed.count !== 1) return null;
+    const stillActive = await tx.specimenStorageLocation.count({
+      where: { id: registered.id, organizationId: session.user.organizationId, branchId: specimen.currentBranchId!, status: "ACTIVE" },
+    });
+    if (stillActive !== 1) throw new Error("STORAGE_LOCATION_DEACTIVATED");
 
     await tx.specimenEvent.create({
       data: {
@@ -60,6 +71,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           previousStorageLocation: specimen.storageLocation,
           storageLocation,
           storagePosition: position.segments,
+          storageLocationId: registered.id,
           reason,
         },
       },
@@ -75,13 +87,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         entityId: specimen.id,
         reason,
         oldValues: { storageLocation: specimen.storageLocation },
-        newValues: { storageLocation, storagePosition: position.segments },
+        newValues: { storageLocation, storagePosition: position.segments, storageLocationId: registered.id },
         ipAddress: ctx.ipAddress,
         userAgent: ctx.userAgent,
       },
     });
 
     return true;
+  }).catch(error => {
+    if (error instanceof Error && error.message === "STORAGE_LOCATION_DEACTIVATED") return null;
+    throw error;
   });
 
   if (!result) return NextResponse.json({ error: "specimen_state_changed" }, { status: 409 });
