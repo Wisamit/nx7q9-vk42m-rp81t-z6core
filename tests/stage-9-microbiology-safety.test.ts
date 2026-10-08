@@ -101,3 +101,16 @@ test("case creation locks current specimen and active order lineage", () => {
   assert.ok(transaction>=0 && specimenLock>transaction && link>specimenLock && create>link);
   assert.ok(api.includes('error: "microbiology_case_performing_branch_conflict"'));
 });
+
+test("microbiology UI preserves history but blocks active work when specimen custody is unsafe", () => {
+  const page=source("../src/app/microbiology/[id]/page.tsx");
+  assert.ok(page.includes('microbiologyCase.specimen.status === "IN_PROCESS"'));
+  assert.ok(page.includes("microbiologyCase.specimen.currentBranchId === microbiologyCase.performingBranchId"));
+  assert.ok(page.includes("Boolean(microbiologyCase.result) || !specimenReadyForProcessing"));
+  assert.ok(page.includes("العينة غير متاحة لمعالجة الأحياء الدقيقة"));
+  const workflow=source("../src/components/microbiology-final-workflow.tsx");
+  assert.ok(workflow.includes("canEnter && specimenReadyForProcessing"));
+  assert.ok(workflow.includes("canVerify && specimenReadyForProcessing"));
+  assert.ok(workflow.includes("canRelease && specimenReadyForProcessing"));
+  assert.ok(workflow.includes('resultStatus === "ENTERED" && canEnter'));
+});
