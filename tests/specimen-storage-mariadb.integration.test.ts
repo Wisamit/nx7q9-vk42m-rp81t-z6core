@@ -85,6 +85,15 @@ test("MariaDB serializes a storage deactivation behind a relocation location loc
       [locationId, branchId]);
     assert.equal(locked.length, 1);
 
+    // Execute the same guarded specimen state change as the relocation API
+    // while holding the destination master lock.
+    const [claimedSpecimen] = await relocating.execute<mysql.ResultSetHeader>(
+      `UPDATE specimens SET preanalytical_version = preanalytical_version + 1
+       WHERE id = ? AND organization_id = ? AND current_branch_id = ?
+       AND status = 'RECEIVED' AND preanalytical_version = 0`,
+      [specimenId, organizationId, branchId]);
+    assert.equal(claimedSpecimen.affectedRows, 1);
+
     await deactivating.query("SET SESSION innodb_lock_wait_timeout = 1");
     await deactivating.beginTransaction();
     await assert.rejects(
