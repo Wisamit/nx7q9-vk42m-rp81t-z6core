@@ -26,13 +26,26 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "inventory_transfer_not_receivable", status: transfer.status }, { status: 409 });
   }
 
-  const incoming = new Map(body.items.map(line => [line.transferItemId || "", line.receivedQty]));
+  // Reject duplicate or foreign line identifiers before any stock mutation.
+  // A Map alone would silently overwrite repeated transfer lines.
+  const knownLineIds = new Set(transfer.items.map(line => line.id));
+  const submittedIds = body.items.map(line => line.transferItemId);
+  if (submittedIds.some(lineId => typeof lineId !== "string" || !knownLineIds.has(lineId))
+    || new Set(submittedIds).size !== submittedIds.length) {
+    return NextResponse.json({ error: "invalid_or_duplicate_transfer_item" }, { status: 400 });
+  }
+  const incoming = new Map(body.items.map(line => [line.transferItemId!, line.receivedQty]));
   try {
     const received = await prisma.$transaction(async tx => {
       const current = await tx.inventoryTransfer.findUnique({ where: { id: transfer.id }, select: { status: true } });
       if (!current || !["DISPATCHED","PARTIALLY_RECEIVED"].includes(current.status)) throw new Error("STATE_CHANGED");
 
-      for (const line of transfer.items) {
+      // Read the latest line quantities under the same transaction.
+      // A second receiver must never use an older receivedQty snapshot.
+      const currentLines = await tx.inventoryTransferItem.findMany({
+        where: { transferId: transfer.id },
+      });
+      for (const line of currentLines) {
         if (!incoming.has(line.id)) continue;
         const addQty = nonNegative(incoming.get(line.id));
         const dispatchedQty = line.dispatchedQty || new Prisma.Decimal(0);
