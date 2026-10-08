@@ -29,3 +29,10 @@ test("bilingual specimen screen exposes disposal only for rejected specimens", (
   assert.ok(ui.includes("التخلص من العينة المرفوضة"));
   assert.ok(ui.includes('/dispose'));
 });
+
+test("disposed specimens release current physical occupancy but retain prior storage audit", () => {
+  const route = readFileSync(new URL("../src/app/api/specimens/[id]/dispose/route.ts", import.meta.url), "utf8");
+  assert.ok(route.includes('status: "DISPOSED", storageLocation: null, storageLocationId: null'));
+  assert.ok(route.includes('previousStorageLocationId: specimen.storageLocationId'));
+  assert.ok(route.includes('oldValues: { status: "REJECTED", storageLocation: specimen.storageLocation, storageLocationId: specimen.storageLocationId }'));
+});
