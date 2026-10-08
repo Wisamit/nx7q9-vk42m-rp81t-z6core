@@ -84,6 +84,9 @@ export function SpecimenAliquotManager({
       usage_order_item_not_linked: tr("The selected test is not linked to this specimen.", "الفحص المحدد غير مرتبط بهذه العينة."),
       specimen_volume_changed: tr("Available volume changed concurrently. Review the updated balance and try again.", "تغير الحجم المتاح بالتزامن. راجع الرصيد الجديد وحاول مجددًا."),
       container_not_found: tr("Selected aliquot container is unavailable.", "حاوية الجزء المشتق المحددة غير متاحة."),
+      storage_position_required: tr("Structured storage position is required.", "موقع التخزين المنظّم مطلوب."),
+      storage_position_incomplete: tr("Enter zone, storage unit, rack and slot.", "أدخل المنطقة ووحدة التخزين والرف والموضع."),
+      storage_position_invalid: tr("Storage position contains invalid characters or is too long.", "موقع التخزين يحتوي أحرفًا غير مسموحة أو يتجاوز الطول المسموح."),
       storage_location_required: tr("Storage location is required.", "موقع التخزين مطلوب."),
       storage_relocation_reason_required: tr("A storage relocation reason is required.", "سبب تغيير موقع التخزين مطلوب."),
       specimen_status_not_relocatable: tr("This specimen status does not allow storage relocation.", "حالة هذه العينة لا تسمح بتغيير موقع التخزين."),
@@ -149,7 +152,12 @@ export function SpecimenAliquotManager({
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const ok = await post(`/api/specimens/${specimenId}/storage-location`, {
-      storageLocation: form.get("storageLocation"),
+      storagePosition: {
+        zone: form.get("zone"),
+        unit: form.get("unit"),
+        rack: form.get("rack"),
+        slot: form.get("slot"),
+      },
       reason: form.get("reason"),
     });
     if (ok) setMessage(tr("Physical storage location updated and audited.", "تم تحديث موقع التخزين الفعلي وتسجيله."));
@@ -207,7 +215,10 @@ export function SpecimenAliquotManager({
     {canManage && usable && <details className="specimen-history">
       <summary>{tr("Update Physical Storage", "تحديث موقع التخزين الفعلي")}</summary>
       <form className="catalog-form specimen-action-form" onSubmit={relocateStorage}>
-        <label className="form-span">{tr("Storage / physical location", "التخزين / الموقع الفعلي")}<input name="storageLocation" defaultValue={storageLocation || ""} maxLength={200} placeholder={tr("Example: Fridge 2 · Rack B3", "مثال: الثلاجة 2 · الرف B3")} required /></label>
+        <label>{tr("Zone / area", "المنطقة")}<input name="zone" maxLength={40} required /></label>
+        <label>{tr("Fridge / freezer", "الثلاجة / المجمّد")}<input name="unit" maxLength={40} required /></label>
+        <label>{tr("Rack / shelf", "الرف")}<input name="rack" maxLength={40} required /></label>
+        <label>{tr("Position / slot", "الموضع")}<input name="slot" maxLength={40} required /></label>
         <label className="form-span">{tr("Relocation reason", "سبب تغيير الموقع")}<textarea name="reason" rows={2} maxLength={1000} required /></label>
         <button className="secondary-button form-span" disabled={busy}>{tr("Update Storage Location", "تحديث موقع التخزين")}</button>
       </form>
