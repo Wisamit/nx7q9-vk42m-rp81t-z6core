@@ -13,7 +13,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     barcode?: string;
   } | null;
 
-  if (!body?.action) return NextResponse.json({ error: "invalid_action" }, { status: 400 });
+  if (body?.action !== "DISPATCH" && body?.action !== "RECEIVE_ITEM") return NextResponse.json({ error: "invalid_action" }, { status: 400 });
 
   const permission = body.action === "DISPATCH" ? "transfers.dispatch" : "transfers.receive";
   const session = await requirePermission(permission);
