@@ -63,7 +63,7 @@ export default async function PatientDetailPage({ params }: { params: Promise<{ 
 
   const identifierSchemes = canManage && patient.status === "ACTIVE" && !patient.mergedIntoPatientId
     ? await prisma.patientIdentifierScheme.findMany({
-        where: { organizationId: session.user.organizationId, status: "ACTIVE" },
+        where: { organizationId: session.user.organizationId, status: "ACTIVE", code: { not: "LEGACY_OTHER" } },
         select: {
           id: true,
           code: true,
