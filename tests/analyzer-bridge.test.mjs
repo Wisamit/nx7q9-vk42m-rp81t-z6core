@@ -54,7 +54,7 @@ test("file bridge preserves exact raw bytes and leaves files pending on transien
     const {mkdir}=await import("node:fs/promises");await mkdir(inputDir);
     const settings=validateBridgeSettings({analyzerId:randomUUID(),lisOrigin:"https://lis.example.org/",protocol:"HL7_V2",
       profile:{barcodeSource:"OBR_3"},inputDir,archivedDir,rejectedDir});
-    const raw=hl7+"   \r";
+    const raw=hl7.replace("yellow|\r","yellow   |\r");
     await writeFile(join(inputDir,"message.ready"),raw,"utf8");
     let first=true;const seen=[];
     const sender=async(url,options)=>{
