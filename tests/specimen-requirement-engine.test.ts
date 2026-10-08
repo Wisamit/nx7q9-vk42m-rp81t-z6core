@@ -89,9 +89,21 @@ test("requirement snapshot reader accepts only explicit finalized metadata", () 
   };
   assert.equal(specimenRequirementSnapshotFromDetails({ requiredVolume: "0.800" }), null);
   assert.deepEqual(specimenRequirementSnapshotFromDetails(finalized), {
+    requirementEngineVersion: 1,
+    requirementSource: "LEGACY_FINALIZATION",
+    requirementCapturedAt: null,
+    specimenTypeId: null,
+    specimenTypeCode: null,
+    specimenTypeNameEn: null,
+    specimenTypeNameAr: null,
+    containerId: null,
+    containerCode: null,
+    containerNameEn: null,
+    containerNameAr: null,
     requiredVolume: "0.800",
     requiredVolumeUnit: "mL",
     volumeRequirementComplete: true,
+    patientPreparation: [],
     collectionInstructions: ["Allow to clot"],
     storageConditions: "2-8 C",
     stabilityMinutes: 240,
