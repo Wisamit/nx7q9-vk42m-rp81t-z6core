@@ -56,3 +56,12 @@ test("result QC gate treats overdue maintenance and unsigned calibration as bloc
     assert.ok(gate.includes('"' + reason + '",'));
   }
 });
+
+test("maintenance completion preserves safety hold and requires a separate RESTORE", () => {
+  const route = source("../src/app/api/equipment/[id]/maintenance/route.ts");
+  assert.ok(route.includes("SELECT id FROM equipment WHERE id ="));
+  assert.ok(route.includes("FOR UPDATE"));
+  assert.ok(route.includes('status: "UNDER_MAINTENANCE"'));
+  assert.ok(route.includes('status: "OUT_OF_SERVICE"'));
+  assert.ok(!route.includes('data: { status: "ACTIVE" }'));
+});
