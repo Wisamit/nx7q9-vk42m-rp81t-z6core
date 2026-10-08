@@ -67,8 +67,11 @@ test("outbound dispatcher revalidates the current report version while holding t
   const tx=api.indexOf("const queued = await prisma.$transaction");
   const lock=api.indexOf("FROM diagnostic_reports",tx);
   const latest=api.indexOf("tx.diagnosticReportVersion.findFirst",lock);
-  const queue=api.indexOf("tx.reportDeliveryEvent.create",latest);
-  assert.ok(tx>=0 && lock>tx && latest>lock && queue>latest);
+  const duplicate=api.indexOf("tx.reportDeliveryEvent.findFirst",latest);
+  const queue=api.indexOf("tx.reportDeliveryEvent.create",duplicate);
+  assert.ok(tx>=0 && lock>tx && latest>lock && duplicate>latest && queue>duplicate);
+  assert.ok(api.slice(duplicate,queue).includes('status: { in: ["QUEUED", "SENT", "DELIVERED"] }'));
+  assert.ok(api.includes('error: "report_delivery_already_pending_or_sent"'));
   assert.ok(api.slice(lock,latest).includes("FOR UPDATE"));
   assert.ok(api.slice(latest,queue).includes('current.status === "RETRACTED"'));
   assert.ok(api.includes('error: "report_version_changed_retry"'));
