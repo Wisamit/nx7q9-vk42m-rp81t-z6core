@@ -90,6 +90,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ iso
       caseId: isolate.case.id,
       specimenId: isolate.case.specimenId,
       performingBranchId: isolate.case.performingBranchId,
+      expectedCaseUpdatedAt: isolate.case.updatedAt,
     });
     const created = await tx.susceptibilityTest.create({
       data: {
@@ -117,6 +118,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ iso
       });
     }
 
+    await tx.microbiologyCase.update({
+      where: { id: isolate.case.id },
+      data: { updatedAt: new Date(Math.max(Date.now(), isolate.case.updatedAt.getTime() + 1)) },
+    });
     await tx.auditEvent.create({
       data: {
         organizationId: session.user.organizationId,
