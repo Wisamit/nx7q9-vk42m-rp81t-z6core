@@ -21,12 +21,12 @@ This is an evidence-oriented checklist, not a statement of completed acceptance.
 
 ## Non-negotiable completion gates
 
-1. Do **not** close Stage 6 while S6-02, S6-06, S6-07, S6-09 or S6-10 remain unaccepted.
+1. Do **not** assert Stage 6 **clinical / operational go-live acceptance** while S6-02, S6-06, S6-07, S6-09 or S6-10 remain unaccepted. Automated engineering completion and a guarded deployment candidate may be recorded separately when the exact-HEAD evidence passes; S6-09 hardware/manual UI remains DEFERRED to whole-project UAT at owner direction.
 2. Do **not** infer or backfill historical `storage_location_id` values from unverified free text.
 3. Do **not** invent clinical quarantine/disposal timelines or authorities. These require explicit laboratory policy approval.
 4. For each failure case: ensure the state transition fails closed, preserves immutable historical context, and writes an auditable decision or exceptional observation.
 5. Capture acceptance evidence: actor, branch, barcode/manifest, expected vs actual, timestamp, screenshot/log reference, version/SHA, reviewer and outcome.
-6. Stage 6 can be considered **engineering-complete** only after final-schema migrations, all required automated tests and current-SHA CI pass; **accepted** only after clinical and operational signoff. Neither is currently asserted.
+6. Stage 6 can be considered **engineering-complete** only after final-schema migrations, all required automated tests and current-SHA CI pass; **clinically operationally accepted** only after deferred system-wide UAT and relevant clinical signoff. Neither is currently asserted.
 
 ## Release guard
 
