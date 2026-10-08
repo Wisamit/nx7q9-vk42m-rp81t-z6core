@@ -1002,6 +1002,7 @@ model Organization {
   deactivatedAt   DateTime?    @map("deactivated_at") @db.DateTime(3)
 
   organizationSetting OrganizationSetting?
+  specimenStorageLocations SpecimenStorageLocation[]
   branches    Branch[]
   users       User[]
   roles       Role[]
@@ -1160,6 +1161,7 @@ model Branch {
   deactivatedAt   DateTime?    @map("deactivated_at") @db.DateTime(3)
 
   organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  specimenStorageLocations SpecimenStorageLocation[]
   settings     BranchSetting[]
   departments Department[]
   workstations Workstation[]
@@ -3434,6 +3436,27 @@ model SpecimenReceptionAssessment {
   @@index([specimenId, receivedAt])
   @@index([branchId, receivedAt])
   @@map("specimen_reception_assessments")
+}
+
+model SpecimenStorageLocation {
+  id             String       @id @default(uuid()) @db.Char(36)
+  organizationId String       @map("organization_id") @db.Char(36)
+  branchId       String       @map("branch_id") @db.Char(36)
+  path           String       @db.VarChar(200)
+  zone           String       @db.VarChar(40)
+  unit           String       @db.VarChar(40)
+  rack           String       @db.VarChar(40)
+  slot           String       @db.VarChar(40)
+  status         RecordStatus @default(ACTIVE)
+  createdAt      DateTime     @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt      DateTime     @updatedAt @map("updated_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  branch       Branch       @relation(fields: [branchId], references: [id], onDelete: Restrict)
+
+  @@unique([branchId, path])
+  @@index([organizationId, branchId, status])
+  @@map("specimen_storage_locations")
 }
 
 model SpecimenRejectionReason {
