@@ -7,7 +7,7 @@ import {
 } from "@/lib/analyzer-mapping-governance";
 import { prisma } from "@/lib/db";
 import { parseResultValue } from "@/lib/result-value-parser";
-import { numericFlag, resolveReferenceInterval } from "@/lib/result-reference";
+import { numericFlag, referencePatientSex, resolveReferenceInterval } from "@/lib/result-reference";
 import { evaluateDelta } from "@/lib/delta-check";
 import { syncDeltaReviewEvents } from "@/lib/delta-review";
 import { evaluateFormula, formulaVariables } from "@/lib/formula-engine";
@@ -386,7 +386,7 @@ export async function POST(request: Request) {
             componentId: definition.componentId,
             branchId: analyzer.branchId,
             methodId: orderItem.test.methodId,
-            patientSex: orderItem.order.patientSexSnapshot ?? "UNKNOWN",
+            patientSex: referencePatientSex(orderItem.order.patientSexSnapshot),
             dateOfBirth: orderItem.order.patientDobSnapshot,
         recordedAgeValue: orderItem.order.patientAgeValueSnapshot,
         recordedAgeUnit: orderItem.order.patientAgeUnitSnapshot,
@@ -521,7 +521,7 @@ export async function POST(request: Request) {
         componentId: rule.targetComponentId,
         branchId: analyzer.branchId,
         methodId: orderItem.test.methodId,
-        patientSex: orderItem.order.patientSexSnapshot ?? "UNKNOWN",
+        patientSex: referencePatientSex(orderItem.order.patientSexSnapshot),
         dateOfBirth: orderItem.order.patientDobSnapshot,
         recordedAgeValue: orderItem.order.patientAgeValueSnapshot,
         recordedAgeUnit: orderItem.order.patientAgeUnitSnapshot,
