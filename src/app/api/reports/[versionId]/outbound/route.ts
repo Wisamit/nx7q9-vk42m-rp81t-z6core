@@ -1,4 +1,3 @@
-import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import {
   NotificationChannel,
@@ -7,6 +6,7 @@ import {
 } from "../../../../../../generated/prisma/client";
 import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { canonicalReportOrigin } from "@/lib/report-origin";
 import { enqueueNotification } from "@/lib/notifications";
 import {
   defaultReportReadyMessage,
@@ -17,15 +17,6 @@ import {
   type ReportOutboundChannel,
   type ReportOutboundRecipientType,
 } from "@/lib/report-outbound";
-
-function appBaseUrl(headerStore: Awaited<ReturnType<typeof headers>>) {
-  const configured = process.env.NEXT_PUBLIC_APP_URL?.trim().replace(/\/$/, "");
-  if (configured) return configured;
-  const host = headerStore.get("x-forwarded-host") || headerStore.get("host");
-  if (!host) return null;
-  const protocol = headerStore.get("x-forwarded-proto") || "https";
-  return `${protocol}://${host}`;
-}
 
 function recipientTypeEnum(value: ReportOutboundRecipientType) {
   if (value === "PATIENT") return NotificationRecipientType.PATIENT;
@@ -147,8 +138,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ ver
     return NextResponse.json({ error: destination.error }, { status: 409 });
   }
 
-  const headerStore = await headers();
-  const baseUrl = appBaseUrl(headerStore);
+  const baseUrl = canonicalReportOrigin(
+    process.env.NEXT_PUBLIC_APP_URL,
+    process.env.NODE_ENV === "production",
+  );
   if (!baseUrl) {
     return NextResponse.json({ error: "public_app_url_required" }, { status: 503 });
   }
