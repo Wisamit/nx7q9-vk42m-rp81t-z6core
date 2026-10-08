@@ -47,6 +47,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       caseId: microbiologyCase.id,
       specimenId: microbiologyCase.specimenId,
       performingBranchId: microbiologyCase.performingBranchId,
+      expectedCaseUpdatedAt: microbiologyCase.updatedAt,
     });
     const item = await tx.microbiologyCase.update({
       where: { id },
