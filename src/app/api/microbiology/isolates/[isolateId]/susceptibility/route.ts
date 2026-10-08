@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { canAccessBranch, canAccessDepartment, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { MicrobiologyEditRejected, requireEditableMicrobiologyCase } from "@/lib/microbiology-case-lock";
 
 function text(value: unknown, max = 1000) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -84,6 +85,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ iso
   }
 
   const susceptibilityTest = await prisma.$transaction(async tx => {
+    await requireEditableMicrobiologyCase(tx, {
+      organizationId: session.user.organizationId,
+      caseId: isolate.case.id,
+      specimenId: isolate.case.specimenId,
+      performingBranchId: isolate.case.performingBranchId,
+    });
     const created = await tx.susceptibilityTest.create({
       data: {
         isolateId,
@@ -136,7 +143,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ iso
     });
 
     return created;
+  }).catch(error => {
+    if (error instanceof MicrobiologyEditRejected) return error;
+    throw error;
   });
+  if (susceptibilityTest instanceof MicrobiologyEditRejected) {
+    return NextResponse.json({ error: susceptibilityTest.code }, { status: 409 });
+  }
 
   return NextResponse.json({ status: "ok", susceptibilityTestId: susceptibilityTest.id }, { status: 201 });
 }
