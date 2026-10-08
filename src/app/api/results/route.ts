@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { Prisma } from "../../../../generated/prisma/client";
 import { canAccessBranch, canAccessDepartment, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { numericFlag, resolveReferenceInterval } from "@/lib/result-reference";
+import { numericFlag, referencePatientSex, resolveReferenceInterval } from "@/lib/result-reference";
 import { evaluateDelta } from "@/lib/delta-check";
 import { syncDeltaReviewEvents } from "@/lib/delta-review";
 import { evaluateFormula, formulaVariables } from "@/lib/formula-engine";
@@ -302,7 +302,7 @@ export async function POST(request: Request) {
         componentId: component.componentId,
         branchId: performingBranchId,
         methodId: orderItem.test.methodId,
-        patientSex: orderItem.order.patientSexSnapshot ?? "UNKNOWN",
+        patientSex: referencePatientSex(orderItem.order.patientSexSnapshot),
         dateOfBirth: orderItem.order.patientDobSnapshot,
         recordedAgeValue: orderItem.order.patientAgeValueSnapshot,
         recordedAgeUnit: orderItem.order.patientAgeUnitSnapshot,
@@ -399,7 +399,7 @@ export async function POST(request: Request) {
         componentId: rule.targetComponentId,
         branchId: performingBranchId,
         methodId: orderItem.test.methodId,
-        patientSex: orderItem.order.patientSexSnapshot ?? "UNKNOWN",
+        patientSex: referencePatientSex(orderItem.order.patientSexSnapshot),
         dateOfBirth: orderItem.order.patientDobSnapshot,
         recordedAgeValue: orderItem.order.patientAgeValueSnapshot,
         recordedAgeUnit: orderItem.order.patientAgeUnitSnapshot,
