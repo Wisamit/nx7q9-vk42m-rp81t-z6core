@@ -134,5 +134,5 @@ export async function POST(
   if (outcome === "STALE_CLAIM") {
     return NextResponse.json({ error: "work_order_lease_changed" }, { status: 409 });
   }
-  return NextResponse.json({ status: "ok", ...outcome });
+  return NextResponse.json({ status: "ok", workOrderStatus: outcome.status, nextAttemptAt: outcome.nextAttemptAt, workOrderId: outcome.workOrderId, outboundAnalyzerMessageId: outcome.outboundAnalyzerMessageId });
 }
