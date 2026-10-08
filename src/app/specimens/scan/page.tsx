@@ -248,6 +248,8 @@ export default async function SpecimenScanPage({
       </details>}
 
       <SpecimenAliquotManager
+        currentBranchId={specimen.currentBranchId}
+        canManageStorageSettings={permissions.has("settings.manage")}
         specimenId={specimen.id}
         status={specimen.status}
         originalVolume={specimen.volume?.toFixed(3) || null}
