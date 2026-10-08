@@ -25,7 +25,7 @@ FROM `organizations` o;
 
 INSERT INTO `patient_identifier_schemes`
 (`id`,`organization_id`,`code`,`name_en`,`name_ar`,`identifier_type`,`requires_issuing_country`,`status`,`created_at`,`updated_at`)
-SELECT UUID(), o.id, 'PASSPORT', 'Passport', 'جواز السفر', 'PASSPORT', true, 'ACTIVE', CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3)
+SELECT UUID(), o.id, 'PASSPORT', 'Passport', 'جواز السفر', 'PASSPORT', false, 'ACTIVE', CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3)
 FROM `organizations` o;
 
 INSERT INTO `patient_identifier_schemes`
