@@ -3295,6 +3295,7 @@ model Specimen {
   remainingVolume     Decimal?       @map("remaining_volume") @db.Decimal(10, 3)
   remainingVolumeUnit String?        @map("remaining_volume_unit") @db.VarChar(30)
   storageLocation     String?        @map("storage_location") @db.VarChar(200)
+  storageLocationId   String?        @map("storage_location_id") @db.Char(36)
   preanalyticalVersion Int           @default(0) @map("preanalytical_version")
   notes               String?        @db.Text
   createdAt           DateTime       @default(now()) @map("created_at") @db.DateTime(3)
@@ -3309,6 +3310,7 @@ model Specimen {
   container        Container?    @relation(fields: [containerId], references: [id], onDelete: Restrict)
   collectionBranch Branch?       @relation("SpecimenCollectionBranch", fields: [collectionBranchId], references: [id], onDelete: Restrict)
   currentBranch    Branch?       @relation("SpecimenCurrentBranch", fields: [currentBranchId], references: [id], onDelete: Restrict)
+  registeredStorageLocation SpecimenStorageLocation? @relation(fields: [storageLocationId], references: [id], onDelete: Restrict)
   collectedBy      User?         @relation("SpecimenCollector", fields: [collectedByUserId], references: [id], onDelete: Restrict)
   receivedBy       User?         @relation("SpecimenReceiver", fields: [receivedByUserId], references: [id], onDelete: Restrict)
   rejectedBy       User?         @relation("SpecimenRejector", fields: [rejectedByUserId], references: [id], onDelete: Restrict)
@@ -3331,6 +3333,7 @@ model Specimen {
   @@unique([orderId, sequenceNumber])
   @@index([orderId, status])
   @@index([currentBranchId, status])
+  @@index([storageLocationId, currentBranchId])
   @@index([collectionBranchId, collectedAt])
   @@index([specimenTypeId, status])
   @@map("specimens")
@@ -3453,6 +3456,7 @@ model SpecimenStorageLocation {
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   branch       Branch       @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  specimens    Specimen[]
 
   @@unique([branchId, path])
   @@index([organizationId, branchId, status])
