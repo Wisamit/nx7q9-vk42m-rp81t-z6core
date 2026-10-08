@@ -8,7 +8,11 @@ import { selectValidationPolicy, snapshotValidationPolicy, stageAfterTechnicalRe
 import { Prisma } from "../../../../../../generated/prisma/client";
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const body = await request.json().catch(() => ({})) as {
+  const rawBody = await request.json().catch(() => null);
+  if (!rawBody || typeof rawBody !== "object" || Array.isArray(rawBody)) {
+    return NextResponse.json({ error: "invalid_request" }, { status: 400 });
+  }
+  const body = rawBody as {
     confirmDeltaWarnings?: boolean;
     confirmQcWarnings?: boolean;
     notes?: string;
