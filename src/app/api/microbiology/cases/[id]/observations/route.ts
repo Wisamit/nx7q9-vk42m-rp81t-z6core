@@ -41,6 +41,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       caseId: microbiologyCase.id,
       specimenId: microbiologyCase.specimenId,
       performingBranchId: microbiologyCase.performingBranchId,
+      expectedCaseUpdatedAt: microbiologyCase.updatedAt,
     });
     const created = await tx.cultureObservation.create({
       data: {
@@ -49,6 +50,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         observationText,
         enteredByUserId: session.user.id,
       },
+    });
+    await tx.microbiologyCase.update({
+      where: { id: microbiologyCase.id },
+      data: { updatedAt: new Date(Math.max(Date.now(), microbiologyCase.updatedAt.getTime() + 1)) },
     });
     await tx.auditEvent.create({
       data: {
