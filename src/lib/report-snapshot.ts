@@ -185,8 +185,13 @@ export async function buildDiagnosticReportSnapshot(db: Prisma.TransactionClient
         patientNumber: order.patient.patientNumber,
         fullNameEn: order.patient.fullNameEn,
         fullNameAr: order.patient.fullNameAr,
-        dateOfBirth: order.patient.dateOfBirth?.toISOString().slice(0,10) || null,
-        sexAtBirth: order.patient.sexAtBirth,
+        // Clinical reference interpretation is based on demographics frozen
+        // at order registration, never on edits to the central patient master.
+        dateOfBirth: order.patientDobSnapshot?.toISOString().slice(0, 10) || null,
+        sexAtBirth: order.patientSexSnapshot || "UNKNOWN",
+        ageValueAtOrder: order.patientAgeValueSnapshot,
+        ageUnitAtOrder: order.patientAgeUnitSnapshot,
+        ageRecordedAtOrder: order.patientAgeRecordedAtSnapshot?.toISOString() || null,
       },
       order: {
         id: order.id,
