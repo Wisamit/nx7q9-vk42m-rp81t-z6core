@@ -82,12 +82,11 @@ export async function POST(request: Request) {
           referrerId: scopeType === "REFERRER" ? referrerId : null,
           clientId: scopeType === "CLIENT" ? clientId : null,
           contractId: scopeType === "CONTRACT" ? contractId : null,
-          ...(effectiveTo ? { effectiveFrom: { lte: effectiveTo } } : {}),
-          OR: [{ effectiveTo: null }, { effectiveTo: { gte: effectiveFrom } }],
+          effectiveFrom,
         },
         select: { id: true, code: true },
       });
-      if (overlapping) throw new Error("PRICE_LIST_SCOPE_OVERLAP");
+      if (overlapping) throw new Error("PRICE_LIST_PRECEDENCE_CONFLICT");
 
       const priceList = await tx.priceList.create({
         data: {
@@ -124,8 +123,8 @@ export async function POST(request: Request) {
     });
     return NextResponse.json({ status: "ok", priceList: created }, { status: 201 });
   } catch (error) {
-    if (error instanceof Error && error.message === "PRICE_LIST_SCOPE_OVERLAP") {
-      return NextResponse.json({ error: "price_list_scope_overlap" }, { status: 409 });
+    if (error instanceof Error && error.message === "PRICE_LIST_PRECEDENCE_CONFLICT") {
+      return NextResponse.json({ error: "price_list_precedence_conflict" }, { status: 409 });
     }
     if (error && typeof error === "object" && "code" in error && error.code === "P2002") {
       return NextResponse.json({ error: "price_list_code_already_exists" }, { status: 409 });
