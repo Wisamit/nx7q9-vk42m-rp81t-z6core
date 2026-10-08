@@ -41,7 +41,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         currentBranchId: specimen.currentBranchId,
         preanalyticalVersion: specimen.preanalyticalVersion,
       },
-      data: { status: "DISPOSED", preanalyticalVersion: { increment: 1 } },
+      data: { status: "DISPOSED", storageLocation: null, storageLocationId: null, preanalyticalVersion: { increment: 1 } },
     });
     if (changed.count !== 1) return false;
     const remainingChildren = await tx.specimen.count({
@@ -61,7 +61,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         actorUserId: session.user.id,
         fromStatus: "REJECTED",
         toStatus: "DISPOSED",
-        details: { reason, previousStorageLocation: specimen.storageLocation },
+        details: { reason, previousStorageLocation: specimen.storageLocation, previousStorageLocationId: specimen.storageLocationId },
       },
     });
     await tx.auditEvent.create({
@@ -73,8 +73,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         entityType: "Specimen",
         entityId: specimen.id,
         reason,
-        oldValues: { status: "REJECTED", storageLocation: specimen.storageLocation },
-        newValues: { status: "DISPOSED", barcode: specimen.barcode },
+        oldValues: { status: "REJECTED", storageLocation: specimen.storageLocation, storageLocationId: specimen.storageLocationId },
+        newValues: { status: "DISPOSED", barcode: specimen.barcode, storageLocation: null, storageLocationId: null },
         ipAddress: ctx.ipAddress,
         userAgent: ctx.userAgent,
       },
