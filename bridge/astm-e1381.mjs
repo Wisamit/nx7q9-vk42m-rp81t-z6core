@@ -44,6 +44,7 @@ export function decodeE1381Message(frames,{firstFrameNumber=1,maxBytes=1000000}=
   // Binary/proprietary character encodings must be handled by an approved
   // vendor decoder, never by lossy U+FFFD replacement.
   const raw=new TextDecoder("utf-8",{fatal:true}).decode(buffer);
-  if(!raw.startsWith("H|") || !raw.trimEnd().endsWith("L|1")) invalid("ASTM_MESSAGE_RECORD_SEQUENCE_INVALID");
+  const finalRecord=raw.replace(/\r$/,"").split("\r").at(-1) || "";
+  if(!raw.startsWith("H|") || !finalRecord.startsWith("L|")) invalid("ASTM_MESSAGE_RECORD_SEQUENCE_INVALID");
   return raw;
 }
