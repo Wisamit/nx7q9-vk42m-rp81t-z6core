@@ -29,8 +29,12 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
       // A receipt may contain multiple rows for one PO item. Aggregate all
       // quantities before writing any stock to avoid stale receivedQty reuse.
       const increments = new Map<string, Prisma.Decimal>();
+      const expectedItems = new Map<string, string>();
       for (const line of receipt.items) {
         if (line.purchaseOrderItemId) {
+          if (expectedItems.has(line.purchaseOrderItemId)
+            && expectedItems.get(line.purchaseOrderItemId) !== line.itemId) throw new Error("PO_ITEM_MISMATCH");
+          expectedItems.set(line.purchaseOrderItemId, line.itemId);
           increments.set(line.purchaseOrderItemId,
             (increments.get(line.purchaseOrderItemId) || new Prisma.Decimal(0)).add(line.quantity));
         }
@@ -44,6 +48,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
         });
         if (!currentLine || !receipt.purchaseOrderId ||
           currentLine.purchaseOrderId !== receipt.purchaseOrderId ||
+          currentLine.itemId !== expectedItems.get(poItemId) ||
           currentLine.receivedQty.add(increase).gt(currentLine.orderedQty)) {
           throw new Error("PO_OVER_RECEIPT");
         }
