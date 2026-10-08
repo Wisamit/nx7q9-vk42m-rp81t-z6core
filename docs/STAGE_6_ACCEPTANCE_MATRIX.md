@@ -76,3 +76,10 @@ Keep `stage-6-specimen-operations-completion` and PR #124 in Draft; no merge, no
 
 - Manifest item receipt now enforces organization and the manifest's source branch in the optimistic `IN_TRANSIT` specimen claim, rather than copying an untrusted/stale specimen current branch into the predicate. This rejects inconsistent custody that could otherwise be reassigned to the destination.
 - Added a source regression. Final CI on exact HEAD, authenticated multi-branch acceptance, clinically approved hold/retention policy and hardware validation remain required.
+
+## Release readiness versus deferred operator UAT (owner direction)
+
+- Owner defers **all manual UI and connected hardware testing until the full project is built**. Do not block individual Stage 6 *engineering-complete / deployment-candidate* status solely on immediate manual UI or printer/scanner testing; keep them explicitly **DEFERRED TO FULL-PROJECT UAT**, not passed.
+- The Stage 6 deployment-candidate gate still requires all automated checks, MariaDB migrations and integration fixtures, access control and failure-mode safety checks on the exact HEAD, and a documented rollback/backup rehearsal plan. Any clinical quarantine and retention/disposal operations lacking laboratory-approved policy must remain fail-closed, with no invented times, approvals or implicit result release.
+- Deferring UAT does not establish clinical operational go-live approval. Production activation of clinically sensitive actions requires applicable policy authorization and the later system-wide UAT.
+- The source acceptance matrix rows describing operator hardware acceptance must be read as **deferred verification**, not missing implementation to be filled by claiming tests passed.
