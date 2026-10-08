@@ -18,6 +18,8 @@ import {
   type ReportOutboundRecipientType,
 } from "@/lib/report-outbound";
 
+class OutboundReportVersionChanged extends Error {}
+
 function recipientTypeEnum(value: ReportOutboundRecipientType) {
   if (value === "PATIENT") return NotificationRecipientType.PATIENT;
   if (value === "REFERRER") return NotificationRecipientType.REFERRER;
@@ -184,6 +186,23 @@ export async function POST(request: Request, { params }: { params: Promise<{ ver
   const messageBody = renderReportTemplate(bodyTemplate || fallback.body, messageContext);
 
   const queued = await prisma.$transaction(async tx => {
+    // The report parent is locked by the clinical release workflow before
+    // allocating a new version. Lock it here too so a concurrent amendment
+    // cannot supersede the report between preflight and notification queue.
+    const lockedReport = await tx.$queryRaw<Array<{ id: string }>>`
+      SELECT id FROM diagnostic_reports
+      WHERE id = ${version.reportId} AND organization_id = ${session.user.organizationId}
+      FOR UPDATE
+    `;
+    if (lockedReport.length !== 1) throw new OutboundReportVersionChanged();
+    const current = await tx.diagnosticReportVersion.findFirst({
+      where: { reportId: version.reportId },
+      orderBy: { version: "desc" },
+      select: { id: true, status: true },
+    });
+    if (!current || current.id !== version.id || current.status === "RETRACTED") {
+      throw new OutboundReportVersionChanged();
+    }
     const reportDelivery = await tx.reportDeliveryEvent.create({
       data: {
         reportVersionId: version.id,
@@ -264,7 +283,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ ver
     });
 
     return { reportDeliveryId: reportDelivery.id, notificationId: notification.id };
+  }).catch(error => {
+    if (error instanceof OutboundReportVersionChanged) return null;
+    throw error;
   });
+  if (!queued) {
+    return NextResponse.json({ error: "report_version_changed_retry" }, { status: 409 });
+  }
 
   return NextResponse.json({
     status: "queued",
