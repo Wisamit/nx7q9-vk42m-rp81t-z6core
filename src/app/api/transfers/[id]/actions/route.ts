@@ -74,6 +74,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           },
           data: {
             status: "IN_TRANSIT",
+            storageLocation: null,
+            storageLocationId: null,
             preanalyticalVersion: { increment: 1 },
           },
         });
@@ -91,6 +93,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
               manifestNumber: manifest.manifestNumber,
               sourceBranchId: manifest.sourceBranchId,
               destinationBranchId: manifest.destinationBranchId,
+              priorStorageLocation: item.specimen.storageLocation,
+              priorStorageLocationId: item.specimen.storageLocationId,
             },
           },
         });
@@ -173,6 +177,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       data: {
         status: "RECEIVED",
         currentBranchId: manifest.destinationBranchId,
+        storageLocation: null,
+        storageLocationId: null,
         receivedByUserId: session.user.id,
         receivedAt,
         preanalyticalVersion: { increment: 1 },
