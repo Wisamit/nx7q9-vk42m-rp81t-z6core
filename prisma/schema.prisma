@@ -2270,6 +2270,10 @@ model Patient {
   fullNameAr      String?      @map("full_name_ar") @db.VarChar(220)
   normalizedName  String       @map("normalized_name") @db.VarChar(220)
   dateOfBirth     DateTime?    @map("date_of_birth") @db.Date
+  recordedAgeValue Int? @map("recorded_age_value")
+  recordedAgeUnit  String? @map("recorded_age_unit") @db.VarChar(8)
+  recordedAgeAt    DateTime? @map("recorded_age_at") @db.DateTime(3)
+  address          String? @db.Text
   sexAtBirth      PatientSex   @default(UNKNOWN) @map("sex_at_birth")
   phone           String?      @db.VarChar(50)
   normalizedPhone String?      @map("normalized_phone") @db.VarChar(50)
