@@ -63,3 +63,14 @@ test("device bridge is separate from web server, persists MLLP before ACK, and f
   assert.ok(parser.includes("ASTM_APPROVED_PROFILE_REQUIRED"));
   assert.ok(parser.includes("HL7_BARCODE_PROFILE_REQUIRED"));
 });
+
+test("manual analyzer message replay claims exact failed revision before emitting audit", () => {
+  const route=source("../src/app/api/analyzers/messages/[id]/replay/route.ts");
+  const tx=route.indexOf("const updated = await prisma.$transaction");
+  const claim=route.indexOf("tx.analyzerMessage.updateMany",tx);
+  const audit=route.indexOf("tx.auditEvent.create",claim);
+  assert.ok(tx>=0 && claim>tx && audit>claim);
+  assert.ok(route.slice(claim,audit).includes('status: { in: ["ERROR", "DEAD_LETTER"] }'));
+  assert.ok(route.slice(claim,audit).includes("updatedAt: message.updatedAt"));
+  assert.ok(route.includes('error: "analyzer_message_state_changed"'));
+});
