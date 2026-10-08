@@ -83,3 +83,10 @@ Scope source: `02_MASTER_SCOPE.md` sections 20–28, with related specimen secur
 - Added `tests/specimen-storage-mariadb.integration.test.ts`, executed against the CI MariaDB 10.11 database after migrations.
 - The test creates isolated organization, branch and storage master fixtures, acquires a real `SELECT ... FOR UPDATE` in one connection and verifies a second connection's deactivation UPDATE times out until the first transaction releases the lock. After release, the deactivation succeeds.
 - This test verifies the database's location-row serialization primitive, **not** the entire HTTP relocation/deactivation race with live specimen fixtures. End-to-end concurrent API tests, physical occupancy reconciliation, transfer conflicts and quarantine/retention acceptance remain open.
+
+
+## Concurrency regression extension — reverse locking order
+
+- CI #649 passed on `f660364e23cefaf632070f50c25c3cd079e9b82a`.
+- Extended the MariaDB test to exercise the **inverse** race: an uncommitted change of the master location row blocks `SELECT ... FOR UPDATE` by another connection, and a location left INACTIVE cannot be assigned by the guarded active-only lock query.
+- This is actual two-connection InnoDB evidence. It still does **not** substitute for authenticated HTTP/API concurrency tests with fully constructed specimens, transfer manifests and historical storage reconciliations. Those remain explicit acceptance blockers.
