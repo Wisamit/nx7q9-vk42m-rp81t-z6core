@@ -64,3 +64,26 @@ test("both medical approval and return lock source specimen and claim exact stat
   const approveReview=route.indexOf("await tx.resultValidationReview.create",approveClaim);
   assert.ok(approveTx>=0 && approveClaim>approveTx && approveReview>approveClaim);
 });
+
+test("manual result changes guard active lineage, specimen custody and exact draft revision before replacing values", () => {
+  const route = source("../src/app/api/results/route.ts");
+  const tx = route.indexOf("const saved = await prisma.$transaction");
+  const lock = route.indexOf("FOR UPDATE", tx);
+  const lineage = route.indexOf("const activeLineage = await tx.specimenOrderItem.count",lock);
+  const claim = route.indexOf("await tx.laboratoryResult.updateMany",lineage);
+  const values = route.indexOf("await tx.laboratoryResultValue.deleteMany",claim);
+  assert.ok(tx>=0 && lock>tx && lineage>lock && claim>lineage && values>claim);
+  const guarded=route.slice(claim,values);
+  assert.ok(guarded.includes("updatedAt: existing.updatedAt"));
+  assert.ok(guarded.includes('status: { in: ["DRAFT", "ENTERED"] }'));
+  assert.ok(guarded.includes('source: "MANUAL"'));
+  assert.ok(guarded.includes('throw new Error("RESULT_STATE_CHANGED")'));
+  assert.ok(route.includes('error: "result_concurrently_updated_refresh"'));
+});
+
+test("result operator gets bilingual guidance for concurrent saves and reviews", () => {
+  const ui = source("../src/components/result-entry-form.tsx");
+  assert.ok(ui.includes("result_concurrently_updated_refresh"));
+  assert.ok(ui.includes("result_state_changed_retry"));
+  assert.ok(ui.includes("تغيرت النتيجة أو حالة العينة"));
+});
