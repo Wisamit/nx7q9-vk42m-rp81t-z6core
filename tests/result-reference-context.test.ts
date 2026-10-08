@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   referenceIntervalMatchesContext,
+  referencePatientSex,
   referenceIntervalSpecificityScore,
   selectBestReferenceInterval,
   type ReferenceIntervalCandidate,
@@ -140,4 +141,12 @@ test("age at order time remains stable when result entry happens a day later", (
   };
   assert.equal(referenceIntervalMatchesContext(intervalForInfant, context), true);
   assert.equal(referenceIntervalMatchesContext(intervalForInfant, { ...context, ageAsOf: null }), false);
+});
+
+test("unrecognized legacy order sex snapshots fail closed", () => {
+  assert.equal(referencePatientSex("MALE"), "MALE");
+  assert.equal(referencePatientSex("FEMALE"), "FEMALE");
+  assert.equal(referencePatientSex(null), "UNKNOWN");
+  assert.equal(referencePatientSex("UNEXPECTED"), "UNKNOWN");
+  assert.equal(referenceIntervalMatchesContext(interval({ sex: "FEMALE" }), { ...baseContext, patientSex: referencePatientSex(null) }), false);
 });
