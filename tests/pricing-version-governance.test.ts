@@ -82,3 +82,30 @@ test("effective revision detection exposes ambiguity instead of hiding it", () =
 
   assert.deepEqual(matches.map(item => item.id), ["R1", "R2"]);
 });
+
+
+import { comparePricingCandidates, type PricingScopeType } from "../src/lib/pricing-policy.ts";
+
+function pricingCandidate(scopeType: PricingScopeType, priority = 0, effectiveFrom = "2026-01-01T00:00:00.000Z") {
+  return { scopeType, priority, effectiveFrom: new Date(effectiveFrom) };
+}
+
+test("pricing precedence keeps contract above referrer and referrer above client", () => {
+  const rows = [
+    pricingCandidate("ORGANIZATION"),
+    pricingCandidate("BRANCH"),
+    pricingCandidate("SOURCE"),
+    pricingCandidate("CLIENT"),
+    pricingCandidate("REFERRER"),
+    pricingCandidate("CONTRACT"),
+  ].sort(comparePricingCandidates);
+
+  assert.deepEqual(rows.map(row => row.scopeType), [
+    "CONTRACT",
+    "REFERRER",
+    "CLIENT",
+    "SOURCE",
+    "BRANCH",
+    "ORGANIZATION",
+  ]);
+});
