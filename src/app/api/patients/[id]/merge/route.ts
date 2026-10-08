@@ -3,6 +3,7 @@ import { Prisma } from "../../../../../../generated/prisma/client";
 import { requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { patientMergeEligibility } from "@/lib/patient-merge";
+import { patientDuplicateEvidence } from "@/lib/patient-duplicate-review";
 
 function text(value: unknown, max = 1000) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -35,11 +36,33 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           include: {
             portalAccount: { select: { id: true } },
             mergedFrom: { select: { id: true } },
+            identifiers: {
+              where: { status: "ACTIVE" },
+              select: {
+                identifierType: true,
+                value: true,
+                issuingCountry: true,
+                isPrimary: true,
+              },
+              orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
+            },
           },
         }),
         tx.patient.findFirst({
           where: { id: targetPatientId, organizationId: session.user.organizationId },
-          include: { portalAccount: { select: { id: true } } },
+          include: {
+            portalAccount: { select: { id: true } },
+            identifiers: {
+              where: { status: "ACTIVE" },
+              select: {
+                identifierType: true,
+                value: true,
+                issuingCountry: true,
+                isPrimary: true,
+              },
+              orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
+            },
+          },
         }),
       ]);
 
@@ -48,6 +71,25 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       if (!eligibility.ok) throw new PatientMergeError(eligibility.error);
 
       const mergedAt = new Date();
+      const identitySnapshot = (patient: typeof source) => ({
+        patientNumber: patient.patientNumber,
+        fullNameEn: patient.fullNameEn,
+        fullNameAr: patient.fullNameAr,
+        dateOfBirth: patient.dateOfBirth?.toISOString().slice(0, 10) || null,
+        sexAtBirth: patient.sexAtBirth,
+        phone: patient.phone,
+        whatsapp: patient.whatsapp,
+        email: patient.email,
+        nationalityCode: patient.nationalityCode,
+        addressEn: patient.addressEn,
+        addressAr: patient.addressAr,
+        creationBranchId: patient.creationBranchId,
+        identifiers: patient.identifiers,
+      });
+      const sourceIdentitySnapshot = identitySnapshot(source);
+      const targetIdentitySnapshot = identitySnapshot(target);
+      const duplicateEvidenceSnapshot = patientDuplicateEvidence(source, target);
+
       const claimed = await tx.patient.updateMany({
         where: {
           id: source.id,
@@ -90,6 +132,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           targetPatientId: target.id,
           sourcePatientNumberSnapshot: source.patientNumber,
           targetPatientNumberSnapshot: target.patientNumber,
+          sourceIdentitySnapshot,
+          targetIdentitySnapshot,
+          duplicateEvidenceSnapshot,
           reason,
           mergedByUserId: session.user.id,
           mergedAt,
@@ -117,6 +162,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
               patientMergeEventId: event.id,
               reparentedAliasCount: reparentedAliases.count,
               portalAccountMoved,
+              duplicateEvidenceSnapshot,
             },
             reason,
             ipAddress: ctx.ipAddress,
