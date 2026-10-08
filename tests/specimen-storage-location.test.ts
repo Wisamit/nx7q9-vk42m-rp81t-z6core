@@ -21,3 +21,16 @@ test("structured storage location is persisted and audited with branch-scoped CA
   assert.ok(route.includes("currentBranchId: specimen.currentBranchId"));
   for (const level of ["zone", "unit", "rack", "slot"]) assert.ok(ui.includes('name="' + level + '"'));
 });
+
+test("storage positions are branch-scoped, registered and selected from the master", () => {
+  const api = readFileSync(new URL("../src/app/api/settings/specimen-storage-locations/route.ts", import.meta.url), "utf8");
+  const move = readFileSync(new URL("../src/app/api/specimens/[id]/storage-location/route.ts", import.meta.url), "utf8");
+  const ui = readFileSync(new URL("../src/components/specimen-aliquot-manager.tsx", import.meta.url), "utf8");
+  assert.ok(api.includes('requirePermission("settings.manage")'));
+  assert.ok(api.includes("canAccessBranch(session, branchId)"));
+  assert.ok(api.includes("SPECIMEN_STORAGE_LOCATION_CREATED"));
+  assert.ok(move.includes("prisma.specimenStorageLocation.findUnique"));
+  assert.ok(move.includes('registered.status !== "ACTIVE"'));
+  assert.ok(ui.includes("registerStorage"));
+  assert.ok(ui.includes("selectedLocation"));
+});
