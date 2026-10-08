@@ -95,6 +95,16 @@ test("MariaDB serializes a storage deactivation behind a relocation location loc
       "SELECT COUNT(*) AS occupied FROM specimens WHERE storage_location_id = ? AND status <> 'DISPOSED'",
       [locationId]);
     assert.equal(Number(quarantinedOccupants[0]?.occupied),1);
+    // Execute the exact row-lock shape used by the result release gate.
+    const [releaseGuard] = await setup.execute<mysql.RowDataPacket[]>(
+      `SELECT DISTINCT s.id, s.status FROM specimens s
+       LEFT JOIN specimen_order_items soi ON soi.specimen_id = s.id
+       WHERE s.organization_id = ?
+         AND (s.id = ? OR (soi.order_item_id = ? AND soi.status = 'ACTIVE'))
+       ORDER BY s.id FOR UPDATE`,
+      [organizationId,specimenId,randomUUID()]);
+    assert.equal(releaseGuard.length,1);
+    assert.equal(releaseGuard[0]?.status,"QUARANTINED");
     await setup.rollback();
 
     await relocating.beginTransaction();
