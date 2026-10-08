@@ -169,7 +169,7 @@ export function SpecimenActions({
       {canCollect && status === "PLANNED" && !requirementsFinalized && <span className="form-error">{tr("Order-time requirement snapshot missing", "لقطة متطلبات وقت الطلب غير موجودة")}</span>}
       {canCollect && status === "PLANNED" && requirementsFinalized && specimenTypeConfigured && <Link className="primary-button" href={`/phlebotomy?specimen=${specimenId}`}>{tr("Open Phlebotomy", "فتح شاشة السحب")}</Link>}
       {canReceive && ["COLLECTED","IN_TRANSIT"].includes(status) && <button type="button" className="primary-button" onClick={() => setMode("RECEIVE")}>{tr("Receive", "استلام")}</button>}
-      {canReject && ["COLLECTED","RECEIVED"].includes(status) && <button type="button" className="danger-button" onClick={() => setMode("REJECT")}>{tr("Reject", "رفض")}</button>}
+      {canReject && ["COLLECTED","RECEIVED","QUARANTINED"].includes(status) && <button type="button" className="danger-button" onClick={() => setMode("REJECT")}>{tr("Reject", "رفض")}</button>}
       {canReject && status === "REJECTED" && <button type="button" className="danger-button" onClick={() => setMode("DISPOSE")}>{tr("Dispose rejected specimen", "التخلص من العينة المرفوضة")}</button>}
     </div>
 
