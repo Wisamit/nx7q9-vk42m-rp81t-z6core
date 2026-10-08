@@ -122,3 +122,9 @@ Scope source: `02_MASTER_SCOPE.md` sections 20–28, with related specimen secur
 - Receiving a specimen now includes the organization and expected **current branch** in its optimistic `updateMany` predicate, alongside status and `preanalyticalVersion`. An intervening branch/custody change cannot be accepted solely on a stale read.
 - Added a source regression for the guarded atomic claim before reception-assessment creation.
 - This protects a specific reception transition but does not replace real concurrent authenticated HTTP integration, barcode scanner acceptance, quarantine governance, or retention/disposal approvals.
+
+## Stage 6 closure gate — evidence-based status
+
+- Created `docs/STAGE_6_ACCEPTANCE_MATRIX.md` with 12 explicit acceptance scenarios, an engineering-complete vs clinical/operational-acceptance distinction, and release guardrails.
+- Corrected patient recorded-age DAY truncation at API create/edit (`text(..., 5)`); updated its regression so legitimate five-digit values cannot be silently shortened. No retroactive historical order snapshot modification.
+- **No claim that Stage 6 is complete**: controlled clinical quarantine, approved retention/authorized disposal, actual scanner/printer and bilingual operator signoff, final CI, and full two-branch API concurrency remain unresolved.
