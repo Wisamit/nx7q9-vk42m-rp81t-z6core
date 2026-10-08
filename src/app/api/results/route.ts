@@ -494,6 +494,10 @@ export async function POST(request: Request) {
       || lockedSpecimen[0].current_branch_id !== performingBranchId) {
       throw new Error("SPECIMEN_PREANALYTICAL_STATE_CHANGED");
     }
+    const activeLineage = await tx.specimenOrderItem.count({
+      where: { specimenId: specimen.id, orderItemId, status: "ACTIVE" },
+    });
+    if (activeLineage !== 1) throw new Error("SPECIMEN_PREANALYTICAL_STATE_CHANGED");
 
     const result = existing
       ? await (async () => {
