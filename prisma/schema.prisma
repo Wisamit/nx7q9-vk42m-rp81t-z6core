@@ -2583,6 +2583,11 @@ model LabOrder {
   accessionNumber  String        @map("accession_number") @db.VarChar(50)
   orderingBranchId String        @map("ordering_branch_id") @db.Char(36)
   patientId        String        @map("patient_id") @db.Char(36)
+  patientSexSnapshot String? @map("patient_sex_snapshot") @db.VarChar(10)
+  patientDobSnapshot DateTime? @map("patient_dob_snapshot") @db.Date
+  patientAgeValueSnapshot Int? @map("patient_age_value_snapshot")
+  patientAgeUnitSnapshot String? @map("patient_age_unit_snapshot") @db.VarChar(8)
+  patientAgeRecordedAtSnapshot DateTime? @map("patient_age_recorded_at_snapshot") @db.DateTime(3)
   referrerId       String?       @map("referrer_id") @db.Char(36)
   clientId         String?       @map("client_id") @db.Char(36)
   sourceId         String?       @map("source_id") @db.Char(36)
