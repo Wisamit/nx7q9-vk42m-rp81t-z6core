@@ -134,6 +134,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ ord
         analyzerId: analyzer.id,
         testId: item.testId,
         status: "ACTIVE",
+        approvalStatus: "APPROVED",
         effectiveFrom: { lte: new Date() },
         OR: [{ effectiveTo: null }, { effectiveTo: { gte: new Date() } }],
       },
