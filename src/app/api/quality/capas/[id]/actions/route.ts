@@ -40,11 +40,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       `;
       if (locked.length !== 1) throw new Error("CAPA_STATE_CHANGED");
       const current = await tx.capa.findUniqueOrThrow({ where: { id } });
-      if (["CLOSED", "CANCELLED", "EFFECTIVENESS_REVIEW"].includes(current.status)) {
+      if (["CLOSED", "CANCELLED"].includes(current.status)) {
         throw new Error("CAPA_LOCKED");
       }
       const created = await tx.capaAction.create({ data: { capaId: id, actionType, description, ownerUserId, dueDate } });
-      if (current.status === "OPEN" || current.status === "DRAFT") {
+      if (["OPEN", "DRAFT", "EFFECTIVENESS_REVIEW"].includes(current.status)) {
+        // An ineffective review can be followed by new corrective work, retaining the previous review in audit.
         await tx.capa.update({ where: { id }, data: { status: "IN_PROGRESS", effectiveness: "UNKNOWN", effectivenessReview: null, effectivenessReviewedAt: null, effectivenessReviewedByUserId: null } });
       }
     await tx.auditEvent.create({
@@ -55,7 +56,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         action: "CAPA_ACTION_CREATED",
         entityType: "CapaAction",
         entityId: created.id,
-        newValues: { capaId: id, actionType, ownerUserId, dueDate },
+        oldValues: { capaStatus: current.status, priorEffectiveness: current.effectiveness, priorReview: current.effectivenessReview },
+        newValues: { capaId: id, actionType, ownerUserId, dueDate, capaStatus: "IN_PROGRESS" },
         ipAddress: ctx.ipAddress,
         userAgent: ctx.userAgent,
       },
