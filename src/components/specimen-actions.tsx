@@ -51,7 +51,7 @@ export function SpecimenActions({
 }) {
   const router = useRouter();
   const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
-  const [mode, setMode] = useState<"RECEIVE" | "REJECT" | null>(null);
+  const [mode, setMode] = useState<"RECEIVE" | "REJECT" | "DISPOSE" | null>(null);
   const [rejectionScope, setRejectionScope] = useState<"WHOLE_SPECIMEN" | "SELECTED_TESTS">("WHOLE_SPECIMEN");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -88,6 +88,9 @@ export function SpecimenActions({
       affected_tests_microbiology_work_started: tr("A microbiology case already exists for an affected test.", "توجد حالة أحياء دقيقة بالفعل لأحد الفحوصات المتأثرة."),
       affected_tests_sendout_active: tr("An active external-laboratory referral exists for an affected test.", "توجد إحالة فعالة لمختبر خارجي لأحد الفحوصات المتأثرة."),
       affected_tests_analyzer_work_started: tr("Analyzer observations are already staged or imported for an affected test.", "تم تجهيز أو استيراد قراءات جهاز بالفعل لأحد الفحوصات المتأثرة."),
+      disposal_reason_required: tr("A documented disposal reason is required.", "سبب التخلص من العينة مطلوب."),
+      only_rejected_specimens_disposable: tr("Only rejected specimens can be disposed of in this workflow.", "يسمح مسار التخلص هذا بالعينات المرفوضة فقط."),
+      specimen_state_changed_or_active_children: tr("Specimen changed or has unresolved active aliquots.", "تغيرت حالة العينة أو توجد أجزاء مشتقة فعالة لم تُعالج."),
       specimen_preanalytical_state_changed: tr("Specimen state changed concurrently. Refresh and review before retrying.", "تغيرت حالة العينة بالتزامن. حدّث الصفحة وراجعها قبل إعادة المحاولة."),
       completed_order_requires_result_amendment_workflow: tr("The order is already completed. Use the controlled result/amendment workflow.", "الطلب مكتمل بالفعل. استخدم مسار النتائج/التعديل المنضبط."),
       order_cancelled: tr("The order is cancelled.", "الطلب ملغى."),
@@ -104,11 +107,12 @@ export function SpecimenActions({
     setMessage("");
 
     const isReject = mode === "REJECT";
-    const endpoint = isReject
+    const isDispose = mode === "DISPOSE";
+    const endpoint = isDispose ? `/api/specimens/${specimenId}/dispose` : isReject
       ? `/api/specimens/${specimenId}/rejections`
       : `/api/specimens/${specimenId}/actions`;
 
-    const payload = isReject ? {
+    const payload = isDispose ? { reason: form.get("disposalReason") } : isReject ? {
       branchId: form.get("branchId"),
       rejectionReasonId: form.get("rejectionReasonId"),
       reasonDetails: form.get("reasonDetails"),
@@ -134,7 +138,9 @@ export function SpecimenActions({
     const body = await response.json().catch(() => ({}));
 
     if (response.ok) {
-      if (isReject) {
+      if (isDispose) {
+        setMessage(tr("Rejected specimen disposed and custody audit recorded.", "تم التخلص من العينة المرفوضة وتسجيل سلسلة الحيازة."));
+      } else if (isReject) {
         if (body.replacementType === "PATIENT_RECOLLECTION") {
           setMessage(`${tr(
             rejectionScope === "WHOLE_SPECIMEN" ? "Specimen rejected. Recollection barcode created" : "Selected tests rejected. Targeted recollection barcode created",
@@ -164,6 +170,7 @@ export function SpecimenActions({
       {canCollect && status === "PLANNED" && requirementsFinalized && specimenTypeConfigured && <Link className="primary-button" href={`/phlebotomy?specimen=${specimenId}`}>{tr("Open Phlebotomy", "فتح شاشة السحب")}</Link>}
       {canReceive && ["COLLECTED","IN_TRANSIT"].includes(status) && <button type="button" className="primary-button" onClick={() => setMode("RECEIVE")}>{tr("Receive", "استلام")}</button>}
       {canReject && ["COLLECTED","RECEIVED"].includes(status) && <button type="button" className="danger-button" onClick={() => setMode("REJECT")}>{tr("Reject", "رفض")}</button>}
+      {canReject && status === "REJECTED" && <button type="button" className="danger-button" onClick={() => setMode("DISPOSE")}>{tr("Dispose rejected specimen", "التخلص من العينة المرفوضة")}</button>}
     </div>
 
     {canCollect && status === "PLANNED" && !requirementsFinalized && <p className="form-error">{tr(
@@ -212,6 +219,8 @@ export function SpecimenActions({
         <label className="form-span">{tr("Reception notes", "ملاحظات الاستلام")}<textarea name="receptionNotes" rows={2} maxLength={1000} /></label>
       </>}
 
+      {mode === "DISPOSE" && <label className="form-span">{tr("Disposal reason", "سبب التخلص من العينة")}<textarea name="disposalReason" rows={3} maxLength={1000} required /></label>}
+
       {mode === "REJECT" && <>
         <label>{tr("Rejection scope", "نطاق الرفض")}<select name="scope" value={rejectionScope} onChange={event => setRejectionScope(event.target.value as "WHOLE_SPECIMEN" | "SELECTED_TESTS")}>
           <option value="WHOLE_SPECIMEN">{tr("Whole specimen", "العينة كاملة")}</option>
@@ -238,7 +247,7 @@ export function SpecimenActions({
       <div className="form-span specimen-form-actions">
         <button className="secondary-button" type="button" onClick={() => { setMode(null); setRejectionScope("WHOLE_SPECIMEN"); }}>{tr("Cancel", "إلغاء")}</button>
         <button className={mode === "REJECT" ? "danger-button" : "primary-button"} disabled={busy || (mode === "REJECT" && rejectionReasons.length === 0)}>
-          {busy ? tr("Saving…", "جارٍ الحفظ…") : tr(mode, mode === "RECEIVE" ? "استلام" : "رفض")}
+          {busy ? tr("Saving…", "جارٍ الحفظ…") : tr(mode === "DISPOSE" ? "Dispose specimen" : mode, mode === "RECEIVE" ? "استلام" : mode === "DISPOSE" ? "التخلص من العينة" : "رفض")}
         </button>
       </div>
     </form>}
