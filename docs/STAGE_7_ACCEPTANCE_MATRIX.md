@@ -12,7 +12,7 @@ The existing repository already contains much of the Core Laboratory Results cap
 | Department and branch worklists | `src/app/worklists/page.tsx` | Preserve tenant + department + current custody branch scopes; priority/STAT, specimen, analyzer, TAT filters |
 | Generic and bulk result entry | `src/app/api/results/route.ts`, `src/components/result-entry-form.tsx`, `src/components/bulk-result-entry.tsx` | Concurrent editing vs clinical review must not silently change validated values |
 | Specialized clinical entry | Catalog-defined sections, layout and bilingual hints | No CBC/urine-specific database tables or name-based hardcoding |
-| Reference flags, critical limits | `src/lib/result-reference.ts`, result value snapshots | Worklist preview must use immutable order demographics and order-time context; existing result uses stored range snapshot |
+| Reference flags, critical limits | `src/lib/result-reference.ts`, result value snapshots | Worklist preview must use immutable order demographics and order-time age context and current effective reference policy, consistent with result entry; existing result uses stored range snapshot |
 | Comments and templates | Reusable templates and component notes | Bilingual rendering and audit context |
 | Technical review | `src/app/api/results/[id]/verify/route.ts` | Exact revision CAS before review event; locked specimen readiness/custody |
 | Medical validation | `src/app/api/results/[id]/medical-validate/route.ts` | Explicit action; exact revision CAS for approve/return; prevent duplicate review events |
@@ -22,7 +22,7 @@ The existing repository already contains much of the Core Laboratory Results cap
 
 ## Additional engineering work started
 
-1. Correct reference-interval preview in the worklist detail page to use `patientSexSnapshot`, `patientDobSnapshot`, recorded-age snapshots and `orderedAt` instead of mutable patient demographics or the present-day reference context.
+1. Correct reference-interval preview in the worklist detail page to use `patientSexSnapshot`, `patientDobSnapshot`, recorded-age snapshots and `orderedAt` as age context, but use the current effective date for reference policy selection as the entry API does.
 2. Prevent duplicate technical and medical reviews using an optimistic compare-and-swap against status, validation stage, `updatedAt` and organization, within the same transaction as clinical review/audit events.
 3. Lock the specimen row during technical and medical validation; disallow approval when sample status is not `RECEIVED`/`IN_PROCESS` or its current branch no longer matches the performing branch.
 4. Reject malformed medical-validation actions instead of treating any value as an approval.
