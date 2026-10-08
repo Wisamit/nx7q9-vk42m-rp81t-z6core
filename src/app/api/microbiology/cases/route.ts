@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { Prisma } from "../../../../../generated/prisma/client";
 import { canAccessBranch, canAccessDepartment, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 
@@ -46,10 +47,33 @@ export async function POST(request: Request) {
   const existing = await prisma.microbiologyCase.findUnique({
     where: { orderItemId_specimenId: { orderItemId, specimenId } },
   });
-  if (existing) return NextResponse.json({ status: "ok", case: existing }, { status: 200 });
+  if (existing) {
+    if (existing.performingBranchId !== performingBranchId) {
+      return NextResponse.json({ error: "microbiology_case_performing_branch_conflict" }, { status: 409 });
+    }
+    return NextResponse.json({ status: "ok", case: existing }, { status: 200 });
+  }
 
   const created = await prisma.$transaction(async tx => {
-    if (specimen.status === "RECEIVED") {
+    // Both RECEIVED and IN_PROCESS must be checked under the same specimen
+    // lock. Otherwise a transfer/quarantine may win after the preflight read.
+    const held = await tx.$queryRaw<Array<{ id: string; status: string; current_branch_id: string | null }>>`
+      SELECT id, status, current_branch_id FROM specimens
+      WHERE id = ${specimen.id} AND organization_id = ${session.user.organizationId}
+      FOR UPDATE
+    `;
+    if (held.length !== 1 || !["RECEIVED","IN_PROCESS"].includes(held[0].status)
+      || held[0].current_branch_id !== performingBranchId) {
+      throw new Error("SPECIMEN_PREANALYTICAL_STATE_CHANGED");
+    }
+    const linked = await tx.specimenOrderItem.count({
+      where: { specimenId: specimen.id, orderItemId, status: "ACTIVE" },
+    });
+    const orderReady = await tx.orderItem.count({
+      where: { id: orderItemId, status: { not: "CANCELLED" }, order: { organizationId: session.user.organizationId } },
+    });
+    if (linked !== 1 || orderReady !== 1) throw new Error("SPECIMEN_PREANALYTICAL_STATE_CHANGED");
+    if (held[0].status === "RECEIVED") {
       const claimed = await tx.specimen.updateMany({
         where: {
           id: specimen.id,
@@ -113,6 +137,7 @@ export async function POST(request: Request) {
     return microbiologyCase;
   }).catch(error => {
     if (error instanceof Error && error.message === "SPECIMEN_PREANALYTICAL_STATE_CHANGED") return null;
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") return null;
     throw error;
   });
 
