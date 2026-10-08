@@ -168,6 +168,7 @@ export default async function BillingPage() {
         }))} />}
         {canManageBilling && <CreditNoteCreateModal locale={locale} invoices={creditableInvoices} />}
         {canManageBilling && <RefundCreateModal locale={locale} options={refundOptions} />}
+        <Link className="secondary-link" href="/billing/reports">{tr(locale, "Financial Reports", "التقارير المالية")}</Link>
         <Link className="secondary-link" href="/billing/accounts">{tr(locale, "Client Accounts", "حسابات العملاء")}</Link>
         {permissions.has("billing.tax.manage") && <Link className="secondary-link" href="/billing/taxes">{tr(locale, "Tax Rules", "القواعد الضريبية")}</Link>}
         {(canManageBilling || permissions.has("billing.cashier.approve")) && <Link className="secondary-link" href="/billing/cashier">{tr(locale, "Cashier Closing", "إغلاق أمين الصندوق")}</Link>}
