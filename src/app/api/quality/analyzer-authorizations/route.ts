@@ -37,8 +37,30 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "current_passing_competency_required" }, { status: 409 });
   }
 
-  const authorization = await prisma.$transaction(async tx => {
-    const created = await tx.analyzerAuthorization.create({
+  let authorization;
+  try {
+    authorization = await prisma.$transaction(async tx => {
+      // Competency suspension and authorization grant serialize on the analyzer row.
+      const locked = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM analyzers WHERE id = ${analyzerId}
+        AND organization_id = ${session.user.organizationId}
+        AND branch_id = ${analyzer.branchId} AND status = 'ACTIVE' FOR UPDATE
+      `;
+      if (locked.length !== 1) throw new Error("ANALYZER_STATE_CHANGED");
+      const currentlyActive = await tx.analyzerAuthorization.count({
+        where: { organizationId: session.user.organizationId, userId, analyzerId, status: "ACTIVE" },
+      });
+      if (currentlyActive > 0) throw new Error("ACTIVE_AUTHORIZATION_EXISTS");
+      const latestCompetency = await tx.competencyAssessment.findFirst({
+        where: { organizationId: session.user.organizationId, userId, analyzerId },
+        orderBy: [{ assessedAt: "desc" }, { createdAt: "desc" }],
+      });
+      const at = new Date();
+      if (!latestCompetency || latestCompetency.result !== "PASS" ||
+          (latestCompetency.nextDueAt && latestCompetency.nextDueAt < at)) {
+        throw new Error("CURRENT_PASSING_COMPETENCY_REQUIRED");
+      }
+      const created = await tx.analyzerAuthorization.create({
       data: {
         organizationId: session.user.organizationId,
         userId,
@@ -56,13 +78,19 @@ export async function POST(request: Request) {
         action: "ANALYZER_AUTHORIZATION_GRANTED",
         entityType: "AnalyzerAuthorization",
         entityId: created.id,
-        newValues: { userId, analyzerId, competencyAssessmentId: competency.id, expiresAt },
+        newValues: { userId, analyzerId, competencyAssessmentId: latestCompetency.id, expiresAt },
         ipAddress: ctx.ipAddress,
         userAgent: ctx.userAgent,
       },
     });
-    return created;
-  });
+      return created;
+    }, { isolationLevel: "Serializable", timeout: 30000 });
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : "";
+    return NextResponse.json({ error: reason === "ACTIVE_AUTHORIZATION_EXISTS" ? "active_authorization_exists"
+      : reason === "CURRENT_PASSING_COMPETENCY_REQUIRED" ? "current_passing_competency_required"
+      : "analyzer_authorization_conflict" }, { status: 409 });
+  }
   return NextResponse.json({ status: "ok", authorization }, { status: 201 });
 }
 
@@ -83,15 +111,20 @@ export async function PATCH(request: Request) {
   if (!canAccessBranch(session, authorization.analyzer.branchId)) return NextResponse.json({ error: "branch_forbidden" }, { status: 403 });
   if (authorization.status !== "ACTIVE") return NextResponse.json({ error: "authorization_not_active" }, { status: 409 });
 
-  const saved = await prisma.$transaction(async tx => {
-    const updated = await tx.analyzerAuthorization.update({
-      where: { id },
-      data: {
-        status,
-        revokedAt: status === "REVOKED" ? new Date() : null,
-        revocationReason,
-      },
-    });
+  let saved;
+  try {
+    saved = await prisma.$transaction(async tx => {
+      const locked = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM analyzers WHERE id = ${authorization.analyzerId}
+        AND organization_id = ${session.user.organizationId} FOR UPDATE
+      `;
+      if (locked.length !== 1) throw new Error("ANALYZER_STATE_CHANGED");
+      const claimed = await tx.analyzerAuthorization.updateMany({
+        where: { id, organizationId: session.user.organizationId, status: "ACTIVE" },
+        data: { status, revokedAt: status === "REVOKED" ? new Date() : null, revocationReason },
+      });
+      if (claimed.count !== 1) throw new Error("AUTHORIZATION_ALREADY_CHANGED");
+      const updated = await tx.analyzerAuthorization.findUniqueOrThrow({ where: { id } });
     await tx.auditEvent.create({
       data: {
         organizationId: session.user.organizationId,
@@ -107,7 +140,10 @@ export async function PATCH(request: Request) {
         userAgent: ctx.userAgent,
       },
     });
-    return updated;
-  });
+      return updated;
+    }, { isolationLevel: "Serializable", timeout: 30000 });
+  } catch {
+    return NextResponse.json({ error: "analyzer_authorization_state_conflict" }, { status: 409 });
+  }
   return NextResponse.json({ status: "ok", authorization: saved });
 }
