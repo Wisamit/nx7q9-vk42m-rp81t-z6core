@@ -11,7 +11,7 @@ export async function GET(request: Request) {
   const locations = await prisma.specimenStorageLocation.findMany({
     where: { organizationId: session.user.organizationId, branchId, ...(url.searchParams.get("includeInactive") === "true" ? {} : { status: "ACTIVE" }) },
     orderBy: { path: "asc" },
-    select: { id: true, path: true, zone: true, unit: true, rack: true, slot: true },
+    select: { id: true, path: true, zone: true, unit: true, rack: true, slot: true, status: true },
   });
   return NextResponse.json({ locations });
 }
