@@ -23,12 +23,13 @@ test("patient registration persists active branch as immutable creation context"
   assert.ok(route.includes("clinicalInformation: clinicalInformation || null"));
 });
 
-test("patient registration supports passport identity without replacing national ID semantics", () => {
+test("patient registration preserves standard National ID and Passport semantics through governed schemes", () => {
   const route = source("src/app/api/patients/route.ts");
-  assert.ok(route.includes('identifierType: "NATIONAL_ID" as const'));
-  assert.ok(route.includes('identifierType: "PASSPORT" as const'));
+  assert.ok(route.includes('schemeByCode.get("NATIONAL_ID")'));
+  assert.ok(route.includes('schemeByCode.get("PASSPORT")'));
   assert.ok(route.includes("passportIssuingCountry"));
   assert.ok(route.includes("identifier_already_used"));
+  assert.ok(route.includes("organizationId_schemeId_normalizedValue"));
 });
 
 test("patient detail exposes calculated age, creation branch and extended demographics", () => {
