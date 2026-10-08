@@ -65,3 +65,23 @@ test("maintenance completion preserves safety hold and requires a separate RESTO
   assert.ok(route.includes('status: "OUT_OF_SERVICE"'));
   assert.ok(!route.includes('data: { status: "ACTIVE" }'));
 });
+
+test("result release rechecks the QC gate behind analyzer and equipment locks", () => {
+  const route = source("../src/app/api/results/[id]/release/route.ts");
+  const tx = route.indexOf("prisma.$transaction(async (tx) =>");
+  const analyzerLock = route.indexOf("SELECT id FROM analyzers", tx);
+  const equipmentLock = route.indexOf("SELECT id FROM equipment", analyzerLock);
+  const gated = route.indexOf("resolveAnalyzerQcGate(tx", equipmentLock);
+  const claim = route.indexOf("tx.laboratoryResult.updateMany(", gated);
+  assert.ok(tx >= 0 && analyzerLock > tx && equipmentLock > analyzerLock && gated > equipmentLock && claim > gated);
+  assert.ok(route.includes('released === "QC_HOLD"'));
+});
+
+test("bridge claim defers outage without cancelling a queued work order", () => {
+  const route = source("../src/app/api/integrations/analyzers/[id]/work-orders/claim/route.ts");
+  const equipment = route.indexOf("SELECT id, status FROM equipment");
+  const downtime = route.indexOf("tx.equipmentDowntime.count(", equipment);
+  const noDispatch = route.indexOf("if (openDowntime > 0) return null;", downtime);
+  const cancel = route.indexOf('status: eligible ? "DEAD_LETTER" : "CANCELLED"', noDispatch);
+  assert.ok(equipment >= 0 && downtime > equipment && noDispatch > downtime && cancel > noDispatch);
+});
