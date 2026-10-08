@@ -98,3 +98,11 @@ test("medical RETURN remains available for corrective action after specimen quar
   const approve = route.slice(end);
   assert.ok(approve.includes("validationSpecimenCustodyError({"));
 });
+
+test("result workspace preserves history but disables entry and technical approval for invalid custody", () => {
+  const page = source("../src/app/worklists/[orderItemId]/page.tsx");
+  assert.ok(page.includes('const specimenReadyForValidation = ["RECEIVED", "IN_PROCESS"].includes(readySpecimen.status)'));
+  assert.ok(page.includes('canEnter={permissions.has("results.enter") && specimenReadyForValidation}'));
+  assert.ok(page.includes('canTechnicalReview={permissions.has("results.technical_review") && specimenReadyForValidation}'));
+  assert.ok(page.includes("العينة غير مؤهلة لإدخال النتائج أو اعتمادها"));
+});
