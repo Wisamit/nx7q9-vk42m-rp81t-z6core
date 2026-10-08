@@ -3,6 +3,7 @@ import { canAccessBranch, canAccessDepartment, requirePermission, requestContext
 import { prisma } from "@/lib/db";
 import { resolveAnalyzerQcGate } from "@/lib/qc-gate";
 import { notifyUsersWithPermission } from "@/lib/notifications";
+import { validationSpecimenCustodyError } from "@/lib/result-validation-custody";
 import { selectValidationPolicy, snapshotValidationPolicy, stageAfterTechnicalReview, type ValidationPolicySnapshot } from "@/lib/result-validation";
 import { Prisma } from "../../../../../../generated/prisma/client";
 
@@ -156,6 +157,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     : null;
 
   const updated = await prisma.$transaction(async (tx) => {
+    if (result.specimenId) {
+      // Serialize validation with specimen quarantine, rejection and transfers.
+      const custody = await tx.$queryRaw<Array<{ id: string; status: string; current_branch_id: string | null }>>`
+        SELECT id, status, current_branch_id FROM specimens
+        WHERE id = ${result.specimenId} AND organization_id = ${session.user.organizationId}
+        FOR UPDATE
+      `;
+      if (custody.length !== 1 || validationSpecimenCustodyError({
+        status: custody[0].status,
+        currentBranchId: custody[0].current_branch_id,
+        performingBranchId: result.performingBranchId,
+      })) throw new Error("RESULT_STATE_CHANGED");
+    }
     // Claim this exact result revision before recording clinical review.
     // Two reviewers or a concurrent result edit cannot both validate the same snapshot.
     const claim = await tx.laboratoryResult.updateMany({
