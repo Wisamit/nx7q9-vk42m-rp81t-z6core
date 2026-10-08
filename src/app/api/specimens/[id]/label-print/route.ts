@@ -47,6 +47,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (currentBranch && !canAccessBranch(session, currentBranch)) {
       return { error: "branch_forbidden", priorPrintCount: 0 };
     }
+    const auditedBranchId = currentBranch || branchId;
     const priorPrintCount = await tx.auditEvent.count({
       where: {
         organizationId: session.user.organizationId,
@@ -66,7 +67,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     await tx.auditEvent.create({
       data: {
         organizationId: session.user.organizationId,
-        branchId,
+        branchId: auditedBranchId,
         actorUserId: session.user.id,
         action: "SPECIMEN_LABEL_PRINTED",
         entityType: "Specimen",
