@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { canAccessBranch, canAccessDepartment, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { resolveAnalyzerQcGate } from "@/lib/qc-gate";
+import { validationSpecimenCustodyError } from "@/lib/result-validation-custody";
 import { medicalReviewerAllowed, type ValidationPolicySnapshot } from "@/lib/result-validation";
 import { Prisma } from "../../../../../../generated/prisma/client";
 
@@ -58,7 +59,31 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     const returnedAt = new Date();
     const returned = await prisma.$transaction(async tx => {
-      const claimed = await tx.laboratoryResult.updateMany({
+      if (result.specimenId) {
+        const custody = await tx.$queryRaw<Array<{ id: string; status: string; current_branch_id: string | null }>>`
+          SELECT id, status, current_branch_id FROM specimens
+          WHERE id = ${result.specimenId} AND organization_id = ${session.user.organizationId}
+          FOR UPDATE
+        `;
+        if (custody.length !== 1 || validationSpecimenCustodyError({
+          status: custody[0].status,
+          currentBranchId: custody[0].current_branch_id,
+          performingBranchId: result.performingBranchId,
+        })) throw new Error("RESULT_STATE_CHANGED");
+      }
+      if (result.specimenId) {
+      const custody = await tx.$queryRaw<Array<{ id: string; status: string; current_branch_id: string | null }>>`
+        SELECT id, status, current_branch_id FROM specimens
+        WHERE id = ${result.specimenId} AND organization_id = ${session.user.organizationId}
+        FOR UPDATE
+      `;
+      if (custody.length !== 1 || validationSpecimenCustodyError({
+        status: custody[0].status,
+        currentBranchId: custody[0].current_branch_id,
+        performingBranchId: result.performingBranchId,
+      })) throw new Error("RESULT_STATE_CHANGED");
+    }
+    const claimed = await tx.laboratoryResult.updateMany({
         where: {
           id: result.id,
           organizationId: session.user.organizationId,
