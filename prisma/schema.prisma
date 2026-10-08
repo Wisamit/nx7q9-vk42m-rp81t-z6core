@@ -1064,6 +1064,7 @@ model Organization {
   validationHoldRules ValidationHoldRule[]
   resultValidationPolicies ResultValidationPolicy[]
   analyzers Analyzer[]
+  analyzerWorkOrders AnalyzerWorkOrder[]
   criticalEscalationPolicies CriticalEscalationPolicy[]
   microbiologyCases MicrobiologyCase[]
   organisms Organism[]
@@ -1170,6 +1171,7 @@ model Branch {
   workstations Workstation[]
   analyzers Analyzer[]
   analyzerMessages AnalyzerMessage[]
+  analyzerWorkOrders AnalyzerWorkOrder[]
   userScopes   UserBranchScope[]
   auditEvents  AuditEvent[]
   createdPatients Patient[] @relation("PatientCreationBranch")
@@ -2718,6 +2720,7 @@ model OrderItem {
   results          LaboratoryResult[]
   resultRepeatEvents ResultRepeatEvent[]
   analyzerResultImports AnalyzerResultImport[]
+  analyzerWorkOrders AnalyzerWorkOrder[]
   analyzerRoutes OrderItemAnalyzerRoute[]
   analyzerRouteEvents OrderItemAnalyzerRouteEvent[]
   microbiologyCases MicrobiologyCase[]
@@ -3309,6 +3312,7 @@ model Specimen {
   parentSpecimen   Specimen?     @relation("SpecimenParentChild", fields: [parentSpecimenId], references: [id], onDelete: Restrict)
   childSpecimens   Specimen[]    @relation("SpecimenParentChild")
   analyzerResultImports AnalyzerResultImport[]
+  analyzerWorkOrders AnalyzerWorkOrder[]
   specimenType     SpecimenType? @relation(fields: [specimenTypeId], references: [id], onDelete: Restrict)
   container        Container?    @relation(fields: [containerId], references: [id], onDelete: Restrict)
   collectionBranch Branch?       @relation("SpecimenCollectionBranch", fields: [collectionBranchId], references: [id], onDelete: Restrict)
@@ -4543,6 +4547,7 @@ model Analyzer {
   trainingRecords TrainingRecord[]
   competencyAssessments CompetencyAssessment[]
   authorizations AnalyzerAuthorization[]
+  workOrders AnalyzerWorkOrder[]
   workRoutes OrderItemAnalyzerRoute[] @relation("AnalyzerWorkRoutes")
   workRouteEvents OrderItemAnalyzerRouteEvent[] @relation("AnalyzerWorkRouteEvents")
 
@@ -4610,6 +4615,53 @@ model AnalyzerTestMapping {
   @@index([createdByUserId, createdAt], map: "analyzer_mapping_creator_idx")
   @@index([approvedByUserId, approvedAt], map: "analyzer_mapping_approver_idx")
   @@map("analyzer_test_mappings")
+}
+
+enum AnalyzerWorkOrderStatus {
+  QUEUED
+  CLAIMED
+  ACKNOWLEDGED
+  RETRY_WAIT
+  DEAD_LETTER
+  CANCELLED
+}
+
+model AnalyzerWorkOrder {
+  id                         String                  @id @default(uuid()) @db.Char(36)
+  organizationId             String                  @map("organization_id") @db.Char(36)
+  branchId                   String                  @map("branch_id") @db.Char(36)
+  analyzerId                 String                  @map("analyzer_id") @db.Char(36)
+  orderItemId                String                  @map("order_item_id") @db.Char(36)
+  specimenId                 String                  @map("specimen_id") @db.Char(36)
+  assignmentEventId          String                  @unique @map("assignment_event_id") @db.Char(36)
+  accessionNumberSnapshot    String                  @map("accession_number_snapshot") @db.VarChar(80)
+  barcodeSnapshot            String                  @map("barcode_snapshot") @db.VarChar(80)
+  testCodeSnapshot           String                  @map("test_code_snapshot") @db.VarChar(80)
+  analyzerTestCodeSnapshot   String                  @map("analyzer_test_code_snapshot") @db.VarChar(120)
+  bridgeDeviceKeySnapshot    String                  @map("bridge_device_key_snapshot") @db.VarChar(150)
+  status                     AnalyzerWorkOrderStatus @default(QUEUED)
+  attemptCount               Int                     @default(0) @map("attempt_count")
+  maxAttempts                Int                     @default(5) @map("max_attempts")
+  claimTokenHash             String?                 @map("claim_token_hash") @db.Char(64)
+  claimedAt                  DateTime?               @map("claimed_at") @db.DateTime(3)
+  leaseExpiresAt             DateTime?               @map("lease_expires_at") @db.DateTime(3)
+  nextAttemptAt              DateTime?               @map("next_attempt_at") @db.DateTime(3)
+  acknowledgedAt             DateTime?               @map("acknowledged_at") @db.DateTime(3)
+  acknowledgement            String?                 @db.Text
+  lastError                  String?                 @map("last_error") @db.Text
+  createdAt                  DateTime                @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt                  DateTime                @updatedAt @map("updated_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  branch       Branch       @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  analyzer     Analyzer     @relation(fields: [analyzerId], references: [id], onDelete: Restrict)
+  orderItem    OrderItem    @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
+  specimen     Specimen     @relation(fields: [specimenId], references: [id], onDelete: Restrict)
+
+  @@index([analyzerId, status, nextAttemptAt])
+  @@index([organizationId, status, createdAt])
+  @@index([orderItemId, status])
+  @@map("analyzer_work_orders")
 }
 
 model AnalyzerMessage {
