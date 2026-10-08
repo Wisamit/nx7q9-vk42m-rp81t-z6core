@@ -47,7 +47,7 @@ test("culture, observation, isolate and AST edits lock specimen then case and re
     const gate=api.indexOf("await requireEditableMicrobiologyCase(tx");
     assert.ok(gate>=0, path);
     assert.ok(api.indexOf("expectedCaseUpdatedAt:",gate)>gate,path);
-    assert.ok(api.includes("error.code"),path);
+    assert.match(api, /\b(?:updated|observation|isolate|susceptibilityTest)\.code\b/,path);
   }
 });
 
