@@ -645,6 +645,22 @@ export async function POST(request: Request) {
     || null;
 
   const saved = await prisma.$transaction(async tx => {
+    // Serialize clinical import against specimen quarantine/transfer and
+    // concurrent analyzer commits, even for specimens already IN_PROCESS.
+    const custody = await tx.$queryRaw<Array<{ id: string; status: string; current_branch_id: string | null }>>`
+      SELECT id,status,current_branch_id FROM specimens
+      WHERE id = ${specimen.id} AND organization_id = ${session.user.organizationId}
+      FOR UPDATE
+    `;
+    if (custody.length !== 1 || !["RECEIVED", "IN_PROCESS"].includes(custody[0].status)
+      || custody[0].current_branch_id !== analyzer.branchId) {
+      throw new Error("SPECIMEN_PREANALYTICAL_STATE_CHANGED");
+    }
+    const liveLink = await tx.specimenOrderItem.count({
+      where: { specimenId: specimen.id, orderItemId: orderItem.id, status: "ACTIVE" },
+    });
+    if (liveLink !== 1) throw new Error("SPECIMEN_PREANALYTICAL_STATE_CHANGED");
+    if (custody[0].status !== specimen.status) throw new Error("SPECIMEN_PREANALYTICAL_STATE_CHANGED");
     if (specimen.status === "RECEIVED") {
       const claimed = await tx.specimen.updateMany({
         where: {
@@ -662,15 +678,30 @@ export async function POST(request: Request) {
       if (claimed.count !== 1) throw new Error("SPECIMEN_PREANALYTICAL_STATE_CHANGED");
     }
 
-    const stillMapped = await tx.analyzerResultImport.count({
-      where: { id: { in: importIds }, status: "MAPPED" },
-    });
-    if (stillMapped !== importIds.length) throw new Error("ANALYZER_IMPORT_CONCURRENT_STATE_CHANGE");
+    // Claims must occur before any clinical result/value mutation. Lock
+    // import rows in a deterministic order so two operators cannot consume
+    // the same analyzer observation twice.
+    const lockedImports = await tx.$queryRaw<Array<{ id: string; status: string }>>`
+      SELECT id, status FROM analyzer_result_imports
+      WHERE id IN (${Prisma.join([...importIds].sort())})
+      ORDER BY id FOR UPDATE
+    `;
+    if (lockedImports.length !== importIds.length || lockedImports.some(row => row.status !== "MAPPED")) {
+      throw new Error("ANALYZER_IMPORT_CONCURRENT_STATE_CHANGE");
+    }
 
     const result = existing
-      ? await tx.laboratoryResult.update({
-          where: { id: existing.id },
-          data: {
+      ? await (async () => {
+          const claimed = await tx.laboratoryResult.updateMany({
+            where: {
+              id: existing.id,
+              organizationId: session.user.organizationId,
+              source: "ANALYZER",
+              status: { in: ["DRAFT", "ENTERED"] },
+              validationStage: { in: ["ENTRY", "TECHNICAL_REVIEW"] },
+              updatedAt: existing.updatedAt,
+            },
+            data: {
             specimenId: specimen.id,
             performingBranchId: analyzer.branchId,
             methodId: orderItem.test.methodId,
@@ -691,8 +722,11 @@ export async function POST(request: Request) {
             medicallyValidatedAt: null,
             verifiedByUserId: null,
             verifiedAt: null,
-          },
-        })
+            },
+          });
+          if (claimed.count !== 1) throw new Error("ANALYZER_RESULT_STATE_CHANGED");
+          return tx.laboratoryResult.findUniqueOrThrow({ where: { id: existing.id } });
+        })()
       : await tx.laboratoryResult.create({
           data: {
             organizationId: session.user.organizationId,
@@ -1045,10 +1079,11 @@ export async function POST(request: Request) {
     }
 
     const importedAt = new Date();
-    await tx.analyzerResultImport.updateMany({
+    const consumed = await tx.analyzerResultImport.updateMany({
       where: { id: { in: importIds }, status: "MAPPED" },
       data: { status: "IMPORTED", resultId: result.id, importedAt, errorCode: null, errorText: null },
     });
+    if (consumed.count !== importIds.length) throw new Error("ANALYZER_IMPORT_CONCURRENT_STATE_CHANGE");
 
     await tx.orderItem.update({
       where: { id: orderItem.id },
@@ -1191,7 +1226,7 @@ export async function POST(request: Request) {
       },
     });
   }, { timeout: 30000, isolationLevel: "Serializable" }).catch(error => {
-    if (error instanceof Error && ["ANALYZER_IMPORT_CONCURRENT_STATE_CHANGE","SPECIMEN_PREANALYTICAL_STATE_CHANGED"].includes(error.message)) return null;
+    if (error instanceof Error && ["ANALYZER_IMPORT_CONCURRENT_STATE_CHANGE","SPECIMEN_PREANALYTICAL_STATE_CHANGED","ANALYZER_RESULT_STATE_CHANGED"].includes(error.message)) return null;
     throw error;
   });
 
