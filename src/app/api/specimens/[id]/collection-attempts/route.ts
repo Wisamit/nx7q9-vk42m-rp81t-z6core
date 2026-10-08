@@ -92,7 +92,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!specimen.currentBranchId || specimen.currentBranchId !== branchId) {
     return NextResponse.json({ error: "collection_branch_must_match_specimen_location" }, { status: 409 });
   }
-  if (specimen.order.status === "CANCELLED") {
+  if (specimen.order.status === "CANCELLED" || specimen.order.status === "COMPLETED") {
     return NextResponse.json({ error: "order_cancelled" }, { status: 409 });
   }
 
@@ -169,6 +169,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           organizationId: session.user.organizationId,
           status: "PLANNED",
           preanalyticalVersion: specimen.preanalyticalVersion,
+          order: { status: { notIn: ["CANCELLED", "COMPLETED"] } },
+          currentBranchId: branchId,
           orderItems: { some: { status: "ACTIVE" } },
         },
         data: {
