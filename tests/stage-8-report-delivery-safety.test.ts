@@ -103,3 +103,13 @@ test("queued report notifications are not dispatched after amendment or retracti
   assert.ok(gated.includes("report_version_superseded_or_retracted"));
   assert.ok(gated.includes("nextAttemptAt: null"));
 });
+
+test("released report patient sex and age derive only from immutable order demographic context", () => {
+  const source=code("../src/lib/report-snapshot.ts");
+  assert.ok(source.includes("order.patientDobSnapshot"));
+  assert.ok(source.includes('order.patientSexSnapshot || "UNKNOWN"'));
+  assert.ok(source.includes("order.patientAgeValueSnapshot"));
+  assert.ok(source.includes("order.patientAgeUnitSnapshot"));
+  assert.ok(!source.includes("order.patient.dateOfBirth?.toISOString()"));
+  assert.ok(!source.includes("sexAtBirth: order.patient.sexAtBirth"));
+});
