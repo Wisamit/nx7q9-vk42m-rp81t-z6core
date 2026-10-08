@@ -18,8 +18,14 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
   }
 
   const updated = await prisma.$transaction(async tx => {
-    const replayed = await tx.analyzerMessage.update({
-      where: { id: message.id },
+    // Explicit replay must not reset a message concurrently recovered or
+    // claimed by the automated bridge; only the same failed revision wins.
+    const claimed = await tx.analyzerMessage.updateMany({
+      where: {
+        id: message.id,
+        status: { in: ["ERROR", "DEAD_LETTER"] },
+        updatedAt: message.updatedAt,
+      },
       data: {
         status: "RECEIVED",
         attempts: { increment: 1 },
@@ -28,6 +34,8 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
         processedAt: null,
       },
     });
+    if (claimed.count !== 1) throw new Error("ANALYZER_MESSAGE_REPLAY_CONFLICT");
+    const replayed = await tx.analyzerMessage.findUniqueOrThrow({ where: { id: message.id } });
 
     await tx.auditEvent.create({
       data: {
@@ -44,7 +52,11 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
       },
     });
     return replayed;
+  }).catch(error => {
+    if (error instanceof Error && error.message === "ANALYZER_MESSAGE_REPLAY_CONFLICT") return null;
+    throw error;
   });
+  if (!updated) return NextResponse.json({ error: "analyzer_message_state_changed" }, { status: 409 });
 
   return NextResponse.json({ status: "ok", messageId: updated.id, messageStatus: updated.status, attempts: updated.attempts });
 }
