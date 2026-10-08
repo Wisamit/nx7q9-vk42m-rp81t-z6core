@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { requirePermission } from "@/lib/auth";
+import { permissionSet, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { PatientCreateModal } from "@/components/patient-create-modal";
 import { SystemIcon } from "@/components/system-icon";
@@ -15,8 +15,11 @@ export default async function PatientsPage({
   const session = await requirePermission("patients.view");
   const query = (await searchParams).q?.trim() || "";
   const locale = getUiLocale(session.user.preferredLocale);
+  const permissions = permissionSet(session);
+  const canManage = permissions.has("patients.manage");
 
-  const patients = await prisma.patient.findMany({
+  const [patients, identifierSchemes] = await Promise.all([
+    prisma.patient.findMany({
     where: {
       organizationId: session.user.organizationId,
       ...(query ? {
@@ -36,7 +39,24 @@ export default async function PatientsPage({
     },
     orderBy: { createdAt: "desc" },
     take: 100,
-  });
+    }),
+    canManage ? prisma.patientIdentifierScheme.findMany({
+      where: {
+        organizationId: session.user.organizationId,
+        status: "ACTIVE",
+        identifierType: "OTHER",
+        code: { not: "LEGACY_OTHER" },
+      },
+      select: {
+        id: true,
+        code: true,
+        nameEn: true,
+        nameAr: true,
+        requiresIssuingCountry: true,
+      },
+      orderBy: { code: "asc" },
+    }) : Promise.resolve([]),
+  ]);
 
   return <main className="catalog-shell">
     <header className="page-header">
@@ -46,7 +66,8 @@ export default async function PatientsPage({
         <p className="muted">{tr(locale, "Organization-wide patient identity shared across all branches, with duplicate protection and auditable identifiers.", "هوية موحدة للمريض على مستوى المؤسسة ومشتركة بين جميع الفروع مع حماية من التكرار ومعرّفات قابلة للتدقيق.")}</p>
       </div>
       <div className="header-actions">
-        <PatientCreateModal locale={locale} />
+        {canManage && <PatientCreateModal locale={locale} identifierSchemes={identifierSchemes} />}
+        {canManage && <Link className="secondary-link" href="/patients/identifier-schemes">{tr(locale, "Identifier Schemes", "أنواع المعرّفات")}</Link>}
         <Link className="secondary-link" href="/dashboard"><SystemIcon name="dashboard" size={15} />{tr(locale, "Back to Dashboard", "العودة للوحة التحكم")}</Link>
       </div>
     </header>
