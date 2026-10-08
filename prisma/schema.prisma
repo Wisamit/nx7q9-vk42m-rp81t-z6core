@@ -131,6 +131,7 @@ enum PriceListScope {
   ORGANIZATION
   BRANCH
   SOURCE
+  REFERRER
   CLIENT
   CONTRACT
 }
@@ -2418,6 +2419,7 @@ model Referrer {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   client       Client?      @relation(fields: [clientId], references: [id], onDelete: Restrict)
   orders       LabOrder[]
+  priceLists   PriceList[]
 
   portalAccount PortalAccount?
 
@@ -2461,6 +2463,7 @@ model PriceList {
   scopeType      PriceListScope @default(ORGANIZATION) @map("scope_type")
   branchId       String?        @map("branch_id") @db.Char(36)
   sourceId       String?        @map("source_id") @db.Char(36)
+  referrerId     String?        @map("referrer_id") @db.Char(36)
   clientId       String?        @map("client_id") @db.Char(36)
   contractId     String?        @map("contract_id") @db.Char(36)
   currency       String         @db.Char(3)
@@ -2475,6 +2478,7 @@ model PriceList {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   branch       Branch?      @relation(fields: [branchId], references: [id], onDelete: Restrict)
   source       OrderSource? @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+  referrer     Referrer?    @relation(fields: [referrerId], references: [id], onDelete: Restrict)
   client       Client?      @relation(fields: [clientId], references: [id], onDelete: Restrict)
   contract     Contract?    @relation(fields: [contractId], references: [id], onDelete: Restrict)
   items        PriceListItem[]
@@ -2484,6 +2488,7 @@ model PriceList {
   @@index([organizationId, scopeType, status, effectiveFrom, effectiveTo])
   @@index([branchId, status])
   @@index([sourceId, status])
+  @@index([referrerId, status])
   @@index([clientId, status])
   @@index([contractId, status])
   @@map("price_lists")
