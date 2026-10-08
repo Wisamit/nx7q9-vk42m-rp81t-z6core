@@ -27,11 +27,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const specimen = await prisma.specimen.findFirst({
     where: { id, organizationId: session.user.organizationId },
-    include: { orderItems: true },
+    include: { order: { select: { status: true } }, orderItems: true },
   });
   if (!specimen) return NextResponse.json({ error: "specimen_not_found" }, { status: 404 });
   if (!specimen.currentBranchId || !canAccessBranch(session, specimen.currentBranchId)) {
     return NextResponse.json({ error: "branch_forbidden" }, { status: 403 });
+  }
+  if (["CANCELLED", "COMPLETED"].includes(specimen.order.status)) {
+    return NextResponse.json({ error: "usage_order_not_active" }, { status: 409 });
   }
   if (orderItemId && !specimen.orderItems.some(link => link.orderItemId === orderItemId && link.status === "ACTIVE")) {
     return NextResponse.json({ error: "usage_order_item_not_linked" }, { status: 409 });
@@ -55,6 +58,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         currentBranchId: specimen.currentBranchId,
         remainingVolume: { gte: volumeUsed },
         preanalyticalVersion: specimen.preanalyticalVersion,
+        order: { status: { notIn: ["CANCELLED", "COMPLETED"] } },
+        ...(orderItemId ? { orderItems: { some: { orderItemId, status: "ACTIVE", orderItem: { status: { not: "CANCELLED" } } } } } : {}),
       },
       data: {
         remainingVolume: { decrement: volumeUsed },
