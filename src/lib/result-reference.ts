@@ -4,6 +4,10 @@ type DbClient = PrismaClient | Prisma.TransactionClient;
 
 type PregnancyStatusValue = "UNKNOWN" | "NOT_PREGNANT" | "PREGNANT";
 type SexValue = "MALE" | "FEMALE" | "UNKNOWN";
+
+export function referencePatientSex(value: string | null | undefined): SexValue {
+  return value === "MALE" || value === "FEMALE" ? value : "UNKNOWN";
+}
 type SexApplicabilityValue = "ANY" | "MALE" | "FEMALE";
 type AgeUnitValue = "DAY" | "WEEK" | "MONTH" | "YEAR";
 
