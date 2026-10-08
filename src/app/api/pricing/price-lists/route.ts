@@ -65,9 +65,30 @@ export async function POST(request: Request) {
 
   const priceListCode = code(suppliedCode || nameEn);
   if (!priceListCode) return NextResponse.json({ error: "invalid_code" }, { status: 400 });
+  const normalizedPriority = Number.isFinite(priority) ? Math.trunc(priority) : 0;
 
   try {
     const created = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM organizations WHERE id = ${session.user.organizationId} FOR UPDATE`;
+
+      const overlapping = await tx.priceList.findFirst({
+        where: {
+          organizationId: session.user.organizationId,
+          status: "ACTIVE",
+          scopeType,
+          priority: normalizedPriority,
+          branchId: scopeType === "BRANCH" ? branchId : null,
+          sourceId: scopeType === "SOURCE" ? sourceId : null,
+          referrerId: scopeType === "REFERRER" ? referrerId : null,
+          clientId: scopeType === "CLIENT" ? clientId : null,
+          contractId: scopeType === "CONTRACT" ? contractId : null,
+          ...(effectiveTo ? { effectiveFrom: { lte: effectiveTo } } : {}),
+          OR: [{ effectiveTo: null }, { effectiveTo: { gte: effectiveFrom } }],
+        },
+        select: { id: true, code: true },
+      });
+      if (overlapping) throw new Error("PRICE_LIST_SCOPE_OVERLAP");
+
       const priceList = await tx.priceList.create({
         data: {
           organizationId: session.user.organizationId,
@@ -81,7 +102,7 @@ export async function POST(request: Request) {
           clientId: scopeType === "CLIENT" ? clientId : null,
           contractId: scopeType === "CONTRACT" ? contractId : null,
           currency,
-          priority: Number.isFinite(priority) ? Math.trunc(priority) : 0,
+          priority: normalizedPriority,
           effectiveFrom,
           effectiveTo,
         },
@@ -102,7 +123,13 @@ export async function POST(request: Request) {
       return priceList;
     });
     return NextResponse.json({ status: "ok", priceList: created }, { status: 201 });
-  } catch {
-    return NextResponse.json({ error: "price_list_code_already_exists" }, { status: 409 });
+  } catch (error) {
+    if (error instanceof Error && error.message === "PRICE_LIST_SCOPE_OVERLAP") {
+      return NextResponse.json({ error: "price_list_scope_overlap" }, { status: 409 });
+    }
+    if (error && typeof error === "object" && "code" in error && error.code === "P2002") {
+      return NextResponse.json({ error: "price_list_code_already_exists" }, { status: 409 });
+    }
+    throw error;
   }
 }
