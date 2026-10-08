@@ -111,3 +111,7 @@ Keep `stage-6-specimen-operations-completion` and PR #124 in Draft; no merge, no
 - `MISSING` is **not** a receipt: the specimen remains `IN_TRANSIT` with no implied destination physical custody. Other discrepancies confirm arrival at the destination but put the specimen into `QUARANTINED`; analytical use and result release remain blocked.
 - Exceptions do not silently mark the manifest `RECEIVED`: it remains `PARTIALLY_RECEIVED` and requires reconciliation. The current fail-closed workflow does not allow a later unreviewed scan to clear the exception, and no clinically unapproved exception waiver is fabricated.
 - Added bilingual UI exception fields and safe server-side tests. Deferred full-project UAT and a future explicitly authorized exception reconciliation procedure must be recognized separately from code delivery.
+
+## Immutable exception event classification
+
+- Missing in-transit specimens use a distinct `TRANSFER_EXCEPTION` lifecycle event rather than a misleading normal `TRANSFERRED` event; the enum is included in the predeployment migration and schema. Physically arrived discrepancies use the quarantined lifecycle event.
