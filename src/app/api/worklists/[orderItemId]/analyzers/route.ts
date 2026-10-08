@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { Prisma } from "../../../../../../generated/prisma/client";
 import { canAccessBranch, canAccessDepartment, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { analyzerCanRouteWorkItem } from "@/lib/analyzer-routing";
@@ -107,6 +108,46 @@ export async function POST(request: Request, { params }: { params: Promise<{ ord
   }
 
   const route = await prisma.$transaction(async tx => {
+    // Lock the order item so simultaneous route edits serialize and cannot
+    // race clinical verification or changes to branch custody.
+    const work = await tx.$queryRaw<Array<{ id: string; status: string }>>`
+      SELECT oi.id, oi.status FROM order_items oi
+      JOIN orders o ON o.id = oi.order_id
+      WHERE oi.id = ${item.id} AND o.organization_id = ${session.user.organizationId}
+      FOR UPDATE
+    `;
+    if (work.length !== 1 || work[0].status === "CANCELLED") throw new Error("ANALYZER_ROUTING_STATE_CHANGED");
+    const ready = await tx.specimenOrderItem.findFirst({
+      where: {
+        orderItemId: item.id,
+        status: "ACTIVE",
+        specimen: {
+          organizationId: session.user.organizationId,
+          status: { in: ["RECEIVED", "IN_PROCESS"] },
+          currentBranchId: analyzer.branchId,
+        },
+      },
+      select: { specimenId: true },
+    });
+    const mapped = await tx.analyzerTestMapping.count({
+      where: {
+        analyzerId: analyzer.id,
+        testId: item.testId,
+        status: "ACTIVE",
+        effectiveFrom: { lte: new Date() },
+        OR: [{ effectiveTo: null }, { effectiveTo: { gte: new Date() } }],
+      },
+    });
+    const reviewed = await tx.laboratoryResult.count({
+      where: {
+        orderItemId: item.id,
+        OR: [
+          { status: { in: ["VERIFIED", "RELEASED", "AMENDED", "CANCELLED"] } },
+          { validationStage: "COMPLETE" },
+        ],
+      },
+    });
+    if (!ready || mapped === 0 || reviewed > 0) throw new Error("ANALYZER_ROUTING_STATE_CHANGED");
     const created = await tx.orderItemAnalyzerRoute.create({
       data: {
         orderItemId: item.id,
@@ -151,7 +192,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ ord
     });
 
     return created;
+  }).catch(error => {
+    if (error instanceof Error && error.message === "ANALYZER_ROUTING_STATE_CHANGED") return null;
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") return null;
+    throw error;
   });
+  if (!route) return NextResponse.json({ error: "analyzer_routing_state_changed" }, { status: 409 });
 
   return NextResponse.json({ status: "ok", route }, { status: 201 });
 }
