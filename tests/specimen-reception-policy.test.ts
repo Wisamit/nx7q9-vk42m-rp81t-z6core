@@ -124,3 +124,10 @@ test("rejection rechecks source branch, order state and child aliquots inside tr
   assert.ok(route.includes("parentRelationType: \"ALIQUOT\""));
   assert.ok(route.includes("currentChildren.some(child =>"));
 });
+
+test("successful and failed collection require active orders and current custody branch atomically", () => {
+  const route = readFileSync(new URL("../src/app/api/specimens/[id]/collection-attempts/route.ts", import.meta.url), "utf8");
+  assert.equal(route.split('order: { status: { notIn: ["CANCELLED", "COMPLETED"] } }').length - 1, 2);
+  assert.equal(route.split('currentBranchId: branchId,\n').length >= 3, true);
+  assert.ok(route.includes('specimen.order.status === "CANCELLED" || specimen.order.status === "COMPLETED"'));
+});
