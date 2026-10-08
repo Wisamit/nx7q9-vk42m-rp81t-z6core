@@ -19,6 +19,7 @@ export type ReferenceIntervalContext = {
   recordedAgeValue?: number | null;
   recordedAgeUnit?: string | null;
   recordedAgeAt?: Date | null;
+  ageAsOf?: Date | null;
   pregnancyStatus?: PregnancyStatusValue | null;
   gestationalAgeWeeks?: NumericLike | null;
   populationCode?: string | null;
@@ -95,12 +96,12 @@ export function referenceIntervalMatchesContext(
     if (!interval.ageUnit) return false;
     let age: number;
     if (input.dateOfBirth) {
-      age = ageInUnit(input.dateOfBirth, input.at ?? new Date(), interval.ageUnit);
+      age = ageInUnit(input.dateOfBirth, input.ageAsOf ?? input.at ?? new Date(), interval.ageUnit);
     } else {
       // Manually reported age is not a date of birth. Only exact matching units
       // within the same recorded UTC calendar day are supported. Other cases
       // cannot establish a safe reference-interval context.
-      const at = input.at ?? new Date();
+      const at = input.ageAsOf ?? input.at ?? new Date();
       const recordedAt = input.recordedAgeAt;
       if (recordedAt == null || !Number.isFinite(recordedAt.getTime()) ||
           at.getTime() < recordedAt.getTime() ||
