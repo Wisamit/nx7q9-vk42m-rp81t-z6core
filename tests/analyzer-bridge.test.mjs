@@ -31,7 +31,7 @@ test("bridge rejects unapproved and ambiguous protocol fields rather than guessi
     ()=>parseHl7Oru(hl7.replace("5.2|mmol/L","5.2~6.1|mmol/L"),{barcodeSource:"OBR_3"}),
     ()=>normalizeAnalyzerMessage(hl7,"FILE",{}),
   ];
-  for (const fail of cases) assert.throws(fail,/INVALID|REQUIRED|UNSUPPORTED|COMPLEX|DUPLICATE|PROFILE/);
+  for (const fail of cases) assert.throws(fail,/INVALID|REQUIRED|UNSUPPORTED|COMPLEX|DUPLICATE|PROFILE|REQUIRES_APPROVED_ADAPTER/);
 });
 
 test("ASTM record parser requires approved field profile and verified transport framing",()=>{
