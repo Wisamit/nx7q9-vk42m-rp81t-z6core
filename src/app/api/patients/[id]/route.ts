@@ -47,7 +47,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const email = text(body.email, 191).toLowerCase();
   const nationalityCode = text(body.nationalityCode, 2).toUpperCase();
   const address = text(body.address, 4000);
-  const ageText = text(body.recordedAgeValue, 4);
+  const ageText = text(body.recordedAgeValue, 5);
   const ageUnit = text(body.recordedAgeUnit, 8);
   const recordedAgeValue = /^(0|[1-9][0-9]{0,4})$/.test(ageText) ? Number(ageText) : null;
   const notes = text(body.notes, 4000);
