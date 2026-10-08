@@ -95,3 +95,9 @@ Scope source: `02_MASTER_SCOPE.md` sections 20–28, with related specimen secur
 
 - Extended MariaDB integration coverage with actual organization, branch, user, patient, order, specimen and registered storage records. Verifies explicit FK-based occupancy and reassesses occupancy after clearing the specimen's current location.
 - Keeps reverse lock-contention checks. This test does not yet make authenticated concurrent HTTP requests or prove every workflow respects storage locking; release acceptance remains blocked pending those tests and clinical quarantine/retention policies.
+
+
+## Occupied-location transactional rollback coverage
+
+- Extended the MariaDB integration fixture to perform an actual tentative INACTIVE update while a specimen references the location, then query occupied specimens within the **same transaction** and roll back. Verify the location remains ACTIVE after rollback.
+- Coverage now tests registered specimen FK occupancy, the conservative free-text fallback predicate, and two-connection row locking. This does not yet emulate authenticated API calls or all specimen lifecycle transitions; do not mark Stage 6 accepted from this alone.
