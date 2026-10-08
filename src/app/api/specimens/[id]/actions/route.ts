@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { specimenActionError } from "@/lib/clinical-safety";
-import { receptionAssessmentError } from "@/lib/specimen-reception-policy";
+import { receptionAssessmentError, receptionAcceptanceError } from "@/lib/specimen-reception-policy";
 import { specimenRequirementSnapshotFromDetails } from "@/lib/specimen-requirement-engine";
 
 function text(value: unknown, max = 500) {
@@ -58,6 +58,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
 
   if (body.action === "RECEIVE") {
+    if (specimen.currentBranchId !== branchId) {
+      return NextResponse.json({ error: "specimen_reception_branch_must_match_current_location" }, { status: 409 });
+    }
     const requirementSnapshot = specimen.events
       .map(event => specimenRequirementSnapshotFromDetails(event.details))
       .find(Boolean) || null;
@@ -84,6 +87,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (receptionError) {
       return NextResponse.json({ error: receptionError }, { status: 400 });
     }
+
+    const acceptanceError = receptionAcceptanceError({ labelAssessment, conditionCode, expectedContainerCode, observedContainerCode });
+    if (acceptanceError) return NextResponse.json({ error: acceptanceError }, { status: 409 });
 
     const result = await prisma.$transaction(async (tx) => {
       const changed = await tx.specimen.updateMany({
