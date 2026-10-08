@@ -126,3 +126,18 @@ test("recorded age fails closed if timestamp missing, stale, future, or unit mis
   assert.equal(referenceIntervalMatchesContext(candidate, { ...context, at: new Date("2026-10-08T08:00:00.000Z") }), false);
   assert.equal(referenceIntervalMatchesContext(candidate, { ...context, recordedAgeUnit: "YEAR" }), false);
 });
+
+test("age at order time remains stable when result entry happens a day later", () => {
+  const intervalForInfant = interval({ ageFrom: 3, ageTo: 9, ageUnit: "MONTH" });
+  const context = {
+    ...baseContext,
+    dateOfBirth: null,
+    recordedAgeValue: 6,
+    recordedAgeUnit: "MONTH",
+    recordedAgeAt: new Date("2026-10-08T09:00:00.000Z"),
+    ageAsOf: new Date("2026-10-08T10:00:00.000Z"),
+    at: new Date("2026-10-15T10:00:00.000Z"),
+  };
+  assert.equal(referenceIntervalMatchesContext(intervalForInfant, context), true);
+  assert.equal(referenceIntervalMatchesContext(intervalForInfant, { ...context, ageAsOf: null }), false);
+});
