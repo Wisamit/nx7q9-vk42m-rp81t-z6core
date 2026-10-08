@@ -17,10 +17,18 @@ test("MariaDB serializes a storage deactivation behind a relocation location loc
   const organizationId = randomUUID();
   const branchId = randomUUID();
   const locationId = randomUUID();
+  const userId = randomUUID();
+  const patientId = randomUUID();
+  const orderId = randomUUID();
+  const specimenId = randomUUID();
   const suffix = organizationId.slice(0, 8);
   let insertedOrganization = false;
   let insertedBranch = false;
   let insertedLocation = false;
+  let insertedSpecimen = false;
+  let insertedOrder = false;
+  let insertedPatient = false;
+  let insertedUser = false;
   try {
     await setup.execute("INSERT INTO organizations (id, code, name_en, updated_at) VALUES (?, ?, ?, NOW(3))",
       [organizationId, "LOC-" + suffix, "Storage Lock Integration"]);
@@ -33,6 +41,26 @@ test("MariaDB serializes a storage deactivation behind a relocation location loc
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(3))`,
       [locationId, organizationId, branchId, "Integration / Fridge / Rack / Slot", "Integration", "Fridge", "Rack", "Slot"]);
     insertedLocation = true;
+    await setup.execute("INSERT INTO users (id, organization_id, username, display_name_en, updated_at) VALUES (?, ?, ?, ?, NOW(3))",
+      [userId, organizationId, "lock-" + suffix, "Storage Integration Actor"]);
+    insertedUser = true;
+    await setup.execute("INSERT INTO patients (id, organization_id, patient_number, full_name_en, normalized_name, updated_at) VALUES (?, ?, ?, ?, ?, NOW(3))",
+      [patientId, organizationId, "P-" + suffix, "Storage Test Patient", "storage test patient"]);
+    insertedPatient = true;
+    await setup.execute("INSERT INTO orders (id, organization_id, accession_number, ordering_branch_id, patient_id, created_by_user_id, updated_at) VALUES (?, ?, ?, ?, ?, ?, NOW(3))",
+      [orderId, organizationId, "A-" + suffix, branchId, patientId, userId]);
+    insertedOrder = true;
+    await setup.execute(`INSERT INTO specimens
+      (id, organization_id, order_id, barcode, sequence_number, status, current_branch_id, storage_location, storage_location_id, updated_at)
+      VALUES (?, ?, ?, ?, 1, 'RECEIVED', ?, ?, ?, NOW(3))`,
+      [specimenId, organizationId, orderId, "LOCK-" + suffix, branchId, "Integration / Fridge / Rack / Slot", locationId]);
+    insertedSpecimen = true;
+
+    // An occupied registered position must be denied deactivation.
+    const [occupied] = await setup.execute<mysql.RowDataPacket[]>(
+      "SELECT COUNT(*) AS occupied FROM specimens WHERE current_branch_id = ? AND storage_location_id = ? AND status <> 'DISPOSED'",
+      [branchId, locationId]);
+    assert.equal(Number(occupied[0]?.occupied), 1);
 
     await relocating.beginTransaction();
     const [locked] = await relocating.execute<mysql.RowDataPacket[]>(
@@ -48,6 +76,13 @@ test("MariaDB serializes a storage deactivation behind a relocation location loc
     );
     await deactivating.rollback();
     await relocating.commit();
+
+    // Remove the sample's current physical assignment before disabling.
+    await setup.execute("UPDATE specimens SET storage_location_id = NULL, storage_location = NULL WHERE id = ?", [specimenId]);
+    const [cleared] = await setup.execute<mysql.RowDataPacket[]>(
+      "SELECT COUNT(*) AS occupied FROM specimens WHERE current_branch_id = ? AND storage_location_id = ? AND status <> 'DISPOSED'",
+      [branchId, locationId]);
+    assert.equal(Number(cleared[0]?.occupied), 0);
 
     await deactivating.beginTransaction();
     const [update] = await deactivating.execute<mysql.ResultSetHeader>(
@@ -84,6 +119,10 @@ test("MariaDB serializes a storage deactivation behind a relocation location loc
   } finally {
     await relocating.rollback().catch(() => {});
     await deactivating.rollback().catch(() => {});
+    if (insertedSpecimen) await setup.execute("DELETE FROM specimens WHERE id = ?", [specimenId]);
+    if (insertedOrder) await setup.execute("DELETE FROM orders WHERE id = ?", [orderId]);
+    if (insertedPatient) await setup.execute("DELETE FROM patients WHERE id = ?", [patientId]);
+    if (insertedUser) await setup.execute("DELETE FROM users WHERE id = ?", [userId]);
     if (insertedLocation) await setup.execute("DELETE FROM specimen_storage_locations WHERE id = ?", [locationId]);
     if (insertedBranch) await setup.execute("DELETE FROM branches WHERE id = ?", [branchId]);
     if (insertedOrganization) await setup.execute("DELETE FROM organizations WHERE id = ?", [organizationId]);
