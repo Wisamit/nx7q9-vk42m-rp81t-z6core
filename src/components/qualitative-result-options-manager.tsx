@@ -33,7 +33,17 @@ type ExistingOption = {
   displayOrder: number;
   effectiveFrom: string;
   effectiveTo: string | null;
+  approvalStatus: "DRAFT" | "APPROVED" | "RETIRED";
   status: string;
+  approvedAt: string | null;
+  retiredAt: string | null;
+  retirementReason: string | null;
+  createdByNameEn: string;
+  createdByNameAr?: string | null;
+  approvedByNameEn?: string | null;
+  approvedByNameAr?: string | null;
+  retiredByNameEn?: string | null;
+  retiredByNameAr?: string | null;
   testCode: string;
   testNameEn: string;
   testNameAr?: string | null;
@@ -46,10 +56,12 @@ export function QualitativeResultOptionsManager({
   tests,
   options,
   locale,
+  canApprove,
 }: {
   tests: TestOption[];
   options: ExistingOption[];
   locale: "ar" | "en";
+  canApprove: boolean;
 }) {
   const router = useRouter();
   const [testId, setTestId] = useState("");
@@ -95,7 +107,7 @@ export function QualitativeResultOptionsManager({
     const body = await response.json().catch(() => ({}));
 
     if (response.ok) {
-      setMessage(tr("Qualitative result option created.", "تم إنشاء خيار النتيجة النوعية."));
+      setMessage(tr("Qualitative result option draft created. It cannot be used clinically until approval.", "تم إنشاء مسودة خيار النتيجة النوعية. لا يمكن استخدامها سريرياً قبل الاعتماد."));
       event.currentTarget.reset();
       setTestId("");
       setComponentId("");
@@ -106,18 +118,39 @@ export function QualitativeResultOptionsManager({
     setBusy("");
   }
 
-  async function changeStatus(id: string, status: "ACTIVE" | "INACTIVE") {
+  async function governanceAction(id: string, action: "APPROVE" | "RETIRE") {
+    if (!canApprove) return;
+    let reason = "";
+    if (action === "APPROVE") {
+      if (!confirm(tr(
+        "Approve this qualitative result meaning for clinical use? Critical options can generate critical-result alerts after approval.",
+        "اعتماد معنى النتيجة النوعية للاستخدام السريري؟ الخيارات الحرجة قد تنشئ تنبيهات نتائج حرجة بعد الاعتماد.",
+      ))) return;
+    } else {
+      const entered = prompt(tr("Retirement reason (required):", "سبب إيقاف الخيار (مطلوب):"));
+      if (entered === null) return;
+      reason = entered.trim();
+      if (!reason) {
+        setMessage(tr("Retirement reason is required.", "سبب الإيقاف مطلوب."));
+        return;
+      }
+    }
+
     setBusy(id);
     setMessage("");
     const response = await fetch("/api/clinical-rules/qualitative-options", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, status }),
+      body: JSON.stringify({ id, action, reason }),
     });
     const body = await response.json().catch(() => ({}));
     setMessage(response.ok
-      ? tr("Qualitative option status updated.", "تم تحديث حالة خيار النتيجة النوعية.")
-      : typeof body.error === "string" ? body.error : tr("Could not update option status.", "تعذر تحديث حالة الخيار."));
+      ? action === "APPROVE"
+        ? tr("Qualitative option approved for clinical use.", "تم اعتماد خيار النتيجة النوعية للاستخدام السريري.")
+        : tr("Qualitative option retired.", "تم إيقاف خيار النتيجة النوعية.")
+      : body.error === "approved_qualitative_option_overlap"
+        ? tr("Approval blocked: another approved version with the same code overlaps this effective period.", "تعذر الاعتماد: يوجد إصدار معتمد آخر بنفس الرمز ويتداخل مع فترة السريان.")
+        : typeof body.error === "string" ? body.error : tr("Could not update qualitative option.", "تعذر تحديث خيار النتيجة النوعية."));
     setBusy("");
     if (response.ok) router.refresh();
   }
@@ -135,8 +168,8 @@ export function QualitativeResultOptionsManager({
       <div>
         <h2>{tr("Qualitative Result Options", "خيارات النتائج النوعية")}</h2>
         <p className="muted">{tr(
-          "Configure selectable qualitative values per test/component. The selected label, flag and critical state are snapshotted into the result.",
-          "هيّئ القيم النوعية القابلة للاختيار لكل فحص/مكوّن. يتم حفظ نسخة تاريخية من النص والإشارة والحالة الحرجة داخل النتيجة."
+          "Configure selectable qualitative values per test/component. New meanings are saved as inactive drafts; only explicitly approved options can be used clinically. The selected label, flag and critical state are snapshotted into the result.",
+          "هيّئ القيم النوعية القابلة للاختيار لكل فحص/مكوّن. تُحفظ المعاني الجديدة كمسودات غير نشطة، ولا تُستخدم سريرياً إلا بعد اعتماد صريح. ويتم حفظ نسخة تاريخية من النص والإشارة والحالة الحرجة داخل النتيجة."
         )}</p>
       </div>
     </div>
@@ -179,7 +212,7 @@ export function QualitativeResultOptionsManager({
       <label className="checkbox-row"><input name="isAbnormal" type="checkbox" /> {tr("Treat this option as abnormal", "اعتبر هذا الخيار غير طبيعي")}</label>
       <label className="checkbox-row"><input name="isCritical" type="checkbox" /> {tr("Treat this option as a critical result", "اعتبر هذا الخيار نتيجة حرجة")}</label>
       <button className="primary-button form-span" disabled={busy === "create" || !testId || (requiresComponent && !componentId)}>
-        {busy === "create" ? tr("Saving…", "جارٍ الحفظ…") : tr("Create Qualitative Option", "إنشاء الخيار النوعي")}
+        {busy === "create" ? tr("Saving…", "جارٍ الحفظ…") : tr("Create Qualitative Option Draft", "إنشاء مسودة الخيار النوعي")}
       </button>
     </form>
 
@@ -195,11 +228,12 @@ export function QualitativeResultOptionsManager({
           <th>{tr("Abnormal", "غير طبيعية")}</th>
           <th>{tr("Critical", "حرجة")}</th>
           <th>{tr("Effective", "السريان")}</th>
+          <th>{tr("Governance", "الحوكمة")}</th>
           <th>{tr("Status", "الحالة")}</th>
-          <th></th>
+          <th>{tr("Action", "الإجراء")}</th>
         </tr></thead>
         <tbody>
-          {options.length === 0 ? <tr><td colSpan={9} className="empty-state">{tr("No qualitative result options configured.", "لا توجد خيارات نتائج نوعية مهيأة.")}</td></tr> :
+          {options.length === 0 ? <tr><td colSpan={10} className="empty-state">{tr("No qualitative result options configured.", "لا توجد خيارات نتائج نوعية مهيأة.")}</td></tr> :
             options.map((option) => {
               const target = option.componentId
                 ? option.testCode + " / " + (option.componentCode || "")
@@ -213,10 +247,19 @@ export function QualitativeResultOptionsManager({
                 <td>{option.isAbnormal ? tr("YES", "نعم") : tr("NO", "لا")}</td>
                 <td>{option.isCritical ? tr("YES", "نعم") : tr("NO", "لا")}</td>
                 <td>{option.effectiveFrom} → {option.effectiveTo || tr("Open", "مفتوح")}</td>
+                <td>
+                  <strong>{option.approvalStatus === "APPROVED" ? tr("Approved", "معتمد") : option.approvalStatus === "RETIRED" ? tr("Retired", "موقوف") : tr("Draft", "مسودة")}</strong>
+                  <br/><small>{tr("Created by", "أُنشئ بواسطة")}: {locale === "ar" ? option.createdByNameAr || option.createdByNameEn : option.createdByNameEn}</small>
+                  {option.approvedAt && option.approvedByNameEn ? <><br/><small>{tr("Approved by", "اعتمد بواسطة")}: {locale === "ar" ? option.approvedByNameAr || option.approvedByNameEn : option.approvedByNameEn} · {option.approvedAt}</small></> : null}
+                  {option.retiredAt && option.retiredByNameEn ? <><br/><small>{tr("Retired by", "أُوقف بواسطة")}: {locale === "ar" ? option.retiredByNameAr || option.retiredByNameEn : option.retiredByNameEn} · {option.retiredAt}</small></> : null}
+                  {option.retirementReason ? <><br/><small>{tr("Reason", "السبب")}: {option.retirementReason}</small></> : null}
+                </td>
                 <td>{option.status}</td>
-                <td><button type="button" className="secondary-button" disabled={busy === option.id} onClick={() => void changeStatus(option.id, option.status === "ACTIVE" ? "INACTIVE" : "ACTIVE")}>
-                  {option.status === "ACTIVE" ? tr("Deactivate", "تعطيل") : tr("Reactivate", "إعادة تفعيل")}
-                </button></td>
+                <td>{canApprove && option.approvalStatus === "DRAFT"
+                  ? <button type="button" className="primary-button" disabled={busy === option.id} onClick={() => void governanceAction(option.id, "APPROVE")}>{tr("Approve", "اعتماد")}</button>
+                  : canApprove && option.approvalStatus === "APPROVED"
+                    ? <button type="button" className="secondary-button" disabled={busy === option.id} onClick={() => void governanceAction(option.id, "RETIRE")}>{tr("Retire", "إيقاف")}</button>
+                    : "—"}</td>
               </tr>;
             })}
         </tbody>

@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   buildSpecimenPlans,
   specimenCollectionVolumeError,
+  specimenRequirementEventDetails,
   specimenRequirementSnapshotFromDetails,
 } from "../src/lib/specimen-requirement-engine.ts";
 
@@ -88,9 +89,21 @@ test("requirement snapshot reader accepts only explicit finalized metadata", () 
   };
   assert.equal(specimenRequirementSnapshotFromDetails({ requiredVolume: "0.800" }), null);
   assert.deepEqual(specimenRequirementSnapshotFromDetails(finalized), {
+    requirementEngineVersion: 1,
+    requirementSource: "LEGACY_FINALIZATION",
+    requirementCapturedAt: null,
+    specimenTypeId: null,
+    specimenTypeCode: null,
+    specimenTypeNameEn: null,
+    specimenTypeNameAr: null,
+    containerId: null,
+    containerCode: null,
+    containerNameEn: null,
+    containerNameAr: null,
     requiredVolume: "0.800",
     requiredVolumeUnit: "mL",
     volumeRequirementComplete: true,
+    patientPreparation: [],
     collectionInstructions: ["Allow to clot"],
     storageConditions: "2-8 C",
     stabilityMinutes: 240,
@@ -98,4 +111,68 @@ test("requirement snapshot reader accepts only explicit finalized metadata", () 
     configurationComplete: true,
     requirementMembers: [{ testCode: "GLU" }],
   });
+});
+
+
+test("order-time requirement event snapshots preserve pre-analytical configuration", () => {
+  const plan = buildSpecimenPlans([{
+    orderItemId: "OI-1",
+    testId: "T-1",
+    testCode: "GLU",
+    specimenTypeId: "SPEC-1",
+    specimenTypeCode: "SERUM",
+    specimenTypeNameEn: "Serum",
+    specimenTypeNameAr: "مصل",
+    containerId: "CONT-1",
+    containerCode: "SST",
+    containerNameEn: "Serum separator tube",
+    containerNameAr: "أنبوب فصل المصل",
+    minimumVolume: "0.500",
+    minimumVolumeUnit: "mL",
+    patientPreparation: "Fasting 8 hours",
+    collectionInstructions: "Allow to clot",
+    storageConditions: "2-8 C",
+    stabilityMinutes: 240,
+  }])[0];
+
+  const capturedAt = new Date("2026-10-08T01:00:00.000Z");
+  const details = specimenRequirementEventDetails(plan, {
+    requirementSource: "ORDER_REGISTRATION_SNAPSHOT",
+    capturedAt,
+    extra: { barcode: "ORD-01" },
+  });
+  const snapshot = specimenRequirementSnapshotFromDetails(details);
+
+  assert.ok(snapshot);
+  assert.equal(snapshot.requirementEngineVersion, 2);
+  assert.equal(snapshot.requirementSource, "ORDER_REGISTRATION_SNAPSHOT");
+  assert.equal(snapshot.requirementCapturedAt, capturedAt.toISOString());
+  assert.equal(snapshot.specimenTypeCode, "SERUM");
+  assert.equal(snapshot.specimenTypeNameEn, "Serum");
+  assert.equal(snapshot.containerCode, "SST");
+  assert.equal(snapshot.containerNameEn, "Serum separator tube");
+  assert.deepEqual(snapshot.patientPreparation, ["Fasting 8 hours"]);
+  assert.deepEqual(snapshot.collectionInstructions, ["Allow to clot"]);
+  assert.equal(snapshot.requiredVolume, "0.500");
+  assert.equal(snapshot.storageConditions, "2-8 C");
+  assert.equal(snapshot.stabilityMinutes, 240);
+});
+
+test("legacy finalized snapshots remain readable without inventing missing order-time evidence", () => {
+  const snapshot = specimenRequirementSnapshotFromDetails({
+    requirementsFinalized: true,
+    requiredVolume: "1.000",
+    requiredVolumeUnit: "mL",
+    volumeRequirementComplete: true,
+    collectionInstructions: ["Legacy instruction"],
+    configurationComplete: true,
+    requirementMembers: [],
+  });
+  assert.ok(snapshot);
+  assert.equal(snapshot.requirementEngineVersion, 1);
+  assert.equal(snapshot.requirementSource, "LEGACY_FINALIZATION");
+  assert.equal(snapshot.requirementCapturedAt, null);
+  assert.equal(snapshot.specimenTypeCode, null);
+  assert.equal(snapshot.containerCode, null);
+  assert.deepEqual(snapshot.patientPreparation, []);
 });

@@ -6,6 +6,7 @@ export type ValidationPolicyLike = {
   nameEn: string;
   nameAr: string | null;
   scope: ValidationPolicyScope;
+  branchId: string | null;
   departmentId: string | null;
   testId: string | null;
   requiresMedicalValidation: boolean;
@@ -21,6 +22,7 @@ export type ValidationPolicySnapshot = {
   nameEn: string;
   nameAr: string | null;
   scope: ValidationPolicyScope | null;
+  branchId: string | null;
   departmentId: string | null;
   testId: string | null;
   requiresMedicalValidation: boolean;
@@ -37,17 +39,20 @@ const scopePriority: Record<ValidationPolicyScope, number> = {
 
 export function selectValidationPolicy(
   policies: ValidationPolicyLike[],
-  context: { testId: string; departmentId: string | null },
+  context: { branchId: string; testId: string; departmentId: string | null },
 ) {
   return policies
     .filter(policy => {
+      if (policy.branchId !== null && policy.branchId !== context.branchId) return false;
       if (policy.scope === "TEST") return policy.testId === context.testId;
       if (policy.scope === "DEPARTMENT") return Boolean(context.departmentId) && policy.departmentId === context.departmentId;
       return policy.scope === "ORGANIZATION";
     })
     .sort((a, b) =>
       scopePriority[b.scope] - scopePriority[a.scope]
+      || Number(b.branchId !== null) - Number(a.branchId !== null)
       || b.effectiveFrom.getTime() - a.effectiveFrom.getTime()
+      || b.id.localeCompare(a.id)
     )[0] || null;
 }
 
@@ -60,6 +65,7 @@ export function snapshotValidationPolicy(policy: ValidationPolicyLike | null): V
       nameEn: "Default technical review",
       nameAr: "المراجعة الفنية الافتراضية",
       scope: null,
+      branchId: null,
       departmentId: null,
       testId: null,
       requiresMedicalValidation: false,
@@ -76,6 +82,7 @@ export function snapshotValidationPolicy(policy: ValidationPolicyLike | null): V
     nameEn: policy.nameEn,
     nameAr: policy.nameAr,
     scope: policy.scope,
+    branchId: policy.branchId,
     departmentId: policy.departmentId,
     testId: policy.testId,
     requiresMedicalValidation: policy.requiresMedicalValidation,
@@ -87,6 +94,22 @@ export function snapshotValidationPolicy(policy: ValidationPolicyLike | null): V
 
 export function stageAfterTechnicalReview(snapshot: ValidationPolicySnapshot) {
   return snapshot.requiresMedicalValidation ? "MEDICAL_VALIDATION" as const : "COMPLETE" as const;
+}
+
+export function automatedTechnicalReviewOutcome(
+  snapshot: ValidationPolicySnapshot,
+  input: { eligible: boolean; complete: boolean },
+) {
+  if (!input.complete) {
+    return { resultStatus: "DRAFT" as const, validationStage: "ENTRY" as const, verificationComplete: false };
+  }
+  if (!input.eligible) {
+    return { resultStatus: "ENTERED" as const, validationStage: "TECHNICAL_REVIEW" as const, verificationComplete: false };
+  }
+  if (snapshot.requiresMedicalValidation) {
+    return { resultStatus: "ENTERED" as const, validationStage: "MEDICAL_VALIDATION" as const, verificationComplete: false };
+  }
+  return { resultStatus: "VERIFIED" as const, validationStage: "COMPLETE" as const, verificationComplete: true };
 }
 
 export function medicalReviewerAllowed(

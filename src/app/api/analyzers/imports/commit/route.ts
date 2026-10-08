@@ -1,16 +1,23 @@
 import { NextResponse } from "next/server";
 import { Prisma } from "../../../../../../generated/prisma/client";
 import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
+import {
+  analyzerMappingClinicallyUsable,
+  analyzerMappingTargetUnitStillMatches,
+} from "@/lib/analyzer-mapping-governance";
 import { prisma } from "@/lib/db";
 import { parseResultValue } from "@/lib/result-value-parser";
 import { numericFlag, resolveReferenceInterval } from "@/lib/result-reference";
 import { evaluateDelta } from "@/lib/delta-check";
+import { syncDeltaReviewEvents } from "@/lib/delta-review";
 import { evaluateFormula, formulaVariables } from "@/lib/formula-engine";
 import { reflexMatches } from "@/lib/reflex-rules";
 import { validationHoldMatches } from "@/lib/validation-holds";
 import { evaluateAutoverification } from "@/lib/autoverification";
 import { resolveAnalyzerQcGate } from "@/lib/qc-gate";
 import { matchQualitativeOption, qualitativeFlag } from "@/lib/qualitative-result-options";
+import { snapshotReportPresentation } from "@/lib/report-presentation";
+import { automatedTechnicalReviewOutcome, selectValidationPolicy, snapshotValidationPolicy, type ValidationPolicySnapshot } from "@/lib/result-validation";
 
 function emptyDelta() {
   return {
@@ -21,6 +28,8 @@ function emptyDelta() {
     deltaPercent: null,
     absoluteLimit: null,
     percentLimit: null,
+    ruleId: null,
+    lookbackDays: null,
   };
 }
 
@@ -43,7 +52,12 @@ export async function POST(request: Request) {
     },
     include: {
       analyzer: true,
-      mapping: true,
+      mapping: {
+        include: {
+          test: { include: { defaultUnit: true } },
+          component: { include: { unit: true } },
+        },
+      },
       specimen: true,
       orderItem: true,
     },
@@ -92,9 +106,12 @@ export async function POST(request: Request) {
             where: { status: "ACTIVE" },
             include: {
               unit: true,
+              resultSection: true,
               qualitativeResultOptions: {
                 where: {
                   status: "ACTIVE",
+                  approvalStatus: "APPROVED",
+                  approvedAt: { not: null },
                   effectiveFrom: { lte: now },
                   OR: [{ effectiveTo: null }, { effectiveTo: { gte: now } }],
                 },
@@ -107,6 +124,8 @@ export async function POST(request: Request) {
             where: {
               componentId: null,
               status: "ACTIVE",
+              approvalStatus: "APPROVED",
+              approvedAt: { not: null },
               effectiveFrom: { lte: now },
               OR: [{ effectiveTo: null }, { effectiveTo: { gte: now } }],
             },
@@ -178,11 +197,29 @@ export async function POST(request: Request) {
     if (!item.mapping || item.mapping.testId !== orderItem.testId || item.mapping.analyzerId !== analyzer.id) {
       return NextResponse.json({ error: "staged_mapping_no_longer_matches_order_item", importId: item.id }, { status: 409 });
     }
+    if (!analyzerMappingClinicallyUsable(item.mapping, now)) {
+      return NextResponse.json({ error: "staged_mapping_no_longer_clinically_usable", importId: item.id }, { status: 409 });
+    }
+    const currentTargetUnit = item.mapping.componentId
+      ? item.mapping.component?.unit || null
+      : item.mapping.test.defaultUnit;
+    if (!analyzerMappingTargetUnitStillMatches(item.mapping, currentTargetUnit)) {
+      return NextResponse.json({ error: "staged_mapping_target_unit_changed", importId: item.id }, { status: 409 });
+    }
+    if (item.mapping.analyzerUnitCode && item.rawUnit !== item.mapping.analyzerUnitCode) {
+      return NextResponse.json({ error: "staged_analyzer_unit_mismatch", importId: item.id }, { status: 409 });
+    }
+    if (!item.mapping.analyzerUnitCode && item.rawUnit) {
+      return NextResponse.json({ error: "staged_analyzer_unit_unexpected", importId: item.id }, { status: 409 });
+    }
   }
 
   const existing = orderItem.results[0] || null;
   if (existing && ["VERIFIED","RELEASED","AMENDED","CANCELLED"].includes(existing.status)) {
     return NextResponse.json({ error: "result_locked_requires_explicit_workflow", resultId: existing.id, status: existing.status }, { status: 409 });
+  }
+  if (existing && ["MEDICAL_VALIDATION","COMPLETE"].includes(existing.validationStage)) {
+    return NextResponse.json({ error: "result_locked_by_validation_stage", resultId: existing.id, validationStage: existing.validationStage }, { status: 409 });
   }
   if (existing && existing.source !== "ANALYZER") {
     return NextResponse.json({
@@ -212,6 +249,24 @@ export async function POST(request: Request) {
         unitSnapshot: component.unit?.symbol || null,
         decimalPrecision: component.decimalPrecision,
         qualitativeOptions: component.qualitativeResultOptions,
+        reportPresentation: snapshotReportPresentation({
+          code: component.code,
+          nameEn: component.nameEn,
+          nameAr: component.nameAr,
+          displayOrder: component.displayOrder,
+          reportNameEn: component.reportNameEn,
+          reportNameAr: component.reportNameAr,
+          reportDisplayOrder: component.reportDisplayOrder,
+          reportVisible: component.reportVisible,
+          resultSection: component.resultSection ? {
+            code: component.resultSection.code,
+            nameEn: component.resultSection.nameEn,
+            nameAr: component.resultSection.nameAr,
+            displayOrder: component.resultSection.displayOrder,
+            reportDisplayOrder: component.resultSection.reportDisplayOrder,
+            reportVisible: component.resultSection.reportVisible,
+          } : null,
+        }),
       }))
     : [{
         componentId: null,
@@ -223,6 +278,16 @@ export async function POST(request: Request) {
         unitSnapshot: orderItem.test.defaultUnit?.symbol || null,
         decimalPrecision: orderItem.test.decimalPrecision,
         qualitativeOptions: orderItem.test.qualitativeResultOptions,
+        reportPresentation: {
+          reportNameEnSnapshot: orderItem.test.nameEn,
+          reportNameArSnapshot: orderItem.test.nameAr,
+          reportDisplayOrderSnapshot: 0,
+          reportVisibleSnapshot: true,
+          reportSectionCodeSnapshot: null,
+          reportSectionNameEnSnapshot: null,
+          reportSectionNameArSnapshot: null,
+          reportSectionOrderSnapshot: null,
+        },
       }];
 
   const calculatedTargetIds = new Set(orderItem.test.calculatedRules.map(rule => rule.targetComponentId));
@@ -245,6 +310,16 @@ export async function POST(request: Request) {
     resultType: "NUMERIC" | "TEXT" | "QUALITATIVE" | "BOOLEAN" | "DATE";
     unitId: string | null;
     unitSnapshot: string | null;
+    reportPresentation: {
+      reportNameEnSnapshot: string;
+      reportNameArSnapshot: string | null;
+      reportDisplayOrderSnapshot: number;
+      reportVisibleSnapshot: boolean;
+      reportSectionCodeSnapshot: string | null;
+      reportSectionNameEnSnapshot: string | null;
+      reportSectionNameArSnapshot: string | null;
+      reportSectionOrderSnapshot: number | null;
+    };
     parsed: NonNullable<ReturnType<typeof parseResultValue>>;
     interval: Awaited<ReturnType<typeof resolveReferenceInterval>> | null;
     flag: {
@@ -313,6 +388,11 @@ export async function POST(request: Request) {
             methodId: orderItem.test.methodId,
             patientSex: orderItem.order.patient.sexAtBirth,
             dateOfBirth: orderItem.order.patient.dateOfBirth,
+            pregnancyStatus: orderItem.order.pregnancyStatus,
+            gestationalAgeWeeks: orderItem.order.gestationalAgeWeeks,
+            analyzerId: analyzer.id,
+            specimenTypeId: specimen.specimenTypeId,
+            populationCode: orderItem.order.referencePopulationCode,
           })
         : null;
 
@@ -439,6 +519,11 @@ export async function POST(request: Request) {
         methodId: orderItem.test.methodId,
         patientSex: orderItem.order.patient.sexAtBirth,
         dateOfBirth: orderItem.order.patient.dateOfBirth,
+        pregnancyStatus: orderItem.order.pregnancyStatus,
+        gestationalAgeWeeks: orderItem.order.gestationalAgeWeeks,
+        analyzerId: analyzer.id,
+        specimenTypeId: specimen.specimenTypeId,
+        populationCode: orderItem.order.referencePopulationCode,
       });
       const flag = numericFlag(value, interval);
       const delta = await evaluateDelta(prisma, {
@@ -521,6 +606,31 @@ export async function POST(request: Request) {
   const finalCodes = new Set(ruleValues.keys());
   const complete = expected.every(item => finalCodes.has(item.code));
   const resultStatus = complete ? "ENTERED" : "DRAFT";
+  const existingValidationSnapshot = existing?.validationPolicySnapshot
+    ? existing.validationPolicySnapshot as unknown as ValidationPolicySnapshot
+    : null;
+  let validationSnapshot = existingValidationSnapshot;
+  if (!validationSnapshot && complete) {
+    const validationPolicies = await prisma.resultValidationPolicy.findMany({
+      where: {
+        organizationId: session.user.organizationId,
+        status: "ACTIVE",
+        effectiveFrom: { lte: now },
+        AND: [
+          { OR: [{ effectiveTo: null }, { effectiveTo: { gte: now } }] },
+          { OR: [{ branchId: null }, { branchId: analyzer.branchId }] },
+        ],
+      },
+    });
+    validationSnapshot = snapshotValidationPolicy(selectValidationPolicy(validationPolicies, {
+      branchId: analyzer.branchId,
+      testId: orderItem.testId,
+      departmentId: orderItem.test.departmentId,
+    }));
+  }
+  const validationPolicyId = existing?.validationPolicyId
+    || (validationSnapshot?.source === "CONFIGURED" ? validationSnapshot.policyId : null);
+  const entryValidationStage = complete ? "TECHNICAL_REVIEW" as const : "ENTRY" as const;
   const autoverificationPolicy =
     orderItem.test.autoverificationPolicies.find(policy => policy.branchId === analyzer.branchId)
     || orderItem.test.autoverificationPolicies.find(policy => policy.branchId === null)
@@ -564,6 +674,13 @@ export async function POST(request: Request) {
             enteredByUserId: session.user.id,
             enteredAt: new Date(),
             autoVerified: false,
+            validationStage: entryValidationStage,
+            validationPolicyId,
+            validationPolicySnapshot: validationSnapshot ? validationSnapshot as unknown as Prisma.InputJsonValue : Prisma.DbNull,
+            technicalReviewedByUserId: null,
+            technicalReviewedAt: null,
+            medicallyValidatedByUserId: null,
+            medicallyValidatedAt: null,
             verifiedByUserId: null,
             verifiedAt: null,
           },
@@ -582,6 +699,9 @@ export async function POST(request: Request) {
             status: resultStatus,
             source: "ANALYZER",
             enteredByUserId: session.user.id,
+            validationStage: entryValidationStage,
+            validationPolicyId,
+            validationPolicySnapshot: validationSnapshot ? validationSnapshot as unknown as Prisma.InputJsonValue : undefined,
           },
         });
 
@@ -603,6 +723,14 @@ export async function POST(request: Request) {
           componentId: item.componentId,
           componentNameEnSnapshot: item.nameEn,
           componentNameArSnapshot: item.nameAr,
+          reportNameEnSnapshot: item.reportPresentation.reportNameEnSnapshot,
+          reportNameArSnapshot: item.reportPresentation.reportNameArSnapshot,
+          reportDisplayOrderSnapshot: item.reportPresentation.reportDisplayOrderSnapshot,
+          reportVisibleSnapshot: item.reportPresentation.reportVisibleSnapshot,
+          reportSectionCodeSnapshot: item.reportPresentation.reportSectionCodeSnapshot,
+          reportSectionNameEnSnapshot: item.reportPresentation.reportSectionNameEnSnapshot,
+          reportSectionNameArSnapshot: item.reportPresentation.reportSectionNameArSnapshot,
+          reportSectionOrderSnapshot: item.reportPresentation.reportSectionOrderSnapshot,
           resultTypeSnapshot: item.resultType,
           valueNumeric: item.parsed.valueNumeric,
           valueText: item.parsed.valueText,
@@ -633,6 +761,8 @@ export async function POST(request: Request) {
           deltaPercentSnapshot: item.delta.deltaPercent,
           deltaAbsoluteLimitSnapshot: item.delta.absoluteLimit,
           deltaPercentLimitSnapshot: item.delta.percentLimit,
+          deltaRuleId: item.delta.ruleId,
+          deltaLookbackDaysSnapshot: item.delta.lookbackDays,
           isCalculated: false,
           calculatedRuleId: null,
           calculationExpressionSnapshot: null,
@@ -645,6 +775,14 @@ export async function POST(request: Request) {
           componentCodeSnapshot: item.code,
           componentNameEnSnapshot: item.nameEn,
           componentNameArSnapshot: item.nameAr,
+          reportNameEnSnapshot: item.reportPresentation.reportNameEnSnapshot,
+          reportNameArSnapshot: item.reportPresentation.reportNameArSnapshot,
+          reportDisplayOrderSnapshot: item.reportPresentation.reportDisplayOrderSnapshot,
+          reportVisibleSnapshot: item.reportPresentation.reportVisibleSnapshot,
+          reportSectionCodeSnapshot: item.reportPresentation.reportSectionCodeSnapshot,
+          reportSectionNameEnSnapshot: item.reportPresentation.reportSectionNameEnSnapshot,
+          reportSectionNameArSnapshot: item.reportPresentation.reportSectionNameArSnapshot,
+          reportSectionOrderSnapshot: item.reportPresentation.reportSectionOrderSnapshot,
           resultTypeSnapshot: item.resultType,
           valueNumeric: item.parsed.valueNumeric,
           valueText: item.parsed.valueText,
@@ -675,6 +813,8 @@ export async function POST(request: Request) {
           deltaPercentSnapshot: item.delta.deltaPercent,
           deltaAbsoluteLimitSnapshot: item.delta.absoluteLimit,
           deltaPercentLimitSnapshot: item.delta.percentLimit,
+          deltaRuleId: item.delta.ruleId,
+          deltaLookbackDaysSnapshot: item.delta.lookbackDays,
           analyzerImportId: item.analyzerImportId,
         },
       });
@@ -688,6 +828,14 @@ export async function POST(request: Request) {
           componentCodeSnapshot: item.code,
           componentNameEnSnapshot: item.nameEn,
           componentNameArSnapshot: item.nameAr,
+          reportNameEnSnapshot: item.reportPresentation.reportNameEnSnapshot,
+          reportNameArSnapshot: item.reportPresentation.reportNameArSnapshot,
+          reportDisplayOrderSnapshot: item.reportPresentation.reportDisplayOrderSnapshot,
+          reportVisibleSnapshot: item.reportPresentation.reportVisibleSnapshot,
+          reportSectionCodeSnapshot: item.reportPresentation.reportSectionCodeSnapshot,
+          reportSectionNameEnSnapshot: item.reportPresentation.reportSectionNameEnSnapshot,
+          reportSectionNameArSnapshot: item.reportPresentation.reportSectionNameArSnapshot,
+          reportSectionOrderSnapshot: item.reportPresentation.reportSectionOrderSnapshot,
           resultTypeSnapshot: item.resultType,
           valueNumeric: item.parsed.valueNumeric,
           valueText: item.parsed.valueText,
@@ -718,6 +866,8 @@ export async function POST(request: Request) {
           deltaPercentSnapshot: item.delta.deltaPercent,
           deltaAbsoluteLimitSnapshot: item.delta.absoluteLimit,
           deltaPercentLimitSnapshot: item.delta.percentLimit,
+          deltaRuleId: item.delta.ruleId,
+          deltaLookbackDaysSnapshot: item.delta.lookbackDays,
           isCalculated: true,
           calculatedRuleId: item.calculatedRuleId,
           calculationExpressionSnapshot: item.calculationExpression,
@@ -726,6 +876,13 @@ export async function POST(request: Request) {
         },
       });
     }
+
+    await syncDeltaReviewEvents(tx, {
+      resultId: result.id,
+      performingBranchId: analyzer.branchId,
+      methodId: orderItem.test.methodId,
+      detectedAt: now,
+    });
 
     for (const rule of orderItem.test.sourceReflexRules) {
       if (rule.branchId && rule.branchId !== analyzer.branchId) continue;
@@ -835,20 +992,49 @@ export async function POST(request: Request) {
       blockingHoldCount,
       qcGate,
     });
-    const finalResultStatus = decision.eligible ? "VERIFIED" : resultStatus;
+    const effectiveValidationSnapshot = validationSnapshot || snapshotValidationPolicy(null);
+    const autoOutcome = automatedTechnicalReviewOutcome(effectiveValidationSnapshot, {
+      eligible: decision.eligible,
+      complete,
+    });
+    const requiresMedicalValidation = effectiveValidationSnapshot.requiresMedicalValidation;
+    const finalResultStatus = autoOutcome.resultStatus;
+    const finalValidationStage = autoOutcome.validationStage;
     const autoverifiedAt = decision.eligible ? new Date() : null;
 
     await tx.laboratoryResult.update({
       where: { id: result.id },
       data: {
         status: finalResultStatus,
+        validationStage: finalValidationStage,
+        validationPolicyId,
+        validationPolicySnapshot: validationSnapshot ? validationSnapshot as unknown as Prisma.InputJsonValue : Prisma.DbNull,
+        technicalReviewedByUserId: null,
+        technicalReviewedAt: autoverifiedAt,
+        medicallyValidatedByUserId: null,
+        medicallyValidatedAt: null,
         autoVerified: decision.eligible,
         autoverificationPolicyId: decision.policyId,
         autoverificationDecisionSnapshot: decision as Prisma.InputJsonValue,
         verifiedByUserId: null,
-        verifiedAt: autoverifiedAt,
+        verifiedAt: decision.eligible && !requiresMedicalValidation ? autoverifiedAt : null,
       },
     });
+
+    if (decision.eligible) {
+      await tx.resultValidationReview.create({
+        data: {
+          resultId: result.id,
+          stage: "TECHNICAL_REVIEW",
+          outcome: "APPROVED",
+          reviewerUserId: null,
+          automated: true,
+          reviewedAt: autoverifiedAt!,
+          notes: "Technical review completed by configured analyzer autoverification policy",
+          policySnapshot: validationSnapshot ? validationSnapshot as unknown as Prisma.InputJsonValue : undefined,
+        },
+      });
+    }
 
     const importedAt = new Date();
     await tx.analyzerResultImport.updateMany({
@@ -860,7 +1046,7 @@ export async function POST(request: Request) {
       where: { id: orderItem.id },
       data: {
         performedBranchId: analyzer.branchId,
-        status: decision.eligible ? "VERIFIED" : "IN_PROGRESS",
+        status: finalResultStatus === "VERIFIED" ? "VERIFIED" : "IN_PROGRESS",
       },
     });
 
@@ -878,7 +1064,7 @@ export async function POST(request: Request) {
       });
     }
 
-    const remainingOrderItems = decision.eligible
+    const remainingOrderItems = finalResultStatus === "VERIFIED"
       ? await tx.orderItem.count({
           where: {
             orderId: orderItem.orderId,
@@ -887,7 +1073,7 @@ export async function POST(request: Request) {
         })
       : null;
 
-    if (decision.eligible && remainingOrderItems === 0) {
+    if (finalResultStatus === "VERIFIED" && remainingOrderItems === 0) {
       const currentOrder = await tx.labOrder.findUnique({ where: { id: orderItem.orderId }, select: { status: true } });
       if (currentOrder && currentOrder.status !== "COMPLETED") {
         await tx.labOrder.update({ where: { id: orderItem.orderId }, data: { status: "COMPLETED" } });
@@ -940,6 +1126,9 @@ export async function POST(request: Request) {
           complete,
           autoverificationEligible: decision.eligible,
           autoverificationReasons: decision.reasons,
+          validationStage: finalValidationStage,
+          validationPolicyId,
+          medicalValidationRequired: requiresMedicalValidation,
           qcGateStatus: qcGate.status,
           qcGateReasons: qcGate.reasons,
           values: incoming.map(item => ({
@@ -965,14 +1154,20 @@ export async function POST(request: Request) {
           entityId: result.id,
           oldValues: { status: resultStatus },
           newValues: {
-            status: "VERIFIED",
-            verifiedAt: autoverifiedAt,
+            status: finalResultStatus,
+            validationStage: finalValidationStage,
+            verifiedAt: decision.eligible && !requiresMedicalValidation ? autoverifiedAt : null,
+            technicalReviewedAt: autoverifiedAt,
+            medicalValidationRequired: requiresMedicalValidation,
             policyId: decision.policyId,
+            validationPolicyId,
             analyzerId: analyzer.id,
             qcGateStatus: qcGate.status,
             qcGateReasons: qcGate.reasons,
           },
-          reason: "Analyzer result met all autoverification rules and QC gate passed",
+          reason: requiresMedicalValidation
+            ? "Analyzer result met autoverification rules and QC gate; medical validation remains required"
+            : "Analyzer result met all autoverification rules and QC gate passed",
           ipAddress: ctx.ipAddress,
           userAgent: ctx.userAgent,
         },

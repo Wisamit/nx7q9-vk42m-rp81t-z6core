@@ -10,6 +10,8 @@ type ResultSection = {
   nameEn: string;
   nameAr: string | null;
   displayOrder: number;
+  reportDisplayOrder: number | null;
+  reportVisible: boolean;
   columnCount: number;
   hintEn: string | null;
   hintAr: string | null;
@@ -21,6 +23,10 @@ type ComponentOption = {
   nameEn: string;
   nameAr: string | null;
   resultSectionId: string | null;
+  reportNameEn: string | null;
+  reportNameAr: string | null;
+  reportDisplayOrder: number | null;
+  reportVisible: boolean;
   entryWidth: "AUTO" | "NARROW" | "STANDARD" | "WIDE" | "FULL";
   entryHintEn: string | null;
   entryHintAr: string | null;
@@ -46,9 +52,15 @@ export function ResultLayoutManager({
   const [presentationSectionId, setPresentationSectionId] = useState(sections.find(section => section.status === "ACTIVE")?.id || sections[0]?.id || "");
   const initialPresentationSection = sections.find(section => section.id === (sections.find(item => item.status === "ACTIVE")?.id || sections[0]?.id));
   const [sectionColumnCount, setSectionColumnCount] = useState(initialPresentationSection?.columnCount || 3);
+  const [sectionReportDisplayOrder, setSectionReportDisplayOrder] = useState<number | "">(initialPresentationSection?.reportDisplayOrder ?? "");
+  const [sectionReportVisible, setSectionReportVisible] = useState(initialPresentationSection?.reportVisible ?? true);
   const [sectionHintEn, setSectionHintEn] = useState(initialPresentationSection?.hintEn || "");
   const [sectionHintAr, setSectionHintAr] = useState(initialPresentationSection?.hintAr || "");
   const [presentationComponentId, setPresentationComponentId] = useState(components[0]?.id || "");
+  const [reportNameEn, setReportNameEn] = useState(components[0]?.reportNameEn || "");
+  const [reportNameAr, setReportNameAr] = useState(components[0]?.reportNameAr || "");
+  const [reportDisplayOrder, setReportDisplayOrder] = useState<number | "">(components[0]?.reportDisplayOrder ?? "");
+  const [reportVisible, setReportVisible] = useState(components[0]?.reportVisible ?? true);
   const [entryWidth, setEntryWidth] = useState<ComponentOption["entryWidth"]>(components[0]?.entryWidth || "AUTO");
   const [entryHintEn, setEntryHintEn] = useState(components[0]?.entryHintEn || "");
   const [entryHintAr, setEntryHintAr] = useState(components[0]?.entryHintAr || "");
@@ -116,6 +128,8 @@ export function ResultLayoutManager({
     if (await post("UPDATE_SECTION_PRESENTATION", {
       sectionId: presentationSectionId,
       columnCount: sectionColumnCount,
+      reportDisplayOrder: sectionReportDisplayOrder,
+      reportVisible: sectionReportVisible,
       hintEn: sectionHintEn,
       hintAr: sectionHintAr,
     })) {
@@ -129,6 +143,10 @@ export function ResultLayoutManager({
     if (await post("UPDATE_COMPONENT_PRESENTATION", {
       componentId: presentationComponentId,
       entryWidth,
+      reportNameEn,
+      reportNameAr,
+      reportDisplayOrder,
+      reportVisible,
       entryHintEn,
       entryHintAr,
     })) {
@@ -197,6 +215,8 @@ export function ResultLayoutManager({
           setPresentationSectionId(id);
           const selected = sections.find(section => section.id === id);
           setSectionColumnCount(selected?.columnCount || 3);
+          setSectionReportDisplayOrder(selected?.reportDisplayOrder ?? "");
+          setSectionReportVisible(selected?.reportVisible ?? true);
           setSectionHintEn(selected?.hintEn || "");
           setSectionHintAr(selected?.hintAr || "");
         }}>
@@ -205,6 +225,8 @@ export function ResultLayoutManager({
         <label>{tr("Grid columns", "أعمدة الشبكة")}<select value={sectionColumnCount} onChange={event => setSectionColumnCount(Number(event.target.value))}>
           <option value={1}>1</option><option value={2}>2</option><option value={3}>3</option><option value={4}>4</option>
         </select></label>
+        <label>{tr("Report order", "ترتيب التقرير")}<input type="number" min="0" max="10000" value={sectionReportDisplayOrder} onChange={event => setSectionReportDisplayOrder(event.target.value === "" ? "" : Number(event.target.value))} placeholder={tr("Use section order", "استخدم ترتيب القسم")} /></label>
+        <label className="check-row"><input type="checkbox" checked={sectionReportVisible} onChange={event => setSectionReportVisible(event.target.checked)} /><span>{tr("Show this section on report", "إظهار هذا القسم في التقرير")}</span></label>
         <label className="form-span">{tr("English hint", "التعليمات بالإنجليزية")}<input value={sectionHintEn} onChange={event => setSectionHintEn(event.target.value)} maxLength={500} /></label>
         <label className="form-span">{tr("Arabic hint", "التعليمات بالعربية")}<input dir="rtl" value={sectionHintAr} onChange={event => setSectionHintAr(event.target.value)} maxLength={500} /></label>
         <button className="secondary-button form-span" disabled={busy !== ""}>{busy === "UPDATE_SECTION_PRESENTATION" ? tr("Saving…", "جارٍ الحفظ…") : tr("Save Section Presentation", "حفظ عرض القسم")}</button>
@@ -213,12 +235,16 @@ export function ResultLayoutManager({
 
     {components.length > 0 && <article className="detail-card">
       <h3>{tr("Component Presentation", "عرض المكوّن")}</h3>
-      <p className="muted">{tr("Control field width and optional operator guidance without changing result storage or report names.", "تحكم بعرض الحقل وتعليمات المشغل دون تغيير تخزين النتيجة أو أسماء التقرير.")}</p>
+      <p className="muted">{tr("Control entry guidance separately from report presentation. Report names, visibility, section and order are snapshotted with each new result so later catalog edits cannot rewrite released history.", "تحكم بتعليمات الإدخال بشكل مستقل عن عرض التقرير. تُحفظ أسماء التقرير وحالة الظهور والقسم والترتيب كلقطة مع كل نتيجة جديدة حتى لا تعيد تعديلات الدليل لاحقاً كتابة السجل الصادر.")}</p>
       <form className="catalog-form" onSubmit={updateComponentPresentation}>
         <label>{tr("Component", "المكوّن")}<select value={presentationComponentId} onChange={event => {
           const id = event.target.value;
           setPresentationComponentId(id);
           const selected = components.find(component => component.id === id);
+          setReportNameEn(selected?.reportNameEn || "");
+          setReportNameAr(selected?.reportNameAr || "");
+          setReportDisplayOrder(selected?.reportDisplayOrder ?? "");
+          setReportVisible(selected?.reportVisible ?? true);
           setEntryWidth(selected?.entryWidth || "AUTO");
           setEntryHintEn(selected?.entryHintEn || "");
           setEntryHintAr(selected?.entryHintAr || "");
@@ -232,6 +258,10 @@ export function ResultLayoutManager({
           <option value="WIDE">{tr("Wide", "عريض")}</option>
           <option value="FULL">{tr("Full row", "صف كامل")}</option>
         </select></label>
+        <label>{tr("Report name (English)", "اسم التقرير بالإنجليزية")}<input value={reportNameEn} onChange={event => setReportNameEn(event.target.value)} maxLength={200} placeholder={tr("Use component name", "استخدم اسم المكوّن")} /></label>
+        <label>{tr("Report name (Arabic)", "اسم التقرير بالعربية")}<input dir="rtl" value={reportNameAr} onChange={event => setReportNameAr(event.target.value)} maxLength={200} placeholder={tr("Use component Arabic name", "استخدم الاسم العربي للمكوّن")} /></label>
+        <label>{tr("Report order", "ترتيب التقرير")}<input type="number" min="0" max="10000" value={reportDisplayOrder} onChange={event => setReportDisplayOrder(event.target.value === "" ? "" : Number(event.target.value))} placeholder={tr("Use component order", "استخدم ترتيب المكوّن")} /></label>
+        <label className="check-row"><input type="checkbox" checked={reportVisible} onChange={event => setReportVisible(event.target.checked)} /><span>{tr("Show this component on report", "إظهار هذا المكوّن في التقرير")}</span></label>
         <label className="form-span">{tr("English entry hint", "تعليمات الإدخال بالإنجليزية")}<input value={entryHintEn} onChange={event => setEntryHintEn(event.target.value)} maxLength={500} /></label>
         <label className="form-span">{tr("Arabic entry hint", "تعليمات الإدخال بالعربية")}<input dir="rtl" value={entryHintAr} onChange={event => setEntryHintAr(event.target.value)} maxLength={500} /></label>
         <button className="secondary-button form-span" disabled={busy !== ""}>{busy === "UPDATE_COMPONENT_PRESENTATION" ? tr("Saving…", "جارٍ الحفظ…") : tr("Save Component Presentation", "حفظ عرض المكوّن")}</button>

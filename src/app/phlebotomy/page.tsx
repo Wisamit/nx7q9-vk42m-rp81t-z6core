@@ -172,13 +172,19 @@ export default async function PhlebotomyPage({
               accessionNumber: specimen.order.accessionNumber,
               patientNumber: specimen.order.patient.patientNumber,
               patientName: patientName(specimen.order.patient),
-              specimenName: specimen.specimenType ? localizedName(specimen.specimenType) : tr(locale, "Not configured", "غير مهيأة"),
-              containerName: specimen.container ? `${specimen.container.code} — ${localizedName(specimen.container)}` : "—",
+              specimenName: requirement?.specimenTypeNameEn
+                ? (locale === "ar" ? requirement.specimenTypeNameAr || requirement.specimenTypeNameEn : requirement.specimenTypeNameEn)
+                : specimen.specimenType ? localizedName(specimen.specimenType) : tr(locale, "Not configured", "غير مهيأة"),
+              containerName: requirement?.containerNameEn
+                ? `${requirement.containerCode || "—"} — ${locale === "ar" ? requirement.containerNameAr || requirement.containerNameEn : requirement.containerNameEn}`
+                : specimen.container ? `${specimen.container.code} — ${localizedName(specimen.container)}` : "—",
               testCodes: specimen.orderItems.map(link => link.orderItem.testCodeSnapshot),
               requiredVolume: requirement?.requiredVolume || null,
               requiredVolumeUnit: requirement?.requiredVolumeUnit || null,
+              patientPreparation: requirement?.patientPreparation || [],
               collectionInstructions: requirement?.collectionInstructions || [],
               requirementsFinalized: Boolean(requirement),
+              configurationComplete: requirement?.configurationComplete === true,
               parentBarcode: specimen.parentSpecimen?.barcode || null,
               secondaryOptions,
             }}

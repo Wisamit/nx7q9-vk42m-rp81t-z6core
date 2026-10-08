@@ -9,6 +9,7 @@ import { scopedWorklistBranchIds } from "@/lib/clinical-safety";
 import { tatRemainingMinutes, tatWorkState } from "@/lib/tat";
 import { analyzerCanRouteWorkItem } from "@/lib/analyzer-routing";
 import { AnalyzerRoutingControl } from "@/components/analyzer-routing-control";
+import { TatEscalationAcknowledge } from "@/components/tat-escalation-acknowledge";
 
 export const dynamic = "force-dynamic";
 
@@ -49,8 +50,8 @@ export default async function WorklistsPage({
   const specimenStatusFilter = ["RECEIVED", "IN_PROCESS"].includes(specimenStatus)
     ? specimenStatus as "RECEIVED" | "IN_PROCESS"
     : null;
-  const dueFilter = ["OVERDUE", "PENDING", "NO_TAT"].includes(due)
-    ? due as "OVERDUE" | "PENDING" | "NO_TAT"
+  const dueFilter = ["OVERDUE", "DUE_SOON", "PENDING", "NO_TAT"].includes(due)
+    ? due as "OVERDUE" | "DUE_SOON" | "PENDING" | "NO_TAT"
     : null;
   const scopedDepartmentIds = authorizedDepartmentIds(session);
   const departmentRestricted = scopedDepartmentIds.length > 0;
@@ -80,10 +81,17 @@ export default async function WorklistsPage({
       status: { notIn: ["VERIFIED", "CANCELLED"] },
       tatDueAt: { lt: now },
     });
+  } else if (dueFilter === "DUE_SOON") {
+    andFilters.push({
+      status: { notIn: ["VERIFIED", "CANCELLED"] },
+      tatDueAt: { gte: now },
+      tatAlertAt: { lte: now },
+    });
   } else if (dueFilter === "PENDING") {
     andFilters.push({
       status: { notIn: ["VERIFIED", "CANCELLED"] },
       tatDueAt: { gte: now },
+      OR: [{ tatAlertAt: null }, { tatAlertAt: { gt: now } }],
     });
   } else if (dueFilter === "NO_TAT") {
     andFilters.push({ tatDueAt: null });
@@ -158,6 +166,10 @@ export default async function WorklistsPage({
         },
         analyzerRoutes: {
           orderBy: { assignedAt: "asc" },
+        },
+        tatEscalations: {
+          orderBy: { level: "desc" },
+          take: 1,
         },
         results: {
           orderBy: { version: "desc" },
@@ -358,6 +370,7 @@ export default async function WorklistsPage({
           <select name="due" defaultValue={due}>
             <option value="">{tr(locale, "All TAT states", "كل حالات زمن الإنجاز")}</option>
             <option value="OVERDUE">{tr(locale, "Overdue", "متأخر")}</option>
+            <option value="DUE_SOON">{tr(locale, "Due soon / SLA alert", "قارب الاستحقاق / تنبيه SLA")}</option>
             <option value="PENDING">{tr(locale, "Pending within TAT", "ضمن زمن الإنجاز")}</option>
             <option value="NO_TAT">{tr(locale, "No TAT snapshot", "بدون لقطة زمن إنجاز")}</option>
           </select>
@@ -388,8 +401,9 @@ export default async function WorklistsPage({
                 const result = item.results[0];
                 const criticalCount = result?.values.filter(value => value.isCritical).length || 0;
                 const abnormalCount = result?.values.filter(value => value.isAbnormal).length || 0;
-                const tatState = tatWorkState(item.tatDueAt, item.status, now);
+                const tatState = tatWorkState(item.tatDueAt, item.status, now, item.tatAlertAt);
                 const tatRemaining = tatRemainingMinutes(item.tatDueAt, now);
+                const latestTatEscalation = item.tatEscalations[0] || null;
                 const readySpecimenBranchIds = [...new Set(item.specimenLinks
                   .map(link => link.specimen)
                   .filter(specimen =>
@@ -435,14 +449,27 @@ export default async function WorklistsPage({
                   /></td>
                   <td>
                     {item.tatDueAt ? <>
-                      <strong className={tatState === "OVERDUE" ? "critical-text" : ""}>
+                      <strong className={tatState === "OVERDUE" ? "critical-text" : tatState === "DUE_SOON" ? "tat-due-soon" : ""}>
                         {tatState === "OVERDUE" && tatRemaining !== null
                           ? tr(locale, `Overdue ${formatTatMinutes(tatRemaining)}`, `متأخر ${formatTatMinutes(tatRemaining)}`)
-                          : tatState === "PENDING" && tatRemaining !== null
-                            ? tr(locale, `${formatTatMinutes(tatRemaining)} remaining`, `متبقٍ ${formatTatMinutes(tatRemaining)}`)
-                            : tr(locale, "Completed", "مكتمل")}
+                          : tatState === "DUE_SOON" && tatRemaining !== null
+                            ? tr(locale, `Due soon · ${formatTatMinutes(tatRemaining)} remaining`, `قارب الاستحقاق · متبقٍ ${formatTatMinutes(tatRemaining)}`)
+                            : tatState === "PENDING" && tatRemaining !== null
+                              ? tr(locale, `${formatTatMinutes(tatRemaining)} remaining`, `متبقٍ ${formatTatMinutes(tatRemaining)}`)
+                              : tr(locale, "Completed", "مكتمل")}
                       </strong>
-                      <br/><small>{formatTatDueAt(item.tatDueAt, item.order.orderingBranch.timezone)} · {item.tatMinutesSnapshot ?? "—"} {tr(locale, "min", "دقيقة")}</small>
+                      <br/><small>{formatTatDueAt(item.tatDueAt, item.order.orderingBranch.timezone)} · {item.tatMinutesSnapshot ?? "—"} {tr(locale, "min", "دقيقة")}{item.tatSnapshotSource === "SLA_POLICY" ? " · SLA" : ""}</small>
+                      {item.tatFirstEscalationAt ? <><br/><small>{tr(locale, "Escalation starts", "بدء التصعيد")}: {formatTatDueAt(item.tatFirstEscalationAt, item.order.orderingBranch.timezone)} · {tr(locale, "max", "حد أقصى")} {item.tatMaxEscalationLevelSnapshot || 1}</small></> : null}
+                      {latestTatEscalation ? <div className={latestTatEscalation.status === "OPEN" ? "form-warning" : "muted"}>
+                        <strong>{tr(locale, "TAT escalation", "تصعيد TAT")} L{latestTatEscalation.level} · {statusLabel(locale, latestTatEscalation.status)}</strong>
+                        <br/><small>{latestTatEscalation.escalationDueAtSnapshot.toISOString().replace("T"," ").slice(0,19)} · {tr(locale, "recipients", "المستلمون")}: {latestTatEscalation.recipientCount}</small>
+                        {latestTatEscalation.status === "OPEN" && permissions.has("worklists.tat_escalations.acknowledge") && <TatEscalationAcknowledge
+                          orderItemId={item.id}
+                          eventId={latestTatEscalation.id}
+                          level={latestTatEscalation.level}
+                          locale={locale}
+                        />}
+                      </div> : null}
                     </> : <span className="muted">
                       {item.tatSnapshotSource === "MIGRATED_BASELINE"
                         ? tr(locale, "Historical item — no TAT snapshot", "عنصر تاريخي — لا توجد لقطة زمن إنجاز")

@@ -65,6 +65,8 @@ export async function POST(request: Request) {
     const nameAr = text(body.nameAr, 200) || null;
     const displayOrder = body.displayOrder === "" || body.displayOrder == null ? 0 : Number(body.displayOrder);
     const columnCount = body.columnCount === "" || body.columnCount == null ? 3 : Number(body.columnCount);
+    const reportDisplayOrder = body.reportDisplayOrder === "" || body.reportDisplayOrder == null ? null : Number(body.reportDisplayOrder);
+    const reportVisible = body.reportVisible !== false;
     const hintEn = text(body.hintEn, 500) || null;
     const hintAr = text(body.hintAr, 500) || null;
 
@@ -77,6 +79,9 @@ export async function POST(request: Request) {
     if (!Number.isInteger(columnCount) || columnCount < 1 || columnCount > 4) {
       return NextResponse.json({ error: "invalid_column_count" }, { status: 400 });
     }
+    if (reportDisplayOrder !== null && (!Number.isInteger(reportDisplayOrder) || reportDisplayOrder < 0 || reportDisplayOrder > 10000)) {
+      return NextResponse.json({ error: "invalid_report_display_order" }, { status: 400 });
+    }
 
     try {
       const section = await prisma.$transaction(async (tx) => {
@@ -87,6 +92,8 @@ export async function POST(request: Request) {
             nameEn,
             nameAr,
             displayOrder,
+            reportDisplayOrder,
+            reportVisible,
             columnCount,
             hintEn,
             hintAr,
@@ -100,7 +107,7 @@ export async function POST(request: Request) {
             action: "RESULT_SECTION_CREATED",
             entityType: "TestResultSection",
             entityId: created.id,
-            newValues: { testId: test.id, code: sectionCode, nameEn, nameAr, displayOrder, columnCount, hintEn, hintAr },
+            newValues: { testId: test.id, code: sectionCode, nameEn, nameAr, displayOrder, reportDisplayOrder, reportVisible, columnCount, hintEn, hintAr },
             ipAddress: ctx.ipAddress,
             userAgent: ctx.userAgent,
           },
@@ -163,10 +170,15 @@ export async function POST(request: Request) {
   if (action === "UPDATE_SECTION_PRESENTATION") {
     const sectionId = text(body.sectionId, 36);
     const columnCount = Number(body.columnCount);
+    const reportDisplayOrder = body.reportDisplayOrder === "" || body.reportDisplayOrder == null ? null : Number(body.reportDisplayOrder);
+    const reportVisible = body.reportVisible !== false;
     const hintEn = text(body.hintEn, 500) || null;
     const hintAr = text(body.hintAr, 500) || null;
     if (!sectionId || !Number.isInteger(columnCount) || columnCount < 1 || columnCount > 4) {
       return NextResponse.json({ error: "invalid_section_presentation" }, { status: 400 });
+    }
+    if (reportDisplayOrder !== null && (!Number.isInteger(reportDisplayOrder) || reportDisplayOrder < 0 || reportDisplayOrder > 10000)) {
+      return NextResponse.json({ error: "invalid_report_display_order" }, { status: 400 });
     }
 
     const section = await prisma.testResultSection.findFirst({
@@ -177,7 +189,7 @@ export async function POST(request: Request) {
     const updated = await prisma.$transaction(async (tx) => {
       const changed = await tx.testResultSection.update({
         where: { id: section.id },
-        data: { columnCount, hintEn, hintAr },
+        data: { columnCount, reportDisplayOrder, reportVisible, hintEn, hintAr },
       });
       await tx.auditEvent.create({
         data: {
@@ -187,8 +199,8 @@ export async function POST(request: Request) {
           action: "RESULT_SECTION_PRESENTATION_UPDATED",
           entityType: "TestResultSection",
           entityId: section.id,
-          oldValues: { columnCount: section.columnCount, hintEn: section.hintEn, hintAr: section.hintAr },
-          newValues: { columnCount, hintEn, hintAr },
+          oldValues: { columnCount: section.columnCount, reportDisplayOrder: section.reportDisplayOrder, reportVisible: section.reportVisible, hintEn: section.hintEn, hintAr: section.hintAr },
+          newValues: { columnCount, reportDisplayOrder, reportVisible, hintEn, hintAr },
           ipAddress: ctx.ipAddress,
           userAgent: ctx.userAgent,
         },
@@ -202,10 +214,17 @@ export async function POST(request: Request) {
   if (action === "UPDATE_COMPONENT_PRESENTATION") {
     const componentId = text(body.componentId, 36);
     const entryWidth = text(body.entryWidth, 40);
+    const reportNameEn = text(body.reportNameEn, 200) || null;
+    const reportNameAr = text(body.reportNameAr, 200) || null;
+    const reportDisplayOrder = body.reportDisplayOrder === "" || body.reportDisplayOrder == null ? null : Number(body.reportDisplayOrder);
+    const reportVisible = body.reportVisible !== false;
     const entryHintEn = text(body.entryHintEn, 500) || null;
     const entryHintAr = text(body.entryHintAr, 500) || null;
     if (!componentId || !fieldWidths.has(entryWidth)) {
       return NextResponse.json({ error: "invalid_component_presentation" }, { status: 400 });
+    }
+    if (reportDisplayOrder !== null && (!Number.isInteger(reportDisplayOrder) || reportDisplayOrder < 0 || reportDisplayOrder > 10000)) {
+      return NextResponse.json({ error: "invalid_report_display_order" }, { status: 400 });
     }
 
     const component = await prisma.testComponent.findFirst({
@@ -216,7 +235,15 @@ export async function POST(request: Request) {
     const updated = await prisma.$transaction(async (tx) => {
       const changed = await tx.testComponent.update({
         where: { id: component.id },
-        data: { entryWidth: entryWidth as "AUTO" | "NARROW" | "STANDARD" | "WIDE" | "FULL", entryHintEn, entryHintAr },
+        data: {
+          entryWidth: entryWidth as "AUTO" | "NARROW" | "STANDARD" | "WIDE" | "FULL",
+          entryHintEn,
+          entryHintAr,
+          reportNameEn,
+          reportNameAr,
+          reportDisplayOrder,
+          reportVisible,
+        },
       });
       await tx.auditEvent.create({
         data: {
@@ -226,8 +253,16 @@ export async function POST(request: Request) {
           action: "RESULT_COMPONENT_PRESENTATION_UPDATED",
           entityType: "TestComponent",
           entityId: component.id,
-          oldValues: { entryWidth: component.entryWidth, entryHintEn: component.entryHintEn, entryHintAr: component.entryHintAr },
-          newValues: { entryWidth, entryHintEn, entryHintAr },
+          oldValues: {
+            entryWidth: component.entryWidth,
+            entryHintEn: component.entryHintEn,
+            entryHintAr: component.entryHintAr,
+            reportNameEn: component.reportNameEn,
+            reportNameAr: component.reportNameAr,
+            reportDisplayOrder: component.reportDisplayOrder,
+            reportVisible: component.reportVisible,
+          },
+          newValues: { entryWidth, entryHintEn, entryHintAr, reportNameEn, reportNameAr, reportDisplayOrder, reportVisible },
           ipAddress: ctx.ipAddress,
           userAgent: ctx.userAgent,
         },

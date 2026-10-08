@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { canAccessBranch, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { getUiLocale, priorityLabel, statusLabel, tr } from "@/lib/ui-i18n";
+import { specimenRequirementSnapshotFromDetails } from "@/lib/specimen-requirement-engine";
 
 export const dynamic = "force-dynamic";
 
@@ -42,7 +43,16 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         orderBy: { issuedAt: "desc" },
       },
       statusHistory: { include: { changedBy: true }, orderBy: { changedAt: "asc" } },
-      specimens: { include: { specimenType: true, container: true, currentBranch: true, orderItems: { include: { orderItem: true } } }, orderBy: { sequenceNumber: "asc" } },
+      specimens: {
+        include: {
+          specimenType: true,
+          container: true,
+          currentBranch: true,
+          orderItems: { include: { orderItem: true } },
+          events: { where: { eventType: "CREATED" }, orderBy: { occurredAt: "asc" } },
+        },
+        orderBy: { sequenceNumber: "asc" },
+      },
     },
   });
 
@@ -71,6 +81,13 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
           <dt>{tr(locale, "Referrer", "المحيل")}</dt><dd>{order.referrer?.nameEn || "—"}</dd>
           <dt>{tr(locale, "Client", "العميل")}</dt><dd>{order.client?.nameEn || tr(locale, "Patient / walk-in", "مريض / حضور مباشر")}</dd>
           <dt>{tr(locale, "Fasting", "صائم")}</dt><dd>{order.fasting === null ? tr(locale, "Unknown", "غير معروف") : order.fasting ? tr(locale, "Yes", "نعم") : tr(locale, "No", "لا")}</dd>
+          <dt>{tr(locale, "Pregnancy status", "حالة الحمل")}</dt><dd>{
+            order.pregnancyStatus === "PREGNANT" ? tr(locale, "Pregnant", "حامل") :
+            order.pregnancyStatus === "NOT_PREGNANT" ? tr(locale, "Not pregnant", "غير حامل") :
+            tr(locale, "Unknown / not stated", "غير معروف / غير مذكور")
+          }</dd>
+          <dt>{tr(locale, "Gestational age", "عمر الحمل")}</dt><dd>{order.gestationalAgeWeeks !== null ? order.gestationalAgeWeeks.toString() + " " + tr(locale, "weeks", "أسبوع") : "—"}</dd>
+          <dt>{tr(locale, "Reference population", "المجموعة المرجعية")}</dt><dd>{order.referencePopulationCode || "—"}</dd>
           <dt>{tr(locale, "Diagnosis", "التشخيص")}</dt><dd>{order.diagnosis || "—"}</dd>
           <dt>{tr(locale, "Created by", "أنشئ بواسطة")}</dt><dd>{order.createdBy.displayNameEn}</dd>
         </dl>
@@ -123,16 +140,23 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       <div className="table-wrap"><table>
         <thead><tr><th>{tr(locale, "Test", "الفحص")}</th><th>{tr(locale, "Question", "السؤال")}</th><th>{tr(locale, "Answer", "الإجابة")}</th><th>{tr(locale, "Recorded", "تم التسجيل")}</th></tr></thead>
         <tbody>{order.items.flatMap(item => item.answers.map(answer => {
+          const selectedOption = locale === "ar"
+            ? answer.selectedOptionTextArSnapshot || answer.selectedOptionTextEnSnapshot || answer.selectedOptionSnapshot
+            : answer.selectedOptionTextEnSnapshot || answer.selectedOptionSnapshot;
+          const dateTimeAnswer = answer.answerDateTimeLocalSnapshot
+            ? answer.answerDateTimeLocalSnapshot.replace("T", " ") + (answer.answerTimeZoneSnapshot ? " · " + answer.answerTimeZoneSnapshot : "")
+            : answer.answerDateTime?.toISOString().replace("T"," ").slice(0,19) || null;
           const displayAnswer = answer.answerText
             ?? answer.answerNumeric?.toString()
             ?? (answer.answerBoolean === null ? null : answer.answerBoolean ? tr(locale, "Yes", "نعم") : tr(locale, "No", "لا"))
             ?? answer.answerDate?.toISOString().slice(0,10)
-            ?? answer.selectedOptionSnapshot
+            ?? dateTimeAnswer
+            ?? selectedOption
             ?? "—";
           return <tr key={answer.id}>
             <td><strong>{item.testCodeSnapshot}</strong></td>
-            <td>{answer.questionTextEnSnapshot}{answer.questionTextArSnapshot && <><br/><small dir="rtl">{answer.questionTextArSnapshot}</small></>}</td>
-            <td><strong>{displayAnswer}</strong></td>
+            <td>{answer.questionTextEnSnapshot}{answer.questionTextArSnapshot && <><br/><small dir="rtl">{answer.questionTextArSnapshot}</small></>}<br/><small>{answer.questionCodeSnapshot} · v{answer.questionVersionSnapshot}</small></td>
+            <td><strong>{displayAnswer}</strong>{answer.selectedOptionCodeSnapshot ? <><br/><small>{answer.selectedOptionCodeSnapshot}</small></> : null}</td>
             <td>{answer.recordedAt.toISOString().replace("T"," ").slice(0,19)}</td>
           </tr>;
         }))}</tbody>
@@ -144,14 +168,29 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       <div className="table-wrap">
         <table>
           <thead><tr><th>{tr(locale, "Barcode", "الباركود")}</th><th>{tr(locale, "Specimen", "العينة")}</th><th>{tr(locale, "Container", "الحاوية")}</th><th>{tr(locale, "Tests", "الفحوصات")}</th><th>{tr(locale, "Current branch", "الفرع الحالي")}</th><th>{tr(locale, "Status", "الحالة")}</th></tr></thead>
-          <tbody>{order.specimens.length === 0 ? <tr><td colSpan={6} className="empty-state">{tr(locale, "No specimen plans.", "لا توجد عينات مخططة.")}</td></tr> : order.specimens.map(specimen => <tr key={specimen.id}>
-            <td><Link className="table-link" href={`/specimens?q=${encodeURIComponent(specimen.barcode)}`}><strong>{specimen.barcode}</strong></Link></td>
-            <td>{specimen.specimenType?.nameEn || tr(locale, "Not configured", "غير مهيأ")}</td>
-            <td>{specimen.container?.nameEn || "—"}</td>
-            <td>{specimen.orderItems.map(link => link.orderItem.testCodeSnapshot).join(", ")}</td>
-            <td>{specimen.currentBranch?.nameEn || "—"}</td>
-            <td>{statusLabel(locale, specimen.status)}</td>
-          </tr>)}</tbody>
+          <tbody>{order.specimens.length === 0 ? <tr><td colSpan={6} className="empty-state">{tr(locale, "No specimen plans.", "لا توجد عينات مخططة.")}</td></tr> : order.specimens.map(specimen => {
+            const requirement = specimen.events
+              .map(event => specimenRequirementSnapshotFromDetails(event.details))
+              .find(Boolean) || null;
+            const specimenName = requirement?.specimenTypeNameEn
+              ? (locale === "ar" ? requirement.specimenTypeNameAr || requirement.specimenTypeNameEn : requirement.specimenTypeNameEn)
+              : specimen.specimenType
+                ? (locale === "ar" ? specimen.specimenType.nameAr || specimen.specimenType.nameEn : specimen.specimenType.nameEn)
+                : tr(locale, "Not configured", "غير مهيأ");
+            const containerName = requirement?.containerNameEn
+              ? (locale === "ar" ? requirement.containerNameAr || requirement.containerNameEn : requirement.containerNameEn)
+              : specimen.container
+                ? (locale === "ar" ? specimen.container.nameAr || specimen.container.nameEn : specimen.container.nameEn)
+                : "—";
+            return <tr key={specimen.id}>
+              <td><Link className="table-link" href={`/specimens?q=${encodeURIComponent(specimen.barcode)}`}><strong>{specimen.barcode}</strong></Link>{requirement ? <><br/><small>{tr(locale, "Order-time snapshot", "لقطة وقت الطلب")} · v{requirement.requirementEngineVersion}</small></> : <><br/><small>{tr(locale, "Historical snapshot missing", "اللقطة التاريخية غير موجودة")}</small></>}</td>
+              <td>{specimenName}{requirement?.specimenTypeCode ? <><br/><small>{requirement.specimenTypeCode}</small></> : null}</td>
+              <td>{containerName}{requirement?.containerCode ? <><br/><small>{requirement.containerCode}</small></> : null}</td>
+              <td>{specimen.orderItems.map(link => link.orderItem.testCodeSnapshot).join(", ")}{requirement?.requiredVolume ? <><br/><small>{tr(locale, "Required", "المطلوب")}: {requirement.requiredVolume} {requirement.requiredVolumeUnit || ""}</small></> : null}</td>
+              <td>{specimen.currentBranch ? (locale === "ar" ? specimen.currentBranch.nameAr || specimen.currentBranch.nameEn : specimen.currentBranch.nameEn) : "—"}</td>
+              <td>{statusLabel(locale, specimen.status)}</td>
+            </tr>;
+          })}</tbody>
         </table>
       </div>
     </section>

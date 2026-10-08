@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { planQualitativeOptionApproval } from "@/lib/qualitative-option-governance";
 
 function text(value: unknown, max = 500) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -8,10 +9,6 @@ function text(value: unknown, max = 500) {
 
 function code(value: string) {
   return value.toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 80);
-}
-
-function overlaps(aStart: Date, aEnd: Date | null, bStart: Date, bEnd: Date | null) {
-  return (aEnd === null || bStart <= aEnd) && (bEnd === null || aStart <= bEnd);
 }
 
 const qualitativeFlags = new Set(["NORMAL", "ABNORMAL", "POSITIVE", "NEGATIVE", "UNKNOWN"]);
@@ -71,20 +68,6 @@ export async function POST(request: Request) {
     }
   }
 
-  const existing = await prisma.qualitativeResultOption.findMany({
-    where: {
-      organizationId: session.user.organizationId,
-      testId,
-      componentId,
-      code: optionCode,
-      status: "ACTIVE",
-    },
-    select: { effectiveFrom: true, effectiveTo: true },
-  });
-  if (existing.some((item) => overlaps(effectiveFrom, effectiveTo, item.effectiveFrom, item.effectiveTo))) {
-    return NextResponse.json({ error: "overlapping_qualitative_option_code" }, { status: 409 });
-  }
-
   const option = await prisma.$transaction(async (tx) => {
     const created = await tx.qualitativeResultOption.create({
       data: {
@@ -100,6 +83,8 @@ export async function POST(request: Request) {
         displayOrder,
         effectiveFrom,
         effectiveTo,
+        approvalStatus: "DRAFT",
+        status: "INACTIVE",
         createdByUserId: session.user.id,
       },
     });
@@ -109,7 +94,7 @@ export async function POST(request: Request) {
         organizationId: session.user.organizationId,
         branchId: session.activeBranchId,
         actorUserId: session.user.id,
-        action: "QUALITATIVE_RESULT_OPTION_CREATED",
+        action: "QUALITATIVE_RESULT_OPTION_DRAFT_CREATED",
         entityType: "QualitativeResultOption",
         entityId: created.id,
         newValues: {
@@ -124,6 +109,8 @@ export async function POST(request: Request) {
           displayOrder,
           effectiveFrom,
           effectiveTo,
+          approvalStatus: created.approvalStatus,
+          status: created.status,
         },
         ipAddress: ctx.ipAddress,
         userAgent: ctx.userAgent,
@@ -136,60 +123,171 @@ export async function POST(request: Request) {
 }
 
 export async function PATCH(request: Request) {
-  const session = await requirePermission("clinical_rules.manage");
+  const session = await requirePermission("clinical_rules.qualitative_options.approve");
   const ctx = await requestContext();
   const body = await request.json().catch(() => null) as Record<string, unknown> | null;
   if (!body) return NextResponse.json({ error: "invalid_request" }, { status: 400 });
 
   const id = text(body.id, 36);
-  const status = body.status === "ACTIVE" ? "ACTIVE" : body.status === "INACTIVE" ? "INACTIVE" : null;
-  if (!id || !status) return NextResponse.json({ error: "invalid_status_change" }, { status: 400 });
+  const action = text(body.action, 20).toUpperCase();
+  const reason = text(body.reason, 1000);
+  if (!id || !["APPROVE", "RETIRE"].includes(action)) {
+    return NextResponse.json({ error: "invalid_qualitative_option_action" }, { status: 400 });
+  }
 
   const existing = await prisma.qualitativeResultOption.findFirst({
     where: { id, organizationId: session.user.organizationId },
   });
   if (!existing) return NextResponse.json({ error: "qualitative_option_not_found" }, { status: 404 });
-  if (existing.status === status) return NextResponse.json({ status: "ok", option: existing });
 
-  if (status === "ACTIVE") {
-    const conflicts = await prisma.qualitativeResultOption.findMany({
+  if (action === "APPROVE") {
+    if (existing.approvalStatus !== "DRAFT") {
+      return NextResponse.json({ error: "qualitative_option_not_draft", approvalStatus: existing.approvalStatus }, { status: 409 });
+    }
+
+    const approved = await prisma.qualitativeResultOption.findMany({
       where: {
         organizationId: session.user.organizationId,
         testId: existing.testId,
         componentId: existing.componentId,
         code: existing.code,
+        approvalStatus: "APPROVED",
         status: "ACTIVE",
         id: { not: existing.id },
       },
-      select: { effectiveFrom: true, effectiveTo: true },
     });
-    if (conflicts.some((item) => overlaps(existing.effectiveFrom, existing.effectiveTo, item.effectiveFrom, item.effectiveTo))) {
-      return NextResponse.json({ error: "overlapping_qualitative_option_code" }, { status: 409 });
+    const plan = planQualitativeOptionApproval(existing, approved);
+    if (plan.conflicts.length > 0) {
+      return NextResponse.json({
+        error: "approved_qualitative_option_overlap",
+        conflictingOptionIds: plan.conflicts,
+      }, { status: 409 });
     }
+
+    const approvedAt = new Date();
+    const predecessorEffectiveTo = new Date(existing.effectiveFrom.getTime() - 1);
+
+    const option = await prisma.$transaction(async (tx) => {
+      for (const predecessorId of plan.predecessorsToClose) {
+        const predecessor = approved.find((item) => item.id === predecessorId);
+        if (!predecessor) continue;
+        await tx.qualitativeResultOption.update({
+          where: { id: predecessorId },
+          data: { effectiveTo: predecessorEffectiveTo },
+        });
+        await tx.auditEvent.create({
+          data: {
+            organizationId: session.user.organizationId,
+            branchId: session.activeBranchId,
+            actorUserId: session.user.id,
+            action: "QUALITATIVE_RESULT_OPTION_SUPERSEDED",
+            entityType: "QualitativeResultOption",
+            entityId: predecessorId,
+            oldValues: { effectiveTo: predecessor.effectiveTo },
+            newValues: { effectiveTo: predecessorEffectiveTo, supersededByOptionId: existing.id },
+            ipAddress: ctx.ipAddress,
+            userAgent: ctx.userAgent,
+          },
+        });
+      }
+
+      const updated = await tx.qualitativeResultOption.update({
+        where: { id },
+        data: {
+          approvalStatus: "APPROVED",
+          status: "ACTIVE",
+          approvedByUserId: session.user.id,
+          approvedAt,
+          retiredByUserId: null,
+          retiredAt: null,
+          retirementReason: null,
+          deactivatedAt: null,
+        },
+      });
+
+      await tx.auditEvent.create({
+        data: {
+          organizationId: session.user.organizationId,
+          branchId: session.activeBranchId,
+          actorUserId: session.user.id,
+          action: "QUALITATIVE_RESULT_OPTION_APPROVED",
+          entityType: "QualitativeResultOption",
+          entityId: id,
+          oldValues: { approvalStatus: existing.approvalStatus, status: existing.status },
+          newValues: {
+            approvalStatus: updated.approvalStatus,
+            status: updated.status,
+            approvedByUserId: session.user.id,
+            approvedAt,
+            predecessorsClosed: plan.predecessorsToClose,
+            isCritical: updated.isCritical,
+            flag: updated.flag,
+          },
+          reason: reason || null,
+          ipAddress: ctx.ipAddress,
+          userAgent: ctx.userAgent,
+        },
+      });
+
+      return updated;
+    });
+
+    return NextResponse.json({ status: "ok", option });
   }
+
+  if (existing.approvalStatus !== "APPROVED") {
+    return NextResponse.json({ error: "only_approved_qualitative_option_can_be_retired", approvalStatus: existing.approvalStatus }, { status: 409 });
+  }
+  if (!reason) {
+    return NextResponse.json({ error: "retirement_reason_required" }, { status: 400 });
+  }
+
+  const retiredAt = new Date();
+  const effectiveTo = existing.effectiveFrom <= retiredAt
+    && (existing.effectiveTo === null || existing.effectiveTo > retiredAt)
+      ? retiredAt
+      : existing.effectiveTo;
 
   const option = await prisma.$transaction(async (tx) => {
     const updated = await tx.qualitativeResultOption.update({
       where: { id },
       data: {
-        status,
-        deactivatedAt: status === "INACTIVE" ? new Date() : null,
+        approvalStatus: "RETIRED",
+        status: "INACTIVE",
+        effectiveTo,
+        retiredByUserId: session.user.id,
+        retiredAt,
+        retirementReason: reason,
+        deactivatedAt: retiredAt,
       },
     });
+
     await tx.auditEvent.create({
       data: {
         organizationId: session.user.organizationId,
         branchId: session.activeBranchId,
         actorUserId: session.user.id,
-        action: status === "INACTIVE" ? "QUALITATIVE_RESULT_OPTION_DEACTIVATED" : "QUALITATIVE_RESULT_OPTION_REACTIVATED",
+        action: "QUALITATIVE_RESULT_OPTION_RETIRED",
         entityType: "QualitativeResultOption",
         entityId: id,
-        oldValues: { status: existing.status },
-        newValues: { status },
+        oldValues: {
+          approvalStatus: existing.approvalStatus,
+          status: existing.status,
+          effectiveTo: existing.effectiveTo,
+        },
+        newValues: {
+          approvalStatus: updated.approvalStatus,
+          status: updated.status,
+          effectiveTo,
+          retiredByUserId: session.user.id,
+          retiredAt,
+        },
+        reason,
         ipAddress: ctx.ipAddress,
         userAgent: ctx.userAgent,
       },
     });
+
     return updated;
   });
 

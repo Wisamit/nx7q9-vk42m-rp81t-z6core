@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requirePermission, requestContext } from "@/lib/auth";
+import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 
 function text(value: unknown, max = 1000) {
@@ -47,6 +47,7 @@ export async function POST(request: Request) {
   ]);
   if (!test) return NextResponse.json({ error: "test_not_found" }, { status: 404 });
   if (branchId && !branchRecord) return NextResponse.json({ error: "branch_not_found" }, { status: 404 });
+  if (branchId && !canAccessBranch(session, branchId)) return NextResponse.json({ error: "branch_forbidden" }, { status: 403 });
 
   const rule = await prisma.$transaction(async tx => {
     const created = await tx.validationHoldRule.create({
@@ -61,6 +62,7 @@ export async function POST(request: Request) {
         reasonAr,
         effectiveFrom,
         effectiveTo,
+        status: "INACTIVE",
       },
     });
 
@@ -69,7 +71,7 @@ export async function POST(request: Request) {
         organizationId: session.user.organizationId,
         branchId: session.activeBranchId,
         actorUserId: session.user.id,
-        action: "VALIDATION_HOLD_RULE_CREATED",
+        action: "VALIDATION_HOLD_RULE_DRAFT_CREATED",
         entityType: "ValidationHoldRule",
         entityId: created.id,
         newValues: { testId, branchId, condition, resultSource, severity, reasonEn, reasonAr, effectiveFrom, effectiveTo },

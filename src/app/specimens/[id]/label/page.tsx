@@ -64,7 +64,7 @@ export default async function SpecimenLabelPage({
   const requirement = specimen.events
     .map(event => specimenRequirementSnapshotFromDetails(event.details))
     .find(Boolean) || null;
-  const plannedWithoutFinalizedRequirements = specimen.status === "PLANNED" && !requirement;
+  const plannedWithoutFinalizedRequirements = specimen.status === "PLANNED" && (!requirement || !requirement.configurationComplete);
   const encoded = code128BBars(specimen.barcode);
   if (!encoded) throw new Error("INVALID_SPECIMEN_BARCODE");
 
@@ -84,12 +84,16 @@ export default async function SpecimenLabelPage({
     && specimen.order.patient.fullNameAr !== specimen.order.patient.fullNameEn
     ? (locale === "ar" ? specimen.order.patient.fullNameEn : specimen.order.patient.fullNameAr)
     : null;
-  const specimenName = specimen.specimenType
-    ? (locale === "ar" ? specimen.specimenType.nameAr || specimen.specimenType.nameEn : specimen.specimenType.nameEn)
-    : tr(locale, "Unconfigured specimen", "عينة غير مهيأة");
-  const containerName = specimen.container
-    ? (locale === "ar" ? specimen.container.nameAr || specimen.container.nameEn : specimen.container.nameEn)
-    : "—";
+  const specimenName = requirement?.specimenTypeNameEn
+    ? (locale === "ar" ? requirement.specimenTypeNameAr || requirement.specimenTypeNameEn : requirement.specimenTypeNameEn)
+    : specimen.specimenType
+      ? (locale === "ar" ? specimen.specimenType.nameAr || specimen.specimenType.nameEn : specimen.specimenType.nameEn)
+      : tr(locale, "Unconfigured specimen", "عينة غير مهيأة");
+  const containerName = requirement?.containerNameEn
+    ? (locale === "ar" ? requirement.containerNameAr || requirement.containerNameEn : requirement.containerNameEn)
+    : specimen.container
+      ? (locale === "ar" ? specimen.container.nameAr || specimen.container.nameEn : specimen.container.nameEn)
+      : "—";
   const testCodes = specimen.orderItems.map(link => link.orderItem.testCodeSnapshot).join(" · ");
   const dob = specimen.order.patient.dateOfBirth?.toISOString().slice(0, 10) || "—";
 
@@ -130,7 +134,7 @@ export default async function SpecimenLabelPage({
     </div>
 
     {plannedWithoutFinalizedRequirements && <p className="no-print form-error specimen-label-warning">
-      {tr(locale, "Printing is blocked until specimen requirements are finalized, so the label cannot be attached to an unverified tube plan.", "الطباعة مقفلة حتى يتم تثبيت متطلبات العينة، حتى لا يوضع الملصق على خطة أنبوب غير مثبتة.")}
+      {tr(locale, "Printing is blocked because the immutable order-time specimen requirement snapshot is missing or incomplete. Current catalog values are not substituted.", "الطباعة مقفلة لأن لقطة متطلبات العينة الثابتة وقت الطلب غير موجودة أو غير مكتملة. لا يتم استبدالها بقيم الدليل الحالية.")}
     </p>}
 
     <section className="specimen-label-paper" dir={locale === "ar" ? "rtl" : "ltr"}>

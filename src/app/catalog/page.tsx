@@ -13,7 +13,7 @@ export default async function CatalogPage() {
   const session = await requirePermission("catalog.view");
   const permissions = permissionSet(session);
   const locale = session.user.preferredLocale === "ar" ? "ar" : "en";
-  const [tests, departments, specimens, containers, methods, units, panels, packages, importBatches] = await Promise.all([
+  const [tests, departments, specimens, containers, methods, units, analyzers, panels, packages, importBatches] = await Promise.all([
     prisma.labTest.findMany({
       where: { organizationId: session.user.organizationId },
       include: { department: true, specimenType: true, components: { include: { unit: true, referenceIntervals: { orderBy: { effectiveFrom: "desc" }, take: 1 } }, orderBy: { displayOrder: "asc" } } },
@@ -24,6 +24,7 @@ export default async function CatalogPage() {
     prisma.container.findMany({ where: { organizationId: session.user.organizationId, status: "ACTIVE" }, orderBy: { nameEn: "asc" } }),
     prisma.method.findMany({ where: { organizationId: session.user.organizationId, status: "ACTIVE" }, orderBy: { nameEn: "asc" } }),
     prisma.unit.findMany({ where: { organizationId: session.user.organizationId, status: "ACTIVE" }, orderBy: { code: "asc" } }),
+    prisma.analyzer.findMany({ where: { organizationId: session.user.organizationId, status: "ACTIVE" }, include: { branch: true }, orderBy: [{ branch: { nameEn: "asc" } }, { name: "asc" }] }),
     prisma.testPanel.findMany({ where: { organizationId: session.user.organizationId }, include: { items: true }, orderBy: { nameEn: "asc" } }),
     prisma.commercialPackage.findMany({ where: { organizationId: session.user.organizationId }, include: { items: { include: { test: true }, orderBy: { displayOrder: "asc" } }, priceListItems: { where: { status: "ACTIVE" }, orderBy: { effectiveFrom: "desc" }, take: 1, include: { priceList: true } } }, orderBy: { nameEn: "asc" } }),
     prisma.catalogImportBatch.findMany({ where: { organizationId: session.user.organizationId }, include: { _count: { select: { rows: true } } }, orderBy: { createdAt: "desc" }, take: 10 }),
@@ -38,7 +39,22 @@ export default async function CatalogPage() {
           <p className="muted">{tr(locale, "Configuration-driven tests, components, specimens, methods and reference intervals.", "إدارة الفحوصات والمكونات والعينات والطرق والمجالات المرجعية بطريقة قابلة للتهيئة.")}</p>
         </div>
         <div className="header-actions">
-          <ClinicalCatalogManager locale={locale} tests={tests} units={units} methods={methods} branches={session.user.branchScopes.map(scope => scope.branch)} />
+          <ClinicalCatalogManager
+            locale={locale}
+            tests={tests}
+            units={units}
+            methods={methods}
+            branches={session.user.branchScopes.map(scope => scope.branch)}
+            specimenTypes={specimens}
+            analyzers={analyzers.map(analyzer => ({
+              id: analyzer.id,
+              code: analyzer.code,
+              name: analyzer.name,
+              branchId: analyzer.branchId,
+              branchNameEn: analyzer.branch.nameEn,
+              branchNameAr: analyzer.branch.nameAr,
+            }))}
+          />
           <CatalogManager locale={locale} departments={departments} specimens={specimens} containers={containers} methods={methods} units={units} />
           {permissions.has("catalog.manage") && <CommercialPackageManager locale={locale} tests={tests.map(test => ({ id: test.id, code: test.code, nameEn: test.nameEn, nameAr: test.nameAr }))} />}
           <Link className="secondary-link" href="/dashboard">{tr(locale, "Back to Dashboard", "العودة إلى لوحة التحكم")}</Link>

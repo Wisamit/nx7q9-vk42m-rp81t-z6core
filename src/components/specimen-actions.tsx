@@ -59,7 +59,9 @@ export function SpecimenActions({
   function actionError(body: Record<string, unknown>) {
     const code = typeof body.error === "string" ? body.error : "";
     const errors: Record<string, string> = {
-      specimen_requirements_not_finalized: tr("Collection requirements must be finalized first.", "يجب تثبيت متطلبات العينة قبل الجمع."),
+      specimen_requirements_not_finalized: tr("This specimen has no immutable order-time requirement snapshot. Collection is blocked.", "لا تحتوي هذه العينة على لقطة ثابتة لمتطلبات وقت الطلب. تم منع السحب."),
+      order_time_specimen_requirement_snapshot_missing: tr("Historical requirements were not captured at order registration. Current catalog values will not be substituted; use a controlled order correction/re-registration workflow.", "لم تُحفظ المتطلبات التاريخية عند تسجيل الطلب. لن يتم استبدالها بقيم الدليل الحالية؛ استخدم مسار تصحيح/إعادة تسجيل الطلب بشكل منضبط."),
+      specimen_requirement_snapshot_missing_for_reception: tr("Reception is blocked because the immutable collection-requirement snapshot is missing.", "تم منع الاستلام لأن لقطة متطلبات الجمع الثابتة غير موجودة."),
       specimen_requirement_configuration_incomplete: tr("Collection is blocked because the specimen requirement configuration is incomplete.", "تم منع الجمع لأن إعداد متطلبات العينة غير مكتمل."),
       specimen_volume_required: tr("Collected volume is required for this specimen.", "حجم العينة المجموعة مطلوب لهذه العينة."),
       specimen_volume_unit_mismatch: tr("Collected volume unit must match the planned requirement.", "يجب أن تطابق وحدة الحجم المجموعة وحدة المتطلب المخطط."),
@@ -88,20 +90,6 @@ export function SpecimenActions({
       rejection_branch_must_match_specimen_location: tr("Rejection must be recorded at the specimen's current custody branch.", "يجب تسجيل الرفض في فرع الحيازة الحالي للعينة."),
     };
     return errors[code] || code || tr("Specimen action failed.", "فشل إجراء العينة.");
-  }
-
-  async function finalizeRequirements() {
-    setBusy(true);
-    setMessage("");
-    const response = await fetch(`/api/orders/${orderId}/specimen-requirements/finalize`, { method: "POST" });
-    const body = await response.json().catch(() => ({}));
-    if (response.ok) {
-      setMessage(tr("Specimen requirements finalized. Collection controls are now active.", "تم تثبيت متطلبات العينات وأصبحت ضوابط الجمع فعالة."));
-      router.refresh();
-    } else {
-      setMessage(actionError(body));
-    }
-    setBusy(false);
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -168,13 +156,16 @@ export function SpecimenActions({
 
   return <div className="specimen-actions">
     <div className="specimen-action-buttons">
-      {canCollect && status === "PLANNED" && !requirementsFinalized && <button type="button" className="secondary-button" disabled={busy} onClick={finalizeRequirements}>{tr("Finalize Requirements", "تثبيت المتطلبات")}</button>}
+      {canCollect && status === "PLANNED" && !requirementsFinalized && <span className="form-error">{tr("Order-time requirement snapshot missing", "لقطة متطلبات وقت الطلب غير موجودة")}</span>}
       {canCollect && status === "PLANNED" && requirementsFinalized && specimenTypeConfigured && <Link className="primary-button" href={`/phlebotomy?specimen=${specimenId}`}>{tr("Open Phlebotomy", "فتح شاشة السحب")}</Link>}
       {canReceive && ["COLLECTED","IN_TRANSIT"].includes(status) && <button type="button" className="primary-button" onClick={() => setMode("RECEIVE")}>{tr("Receive", "استلام")}</button>}
       {canReject && ["COLLECTED","RECEIVED"].includes(status) && <button type="button" className="danger-button" onClick={() => setMode("REJECT")}>{tr("Reject", "رفض")}</button>}
     </div>
 
-    {canCollect && status === "PLANNED" && !requirementsFinalized && <p className="form-warning">{tr("Collection is locked until the order's specimen requirements are finalized.", "الجمع مقفل حتى يتم تثبيت متطلبات عينات الطلب.")}</p>}
+    {canCollect && status === "PLANNED" && !requirementsFinalized && <p className="form-error">{tr(
+      "Collection is locked because this historical specimen has no immutable order-time requirement snapshot. Current catalog values are intentionally not used as a substitute.",
+      "السحب مقفل لأن هذه العينة التاريخية لا تحتوي على لقطة ثابتة لمتطلبات وقت الطلب. لا تُستخدم قيم الدليل الحالية كبديل بشكل مقصود."
+    )}</p>}
     {canCollect && !specimenTypeConfigured && status === "PLANNED" && <p className="form-error">{tr("Collection blocked: specimen type is not configured for this test.", "تعذر جمع العينة لأن نوع العينة غير مهيأ لهذا الفحص.")}</p>}
     {requirementsFinalized && requiredVolume && status === "PLANNED" && <p className="muted"><strong>{tr("Minimum required volume", "الحد الأدنى المطلوب")}: {requiredVolume} {requiredVolumeUnit || ""}</strong></p>}
     {requirementsFinalized && collectionInstructions.length > 0 && status === "PLANNED" && <div className="muted"><strong>{tr("Collection instructions", "تعليمات الجمع")}:</strong> {collectionInstructions.join(" · ")}</div>}

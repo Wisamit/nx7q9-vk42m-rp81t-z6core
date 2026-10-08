@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requirePermission, requestContext } from "@/lib/auth";
+import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 
 function text(value: unknown, max = 220) {
@@ -30,11 +30,22 @@ export async function POST(request: Request) {
   }
   if (!Number.isInteger(lookbackDays) || lookbackDays < 1 || lookbackDays > 3650) return NextResponse.json({ error: "invalid_lookback" }, { status: 400 });
 
-  const test = await prisma.labTest.findFirst({
-    where: { id: testId, organizationId: session.user.organizationId },
-    include: { components: true },
-  });
+  const [test, branchRecord, methodRecord] = await Promise.all([
+    prisma.labTest.findFirst({
+      where: { id: testId, organizationId: session.user.organizationId, status: "ACTIVE" },
+      include: { components: { where: { status: "ACTIVE" } } },
+    }),
+    branchId
+      ? prisma.branch.findFirst({ where: { id: branchId, organizationId: session.user.organizationId, status: "ACTIVE" } })
+      : Promise.resolve(null),
+    methodId
+      ? prisma.method.findFirst({ where: { id: methodId, organizationId: session.user.organizationId, status: "ACTIVE" } })
+      : Promise.resolve(null),
+  ]);
   if (!test) return NextResponse.json({ error: "test_not_found" }, { status: 404 });
+  if (branchId && !branchRecord) return NextResponse.json({ error: "branch_not_found" }, { status: 404 });
+  if (branchId && !canAccessBranch(session, branchId)) return NextResponse.json({ error: "branch_forbidden" }, { status: 403 });
+  if (methodId && !methodRecord) return NextResponse.json({ error: "method_not_found" }, { status: 404 });
   if (componentId && !test.components.some(component => component.id === componentId)) {
     return NextResponse.json({ error: "component_not_belong_to_test" }, { status: 409 });
   }
@@ -52,6 +63,7 @@ export async function POST(request: Request) {
         lookbackDays,
         effectiveFrom,
         effectiveTo,
+        status: "INACTIVE",
       },
     });
 
@@ -60,7 +72,7 @@ export async function POST(request: Request) {
         organizationId: session.user.organizationId,
         branchId: session.activeBranchId,
         actorUserId: session.user.id,
-        action: "DELTA_RULE_CREATED",
+        action: "DELTA_RULE_DRAFT_CREATED",
         entityType: "DeltaRule",
         entityId: created.id,
         newValues: {

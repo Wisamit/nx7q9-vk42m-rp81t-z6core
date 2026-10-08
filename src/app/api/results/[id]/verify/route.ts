@@ -24,6 +24,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       specimen: true,
       reflexEvents: { where: { status: "PENDING" } },
       validationHoldEvents: { where: { status: "ACTIVE", severitySnapshot: "BLOCK" } },
+      deltaReviewEvents: { where: { status: "PENDING" }, orderBy: { detectedAt: "asc" } },
       orderItem: {
         include: {
           test: { include: { components: { where: { status: "ACTIVE" } } } },
@@ -84,16 +85,29 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const deltaExceeded = result.values.filter((value) => value.deltaEvaluation === "EXCEEDED");
   if (deltaExceeded.length > 0 && body.confirmDeltaWarnings !== true) {
+    const components = result.deltaReviewEvents.length > 0
+      ? result.deltaReviewEvents.map((event) => ({
+          code: event.componentCodeSnapshot,
+          value: event.currentValueSnapshot.toString(),
+          previousValue: event.previousValueSnapshot?.toString() || null,
+          deltaAbsolute: event.deltaAbsoluteSnapshot?.toString() || null,
+          deltaPercent: event.deltaPercentSnapshot?.toString() || null,
+          absoluteLimit: event.absoluteLimitSnapshot?.toString() || null,
+          percentLimit: event.percentLimitSnapshot?.toString() || null,
+        }))
+      : deltaExceeded.map((value) => ({
+          code: value.componentCodeSnapshot,
+          value: value.displayValue,
+          previousValue: value.previousValueSnapshot?.toString() || null,
+          deltaAbsolute: value.deltaAbsoluteSnapshot?.toString() || null,
+          deltaPercent: value.deltaPercentSnapshot?.toString() || null,
+          absoluteLimit: value.deltaAbsoluteLimitSnapshot?.toString() || null,
+          percentLimit: value.deltaPercentLimitSnapshot?.toString() || null,
+        }));
     return NextResponse.json({
       error: "delta_review_confirmation_required",
       deltaExceededCount: deltaExceeded.length,
-      components: deltaExceeded.map((value) => ({
-        code: value.componentCodeSnapshot,
-        value: value.displayValue,
-        previousValue: value.previousValueSnapshot?.toString() || null,
-        deltaAbsolute: value.deltaAbsoluteSnapshot?.toString() || null,
-        deltaPercent: value.deltaPercentSnapshot?.toString() || null,
-      })),
+      components,
     }, { status: 409 });
   }
 
@@ -105,9 +119,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           organizationId: session.user.organizationId,
           status: "ACTIVE",
           effectiveFrom: { lte: verifiedAt },
-          OR: [{ effectiveTo: null }, { effectiveTo: { gte: verifiedAt } }],
+          AND: [
+            { OR: [{ effectiveTo: null }, { effectiveTo: { gte: verifiedAt } }] },
+            { OR: [{ branchId: null }, { branchId: result.performingBranchId }] },
+          ],
         },
       }), {
+        branchId: result.performingBranchId,
         testId: result.orderItem.testId,
         departmentId: result.orderItem.test.departmentId,
       }));
@@ -167,6 +185,82 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       },
     });
 
+    if (deltaExceeded.length > 0 && body.confirmDeltaWarnings === true) {
+      const acknowledgementNote = typeof body.notes === "string"
+        ? body.notes.trim().slice(0, 1000) || null
+        : null;
+
+      for (const value of deltaExceeded) {
+        if (value.valueNumeric === null) continue;
+        await tx.deltaReviewEvent.upsert({
+          where: {
+            resultId_componentCodeSnapshot: {
+              resultId: result.id,
+              componentCodeSnapshot: value.componentCodeSnapshot,
+            },
+          },
+          update: {
+            status: "ACKNOWLEDGED",
+            acknowledgedByUserId: session.user.id,
+            acknowledgedAt: verifiedAt,
+            acknowledgementNote,
+            supersededAt: null,
+          },
+          create: {
+            resultId: result.id,
+            deltaRuleId: value.deltaRuleId,
+            status: "ACKNOWLEDGED",
+            componentCodeSnapshot: value.componentCodeSnapshot,
+            componentNameEnSnapshot: value.componentNameEnSnapshot,
+            componentNameArSnapshot: value.componentNameArSnapshot,
+            currentValueSnapshot: value.valueNumeric,
+            previousValueSnapshot: value.previousValueSnapshot,
+            previousResultAtSnapshot: value.previousResultAtSnapshot,
+            deltaAbsoluteSnapshot: value.deltaAbsoluteSnapshot,
+            deltaPercentSnapshot: value.deltaPercentSnapshot,
+            absoluteLimitSnapshot: value.deltaAbsoluteLimitSnapshot,
+            percentLimitSnapshot: value.deltaPercentLimitSnapshot,
+            lookbackDaysSnapshot: value.deltaLookbackDaysSnapshot,
+            performingBranchIdSnapshot: result.performingBranchId,
+            methodIdSnapshot: result.methodId,
+            detectedAt: verifiedAt,
+            acknowledgedByUserId: session.user.id,
+            acknowledgedAt: verifiedAt,
+            acknowledgementNote,
+          },
+        });
+      }
+
+      await tx.auditEvent.create({
+        data: {
+          organizationId: session.user.organizationId,
+          branchId: result.performingBranchId,
+          actorUserId: session.user.id,
+          action: "DELTA_REVIEW_ACKNOWLEDGED",
+          entityType: "LaboratoryResult",
+          entityId: result.id,
+          newValues: {
+            deltaExceededCount: deltaExceeded.length,
+            components: deltaExceeded.map(value => ({
+              code: value.componentCodeSnapshot,
+              currentValue: value.valueNumeric?.toString() || null,
+              previousValue: value.previousValueSnapshot?.toString() || null,
+              deltaAbsolute: value.deltaAbsoluteSnapshot?.toString() || null,
+              deltaPercent: value.deltaPercentSnapshot?.toString() || null,
+              absoluteLimit: value.deltaAbsoluteLimitSnapshot?.toString() || null,
+              percentLimit: value.deltaPercentLimitSnapshot?.toString() || null,
+              deltaRuleId: value.deltaRuleId,
+              lookbackDays: value.deltaLookbackDaysSnapshot,
+            })),
+            acknowledgedAt: verifiedAt,
+          },
+          reason: acknowledgementNote || "Delta-check warnings reviewed during technical review",
+          ipAddress: ctx.ipAddress,
+          userAgent: ctx.userAgent,
+        },
+      });
+    }
+
     await tx.orderItem.update({
       where: { id: result.orderItemId },
       data: { status: finalValidationComplete ? "VERIFIED" : "IN_PROGRESS" },
@@ -180,9 +274,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           criticalValueSnapshot: criticalValues.map((value) => ({
             componentCode: value.componentCodeSnapshot,
             componentName: value.componentNameEnSnapshot,
+            componentNameEn: value.componentNameEnSnapshot,
+            componentNameAr: value.componentNameArSnapshot,
             displayValue: value.displayValue,
+            valueTextEn: value.valueTextEnSnapshot,
+            valueTextAr: value.valueTextArSnapshot,
             unit: value.unitSnapshot,
             flag: value.flag,
+            flagSource: value.flagSource,
+            isAbnormal: value.isAbnormal,
+            qualitativeOptionId: value.qualitativeOptionId,
+            qualitativeOptionCode: value.qualitativeOptionCodeSnapshot,
             criticalLow: value.criticalLowSnapshot?.toString() || null,
             criticalHigh: value.criticalHighSnapshot?.toString() || null,
           })),
@@ -210,9 +312,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           criticalValueSnapshot: criticalValues.map((value) => ({
             componentCode: value.componentCodeSnapshot,
             componentName: value.componentNameEnSnapshot,
+            componentNameEn: value.componentNameEnSnapshot,
+            componentNameAr: value.componentNameArSnapshot,
             displayValue: value.displayValue,
+            valueTextEn: value.valueTextEnSnapshot,
+            valueTextAr: value.valueTextArSnapshot,
             unit: value.unitSnapshot,
             flag: value.flag,
+            flagSource: value.flagSource,
+            isAbnormal: value.isAbnormal,
+            qualitativeOptionId: value.qualitativeOptionId,
+            qualitativeOptionCode: value.qualitativeOptionCodeSnapshot,
             criticalLow: value.criticalLowSnapshot?.toString() || null,
             criticalHigh: value.criticalHighSnapshot?.toString() || null,
           })),
@@ -278,6 +388,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           verifiedAt: finalValidationComplete ? verifiedAt : null,
           criticalCount: criticalValues.length,
           deltaExceededCount: deltaExceeded.length,
+          deltaReviewAcknowledgedCount: body.confirmDeltaWarnings === true ? deltaExceeded.length : 0,
           blockingValidationHoldCount: blockingValidationHolds,
           qcGateStatus: qcGate?.status || null,
           qcGateReasons: qcGate?.reasons || [],

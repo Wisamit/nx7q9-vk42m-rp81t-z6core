@@ -12,6 +12,24 @@ enum RecordStatus {
   INACTIVE
 }
 
+enum ReferenceIntervalApprovalStatus {
+  DRAFT
+  APPROVED
+  RETIRED
+}
+
+enum QualitativeOptionApprovalStatus {
+  DRAFT
+  APPROVED
+  RETIRED
+}
+
+enum AnalyzerMappingApprovalStatus {
+  DRAFT
+  APPROVED
+  RETIRED
+}
+
 enum UserStatus {
   INVITED
   ACTIVE
@@ -23,6 +41,12 @@ enum PatientSex {
   MALE
   FEMALE
   UNKNOWN
+}
+
+enum PregnancyStatus {
+  UNKNOWN
+  NOT_PREGNANT
+  PREGNANT
 }
 
 enum PatientIdentifierType {
@@ -58,6 +82,7 @@ enum OrderQuestionResponseType {
   NUMERIC
   BOOLEAN
   DATE
+  DATETIME
   SINGLE_CHOICE
 }
 
@@ -85,8 +110,21 @@ enum TatClockBasis {
 
 enum TatSnapshotSource {
   CATALOG_SNAPSHOT
+  SLA_POLICY
   NOT_CONFIGURED
   MIGRATED_BASELINE
+}
+
+enum TatPolicyApprovalStatus {
+  DRAFT
+  APPROVED
+  RETIRED
+}
+
+enum TatEscalationStatus {
+  OPEN
+  ACKNOWLEDGED
+  CLOSED
 }
 
 enum PriceListScope {
@@ -459,6 +497,12 @@ enum DeltaEvaluation {
   NO_PREVIOUS_RESULT
   WITHIN_LIMIT
   EXCEEDED
+}
+
+enum DeltaReviewStatus {
+  PENDING
+  ACKNOWLEDGED
+  SUPERSEDED
 }
 
 enum CommentTemplateScope {
@@ -962,6 +1006,7 @@ model Organization {
   roles       Role[]
   departments Department[]
   auditEvents AuditEvent[]
+  clinicalRuleGovernanceLocks ClinicalRuleGovernanceLock[]
   specimenTypes SpecimenType[]
   containers Container[]
   units Unit[]
@@ -1061,6 +1106,7 @@ model Organization {
   notificationTemplates NotificationTemplate[]
   notificationPreferences NotificationPreference[]
   notifications Notification[]
+  tatEscalationEvents TatEscalationEvent[]
   reportTemplates ReportTemplate[]
 
   @@map("organizations")
@@ -1121,6 +1167,7 @@ model Branch {
   activeSessions UserSession[] @relation("ActiveBranchSessions")
   testAvailability TestBranchAvailability[]
   referenceIntervals ReferenceInterval[]
+  tatPolicies TestTatPolicy[]
   priceLists PriceList[]
   orders LabOrder[] @relation("OrderingBranchOrders")
   performedOrderItems OrderItem[] @relation("PerformedBranchOrderItems")
@@ -1150,6 +1197,7 @@ model Branch {
   autoverificationPolicies AutoverificationPolicy[]
   validationHoldRules ValidationHoldRule[]
   criticalEscalationPolicies CriticalEscalationPolicy[]
+  resultValidationPolicies ResultValidationPolicy[]
   microbiologyCases MicrobiologyCase[]
   branchStocks BranchStock[]
   inventoryLotStocks InventoryLotStock[]
@@ -1183,6 +1231,7 @@ model Branch {
   edgeQueueMessages EdgeQueueMessage[]
 
   notifications Notification[]
+  tatEscalationEvents TatEscalationEvent[]
   reportTemplates ReportTemplate[]
 
   @@unique([organizationId, code])
@@ -1251,6 +1300,18 @@ model Workstation {
   @@map("workstations")
 }
 
+model ClinicalRuleGovernanceLock {
+  organizationId String   @map("organization_id") @db.Char(36)
+  ruleType       String   @map("rule_type") @db.VarChar(80)
+  identityHash   String   @map("identity_hash") @db.Char(64)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+
+  @@id([organizationId, ruleType, identityHash])
+  @@map("clinical_rule_governance_locks")
+}
+
 model User {
   id             String     @id @default(uuid()) @db.Char(36)
   organizationId String     @map("organization_id") @db.Char(36)
@@ -1283,7 +1344,12 @@ model User {
   auditEvents      AuditEvent[]          @relation("AuditActor")
   sessions         UserSession[]
   mfaChallenges     StaffMfaChallenge[]
+  createdReferenceIntervals ReferenceInterval[] @relation("ReferenceIntervalCreator")
   approvedReferenceIntervals ReferenceInterval[] @relation("ReferenceIntervalApprover")
+  retiredReferenceIntervals ReferenceInterval[] @relation("ReferenceIntervalRetirer")
+  createdAnalyzerTestMappings AnalyzerTestMapping[] @relation("AnalyzerTestMappingCreator")
+  approvedAnalyzerTestMappings AnalyzerTestMapping[] @relation("AnalyzerTestMappingApprover")
+  retiredAnalyzerTestMappings AnalyzerTestMapping[] @relation("AnalyzerTestMappingRetirer")
   createdCatalogImportMappings CatalogImportMapping[] @relation("CatalogImportMappingCreator")
   createdOrders LabOrder[] @relation("OrderCreator")
   recordedOrderAnswers OrderAnswer[] @relation("OrderAnswerRecorder")
@@ -1300,6 +1366,10 @@ model User {
   createdClientAccountStatements ClientAccountStatement[] @relation("ClientStatementCreator")
   createdClientCreditPolicies ClientCreditPolicy[] @relation("ClientCreditPolicyCreator")
   createdTaxRules TaxRule[] @relation("TaxRuleCreator")
+  createdTatPolicies TestTatPolicy[] @relation("TatPolicyCreator")
+  approvedTatPolicies TestTatPolicy[] @relation("TatPolicyApprover")
+  retiredTatPolicies TestTatPolicy[] @relation("TatPolicyRetirer")
+  acknowledgedTatEscalations TatEscalationEvent[] @relation("TatEscalationAcknowledgedBy")
   updatedClientCreditPolicies ClientCreditPolicy[] @relation("ClientCreditPolicyUpdater")
   orderStatusChanges OrderStatusHistory[] @relation("OrderStatusChanger")
   collectedSpecimens Specimen[] @relation("SpecimenCollector")
@@ -1327,6 +1397,7 @@ model User {
   reportDeliveries ReportDeliveryEvent[]
   amendmentRequests LaboratoryResult[] @relation("ResultAmendmentRequestedBy")
   resultRepeatEvents ResultRepeatEvent[] @relation("ResultRepeatRequestedBy")
+  acknowledgedDeltaReviews DeltaReviewEvent[] @relation("DeltaReviewAcknowledgedBy")
   createdSendOutReferrals SendOutReferral[] @relation("SendOutCreatedBy")
   dispatchedSendOutReferrals SendOutReferral[] @relation("SendOutDispatchedBy")
   receivedSendOutReferrals SendOutReferral[] @relation("SendOutReceivedBy")
@@ -1402,6 +1473,8 @@ model User {
   patientMergeEvents PatientMergeEvent[] @relation("PatientMergeActor")
   portalContactVerifications PortalContactVerification[] @relation("PortalContactVerificationActor")
   createdQualitativeResultOptions QualitativeResultOption[] @relation("QualitativeResultOptionCreator")
+  approvedQualitativeResultOptions QualitativeResultOption[] @relation("QualitativeResultOptionApprover")
+  retiredQualitativeResultOptions QualitativeResultOption[] @relation("QualitativeResultOptionRetirer")
   submittedReportTemplateVersions ReportTemplateVersion[] @relation("ReportTemplateVersionSubmitter")
   approvedReportTemplateVersions ReportTemplateVersion[] @relation("ReportTemplateVersionApprover")
 
@@ -1651,6 +1724,7 @@ model SpecimenType {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   tests        LabTest[]
   specimens    Specimen[]
+  referenceIntervals ReferenceInterval[]
 
   @@unique([organizationId, code])
   @@map("specimen_types")
@@ -1766,6 +1840,7 @@ model LabTest {
   priceListItems     PriceListItem[]
   taxRules           TaxRule[]
   orderItems         OrderItem[]
+  tatPolicies        TestTatPolicy[]
   orderQuestions     OrderQuestion[]
   deltaRules         DeltaRule[]
   commentTemplates   ResultCommentTemplate[]
@@ -1788,6 +1863,76 @@ model LabTest {
   @@map("lab_tests")
 }
 
+model TestTatPolicy {
+  id                         String                  @id @default(uuid()) @db.Char(36)
+  testId                     String                  @map("test_id") @db.Char(36)
+  branchId                   String?                 @map("branch_id") @db.Char(36)
+  priority                   OrderPriority?
+  tatMinutes                 Int                     @map("tat_minutes")
+  alertBeforeMinutes         Int?                    @map("alert_before_minutes")
+  escalationAfterMinutes     Int?                    @map("escalation_after_minutes")
+  escalationRepeatMinutes    Int?                    @map("escalation_repeat_minutes")
+  maxEscalationLevel         Int                     @default(1) @map("max_escalation_level")
+  escalationPermissionCode   String?                 @map("escalation_permission_code") @db.VarChar(120)
+  effectiveFrom              DateTime                @map("effective_from") @db.DateTime(3)
+  effectiveTo                DateTime?               @map("effective_to") @db.DateTime(3)
+  status                     RecordStatus            @default(INACTIVE)
+  approvalStatus             TatPolicyApprovalStatus @default(DRAFT) @map("approval_status")
+  createdByUserId            String                  @map("created_by_user_id") @db.Char(36)
+  approvedByUserId           String?                 @map("approved_by_user_id") @db.Char(36)
+  approvedAt                 DateTime?               @map("approved_at") @db.DateTime(3)
+  retiredByUserId            String?                 @map("retired_by_user_id") @db.Char(36)
+  retiredAt                  DateTime?               @map("retired_at") @db.DateTime(3)
+  retirementReason           String?                 @map("retirement_reason") @db.VarChar(1000)
+  createdAt                  DateTime                @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt                  DateTime                @updatedAt @map("updated_at") @db.DateTime(3)
+
+  test       LabTest @relation(fields: [testId], references: [id], onDelete: Restrict)
+  branch     Branch? @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  createdBy  User    @relation("TatPolicyCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  approvedBy User?   @relation("TatPolicyApprover", fields: [approvedByUserId], references: [id], onDelete: Restrict)
+  retiredBy  User?   @relation("TatPolicyRetirer", fields: [retiredByUserId], references: [id], onDelete: Restrict)
+  orderItems OrderItem[]
+
+  @@index([testId, status, approvalStatus, effectiveFrom, effectiveTo])
+  @@index([branchId, status, approvalStatus, effectiveFrom, effectiveTo])
+  @@index([testId, branchId, priority, status, approvalStatus, effectiveFrom])
+  @@index([createdByUserId, createdAt])
+  @@index([approvedByUserId, approvedAt])
+  @@map("test_tat_policies")
+}
+
+model TatEscalationEvent {
+  id                      String              @id @default(uuid()) @db.Char(36)
+  organizationId          String              @map("organization_id") @db.Char(36)
+  branchId                String              @map("branch_id") @db.Char(36)
+  orderItemId             String              @map("order_item_id") @db.Char(36)
+  level                   Int
+  status                  TatEscalationStatus @default(OPEN)
+  tatDueAtSnapshot        DateTime            @map("tat_due_at_snapshot") @db.DateTime(3)
+  escalationDueAtSnapshot DateTime            @map("escalation_due_at_snapshot") @db.DateTime(3)
+  permissionCodeSnapshot  String              @map("permission_code_snapshot") @db.VarChar(120)
+  recipientCount          Int                 @default(0) @map("recipient_count")
+  notificationIdsSnapshot Json?               @map("notification_ids_snapshot")
+  acknowledgedByUserId    String?             @map("acknowledged_by_user_id") @db.Char(36)
+  acknowledgedAt          DateTime?           @map("acknowledged_at") @db.DateTime(3)
+  acknowledgementNote     String?             @map("acknowledgement_note") @db.VarChar(1000)
+  closedAt                DateTime?           @map("closed_at") @db.DateTime(3)
+  createdAt               DateTime            @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt               DateTime            @updatedAt @map("updated_at") @db.DateTime(3)
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  branch         Branch       @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  orderItem      OrderItem    @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
+  acknowledgedBy User?        @relation("TatEscalationAcknowledgedBy", fields: [acknowledgedByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([orderItemId, level])
+  @@index([organizationId, status, escalationDueAtSnapshot])
+  @@index([branchId, status, createdAt])
+  @@index([acknowledgedByUserId, acknowledgedAt])
+  @@map("tat_escalation_events")
+}
+
 model TestComponent {
   id               String       @id @default(uuid()) @db.Char(36)
   testId           String       @map("test_id") @db.Char(36)
@@ -1799,6 +1944,10 @@ model TestComponent {
   decimalPrecision Int?         @map("decimal_precision")
   displayOrder     Int          @default(0) @map("display_order")
   resultSectionId  String?      @map("result_section_id") @db.Char(36)
+  reportNameEn      String?      @map("report_name_en") @db.VarChar(200)
+  reportNameAr      String?      @map("report_name_ar") @db.VarChar(200)
+  reportDisplayOrder Int?        @map("report_display_order")
+  reportVisible     Boolean      @default(true) @map("report_visible")
   entryWidth        ResultEntryFieldWidth @default(AUTO) @map("entry_width")
   entryHintEn       String?      @map("entry_hint_en") @db.VarChar(500)
   entryHintAr       String?      @map("entry_hint_ar") @db.VarChar(500)
@@ -1835,6 +1984,8 @@ model TestResultSection {
   nameEn         String       @map("name_en") @db.VarChar(200)
   nameAr         String?      @map("name_ar") @db.VarChar(200)
   displayOrder   Int          @default(0) @map("display_order")
+  reportDisplayOrder Int?      @map("report_display_order")
+  reportVisible   Boolean      @default(true) @map("report_visible")
   columnCount    Int          @default(3) @map("column_count")
   hintEn         String?      @map("hint_en") @db.VarChar(500)
   hintAr         String?      @map("hint_ar") @db.VarChar(500)
@@ -1865,8 +2016,14 @@ model QualitativeResultOption {
   displayOrder    Int          @default(0) @map("display_order")
   effectiveFrom   DateTime     @map("effective_from") @db.DateTime(3)
   effectiveTo     DateTime?    @map("effective_to") @db.DateTime(3)
-  status          RecordStatus @default(ACTIVE)
+  approvalStatus  QualitativeOptionApprovalStatus @default(DRAFT) @map("approval_status")
+  status          RecordStatus @default(INACTIVE)
   createdByUserId String       @map("created_by_user_id") @db.Char(36)
+  approvedByUserId String?     @map("approved_by_user_id") @db.Char(36)
+  approvedAt      DateTime?    @map("approved_at") @db.DateTime(3)
+  retiredByUserId String?      @map("retired_by_user_id") @db.Char(36)
+  retiredAt       DateTime?    @map("retired_at") @db.DateTime(3)
+  retirementReason String?     @map("retirement_reason") @db.VarChar(1000)
   createdAt       DateTime     @default(now()) @map("created_at") @db.DateTime(3)
   updatedAt       DateTime     @updatedAt @map("updated_at") @db.DateTime(3)
   deactivatedAt   DateTime?    @map("deactivated_at") @db.DateTime(3)
@@ -1875,9 +2032,12 @@ model QualitativeResultOption {
   test         LabTest      @relation(fields: [testId], references: [id], onDelete: Restrict)
   component    TestComponent? @relation(fields: [componentId], references: [id], onDelete: Restrict)
   createdBy    User         @relation("QualitativeResultOptionCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  approvedBy   User?        @relation("QualitativeResultOptionApprover", fields: [approvedByUserId], references: [id], onDelete: Restrict)
+  retiredBy    User?        @relation("QualitativeResultOptionRetirer", fields: [retiredByUserId], references: [id], onDelete: Restrict)
   resultValues LaboratoryResultValue[]
 
   @@index([organizationId, status], map: "qual_result_options_org_status_idx")
+  @@index([organizationId, approvalStatus, status], map: "qual_result_options_approval_idx")
   @@index([testId, componentId, status, effectiveFrom, effectiveTo], map: "qual_result_options_scope_effective_idx")
   @@index([createdByUserId, createdAt], map: "qual_result_options_creator_idx")
   @@map("qualitative_result_options")
@@ -1900,15 +2060,21 @@ model TestBranchAvailability {
 }
 
 model ReferenceInterval {
-  id                String           @id @default(uuid()) @db.Char(36)
-  componentId       String           @map("component_id") @db.Char(36)
-  branchId          String?          @map("branch_id") @db.Char(36)
-  methodId          String?          @map("method_id") @db.Char(36)
-  sex               SexApplicability @default(ANY)
-  ageFrom           Decimal?         @map("age_from") @db.Decimal(10, 3)
-  ageTo             Decimal?         @map("age_to") @db.Decimal(10, 3)
-  ageUnit           AgeUnit?         @map("age_unit")
-  lowValue          Decimal?         @map("low_value") @db.Decimal(18, 6)
+  id                      String           @id @default(uuid()) @db.Char(36)
+  componentId             String           @map("component_id") @db.Char(36)
+  branchId                String?          @map("branch_id") @db.Char(36)
+  methodId                String?          @map("method_id") @db.Char(36)
+  analyzerId              String?          @map("analyzer_id") @db.Char(36)
+  specimenTypeId          String?          @map("specimen_type_id") @db.Char(36)
+  sex                     SexApplicability @default(ANY)
+  ageFrom                 Decimal?         @map("age_from") @db.Decimal(10, 3)
+  ageTo                   Decimal?         @map("age_to") @db.Decimal(10, 3)
+  ageUnit                 AgeUnit?         @map("age_unit")
+  pregnancyStatus         PregnancyStatus? @map("pregnancy_status")
+  gestationalAgeFromWeeks Decimal?         @map("gestational_age_from_weeks") @db.Decimal(6, 2)
+  gestationalAgeToWeeks   Decimal?         @map("gestational_age_to_weeks") @db.Decimal(6, 2)
+  populationCode          String?          @map("population_code") @db.VarChar(80)
+  lowValue                Decimal?         @map("low_value") @db.Decimal(18, 6)
   highValue         Decimal?         @map("high_value") @db.Decimal(18, 6)
   normalTextEn      String?          @map("normal_text_en") @db.VarChar(500)
   normalTextAr      String?          @map("normal_text_ar") @db.VarChar(500)
@@ -1918,20 +2084,33 @@ model ReferenceInterval {
   notes             String?          @db.Text
   effectiveFrom     DateTime         @map("effective_from") @db.DateTime(3)
   effectiveTo       DateTime?        @map("effective_to") @db.DateTime(3)
+  approvalStatus    ReferenceIntervalApprovalStatus @default(DRAFT) @map("approval_status")
+  createdByUserId   String?          @map("created_by_user_id") @db.Char(36)
   approvedByUserId  String?          @map("approved_by_user_id") @db.Char(36)
   approvedAt        DateTime?        @map("approved_at") @db.DateTime(3)
-  status            RecordStatus     @default(ACTIVE)
+  retiredByUserId   String?          @map("retired_by_user_id") @db.Char(36)
+  retiredAt         DateTime?        @map("retired_at") @db.DateTime(3)
+  retirementReason  String?          @map("retirement_reason") @db.VarChar(1000)
+  status            RecordStatus     @default(INACTIVE)
   createdAt         DateTime         @default(now()) @map("created_at") @db.DateTime(3)
   updatedAt         DateTime         @updatedAt @map("updated_at") @db.DateTime(3)
 
-  component TestComponent @relation(fields: [componentId], references: [id], onDelete: Restrict)
-  branch    Branch? @relation(fields: [branchId], references: [id], onDelete: Restrict)
-  method    Method? @relation(fields: [methodId], references: [id], onDelete: Restrict)
-  approvedBy User? @relation("ReferenceIntervalApprover", fields: [approvedByUserId], references: [id], onDelete: Restrict)
+  component    TestComponent @relation(fields: [componentId], references: [id], onDelete: Restrict)
+  branch       Branch? @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  method       Method? @relation(fields: [methodId], references: [id], onDelete: Restrict)
+  analyzer     Analyzer? @relation(fields: [analyzerId], references: [id], onDelete: Restrict)
+  specimenType SpecimenType? @relation(fields: [specimenTypeId], references: [id], onDelete: Restrict)
+  createdBy    User? @relation("ReferenceIntervalCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  approvedBy   User? @relation("ReferenceIntervalApprover", fields: [approvedByUserId], references: [id], onDelete: Restrict)
+  retiredBy    User? @relation("ReferenceIntervalRetirer", fields: [retiredByUserId], references: [id], onDelete: Restrict)
   resultValues LaboratoryResultValue[]
 
   @@index([componentId, effectiveFrom, effectiveTo])
+  @@index([componentId, approvalStatus, status, effectiveFrom, effectiveTo])
   @@index([branchId, status])
+  @@index([analyzerId, status])
+  @@index([specimenTypeId, status])
+  @@index([populationCode, status])
   @@map("reference_intervals")
 }
 
@@ -2365,8 +2544,11 @@ model LabOrder {
   clinicalNotes    String?       @map("clinical_notes") @db.Text
   diagnosis        String?       @db.VarChar(500)
   fasting          Boolean?      
-  pregnancyInfo    String?       @map("pregnancy_info") @db.VarChar(500)
-  orderedAt        DateTime      @default(now()) @map("ordered_at") @db.DateTime(3)
+  pregnancyInfo          String?          @map("pregnancy_info") @db.VarChar(500)
+  pregnancyStatus        PregnancyStatus  @default(UNKNOWN) @map("pregnancy_status")
+  gestationalAgeWeeks    Decimal?         @map("gestational_age_weeks") @db.Decimal(6, 2)
+  referencePopulationCode String?         @map("reference_population_code") @db.VarChar(80)
+  orderedAt              DateTime         @default(now()) @map("ordered_at") @db.DateTime(3)
   createdByUserId  String        @map("created_by_user_id") @db.Char(36)
   createdAt        DateTime      @default(now()) @map("created_at") @db.DateTime(3)
   updatedAt        DateTime      @updatedAt @map("updated_at") @db.DateTime(3)
@@ -2456,12 +2638,21 @@ model OrderItem {
   tatClockBasisSnapshot TatClockBasis?  @map("tat_clock_basis_snapshot")
   tatClockStartedAt     DateTime?       @map("tat_clock_started_at") @db.DateTime(3)
   tatDueAt              DateTime?       @map("tat_due_at") @db.DateTime(3)
-  tatSnapshotSource     TatSnapshotSource @default(NOT_CONFIGURED) @map("tat_snapshot_source")
-  createdAt             DateTime        @default(now()) @map("created_at") @db.DateTime(3)
+  tatAlertBeforeMinutesSnapshot Int?      @map("tat_alert_before_minutes_snapshot")
+  tatAlertAt             DateTime?       @map("tat_alert_at") @db.DateTime(3)
+  tatEscalationAfterMinutesSnapshot Int?   @map("tat_escalation_after_minutes_snapshot")
+  tatEscalationRepeatMinutesSnapshot Int?  @map("tat_escalation_repeat_minutes_snapshot")
+  tatMaxEscalationLevelSnapshot Int?        @map("tat_max_escalation_level_snapshot")
+  tatEscalationPermissionCodeSnapshot String? @map("tat_escalation_permission_code_snapshot") @db.VarChar(120)
+  tatFirstEscalationAt   DateTime?       @map("tat_first_escalation_at") @db.DateTime(3)
+  tatPolicyId            String?         @map("tat_policy_id") @db.Char(36)
+  tatSnapshotSource      TatSnapshotSource @default(NOT_CONFIGURED) @map("tat_snapshot_source")
+  createdAt              DateTime        @default(now()) @map("created_at") @db.DateTime(3)
   updatedAt             DateTime        @updatedAt @map("updated_at") @db.DateTime(3)
 
   order           LabOrder       @relation(fields: [orderId], references: [id], onDelete: Restrict)
   test            LabTest        @relation(fields: [testId], references: [id], onDelete: Restrict)
+  tatPolicy       TestTatPolicy?  @relation(fields: [tatPolicyId], references: [id], onDelete: Restrict)
   performedBranch Branch?        @relation("PerformedBranchOrderItems", fields: [performedBranchId], references: [id], onDelete: Restrict)
   priceListItem   PriceListItem? @relation(fields: [priceListItemId], references: [id], onDelete: Restrict)
   invoiceLines    InvoiceLine[]
@@ -2476,11 +2667,15 @@ model OrderItem {
   packageLinks     OrderPackageItem[]
   answers          OrderAnswer[]
   sendOutReferrals SendOutReferral[]
+  tatEscalations TatEscalationEvent[]
 
   @@unique([orderId, testId])
   @@index([performedBranchId, status])
   @@index([testId, status])
   @@index([tatDueAt, status])
+  @@index([tatAlertAt, tatDueAt, status])
+  @@index([tatFirstEscalationAt, status])
+  @@index([tatPolicyId])
   @@map("order_items")
 }
 
@@ -3340,6 +3535,7 @@ model LaboratoryResult {
   amendments       LaboratoryResult[] @relation("ResultAmendmentChain")
   values           LaboratoryResultValue[]
   criticalEvents   CriticalResultEvent[]
+  deltaReviewEvents DeltaReviewEvent[]
   reflexEvents      ReflexRuleEvent[]
   autoverificationPolicy AutoverificationPolicy? @relation(fields: [autoverificationPolicyId], references: [id], onDelete: Restrict)
   validationHoldEvents ValidationHoldEvent[]
@@ -3365,6 +3561,7 @@ model ResultValidationPolicy {
   id                        String       @id @default(uuid()) @db.Char(36)
   organizationId            String       @map("organization_id") @db.Char(36)
   scope                     ResultValidationPolicyScope
+  branchId                  String?      @map("branch_id") @db.Char(36)
   departmentId              String?      @map("department_id") @db.Char(36)
   testId                    String?      @map("test_id") @db.Char(36)
   code                      String       @db.VarChar(80)
@@ -3374,20 +3571,22 @@ model ResultValidationPolicy {
   allowSameReviewer         Boolean      @default(false) @map("allow_same_reviewer")
   effectiveFrom             DateTime     @map("effective_from") @db.DateTime(3)
   effectiveTo               DateTime?    @map("effective_to") @db.DateTime(3)
-  status                    RecordStatus @default(ACTIVE)
+  status                    RecordStatus @default(INACTIVE)
   createdByUserId           String       @map("created_by_user_id") @db.Char(36)
   createdAt                 DateTime     @default(now()) @map("created_at") @db.DateTime(3)
   updatedAt                 DateTime     @updatedAt @map("updated_at") @db.DateTime(3)
   deactivatedAt             DateTime?    @map("deactivated_at") @db.DateTime(3)
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  branch       Branch?      @relation(fields: [branchId], references: [id], onDelete: Restrict)
   department   Department?  @relation(fields: [departmentId], references: [id], onDelete: Restrict)
   test         LabTest?     @relation(fields: [testId], references: [id], onDelete: Restrict)
   createdBy    User         @relation("ResultValidationPolicyCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
   results      LaboratoryResult[]
 
-  @@unique([organizationId, code])
+  @@index([organizationId, code], map: "result_validation_policies_org_code_idx")
   @@index([organizationId, scope, status, effectiveFrom, effectiveTo], map: "result_validation_policy_scope_idx")
+  @@index([branchId, scope, status, effectiveFrom], map: "result_validation_policy_branch_idx")
   @@index([departmentId, status, effectiveFrom], map: "result_validation_policy_department_idx")
   @@index([testId, status, effectiveFrom], map: "result_validation_policy_test_idx")
   @@map("result_validation_policies")
@@ -3557,6 +3756,14 @@ model LaboratoryResultValue {
   componentCodeSnapshot    String      @map("component_code_snapshot") @db.VarChar(80)
   componentNameEnSnapshot  String      @map("component_name_en_snapshot") @db.VarChar(220)
   componentNameArSnapshot  String?     @map("component_name_ar_snapshot") @db.VarChar(220)
+  reportNameEnSnapshot     String?     @map("report_name_en_snapshot") @db.VarChar(220)
+  reportNameArSnapshot     String?     @map("report_name_ar_snapshot") @db.VarChar(220)
+  reportDisplayOrderSnapshot Int?      @map("report_display_order_snapshot")
+  reportVisibleSnapshot    Boolean?    @map("report_visible_snapshot")
+  reportSectionCodeSnapshot String?    @map("report_section_code_snapshot") @db.VarChar(80)
+  reportSectionNameEnSnapshot String?  @map("report_section_name_en_snapshot") @db.VarChar(220)
+  reportSectionNameArSnapshot String?  @map("report_section_name_ar_snapshot") @db.VarChar(220)
+  reportSectionOrderSnapshot Int?      @map("report_section_order_snapshot")
   resultTypeSnapshot       ResultType  @map("result_type_snapshot")
   valueNumeric             Decimal?    @map("value_numeric") @db.Decimal(24, 8)
   valueText                String?     @map("value_text") @db.Text
@@ -3588,6 +3795,8 @@ model LaboratoryResultValue {
   deltaPercentSnapshot      Decimal?    @map("delta_percent_snapshot") @db.Decimal(18, 6)
   deltaAbsoluteLimitSnapshot Decimal?   @map("delta_absolute_limit_snapshot") @db.Decimal(24, 8)
   deltaPercentLimitSnapshot Decimal?    @map("delta_percent_limit_snapshot") @db.Decimal(18, 6)
+  deltaRuleId               String?     @map("delta_rule_id") @db.Char(36)
+  deltaLookbackDaysSnapshot Int?        @map("delta_lookback_days_snapshot")
   isCalculated              Boolean     @default(false) @map("is_calculated")
   calculatedRuleId          String?     @map("calculated_rule_id") @db.Char(36)
   calculationExpressionSnapshot String? @map("calculation_expression_snapshot") @db.VarChar(1000)
@@ -3603,11 +3812,13 @@ model LaboratoryResultValue {
   calculatedRule    CalculatedResultRule? @relation(fields: [calculatedRuleId], references: [id], onDelete: Restrict)
   analyzerImport     AnalyzerResultImport? @relation(fields: [analyzerImportId], references: [id], onDelete: Restrict)
   qualitativeOption  QualitativeResultOption? @relation(fields: [qualitativeOptionId], references: [id], onDelete: Restrict)
+  deltaRule          DeltaRule? @relation(fields: [deltaRuleId], references: [id], onDelete: Restrict)
 
   @@unique([resultId, componentCodeSnapshot])
   @@index([componentId])
   @@index([flag, isAbnormal, isCritical])
   @@index([qualitativeOptionId])
+  @@index([deltaRuleId])
   @@index([calculatedRuleId])
   @@index([analyzerImportId])
   @@map("laboratory_result_values")
@@ -3733,7 +3944,7 @@ model DeltaRule {
   lookbackDays             Int          @default(365) @map("lookback_days")
   effectiveFrom            DateTime     @map("effective_from") @db.DateTime(3)
   effectiveTo              DateTime?    @map("effective_to") @db.DateTime(3)
-  status                   RecordStatus @default(ACTIVE)
+  status                   RecordStatus @default(INACTIVE)
   createdAt                DateTime     @default(now()) @map("created_at") @db.DateTime(3)
   updatedAt                DateTime     @updatedAt @map("updated_at") @db.DateTime(3)
   deactivatedAt            DateTime?    @map("deactivated_at") @db.DateTime(3)
@@ -3743,11 +3954,50 @@ model DeltaRule {
   component    TestComponent? @relation(fields: [componentId], references: [id], onDelete: Restrict)
   branch       Branch?        @relation(fields: [branchId], references: [id], onDelete: Restrict)
   method       Method?        @relation(fields: [methodId], references: [id], onDelete: Restrict)
+  resultValues LaboratoryResultValue[]
+  reviewEvents DeltaReviewEvent[]
 
   @@index([testId, componentId, status, effectiveFrom, effectiveTo])
   @@index([branchId, status])
   @@index([methodId, status])
   @@map("delta_rules")
+}
+
+model DeltaReviewEvent {
+  id                         String            @id @default(uuid()) @db.Char(36)
+  resultId                   String            @map("result_id") @db.Char(36)
+  deltaRuleId                String?           @map("delta_rule_id") @db.Char(36)
+  status                     DeltaReviewStatus @default(PENDING)
+  componentCodeSnapshot      String            @map("component_code_snapshot") @db.VarChar(80)
+  componentNameEnSnapshot    String            @map("component_name_en_snapshot") @db.VarChar(220)
+  componentNameArSnapshot    String?           @map("component_name_ar_snapshot") @db.VarChar(220)
+  currentValueSnapshot       Decimal           @map("current_value_snapshot") @db.Decimal(24, 8)
+  previousValueSnapshot      Decimal?          @map("previous_value_snapshot") @db.Decimal(24, 8)
+  previousResultAtSnapshot   DateTime?         @map("previous_result_at_snapshot") @db.DateTime(3)
+  deltaAbsoluteSnapshot      Decimal?          @map("delta_absolute_snapshot") @db.Decimal(24, 8)
+  deltaPercentSnapshot       Decimal?          @map("delta_percent_snapshot") @db.Decimal(18, 6)
+  absoluteLimitSnapshot      Decimal?          @map("absolute_limit_snapshot") @db.Decimal(24, 8)
+  percentLimitSnapshot       Decimal?          @map("percent_limit_snapshot") @db.Decimal(18, 6)
+  lookbackDaysSnapshot       Int?              @map("lookback_days_snapshot")
+  performingBranchIdSnapshot String            @map("performing_branch_id_snapshot") @db.Char(36)
+  methodIdSnapshot           String?           @map("method_id_snapshot") @db.Char(36)
+  detectedAt                 DateTime          @default(now()) @map("detected_at") @db.DateTime(3)
+  acknowledgedByUserId       String?           @map("acknowledged_by_user_id") @db.Char(36)
+  acknowledgedAt             DateTime?         @map("acknowledged_at") @db.DateTime(3)
+  acknowledgementNote        String?           @map("acknowledgement_note") @db.VarChar(1000)
+  supersededAt               DateTime?         @map("superseded_at") @db.DateTime(3)
+  createdAt                  DateTime          @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt                  DateTime          @updatedAt @map("updated_at") @db.DateTime(3)
+
+  result         LaboratoryResult @relation(fields: [resultId], references: [id], onDelete: Restrict)
+  deltaRule      DeltaRule?       @relation(fields: [deltaRuleId], references: [id], onDelete: Restrict)
+  acknowledgedBy User?            @relation("DeltaReviewAcknowledgedBy", fields: [acknowledgedByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([resultId, componentCodeSnapshot])
+  @@index([status, detectedAt])
+  @@index([deltaRuleId])
+  @@index([acknowledgedByUserId, acknowledgedAt])
+  @@map("delta_review_events")
 }
 
 model ResultCommentTemplate {
@@ -3806,7 +4056,7 @@ model CalculatedResultRule {
   decimalPrecision  Int?         @map("decimal_precision")
   effectiveFrom     DateTime     @map("effective_from") @db.DateTime(3)
   effectiveTo       DateTime?    @map("effective_to") @db.DateTime(3)
-  status            RecordStatus @default(ACTIVE)
+  status            RecordStatus @default(INACTIVE)
   createdAt         DateTime     @default(now()) @map("created_at") @db.DateTime(3)
   updatedAt         DateTime     @updatedAt @map("updated_at") @db.DateTime(3)
   deactivatedAt     DateTime?    @map("deactivated_at") @db.DateTime(3)
@@ -3835,7 +4085,7 @@ model ReflexRule {
   noteAr            String?        @map("note_ar") @db.VarChar(500)
   effectiveFrom     DateTime       @map("effective_from") @db.DateTime(3)
   effectiveTo       DateTime?      @map("effective_to") @db.DateTime(3)
-  status            RecordStatus   @default(ACTIVE)
+  status            RecordStatus   @default(INACTIVE)
   createdAt         DateTime       @default(now()) @map("created_at") @db.DateTime(3)
   updatedAt         DateTime       @updatedAt @map("updated_at") @db.DateTime(3)
   deactivatedAt     DateTime?      @map("deactivated_at") @db.DateTime(3)
@@ -3895,7 +4145,7 @@ model AutoverificationPolicy {
   requireAllFlagsNormal    Boolean      @default(false) @map("require_all_flags_normal")
   effectiveFrom            DateTime     @map("effective_from") @db.DateTime(3)
   effectiveTo              DateTime?    @map("effective_to") @db.DateTime(3)
-  status                   RecordStatus @default(ACTIVE)
+  status                   RecordStatus @default(INACTIVE)
   createdAt                DateTime     @default(now()) @map("created_at") @db.DateTime(3)
   updatedAt                DateTime     @updatedAt @map("updated_at") @db.DateTime(3)
   deactivatedAt            DateTime?    @map("deactivated_at") @db.DateTime(3)
@@ -3922,7 +4172,7 @@ model ValidationHoldRule {
   reasonAr       String?                 @map("reason_ar") @db.VarChar(500)
   effectiveFrom  DateTime                @map("effective_from") @db.DateTime(3)
   effectiveTo    DateTime?               @map("effective_to") @db.DateTime(3)
-  status         RecordStatus            @default(ACTIVE)
+  status         RecordStatus            @default(INACTIVE)
   createdAt      DateTime                @default(now()) @map("created_at") @db.DateTime(3)
   updatedAt      DateTime                @updatedAt @map("updated_at") @db.DateTime(3)
   deactivatedAt  DateTime?               @map("deactivated_at") @db.DateTime(3)
@@ -3973,7 +4223,7 @@ model CriticalEscalationPolicy {
   requireReadBack           Boolean      @default(true) @map("require_read_back")
   effectiveFrom             DateTime     @map("effective_from") @db.DateTime(3)
   effectiveTo               DateTime?    @map("effective_to") @db.DateTime(3)
-  status                    RecordStatus @default(ACTIVE)
+  status                    RecordStatus @default(INACTIVE)
   createdAt                 DateTime     @default(now()) @map("created_at") @db.DateTime(3)
   updatedAt                 DateTime     @updatedAt @map("updated_at") @db.DateTime(3)
   deactivatedAt             DateTime?    @map("deactivated_at") @db.DateTime(3)
@@ -4165,6 +4415,7 @@ model Analyzer {
   messages     AnalyzerMessage[]
   resultImports AnalyzerResultImport[]
   results LaboratoryResult[]
+  referenceIntervals ReferenceInterval[]
   equipment Equipment?
   maintenanceEvents MaintenanceEvent[]
   calibrationEvents CalibrationEvent[]
@@ -4203,27 +4454,43 @@ model AnalyzerCredential {
 }
 
 model AnalyzerTestMapping {
-  id               String       @id @default(uuid()) @db.Char(36)
-  analyzerId       String       @map("analyzer_id") @db.Char(36)
-  analyzerTestCode String       @map("analyzer_test_code") @db.VarChar(120)
-  analyzerUnitCode String?      @map("analyzer_unit_code") @db.VarChar(80)
-  testId           String       @map("test_id") @db.Char(36)
-  componentId      String?      @map("component_id") @db.Char(36)
-  effectiveFrom    DateTime     @map("effective_from") @db.DateTime(3)
-  effectiveTo      DateTime?    @map("effective_to") @db.DateTime(3)
-  status           RecordStatus @default(ACTIVE)
-  createdAt        DateTime     @default(now()) @map("created_at") @db.DateTime(3)
-  updatedAt        DateTime     @updatedAt @map("updated_at") @db.DateTime(3)
-  deactivatedAt    DateTime?    @map("deactivated_at") @db.DateTime(3)
+  id                      String                        @id @default(uuid()) @db.Char(36)
+  analyzerId              String                        @map("analyzer_id") @db.Char(36)
+  analyzerTestCode        String                        @map("analyzer_test_code") @db.VarChar(120)
+  analyzerUnitCode        String?                       @map("analyzer_unit_code") @db.VarChar(80)
+  testId                  String                        @map("test_id") @db.Char(36)
+  componentId             String?                       @map("component_id") @db.Char(36)
+  effectiveFrom           DateTime                      @map("effective_from") @db.DateTime(3)
+  effectiveTo             DateTime?                     @map("effective_to") @db.DateTime(3)
+  approvalStatus          AnalyzerMappingApprovalStatus @default(DRAFT) @map("approval_status")
+  lisUnitIdSnapshot       String?                       @map("lis_unit_id_snapshot") @db.Char(36)
+  lisUnitCodeSnapshot     String?                       @map("lis_unit_code_snapshot") @db.VarChar(50)
+  lisUnitSymbolSnapshot   String?                       @map("lis_unit_symbol_snapshot") @db.VarChar(50)
+  lisUnitUcumCodeSnapshot String?                       @map("lis_unit_ucum_code_snapshot") @db.VarChar(50)
+  createdByUserId         String?                       @map("created_by_user_id") @db.Char(36)
+  approvedByUserId        String?                       @map("approved_by_user_id") @db.Char(36)
+  approvedAt              DateTime?                     @map("approved_at") @db.DateTime(3)
+  retiredByUserId         String?                       @map("retired_by_user_id") @db.Char(36)
+  retiredAt               DateTime?                     @map("retired_at") @db.DateTime(3)
+  retirementReason        String?                       @map("retirement_reason") @db.VarChar(1000)
+  status                  RecordStatus                  @default(INACTIVE)
+  createdAt               DateTime                      @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt               DateTime                      @updatedAt @map("updated_at") @db.DateTime(3)
+  deactivatedAt           DateTime?                     @map("deactivated_at") @db.DateTime(3)
 
-  analyzer  Analyzer       @relation(fields: [analyzerId], references: [id], onDelete: Restrict)
-  test      LabTest        @relation(fields: [testId], references: [id], onDelete: Restrict)
-  component TestComponent? @relation(fields: [componentId], references: [id], onDelete: Restrict)
-  imports   AnalyzerResultImport[]
+  analyzer   Analyzer       @relation(fields: [analyzerId], references: [id], onDelete: Restrict)
+  test       LabTest        @relation(fields: [testId], references: [id], onDelete: Restrict)
+  component  TestComponent? @relation(fields: [componentId], references: [id], onDelete: Restrict)
+  createdBy  User?          @relation("AnalyzerTestMappingCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  approvedBy User?          @relation("AnalyzerTestMappingApprover", fields: [approvedByUserId], references: [id], onDelete: Restrict)
+  retiredBy  User?          @relation("AnalyzerTestMappingRetirer", fields: [retiredByUserId], references: [id], onDelete: Restrict)
+  imports    AnalyzerResultImport[]
 
   @@unique([analyzerId, analyzerTestCode, effectiveFrom])
   @@index([testId, componentId, status, effectiveFrom, effectiveTo])
-  @@index([analyzerId, status, effectiveFrom, effectiveTo])
+  @@index([analyzerId, approvalStatus, status, effectiveFrom, effectiveTo], map: "analyzer_mapping_approval_effective_idx")
+  @@index([createdByUserId, createdAt], map: "analyzer_mapping_creator_idx")
+  @@index([approvedByUserId, approvedAt], map: "analyzer_mapping_approver_idx")
   @@map("analyzer_test_mappings")
 }
 
@@ -6082,6 +6349,10 @@ model OrderQuestion {
   required       Boolean                   @default(false)
   options        Json?
   displayOrder   Int                       @default(0) @map("display_order")
+  version        Int                       @default(1)
+  effectiveFrom  DateTime                  @default(now()) @map("effective_from") @db.DateTime(3)
+  effectiveTo    DateTime?                 @map("effective_to") @db.DateTime(3)
+  supersedesQuestionId String?             @map("supersedes_question_id") @db.Char(36)
   status         RecordStatus              @default(ACTIVE)
   createdAt      DateTime                  @default(now()) @map("created_at") @db.DateTime(3)
   updatedAt      DateTime                  @updatedAt @map("updated_at") @db.DateTime(3)
@@ -6090,10 +6361,14 @@ model OrderQuestion {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   test         LabTest      @relation(fields: [testId], references: [id], onDelete: Restrict)
   answers      OrderAnswer[]
+  supersedes   OrderQuestion? @relation("OrderQuestionRevision", fields: [supersedesQuestionId], references: [id], onDelete: Restrict)
+  supersededBy OrderQuestion[] @relation("OrderQuestionRevision")
 
-  @@unique([testId, code])
+  @@unique([testId, code, version])
   @@index([organizationId, status])
   @@index([testId, status, displayOrder])
+  @@index([testId, code, status, effectiveFrom, effectiveTo])
+  @@index([supersedesQuestionId])
   @@map("order_questions")
 }
 
@@ -6107,11 +6382,18 @@ model OrderAnswer {
   questionTextEnSnapshot   String                    @map("question_text_en_snapshot") @db.VarChar(500)
   questionTextArSnapshot   String?                   @map("question_text_ar_snapshot") @db.VarChar(500)
   responseTypeSnapshot     OrderQuestionResponseType @map("response_type_snapshot")
+  questionVersionSnapshot  Int                       @default(1) @map("question_version_snapshot")
   answerText               String?                   @map("answer_text") @db.Text
   answerNumeric            Decimal?                  @map("answer_numeric") @db.Decimal(18, 6)
   answerBoolean            Boolean?                  @map("answer_boolean")
   answerDate               DateTime?                 @map("answer_date") @db.Date
+  answerDateTime           DateTime?                 @map("answer_date_time") @db.DateTime(3)
+  answerDateTimeLocalSnapshot String?                @map("answer_date_time_local_snapshot") @db.VarChar(32)
+  answerTimeZoneSnapshot   String?                   @map("answer_time_zone_snapshot") @db.VarChar(100)
   selectedOptionSnapshot   String?                   @map("selected_option_snapshot") @db.VarChar(500)
+  selectedOptionCodeSnapshot String?                 @map("selected_option_code_snapshot") @db.VarChar(100)
+  selectedOptionTextEnSnapshot String?               @map("selected_option_text_en_snapshot") @db.VarChar(500)
+  selectedOptionTextArSnapshot String?               @map("selected_option_text_ar_snapshot") @db.VarChar(500)
   recordedByUserId         String                    @map("recorded_by_user_id") @db.Char(36)
   recordedAt               DateTime                  @default(now()) @map("recorded_at") @db.DateTime(3)
 

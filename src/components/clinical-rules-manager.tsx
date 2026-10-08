@@ -57,7 +57,7 @@ export function ClinicalRulesManager({
       }),
     });
     if (response.ok) {
-      setMessage(tr("Delta rule created.", "تم إنشاء قاعدة الفرق بنجاح."));
+      setMessage(tr("Delta rule draft created. Approval is required before clinical use.", "تم إنشاء مسودة قاعدة Delta. يلزم اعتمادها قبل الاستخدام السريري."));
       event.currentTarget.reset();
       setDeltaTestId("");
       router.refresh();
@@ -113,7 +113,7 @@ export function ClinicalRulesManager({
         <label>{tr("Lookback days", "أيام الرجوع للخلف")}<input name="lookbackDays" type="number" min="1" max="3650" defaultValue="365" required /></label>
         <label>{tr("Effective from", "ساري من")}<input name="effectiveFrom" type="date" defaultValue={new Date().toISOString().slice(0,10)} required /></label>
         <label>{tr("Effective to", "ساري حتى")}<input name="effectiveTo" type="date" /></label>
-        <button className="primary-button form-span" disabled={busy === "delta"}>{busy === "delta" ? tr("Saving…", "جارٍ الحفظ…") : tr("Create Delta Rule", "إنشاء قاعدة الفرق")}</button>
+        <button className="primary-button form-span" disabled={busy === "delta"}>{busy === "delta" ? tr("Saving…", "جارٍ الحفظ…") : tr("Create Delta Rule Draft", "إنشاء مسودة قاعدة الفرق")}</button>
       </form>
     </article>
 

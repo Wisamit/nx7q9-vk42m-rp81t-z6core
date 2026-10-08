@@ -4,6 +4,7 @@ import { canAccessBranch, canAccessDepartment, requirePermission, requestContext
 import { prisma } from "@/lib/db";
 import { numericFlag, resolveReferenceInterval } from "@/lib/result-reference";
 import { evaluateDelta } from "@/lib/delta-check";
+import { syncDeltaReviewEvents } from "@/lib/delta-review";
 import { evaluateFormula, formulaVariables } from "@/lib/formula-engine";
 import { reflexMatches } from "@/lib/reflex-rules";
 import { evaluateAutoverification } from "@/lib/autoverification";
@@ -11,7 +12,8 @@ import { validationHoldMatches } from "@/lib/validation-holds";
 import { parseResultValue } from "@/lib/result-value-parser";
 import { qualitativeFlag } from "@/lib/qualitative-result-options";
 import { resolveResultValueComment } from "@/lib/result-comments";
-import { selectValidationPolicy, snapshotValidationPolicy, type ValidationPolicySnapshot } from "@/lib/result-validation";
+import { snapshotReportPresentation } from "@/lib/report-presentation";
+import { automatedTechnicalReviewOutcome, selectValidationPolicy, snapshotValidationPolicy, type ValidationPolicySnapshot } from "@/lib/result-validation";
 
 function text(value: unknown, max = 5000) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -55,7 +57,7 @@ export async function POST(request: Request) {
           method: true,
           components: {
             where: { status: "ACTIVE" },
-            include: { unit: true },
+            include: { unit: true, resultSection: true },
             orderBy: [{ displayOrder: "asc" }, { code: "asc" }],
           },
           calculatedRules: {
@@ -141,10 +143,14 @@ export async function POST(request: Request) {
       organizationId: session.user.organizationId,
       status: "ACTIVE",
       effectiveFrom: { lte: resultAt },
-      OR: [{ effectiveTo: null }, { effectiveTo: { gte: resultAt } }],
+      AND: [
+        { OR: [{ effectiveTo: null }, { effectiveTo: { gte: resultAt } }] },
+        { OR: [{ branchId: null }, { branchId: performingBranchId }] },
+      ],
     },
   });
   const selectedValidationPolicy = selectValidationPolicy(validationPolicies, {
+    branchId: performingBranchId,
     testId: orderItem.testId,
     departmentId: orderItem.test.departmentId,
   });
@@ -155,6 +161,8 @@ export async function POST(request: Request) {
       organizationId: session.user.organizationId,
       testId: orderItem.testId,
       status: "ACTIVE",
+      approvalStatus: "APPROVED",
+      approvedAt: { not: null },
       effectiveFrom: { lte: resultAt },
       OR: [{ effectiveTo: null }, { effectiveTo: { gte: resultAt } }],
     },
@@ -177,6 +185,24 @@ export async function POST(request: Request) {
         unitId: component.unitId,
         unitSnapshot: component.unit?.symbol || null,
         decimalPrecision: component.decimalPrecision,
+        reportPresentation: snapshotReportPresentation({
+          code: component.code,
+          nameEn: component.nameEn,
+          nameAr: component.nameAr,
+          displayOrder: component.displayOrder,
+          reportNameEn: component.reportNameEn,
+          reportNameAr: component.reportNameAr,
+          reportDisplayOrder: component.reportDisplayOrder,
+          reportVisible: component.reportVisible,
+          resultSection: component.resultSection ? {
+            code: component.resultSection.code,
+            nameEn: component.resultSection.nameEn,
+            nameAr: component.resultSection.nameAr,
+            displayOrder: component.resultSection.displayOrder,
+            reportDisplayOrder: component.resultSection.reportDisplayOrder,
+            reportVisible: component.resultSection.reportVisible,
+          } : null,
+        }),
       }))
     : [{
         componentId: null,
@@ -187,6 +213,16 @@ export async function POST(request: Request) {
         unitId: orderItem.test.defaultUnitId,
         unitSnapshot: orderItem.test.defaultUnit?.symbol || null,
         decimalPrecision: orderItem.test.decimalPrecision,
+        reportPresentation: {
+          reportNameEnSnapshot: orderItem.test.nameEn,
+          reportNameArSnapshot: orderItem.test.nameAr,
+          reportDisplayOrderSnapshot: 0,
+          reportVisibleSnapshot: true,
+          reportSectionCodeSnapshot: null,
+          reportSectionNameEnSnapshot: null,
+          reportSectionNameArSnapshot: null,
+          reportSectionOrderSnapshot: null,
+        },
       }];
 
   const valueByComponent = new Map((body.values || []).map((entry) => [entry.componentId || "__TEST__", entry]));
@@ -199,6 +235,16 @@ export async function POST(request: Request) {
     resultType: "NUMERIC" | "TEXT" | "QUALITATIVE" | "BOOLEAN" | "DATE";
     unitId: string | null;
     unitSnapshot: string | null;
+    reportPresentation: {
+      reportNameEnSnapshot: string;
+      reportNameArSnapshot: string | null;
+      reportDisplayOrderSnapshot: number;
+      reportVisibleSnapshot: boolean;
+      reportSectionCodeSnapshot: string | null;
+      reportSectionNameEnSnapshot: string | null;
+      reportSectionNameArSnapshot: string | null;
+      reportSectionOrderSnapshot: number | null;
+    };
     parsed: NonNullable<ReturnType<typeof parseResultValue>>;
     interval: Awaited<ReturnType<typeof resolveReferenceInterval>> | null;
     flag: {
@@ -258,6 +304,10 @@ export async function POST(request: Request) {
         methodId: orderItem.test.methodId,
         patientSex: orderItem.order.patient.sexAtBirth,
         dateOfBirth: orderItem.order.patient.dateOfBirth,
+        pregnancyStatus: orderItem.order.pregnancyStatus,
+        gestationalAgeWeeks: orderItem.order.gestationalAgeWeeks,
+        specimenTypeId: specimen.specimenTypeId,
+        populationCode: orderItem.order.referencePopulationCode,
       }) : null;
 
       const flag = selectedOption
@@ -293,6 +343,8 @@ export async function POST(request: Request) {
             deltaPercent: null,
             absoluteLimit: null,
             percentLimit: null,
+            ruleId: null,
+            lookbackDays: null,
           };
 
       prepared.push({
@@ -345,6 +397,10 @@ export async function POST(request: Request) {
         methodId: orderItem.test.methodId,
         patientSex: orderItem.order.patient.sexAtBirth,
         dateOfBirth: orderItem.order.patient.dateOfBirth,
+        pregnancyStatus: orderItem.order.pregnancyStatus,
+        gestationalAgeWeeks: orderItem.order.gestationalAgeWeeks,
+        specimenTypeId: specimen.specimenTypeId,
+        populationCode: orderItem.order.referencePopulationCode,
       });
       const flag = numericFlag(calculated, interval);
       const delta = await evaluateDelta(prisma, {
@@ -474,6 +530,14 @@ export async function POST(request: Request) {
           componentCodeSnapshot: item.code,
           componentNameEnSnapshot: item.nameEn,
           componentNameArSnapshot: item.nameAr,
+          reportNameEnSnapshot: item.reportPresentation.reportNameEnSnapshot,
+          reportNameArSnapshot: item.reportPresentation.reportNameArSnapshot,
+          reportDisplayOrderSnapshot: item.reportPresentation.reportDisplayOrderSnapshot,
+          reportVisibleSnapshot: item.reportPresentation.reportVisibleSnapshot,
+          reportSectionCodeSnapshot: item.reportPresentation.reportSectionCodeSnapshot,
+          reportSectionNameEnSnapshot: item.reportPresentation.reportSectionNameEnSnapshot,
+          reportSectionNameArSnapshot: item.reportPresentation.reportSectionNameArSnapshot,
+          reportSectionOrderSnapshot: item.reportPresentation.reportSectionOrderSnapshot,
           resultTypeSnapshot: item.resultType,
           valueNumeric: item.parsed.valueNumeric,
           valueText: item.parsed.valueText,
@@ -505,6 +569,8 @@ export async function POST(request: Request) {
           deltaPercentSnapshot: item.delta.deltaPercent,
           deltaAbsoluteLimitSnapshot: item.delta.absoluteLimit,
           deltaPercentLimitSnapshot: item.delta.percentLimit,
+          deltaRuleId: item.delta.ruleId,
+          deltaLookbackDaysSnapshot: item.delta.lookbackDays,
           isCalculated: item.isCalculated,
           calculatedRuleId: item.calculatedRuleId,
           calculationExpressionSnapshot: item.calculationExpression,
@@ -512,6 +578,13 @@ export async function POST(request: Request) {
         },
       });
     }
+
+    await syncDeltaReviewEvents(tx, {
+      resultId: result.id,
+      performingBranchId,
+      methodId: orderItem.test.methodId,
+      detectedAt: resultAt,
+    });
 
     for (const rule of orderItem.test.sourceReflexRules) {
       if (rule.branchId && rule.branchId !== performingBranchId) continue;
@@ -622,11 +695,14 @@ export async function POST(request: Request) {
       pendingReflexCount,
       blockingHoldCount,
     });
-    const requiresMedicalValidation = validationSnapshot?.requiresMedicalValidation === true;
-    const finalResultStatus = autoverificationDecision.eligible && !requiresMedicalValidation ? "VERIFIED" : resultStatus;
-    const finalValidationStage = autoverificationDecision.eligible
-      ? requiresMedicalValidation ? "MEDICAL_VALIDATION" : "COMPLETE"
-      : entryValidationStage;
+    const effectiveValidationSnapshot = validationSnapshot || snapshotValidationPolicy(null);
+    const autoOutcome = automatedTechnicalReviewOutcome(effectiveValidationSnapshot, {
+      eligible: autoverificationDecision.eligible,
+      complete,
+    });
+    const requiresMedicalValidation = effectiveValidationSnapshot.requiresMedicalValidation;
+    const finalResultStatus = autoOutcome.resultStatus;
+    const finalValidationStage = autoOutcome.validationStage;
     const autoverifiedAt = autoverificationDecision.eligible ? new Date() : null;
 
     await tx.laboratoryResult.update({
@@ -803,6 +879,7 @@ export async function POST(request: Request) {
         values: { orderBy: { componentCodeSnapshot: "asc" } },
         reflexEvents: true,
         validationHoldEvents: true,
+        deltaReviewEvents: true,
       },
     });
   }, { timeout: 30000 }).catch(error => {
@@ -820,6 +897,7 @@ export async function POST(request: Request) {
     complete,
     criticalCount: saved?.values.filter((value) => value.isCritical).length || 0,
     deltaExceededCount: saved?.values.filter((value) => value.deltaEvaluation === "EXCEEDED").length || 0,
+    pendingDeltaReviewCount: saved?.deltaReviewEvents.filter((event) => event.status === "PENDING").length || 0,
     pendingReflexCount: saved?.reflexEvents.filter((event) => event.status === "PENDING").length || 0,
     blockingValidationHoldCount: saved?.validationHoldEvents.filter((event) => event.status === "ACTIVE" && event.severitySnapshot === "BLOCK").length || 0,
     warningValidationHoldCount: saved?.validationHoldEvents.filter((event) => event.status === "ACTIVE" && event.severitySnapshot === "WARNING").length || 0,

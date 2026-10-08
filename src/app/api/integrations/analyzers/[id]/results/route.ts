@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { analyzerMappingTargetUnitStillMatches } from "@/lib/analyzer-mapping-governance";
 import { analyzerRoutingAllowsImport } from "@/lib/analyzer-routing";
 import { authenticateAnalyzerBridge } from "@/lib/analyzer-auth";
 
@@ -73,8 +74,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         analyzerId: credential.analyzer.id,
         analyzerTestCode: { in: testCodes },
         status: "ACTIVE",
+        approvalStatus: "APPROVED",
+        approvedAt: { not: null },
         effectiveFrom: { lte: now },
         OR: [{ effectiveTo: null }, { effectiveTo: { gte: now } }],
+      },
+      include: {
+        test: { include: { defaultUnit: true } },
+        component: { include: { unit: true } },
       },
       orderBy: { effectiveFrom: "desc" },
     }),
@@ -149,7 +156,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
       if (!mapping) {
         errorCode = "MAPPING_NOT_FOUND";
-        errorText = "No active analyzer mapping exists for the analyzer test code.";
+        errorText = "No approved active analyzer mapping exists for the analyzer test code.";
+      } else if (!analyzerMappingTargetUnitStillMatches(
+        mapping,
+        mapping.componentId ? mapping.component?.unit || null : mapping.test.defaultUnit,
+      )) {
+        errorCode = "MAPPING_TARGET_UNIT_CHANGED";
+        errorText = "The approved analyzer mapping no longer matches the current LIS target unit configuration.";
       } else if (!specimen) {
         errorCode = "SPECIMEN_NOT_FOUND";
         errorText = "No specimen matches the supplied barcode in this organization.";
@@ -165,6 +178,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       } else if (mapping.analyzerUnitCode && item.rawUnit !== mapping.analyzerUnitCode) {
         errorCode = "ANALYZER_UNIT_MISMATCH";
         errorText = `Expected analyzer unit ${mapping.analyzerUnitCode} but received ${item.rawUnit}.`;
+      } else if (!mapping.analyzerUnitCode && item.rawUnit) {
+        errorCode = "ANALYZER_UNIT_UNEXPECTED";
+        errorText = "The approved LIS target is unitless but the analyzer supplied a unit.";
       } else {
         const linkedItems = specimen.orderItems
           .map(link => link.orderItem)

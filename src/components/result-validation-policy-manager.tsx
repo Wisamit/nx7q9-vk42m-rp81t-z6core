@@ -2,6 +2,7 @@
 
 import { FormEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { ClinicalRuleGovernanceButton } from "@/components/clinical-rule-governance-button";
 
 type Scope = "ORGANIZATION" | "DEPARTMENT" | "TEST";
 type Option = { id: string; code: string; nameEn: string; nameAr?: string | null };
@@ -11,6 +12,7 @@ type Policy = {
   nameEn: string;
   nameAr: string | null;
   scope: Scope;
+  branchId: string | null;
   departmentId: string | null;
   testId: string | null;
   requiresMedicalValidation: boolean;
@@ -18,20 +20,26 @@ type Policy = {
   effectiveFrom: string;
   effectiveTo: string | null;
   status: "ACTIVE" | "INACTIVE";
+  deactivatedAt: string | null;
+  branch?: Option | null;
   department?: Option | null;
   test?: Option | null;
 };
 
 export function ResultValidationPolicyManager({
   locale,
+  branches,
   departments,
   tests,
   policies,
+  canApprove,
 }: {
   locale: "ar" | "en";
+  branches: Option[];
   departments: Option[];
   tests: Option[];
   policies: Policy[];
+  canApprove: boolean;
 }) {
   const router = useRouter();
   const [scope, setScope] = useState<Scope>("ORGANIZATION");
@@ -52,6 +60,7 @@ export function ResultValidationPolicyManager({
     const form = new FormData(event.currentTarget);
     const payload = {
       scope,
+      branchId: form.get("branchId") || null,
       code: form.get("code"),
       nameEn: form.get("nameEn"),
       nameAr: form.get("nameAr"),
@@ -75,26 +84,8 @@ export function ResultValidationPolicyManager({
     }
     event.currentTarget.reset();
     setRequiresMedicalValidation(false);
-    setMessage(tr("Validation policy created.", "تم إنشاء سياسة التحقق."));
+    setMessage(tr("Validation policy draft created. It will not affect result validation until approved.", "تم إنشاء مسودة سياسة التحقق. لن تؤثر على مسار التحقق من النتائج قبل اعتمادها."));
     router.refresh();
-  }
-
-  async function setStatus(id: string, status: "ACTIVE" | "INACTIVE") {
-    if (status === "INACTIVE" && !confirm(tr(
-      "Deactivate this validation policy? Existing result snapshots will remain unchanged.",
-      "تعطيل سياسة التحقق؟ ستبقى لقطات النتائج التاريخية الحالية دون تغيير.",
-    ))) return;
-    setSaving(true);
-    setMessage("");
-    const response = await fetch("/api/clinical-rules/validation-policies", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, status }),
-    });
-    const body = await response.json().catch(() => ({})) as { error?: string };
-    setSaving(false);
-    if (!response.ok) setMessage(body.error || tr("Could not update validation policy.", "تعذر تحديث سياسة التحقق."));
-    else router.refresh();
   }
 
   const scopeLabel = (value: Scope) => ({
@@ -108,8 +99,8 @@ export function ResultValidationPolicyManager({
       <div>
         <h2>{tr("Result Validation Paths", "مسارات التحقق من النتائج")}</h2>
         <p className="muted">{tr(
-          "Technical review is always required. Medical validation can be required by organization, department, or test policy. Test overrides department, and department overrides organization.",
-          "المراجعة الفنية مطلوبة دائماً. يمكن اشتراط التحقق الطبي على مستوى المؤسسة أو القسم أو الفحص. سياسة الفحص تتقدم على القسم، والقسم يتقدم على المؤسسة.",
+          "Technical review is always required. New validation paths are inactive drafts until separately approved. Medical validation can be required by organization, department, or test policy, with optional branch overrides.",
+          "المراجعة الفنية مطلوبة دائماً. تُنشأ مسارات التحقق الجديدة كمسودات غير نشطة حتى يتم اعتمادها بشكل منفصل. ويمكن اشتراط التحقق الطبي على مستوى المؤسسة أو القسم أو الفحص مع تجاوزات حسب الفرع.",
         )}</p>
       </div>
     </div>
@@ -119,6 +110,10 @@ export function ResultValidationPolicyManager({
         <option value="ORGANIZATION">{scopeLabel("ORGANIZATION")}</option>
         <option value="DEPARTMENT">{scopeLabel("DEPARTMENT")}</option>
         <option value="TEST">{scopeLabel("TEST")}</option>
+      </select></label>
+      <label>{tr("Branch override", "تجاوز حسب الفرع")}<select name="branchId" defaultValue="">
+        <option value="">{tr("All branches / organization default", "كل الفروع / افتراضي المؤسسة")}</option>
+        {branches.map(x => <option key={x.id} value={x.id}>{x.code} — {name(x)}</option>)}
       </select></label>
       {scope === "DEPARTMENT" && <label>{tr("Department", "القسم")}<select name="departmentId" required>
         <option value="">{tr("Select department", "اختر القسم")}</option>
@@ -135,20 +130,20 @@ export function ResultValidationPolicyManager({
       <label>{tr("Effective to", "ساري حتى")}<input name="effectiveTo" type="date" /></label>
       <label className="check-line"><input type="checkbox" checked={requiresMedicalValidation} onChange={e => setRequiresMedicalValidation(e.target.checked)} /> {tr("Require medical validation", "يتطلب تحققاً طبياً")}</label>
       {requiresMedicalValidation && <label className="check-line"><input type="checkbox" name="allowSameReviewer" /> {tr("Allow same user for technical and medical stages", "السماح لنفس المستخدم بالمراجعة الفنية والتحقق الطبي")}</label>}
-      <button className="primary-button form-span" disabled={saving}>{saving ? tr("Saving…", "جارٍ الحفظ…") : tr("Create Validation Policy", "إنشاء سياسة التحقق")}</button>
+      <button className="primary-button form-span" disabled={saving}>{saving ? tr("Saving…", "جارٍ الحفظ…") : tr("Create Validation Policy Draft", "إنشاء مسودة سياسة التحقق")}</button>
     </form>
 
     <div className="table-wrap"><table>
-      <thead><tr><th>{tr("Code", "الرمز")}</th><th>{tr("Scope", "النطاق")}</th><th>{tr("Path", "المسار")}</th><th>{tr("Reviewer separation", "فصل المراجعين")}</th><th>{tr("Effective", "السريان")}</th><th>{tr("Status", "الحالة")}</th><th></th></tr></thead>
+      <thead><tr><th>{tr("Code", "الرمز")}</th><th>{tr("Branch", "الفرع")}</th><th>{tr("Scope", "النطاق")}</th><th>{tr("Path", "المسار")}</th><th>{tr("Reviewer separation", "فصل المراجعين")}</th><th>{tr("Effective", "السريان")}</th><th>{tr("Governance", "الحوكمة")}</th></tr></thead>
       <tbody>{sortedPolicies.length === 0 ? <tr><td colSpan={7} className="empty-state">{tr("No result validation policies configured. Default path is technical review only.", "لا توجد سياسات تحقق مهيأة. المسار الافتراضي هو المراجعة الفنية فقط.")}</td></tr> :
         sortedPolicies.map(policy => <tr key={policy.id}>
           <td><strong>{policy.code}</strong><br/><small>{locale === "ar" ? policy.nameAr || policy.nameEn : policy.nameEn}</small></td>
+          <td>{policy.branch ? policy.branch.code + " — " + name(policy.branch) : tr("All branches", "كل الفروع")}</td>
           <td>{scopeLabel(policy.scope)}{policy.department ? " · " + policy.department.code : policy.test ? " · " + policy.test.code : ""}</td>
           <td>{policy.requiresMedicalValidation ? tr("Technical → Medical", "فني ← طبي") : tr("Technical only", "فني فقط")}</td>
           <td>{policy.requiresMedicalValidation ? (policy.allowSameReviewer ? tr("Same user allowed", "نفس المستخدم مسموح") : tr("Different users required", "يلزم مستخدمان مختلفان")) : "—"}</td>
           <td>{policy.effectiveFrom + " → " + (policy.effectiveTo || tr("Open", "مفتوح"))}</td>
-          <td>{policy.status === "ACTIVE" ? tr("Active", "نشط") : tr("Inactive", "غير نشط")}</td>
-          <td><button type="button" className="secondary-button" disabled={saving} onClick={() => void setStatus(policy.id, policy.status === "ACTIVE" ? "INACTIVE" : "ACTIVE")}>{policy.status === "ACTIVE" ? tr("Deactivate", "تعطيل") : tr("Reactivate", "إعادة تفعيل")}</button></td>
+          <td><ClinicalRuleGovernanceButton id={policy.id} ruleType="RESULT_VALIDATION_POLICY" status={policy.status} deactivatedAt={policy.deactivatedAt} canApprove={canApprove} locale={locale} /></td>
         </tr>)}
       </tbody>
     </table></div>

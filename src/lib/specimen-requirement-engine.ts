@@ -4,10 +4,15 @@ export type SpecimenRequirementInput = {
   testCode: string;
   specimenTypeId: string | null;
   specimenTypeCode: string | null;
+  specimenTypeNameEn?: string | null;
+  specimenTypeNameAr?: string | null;
   containerId: string | null;
   containerCode: string | null;
+  containerNameEn?: string | null;
+  containerNameAr?: string | null;
   minimumVolume: string | null;
   minimumVolumeUnit: string | null;
+  patientPreparation?: string | null;
   collectionInstructions: string | null;
   storageConditions: string | null;
   stabilityMinutes: number | null;
@@ -19,6 +24,7 @@ export type SpecimenRequirementMemberSnapshot = {
   testCode: string;
   minimumVolume: string | null;
   minimumVolumeUnit: string | null;
+  patientPreparation: string | null;
   collectionInstructions: string | null;
   storageConditions: string | null;
   stabilityMinutes: number | null;
@@ -27,11 +33,16 @@ export type SpecimenRequirementMemberSnapshot = {
 export type SpecimenPlan = {
   specimenTypeId: string | null;
   specimenTypeCode: string | null;
+  specimenTypeNameEn: string | null;
+  specimenTypeNameAr: string | null;
   containerId: string | null;
   containerCode: string | null;
+  containerNameEn: string | null;
+  containerNameAr: string | null;
   requiredVolume: string | null;
   requiredVolumeUnit: string | null;
   volumeRequirementComplete: boolean;
+  patientPreparation: string[];
   collectionInstructions: string[];
   storageConditions: string | null;
   stabilityMinutes: number | null;
@@ -41,7 +52,7 @@ export type SpecimenPlan = {
   members: SpecimenRequirementMemberSnapshot[];
 };
 
-function normalizedText(value: string | null) {
+function normalizedText(value: string | null | undefined) {
   const normalized = value?.trim() || "";
   return normalized ? normalized.replace(/\s+/g, " ") : "";
 }
@@ -91,10 +102,11 @@ export function buildSpecimenPlans(inputs: SpecimenRequirementInput[]): Specimen
     const invalidVolume = volumes.some(value => value === undefined);
     const missingVolume = volumes.some(value => value === null);
     const volumeUnit = normalizedText(first.minimumVolumeUnit) || null;
+    const patientPreparation = [...new Set(
+      members.map(member => normalizedText(member.patientPreparation)).filter(Boolean),
+    )];
     const instructions = [...new Set(
-      members
-        .map(member => normalizedText(member.collectionInstructions))
-        .filter(Boolean),
+      members.map(member => normalizedText(member.collectionInstructions)).filter(Boolean),
     )];
 
     let requiredVolume: string | null = null;
@@ -106,11 +118,16 @@ export function buildSpecimenPlans(inputs: SpecimenRequirementInput[]): Specimen
     return {
       specimenTypeId: first.specimenTypeId,
       specimenTypeCode: first.specimenTypeCode,
+      specimenTypeNameEn: first.specimenTypeNameEn || null,
+      specimenTypeNameAr: first.specimenTypeNameAr || null,
       containerId: first.containerId,
       containerCode: first.containerCode,
+      containerNameEn: first.containerNameEn || null,
+      containerNameAr: first.containerNameAr || null,
       requiredVolume,
       requiredVolumeUnit: volumeUnit,
       volumeRequirementComplete: !invalidVolume && !missingVolume,
+      patientPreparation,
       collectionInstructions: instructions,
       storageConditions: normalizedText(first.storageConditions) || null,
       stabilityMinutes: first.stabilityMinutes,
@@ -123,12 +140,49 @@ export function buildSpecimenPlans(inputs: SpecimenRequirementInput[]): Specimen
         testCode: member.testCode,
         minimumVolume: member.minimumVolume,
         minimumVolumeUnit: normalizedText(member.minimumVolumeUnit) || null,
+        patientPreparation: normalizedText(member.patientPreparation) || null,
         collectionInstructions: normalizedText(member.collectionInstructions) || null,
         storageConditions: normalizedText(member.storageConditions) || null,
         stabilityMinutes: member.stabilityMinutes,
       })),
     };
   });
+}
+
+export function specimenRequirementEventDetails(
+  plan: SpecimenPlan,
+  input: {
+    requirementSource: string;
+    capturedAt: Date;
+    extra?: Record<string, unknown>;
+  },
+) {
+  return {
+    ...(input.extra || {}),
+    requirementsFinalized: true,
+    requirementEngineVersion: 2,
+    requirementSource: input.requirementSource,
+    requirementCapturedAt: input.capturedAt.toISOString(),
+    specimenTypeId: plan.specimenTypeId,
+    specimenTypeCode: plan.specimenTypeCode,
+    specimenTypeNameEn: plan.specimenTypeNameEn,
+    specimenTypeNameAr: plan.specimenTypeNameAr,
+    containerId: plan.containerId,
+    containerCode: plan.containerCode,
+    containerNameEn: plan.containerNameEn,
+    containerNameAr: plan.containerNameAr,
+    requiredVolume: plan.requiredVolume,
+    requiredVolumeUnit: plan.requiredVolumeUnit,
+    volumeRequirementComplete: plan.volumeRequirementComplete,
+    patientPreparation: plan.patientPreparation,
+    collectionInstructions: plan.collectionInstructions,
+    storageConditions: plan.storageConditions,
+    stabilityMinutes: plan.stabilityMinutes,
+    shared: plan.shared,
+    configurationComplete: plan.configurationComplete,
+    orderItemIds: plan.orderItemIds,
+    requirementMembers: plan.members,
+  };
 }
 
 export function specimenCollectionVolumeError(input: {
@@ -158,13 +212,28 @@ export function specimenRequirementSnapshotFromDetails(details: unknown) {
   const requiredVolume = typeof record.requiredVolume === "string" ? record.requiredVolume : null;
   const requiredVolumeUnit = typeof record.requiredVolumeUnit === "string" ? record.requiredVolumeUnit : null;
   const members = Array.isArray(record.requirementMembers) ? record.requirementMembers : [];
+  const patientPreparation = Array.isArray(record.patientPreparation)
+    ? record.patientPreparation.filter((value): value is string => typeof value === "string")
+    : [];
   const collectionInstructions = Array.isArray(record.collectionInstructions)
     ? record.collectionInstructions.filter((value): value is string => typeof value === "string")
     : [];
   return {
+    requirementEngineVersion: typeof record.requirementEngineVersion === "number" ? record.requirementEngineVersion : 1,
+    requirementSource: typeof record.requirementSource === "string" ? record.requirementSource : "LEGACY_FINALIZATION",
+    requirementCapturedAt: typeof record.requirementCapturedAt === "string" ? record.requirementCapturedAt : null,
+    specimenTypeId: typeof record.specimenTypeId === "string" ? record.specimenTypeId : null,
+    specimenTypeCode: typeof record.specimenTypeCode === "string" ? record.specimenTypeCode : null,
+    specimenTypeNameEn: typeof record.specimenTypeNameEn === "string" ? record.specimenTypeNameEn : null,
+    specimenTypeNameAr: typeof record.specimenTypeNameAr === "string" ? record.specimenTypeNameAr : null,
+    containerId: typeof record.containerId === "string" ? record.containerId : null,
+    containerCode: typeof record.containerCode === "string" ? record.containerCode : null,
+    containerNameEn: typeof record.containerNameEn === "string" ? record.containerNameEn : null,
+    containerNameAr: typeof record.containerNameAr === "string" ? record.containerNameAr : null,
     requiredVolume,
     requiredVolumeUnit,
     volumeRequirementComplete: record.volumeRequirementComplete === true,
+    patientPreparation,
     collectionInstructions,
     storageConditions: typeof record.storageConditions === "string" ? record.storageConditions : null,
     stabilityMinutes: typeof record.stabilityMinutes === "number" ? record.stabilityMinutes : null,

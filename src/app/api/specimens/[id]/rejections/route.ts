@@ -20,13 +20,12 @@ function requirementDetailsForRecollection(input: {
   snapshot: ReturnType<typeof specimenRequirementSnapshotFromDetails>;
   affectedOrderItemIds: readonly string[];
   specimenTypeId: string | null;
-  specimenTypeCode: string | null;
   containerId: string | null;
-  containerCode: string | null;
   sourceSpecimenId: string;
   sourceBarcode: string;
 }) {
-  if (!input.snapshot) {
+  const snapshot = input.snapshot;
+  if (!snapshot) {
     return {
       recollectionForSpecimenId: input.sourceSpecimenId,
       rejectedBarcode: input.sourceBarcode,
@@ -35,19 +34,24 @@ function requirementDetailsForRecollection(input: {
   }
 
   const affected = new Set(input.affectedOrderItemIds);
-  const members = input.snapshot.requirementMembers
+  const members = snapshot.requirementMembers
     .filter((value): value is Record<string, unknown> => Boolean(value && typeof value === "object" && !Array.isArray(value)))
     .filter(member => typeof member.orderItemId === "string" && affected.has(member.orderItemId))
     .map(member => ({
       orderItemId: String(member.orderItemId),
       testId: typeof member.testId === "string" ? member.testId : "",
       testCode: typeof member.testCode === "string" ? member.testCode : "",
-      specimenTypeId: input.specimenTypeId,
-      specimenTypeCode: input.specimenTypeCode,
-      containerId: input.containerId,
-      containerCode: input.containerCode,
+      specimenTypeId: snapshot.specimenTypeId || input.specimenTypeId,
+      specimenTypeCode: snapshot.specimenTypeCode,
+      specimenTypeNameEn: snapshot.specimenTypeNameEn,
+      specimenTypeNameAr: snapshot.specimenTypeNameAr,
+      containerId: snapshot.containerId || input.containerId,
+      containerCode: snapshot.containerCode,
+      containerNameEn: snapshot.containerNameEn,
+      containerNameAr: snapshot.containerNameAr,
       minimumVolume: typeof member.minimumVolume === "string" ? member.minimumVolume : null,
       minimumVolumeUnit: typeof member.minimumVolumeUnit === "string" ? member.minimumVolumeUnit : null,
+      patientPreparation: typeof member.patientPreparation === "string" ? member.patientPreparation : null,
       collectionInstructions: typeof member.collectionInstructions === "string" ? member.collectionInstructions : null,
       storageConditions: typeof member.storageConditions === "string" ? member.storageConditions : null,
       stabilityMinutes: typeof member.stabilityMinutes === "number" ? member.stabilityMinutes : null,
@@ -75,12 +79,23 @@ function requirementDetailsForRecollection(input: {
   const plan = plans[0];
   return {
     requirementsFinalized: true,
-    requirementEngineVersion: 1,
+    requirementEngineVersion: Math.max(2, snapshot.requirementEngineVersion),
+    requirementSource: "RECOLLECTION_FROM_REJECTION_SNAPSHOT",
+    requirementCapturedAt: snapshot.requirementCapturedAt,
     recollectionForSpecimenId: input.sourceSpecimenId,
     rejectedBarcode: input.sourceBarcode,
     requiredVolume: plan.requiredVolume,
     requiredVolumeUnit: plan.requiredVolumeUnit,
     volumeRequirementComplete: plan.volumeRequirementComplete,
+    specimenTypeId: plan.specimenTypeId,
+    specimenTypeCode: plan.specimenTypeCode,
+    specimenTypeNameEn: plan.specimenTypeNameEn,
+    specimenTypeNameAr: plan.specimenTypeNameAr,
+    containerId: plan.containerId,
+    containerCode: plan.containerCode,
+    containerNameEn: plan.containerNameEn,
+    containerNameAr: plan.containerNameAr,
+    patientPreparation: plan.patientPreparation,
     collectionInstructions: plan.collectionInstructions,
     storageConditions: plan.storageConditions,
     stabilityMinutes: plan.stabilityMinutes,
@@ -333,9 +348,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
             snapshot: requirementSnapshot,
             affectedOrderItemIds,
             specimenTypeId: specimen.specimenTypeId,
-            specimenTypeCode: specimen.specimenType?.code || null,
             containerId: specimen.containerId,
-            containerCode: specimen.container?.code || null,
             sourceSpecimenId: specimen.id,
             sourceBarcode: specimen.barcode,
           });

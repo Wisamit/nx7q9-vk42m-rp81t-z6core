@@ -355,6 +355,8 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
           normalTextEn: item.normalText || null,
           effectiveFrom: new Date(),
           status: "INACTIVE",
+          approvalStatus: "DRAFT",
+          createdByUserId: session.user.id,
           source: "Legacy Family Lab MDB / normal",
           notes: "Migrated through validated legacy reference-range import; pending clinical approval before activation.",
         },

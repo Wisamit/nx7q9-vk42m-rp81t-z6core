@@ -2,6 +2,7 @@ import Link from "next/link";
 import { permissionSet, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { AnalyzerManager } from "@/components/analyzer-manager";
+import { AnalyzerMappingGovernanceButton } from "@/components/analyzer-mapping-governance-button";
 import { AnalyzerMessageReplayButton } from "@/components/analyzer-message-replay-button";
 import { AnalyzerClinicalImportButton } from "@/components/analyzer-clinical-import-button";
 import { getUiLocale, statusLabel, tr } from "@/lib/ui-i18n";
@@ -22,7 +23,13 @@ export default async function AnalyzersPage() {
         department: true,
         credentials: { orderBy: { createdAt: "desc" }, take: 5 },
         mappings: {
-          include: { test: true, component: true },
+          include: {
+            test: { include: { defaultUnit: true } },
+            component: { include: { unit: true } },
+            createdBy: { select: { displayNameEn: true, displayNameAr: true } },
+            approvedBy: { select: { displayNameEn: true, displayNameAr: true } },
+            retiredBy: { select: { displayNameEn: true, displayNameAr: true } },
+          },
           orderBy: { createdAt: "desc" },
           take: 20,
         },
@@ -138,7 +145,7 @@ export default async function AnalyzersPage() {
           <td>{item.protocol}</td>
           <td>{item.transport}</td>
           <td>{item.credentials.filter(credential => credential.status === "ACTIVE").length} {tr(locale, "active", "نشط")}</td>
-          <td>{item.mappings.filter(mapping => mapping.status === "ACTIVE").length} {tr(locale, "shown active", "نشط ظاهر")}</td>
+          <td>{item.mappings.filter(mapping => mapping.status === "ACTIVE" && mapping.approvalStatus === "APPROVED" && mapping.approvedAt).length} {tr(locale, "approved active", "معتمد ونشط")}</td>
           <td>{statusLabel(locale, item.status)}</td>
         </tr>)}</tbody>
       </table></div>
@@ -200,14 +207,23 @@ export default async function AnalyzersPage() {
       {analyzers.map(item => <article className="table-card" key={item.id}>
         <div className="table-toolbar"><h2>{item.code} {tr(locale, "Mappings", "عمليات الربط")}</h2><span>{item.mappings.length} {tr(locale, "shown", "معروضة")}</span></div>
         <div className="table-wrap"><table>
-          <thead><tr><th>{tr(locale, "Analyzer code", "رمز الجهاز")}</th><th>{tr(locale, "LIS target", "هدف LIS")}</th><th>{tr(locale, "Unit", "الوحدة")}</th><th>{tr(locale, "Effective", "السريان")}</th><th>{tr(locale, "Status", "الحالة")}</th></tr></thead>
-          <tbody>{item.mappings.length === 0 ? <tr><td colSpan={5} className="empty-state">{tr(locale, "No mappings configured.", "لا توجد عمليات ربط مهيأة.")}</td></tr> : item.mappings.map(mapping => <tr key={mapping.id}>
-            <td><strong>{mapping.analyzerTestCode}</strong></td>
-            <td>{mapping.test.code}{mapping.component ? " · " + mapping.component.code : ""}</td>
-            <td>{mapping.analyzerUnitCode || "—"}</td>
-            <td>{mapping.effectiveFrom.toISOString().slice(0,10)} → {mapping.effectiveTo?.toISOString().slice(0,10) || tr(locale, "Open", "مفتوح")}</td>
-            <td>{statusLabel(locale, mapping.status)}</td>
-          </tr>)}</tbody>
+          <thead><tr><th>{tr(locale, "Analyzer code", "رمز الجهاز")}</th><th>{tr(locale, "LIS target", "هدف LIS")}</th><th>{tr(locale, "Unit mapping", "ربط الوحدة")}</th><th>{tr(locale, "Effective", "السريان")}</th><th>{tr(locale, "Lifecycle", "دورة الحياة")}</th><th>{tr(locale, "Governance evidence", "دليل الحوكمة")}</th><th>{tr(locale, "Action", "الإجراء")}</th></tr></thead>
+          <tbody>{item.mappings.length === 0 ? <tr><td colSpan={7} className="empty-state">{tr(locale, "No mappings configured.", "لا توجد عمليات ربط مهيأة.")}</td></tr> : item.mappings.map(mapping => {
+            const currentUnit = mapping.componentId ? mapping.component?.unit || null : mapping.test.defaultUnit;
+            const lisUnit = mapping.lisUnitSymbolSnapshot || currentUnit?.symbol || "—";
+            const creator = mapping.createdBy ? (locale === "ar" ? mapping.createdBy.displayNameAr || mapping.createdBy.displayNameEn : mapping.createdBy.displayNameEn) : tr(locale, "Legacy / unknown", "قديم / غير معروف");
+            const approver = mapping.approvedBy ? (locale === "ar" ? mapping.approvedBy.displayNameAr || mapping.approvedBy.displayNameEn : mapping.approvedBy.displayNameEn) : null;
+            const retirer = mapping.retiredBy ? (locale === "ar" ? mapping.retiredBy.displayNameAr || mapping.retiredBy.displayNameEn : mapping.retiredBy.displayNameEn) : null;
+            return <tr key={mapping.id}>
+              <td><strong>{mapping.analyzerTestCode}</strong></td>
+              <td>{mapping.test.code}{mapping.component ? " · " + mapping.component.code : ""}</td>
+              <td>{mapping.analyzerUnitCode || tr(locale, "Unitless", "بدون وحدة")} → <strong>{lisUnit}</strong>{mapping.lisUnitUcumCodeSnapshot ? <><br/><small>{tr(locale, "UCUM", "UCUM")}: {mapping.lisUnitUcumCodeSnapshot}</small></> : null}</td>
+              <td>{mapping.effectiveFrom.toISOString().slice(0,10)} → {mapping.effectiveTo?.toISOString().slice(0,10) || tr(locale, "Open", "مفتوح")}</td>
+              <td><strong>{mapping.approvalStatus === "APPROVED" ? tr(locale, "Approved", "معتمد") : mapping.approvalStatus === "RETIRED" ? tr(locale, "Retired", "موقوف") : tr(locale, "Draft", "مسودة")}</strong><br/><small>{statusLabel(locale, mapping.status)}</small></td>
+              <td><small>{tr(locale, "Created by", "أنشأه")}: {creator}{mapping.approvedAt ? <><br/>{tr(locale, "Approved by", "اعتمده")}: {approver || "—"} · {mapping.approvedAt.toISOString().replace("T"," ").slice(0,19)}</> : null}{mapping.retiredAt ? <><br/>{tr(locale, "Retired by", "أوقفه")}: {retirer || "—"} · {mapping.retiredAt.toISOString().replace("T"," ").slice(0,19)}{mapping.retirementReason ? " · " + mapping.retirementReason : ""}</> : null}</small></td>
+              <td><AnalyzerMappingGovernanceButton analyzerId={item.id} id={mapping.id} approvalStatus={mapping.approvalStatus} canApprove={permissions.has("analyzers.mappings.approve")} locale={locale} /></td>
+            </tr>;
+          })}</tbody>
         </table></div>
       </article>)}
     </section>

@@ -10,7 +10,13 @@ import { invoiceDueDateSnapshot } from "@/lib/accounts-receivable-aging";
 import { creditLimitDecision } from "@/lib/client-credit-control";
 import { localCalendarDate } from "@/lib/accounts-receivable-aging";
 import { resolveTaxRule, taxLineAmounts, type EffectiveTaxRule } from "@/lib/tax-policy";
-import { buildOrderItemTatSnapshot } from "@/lib/tat";
+import { buildOrderItemTatSnapshot, resolveTatPolicy, type TatPriority } from "@/lib/tat";
+import { localDateTimeToUtc, normalizeOrderQuestionOptions } from "@/lib/order-questions";
+import {
+  buildSpecimenPlans,
+  specimenRequirementEventDetails,
+  type SpecimenRequirementInput,
+} from "@/lib/specimen-requirement-engine";
 
 function text(value: unknown, max = 500) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -50,10 +56,32 @@ export async function POST(request: Request) {
   const clientId = text(body.clientId, 36) || null;
   const directTestIds = uniqueIds(body.testIds);
   const packageIds = uniqueIds(body.packageIds);
-  const priority = ["ROUTINE", "URGENT", "STAT"].includes(body.priority) ? body.priority : "ROUTINE";
+  const priority: TatPriority = ["ROUTINE", "URGENT", "STAT"].includes(body.priority)
+    ? body.priority as TatPriority
+    : "ROUTINE";
   const clinicalNotes = text(body.clinicalNotes, 5000);
   const diagnosis = text(body.diagnosis, 500);
   const pregnancyInfo = text(body.pregnancyInfo, 500);
+  const pregnancyStatus = ["UNKNOWN", "NOT_PREGNANT", "PREGNANT"].includes(body.pregnancyStatus)
+    ? body.pregnancyStatus as "UNKNOWN" | "NOT_PREGNANT" | "PREGNANT"
+    : "UNKNOWN";
+  const gestationalAgeWeeksRaw =
+    body.gestationalAgeWeeks === "" || body.gestationalAgeWeeks === null || body.gestationalAgeWeeks === undefined
+      ? null
+      : Number(body.gestationalAgeWeeks);
+  if (
+    gestationalAgeWeeksRaw !== null &&
+    (!Number.isFinite(gestationalAgeWeeksRaw) || gestationalAgeWeeksRaw < 0)
+  ) {
+    return NextResponse.json({ error: "invalid_gestational_age" }, { status: 400 });
+  }
+  if (gestationalAgeWeeksRaw !== null && pregnancyStatus !== "PREGNANT") {
+    return NextResponse.json({ error: "gestational_age_requires_pregnant_status" }, { status: 400 });
+  }
+  const gestationalAgeWeeks = gestationalAgeWeeksRaw === null
+    ? null
+    : Math.round(gestationalAgeWeeksRaw * 100) / 100;
+  const referencePopulationCode = text(body.referencePopulationCode, 80).toUpperCase() || null;
   const fasting = body.fasting === true ? true : body.fasting === false ? false : null;
   const rawRequestedDiscountPercent = Number(body.discountPercent ?? 0);
   if (!Number.isFinite(rawRequestedDiscountPercent) || rawRequestedDiscountPercent < 0 || rawRequestedDiscountPercent > 100) {
@@ -132,6 +160,7 @@ export async function POST(request: Request) {
 
   const packageTestIds = [...packageTestOwner.keys()];
   const allTestIds = [...directTestIds, ...packageTestIds];
+  const orderQuestionAsOf = new Date();
 
   const [patient, tests, source, referrer, client, orderingBranch] = await Promise.all([
     prisma.patient.findFirst({ where: { id: patientId, organizationId: session.user.organizationId, status: "ACTIVE" }, select: { id: true, patientNumber: true, fullNameEn: true } }),
@@ -142,7 +171,14 @@ export async function POST(request: Request) {
         specimenType: true,
         container: true,
         branchAvailability: { where: { status: "ACTIVE" } },
-        orderQuestions: { where: { status: "ACTIVE" }, orderBy: [{ displayOrder: "asc" }, { code: "asc" }] },
+        orderQuestions: {
+          where: {
+            status: "ACTIVE",
+            effectiveFrom: { lte: orderQuestionAsOf },
+            OR: [{ effectiveTo: null }, { effectiveTo: { gte: orderQuestionAsOf } }],
+          },
+          orderBy: [{ displayOrder: "asc" }, { code: "asc" }],
+        },
       },
     }),
     prisma.orderSource.findFirst({ where: { id: sourceId, organizationId: session.user.organizationId, status: "ACTIVE" }, select: { id: true, code: true, category: true } }),
@@ -178,8 +214,28 @@ export async function POST(request: Request) {
     answerNumeric: Prisma.Decimal | null;
     answerBoolean: boolean | null;
     answerDate: Date | null;
+    answerDateTime: Date | null;
+    answerDateTimeLocalSnapshot: string | null;
+    answerTimeZoneSnapshot: string | null;
     selectedOptionSnapshot: string | null;
+    selectedOptionCodeSnapshot: string | null;
+    selectedOptionTextEnSnapshot: string | null;
+    selectedOptionTextArSnapshot: string | null;
   }>();
+
+  const emptyPreparedAnswer = () => ({
+    answerText: null,
+    answerNumeric: null,
+    answerBoolean: null,
+    answerDate: null,
+    answerDateTime: null,
+    answerDateTimeLocalSnapshot: null,
+    answerTimeZoneSnapshot: null,
+    selectedOptionSnapshot: null,
+    selectedOptionCodeSnapshot: null,
+    selectedOptionTextEnSnapshot: null,
+    selectedOptionTextArSnapshot: null,
+  });
 
   try {
     for (const { question, test } of questions) {
@@ -200,32 +256,49 @@ export async function POST(request: Request) {
 
       if (question.responseType === "TEXT") {
         preparedAnswers.set(question.id, {
-          answerText: stringValue.slice(0, 5000), answerNumeric: null, answerBoolean: null, answerDate: null, selectedOptionSnapshot: null,
+          ...emptyPreparedAnswer(),
+          answerText: stringValue.slice(0, 5000),
         });
       } else if (question.responseType === "NUMERIC") {
         const value = new Prisma.Decimal(stringValue);
         preparedAnswers.set(question.id, {
-          answerText: null, answerNumeric: value, answerBoolean: null, answerDate: null, selectedOptionSnapshot: null,
+          ...emptyPreparedAnswer(),
+          answerNumeric: value,
         });
       } else if (question.responseType === "BOOLEAN") {
         if (!["true","false"].includes(stringValue.toLowerCase())) throw new Error("INVALID_BOOLEAN");
         preparedAnswers.set(question.id, {
-          answerText: null, answerNumeric: null, answerBoolean: stringValue.toLowerCase() === "true", answerDate: null, selectedOptionSnapshot: null,
+          ...emptyPreparedAnswer(),
+          answerBoolean: stringValue.toLowerCase() === "true",
         });
       } else if (question.responseType === "DATE") {
         if (!/^\d{4}-\d{2}-\d{2}$/.test(stringValue)) throw new Error("INVALID_DATE");
         const value = new Date(stringValue + "T00:00:00.000Z");
         if (Number.isNaN(value.getTime()) || value.toISOString().slice(0, 10) !== stringValue) throw new Error("INVALID_DATE");
         preparedAnswers.set(question.id, {
-          answerText: null, answerNumeric: null, answerBoolean: null, answerDate: value, selectedOptionSnapshot: null,
+          ...emptyPreparedAnswer(),
+          answerDate: value,
+        });
+      } else if (question.responseType === "DATETIME") {
+        const value = localDateTimeToUtc(stringValue, orderingBranch.timezone);
+        if (!value) throw new Error("INVALID_DATETIME");
+        preparedAnswers.set(question.id, {
+          ...emptyPreparedAnswer(),
+          answerDateTime: value,
+          answerDateTimeLocalSnapshot: stringValue.slice(0, 32),
+          answerTimeZoneSnapshot: orderingBranch.timezone,
         });
       } else if (question.responseType === "SINGLE_CHOICE") {
-        const options = Array.isArray(question.options)
-          ? question.options.filter((item): item is string => typeof item === "string")
-          : [];
-        if (!options.includes(stringValue)) throw new Error("INVALID_CHOICE");
+        const options = normalizeOrderQuestionOptions(question.options);
+        const selected = options.find(option => option.code === stringValue)
+          || options.find(option => option.valueEn === stringValue || option.valueAr === stringValue);
+        if (!selected) throw new Error("INVALID_CHOICE");
         preparedAnswers.set(question.id, {
-          answerText: null, answerNumeric: null, answerBoolean: null, answerDate: null, selectedOptionSnapshot: stringValue.slice(0, 500),
+          ...emptyPreparedAnswer(),
+          selectedOptionSnapshot: selected.valueEn,
+          selectedOptionCodeSnapshot: selected.code,
+          selectedOptionTextEnSnapshot: selected.valueEn,
+          selectedOptionTextArSnapshot: selected.valueAr,
         });
       }
     }
@@ -663,6 +736,9 @@ export async function POST(request: Request) {
           diagnosis: diagnosis || null,
           fasting,
           pregnancyInfo: pregnancyInfo || null,
+          pregnancyStatus,
+          gestationalAgeWeeks,
+          referencePopulationCode,
           createdByUserId: session.user.id,
         },
       });
@@ -725,7 +801,25 @@ export async function POST(request: Request) {
       }
 
       for (const test of tests) {
-        const tatSnapshot = buildOrderItemTatSnapshot(test.tatMinutes, order.orderedAt);
+        const tatPolicy = await resolveTatPolicy(tx, {
+          testId: test.id,
+          branchId,
+          priority,
+          at: order.orderedAt,
+        });
+        const tatSnapshot = buildOrderItemTatSnapshot(
+          tatPolicy?.tatMinutes ?? test.tatMinutes,
+          order.orderedAt,
+          tatPolicy ? {
+            source: "SLA_POLICY",
+            policyId: tatPolicy.id,
+            alertBeforeMinutes: tatPolicy.alertBeforeMinutes,
+            escalationAfterMinutes: tatPolicy.escalationAfterMinutes,
+            escalationRepeatMinutes: tatPolicy.escalationRepeatMinutes,
+            maxEscalationLevel: tatPolicy.maxEscalationLevel,
+            escalationPermissionCode: tatPolicy.escalationPermissionCode,
+          } : {},
+        );
         const packageId = packageTestOwner.get(test.id) || null;
         const directPrice = packageId ? null : directPriceMap.get(test.id);
         if (!packageId && !directPrice) throw new Error("DIRECT_PRICE_RESOLUTION_MISSING");
@@ -760,6 +854,14 @@ export async function POST(request: Request) {
             tatClockBasisSnapshot: tatSnapshot.tatClockBasisSnapshot,
             tatClockStartedAt: tatSnapshot.tatClockStartedAt,
             tatDueAt: tatSnapshot.tatDueAt,
+            tatAlertBeforeMinutesSnapshot: tatSnapshot.tatAlertBeforeMinutesSnapshot,
+            tatAlertAt: tatSnapshot.tatAlertAt,
+            tatEscalationAfterMinutesSnapshot: tatSnapshot.tatEscalationAfterMinutesSnapshot,
+            tatEscalationRepeatMinutesSnapshot: tatSnapshot.tatEscalationRepeatMinutesSnapshot,
+            tatMaxEscalationLevelSnapshot: tatSnapshot.tatMaxEscalationLevelSnapshot,
+            tatEscalationPermissionCodeSnapshot: tatSnapshot.tatEscalationPermissionCodeSnapshot,
+            tatFirstEscalationAt: tatSnapshot.tatFirstEscalationAt,
+            tatPolicyId: tatSnapshot.tatPolicyId,
             tatSnapshotSource: tatSnapshot.tatSnapshotSource,
           },
           select: { id: true },
@@ -786,11 +888,18 @@ export async function POST(request: Request) {
               questionTextEnSnapshot: question.questionEn,
               questionTextArSnapshot: question.questionAr,
               responseTypeSnapshot: question.responseType,
+              questionVersionSnapshot: question.version,
               answerText: answer.answerText,
               answerNumeric: answer.answerNumeric,
               answerBoolean: answer.answerBoolean,
               answerDate: answer.answerDate,
+              answerDateTime: answer.answerDateTime,
+              answerDateTimeLocalSnapshot: answer.answerDateTimeLocalSnapshot,
+              answerTimeZoneSnapshot: answer.answerTimeZoneSnapshot,
               selectedOptionSnapshot: answer.selectedOptionSnapshot,
+              selectedOptionCodeSnapshot: answer.selectedOptionCodeSnapshot,
+              selectedOptionTextEnSnapshot: answer.selectedOptionTextEnSnapshot,
+              selectedOptionTextArSnapshot: answer.selectedOptionTextArSnapshot,
               recordedByUserId: session.user.id,
             },
           });
@@ -799,7 +908,6 @@ export async function POST(request: Request) {
         createdItems.push({ item, test, tatSnapshot, unitPrice, discountAmount, finalPrice: grossPrice, packageId });
       }
 
-      const specimenGroups = new Map<string, typeof createdItems>();
       if (discountApprovalRequestIdToUse) {
         const consumed = await tx.discountApprovalRequest.updateMany({
           where: {
@@ -818,25 +926,42 @@ export async function POST(request: Request) {
         if (consumed.count !== 1) throw new Error("DISCOUNT_APPROVAL_NOT_CONSUMABLE");
       }
 
-      for (const entry of createdItems) {
-        const specimenTypeId = entry.test.specimenTypeId;
-        const containerId = entry.test.containerId;
-        const groupKey = specimenTypeId ? `${specimenTypeId}:${containerId || "NO_CONTAINER"}` : `ITEM:${entry.item.id}`;
-        const group = specimenGroups.get(groupKey) || [];
-        group.push(entry);
-        specimenGroups.set(groupKey, group);
-      }
+      const specimenRequirementInputs: SpecimenRequirementInput[] = createdItems.map(entry => ({
+        orderItemId: entry.item.id,
+        testId: entry.test.id,
+        testCode: entry.test.code,
+        specimenTypeId: entry.test.specimenTypeId,
+        specimenTypeCode: entry.test.specimenType?.code || null,
+        specimenTypeNameEn: entry.test.specimenType?.nameEn || null,
+        specimenTypeNameAr: entry.test.specimenType?.nameAr || null,
+        containerId: entry.test.containerId,
+        containerCode: entry.test.container?.code || null,
+        containerNameEn: entry.test.container?.nameEn || null,
+        containerNameAr: entry.test.container?.nameAr || null,
+        minimumVolume: entry.test.minimumVolume?.toFixed(3) || null,
+        minimumVolumeUnit: entry.test.minimumVolumeUnit,
+        patientPreparation: entry.test.patientPreparation,
+        collectionInstructions: entry.test.collectionInstructions,
+        storageConditions: entry.test.storageConditions,
+        stabilityMinutes: entry.test.stabilityMinutes,
+      }));
+      const specimenPlans = buildSpecimenPlans(specimenRequirementInputs);
+      const createdItemById = new Map(createdItems.map(entry => [entry.item.id, entry] as const));
 
       let specimenSequence = 1;
-      for (const group of specimenGroups.values()) {
-        const first = group[0];
+      for (const plan of specimenPlans) {
+        const group = plan.orderItemIds
+          .map(orderItemId => createdItemById.get(orderItemId))
+          .filter((entry): entry is (typeof createdItems)[number] => Boolean(entry));
+        if (group.length !== plan.orderItemIds.length) throw new Error("SPECIMEN_PLAN_ITEM_MISSING");
+
         const barcode = `${accessionNumber}-${String(specimenSequence).padStart(2, "0")}`;
         const specimen = await tx.specimen.create({
           data: {
             organizationId: session.user.organizationId,
             orderId: order.id,
-            specimenTypeId: first.test.specimenTypeId,
-            containerId: first.test.containerId,
+            specimenTypeId: plan.specimenTypeId,
+            containerId: plan.containerId,
             barcode,
             sequenceNumber: specimenSequence,
             currentBranchId: branchId,
@@ -844,7 +969,7 @@ export async function POST(request: Request) {
         });
 
         await tx.specimenOrderItem.createMany({
-          data: group.map((entry) => ({ specimenId: specimen.id, orderItemId: entry.item.id })),
+          data: group.map(entry => ({ specimenId: specimen.id, orderItemId: entry.item.id })),
         });
 
         await tx.specimenEvent.create({
@@ -855,17 +980,44 @@ export async function POST(request: Request) {
             actorUserId: session.user.id,
             fromStatus: null,
             toStatus: "PLANNED",
-            details: {
-              barcode,
-              specimenTypeCode: first.test.specimenType?.code || null,
-              containerCode: first.test.container?.code || null,
-              orderItemIds: group.map((entry) => entry.item.id),
-            },
+            details: specimenRequirementEventDetails(plan, {
+              requirementSource: "ORDER_REGISTRATION_SNAPSHOT",
+              capturedAt: order.orderedAt,
+              extra: { barcode },
+            }),
           },
         });
 
         specimenSequence++;
       }
+
+      await tx.auditEvent.create({
+        data: {
+          organizationId: session.user.organizationId,
+          branchId,
+          actorUserId: session.user.id,
+          action: "SPECIMEN_REQUIREMENTS_SNAPSHOTTED",
+          entityType: "LabOrder",
+          entityId: order.id,
+          newValues: {
+            accessionNumber,
+            requirementEngineVersion: 2,
+            requirementSource: "ORDER_REGISTRATION_SNAPSHOT",
+            specimenPlans: specimenPlans.map(plan => ({
+              specimenTypeCode: plan.specimenTypeCode,
+              containerCode: plan.containerCode,
+              requiredVolume: plan.requiredVolume,
+              requiredVolumeUnit: plan.requiredVolumeUnit,
+              storageConditions: plan.storageConditions,
+              stabilityMinutes: plan.stabilityMinutes,
+              orderItemIds: plan.orderItemIds,
+              testCodes: plan.members.map(member => member.testCode),
+            })),
+          },
+          ipAddress: ctx.ipAddress,
+          userAgent: ctx.userAgent,
+        },
+      });
 
       if (!subtotal.equals(quoteSubtotal) || !discountTotal.equals(quoteDiscountTotal)) {
         throw new Error("DISCOUNT_QUOTE_MISMATCH");
@@ -1012,6 +1164,15 @@ export async function POST(request: Request) {
             directTestIds,
             packageIds,
             expandedTestIds: allTestIds,
+            specimenRequirementSnapshots: specimenPlans.map(plan => ({
+              specimenTypeCode: plan.specimenTypeCode,
+              containerCode: plan.containerCode,
+              requiredVolume: plan.requiredVolume,
+              requiredVolumeUnit: plan.requiredVolumeUnit,
+              storageConditions: plan.storageConditions,
+              stabilityMinutes: plan.stabilityMinutes,
+              testCodes: plan.members.map(member => member.testCode),
+            })),
             tatSnapshots: createdItems.map(entry => ({
               orderItemId: entry.item.id,
               testId: entry.test.id,
@@ -1020,6 +1181,11 @@ export async function POST(request: Request) {
               tatClockBasisSnapshot: entry.tatSnapshot.tatClockBasisSnapshot,
               tatClockStartedAt: entry.tatSnapshot.tatClockStartedAt?.toISOString() || null,
               tatDueAt: entry.tatSnapshot.tatDueAt?.toISOString() || null,
+              tatAlertAt: entry.tatSnapshot.tatAlertAt?.toISOString() || null,
+              tatFirstEscalationAt: entry.tatSnapshot.tatFirstEscalationAt?.toISOString() || null,
+              escalationRepeatMinutes: entry.tatSnapshot.tatEscalationRepeatMinutesSnapshot,
+              maxEscalationLevel: entry.tatSnapshot.tatMaxEscalationLevelSnapshot,
+              escalationPermissionCode: entry.tatSnapshot.tatEscalationPermissionCodeSnapshot,
               tatSnapshotSource: entry.tatSnapshot.tatSnapshotSource,
             })),
             answeredOrderQuestionCodes: questions

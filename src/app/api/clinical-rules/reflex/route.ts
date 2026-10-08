@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requirePermission, requestContext } from "@/lib/auth";
+import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 
 function text(value: unknown, max = 500) {
@@ -45,6 +45,7 @@ export async function POST(request: Request) {
 
   if (!sourceTest || !targetTest) return NextResponse.json({ error: "source_or_target_test_not_found" }, { status: 404 });
   if (branchId && !branchRecord) return NextResponse.json({ error: "branch_not_found" }, { status: 404 });
+  if (branchId && !canAccessBranch(session, branchId)) return NextResponse.json({ error: "branch_forbidden" }, { status: 403 });
 
   const sourceComponent = sourceComponentId
     ? sourceTest.components.find(component => component.id === sourceComponentId)
@@ -78,6 +79,7 @@ export async function POST(request: Request) {
         noteAr,
         effectiveFrom,
         effectiveTo,
+        status: "INACTIVE",
       },
     });
 
@@ -86,7 +88,7 @@ export async function POST(request: Request) {
         organizationId: session.user.organizationId,
         branchId: session.activeBranchId,
         actorUserId: session.user.id,
-        action: "REFLEX_RULE_CREATED",
+        action: "REFLEX_RULE_DRAFT_CREATED",
         entityType: "ReflexRule",
         entityId: created.id,
         newValues: {

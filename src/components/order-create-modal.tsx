@@ -6,10 +6,15 @@ import { OrderCreateForm } from "@/components/order-create-form";
 import { SystemIcon } from "@/components/system-icon";
 
 type PatientOption = { id: string; patientNumber: string; fullNameEn: string; phone: string | null };
+type OrderQuestionChoice = {
+  code: string;
+  valueEn: string;
+  valueAr: string | null;
+};
 type OrderQuestionOption = {
   id: string; code: string; questionEn: string; questionAr: string | null;
-  responseType: "TEXT" | "NUMERIC" | "BOOLEAN" | "DATE" | "SINGLE_CHOICE";
-  required: boolean; options: string[]; displayOrder: number;
+  responseType: "TEXT" | "NUMERIC" | "BOOLEAN" | "DATE" | "DATETIME" | "SINGLE_CHOICE";
+  required: boolean; options: OrderQuestionChoice[]; displayOrder: number;
 };
 type TestOption = { id: string; code: string; nameEn: string; orderQuestions: OrderQuestionOption[] };
 type PackageOption = { id: string; code: string; nameEn: string; testIds: string[] };

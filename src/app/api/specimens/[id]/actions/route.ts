@@ -3,6 +3,7 @@ import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { specimenActionError } from "@/lib/clinical-safety";
 import { receptionAssessmentError } from "@/lib/specimen-reception-policy";
+import { specimenRequirementSnapshotFromDetails } from "@/lib/specimen-requirement-engine";
 
 function text(value: unknown, max = 500) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -42,6 +43,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     where: { id, organizationId: session.user.organizationId },
     include: {
       container: true,
+      events: { where: { eventType: "CREATED" }, orderBy: { occurredAt: "asc" } },
     },
   });
   if (!specimen) return NextResponse.json({ error: "specimen_not_found" }, { status: 404 });
@@ -56,6 +58,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
 
   if (body.action === "RECEIVE") {
+    const requirementSnapshot = specimen.events
+      .map(event => specimenRequirementSnapshotFromDetails(event.details))
+      .find(Boolean) || null;
+    if (!requirementSnapshot) {
+      return NextResponse.json({ error: "specimen_requirement_snapshot_missing_for_reception" }, { status: 409 });
+    }
+    const expectedContainerCode = requirementSnapshot.containerCode;
+
     const labelAssessment = text(body.labelAssessment, 30);
     const conditionCode = text(body.conditionCode, 80).toUpperCase();
     const observedContainerCode = text(body.observedContainerCode, 80) || null;
@@ -67,7 +77,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       labelAssessment,
       conditionCode,
       temperatureC: temperatureText,
-      expectedContainerCode: specimen.container?.code || null,
+      expectedContainerCode,
       observedContainerCode,
       discrepancyText,
     });
@@ -100,7 +110,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           branchId,
           receivedByUserId: session.user.id,
           barcodeSnapshot: specimen.barcode,
-          expectedContainerCodeSnapshot: specimen.container?.code || null,
+          expectedContainerCodeSnapshot: expectedContainerCode,
           observedContainerCode,
           labelAssessment: labelAssessment as "MATCHED" | "UNLABELED" | "MISMATCHED",
           conditionCode,
@@ -123,7 +133,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
             receptionAssessmentId: assessment.id,
             labelAssessment,
             conditionCode,
-            expectedContainerCode: specimen.container?.code || null,
+            expectedContainerCode,
             observedContainerCode,
             temperatureC: temperatureText || null,
             discrepancyText,
@@ -147,7 +157,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
             receptionAssessmentId: assessment.id,
             labelAssessment,
             conditionCode,
-            expectedContainerCode: specimen.container?.code || null,
+            expectedContainerCode,
             observedContainerCode,
             temperatureC: temperatureText || null,
             discrepancyText,
