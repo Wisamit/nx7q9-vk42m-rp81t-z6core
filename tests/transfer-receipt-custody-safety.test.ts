@@ -33,3 +33,8 @@ test("concurrent distinct-item receipts serialize before recalculating manifest 
   assert.ok(route.slice(lock, claimed).includes("FOR UPDATE"));
   assert.ok(route.slice(lock, claimed).includes('["DISPATCHED", "PARTIALLY_RECEIVED"]'));
 });
+
+test("manifest transfer actions reject unsupported action names before selecting permissions", () => {
+  const route = readFileSync(new URL("../src/app/api/transfers/[id]/actions/route.ts", import.meta.url), "utf8");
+  assert.ok(route.includes('body?.action !== "DISPATCH" && body?.action !== "RECEIVE_ITEM"'));
+});
