@@ -94,3 +94,53 @@ test("malformed frame is quarantined with metadata but not clinical content",asy
     assert.ok(!errors.includes("TEST PATIENT"));
   } finally {await rm(root,{recursive:true,force:true});}
 });
+
+test("MLLP listener ACKs only after durable local spool, including split TCP frames", {timeout:15000}, async()=>{
+  const { createMllpServer }=await import("../bridge/mllp-listener.mjs");
+  const net=await import("node:net");
+  const root=await mkdtemp(join(tmpdir(),"analyzer-mllp-"));
+  let server,socket;
+  try{
+    server=createMllpServer({inputDir:root,profile:{barcodeSource:"OBR_3"},allowedAddresses:[]});
+    await new Promise((ok,fail)=>{server.once("error",fail);server.listen(0,"127.0.0.1",ok);});
+    socket=net.connect(server.address().port,"127.0.0.1");
+    await new Promise((ok,fail)=>{socket.once("connect",ok);socket.once("error",fail);});
+    const received=new Promise((ok,fail)=>{
+      socket.once("data",ok);socket.once("error",fail);
+    });
+    socket.write(Buffer.from([0x0b]));
+    socket.write(Buffer.from(hl7,"utf8"));
+    socket.write(Buffer.from([0x1c,0x0d]));
+    const reply=(await received).toString("utf8");
+    assert.ok(reply.startsWith("\x0bMSH|"));
+    assert.ok(reply.includes("MSA|AA|MSG-001"));
+    const ready=(await readdir(root)).filter(x=>x.endsWith(".ready"));
+    assert.equal(ready.length,1);
+    assert.equal(await readFile(join(root,ready[0]),"utf8"),hl7);
+  }finally{
+    socket?.destroy();
+    if(server)await new Promise(resolve=>server.close(resolve));
+    await rm(root,{recursive:true,force:true});
+  }
+});
+
+test("MLLP listener NAKs malformed frames without writing clinical data", {timeout:15000},async()=>{
+  const {createMllpServer}=await import("../bridge/mllp-listener.mjs");
+  const net=await import("node:net");
+  const root=await mkdtemp(join(tmpdir(),"analyzer-mllp-invalid-"));
+  let server,socket;
+  try{
+    server=createMllpServer({inputDir:root,profile:{barcodeSource:"OBR_3"},allowedAddresses:[]});
+    await new Promise(resolve=>server.listen(0,"127.0.0.1",resolve));
+    socket=net.connect(server.address().port,"127.0.0.1");
+    await new Promise(resolve=>socket.once("connect",resolve));
+    const response=new Promise(resolve=>socket.once("data",resolve));
+    socket.write(Buffer.concat([Buffer.from([0x0b]),Buffer.from("MALFORMED"),Buffer.from([0x1c,0x0d])]));
+    assert.ok((await response).toString("utf8").includes("MSA|AR|"));
+    assert.equal((await readdir(root)).filter(x=>x.endsWith(".ready")).length,0);
+  }finally{
+    socket?.destroy();
+    if(server)await new Promise(resolve=>server.close(resolve));
+    await rm(root,{recursive:true,force:true});
+  }
+});
