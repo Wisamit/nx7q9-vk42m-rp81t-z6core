@@ -41,3 +41,8 @@ Keep `stage-6-specimen-operations-completion` and PR #124 in Draft; no merge, no
 
 - The specimen label-print endpoint now acquires an InnoDB `FOR UPDATE` lock on the organization-scoped specimen before counting prior prints, evaluating the mandatory reprint reason, and inserting the audit record in one transaction. Concurrent print requests cannot both pass as an unaudited first print.
 - Added source regression for lock/count/policy/audit ordering. Physical printer delivery is **not** guaranteed by an HTTP audit acknowledgment, so real printer, label and retry acceptance still requires in-lab observation.
+
+## Final print-policy consistency checkpoint
+
+- The label endpoint now reads the **current specimen status from its locked database row** and uses that value both for the print policy and audit. This avoids a stale pre-lock specimen status being accepted after a concurrent state transition.
+- The final deploy gate continues to require CI success on the exact HEAD, documented clinical hold and retention policy approval, barcode hardware testing and operational sign-off. Automated tests alone must not be labeled as complete field acceptance.
