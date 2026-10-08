@@ -45,22 +45,24 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       }, { status: 409 });
     }
 
-    await prisma.$transaction(async (tx) => {
+    const dispatched = await prisma.$transaction(async (tx) => {
       const dispatchedAt = new Date();
 
-      await tx.specimenTransferManifest.update({
-        where: { id: manifest.id },
+      const claimedManifest = await tx.specimenTransferManifest.updateMany({
+        where: { id: manifest.id, status: "DRAFT" },
         data: {
           status: "DISPATCHED",
           dispatchedByUserId: session.user.id,
           dispatchedAt,
         },
       });
+      if (claimedManifest.count !== 1) throw new Error("SPECIMEN_PREANALYTICAL_STATE_CHANGED");
 
-      await tx.specimenTransferItem.updateMany({
+      const dispatchedItems = await tx.specimenTransferItem.updateMany({
         where: { manifestId: manifest.id, status: "PLANNED" },
         data: { status: "DISPATCHED" },
       });
+      if (dispatchedItems.count !== manifest.items.length) throw new Error("SPECIMEN_PREANALYTICAL_STATE_CHANGED");
 
       for (const item of manifest.items) {
         const moved = await tx.specimen.updateMany({
@@ -114,16 +116,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           userAgent: ctx.userAgent,
         },
       });
+      return true;
     }, { timeout: 30000 }).catch(error => {
       if (error instanceof Error && error.message === "SPECIMEN_PREANALYTICAL_STATE_CHANGED") return null;
       throw error;
     });
 
-    const refreshed = await prisma.specimenTransferManifest.findUnique({
-      where: { id: manifest.id },
-      select: { status: true },
-    });
-    if (refreshed?.status !== "DISPATCHED") {
+    if (!dispatched) {
       return NextResponse.json({ error: "specimen_preanalytical_state_changed" }, { status: 409 });
     }
     return NextResponse.json({ status: "ok", manifestStatus: "DISPATCHED" });
