@@ -108,3 +108,10 @@ Scope source: `02_MASTER_SCOPE.md` sections 20–28, with related specimen secur
 - Rejected-only disposal now atomically clears `storageLocation` and `storageLocationId` as it transitions to DISPOSED, preventing a disposed specimen from retaining a current physical assignment.
 - Disposal specimen event and audit old values preserve both previous location path and registered ID for traceability. The existing conservative policy still prohibits accepted/processed retained specimens from being disposed by this endpoint.
 - Added source regression in `tests/specimen-disposal-safety.test.ts`. Real API/database concurrency coverage and medically approved retention rules remain acceptance blockers.
+
+## Aliquot physical-storage registration hardening
+
+- Creating an aliquot with a storage path now requires an ACTIVE registered location in the specimen's current branch and organization. The transaction locks that master location row before consuming parent volume; a concurrent deactivation fails closed.
+- The aliquot stores `storageLocationId` alongside the path and includes the registered ID in creation/audit metadata. An unspecified position remains nullable rather than inventing a placement.
+- The aliquot UI offers a select of registered ACTIVE branch positions rather than unrestricted free text, and refresh retains the inactive list for authorized storage managers.
+- Added source regressions; full authenticated API race coverage and clinical hold/retention remain acceptance blockers.
