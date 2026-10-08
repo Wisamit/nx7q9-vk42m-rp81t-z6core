@@ -94,3 +94,17 @@ test("analyzer outbound model retains immutable clinical code/barcode snapshots 
   }
   assert.ok(!model.includes("fullName"));
 });
+
+test("accepted device acknowledgement retains raw protocol evidence in an analyzer message", () => {
+  const ack=source("../src/app/api/integrations/analyzers/[id]/work-orders/[workOrderId]/ack/route.ts");
+  assert.ok(ack.includes('error: "outbound_raw_payload_required"'));
+  const claimed=ack.indexOf("tx.analyzerWorkOrder.updateMany");
+  const raw=ack.indexOf("tx.analyzerMessage.create",claimed);
+  const audit=ack.indexOf("tx.auditEvent.create",raw);
+  assert.ok(claimed>=0&&raw>claimed&&audit>raw);
+  assert.ok(ack.slice(raw,audit).includes('direction: "OUTBOUND"'));
+  assert.ok(ack.slice(raw,audit).includes("rawPayload,"));
+  assert.ok(ack.slice(raw,audit).includes("current.attemptCount"));
+  assert.ok(ack.slice(raw,audit).includes('status: accepted ? "PROCESSED" : "ERROR"'));
+  assert.ok(ack.includes("outboundAnalyzerMessageId: wireMessageId"));
+});
