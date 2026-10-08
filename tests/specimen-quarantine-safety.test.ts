@@ -20,6 +20,8 @@ test("failed reception persists quarantine atomically with event and audit", () 
 });
 
 test("quarantine can only proceed through controlled rejection, not reception or volume consumption", () => {
+  assert.equal(specimenActionError({status:"IN_TRANSIT",action:"RECEIVE",specimenTypeConfigured:true}),"specimen_not_receivable");
+  assert.equal(specimenActionError({status:"COLLECTED",action:"RECEIVE",specimenTypeConfigured:true}),null);
   assert.equal(specimenActionError({status:"QUARANTINED",action:"RECEIVE",specimenTypeConfigured:true}),"specimen_not_receivable");
   assert.equal(specimenActionError({status:"QUARANTINED",action:"REJECT",specimenTypeConfigured:true}),null);
   assert.equal(specimenVolumeUseError({
