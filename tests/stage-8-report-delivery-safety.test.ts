@@ -87,3 +87,19 @@ test("portal never exposes a retracted report as a delivered clinical document",
   assert.ok(verify.includes("snapshot.patient?.patientNumber"));
   assert.ok(!verify.includes("order.patient.patientNumber"));
 });
+
+test("queued report notifications are not dispatched after amendment or retraction", () => {
+  const dispatcher = code("../src/lib/notifications.ts");
+  const start = dispatcher.indexOf("async function dispatchPendingNotifications");
+  const claim = dispatcher.indexOf("const claim = await db.notificationDelivery.updateMany",start);
+  const report = dispatcher.indexOf("const version = await db.diagnosticReportVersion.findFirst",claim);
+  const stop = dispatcher.indexOf("const config = gatewayConfig",report);
+  const post = dispatcher.indexOf("await fetch(config.url",stop);
+  assert.ok(claim>start && report>claim && stop>report && post>stop);
+  const gated=dispatcher.slice(report,stop);
+  assert.ok(gated.includes('version.status === "RETRACTED"'));
+  assert.ok(gated.includes("version.version !== version.report.currentVersion"));
+  assert.ok(gated.includes("NotificationDeliveryStatus.SKIPPED"));
+  assert.ok(gated.includes("report_version_superseded_or_retracted"));
+  assert.ok(gated.includes("nextAttemptAt: null"));
+});
