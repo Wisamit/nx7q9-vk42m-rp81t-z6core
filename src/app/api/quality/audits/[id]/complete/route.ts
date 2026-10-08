@@ -25,8 +25,28 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (openFindings.length > 0) return NextResponse.json({ error: "open_audit_findings", count: openFindings.length }, { status: 409 });
 
   const now = new Date();
-  const saved = await prisma.$transaction(async tx => {
-    const updated = await tx.internalAudit.update({ where: { id }, data: { status: "COMPLETED", completedAt: now, summary } });
+  let saved;
+  try {
+    saved = await prisma.$transaction(async tx => {
+      // Finding creation, finding closure and audit completion share this parent lock.
+      const locked = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM internal_audits WHERE id = ${id}
+        AND organization_id = ${session.user.organizationId} FOR UPDATE
+      `;
+      if (locked.length !== 1) throw new Error("AUDIT_STATE_CHANGED");
+      const current = await tx.internalAudit.findUniqueOrThrow({ where: { id } });
+      if (["COMPLETED", "CANCELLED"].includes(current.status) ||
+          current.updatedAt.getTime() !== audit.updatedAt.getTime()) throw new Error("AUDIT_STATE_CHANGED");
+      const remaining = await tx.internalAuditFinding.count({
+        where: { auditId: id, status: { not: "CLOSED" } },
+      });
+      if (remaining > 0) throw new Error("OPEN_AUDIT_FINDINGS");
+      const claim = await tx.internalAudit.updateMany({
+        where: { id, organizationId: session.user.organizationId, status: current.status, updatedAt: current.updatedAt },
+        data: { status: "COMPLETED", completedAt: now, summary },
+      });
+      if (claim.count !== 1) throw new Error("AUDIT_STATE_CHANGED");
+      const updated = await tx.internalAudit.findUniqueOrThrow({ where: { id } });
     await tx.auditEvent.create({
       data: {
         organizationId: session.user.organizationId,
@@ -42,7 +62,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         userAgent: ctx.userAgent,
       },
     });
-    return updated;
-  });
+      return updated;
+    }, { isolationLevel: "Serializable", timeout: 30000 });
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : "";
+    return NextResponse.json({ error: reason === "OPEN_AUDIT_FINDINGS" ? "open_audit_findings" : "audit_completion_conflict" }, { status: 409 });
+  }
   return NextResponse.json({ status: "ok", audit: saved });
 }
