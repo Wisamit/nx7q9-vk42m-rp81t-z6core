@@ -84,7 +84,7 @@ test("effective revision detection exposes ambiguity instead of hiding it", () =
 });
 
 
-import { comparePricingCandidates, type PricingScopeType } from "../src/lib/pricing-policy.ts";
+import { comparePricingCandidates, samePricingPrecedence, type PricingScopeType } from "../src/lib/pricing-policy.ts";
 
 function pricingCandidate(scopeType: PricingScopeType, priority = 0, effectiveFrom = "2026-01-01T00:00:00.000Z") {
   return { scopeType, priority, effectiveFrom: new Date(effectiveFrom) };
@@ -108,4 +108,13 @@ test("pricing precedence keeps contract above referrer and referrer above client
     "BRANCH",
     "ORGANIZATION",
   ]);
+});
+
+
+test("price-list precedence is tied only when scope, priority and start are identical", () => {
+  const base = pricingCandidate("CLIENT", 10, "2026-06-01T00:00:00.000Z");
+  assert.equal(samePricingPrecedence(base, pricingCandidate("CLIENT", 10, "2026-06-01T00:00:00.000Z")), true);
+  assert.equal(samePricingPrecedence(base, pricingCandidate("CLIENT", 11, "2026-06-01T00:00:00.000Z")), false);
+  assert.equal(samePricingPrecedence(base, pricingCandidate("CLIENT", 10, "2026-07-01T00:00:00.000Z")), false);
+  assert.equal(samePricingPrecedence(base, pricingCandidate("REFERRER", 10, "2026-06-01T00:00:00.000Z")), false);
 });
