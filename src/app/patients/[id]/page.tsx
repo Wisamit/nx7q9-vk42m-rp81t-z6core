@@ -4,6 +4,7 @@ import { permissionSet, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { PatientMergePanel } from "@/components/patient-merge-panel";
 import { PatientEditForm } from "@/components/patient-edit-form";
+import { PatientIdentifierManager } from "@/components/patient-identifier-manager";
 import { calculatePatientAge } from "@/lib/patient-demographics";
 import { patientDuplicateEvidence, sortDuplicateCandidates } from "@/lib/patient-duplicate-review";
 import { getUiLocale, sexLabel, statusLabel, tr } from "@/lib/ui-i18n";
@@ -21,7 +22,10 @@ export default async function PatientDetailPage({ params }: { params: Promise<{ 
   const patient = await prisma.patient.findFirst({
     where: { id, organizationId: session.user.organizationId },
     include: {
-      identifiers: { orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }] },
+      identifiers: {
+        include: { scheme: true },
+        orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
+      },
       creationBranch: { select: { code: true, nameEn: true, nameAr: true } },
       portalAccount: { select: { id: true } },
       mergedInto: {
@@ -56,6 +60,20 @@ export default async function PatientDetailPage({ params }: { params: Promise<{ 
     },
   });
   if (!patient) notFound();
+
+  const identifierSchemes = canManage && patient.status === "ACTIVE" && !patient.mergedIntoPatientId
+    ? await prisma.patientIdentifierScheme.findMany({
+        where: { organizationId: session.user.organizationId, status: "ACTIVE" },
+        select: {
+          id: true,
+          code: true,
+          nameEn: true,
+          nameAr: true,
+          requiresIssuingCountry: true,
+        },
+        orderBy: { code: "asc" },
+      })
+    : [];
 
   const duplicateCandidates = patient.status === "ACTIVE" && !patient.mergedIntoPatientId
     ? await prisma.patient.findMany({
@@ -147,13 +165,30 @@ export default async function PatientDetailPage({ params }: { params: Promise<{ 
         </dl>
       </article>
 
-      <article className="detail-card">
+      {!canManage || patient.status !== "ACTIVE" || patient.mergedIntoPatientId ? <article className="detail-card">
         <h2>{tr(locale, "Identifiers", "المعرّفات")}</h2>
         {patient.identifiers.length === 0 ? <p className="muted">{tr(locale, "No external identifiers recorded.", "لا توجد معرّفات خارجية مسجلة.")}</p> :
           <div className="summary-list">{patient.identifiers.map(identifier =>
-            <div key={identifier.id}><span>{identifier.identifierType}{identifier.isPrimary ? " · " + tr(locale, "Primary", "رئيسي") : ""}</span><strong>{identifier.value}</strong></div>
+            <div key={identifier.id}><span>{locale === "ar" ? identifier.scheme.nameAr || identifier.scheme.nameEn : identifier.scheme.nameEn}{identifier.isPrimary ? " · " + tr(locale, "Primary", "رئيسي") : ""}</span><strong>{identifier.value}</strong></div>
           )}</div>}
-      </article>
+      </article> : <PatientIdentifierManager
+        patientId={patient.id}
+        schemes={identifierSchemes}
+        identifiers={patient.identifiers.map(identifier => ({
+          id: identifier.id,
+          value: identifier.value,
+          issuingCountry: identifier.issuingCountry,
+          isPrimary: identifier.isPrimary,
+          status: identifier.status,
+          scheme: {
+            id: identifier.scheme.id,
+            code: identifier.scheme.code,
+            nameEn: identifier.scheme.nameEn,
+            nameAr: identifier.scheme.nameAr,
+          },
+        }))}
+        locale={locale}
+      />}
     </section>
 
     {canManage && patient.status === "ACTIVE" && !patient.mergedIntoPatientId && <PatientEditForm
