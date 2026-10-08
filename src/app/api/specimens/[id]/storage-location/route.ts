@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { structuredStorageLocation } from "@/lib/specimen-storage-location";
 
 function text(value: unknown, max: number) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -11,7 +12,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const ctx = await requestContext();
   const { id } = await params;
   const body = await request.json().catch(() => null) as Record<string, unknown> | null;
-  const storageLocation = text(body?.storageLocation, 200);
+  const position = structuredStorageLocation(body?.storagePosition);
+  if ("error" in position) return NextResponse.json({ error: position.error }, { status: 400 });
+  const storageLocation = position.path;
   const reason = text(body?.reason, 1000);
   if (!storageLocation) return NextResponse.json({ error: "storage_location_required" }, { status: 400 });
   if (!reason) return NextResponse.json({ error: "storage_relocation_reason_required" }, { status: 400 });
@@ -56,6 +59,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           relocationType: "PHYSICAL_STORAGE",
           previousStorageLocation: specimen.storageLocation,
           storageLocation,
+          storagePosition: position.segments,
           reason,
         },
       },
@@ -71,7 +75,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         entityId: specimen.id,
         reason,
         oldValues: { storageLocation: specimen.storageLocation },
-        newValues: { storageLocation },
+        newValues: { storageLocation, storagePosition: position.segments },
         ipAddress: ctx.ipAddress,
         userAgent: ctx.userAgent,
       },
