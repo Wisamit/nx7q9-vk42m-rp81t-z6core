@@ -79,6 +79,19 @@ test("MariaDB serializes a storage deactivation behind a relocation location loc
       "SELECT status FROM specimen_storage_locations WHERE id = ?", [locationId]);
     assert.equal(afterRejectedDisable[0]?.status, "ACTIVE");
 
+    // The new clinical quarantine enum must be accepted by the migrated DB.
+    // Quarantined material remains physically present and blocks deactivation.
+    await setup.beginTransaction();
+    const [held] = await setup.execute<mysql.ResultSetHeader>(
+      "UPDATE specimens SET status = 'QUARANTINED', preanalytical_version = preanalytical_version + 1 WHERE id = ? AND status = 'RECEIVED'",
+      [specimenId]);
+    assert.equal(held.affectedRows,1);
+    const [quarantinedOccupants] = await setup.execute<mysql.RowDataPacket[]>(
+      "SELECT COUNT(*) AS occupied FROM specimens WHERE storage_location_id = ? AND status <> 'DISPOSED'",
+      [locationId]);
+    assert.equal(Number(quarantinedOccupants[0]?.occupied),1);
+    await setup.rollback();
+
     await relocating.beginTransaction();
     const [locked] = await relocating.execute<mysql.RowDataPacket[]>(
       "SELECT id FROM specimen_storage_locations WHERE id = ? AND branch_id = ? AND status = 'ACTIVE' FOR UPDATE",
