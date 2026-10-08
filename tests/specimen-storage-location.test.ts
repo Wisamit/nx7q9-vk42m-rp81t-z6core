@@ -47,3 +47,12 @@ test("deactivation records a reason and blocks occupied storage positions", () =
   assert.ok(ui.includes("changeStorageStatus"));
   assert.ok(ui.includes("storage_location_has_active_specimens"));
 });
+
+test("inactive location listing requires settings permission and UI scopes requests", () => {
+  const api = readFileSync(new URL("../src/app/api/settings/specimen-storage-locations/route.ts", import.meta.url), "utf8");
+  const ui = readFileSync(new URL("../src/components/specimen-aliquot-manager.tsx", import.meta.url), "utf8");
+  assert.ok(api.includes('requirePermission(includeInactive ? "settings.manage" : "specimens.view")'));
+  assert.ok(ui.includes('canManageStorageSettings ? "&includeInactive=true" : ""'));
+  assert.ok(ui.includes('if (storageBusy || busy) return'));
+  assert.ok(ui.includes('disabled={storageBusy || busy}'));
+});
