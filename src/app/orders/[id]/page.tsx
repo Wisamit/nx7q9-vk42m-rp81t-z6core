@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { canAccessBranch, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { getUiLocale, priorityLabel, statusLabel, tr } from "@/lib/ui-i18n";
+import { specimenRequirementSnapshotFromDetails } from "@/lib/specimen-requirement-engine";
 
 export const dynamic = "force-dynamic";
 
@@ -42,7 +43,16 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         orderBy: { issuedAt: "desc" },
       },
       statusHistory: { include: { changedBy: true }, orderBy: { changedAt: "asc" } },
-      specimens: { include: { specimenType: true, container: true, currentBranch: true, orderItems: { include: { orderItem: true } } }, orderBy: { sequenceNumber: "asc" } },
+      specimens: {
+        include: {
+          specimenType: true,
+          container: true,
+          currentBranch: true,
+          orderItems: { include: { orderItem: true } },
+          events: { where: { eventType: "CREATED" }, orderBy: { occurredAt: "asc" } },
+        },
+        orderBy: { sequenceNumber: "asc" },
+      },
     },
   });
 
@@ -158,14 +168,29 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       <div className="table-wrap">
         <table>
           <thead><tr><th>{tr(locale, "Barcode", "الباركود")}</th><th>{tr(locale, "Specimen", "العينة")}</th><th>{tr(locale, "Container", "الحاوية")}</th><th>{tr(locale, "Tests", "الفحوصات")}</th><th>{tr(locale, "Current branch", "الفرع الحالي")}</th><th>{tr(locale, "Status", "الحالة")}</th></tr></thead>
-          <tbody>{order.specimens.length === 0 ? <tr><td colSpan={6} className="empty-state">{tr(locale, "No specimen plans.", "لا توجد عينات مخططة.")}</td></tr> : order.specimens.map(specimen => <tr key={specimen.id}>
-            <td><Link className="table-link" href={`/specimens?q=${encodeURIComponent(specimen.barcode)}`}><strong>{specimen.barcode}</strong></Link></td>
-            <td>{specimen.specimenType?.nameEn || tr(locale, "Not configured", "غير مهيأ")}</td>
-            <td>{specimen.container?.nameEn || "—"}</td>
-            <td>{specimen.orderItems.map(link => link.orderItem.testCodeSnapshot).join(", ")}</td>
-            <td>{specimen.currentBranch?.nameEn || "—"}</td>
-            <td>{statusLabel(locale, specimen.status)}</td>
-          </tr>)}</tbody>
+          <tbody>{order.specimens.length === 0 ? <tr><td colSpan={6} className="empty-state">{tr(locale, "No specimen plans.", "لا توجد عينات مخططة.")}</td></tr> : order.specimens.map(specimen => {
+            const requirement = specimen.events
+              .map(event => specimenRequirementSnapshotFromDetails(event.details))
+              .find(Boolean) || null;
+            const specimenName = requirement?.specimenTypeNameEn
+              ? (locale === "ar" ? requirement.specimenTypeNameAr || requirement.specimenTypeNameEn : requirement.specimenTypeNameEn)
+              : specimen.specimenType
+                ? (locale === "ar" ? specimen.specimenType.nameAr || specimen.specimenType.nameEn : specimen.specimenType.nameEn)
+                : tr(locale, "Not configured", "غير مهيأ");
+            const containerName = requirement?.containerNameEn
+              ? (locale === "ar" ? requirement.containerNameAr || requirement.containerNameEn : requirement.containerNameEn)
+              : specimen.container
+                ? (locale === "ar" ? specimen.container.nameAr || specimen.container.nameEn : specimen.container.nameEn)
+                : "—";
+            return <tr key={specimen.id}>
+              <td><Link className="table-link" href={`/specimens?q=${encodeURIComponent(specimen.barcode)}`}><strong>{specimen.barcode}</strong></Link>{requirement ? <><br/><small>{tr(locale, "Order-time snapshot", "لقطة وقت الطلب")} · v{requirement.requirementEngineVersion}</small></> : <><br/><small>{tr(locale, "Historical snapshot missing", "اللقطة التاريخية غير موجودة")}</small></>}</td>
+              <td>{specimenName}{requirement?.specimenTypeCode ? <><br/><small>{requirement.specimenTypeCode}</small></> : null}</td>
+              <td>{containerName}{requirement?.containerCode ? <><br/><small>{requirement.containerCode}</small></> : null}</td>
+              <td>{specimen.orderItems.map(link => link.orderItem.testCodeSnapshot).join(", ")}{requirement?.requiredVolume ? <><br/><small>{tr(locale, "Required", "المطلوب")}: {requirement.requiredVolume} {requirement.requiredVolumeUnit || ""}</small></> : null}</td>
+              <td>{specimen.currentBranch ? (locale === "ar" ? specimen.currentBranch.nameAr || specimen.currentBranch.nameEn : specimen.currentBranch.nameEn) : "—"}</td>
+              <td>{statusLabel(locale, specimen.status)}</td>
+            </tr>;
+          })}</tbody>
         </table>
       </div>
     </section>

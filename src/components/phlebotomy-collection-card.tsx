@@ -25,8 +25,10 @@ export function PhlebotomyCollectionCard({
     testCodes: string[];
     requiredVolume: string | null;
     requiredVolumeUnit: string | null;
+    patientPreparation: string[];
     collectionInstructions: string[];
     requirementsFinalized: boolean;
+    configurationComplete: boolean;
     parentBarcode: string | null;
     secondaryOptions: SecondaryOption[];
   };
@@ -48,7 +50,8 @@ export function PhlebotomyCollectionCard({
       patient_secondary_verification_failed: tr("The second patient identifier did not match.", "المعرّف الثاني للمريض غير مطابق."),
       invalid_secondary_verification_type: tr("Select a valid second patient identifier.", "اختر معرّفًا ثانيًا صالحًا للمريض."),
       secondary_verification_required: tr("Enter the second patient identifier.", "أدخل المعرّف الثاني للمريض."),
-      specimen_requirements_not_finalized: tr("Finalize specimen requirements before collection.", "ثبّت متطلبات العينة قبل السحب."),
+      specimen_requirements_not_finalized: tr("This specimen has no immutable order-time requirement snapshot. Collection is blocked.", "لا تحتوي هذه العينة على لقطة ثابتة لمتطلبات وقت الطلب. تم منع السحب."),
+      order_time_specimen_requirement_snapshot_missing: tr("Historical requirements were not captured at order registration. Current catalog values will not be substituted.", "لم تُحفظ المتطلبات التاريخية عند تسجيل الطلب. لن يتم استبدالها بقيم الدليل الحالية."),
       specimen_requirement_configuration_incomplete: tr("Collection is blocked because specimen requirements are incomplete.", "السحب متوقف لأن متطلبات العينة غير مكتملة."),
       specimen_not_collectable: tr("This specimen is no longer available for collection.", "هذه العينة لم تعد متاحة للسحب."),
       specimen_type_required_before_collection: tr("A specimen type must be configured before collection.", "يجب تهيئة نوع العينة قبل السحب."),
@@ -66,20 +69,6 @@ export function PhlebotomyCollectionCard({
       order_cancelled: tr("The order is cancelled.", "الطلب ملغى."),
     };
     return messages[code] || code || tr("Collection action failed.", "فشل إجراء السحب.");
-  }
-
-  async function finalizeRequirements() {
-    setBusy(true);
-    setMessage("");
-    const response = await fetch(`/api/orders/${specimen.orderId}/specimen-requirements/finalize`, { method: "POST" });
-    const body = await response.json().catch(() => ({}));
-    if (response.ok) {
-      setMessage(tr("Specimen requirements finalized.", "تم تثبيت متطلبات العينة."));
-      router.refresh();
-    } else {
-      setMessage(errorMessage(body.error || ""));
-    }
-    setBusy(false);
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -131,7 +120,7 @@ export function PhlebotomyCollectionCard({
         <p className="muted">{specimen.accessionNumber} · {specimen.patientNumber} · {specimen.patientName}</p>
       </div>
       <div className="header-actions">
-        {specimen.requirementsFinalized && <Link className="secondary-link" href={`/specimens/${specimen.id}/label`}>{tr("Print Label", "طباعة الملصق")}</Link>}
+        {specimen.requirementsFinalized && specimen.configurationComplete && <Link className="secondary-link" href={`/specimens/${specimen.id}/label`}>{tr("Print Label", "طباعة الملصق")}</Link>}
         <Link className="secondary-link" href={`/orders/${specimen.orderId}`}>{tr("Open Order", "فتح الطلب")}</Link>
       </div>
     </div>
@@ -145,13 +134,25 @@ export function PhlebotomyCollectionCard({
       <div><span>{tr("Requirements", "المتطلبات")}</span><strong>{specimen.requirementsFinalized ? tr("Finalized", "مثبتة") : tr("Not finalized", "غير مثبتة")}</strong></div>
     </div>
 
+    {specimen.patientPreparation.length > 0 && <div className="form-warning">
+      <strong>{tr("Patient preparation", "تحضير المريض")}</strong>
+      <span>{specimen.patientPreparation.join(" · ")}</span>
+    </div>}
+
     {specimen.collectionInstructions.length > 0 && <div className="form-warning">
       <strong>{tr("Collection instructions", "تعليمات السحب")}</strong>
       <span>{specimen.collectionInstructions.join(" · ")}</span>
     </div>}
 
-    {!specimen.requirementsFinalized ? <div className="specimen-action-buttons">
-      <button className="primary-button" type="button" disabled={busy} onClick={finalizeRequirements}>{tr("Finalize Requirements", "تثبيت المتطلبات")}</button>
+    {!specimen.requirementsFinalized ? <div className="form-error">
+      <strong>{tr("Collection blocked", "السحب متوقف")}</strong>
+      <span>{tr(
+        "This historical specimen has no immutable requirement snapshot captured at order registration. Current catalog values are intentionally not substituted.",
+        "هذه العينة التاريخية لا تحتوي على لقطة ثابتة للمتطلبات محفوظة عند تسجيل الطلب. لا يتم استبدالها بقيم الدليل الحالية بشكل مقصود."
+      )}</span>
+    </div> : !specimen.configurationComplete ? <div className="form-error">
+      <strong>{tr("Collection blocked", "السحب متوقف")}</strong>
+      <span>{tr("The order-time specimen requirement snapshot is incomplete. Correct the catalog/order through a controlled workflow before collection.", "لقطة متطلبات العينة وقت الطلب غير مكتملة. صحح الدليل/الطلب عبر مسار منضبط قبل السحب.")}</span>
     </div> : <form className="catalog-form" onSubmit={submit}>
       <fieldset className="form-span">
         <legend>{tr("Patient verification — two identifiers required", "التحقق من المريض — مطلوب معرفان")}</legend>

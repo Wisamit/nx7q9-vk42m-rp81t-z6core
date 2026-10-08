@@ -207,14 +207,14 @@ export default async function SpecimensPage({
                 <p className="muted">{specimen.order.accessionNumber} · {specimen.order.patient.patientNumber} · {patientName(specimen.order.patient)}</p>
               </div>
               <div className="header-actions">
-                {canCollect && !["COLLECTION_FAILED","REJECTED","DISPOSED"].includes(specimen.status) && (specimen.status !== "PLANNED" || Boolean(requirement)) && <Link className="secondary-link" href={`/specimens/${specimen.id}/label`}>{tr(locale, "Print Label", "طباعة الملصق")}</Link>}
+                {canCollect && !["COLLECTION_FAILED","REJECTED","DISPOSED"].includes(specimen.status) && (specimen.status !== "PLANNED" || requirement?.configurationComplete === true) && <Link className="secondary-link" href={`/specimens/${specimen.id}/label`}>{tr(locale, "Print Label", "طباعة الملصق")}</Link>}
                 <Link className="secondary-link" href={`/orders/${specimen.orderId}`}><SystemIcon name="orders" size={15} />{tr(locale, "Open Order", "فتح الطلب")}</Link>
               </div>
             </div>
 
             <div className="specimen-metadata">
-              <div><span>{tr(locale, "Specimen", "العينة")}</span><strong>{specimen.specimenType ? localizedName(specimen.specimenType) : tr(locale, "Not configured", "غير مهيأة")}</strong></div>
-              <div><span>{tr(locale, "Container", "الحاوية")}</span><strong>{specimen.container ? localizedName(specimen.container) : "—"}</strong></div>
+              <div><span>{tr(locale, "Specimen", "العينة")}</span><strong>{requirement?.specimenTypeNameEn ? (locale === "ar" ? requirement.specimenTypeNameAr || requirement.specimenTypeNameEn : requirement.specimenTypeNameEn) : specimen.specimenType ? localizedName(specimen.specimenType) : tr(locale, "Not configured", "غير مهيأة")}</strong></div>
+              <div><span>{tr(locale, "Container", "الحاوية")}</span><strong>{requirement?.containerNameEn ? (locale === "ar" ? requirement.containerNameAr || requirement.containerNameEn : requirement.containerNameEn) : specimen.container ? localizedName(specimen.container) : "—"}</strong></div>
               <div><span>{tr(locale, "Order branch", "فرع الطلب")}</span><strong>{localizedName(specimen.order.orderingBranch)}</strong></div>
               <div><span>{tr(locale, "Current branch", "الفرع الحالي")}</span><strong>{specimen.currentBranch ? localizedName(specimen.currentBranch) : "—"}</strong></div>
               <div><span>{tr(locale, "Active tests", "الفحوصات الفعالة")}</span><strong>{specimen.orderItems.filter(link => link.status === "ACTIVE").map(link => link.orderItem.testCodeSnapshot).join(", ") || "—"}</strong></div>
@@ -233,6 +233,11 @@ export default async function SpecimensPage({
               <div><span>{tr(locale, "Physical storage", "التخزين الفعلي")}</span><strong>{specimen.storageLocation || "—"}</strong></div>
               <div><span>{tr(locale, "Sharing", "المشاركة")}</span><strong>{requirement ? requirement.shared ? tr(locale, "Shared tube", "أنبوب مشترك") : tr(locale, "Dedicated", "مخصص") : "—"}</strong></div>
             </div>
+
+            {requirement && requirement.patientPreparation.length > 0 && <div className="form-warning">
+              <strong>{tr(locale, "Patient preparation", "تحضير المريض")}</strong>
+              <span>{requirement.patientPreparation.join(" · ")}</span>
+            </div>}
 
             {requirement && requirement.collectionInstructions.length > 0 && <div className="form-warning">
               <strong>{tr(locale, "Collection instructions", "تعليمات الجمع")}</strong>

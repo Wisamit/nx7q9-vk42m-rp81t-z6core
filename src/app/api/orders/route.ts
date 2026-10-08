@@ -12,6 +12,11 @@ import { localCalendarDate } from "@/lib/accounts-receivable-aging";
 import { resolveTaxRule, taxLineAmounts, type EffectiveTaxRule } from "@/lib/tax-policy";
 import { buildOrderItemTatSnapshot, resolveTatPolicy, type TatPriority } from "@/lib/tat";
 import { localDateTimeToUtc, normalizeOrderQuestionOptions } from "@/lib/order-questions";
+import {
+  buildSpecimenPlans,
+  specimenRequirementEventDetails,
+  type SpecimenRequirementInput,
+} from "@/lib/specimen-requirement-engine";
 
 function text(value: unknown, max = 500) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -894,7 +899,6 @@ export async function POST(request: Request) {
         createdItems.push({ item, test, tatSnapshot, unitPrice, discountAmount, finalPrice: grossPrice, packageId });
       }
 
-      const specimenGroups = new Map<string, typeof createdItems>();
       if (discountApprovalRequestIdToUse) {
         const consumed = await tx.discountApprovalRequest.updateMany({
           where: {
@@ -913,25 +917,42 @@ export async function POST(request: Request) {
         if (consumed.count !== 1) throw new Error("DISCOUNT_APPROVAL_NOT_CONSUMABLE");
       }
 
-      for (const entry of createdItems) {
-        const specimenTypeId = entry.test.specimenTypeId;
-        const containerId = entry.test.containerId;
-        const groupKey = specimenTypeId ? `${specimenTypeId}:${containerId || "NO_CONTAINER"}` : `ITEM:${entry.item.id}`;
-        const group = specimenGroups.get(groupKey) || [];
-        group.push(entry);
-        specimenGroups.set(groupKey, group);
-      }
+      const specimenRequirementInputs: SpecimenRequirementInput[] = createdItems.map(entry => ({
+        orderItemId: entry.item.id,
+        testId: entry.test.id,
+        testCode: entry.test.code,
+        specimenTypeId: entry.test.specimenTypeId,
+        specimenTypeCode: entry.test.specimenType?.code || null,
+        specimenTypeNameEn: entry.test.specimenType?.nameEn || null,
+        specimenTypeNameAr: entry.test.specimenType?.nameAr || null,
+        containerId: entry.test.containerId,
+        containerCode: entry.test.container?.code || null,
+        containerNameEn: entry.test.container?.nameEn || null,
+        containerNameAr: entry.test.container?.nameAr || null,
+        minimumVolume: entry.test.minimumVolume?.toFixed(3) || null,
+        minimumVolumeUnit: entry.test.minimumVolumeUnit,
+        patientPreparation: entry.test.patientPreparation,
+        collectionInstructions: entry.test.collectionInstructions,
+        storageConditions: entry.test.storageConditions,
+        stabilityMinutes: entry.test.stabilityMinutes,
+      }));
+      const specimenPlans = buildSpecimenPlans(specimenRequirementInputs);
+      const createdItemById = new Map(createdItems.map(entry => [entry.item.id, entry] as const));
 
       let specimenSequence = 1;
-      for (const group of specimenGroups.values()) {
-        const first = group[0];
+      for (const plan of specimenPlans) {
+        const group = plan.orderItemIds
+          .map(orderItemId => createdItemById.get(orderItemId))
+          .filter((entry): entry is (typeof createdItems)[number] => Boolean(entry));
+        if (group.length !== plan.orderItemIds.length) throw new Error("SPECIMEN_PLAN_ITEM_MISSING");
+
         const barcode = `${accessionNumber}-${String(specimenSequence).padStart(2, "0")}`;
         const specimen = await tx.specimen.create({
           data: {
             organizationId: session.user.organizationId,
             orderId: order.id,
-            specimenTypeId: first.test.specimenTypeId,
-            containerId: first.test.containerId,
+            specimenTypeId: plan.specimenTypeId,
+            containerId: plan.containerId,
             barcode,
             sequenceNumber: specimenSequence,
             currentBranchId: branchId,
@@ -939,7 +960,7 @@ export async function POST(request: Request) {
         });
 
         await tx.specimenOrderItem.createMany({
-          data: group.map((entry) => ({ specimenId: specimen.id, orderItemId: entry.item.id })),
+          data: group.map(entry => ({ specimenId: specimen.id, orderItemId: entry.item.id })),
         });
 
         await tx.specimenEvent.create({
@@ -950,17 +971,44 @@ export async function POST(request: Request) {
             actorUserId: session.user.id,
             fromStatus: null,
             toStatus: "PLANNED",
-            details: {
-              barcode,
-              specimenTypeCode: first.test.specimenType?.code || null,
-              containerCode: first.test.container?.code || null,
-              orderItemIds: group.map((entry) => entry.item.id),
-            },
+            details: specimenRequirementEventDetails(plan, {
+              requirementSource: "ORDER_REGISTRATION_SNAPSHOT",
+              capturedAt: order.orderedAt,
+              extra: { barcode },
+            }),
           },
         });
 
         specimenSequence++;
       }
+
+      await tx.auditEvent.create({
+        data: {
+          organizationId: session.user.organizationId,
+          branchId,
+          actorUserId: session.user.id,
+          action: "SPECIMEN_REQUIREMENTS_SNAPSHOTTED",
+          entityType: "LabOrder",
+          entityId: order.id,
+          newValues: {
+            accessionNumber,
+            requirementEngineVersion: 2,
+            requirementSource: "ORDER_REGISTRATION_SNAPSHOT",
+            specimenPlans: specimenPlans.map(plan => ({
+              specimenTypeCode: plan.specimenTypeCode,
+              containerCode: plan.containerCode,
+              requiredVolume: plan.requiredVolume,
+              requiredVolumeUnit: plan.requiredVolumeUnit,
+              storageConditions: plan.storageConditions,
+              stabilityMinutes: plan.stabilityMinutes,
+              orderItemIds: plan.orderItemIds,
+              testCodes: plan.members.map(member => member.testCode),
+            })),
+          },
+          ipAddress: ctx.ipAddress,
+          userAgent: ctx.userAgent,
+        },
+      });
 
       if (!subtotal.equals(quoteSubtotal) || !discountTotal.equals(quoteDiscountTotal)) {
         throw new Error("DISCOUNT_QUOTE_MISMATCH");
@@ -1107,6 +1155,15 @@ export async function POST(request: Request) {
             directTestIds,
             packageIds,
             expandedTestIds: allTestIds,
+            specimenRequirementSnapshots: specimenPlans.map(plan => ({
+              specimenTypeCode: plan.specimenTypeCode,
+              containerCode: plan.containerCode,
+              requiredVolume: plan.requiredVolume,
+              requiredVolumeUnit: plan.requiredVolumeUnit,
+              storageConditions: plan.storageConditions,
+              stabilityMinutes: plan.stabilityMinutes,
+              testCodes: plan.members.map(member => member.testCode),
+            })),
             tatSnapshots: createdItems.map(entry => ({
               orderItemId: entry.item.id,
               testId: entry.test.id,
