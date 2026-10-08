@@ -36,12 +36,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const outcome = await prisma.$transaction(async tx => {
     // Serialize print decisions on the specimen so simultaneous requests cannot
     // both be mistaken for the first print (and bypass the reprint reason).
-    const lock = await tx.$queryRaw<Array<{ id: string; status: string }>>`
-      SELECT id, status FROM specimens
+    const lock = await tx.$queryRaw<Array<{ id: string; status: string; current_branch_id: string | null }>>`
+      SELECT id, status, current_branch_id FROM specimens
       WHERE id = ${specimen.id} AND organization_id = ${session.user.organizationId}
       FOR UPDATE
     `;
     if (lock.length !== 1) return { error: "specimen_not_found", priorPrintCount: 0 };
+    // Verify custody under the same lock as the print decision.
+    const currentBranch = lock[0].current_branch_id;
+    if (currentBranch && !canAccessBranch(session, currentBranch)) {
+      return { error: "branch_forbidden", priorPrintCount: 0 };
+    }
     const priorPrintCount = await tx.auditEvent.count({
       where: {
         organizationId: session.user.organizationId,
