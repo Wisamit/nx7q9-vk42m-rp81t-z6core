@@ -89,7 +89,36 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     }
 
     const acceptanceError = receptionAcceptanceError({ labelAssessment, conditionCode, expectedContainerCode, observedContainerCode });
-    if (acceptanceError) return NextResponse.json({ error: acceptanceError }, { status: 409 });
+    if (acceptanceError) {
+      // A failed acceptance is a clinically significant observation, even though
+      // the specimen must remain outside the RECEIVED workflow.
+      await prisma.auditEvent.create({
+        data: {
+          organizationId: session.user.organizationId,
+          branchId,
+          actorUserId: session.user.id,
+          action: "SPECIMEN_RECEPTION_EXCEPTION_OBSERVED",
+          entityType: "Specimen",
+          entityId: specimen.id,
+          reason: discrepancyText || acceptanceError,
+          newValues: {
+            barcode: specimen.barcode,
+            specimenStatusUnchanged: specimen.status,
+            acceptanceError,
+            labelAssessment,
+            conditionCode,
+            expectedContainerCode,
+            observedContainerCode,
+            temperatureC: temperatureText || null,
+            discrepancyText,
+            notes: receptionNotes,
+          },
+          ipAddress: ctx.ipAddress,
+          userAgent: ctx.userAgent,
+        },
+      });
+      return NextResponse.json({ error: acceptanceError }, { status: 409 });
+    }
 
     const result = await prisma.$transaction(async (tx) => {
       const changed = await tx.specimen.updateMany({
