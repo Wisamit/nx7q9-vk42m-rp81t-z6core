@@ -322,6 +322,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
             organizationId: session.user.organizationId,
             status: "PLANNED",
             preanalyticalVersion: specimen.preanalyticalVersion,
+            order: { status: { notIn: ["CANCELLED", "COMPLETED"] } },
+            currentBranchId: branchId,
             orderItems: { some: { status: "ACTIVE" } },
           },
           data: {
