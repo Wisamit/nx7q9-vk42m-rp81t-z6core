@@ -17,6 +17,7 @@ test("MariaDB quality parent locks serialize case, CAPA, audit and SOP transitio
   const uid = () => randomUUID();
   const org = uid(), branch = uid(), operator = uid(), nc = uid(), capa = uid(), action = uid();
   const audit = uid(), document = uid(), v1 = uid(), v2 = uid();
+  const analyzer = uid(), competency = uid(), grant = uid();
   const suffix = org.slice(0, 8);
   const cleanup: Array<{ sql: string; params: string[] }> = [];
   async function seed(sql: string, params: string[], undo: string, values: string[]) {
@@ -49,6 +50,10 @@ test("MariaDB quality parent locks serialize case, CAPA, audit and SOP transitio
       await seed("INSERT INTO quality_document_versions(id,document_id,version,status,submitted_by_user_id) VALUES (?,?,?,'APPROVED',?)",
         [vid,document,num,operator],"DELETE FROM quality_document_versions WHERE id=?",[vid]);
     }
+    await seed("INSERT INTO analyzers(id,organization_id,branch_id,code,name,protocol,transport,updated_at) VALUES (?,?,?,?,?,'ASTM','TCP_CLIENT',NOW(3))",
+      [analyzer,org,branch,"QMS-"+suffix,"QA Analyzer"],"DELETE FROM analyzers WHERE id=?",[analyzer]);
+    await seed("INSERT INTO competency_assessments(id,organization_id,branch_id,user_id,analyzer_id,competency_name,assessment_method,result,assessed_by_user_id) VALUES (?,?,?,?,?,'Instrument competency','Observed assessment','PASS',?)",
+      [competency,org,branch,operator,analyzer,operator],"DELETE FROM competency_assessments WHERE id=?",[competency]);
     await b.query("SET SESSION innodb_lock_wait_timeout = 1");
 
     // First actor closes a nonconformance while second actor attempts to link a new CAPA.
@@ -103,6 +108,30 @@ test("MariaDB quality parent locks serialize case, CAPA, audit and SOP transitio
     const [older] = await b.execute<mysql.RowDataPacket[]>(
       "SELECT version FROM quality_document_versions WHERE id=? AND version > ?",[v1,latest[0].current_effective_version]);
     assert.equal(older.length,0);
+    // A single analyzer lock prevents duplicate active grants, and failure suspends it atomically.
+    await a.beginTransaction();
+    await a.execute("SELECT id FROM analyzers WHERE id=? FOR UPDATE",[analyzer]);
+    await a.execute("INSERT INTO analyzer_authorizations(id,organization_id,user_id,analyzer_id,approved_by_user_id,updated_at) VALUES (?,?,?,?,?,NOW(3))",
+      [grant,org,operator,analyzer,operator]);
+    cleanup.unshift({ sql: "DELETE FROM analyzer_authorizations WHERE id=?", params:[grant] });
+    await b.beginTransaction();
+    await assert.rejects(b.execute("SELECT id FROM analyzers WHERE id=? FOR UPDATE",[analyzer]),timeout);
+    await b.rollback();
+    await a.commit();
+    const [granted] = await b.execute<mysql.RowDataPacket[]>(
+      "SELECT COUNT(*) AS total FROM analyzer_authorizations WHERE user_id=? AND analyzer_id=? AND status='ACTIVE'",[operator,analyzer]);
+    assert.equal(Number(granted[0]?.total),1);
+
+    await a.beginTransaction();
+    await a.execute("SELECT id FROM analyzers WHERE id=? FOR UPDATE",[analyzer]);
+    await a.execute("UPDATE analyzer_authorizations SET status='SUSPENDED' WHERE user_id=? AND analyzer_id=? AND status='ACTIVE'",[operator,analyzer]);
+    await b.beginTransaction();
+    await assert.rejects(b.execute("SELECT id FROM analyzers WHERE id=? FOR UPDATE",[analyzer]),timeout);
+    await b.rollback();
+    await a.commit();
+    const [afterFail] = await db.execute<mysql.RowDataPacket[]>(
+      "SELECT COUNT(*) AS total FROM analyzer_authorizations WHERE user_id=? AND analyzer_id=? AND status='ACTIVE'",[operator,analyzer]);
+    assert.equal(Number(afterFail[0]?.total),0);
   } finally {
     await Promise.all([a.rollback().catch(()=>{}),b.rollback().catch(()=>{})]);
     for (const item of cleanup) await db.execute(item.sql,item.params);
