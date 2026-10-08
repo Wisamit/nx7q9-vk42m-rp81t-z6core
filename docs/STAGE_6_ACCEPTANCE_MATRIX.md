@@ -36,3 +36,8 @@ Keep `stage-6-specimen-operations-completion` and PR #124 in Draft; no merge, no
 
 - The MariaDB two-connection test now performs a real guarded `specimens.preanalytical_version` compare-and-swap update in the same transaction that holds the destination storage-row lock. The competing deactivation must time out until the source transaction commits.
 - This increases database-level evidence for specimen CAS and master-row serialization together; it is still **not** an authenticated concurrent API test or a signed-off clinical/hardware procedure. The statuses above remain unchanged until those acceptance records exist.
+
+## Barcode label reprint race hardening
+
+- The specimen label-print endpoint now acquires an InnoDB `FOR UPDATE` lock on the organization-scoped specimen before counting prior prints, evaluating the mandatory reprint reason, and inserting the audit record in one transaction. Concurrent print requests cannot both pass as an unaudited first print.
+- Added source regression for lock/count/policy/audit ordering. Physical printer delivery is **not** guaranteed by an HTTP audit acknowledgment, so real printer, label and retry acceptance still requires in-lab observation.
