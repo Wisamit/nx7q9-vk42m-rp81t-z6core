@@ -165,6 +165,35 @@ export async function POST(request: NextRequest) {
         })),
       });
 
+      await tx.patientIdentifierScheme.createMany({
+        data: [
+          {
+            organizationId: organization.id,
+            code: "NATIONAL_ID",
+            nameEn: "National ID",
+            nameAr: "الرقم الوطني",
+            identifierType: "NATIONAL_ID",
+            requiresIssuingCountry: false,
+          },
+          {
+            organizationId: organization.id,
+            code: "PASSPORT",
+            nameEn: "Passport",
+            nameAr: "جواز السفر",
+            identifierType: "PASSPORT",
+            requiresIssuingCountry: true,
+          },
+          {
+            organizationId: organization.id,
+            code: "LEGACY_OTHER",
+            nameEn: "Legacy Other Identifier",
+            nameAr: "معرّف تاريخي آخر",
+            identifierType: "OTHER",
+            requiresIssuingCountry: false,
+          },
+        ],
+      });
+
       const branch = await tx.branch.create({
         data: {
           organizationId: organization.id,
