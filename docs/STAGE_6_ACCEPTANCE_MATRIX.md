@@ -31,3 +31,8 @@ This is an evidence-oriented checklist, not a statement of completed acceptance.
 ## Release guard
 
 Keep `stage-6-specimen-operations-completion` and PR #124 in Draft; no merge, no Hostinger deployment, no Stage 7 work before explicit owner approval.
+
+## Integration evidence improvement
+
+- The MariaDB two-connection test now performs a real guarded `specimens.preanalytical_version` compare-and-swap update in the same transaction that holds the destination storage-row lock. The competing deactivation must time out until the source transaction commits.
+- This increases database-level evidence for specimen CAS and master-row serialization together; it is still **not** an authenticated concurrent API test or a signed-off clinical/hardware procedure. The statuses above remain unchanged until those acceptance records exist.
