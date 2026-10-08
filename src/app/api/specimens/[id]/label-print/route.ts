@@ -36,8 +36,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const outcome = await prisma.$transaction(async tx => {
     // Serialize print decisions on the specimen so simultaneous requests cannot
     // both be mistaken for the first print (and bypass the reprint reason).
-    const lock = await tx.$queryRaw<Array<{ id: string }>>`
-      SELECT id FROM specimens
+    const lock = await tx.$queryRaw<Array<{ id: string; status: string }>>`
+      SELECT id, status FROM specimens
       WHERE id = ${specimen.id} AND organization_id = ${session.user.organizationId}
       FOR UPDATE
     `;
@@ -51,7 +51,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       },
     });
     const policyError = specimenLabelPrintError({
-      status: specimen.status,
+      status: lock[0].status,
       requirementsFinalized: Boolean(requirement),
       priorPrintCount,
       reason,
@@ -70,7 +70,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         newValues: {
           barcode: specimen.barcode,
           labelSize,
-          specimenStatus: specimen.status,
+          specimenStatus: lock[0].status,
           printSequence: priorPrintCount + 1,
           reprint: priorPrintCount > 0,
           requirementsFinalized: Boolean(requirement),
