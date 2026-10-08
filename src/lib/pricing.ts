@@ -18,6 +18,7 @@ export async function resolveTestPrice(
     organizationId: string;
     branchId: string;
     sourceId?: string | null;
+    referrerId?: string | null;
     clientId?: string | null;
     testId: string;
     at?: Date;
@@ -48,6 +49,7 @@ export async function resolveTestPrice(
           { scopeType: "ORGANIZATION" },
           { scopeType: "BRANCH", branchId: input.branchId },
           ...(input.sourceId ? [{ scopeType: "SOURCE" as const, sourceId: input.sourceId }] : []),
+          ...(input.referrerId ? [{ scopeType: "REFERRER" as const, referrerId: input.referrerId }] : []),
           ...(input.clientId ? [{ scopeType: "CLIENT" as const, clientId: input.clientId }] : []),
           ...(contractIds.length ? [{ scopeType: "CONTRACT" as const, contractId: { in: contractIds } }] : []),
         ],
@@ -103,6 +105,7 @@ export async function resolvePackagePrice(
     organizationId: string;
     branchId: string;
     sourceId?: string | null;
+    referrerId?: string | null;
     clientId?: string | null;
     packageId: string;
     at?: Date;
@@ -133,6 +136,7 @@ export async function resolvePackagePrice(
           { scopeType: "ORGANIZATION" },
           { scopeType: "BRANCH", branchId: input.branchId },
           ...(input.sourceId ? [{ scopeType: "SOURCE" as const, sourceId: input.sourceId }] : []),
+          ...(input.referrerId ? [{ scopeType: "REFERRER" as const, referrerId: input.referrerId }] : []),
           ...(input.clientId ? [{ scopeType: "CLIENT" as const, clientId: input.clientId }] : []),
           ...(contractIds.length ? [{ scopeType: "CONTRACT" as const, contractId: { in: contractIds } }] : []),
         ],
