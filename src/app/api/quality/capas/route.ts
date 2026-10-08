@@ -37,12 +37,31 @@ export async function POST(request: Request) {
   if (branchId && (!branchRecord || !canAccessBranch(session, branchId))) return NextResponse.json({ error: "branch_forbidden" }, { status: 403 });
   if (!owner) return NextResponse.json({ error: "owner_not_found" }, { status: 404 });
   if (nonconformanceId && !nonconformance) return NextResponse.json({ error: "nonconformance_not_found" }, { status: 404 });
+  if (nonconformance?.branchId && !canAccessBranch(session, nonconformance.branchId)) {
+    return NextResponse.json({ error: "nonconformance_branch_forbidden" }, { status: 403 });
+  }
+  if (nonconformance?.branchId && branchId && branchId !== nonconformance.branchId) {
+    return NextResponse.json({ error: "capa_nonconformance_branch_mismatch" }, { status: 409 });
+  }
+  const effectiveBranchId = branchId || nonconformance?.branchId || null;
 
-  const capa = await prisma.$transaction(async tx => {
-    const created = await tx.capa.create({
+  let capa;
+  try {
+    capa = await prisma.$transaction(async tx => {
+      if (nonconformanceId) {
+        const locked = await tx.$queryRaw<Array<{ id: string }>>`
+          SELECT id FROM nonconformances WHERE id = ${nonconformanceId}
+          AND organization_id = ${session.user.organizationId} FOR UPDATE
+        `;
+        if (locked.length !== 1) throw new Error("NONCONFORMANCE_CHANGED");
+        const current = await tx.nonconformance.findUniqueOrThrow({ where: { id: nonconformanceId } });
+        if (["CLOSED", "CANCELLED"].includes(current.status)) throw new Error("NONCONFORMANCE_LOCKED");
+        if (current.branchId && effectiveBranchId !== current.branchId) throw new Error("NONCONFORMANCE_BRANCH_MISMATCH");
+      }
+      const created = await tx.capa.create({
       data: {
         organizationId: session.user.organizationId,
-        branchId,
+        branchId: effectiveBranchId,
         capaNumber: capaNumber(),
         nonconformanceId,
         title,
@@ -52,21 +71,22 @@ export async function POST(request: Request) {
         dueDate,
       },
     });
-    if (nonconformance && !["CLOSED","CANCELLED"].includes(nonconformance.status)) {
+    if (nonconformance) {
+      const current = await tx.nonconformance.findUniqueOrThrow({ where: { id: nonconformance.id } });
       await tx.nonconformance.update({
-        where: { id: nonconformance.id },
-        data: { status: "ACTION_REQUIRED", ownerUserId: nonconformance.ownerUserId || ownerUserId },
+        where: { id: current.id },
+        data: { status: "ACTION_REQUIRED", ownerUserId: current.ownerUserId || ownerUserId },
       });
       await tx.auditEvent.create({
         data: {
           organizationId: session.user.organizationId,
-          branchId: nonconformance.branchId || branchId || session.activeBranchId,
+          branchId: nonconformance.branchId || effectiveBranchId || session.activeBranchId,
           actorUserId: session.user.id,
           action: "NONCONFORMANCE_LINKED_TO_CAPA",
           entityType: "Nonconformance",
           entityId: nonconformance.id,
-          oldValues: { status: nonconformance.status, ownerUserId: nonconformance.ownerUserId },
-          newValues: { status: "ACTION_REQUIRED", ownerUserId: nonconformance.ownerUserId || ownerUserId, capaId: created.id },
+          oldValues: { status: current.status, ownerUserId: current.ownerUserId },
+          newValues: { status: "ACTION_REQUIRED", ownerUserId: current.ownerUserId || ownerUserId, capaId: created.id },
           ipAddress: ctx.ipAddress,
           userAgent: ctx.userAgent,
         },
@@ -75,7 +95,7 @@ export async function POST(request: Request) {
     await tx.auditEvent.create({
       data: {
         organizationId: session.user.organizationId,
-        branchId: branchId || session.activeBranchId,
+        branchId: effectiveBranchId || session.activeBranchId,
         actorUserId: session.user.id,
         action: "CAPA_CREATED",
         entityType: "Capa",
@@ -85,8 +105,11 @@ export async function POST(request: Request) {
         userAgent: ctx.userAgent,
       },
     });
-    return created;
-  });
+      return created;
+    }, { isolationLevel: "Serializable", timeout: 30000 });
+  } catch {
+    return NextResponse.json({ error: "capa_nonconformance_state_conflict" }, { status: 409 });
+  }
 
   return NextResponse.json({ status: "ok", capa }, { status: 201 });
 }
