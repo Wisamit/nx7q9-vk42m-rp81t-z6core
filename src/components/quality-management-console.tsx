@@ -249,9 +249,27 @@ export function QualityManagementConsole({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
-    const body = await response.json().catch(() => ({}));
+    const body = await response.json().catch(() => ({})) as { error?: string };
+    const reason = body.error || "";
+    const errorMessages: Record<string, string> = {
+      open_capa_actions: tr("Finish all CAPA actions before review.", "أكمل إجراءات CAPA المفتوحة قبل المراجعة."),
+      completed_capa_action_required: tr("At least one completed CAPA action is required before closure.", "يجب إكمال إجراء تصحيحي أو وقائي واحد على الأقل قبل الإغلاق."),
+      capa_review_conflict_or_locked: tr("CAPA changed or was closed by another operator. Refresh and review.", "تغيّرت حالة CAPA أو أُغلقت بواسطة مستخدم آخر. حدّث الصفحة وراجع الحالة."),
+      capa_action_conflict_or_locked: tr("The CAPA action changed or its case is closed.", "تغيّر الإجراء أو أُغلق ملف CAPA."),
+      open_capa_blocks_nonconformance_closure: tr("Close linked CAPA records before closing the nonconformance.", "أغلق ملفات CAPA المرتبطة قبل إغلاق عدم المطابقة."),
+      capa_nonconformance_branch_mismatch: tr("CAPA and nonconformance must share the same branch.", "يجب أن يتطابق فرع CAPA مع فرع حالة عدم المطابقة."),
+      capa_nonconformance_state_conflict: tr("The nonconformance changed or is closed. Refresh and review.", "تغيّرت حالة عدم المطابقة أو أُغلقت. حدّث الصفحة وراجع الحالة."),
+      nonconformance_state_conflict: tr("Nonconformance changed. Refresh and review.", "تغيّرت حالة عدم المطابقة. حدّث الصفحة وراجع الحالة."),
+      open_audit_findings: tr("Close all audit findings before completing the audit.", "يجب إغلاق جميع ملاحظات التدقيق قبل إنهائه."),
+      audit_completion_conflict: tr("Audit state changed. Refresh and review.", "تغيّرت حالة التدقيق. حدّث الصفحة وراجع الحالة."),
+      audit_finding_creation_conflict: tr("Audit is already closed or being updated.", "التدقيق مغلق أو تجري عليه عملية أخرى."),
+      audit_finding_closure_conflict: tr("Audit finding changed or the audit is closed.", "تغيّرت الملاحظة أو أُغلق التدقيق."),
+      linked_capa_must_be_closed: tr("Close the linked CAPA before this audit finding.", "أغلق CAPA المرتبط قبل إغلاق ملاحظة التدقيق."),
+      document_workflow_state_conflict: tr("Document version changed. Refresh before retrying.", "تغيّرت حالة إصدار الوثيقة. حدّث الصفحة قبل إعادة المحاولة."),
+      older_version_cannot_replace_effective: tr("An older SOP version cannot replace a newer effective version.", "لا يمكن لإصدار أقدم من إجراء العمل أن يحل محل إصدار أحدث نافذ."),
+    };
     setBusy("");
-    setMessage(response.ok ? success : tr("Action failed.", "فشلت العملية."));
+    setMessage(response.ok ? success : errorMessages[reason] || tr("Action failed. Refresh and review the record.", "فشلت العملية. حدّث الصفحة وراجع السجل."));
     if (response.ok) router.refresh();
     return response.ok;
   }
