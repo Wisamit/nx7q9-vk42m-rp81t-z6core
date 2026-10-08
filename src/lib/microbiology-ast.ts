@@ -8,7 +8,7 @@ export function parseAstMeasurement(
   integerDigits: number,
   fractionDigits: number,
 ): string | null | undefined {
-  if (raw === null || raw === "") return null;
+  if (raw === null || raw === undefined || raw === "") return null;
   if (typeof raw !== "number" && typeof raw !== "string") return undefined;
   if (typeof raw === "number" && !Number.isFinite(raw)) return undefined;
   const text = String(raw).trim();
