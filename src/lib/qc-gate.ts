@@ -49,7 +49,7 @@ export async function resolveAnalyzerQcGate(
       downtimeEvents: { where: { status: "OPEN" }, take: 1 },
       calibrationEvents: { orderBy: { createdAt: "desc" }, take: 1 },
       maintenancePlans: { where: { status: "ACTIVE", nextDueAt: { lte: asOf } }, take: 1 },
-      maintenanceEvents: { where: { status: "IN_PROGRESS" }, take: 1 },
+      maintenanceEvents: { orderBy: { createdAt: "desc" }, take: 1 },
     },
   });
 
@@ -63,7 +63,7 @@ export async function resolveAnalyzerQcGate(
   if (equipment.downtimeEvents.length > 0) {
     reasons.push({ code: "EQUIPMENT_DOWNTIME_OPEN", componentId: null, detail: equipment.downtimeEvents[0].id });
   }
-  if (equipment.maintenanceEvents.length > 0) {
+  if (equipment.maintenanceEvents[0]?.status === "IN_PROGRESS") {
     reasons.push({ code: "EQUIPMENT_MAINTENANCE_IN_PROGRESS", componentId: null, detail: equipment.maintenanceEvents[0].id });
   }
   if (equipment.maintenancePlans.length > 0) {
