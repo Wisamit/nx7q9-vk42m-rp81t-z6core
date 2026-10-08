@@ -88,3 +88,13 @@ Keep `stage-6-specimen-operations-completion` and PR #124 in Draft; no merge, no
 
 - Concurrent creation of active transfer manifests for overlapping specimens is now serialized via stable-order InnoDB specimen row locks, with active-manifest membership rechecked inside the same transaction before manifest/item insertion. Stale specimen state or conflicting membership produces HTTP 409 rather than duplicate active manifests.
 - Added a source regression for stable lock order, transactional membership recheck and fail-closed conflict response. MariaDB/API race acceptance should separately exercise concurrent manifest POSTs.
+
+
+## Fail-closed pre-analytical clinical quarantine (engineering implementation)
+
+- Unacceptable reception observations (label mismatch/unlabeled, unacceptable condition, container mismatch) now atomically transition the specimen from its current receivable state to `QUARANTINED`, increment the pre-analytical CAS version, and persist the actual observation and operator context in both a specimen lifecycle event and audit event.
+- `QUARANTINED` is a first-class database and Prisma enum state, with a preserving enum migration, Arabic status label and bilingual scanner warning. Re-reception, aliquoting, tracked-volume consumption and manifest dispatch remain blocked by the existing lifecycle status checks; rejection/recollection is permitted through the existing audited workflow.
+- The result release transaction locks the linked specimen records and refuses release if any associated source specimen is quarantined. This is a conservative safety rule; it cannot retroactively recall a previously released result.
+- **No quarantine-clearance/override permission is implied or implemented.** Any future release of quarantined material requires a clinically approved policy and independent authorization workflow. Until then the safe path is documented rejection/recollection.
+- MariaDB integration now verifies quarantine is an allowed persisted state and still counts as physical storage occupancy; the fixture rolls the simulated transition back to preserve subsequent tests.
+- Manual device/UAT remain deferred until whole-project testing, without claiming they passed.
