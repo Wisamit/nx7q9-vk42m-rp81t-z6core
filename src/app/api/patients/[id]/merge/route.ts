@@ -33,6 +33,12 @@ type MergeIdentityPatient = {
     value: string;
     issuingCountry: string | null;
     isPrimary: boolean;
+    scheme: {
+      id: string;
+      code: string;
+      nameEn: string;
+      nameAr: string | null;
+    };
   }>;
 };
 
@@ -82,6 +88,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
                 value: true,
                 issuingCountry: true,
                 isPrimary: true,
+                scheme: {
+                  select: { id: true, code: true, nameEn: true, nameAr: true },
+                },
               },
               orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
             },
@@ -98,6 +107,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
                 value: true,
                 issuingCountry: true,
                 isPrimary: true,
+                scheme: {
+                  select: { id: true, code: true, nameEn: true, nameAr: true },
+                },
               },
               orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
             },
