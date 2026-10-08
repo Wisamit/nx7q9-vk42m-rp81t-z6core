@@ -10,6 +10,8 @@ test("label reprint decisions serialize on the specimen row", () => {
   const policy = route.indexOf("const policyError = specimenLabelPrintError", tx);
   const audit = route.indexOf("await tx.auditEvent.create", tx);
   assert.ok(tx >= 0 && lock > tx && count > lock && policy > count && audit > policy);
+  assert.ok(route.includes("SELECT id, status FROM specimens"));
+  assert.ok(route.includes("status: lock[0].status"));
   assert.ok(route.includes('action: "SPECIMEN_LABEL_PRINTED"'));
   assert.ok(route.includes('reason: priorPrintCount > 0 ? reason : null'));
   assert.ok(route.includes('printSequence: priorPrintCount + 1'));
