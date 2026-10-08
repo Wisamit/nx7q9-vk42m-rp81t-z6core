@@ -276,9 +276,44 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ o
     return NextResponse.json({ error: "work_item_validation_complete" }, { status: 409 });
   }
 
-  await prisma.$transaction(async tx => {
-    await tx.orderItemAnalyzerRoute.delete({
-      where: { orderItemId_analyzerId: { orderItemId: item.id, analyzerId } },
+  const cleared = await prisma.$transaction(async tx => {
+    const work = await tx.$queryRaw<Array<{ id: string; status: string }>>`
+      SELECT oi.id, oi.status FROM order_items oi
+      JOIN orders o ON o.id = oi.order_id
+      WHERE oi.id = ${item.id} AND o.organization_id = ${session.user.organizationId}
+      FOR UPDATE
+    `;
+    if (work.length !== 1 || work[0].status === "CANCELLED") {
+      throw new Error("ANALYZER_ROUTING_STATE_CHANGED");
+    }
+    const resultLocked = await tx.laboratoryResult.count({
+      where: {
+        orderItemId: item.id,
+        OR: [
+          { status: { in: ["VERIFIED", "RELEASED", "AMENDED", "CANCELLED"] } },
+          { validationStage: "COMPLETE" },
+        ],
+      },
+    });
+    if (resultLocked) throw new Error("ANALYZER_ROUTING_STATE_CHANGED");
+    const removed = await tx.orderItemAnalyzerRoute.deleteMany({
+      where: { orderItemId: item.id, analyzerId },
+    });
+    if (removed.count !== 1) throw new Error("ANALYZER_ROUTING_STATE_CHANGED");
+    const cancelled = await tx.analyzerWorkOrder.updateMany({
+      where: {
+        orderItemId: item.id,
+        analyzerId,
+        organizationId: session.user.organizationId,
+        status: { in: ["QUEUED", "CLAIMED", "RETRY_WAIT"] },
+      },
+      data: {
+        status: "CANCELLED",
+        claimTokenHash: null,
+        leaseExpiresAt: null,
+        nextAttemptAt: null,
+        lastError: "analyzer_assignment_cleared_by_operator",
+      },
     });
 
     await tx.orderItemAnalyzerRouteEvent.create({
@@ -313,7 +348,12 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ o
         userAgent: ctx.userAgent,
       },
     });
+    return cancelled.count;
+  }).catch(error => {
+    if (error instanceof Error && error.message === "ANALYZER_ROUTING_STATE_CHANGED") return null;
+    throw error;
   });
+  if (cleared === null) return NextResponse.json({ error: "analyzer_routing_state_changed" }, { status: 409 });
 
-  return NextResponse.json({ status: "ok" });
+  return NextResponse.json({ status: "ok", cancelledPendingWorkOrders: cleared });
 }
