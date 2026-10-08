@@ -43,10 +43,7 @@ export default async function SpecimenScanPage({
       where: {
         organizationId: session.user.organizationId,
         barcode,
-        OR: [
-          { currentBranchId: { in: branchIds } },
-          { order: { orderingBranchId: { in: branchIds } } },
-        ],
+        currentBranchId: { in: branchIds },
       },
       include: {
         specimenType: true,
