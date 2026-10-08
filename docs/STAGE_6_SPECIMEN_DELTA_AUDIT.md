@@ -41,3 +41,9 @@ Scope source: `02_MASTER_SCOPE.md` sections 20–28, with related specimen secur
 - **Interbranch custody:** manifest DISPATCH and RECEIVE_ITEM operations now claim source statuses atomically, avoiding concurrent duplicate dispatch/receipt.
 - **Remaining acceptance work:** end-to-end multi-operator race integration tests on MariaDB, exceptional specimen quarantine/clinical release policy, physical storage hierarchy and disposal controls, hardware scanner/label validation, and final Stage 6 / Stage 9 scope allocation. CI success is not equivalent to operational acceptance.
 - **Status:** Stage 6 remains Draft, not yet merged or deployed to Hostinger.
+
+## Part 11 — Rejected-sample disposal (CI #611)
+
+- Rejected-only physical disposal is available through a bilingual operator action and audited endpoint; mandatory reason, scoped authorization, branch custody CAS, active aliquot guard, lifecycle event and immutable audit evidence.
+- Clinical retention/disposal for received, processed or released-result specimens is **not** authorized by this feature; requires explicit documented retention and approval policy. Hierarchical cold storage / slot allocation also remains open.
+- CI #611 SUCCESS on `172cd7374c69d7e0de8c386d15df708aa3fda067` before this documentation update. Final branch CI must be rerun for the current head.
