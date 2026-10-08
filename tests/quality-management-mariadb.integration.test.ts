@@ -46,7 +46,7 @@ test("MariaDB quality parent locks serialize case, CAPA, audit and SOP transitio
       [document,org,branch,"SOP-"+suffix,"Workflow policy"],
       "DELETE FROM quality_documents WHERE id=?",[document]);
     for (const [vid,num] of [[v1,"1"],[v2,"2"]] as const) {
-      await seed("INSERT INTO quality_document_versions(id,document_id,version,status,submitted_by_user_id,updated_at) VALUES (?,?,?,'APPROVED',?,NOW(3))",
+      await seed("INSERT INTO quality_document_versions(id,document_id,version,status,submitted_by_user_id) VALUES (?,?,?,'APPROVED',?)",
         [vid,document,num,operator],"DELETE FROM quality_document_versions WHERE id=?",[vid]);
     }
     await b.query("SET SESSION innodb_lock_wait_timeout = 1");
