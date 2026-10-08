@@ -38,3 +38,10 @@ test("financial report exposes explicit event date bases and currency separation
   assert.match(page, /refunds use refund processing time/);
   assert.match(page, /Amounts are never combined across currencies/);
 });
+
+
+test("financial report preserves original collection events after full refunds", () => {
+  const page = source("src/app/billing/reports/page.tsx");
+  assert.match(page, /status:\s*\{\s*not:\s*"VOIDED"\s*\}/);
+  assert.doesNotMatch(page, /status:\s*"POSTED"[\s\S]{0,300}receivedAt/);
+});

@@ -12,7 +12,23 @@ type InvoiceOption = {
   balanceAmount: string;
 };
 
-export function PaymentCreateModal({ invoices, locale }: { invoices: InvoiceOption[]; locale: "ar" | "en" }) {
+type PaymentMethodOption = {
+  id: string;
+  code: string;
+  name: string;
+  baseMethod: string;
+  requiresReference: boolean;
+};
+
+export function PaymentCreateModal({
+  invoices,
+  paymentMethods,
+  locale,
+}: {
+  invoices: InvoiceOption[];
+  paymentMethods: PaymentMethodOption[];
+  locale: "ar" | "en";
+}) {
   const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
   const [open, setOpen] = useState(false);
   const [notice, setNotice] = useState("");
@@ -20,7 +36,7 @@ export function PaymentCreateModal({ invoices, locale }: { invoices: InvoiceOpti
   return <>
     <div className="crud-trigger-row">
       {notice && <span className="crud-success-toast">{notice}</span>}
-      <button type="button" className="primary-button" disabled={invoices.length === 0} onClick={() => setOpen(true)}>
+      <button type="button" className="primary-button" disabled={invoices.length === 0 || paymentMethods.length === 0} onClick={() => setOpen(true)}>
         <SystemIcon name="plus" size={16} />{tr("Post Payment", "تسجيل دفعة")}
       </button>
     </div>
@@ -31,7 +47,7 @@ export function PaymentCreateModal({ invoices, locale }: { invoices: InvoiceOpti
       description={tr("Allocate a payment to an open invoice while preserving invoice history.", "تسجيل دفعة على فاتورة مفتوحة مع الحفاظ على السجل المالي التاريخي.")}
       size="md"
     >
-      <PaymentForm invoices={invoices} locale={locale} onSuccess={message => {
+      <PaymentForm invoices={invoices} paymentMethods={paymentMethods} locale={locale} onSuccess={message => {
         setNotice(message);
         setOpen(false);
       }} />

@@ -1028,6 +1028,7 @@ model Organization {
   orderAnswers OrderAnswer[]
   invoices Invoice[]
   discountApprovalRequests DiscountApprovalRequest[]
+  paymentMethodConfigs PaymentMethodConfig[]
   payments Payment[]
   creditNotes CreditNote[]
   refunds Refund[]
@@ -2899,15 +2900,43 @@ model InvoiceLine {
   @@map("invoice_lines")
 }
 
+model PaymentMethodConfig {
+  id                String        @id @default(uuid()) @db.Char(36)
+  organizationId    String        @map("organization_id") @db.Char(36)
+  code              String        @db.VarChar(60)
+  nameEn            String        @map("name_en") @db.VarChar(160)
+  nameAr            String?       @map("name_ar") @db.VarChar(160)
+  baseMethod        PaymentMethod @map("base_method")
+  isSettlement      Boolean       @default(true) @map("is_settlement")
+  requiresReference Boolean       @default(false) @map("requires_reference")
+  sortOrder         Int           @default(0) @map("sort_order")
+  status            RecordStatus  @default(ACTIVE)
+  createdAt         DateTime      @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt         DateTime      @updatedAt @map("updated_at") @db.DateTime(3)
+  deactivatedAt     DateTime?     @map("deactivated_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  payments     Payment[]
+  refunds      Refund[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId, status, sortOrder])
+  @@map("payment_method_configs")
+}
+
 model Payment {
   id             String        @id @default(uuid()) @db.Char(36)
   organizationId String        @map("organization_id") @db.Char(36)
   branchId       String        @map("branch_id") @db.Char(36)
   amount         Decimal       @db.Decimal(18, 4)
   refundedAmount Decimal       @default(0) @map("refunded_amount") @db.Decimal(18, 4)
-  currency       String        @db.Char(3)
-  method         PaymentMethod
-  status         PaymentStatus @default(POSTED)
+  currency                    String        @db.Char(3)
+  method                      PaymentMethod
+  paymentMethodConfigId       String        @map("payment_method_config_id") @db.Char(36)
+  paymentMethodCodeSnapshot   String        @map("payment_method_code_snapshot") @db.VarChar(60)
+  paymentMethodNameEnSnapshot String        @map("payment_method_name_en_snapshot") @db.VarChar(160)
+  paymentMethodNameArSnapshot String?       @map("payment_method_name_ar_snapshot") @db.VarChar(160)
+  status                      PaymentStatus @default(POSTED)
   reference      String?       @db.VarChar(150)
   receivedAt     DateTime      @default(now()) @map("received_at") @db.DateTime(3)
   cashierUserId  String        @map("cashier_user_id") @db.Char(36)
@@ -2916,14 +2945,16 @@ model Payment {
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   branch       Branch       @relation(fields: [branchId], references: [id], onDelete: Restrict)
-  cashier      User         @relation("PaymentCashier", fields: [cashierUserId], references: [id], onDelete: Restrict)
-  cashierShift CashierShift? @relation(fields: [cashierShiftId], references: [id], onDelete: Restrict)
-  allocations  PaymentAllocation[]
+  cashier             User                 @relation("PaymentCashier", fields: [cashierUserId], references: [id], onDelete: Restrict)
+  cashierShift        CashierShift?         @relation(fields: [cashierShiftId], references: [id], onDelete: Restrict)
+  paymentMethodConfig PaymentMethodConfig   @relation(fields: [paymentMethodConfigId], references: [id], onDelete: Restrict)
+  allocations         PaymentAllocation[]
   refunds      Refund[]
 
   @@index([branchId, receivedAt])
   @@index([cashierUserId, receivedAt])
   @@index([cashierShiftId, receivedAt])
+  @@index([paymentMethodConfigId, receivedAt])
   @@map("payments")
 }
 
@@ -3003,6 +3034,10 @@ model Refund {
   currency                     String       @db.Char(3)
   amount                       Decimal      @db.Decimal(18, 4)
   method                       PaymentMethod
+  paymentMethodConfigId        String       @map("payment_method_config_id") @db.Char(36)
+  paymentMethodCodeSnapshot    String       @map("payment_method_code_snapshot") @db.VarChar(60)
+  paymentMethodNameEnSnapshot  String       @map("payment_method_name_en_snapshot") @db.VarChar(160)
+  paymentMethodNameArSnapshot  String?      @map("payment_method_name_ar_snapshot") @db.VarChar(160)
   reason                       String       @db.VarChar(1000)
   reference                    String?      @db.VarChar(150)
   paymentAmountSnapshot        Decimal      @map("payment_amount_snapshot") @db.Decimal(18, 4)
@@ -3021,8 +3056,9 @@ model Refund {
   branch       Branch       @relation(fields: [branchId], references: [id], onDelete: Restrict)
   payment      Payment      @relation(fields: [paymentId], references: [id], onDelete: Restrict)
   invoice      Invoice      @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
-  processedBy  User         @relation("RefundProcessor", fields: [processedByUserId], references: [id], onDelete: Restrict)
-  cashierShift CashierShift? @relation(fields: [cashierShiftId], references: [id], onDelete: Restrict)
+  processedBy         User                @relation("RefundProcessor", fields: [processedByUserId], references: [id], onDelete: Restrict)
+  cashierShift        CashierShift?       @relation(fields: [cashierShiftId], references: [id], onDelete: Restrict)
+  paymentMethodConfig PaymentMethodConfig @relation(fields: [paymentMethodConfigId], references: [id], onDelete: Restrict)
 
   @@unique([organizationId, refundNumber])
   @@index([branchId, processedAt])
@@ -3030,6 +3066,7 @@ model Refund {
   @@index([paymentId, status, processedAt])
   @@index([processedByUserId, processedAt])
   @@index([cashierShiftId, processedAt])
+  @@index([paymentMethodConfigId, processedAt])
   @@map("refunds")
 }
 

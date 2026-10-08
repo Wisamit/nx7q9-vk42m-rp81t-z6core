@@ -10,9 +10,6 @@ import { tr } from "@/lib/ui-i18n";
 export const dynamic = "force-dynamic";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
-const PAYMENT_METHODS = ["CASH", "CARD", "BANK_TRANSFER", "ONLINE", "CREDIT_ACCOUNT", "OTHER"] as const;
-type PaymentMethodValue = (typeof PAYMENT_METHODS)[number];
-
 function first(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
 }
@@ -91,19 +88,6 @@ function dateWhere(start: Date | null, endExclusive: Date | null) {
   };
 }
 
-function methodLabel(locale: "ar" | "en", value: string) {
-  const labels: Record<string, [string, string]> = {
-    CASH: ["Cash", "نقدي"],
-    CARD: ["Card", "بطاقة"],
-    BANK_TRANSFER: ["Bank transfer", "تحويل بنكي"],
-    ONLINE: ["Online", "إلكتروني"],
-    CREDIT_ACCOUNT: ["Credit account", "حساب آجل"],
-    OTHER: ["Other", "أخرى"],
-  };
-  const label = labels[value];
-  return label ? tr(locale, label[0], label[1]) : value;
-}
-
 export default async function FinancialReportsPage({ searchParams }: { searchParams: SearchParams }) {
   const session = await requirePermission("billing.view");
   const locale = session.user.preferredLocale === "ar" ? "ar" : "en";
@@ -111,7 +95,7 @@ export default async function FinancialReportsPage({ searchParams }: { searchPar
   const organizationId = session.user.organizationId;
   const authorizedBranchIds = session.user.branchScopes.map(scope => scope.branchId);
 
-  const [branches, sources, referrers, clients, tests, cashiers] = await Promise.all([
+  const [branches, sources, referrers, clients, tests, cashiers, paymentMethods] = await Promise.all([
     prisma.branch.findMany({
       where: { organizationId, id: { in: authorizedBranchIds } },
       select: { id: true, code: true, nameEn: true, nameAr: true, timezone: true },
@@ -145,6 +129,11 @@ export default async function FinancialReportsPage({ searchParams }: { searchPar
       select: { id: true, username: true, displayNameEn: true, displayNameAr: true },
       orderBy: { displayNameEn: "asc" },
     }),
+    prisma.paymentMethodConfig.findMany({
+      where: { organizationId, isSettlement: true },
+      select: { id: true, code: true, nameEn: true, nameAr: true, status: true },
+      orderBy: [{ sortOrder: "asc" }, { code: "asc" }],
+    }),
   ]);
 
   const requestedBranchId = first(params.branchId) || "";
@@ -165,10 +154,7 @@ export default async function FinancialReportsPage({ searchParams }: { searchPar
   const clientId = selectedFrom(clients, first(params.clientId));
   const testId = selectedFrom(tests, first(params.testId));
   const cashierUserId = selectedFrom(cashiers, first(params.cashierUserId));
-  const requestedMethod = first(params.paymentMethod) || "";
-  const paymentMethod: PaymentMethodValue | "" = PAYMENT_METHODS.includes(requestedMethod as PaymentMethodValue)
-    ? requestedMethod as PaymentMethodValue
-    : "";
+  const paymentMethodId = selectedFrom(paymentMethods, first(params.paymentMethodId));
   const requestedCurrency = (first(params.currency) || "").trim().toUpperCase();
   const currency = /^[A-Z]{3}$/.test(requestedCurrency) ? requestedCurrency : "";
 
@@ -189,8 +175,8 @@ export default async function FinancialReportsPage({ searchParams }: { searchPar
   const paymentContext: Prisma.PaymentWhereInput = {
     organizationId,
     branchId: { in: branchIds },
-    status: "POSTED",
-    ...(paymentMethod ? { method: paymentMethod } : {}),
+    status: { not: "VOIDED" },
+    ...(paymentMethodId ? { paymentMethodConfigId: paymentMethodId } : {}),
     ...(cashierUserId ? { cashierUserId } : {}),
     ...(currency ? { currency } : {}),
   };
@@ -239,6 +225,9 @@ export default async function FinancialReportsPage({ searchParams }: { searchPar
             id: true,
             currency: true,
             method: true,
+            paymentMethodCodeSnapshot: true,
+            paymentMethodNameEnSnapshot: true,
+            paymentMethodNameArSnapshot: true,
             receivedAt: true,
             cashier: { select: { displayNameEn: true, displayNameAr: true } },
           },
@@ -274,8 +263,8 @@ export default async function FinancialReportsPage({ searchParams }: { searchPar
         ...(currency ? { currency } : {}),
         ...(periodWhere ? { processedAt: periodWhere } : {}),
         invoice: invoiceContext,
+        ...(paymentMethodId ? { paymentMethodConfigId: paymentMethodId } : {}),
         payment: {
-          ...(paymentMethod ? { method: paymentMethod } : {}),
           ...(cashierUserId ? { cashierUserId } : {}),
         },
       },
@@ -286,6 +275,9 @@ export default async function FinancialReportsPage({ searchParams }: { searchPar
         amount: true,
         processedAt: true,
         method: true,
+        paymentMethodCodeSnapshot: true,
+        paymentMethodNameEnSnapshot: true,
+        paymentMethodNameArSnapshot: true,
         reason: true,
         invoice: { select: { invoiceNumber: true } },
         payment: {
@@ -380,9 +372,9 @@ export default async function FinancialReportsPage({ searchParams }: { searchPar
           <option value="">{tr(locale, "All tests", "كل الفحوصات")}</option>
           {tests.map(item => <option key={item.id} value={item.id}>{item.code} — {localizedName(item)}</option>)}
         </select></label>
-        <label>{tr(locale, "Payment method", "طريقة الدفع")}<select name="paymentMethod" defaultValue={paymentMethod}>
+        <label>{tr(locale, "Payment method", "طريقة الدفع")}<select name="paymentMethodId" defaultValue={paymentMethodId}>
           <option value="">{tr(locale, "All methods", "كل الطرق")}</option>
-          {PAYMENT_METHODS.map(item => <option key={item} value={item}>{methodLabel(locale, item)}</option>)}
+          {paymentMethods.map(item => <option key={item.id} value={item.id}>{locale === "ar" ? item.nameAr || item.nameEn : item.nameEn} · {item.code}{item.status === "INACTIVE" ? " · " + tr(locale, "Inactive", "غير نشطة") : ""}</option>)}
         </select></label>
         <label>{tr(locale, "Cashier", "أمين الصندوق")}<select name="cashierUserId" defaultValue={cashierUserId}>
           <option value="">{tr(locale, "All cashiers", "كل أمناء الصندوق")}</option>
@@ -462,7 +454,7 @@ export default async function FinancialReportsPage({ searchParams }: { searchPar
         <tbody>{paymentAllocations.length === 0 ? <tr><td colSpan={5} className="empty-state">{tr(locale, "No collection allocations match the selected filters.", "لا توجد تخصيصات تحصيل تطابق المرشحات المحددة.")}</td></tr> : paymentAllocations.slice(0, 1000).map((item, index) => <tr key={item.payment.id + ":" + item.invoice.invoiceNumber + ":" + index}>
           <td>{item.payment.receivedAt.toISOString().replace("T", " ").slice(0, 19)}</td>
           <td>{item.invoice.invoiceNumber}</td>
-          <td>{methodLabel(locale, item.payment.method)}</td>
+          <td>{locale === "ar" ? item.payment.paymentMethodNameArSnapshot || item.payment.paymentMethodNameEnSnapshot : item.payment.paymentMethodNameEnSnapshot}</td>
           <td>{locale === "ar" ? item.payment.cashier.displayNameAr || item.payment.cashier.displayNameEn : item.payment.cashier.displayNameEn}</td>
           <td>{item.amount.toFixed(4)} {item.payment.currency}</td>
         </tr>)}</tbody>
@@ -485,7 +477,7 @@ export default async function FinancialReportsPage({ searchParams }: { searchPar
         <div className="table-wrap"><table>
           <thead><tr><th>{tr(locale, "Processed", "التنفيذ")}</th><th>{tr(locale, "Refund", "الاسترداد")}</th><th>{tr(locale, "Invoice", "الفاتورة")}</th><th>{tr(locale, "Method", "الطريقة")}</th><th>{tr(locale, "Original cashier", "أمين الصندوق الأصلي")}</th><th>{tr(locale, "Amount", "المبلغ")}</th></tr></thead>
           <tbody>{refunds.length === 0 ? <tr><td colSpan={6} className="empty-state">{tr(locale, "No refunds match.", "لا توجد استردادات مطابقة.")}</td></tr> : refunds.slice(0, 500).map(item => <tr key={item.id}>
-            <td>{item.processedAt.toISOString().replace("T", " ").slice(0, 19)}</td><td>{item.refundNumber}</td><td>{item.invoice.invoiceNumber}</td><td>{methodLabel(locale, item.method)}</td><td>{locale === "ar" ? item.payment.cashier.displayNameAr || item.payment.cashier.displayNameEn : item.payment.cashier.displayNameEn}</td><td>{item.amount.toFixed(4)} {item.currency}</td>
+            <td>{item.processedAt.toISOString().replace("T", " ").slice(0, 19)}</td><td>{item.refundNumber}</td><td>{item.invoice.invoiceNumber}</td><td>{locale === "ar" ? item.paymentMethodNameArSnapshot || item.paymentMethodNameEnSnapshot : item.paymentMethodNameEnSnapshot}</td><td>{locale === "ar" ? item.payment.cashier.displayNameAr || item.payment.cashier.displayNameEn : item.payment.cashier.displayNameEn}</td><td>{item.amount.toFixed(4)} {item.currency}</td>
           </tr>)}</tbody>
         </table></div>
       </article>

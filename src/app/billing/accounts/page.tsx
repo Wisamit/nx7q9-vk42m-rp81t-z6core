@@ -19,7 +19,7 @@ export default async function ClientAccountsPage() {
   });
   const hasAllBranches = branchIds.length === activeBranchCount;
 
-  const [clients, openInvoices, statements] = await Promise.all([
+  const [clients, openInvoices, statements, paymentMethods] = await Promise.all([
     prisma.client.findMany({
       where: { organizationId: session.user.organizationId, status: "ACTIVE" },
       orderBy: { nameEn: "asc" },
@@ -47,6 +47,15 @@ export default async function ClientAccountsPage() {
       },
       orderBy: { generatedAt: "desc" },
       take: 200,
+    }),
+    prisma.paymentMethodConfig.findMany({
+      where: {
+        organizationId: session.user.organizationId,
+        status: "ACTIVE",
+        isSettlement: true,
+        baseMethod: { not: "CREDIT_ACCOUNT" },
+      },
+      orderBy: [{ sortOrder: "asc" }, { code: "asc" }],
     }),
   ]);
 
@@ -91,6 +100,13 @@ export default async function ClientAccountsPage() {
         currency: invoice.currency,
         balanceAmount: invoice.balanceAmount.toFixed(4),
         issuedAt: invoice.issuedAt.toISOString(),
+      }))}
+      paymentMethods={paymentMethods.map(method => ({
+        id: method.id,
+        code: method.code,
+        name: locale === "ar" ? method.nameAr || method.nameEn : method.nameEn,
+        baseMethod: method.baseMethod,
+        requiresReference: method.requiresReference,
       }))}
       statements={statements.map(statement => ({
         id: statement.id,

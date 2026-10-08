@@ -20,6 +20,14 @@ type BranchOption = {
   defaultCurrency: string;
 };
 
+type PaymentMethodOption = {
+  id: string;
+  code: string;
+  name: string;
+  baseMethod: string;
+  requiresReference: boolean;
+};
+
 type InvoiceOption = {
   id: string;
   clientId: string;
@@ -66,6 +74,8 @@ function errorText(locale: "ar" | "en", code: string) {
     cashier_shift_changed: tr("The cashier shift changed while posting. Refresh and try again.", "تغيرت وردية أمين الصندوق أثناء التسجيل. حدّث الصفحة وحاول مجددًا."),
     invoice_changed: tr("An invoice changed while posting. Refresh and review balances.", "تغيرت إحدى الفواتير أثناء التسجيل. حدّث الصفحة وراجع الأرصدة."),
     invoice_allocation_changed: tr("One or more invoice balances changed. Refresh and try again.", "تغير رصيد فاتورة واحدة أو أكثر. حدّث الصفحة وحاول مجددًا."),
+    payment_method_not_available: tr("The selected payment method is no longer available.", "طريقة الدفع المحددة لم تعد متاحة."),
+    payment_method_reference_required: tr("This payment method requires a transaction/reference number.", "طريقة الدفع هذه تتطلب رقم مرجع أو عملية."),
   };
   return map[code] || code || tr("Unable to complete the account action.", "تعذر إكمال إجراء حساب العميل.");
 }
@@ -79,6 +89,7 @@ export function ClientAccountManager({
   branches,
   invoices,
   statements,
+  paymentMethods,
 }: {
   locale: "ar" | "en";
   canManage: boolean;
@@ -88,6 +99,7 @@ export function ClientAccountManager({
   branches: BranchOption[];
   invoices: InvoiceOption[];
   statements: StatementRow[];
+  paymentMethods: PaymentMethodOption[];
 }) {
   const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
   const router = useRouter();
@@ -98,6 +110,7 @@ export function ClientAccountManager({
   const [paymentClientId, setPaymentClientId] = useState("");
   const [paymentBranchId, setPaymentBranchId] = useState(defaultBranchId || branches[0]?.id || "");
   const [paymentCurrency, setPaymentCurrency] = useState("");
+  const [paymentMethodId, setPaymentMethodId] = useState(paymentMethods[0]?.id || "");
   const [allocations, setAllocations] = useState<Record<string, string>>({});
 
   const paymentInvoices = useMemo(() => invoices.filter(invoice =>
@@ -162,7 +175,7 @@ export function ClientAccountManager({
         branchId: paymentBranchId,
         currency: paymentCurrency,
         amount: form.get("amount"),
-        method: form.get("method"),
+        paymentMethodId,
         reference: form.get("reference"),
         allocations: selectedAllocations,
       }),
@@ -201,8 +214,11 @@ export function ClientAccountManager({
         <label>{tr("Branch", "الفرع")}<select required value={paymentBranchId} onChange={event => { setPaymentBranchId(event.target.value); setPaymentCurrency(""); setAllocations({}); }}>{branches.map(branch => <option key={branch.id} value={branch.id}>{branch.code} — {branch.name}</option>)}</select></label>
         <label>{tr("Currency", "العملة")}<select required value={paymentCurrency} onChange={event => { setPaymentCurrency(event.target.value); setAllocations({}); }}><option value="">{tr("Select currency…", "اختر العملة…")}</option>{availableCurrencies.map(currency => <option key={currency} value={currency}>{currency}</option>)}</select></label>
         <label>{tr("Payment amount", "مبلغ الدفعة")}<input name="amount" type="number" min="0.0001" step="0.0001" required /></label>
-        <label>{tr("Method", "طريقة الدفع")}<select name="method" defaultValue="BANK_TRANSFER"><option value="CASH">{tr("Cash", "نقدي")}</option><option value="CARD">{tr("Card", "بطاقة")}</option><option value="BANK_TRANSFER">{tr("Bank transfer", "تحويل بنكي")}</option><option value="ONLINE">{tr("Online", "إلكتروني")}</option><option value="OTHER">{tr("Other", "أخرى")}</option></select></label>
-        <label>{tr("Reference", "المرجع")}<input name="reference" maxLength={150} /></label>
+        <label>{tr("Method", "طريقة الدفع")}<select name="paymentMethodId" required value={paymentMethodId} onChange={event => setPaymentMethodId(event.target.value)}>
+          <option value="">{tr("Select method…", "اختر الطريقة…")}</option>
+          {paymentMethods.map(method => <option key={method.id} value={method.id}>{method.name} · {method.code}</option>)}
+        </select></label>
+        <label>{tr("Reference", "المرجع")}<input name="reference" maxLength={150} required={paymentMethods.find(method => method.id === paymentMethodId)?.requiresReference === true} /></label>
 
         <div className="form-span table-wrap">
           <table>
@@ -214,7 +230,7 @@ export function ClientAccountManager({
           </table>
         </div>
         <div className="form-span form-success">{tr("Allocated total", "إجمالي التخصيص")}: {allocatedTotal.toFixed(4)} {paymentCurrency}</div>
-        <button className="primary-button form-span" disabled={busy || !paymentClientId || !paymentCurrency || paymentInvoices.length === 0}>{busy ? tr("Posting…", "جارٍ التسجيل…") : tr("Post Client Payment", "تسجيل دفعة العميل")}</button>
+        <button className="primary-button form-span" disabled={busy || !paymentClientId || !paymentCurrency || !paymentMethodId || paymentInvoices.length === 0}>{busy ? tr("Posting…", "جارٍ التسجيل…") : tr("Post Client Payment", "تسجيل دفعة العميل")}</button>
       </form>
     </CrudModal>
 

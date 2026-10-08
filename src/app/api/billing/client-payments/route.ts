@@ -4,6 +4,7 @@ import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
 import { invoiceAdjustmentState } from "@/lib/billing-adjustments";
 import { clientPaymentAllocationError } from "@/lib/client-accounting";
 import { prisma } from "@/lib/db";
+import { paymentMethodReferenceError, paymentMethodSnapshot, resolveSettlementPaymentMethod } from "@/lib/payment-methods";
 
 function text(value: unknown, max = 500) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -25,9 +26,8 @@ export async function POST(request: Request) {
   const branchId = text(body.branchId, 36);
   const currency = text(body.currency, 3).toUpperCase();
   const reference = text(body.reference, 150);
-  const method = ["CASH","CARD","BANK_TRANSFER","ONLINE","OTHER"].includes(String(body.method))
-    ? String(body.method) as "CASH" | "CARD" | "BANK_TRANSFER" | "ONLINE" | "OTHER"
-    : null;
+  const paymentMethodId = text(body.paymentMethodId, 36);
+  const legacyMethod = text(body.method, 60);
   const amountText = typeof body.amount === "string" || typeof body.amount === "number" ? String(body.amount) : "";
   const rawAllocations = Array.isArray(body.allocations) ? body.allocations : [];
   const allocations = rawAllocations
@@ -38,7 +38,7 @@ export async function POST(request: Request) {
     }))
     .filter(item => item.invoiceId);
 
-  if (!clientId || !branchId || !/^[A-Z]{3}$/.test(currency) || !method || !/^\d+(\.\d{1,4})?$/.test(amountText) || allocations.length === 0) {
+  if (!clientId || !branchId || !/^[A-Z]{3}$/.test(currency) || (!paymentMethodId && !legacyMethod) || !/^\d+(\.\d{1,4})?$/.test(amountText) || allocations.length === 0) {
     return NextResponse.json({ error: "invalid_fields" }, { status: 400 });
   }
   if (new Set(allocations.map(item => item.invoiceId)).size !== allocations.length) {
@@ -101,6 +101,15 @@ export async function POST(request: Request) {
       });
       if (currentPolicyError) return { error: currentPolicyError, httpStatus: 409 } as const;
 
+      const paymentMethod = await resolveSettlementPaymentMethod(tx, {
+        organizationId: session.user.organizationId,
+        paymentMethodId,
+        legacyMethod,
+      });
+      if (!paymentMethod) return { error: "payment_method_not_available", httpStatus: 409 } as const;
+      const referenceError = paymentMethodReferenceError(paymentMethod, reference);
+      if (referenceError) return { error: referenceError, httpStatus: 409 } as const;
+
       const cashierShift = await tx.cashierShift.findFirst({
         where: {
           organizationId: session.user.organizationId,
@@ -156,7 +165,7 @@ export async function POST(request: Request) {
           branchId,
           amount: paymentAmount,
           currency,
-          method,
+          ...paymentMethodSnapshot(paymentMethod),
           reference: reference || null,
           cashierUserId: session.user.id,
           cashierShiftId: cashierShift.id,
@@ -183,7 +192,10 @@ export async function POST(request: Request) {
             clientCode: client.code,
             amount: paymentAmount.toFixed(4),
             currency,
-            method,
+            paymentMethodCode: paymentMethod.code,
+            paymentMethodNameEn: paymentMethod.nameEn,
+            paymentMethodNameAr: paymentMethod.nameAr,
+            baseMethod: paymentMethod.baseMethod,
             reference: reference || null,
             cashierShiftId: cashierShift.id,
             shiftNumber: cashierShift.shiftNumber,
