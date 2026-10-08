@@ -56,3 +56,16 @@ test("inactive location listing requires settings permission and UI scopes reque
   assert.ok(ui.includes('if (storageBusy || busy) return'));
   assert.ok(ui.includes('disabled={storageBusy || busy}'));
 });
+
+
+test("relocation serializes against deactivation by locking location first", () => {
+  const move = readFileSync(new URL("../src/app/api/specimens/[id]/storage-location/route.ts", import.meta.url), "utf8");
+  const settings = readFileSync(new URL("../src/app/api/settings/specimen-storage-locations/route.ts", import.meta.url), "utf8");
+  const lockAt = move.indexOf("FOR UPDATE");
+  const specimenUpdateAt = move.indexOf("const changed = await tx.specimen.updateMany");
+  assert.ok(lockAt > 0 && lockAt < specimenUpdateAt);
+  assert.ok(move.includes("FROM specimen_storage_locations"));
+  assert.ok(move.includes("AND status = 'ACTIVE'"));
+  assert.ok(settings.includes("const row = await tx.specimenStorageLocation.updateMany"));
+  assert.ok(settings.includes("const occupied = await tx.specimen.count"));
+});
