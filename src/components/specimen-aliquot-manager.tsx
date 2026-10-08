@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 type ContainerOption = { id: string; code: string; name: string };
@@ -30,6 +30,8 @@ type UsageRow = {
 
 export function SpecimenAliquotManager({
   specimenId,
+  currentBranchId,
+  canManageStorageSettings,
   status,
   originalVolume,
   originalVolumeUnit,
@@ -45,6 +47,8 @@ export function SpecimenAliquotManager({
   locale,
 }: {
   specimenId: string;
+  currentBranchId: string | null;
+  canManageStorageSettings: boolean;
   status: string;
   originalVolume: string | null;
   originalVolumeUnit: string | null;
@@ -61,9 +65,17 @@ export function SpecimenAliquotManager({
 }) {
   const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
   const router = useRouter();
+  const [locations, setLocations] = useState<Array<{ id: string; path: string }>>([]);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const usable = ["COLLECTED","RECEIVED","IN_PROCESS"].includes(status);
+  useEffect(() => {
+    if (!currentBranchId) return;
+    fetch(`/api/settings/specimen-storage-locations?branchId=${encodeURIComponent(currentBranchId)}`)
+      .then(response => response.ok ? response.json() : { locations: [] })
+      .then(data => setLocations(Array.isArray(data.locations) ? data.locations : []))
+      .catch(() => setLocations([]));
+  }, [currentBranchId]);
 
   function errorMessage(code: unknown) {
     const key = typeof code === "string" ? code : "";
@@ -84,6 +96,8 @@ export function SpecimenAliquotManager({
       usage_order_item_not_linked: tr("The selected test is not linked to this specimen.", "الفحص المحدد غير مرتبط بهذه العينة."),
       specimen_volume_changed: tr("Available volume changed concurrently. Review the updated balance and try again.", "تغير الحجم المتاح بالتزامن. راجع الرصيد الجديد وحاول مجددًا."),
       container_not_found: tr("Selected aliquot container is unavailable.", "حاوية الجزء المشتق المحددة غير متاحة."),
+      storage_location_not_registered: tr("Choose a registered active storage position at this branch.", "اختر موقع تخزين معرّفًا وفعّالًا في هذا الفرع."),
+      storage_location_exists: tr("This storage location is already registered.", "موقع التخزين معرّف مسبقًا."),
       storage_position_required: tr("Structured storage position is required.", "موقع التخزين المنظّم مطلوب."),
       storage_position_incomplete: tr("Enter zone, storage unit, rack and slot.", "أدخل المنطقة ووحدة التخزين والرف والموضع."),
       storage_position_invalid: tr("Storage position contains invalid characters or is too long.", "موقع التخزين يحتوي أحرفًا غير مسموحة أو يتجاوز الطول المسموح."),
@@ -148,16 +162,34 @@ export function SpecimenAliquotManager({
     }
   }
 
+  async function registerStorage(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const ok = await post("/api/settings/specimen-storage-locations", {
+      branchId: currentBranchId,
+      storagePosition: {
+        zone: form.get("zone"), unit: form.get("unit"), rack: form.get("rack"), slot: form.get("slot"),
+      },
+    });
+    if (ok && currentBranchId) {
+      const response = await fetch(`/api/settings/specimen-storage-locations?branchId=${encodeURIComponent(currentBranchId)}`);
+      if (response.ok) {
+        const data = await response.json();
+        setLocations(data.locations || []);
+      }
+      setMessage(tr("Storage location registered for this branch.", "تم تعريف موقع التخزين لهذا الفرع."));
+    }
+  }
+
   async function relocateStorage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const ok = await post(`/api/specimens/${specimenId}/storage-location`, {
-      storagePosition: {
-        zone: form.get("zone"),
-        unit: form.get("unit"),
-        rack: form.get("rack"),
-        slot: form.get("slot"),
-      },
+      storagePosition: (() => {
+        const path = String(form.get("selectedLocation") || "");
+        const parts = path.split(" / ");
+        return { zone: parts[0], unit: parts[1], rack: parts[2], slot: parts[3] };
+      })(),
       reason: form.get("reason"),
     });
     if (ok) setMessage(tr("Physical storage location updated and audited.", "تم تحديث موقع التخزين الفعلي وتسجيله."));
@@ -214,11 +246,21 @@ export function SpecimenAliquotManager({
 
     {canManage && usable && <details className="specimen-history">
       <summary>{tr("Update Physical Storage", "تحديث موقع التخزين الفعلي")}</summary>
-      <form className="catalog-form specimen-action-form" onSubmit={relocateStorage}>
+      {canManageStorageSettings && <form className="catalog-form specimen-action-form" onSubmit={registerStorage}>
+        <strong className="form-span">{tr("Register branch storage position", "تعريف موقع تخزين في الفرع")}</strong>
         <label>{tr("Zone / area", "المنطقة")}<input name="zone" maxLength={40} required /></label>
         <label>{tr("Fridge / freezer", "الثلاجة / المجمّد")}<input name="unit" maxLength={40} required /></label>
         <label>{tr("Rack / shelf", "الرف")}<input name="rack" maxLength={40} required /></label>
         <label>{tr("Position / slot", "الموضع")}<input name="slot" maxLength={40} required /></label>
+        <button className="secondary-button form-span" disabled={busy}>{tr("Register position", "تعريف الموقع")}</button>
+      </form>}
+      <form className="catalog-form specimen-action-form" onSubmit={relocateStorage}>
+        <label className="form-span">{tr("Registered physical position", "موقع التخزين المعرّف")}
+          <select name="selectedLocation" required defaultValue="">
+            <option value="">{tr("Select a storage position", "اختر موقع التخزين")}</option>
+            {locations.map(location => <option key={location.id} value={location.path}>{location.path}</option>)}
+          </select>
+        </label>
         <label className="form-span">{tr("Relocation reason", "سبب تغيير الموقع")}<textarea name="reason" rows={2} maxLength={1000} required /></label>
         <button className="secondary-button form-span" disabled={busy}>{tr("Update Storage Location", "تحديث موقع التخزين")}</button>
       </form>
