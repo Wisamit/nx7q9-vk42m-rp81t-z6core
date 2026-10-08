@@ -73,3 +73,20 @@ test("referrer pricing wiring is present end to end", () => {
   assert.ok(manager.includes('<option value="REFERRER">'));
   assert.ok(manager.includes('name="referrerId"'));
 });
+
+
+test("price-list creation serializes and rejects tied precedence", () => {
+  const route = source("src/app/api/pricing/price-lists/route.ts");
+  assert.ok(route.includes("SELECT id FROM organizations"));
+  assert.ok(route.includes("FOR UPDATE"));
+  assert.ok(route.includes("PRICE_LIST_PRECEDENCE_CONFLICT"));
+  assert.ok(route.includes("price_list_precedence_conflict"));
+  assert.ok(route.includes("effectiveFrom,"));
+});
+
+test("price resolution fails closed when top price lists have tied precedence", () => {
+  const pricing = source("src/lib/pricing.ts");
+  assert.ok(pricing.includes("samePricingPrecedence"));
+  assert.ok(pricing.includes("ambiguous_test_price_list"));
+  assert.ok(pricing.includes("ambiguous_package_price_list"));
+});
