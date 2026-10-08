@@ -29,24 +29,38 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (action === "MAKE_EFFECTIVE" && Number.isNaN(effectiveFrom.getTime())) return NextResponse.json({ error: "invalid_effective_date" }, { status: 400 });
   if (action === "MAKE_EFFECTIVE" && effectiveFrom > now) return NextResponse.json({ error: "future_effective_activation_not_supported" }, { status: 409 });
 
-  const saved = await prisma.$transaction(async tx => {
-    let updated;
-    if (action === "SUBMIT_REVIEW") {
-      updated = await tx.qualityDocumentVersion.update({
-        where: { id },
-        data: { status: "IN_REVIEW" },
+  let saved;
+  try {
+    saved = await prisma.$transaction(async tx => {
+      // Serialize sibling version activation through their common document.
+      const locked = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM quality_documents WHERE id = ${version.documentId}
+        AND organization_id = ${session.user.organizationId} AND status = 'ACTIVE'
+        FOR UPDATE
+      `;
+      if (locked.length !== 1) throw new Error("DOCUMENT_NOT_ACTIVE");
+      const currentDocument = await tx.qualityDocument.findUniqueOrThrow({ where: { id: version.documentId } });
+      const current = await tx.qualityDocumentVersion.findUniqueOrThrow({ where: { id } });
+      const expectedStatus = action === "SUBMIT_REVIEW" ? "DRAFT"
+        : action === "COMPLETE_REVIEW" ? "IN_REVIEW"
+        : action === "APPROVE" ? "REVIEWED" : "APPROVED";
+      if (current.status !== expectedStatus) throw new Error("DOCUMENT_VERSION_STATE_CHANGED");
+      if (action === "MAKE_EFFECTIVE" && current.version <= currentDocument.currentEffectiveVersion) {
+        throw new Error("OLDER_VERSION_CANNOT_REPLACE_EFFECTIVE");
+      }
+      const claim = await tx.qualityDocumentVersion.updateMany({
+        where: { id, documentId: version.documentId, status: expectedStatus },
+        data: action === "SUBMIT_REVIEW"
+          ? { status: "IN_REVIEW" }
+          : action === "COMPLETE_REVIEW"
+            ? { status: "REVIEWED", reviewedByUserId: session.user.id, reviewedAt: now }
+            : action === "APPROVE"
+              ? { status: "APPROVED", approvedByUserId: session.user.id, approvedAt: now }
+              : { status: "EFFECTIVE", effectiveFrom, retiredAt: null },
       });
-    } else if (action === "COMPLETE_REVIEW") {
-      updated = await tx.qualityDocumentVersion.update({
-        where: { id },
-        data: { status: "REVIEWED", reviewedByUserId: session.user.id, reviewedAt: now },
-      });
-    } else if (action === "APPROVE") {
-      updated = await tx.qualityDocumentVersion.update({
-        where: { id },
-        data: { status: "APPROVED", approvedByUserId: session.user.id, approvedAt: now },
-      });
-    } else {
+      if (claim.count !== 1) throw new Error("DOCUMENT_VERSION_STATE_CHANGED");
+      let updated = await tx.qualityDocumentVersion.findUniqueOrThrow({ where: { id } });
+      if (action === "MAKE_EFFECTIVE") {
       const currentlyEffective = await tx.qualityDocumentVersion.findMany({
         where: { documentId: version.documentId, status: "EFFECTIVE", id: { not: id } },
         select: { id: true },
@@ -57,10 +71,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           data: { status: "RETIRED", retiredAt: now },
         });
       }
-      updated = await tx.qualityDocumentVersion.update({
-        where: { id },
-        data: { status: "EFFECTIVE", effectiveFrom, retiredAt: null },
-      });
       await tx.qualityDocument.update({
         where: { id: version.documentId },
         data: { currentEffectiveVersion: version.version },
@@ -81,8 +91,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         userAgent: ctx.userAgent,
       },
     });
-    return updated;
-  });
+      return updated;
+    }, { isolationLevel: "Serializable", timeout: 30000 });
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : "";
+    return NextResponse.json({ error: reason === "OLDER_VERSION_CANNOT_REPLACE_EFFECTIVE"
+      ? "older_version_cannot_replace_effective" : "document_workflow_state_conflict" }, { status: 409 });
+  }
 
   return NextResponse.json({ status: "ok", version: saved });
 }
