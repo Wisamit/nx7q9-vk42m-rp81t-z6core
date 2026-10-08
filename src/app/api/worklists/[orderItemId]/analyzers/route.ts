@@ -13,6 +13,7 @@ async function loadOrderItem(orderItemId: string, organizationId: string) {
     where: { id: orderItemId, order: { organizationId } },
     include: {
       test: true,
+      order: { select: { accessionNumber: true } },
       specimenLinks: {
         where: { status: "ACTIVE" },
         include: { specimen: true },
@@ -127,7 +128,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ ord
           currentBranchId: analyzer.branchId,
         },
       },
-      select: { specimenId: true },
+      select: { specimenId: true, specimen: { select: { barcode: true } } },
     });
     const mapped = await tx.analyzerTestMapping.count({
       where: {
@@ -160,7 +161,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ ord
       },
     });
 
-    await tx.orderItemAnalyzerRouteEvent.create({
+    const assignment = await tx.orderItemAnalyzerRouteEvent.create({
       data: {
         orderItemId: item.id,
         analyzerId: analyzer.id,
@@ -171,6 +172,43 @@ export async function POST(request: Request, { params }: { params: Promise<{ ord
         actorUserId: session.user.id,
       },
     });
+
+    // Outbound transmission is opt-in per configured device. A single,
+    // unambiguous approved analyzer test code is mandatory; never guess how
+    // a mapped panel should be encoded on a physical instrument.
+    let workOrderId: string | null = null;
+    if (analyzer.bridgeDeviceKey) {
+      const candidateMappings = await tx.analyzerTestMapping.findMany({
+        where: {
+          analyzerId: analyzer.id,
+          testId: item.testId,
+          status: "ACTIVE",
+          approvalStatus: "APPROVED",
+          effectiveFrom: { lte: now },
+          OR: [{ effectiveTo: null }, { effectiveTo: { gte: now } }],
+        },
+        select: { analyzerTestCode: true },
+      });
+      const codes = [...new Set(candidateMappings.map(mapping => mapping.analyzerTestCode))];
+      if (codes.length === 1) {
+        const outbound = await tx.analyzerWorkOrder.create({
+          data: {
+            organizationId: session.user.organizationId,
+            branchId: analyzer.branchId,
+            analyzerId: analyzer.id,
+            orderItemId: item.id,
+            specimenId: ready.specimenId,
+            assignmentEventId: assignment.id,
+            accessionNumberSnapshot: item.order.accessionNumber,
+            barcodeSnapshot: ready.specimen.barcode,
+            testCodeSnapshot: item.testCodeSnapshot,
+            analyzerTestCodeSnapshot: codes[0],
+            bridgeDeviceKeySnapshot: analyzer.bridgeDeviceKey,
+          },
+        });
+        workOrderId = outbound.id;
+      }
+    }
 
     await tx.auditEvent.create({
       data: {
@@ -186,13 +224,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ ord
           analyzerName: analyzer.name,
           analyzerBranchId: analyzer.branchId,
           testId: item.testId,
+          outboundWorkOrderId: workOrderId,
+          outboundQueued: workOrderId !== null,
+          outboundReason: workOrderId ? "QUEUED" : analyzer.bridgeDeviceKey ? "AMBIGUOUS_ANALYZER_TEST_CODE" : "BRIDGE_NOT_CONFIGURED",
         },
         ipAddress: ctx.ipAddress,
         userAgent: ctx.userAgent,
       },
     });
 
-    return created;
+    return { ...created, workOrderId };
   }).catch(error => {
     if (error instanceof Error && error.message === "ANALYZER_ROUTING_STATE_CHANGED") return null;
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") return null;
