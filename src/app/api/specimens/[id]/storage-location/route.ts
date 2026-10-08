@@ -33,6 +33,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         id: specimen.id,
         organizationId: session.user.organizationId,
         status: specimen.status,
+        currentBranchId: specimen.currentBranchId,
         updatedAt: specimen.updatedAt,
         preanalyticalVersion: specimen.preanalyticalVersion,
       },
