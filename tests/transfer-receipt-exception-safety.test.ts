@@ -22,6 +22,7 @@ test("missing material does not claim destination custody, but damaged material 
   assert.ok(branch.includes("const stillInTransit = await tx.specimen.count"));
   assert.ok(branch.includes('status: "IN_TRANSIT"'));
   assert.ok(branch.includes('status: "QUARANTINED"'));
+  assert.ok(branch.includes('eventType: exceptionType === "MISSING" ? "TRANSFER_EXCEPTION" : "QUARANTINED"'));
   assert.ok(branch.includes("currentBranchId: manifest.destinationBranchId"));
   assert.ok(branch.includes("preanalyticalVersion: item.specimen.preanalyticalVersion"));
   assert.ok(branch.includes("physicalCustodyAccepted: exceptionType !== \"MISSING\""));
