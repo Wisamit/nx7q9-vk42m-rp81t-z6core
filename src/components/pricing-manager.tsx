@@ -114,7 +114,12 @@ export function PricingManager({
       setScopeType("ORGANIZATION");
       router.refresh();
       setOpen("");
-    } else setMessage(body.error || tr("Could not create price list.", "تعذر إنشاء قائمة الأسعار."));
+    } else setMessage(body.error === "price_list_precedence_conflict"
+      ? tr(
+          "Another price list already has the same scope, target, priority and start date. Change the start date or priority.",
+          "توجد قائمة أسعار أخرى بنفس النطاق والهدف والأولوية وتاريخ البداية. غيّر تاريخ البداية أو الأولوية.",
+        )
+      : body.error || tr("Could not create price list.", "تعذر إنشاء قائمة الأسعار."));
     setBusy("");
   }
 
