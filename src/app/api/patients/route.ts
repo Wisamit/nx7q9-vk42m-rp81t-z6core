@@ -50,6 +50,7 @@ export async function POST(request: Request) {
   const phoneKey = phone ? normalizePatientPhone(phone) : null;
   const dob = dateOfBirth ? new Date(`${dateOfBirth}T00:00:00.000Z`) : null;
   if (dateOfBirth && Number.isNaN(dob?.getTime())) return NextResponse.json({ error: "invalid_date_of_birth" }, { status: 400 });
+  if (dob && dob.getTime() > Date.now()) return NextResponse.json({ error: "future_date_of_birth" }, { status: 400 });
 
   const duplicateOr = [
     ...(dob ? [{ normalizedName: nameKey, dateOfBirth: dob }] : []),
