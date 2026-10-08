@@ -19,6 +19,7 @@ import {
 } from "@/lib/report-outbound";
 
 class OutboundReportVersionChanged extends Error {}
+class OutboundReportDuplicateDelivery extends Error {}
 
 function recipientTypeEnum(value: ReportOutboundRecipientType) {
   if (value === "PATIENT") return NotificationRecipientType.PATIENT;
@@ -203,6 +204,20 @@ export async function POST(request: Request, { params }: { params: Promise<{ ver
     if (!current || current.id !== version.id || current.status === "RETRACTED") {
       throw new OutboundReportVersionChanged();
     }
+    // Serialize replays and double clicks while the same parent is locked.
+    // A failed terminal delivery may be retried by a new authorized request,
+    // but never silently resend a still queued or already sent report.
+    const duplicate = await tx.reportDeliveryEvent.findFirst({
+      where: {
+        reportVersionId: version.id,
+        channel,
+        recipient: destination.destination,
+        status: { in: ["QUEUED", "SENT", "DELIVERED"] },
+      },
+      select: { id: true },
+    });
+    if (duplicate) throw new OutboundReportDuplicateDelivery();
+
     const reportDelivery = await tx.reportDeliveryEvent.create({
       data: {
         reportVersionId: version.id,
@@ -284,11 +299,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ ver
 
     return { reportDeliveryId: reportDelivery.id, notificationId: notification.id };
   }).catch(error => {
-    if (error instanceof OutboundReportVersionChanged) return null;
+    if (error instanceof OutboundReportVersionChanged) return "VERSION_CHANGED" as const;
+    if (error instanceof OutboundReportDuplicateDelivery) return "DUPLICATE" as const;
     throw error;
   });
-  if (!queued) {
+  if (queued === "VERSION_CHANGED") {
     return NextResponse.json({ error: "report_version_changed_retry" }, { status: 409 });
+  }
+  if (queued === "DUPLICATE") {
+    return NextResponse.json({ error: "report_delivery_already_pending_or_sent" }, { status: 409 });
   }
 
   return NextResponse.json({
