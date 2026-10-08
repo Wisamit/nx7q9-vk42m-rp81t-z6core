@@ -19,3 +19,15 @@ export function comparePricingCandidates(
     b.effectiveFrom.getTime() - a.effectiveFrom.getTime()
   );
 }
+
+
+export function samePricingPrecedence(
+  a: { scopeType: PricingScopeType; priority: number; effectiveFrom: Date },
+  b: { scopeType: PricingScopeType; priority: number; effectiveFrom: Date },
+) {
+  return (
+    a.scopeType === b.scopeType
+    && a.priority === b.priority
+    && a.effectiveFrom.getTime() === b.effectiveFrom.getTime()
+  );
+}
