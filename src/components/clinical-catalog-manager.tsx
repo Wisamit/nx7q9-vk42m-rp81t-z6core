@@ -101,7 +101,7 @@ export function ClinicalCatalogManager({
         <label>{tr("Escalate after overdue (minutes)", "التصعيد بعد التأخر (دقائق)")}<input name="escalationAfterMinutes" type="number" min="0" placeholder={tr("Optional — leave blank to disable", "اختياري — اتركه فارغاً للتعطيل")} /></label>
         <label>{tr("Repeat escalation every (minutes)", "تكرار التصعيد كل (دقائق)")}<input name="escalationRepeatMinutes" type="number" min="1" placeholder={tr("Required only for multiple levels", "مطلوب فقط عند تعدد المستويات")} /></label>
         <label>{tr("Maximum escalation level", "الحد الأقصى لمستوى التصعيد")}<input name="maxEscalationLevel" type="number" min="1" max="10" defaultValue="1" /></label>
-        <label>{tr("Recipient permission code", "رمز صلاحية المستلمين")}<input name="escalationPermissionCode" maxLength={120} placeholder="results.verify" /></label>
+        <label>{tr("Recipient permission code", "رمز صلاحية المستلمين")}<input name="escalationPermissionCode" maxLength={120} placeholder={tr("Permission code, e.g. results.verify", "رمز الصلاحية، مثال results.verify")} /></label>
         <label>{tr("Effective from", "ساري من")}<input name="effectiveFrom" type="date" required defaultValue={new Date().toISOString().slice(0, 10)} /></label>
         <label>{tr("Effective to", "ساري حتى")}<input name="effectiveTo" type="date" /></label>
         <p className="muted form-span">{tr(
