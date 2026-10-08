@@ -83,3 +83,8 @@ Keep `stage-6-specimen-operations-completion` and PR #124 in Draft; no merge, no
 - The Stage 6 deployment-candidate gate still requires all automated checks, MariaDB migrations and integration fixtures, access control and failure-mode safety checks on the exact HEAD, and a documented rollback/backup rehearsal plan. Any clinical quarantine and retention/disposal operations lacking laboratory-approved policy must remain fail-closed, with no invented times, approvals or implicit result release.
 - Deferring UAT does not establish clinical operational go-live approval. Production activation of clinically sensitive actions requires applicable policy authorization and the later system-wide UAT.
 - The source acceptance matrix rows describing operator hardware acceptance must be read as **deferred verification**, not missing implementation to be filled by claiming tests passed.
+
+## Manifest creation contention guard
+
+- Concurrent creation of active transfer manifests for overlapping specimens is now serialized via stable-order InnoDB specimen row locks, with active-manifest membership rechecked inside the same transaction before manifest/item insertion. Stale specimen state or conflicting membership produces HTTP 409 rather than duplicate active manifests.
+- Added a source regression for stable lock order, transactional membership recheck and fail-closed conflict response. MariaDB/API race acceptance should separately exercise concurrent manifest POSTs.
