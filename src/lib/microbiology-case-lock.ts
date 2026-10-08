@@ -22,6 +22,7 @@ export async function lockMicrobiologyCaseForEdit(
     specimenId: string;
     performingBranchId: string;
     allowSubmittedResult?: boolean;
+    allowCorrectionWhenSpecimenUnready?: boolean;
     expectedCaseUpdatedAt?: Date;
     expectedResultId?: string | null;
   },
@@ -32,9 +33,10 @@ export async function lockMicrobiologyCaseForEdit(
       AND organization_id = ${input.organizationId}
     FOR UPDATE
   `;
-  if (specimen.length !== 1 ||
-    specimen[0].status !== "IN_PROCESS" ||
-    specimen[0].current_branch_id !== input.performingBranchId) {
+  if (specimen.length !== 1) return "SPECIMEN_CHANGED";
+  if (!input.allowCorrectionWhenSpecimenUnready &&
+    (specimen[0].status !== "IN_PROCESS" ||
+     specimen[0].current_branch_id !== input.performingBranchId)) {
     return "SPECIMEN_CHANGED";
   }
 
