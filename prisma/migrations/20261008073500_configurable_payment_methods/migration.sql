@@ -83,7 +83,7 @@ ALTER TABLE `payments`
 UPDATE `payments` p
 JOIN `payment_method_configs` pm
   ON pm.`organization_id` = p.`organization_id`
- AND pm.`code` = CAST(p.`method` AS CHAR)
+ AND pm.`code` = CONVERT(CAST(p.`method` AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci
 SET p.`payment_method_config_id` = pm.`id`,
     p.`payment_method_code_snapshot` = pm.`code`,
     p.`payment_method_name_en_snapshot` = pm.`name_en`,
@@ -107,7 +107,7 @@ ALTER TABLE `refunds`
 UPDATE `refunds` r
 JOIN `payment_method_configs` pm
   ON pm.`organization_id` = r.`organization_id`
- AND pm.`code` = CAST(r.`method` AS CHAR)
+ AND pm.`code` = CONVERT(CAST(r.`method` AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci
 SET r.`payment_method_config_id` = pm.`id`,
     r.`payment_method_code_snapshot` = pm.`code`,
     r.`payment_method_name_en_snapshot` = pm.`name_en`,
