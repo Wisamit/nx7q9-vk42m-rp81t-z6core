@@ -56,7 +56,16 @@ export function MicrobiologyCaseEditor({
     const body = await response.json().catch(() => ({}));
     setBusy("");
     if (!response.ok) {
-      setMessage(body.error || tr("The microbiology action could not be saved.", "تعذر حفظ إجراء الأحياء الدقيقة."));
+      const messageByError: Record<string, string> = {
+        microbiology_case_state_changed: tr("Another operator changed this culture. Refresh before editing.", "عدّل مستخدم آخر هذه الزراعة. حدّث الصفحة قبل المتابعة."),
+        microbiology_case_locked: tr("This microbiology case is finalized or cancelled.", "حالة الأحياء الدقيقة نهائية أو ملغاة."),
+        microbiology_result_submitted_withdraw_before_edit: tr("A final result was submitted. Withdraw it for correction before changing culture or susceptibility data.", "تم إرسال النتيجة النهائية. اسحبها للتصحيح قبل تعديل الزرع أو الحساسية."),
+        specimen_not_ready_for_microbiology: tr("The specimen is unavailable at this performing branch, quarantined or transferred.", "العينة غير متاحة في فرع التنفيذ أو محجورة أو منقولة."),
+        no_growth_conflicts_with_isolates: tr("No-growth cannot be selected while isolates are recorded.", "لا يمكن اختيار عدم وجود نمو مع وجود عزلات مسجلة."),
+        invalid_susceptibility_value: tr("Check the AST interpretation, MIC/zone precision and MIC unit.", "تحقق من تفسير الحساسية ودقة قيم MIC/القطر ووحدة MIC."),
+        microbiology_ast_catalog_changed: tr("Organism or antibiotic configuration changed. Refresh and retry.", "تغيرت إعدادات الكائن أو المضاد الحيوي. حدّث الصفحة وأعد المحاولة."),
+      };
+      setMessage(messageByError[body.error] || tr("The microbiology action could not be saved. Refresh if data changed.", "تعذر حفظ إجراء الأحياء الدقيقة. حدّث الصفحة إذا تغيرت البيانات."));
       return null;
     }
     router.refresh();
