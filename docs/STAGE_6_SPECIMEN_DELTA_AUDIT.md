@@ -31,3 +31,13 @@ Scope source: `02_MASTER_SCOPE.md` sections 20–28, with related specimen secur
 - Preserve historical records and audit all clinically important transitions.
 - For each Part: implementation + migration if needed + bilingual UI + safety tests + full CI on current head.
 - Keep one Draft PR; no individual Part merge or production deploy.
+
+## Stage 6 implementation checkpoints (2026-10-08)
+
+- **Order-time demographics:** sex, DOB and recorded age captured as immutable order snapshots; reference interval evaluation at order time, with absent historical evidence handled conservatively.
+- **Reception:** unsafe label/condition/container assessments do not enter RECEIVED, and denied reception exceptions are audit logged. Controlled quarantine/exception adjudication remains a distinct follow-up requirement.
+- **Aliquots and material:** parent lineage, independent barcodes and exact-volume usage exist; new aliquot creation blocks closed orders and parents without active linked tests; reconciliation cannot recreate already consumed specimen volume.
+- **Rejection and recollection:** whole/selected-test safeguards, replacement genealogy and requirement snapshots exist. Source custody, order status and active child links now rechecked transactionally. Successful and failed collection paths verify active order and current branch inside atomic state changes.
+- **Interbranch custody:** manifest DISPATCH and RECEIVE_ITEM operations now claim source statuses atomically, avoiding concurrent duplicate dispatch/receipt.
+- **Remaining acceptance work:** end-to-end multi-operator race integration tests on MariaDB, exceptional specimen quarantine/clinical release policy, physical storage hierarchy and disposal controls, hardware scanner/label validation, and final Stage 6 / Stage 9 scope allocation. CI success is not equivalent to operational acceptance.
+- **Status:** Stage 6 remains Draft, not yet merged or deployed to Hostinger.
