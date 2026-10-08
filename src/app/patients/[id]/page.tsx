@@ -4,6 +4,7 @@ import { permissionSet, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { PatientMergePanel } from "@/components/patient-merge-panel";
 import { calculatePatientAge } from "@/lib/patient-demographics";
+import { patientDuplicateEvidence, sortDuplicateCandidates } from "@/lib/patient-duplicate-review";
 import { getUiLocale, sexLabel, statusLabel, tr } from "@/lib/ui-i18n";
 
 export const dynamic = "force-dynamic";
@@ -71,8 +72,10 @@ export default async function PatientDetailPage({ params }: { params: Promise<{ 
           patientNumber: true,
           fullNameEn: true,
           fullNameAr: true,
+          normalizedName: true,
           dateOfBirth: true,
           phone: true,
+          normalizedPhone: true,
           portalAccount: { select: { id: true } },
         },
         take: 10,
@@ -192,7 +195,7 @@ export default async function PatientDetailPage({ params }: { params: Promise<{ 
         phone: patient.phone,
         hasPortalAccount: Boolean(patient.portalAccount),
       }}
-      candidates={duplicateCandidates.map(candidate => ({
+      candidates={sortDuplicateCandidates(duplicateCandidates.map(candidate => ({
         id: candidate.id,
         patientNumber: candidate.patientNumber,
         fullNameEn: candidate.fullNameEn,
@@ -200,7 +203,8 @@ export default async function PatientDetailPage({ params }: { params: Promise<{ 
         dateOfBirth: candidate.dateOfBirth?.toISOString().slice(0,10) || null,
         phone: candidate.phone,
         hasPortalAccount: Boolean(candidate.portalAccount),
-      }))}
+        evidence: patientDuplicateEvidence(patient, candidate),
+      })))}
       locale={locale}
     />}
 
