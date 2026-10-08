@@ -42,7 +42,8 @@ test("deactivation records a reason and blocks occupied storage positions", () =
   assert.ok(api.includes('requirePermission("settings.manage")'));
   assert.ok(api.includes('status === "INACTIVE"'));
   assert.ok(api.includes("tx.specimen.count"));
-  assert.ok(api.includes('storageLocation: location.path'));
+  assert.ok(api.includes('storageLocationId: location.id'));
+  assert.ok(api.includes('storageLocationId: null, storageLocation: location.path'));
   assert.ok(api.includes('action: "SPECIMEN_STORAGE_LOCATION_STATUS_CHANGED"'));
   assert.ok(ui.includes("changeStorageStatus"));
   assert.ok(ui.includes("storage_location_has_active_specimens"));
@@ -68,4 +69,18 @@ test("relocation serializes against deactivation by locking location first", () 
   assert.ok(move.includes("AND status = 'ACTIVE'"));
   assert.ok(settings.includes("const row = await tx.specimenStorageLocation.updateMany"));
   assert.ok(settings.includes("const occupied = await tx.specimen.count"));
+});
+
+test("registered storage assignment has optional FK and transfer removes stale current position", () => {
+  const schema = readFileSync(new URL("../prisma/schema.prisma", import.meta.url), "utf8");
+  const migration = readFileSync(new URL("../prisma/migrations/20261008170000_specimen_registered_storage_fk/migration.sql", import.meta.url), "utf8");
+  const relocation = readFileSync(new URL("../src/app/api/specimens/[id]/storage-location/route.ts", import.meta.url), "utf8");
+  const transfer = readFileSync(new URL("../src/app/api/transfers/[id]/actions/route.ts", import.meta.url), "utf8");
+  assert.ok(schema.includes('storageLocationId   String?'));
+  assert.ok(migration.includes('ADD COLUMN `storage_location_id` CHAR(36) NULL'));
+  assert.ok(!migration.includes('UPDATE `specimens`'));
+  assert.ok(relocation.includes('storageLocationId: registered.id'));
+  assert.ok(relocation.includes('previousStorageLocationId: specimen.storageLocationId'));
+  assert.ok(transfer.includes('priorStorageLocationId: item.specimen.storageLocationId'));
+  assert.ok((transfer.match(/storageLocationId: null/g) || []).length >= 2);
 });
