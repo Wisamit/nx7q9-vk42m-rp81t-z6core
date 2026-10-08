@@ -81,10 +81,40 @@ export async function POST(request: Request) {
     }, { status: 409 });
   }
 
-  const targetById = new Map(targets.map(target => [target.id, target]));
-
   try {
     const saved = await prisma.$transaction(async tx => {
+      // One analyzer's QC sequence must be evaluated in a single committed order.
+      const locked = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM analyzers WHERE id = ${analyzerId}
+        AND organization_id = ${session.user.organizationId}
+        AND branch_id = ${analyzer.branchId} AND status = 'ACTIVE' FOR UPDATE
+      `;
+      if (locked.length !== 1) throw new Error("ANALYZER_NOT_ACTIVE");
+
+      const currentAnalyzer = await tx.analyzer.findFirst({
+        where: { id: analyzerId, organizationId: session.user.organizationId, status: "ACTIVE" },
+        include: { equipment: true },
+      });
+      if (!currentAnalyzer?.equipment || currentAnalyzer.equipment.branchId !== currentAnalyzer.branchId) {
+        throw new Error("ANALYZER_EQUIPMENT_MISMATCH");
+      }
+      const currentTargets = await tx.qcTarget.findMany({
+        where: {
+          id: { in: targetIds },
+          organizationId: session.user.organizationId,
+          analyzerId,
+          status: "ACTIVE",
+          effectiveFrom: { lte: runAt },
+          OR: [{ effectiveTo: null }, { effectiveTo: { gte: runAt } }],
+        },
+        include: { qcLot: true },
+      });
+      if (currentTargets.length !== observations.length || currentTargets.some(target =>
+        target.qcLot.status !== "ACTIVE" ||
+        (target.qcLot.expiryDate && target.qcLot.expiryDate < runAt)
+      )) throw new Error("QC_TARGET_OR_LOT_CHANGED");
+      const currentTargetById = new Map(currentTargets.map(target => [target.id, target]));
+
       const run = await tx.qcRun.create({
         data: {
           organizationId: session.user.organizationId,
@@ -104,7 +134,7 @@ export async function POST(request: Request) {
       }> = [];
 
       const computed = observations.map(observation => {
-        const target = targetById.get(observation.targetId)!;
+        const target = currentTargetById.get(observation.targetId)!;
         const zScore = observation.observedValue.sub(target.targetMean).div(target.targetSd);
         return { observation, target, zScore };
       });
@@ -113,10 +143,10 @@ export async function POST(request: Request) {
         const history = await tx.qcResult.findMany({
           where: {
             targetId: item.target.id,
-            run: { runAt: { lt: runAt }, status: { not: "CANCELLED" } },
+            run: { runAt: { lte: runAt }, status: { not: "CANCELLED" } },
           },
           include: { run: { select: { runAt: true } } },
-          orderBy: { run: { runAt: "desc" } },
+          orderBy: [{ run: { runAt: "desc" } }, { createdAt: "desc" }],
           take: 9,
         });
 
@@ -200,7 +230,7 @@ export async function POST(request: Request) {
           newValues: {
             analyzerId,
             equipmentId: analyzer.equipment?.id || null,
-            qcLotIds: [...new Set(targets.map(target => target.qcLotId))],
+            qcLotIds: [...new Set(currentTargets.map(target => target.qcLotId))],
             runAt,
             status: runStatus,
             results: evaluated.map(item => ({
