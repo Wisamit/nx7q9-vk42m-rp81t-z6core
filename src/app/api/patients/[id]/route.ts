@@ -186,7 +186,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         dateOfBirth: dob,
         recordedAgeValue,
         recordedAgeUnit: ageUnit,
-        recordedAgeAt: new Date(),
+        recordedAgeAt: (patient.recordedAgeValue !== recordedAgeValue || patient.recordedAgeUnit !== ageUnit)
+          ? new Date() : patient.recordedAgeAt,
         address: address || null,
         sexAtBirth,
         phone: phone || null,
