@@ -20,3 +20,12 @@ test("disposal is atomic and preserves clinical and custody history", () => {
   assert.ok(route.includes('previousStorageLocation: specimen.storageLocation'));
   assert.ok(!route.includes("specimen.delete"));
 });
+
+test("bilingual specimen screen exposes disposal only for rejected specimens", () => {
+  const ui = readFileSync(new URL("../src/components/specimen-actions.tsx", import.meta.url), "utf8");
+  assert.ok(ui.includes('canReject && status === "REJECTED"'));
+  assert.ok(ui.includes('setMode("DISPOSE")'));
+  assert.ok(ui.includes("disposalReason"));
+  assert.ok(ui.includes("التخلص من العينة المرفوضة"));
+  assert.ok(ui.includes('/dispose'));
+});
