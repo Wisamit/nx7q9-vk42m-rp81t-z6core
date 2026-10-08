@@ -98,5 +98,5 @@ export async function PATCH(request: Request) {
   });
   if (changed === null) return NextResponse.json({ error: "storage_location_has_active_specimens" }, { status: 409 });
   if (!changed) return NextResponse.json({ error: "storage_location_state_changed" }, { status: 409 });
-  return NextResponse.json({ status: "ok", locationId: id, status });
+  return NextResponse.json({ status: "ok", locationId: id, locationStatus: status });
 }
