@@ -90,3 +90,8 @@ Scope source: `02_MASTER_SCOPE.md` sections 20–28, with related specimen secur
 - CI #649 passed on `f660364e23cefaf632070f50c25c3cd079e9b82a`.
 - Extended the MariaDB test to exercise the **inverse** race: an uncommitted change of the master location row blocks `SELECT ... FOR UPDATE` by another connection, and a location left INACTIVE cannot be assigned by the guarded active-only lock query.
 - This is actual two-connection InnoDB evidence. It still does **not** substitute for authenticated HTTP/API concurrency tests with fully constructed specimens, transfer manifests and historical storage reconciliations. Those remain explicit acceptance blockers.
+
+## Real specimen occupancy fixture checkpoint
+
+- Extended MariaDB integration coverage with actual organization, branch, user, patient, order, specimen and registered storage records. Verifies explicit FK-based occupancy and reassesses occupancy after clearing the specimen's current location.
+- Keeps reverse lock-contention checks. This test does not yet make authenticated concurrent HTTP requests or prove every workflow respects storage locking; release acceptance remains blocked pending those tests and clinical quarantine/retention policies.
