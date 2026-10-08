@@ -13,9 +13,31 @@ type DuplicateCandidate = {
   evidence: Array<"NAME_DOB" | "PHONE">;
 };
 
-type PatientPayload = Record<string, FormDataEntryValue | null>;
+type PatientPayload = Record<string, unknown>;
 
-export function PatientCreateForm({ locale, onSuccess }: { locale: "ar" | "en"; onSuccess?: (message: string) => void }) {
+type IdentifierSchemeOption = {
+  id: string;
+  code: string;
+  nameEn: string;
+  nameAr: string | null;
+  requiresIssuingCountry: boolean;
+};
+
+type AdditionalIdentifier = {
+  schemeId: string;
+  value: string;
+  issuingCountry: string;
+};
+
+export function PatientCreateForm({
+  locale,
+  identifierSchemes,
+  onSuccess,
+}: {
+  locale: "ar" | "en";
+  identifierSchemes: IdentifierSchemeOption[];
+  onSuccess?: (message: string) => void;
+}) {
   const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
   const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
@@ -23,6 +45,7 @@ export function PatientCreateForm({ locale, onSuccess }: { locale: "ar" | "en"; 
   const [message, setMessage] = useState("");
   const [duplicateReview, setDuplicateReview] = useState<{ payload: PatientPayload; candidates: DuplicateCandidate[] } | null>(null);
   const [duplicateReason, setDuplicateReason] = useState("");
+  const [additionalIdentifiers, setAdditionalIdentifiers] = useState<AdditionalIdentifier[]>([]);
 
   function payloadFrom(form: FormData): PatientPayload {
     return {
@@ -41,6 +64,13 @@ export function PatientCreateForm({ locale, onSuccess }: { locale: "ar" | "en"; 
       addressAr: form.get("addressAr"),
       notes: form.get("notes"),
       clinicalInformation: form.get("clinicalInformation"),
+      customIdentifiers: additionalIdentifiers
+        .filter(item => item.schemeId && item.value.trim())
+        .map(item => ({
+          schemeId: item.schemeId,
+          value: item.value.trim(),
+          issuingCountry: item.issuingCountry.trim().toUpperCase(),
+        })),
     };
   }
 
@@ -69,6 +99,7 @@ export function PatientCreateForm({ locale, onSuccess }: { locale: "ar" | "en"; 
       setDuplicateReview(null);
       setDuplicateReason("");
       formRef.current?.reset();
+      setAdditionalIdentifiers([]);
       router.refresh();
       onSuccess?.(success);
     } else if (body.error === "possible_duplicates" && body.candidates?.length) {
@@ -125,6 +156,34 @@ export function PatientCreateForm({ locale, onSuccess }: { locale: "ar" | "en"; 
     <label>{tr("Passport number", "رقم جواز السفر")}<input name="passportNumber" maxLength={120} /></label>
     <label>{tr("Passport issuing country", "بلد إصدار الجواز")}<input name="passportIssuingCountry" maxLength={2} placeholder={tr("ISO code", "رمز ISO")} /></label>
     <label>{tr("Nationality code", "رمز الجنسية")}<input name="nationalityCode" maxLength={2} placeholder={tr("ISO code", "رمز ISO")} /></label>
+
+    {identifierSchemes.length > 0 && <section className="detail-card form-span">
+      <div className="table-toolbar">
+        <div>
+          <h3>{tr("Additional Identifiers", "معرّفات إضافية")}</h3>
+          <span>{tr("Insurance IDs, employee IDs, external MRNs and other configured identifiers.", "معرّفات التأمين والموظفين والأرقام الطبية الخارجية وغيرها من الأنواع المهيأة.")}</span>
+        </div>
+        {additionalIdentifiers.length < 10 && <button
+          type="button"
+          className="secondary-button"
+          onClick={() => setAdditionalIdentifiers(items => [...items, { schemeId: identifierSchemes[0]?.id || "", value: "", issuingCountry: "" }])}
+        >{tr("Add Identifier", "إضافة معرّف")}</button>}
+      </div>
+      {additionalIdentifiers.length === 0 ? <p className="muted">{tr("No additional identifiers.", "لا توجد معرّفات إضافية.")}</p> :
+        <div className="summary-list">{additionalIdentifiers.map((item, index) => {
+          const selected = identifierSchemes.find(scheme => scheme.id === item.schemeId);
+          return <div key={index}>
+            <span>
+              <select value={item.schemeId} onChange={event => setAdditionalIdentifiers(items => items.map((row, rowIndex) => rowIndex === index ? { ...row, schemeId: event.target.value } : row))}>
+                {identifierSchemes.map(scheme => <option key={scheme.id} value={scheme.id}>{scheme.code} — {locale === "ar" ? scheme.nameAr || scheme.nameEn : scheme.nameEn}</option>)}
+              </select>
+              <input value={item.value} maxLength={120} onChange={event => setAdditionalIdentifiers(items => items.map((row, rowIndex) => rowIndex === index ? { ...row, value: event.target.value } : row))} placeholder={tr("Identifier value", "قيمة المعرّف")} />
+              {selected?.requiresIssuingCountry && <input value={item.issuingCountry} maxLength={2} onChange={event => setAdditionalIdentifiers(items => items.map((row, rowIndex) => rowIndex === index ? { ...row, issuingCountry: event.target.value } : row))} placeholder={tr("Country", "البلد")} />}
+            </span>
+            <button type="button" className="secondary-button" onClick={() => setAdditionalIdentifiers(items => items.filter((_, rowIndex) => rowIndex !== index))}>{tr("Remove", "إزالة")}</button>
+          </div>;
+        })}</div>}
+    </section>}
     <label>{tr("Address (English)", "العنوان بالإنجليزية")}<textarea name="addressEn" maxLength={4000} rows={2} /></label>
     <label dir="rtl">{tr("Address (Arabic)", "العنوان بالعربية")}<textarea name="addressAr" maxLength={4000} rows={2} dir="rtl" /></label>
     <label>{tr("Clinical information", "المعلومات السريرية")}<textarea name="clinicalInformation" maxLength={4000} rows={3} /></label>
