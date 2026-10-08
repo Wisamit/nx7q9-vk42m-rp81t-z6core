@@ -132,7 +132,11 @@ export function EquipmentManager({
       reason: form.get("reason"),
       impact: form.get("impact"),
       resolution: form.get("resolution"),
-    }, "downtime", action === "OPEN" ? tr("Downtime opened.", "تم فتح حدث توقف.") : tr("Downtime closed.", "تم إغلاق حدث التوقف."), event.currentTarget);
+    }, "downtime", action === "OPEN"
+      ? tr("Downtime opened.", "تم فتح حدث توقف.")
+      : action === "CLOSE"
+        ? tr("Downtime closed. Equipment remains out of service until authorized restoration.", "تم إغلاق التوقف. تبقى المعدة خارج الخدمة حتى إعادة تفعيلها بشكل معتمد.")
+        : tr("Equipment returned to service.", "تمت إعادة المعدة إلى الخدمة."), event.currentTarget);
   }
 
   async function maintenancePlan(event: FormEvent<HTMLFormElement>) {
@@ -228,7 +232,7 @@ export function EquipmentManager({
       <h2>{tr("Downtime", "التوقف")}</h2>
       <form className="catalog-form" onSubmit={downtime}>
         <label className="form-span">{tr("Equipment", "المعدة")}<select name="equipmentId" required defaultValue=""><option value="">{tr("Select equipment…", "اختر المعدة…")}</option>{equipmentOptions.map(item => <option key={item.id} value={item.id}>{item.assetId} — {item.name}</option>)}</select></label>
-        <label>{tr("Action", "الإجراء")}<select name="action" defaultValue="OPEN"><option value="OPEN">{tr("Open downtime", "فتح توقف")}</option><option value="CLOSE">{tr("Close downtime", "إغلاق التوقف")}</option></select></label>
+        <label>{tr("Action", "الإجراء")}<select name="action" defaultValue="OPEN"><option value="OPEN">{tr("Open downtime", "فتح توقف")}</option><option value="CLOSE">{tr("Close downtime", "إغلاق التوقف")}</option><option value="RESTORE">{tr("Return to service (after clearance)", "إعادة للخدمة بعد استيفاء الشروط")}</option></select></label>
         <label className="form-span">{tr("Reason", "السبب")}<input name="reason" /></label>
         <label className="form-span">{tr("Impact", "التأثير")}<input name="impact" /></label>
         <label className="form-span">{tr("Resolution", "الحل")}<input name="resolution" /></label>

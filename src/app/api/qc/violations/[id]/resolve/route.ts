@@ -37,24 +37,30 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (violation.status !== "OPEN") return NextResponse.json({ error: "qc_violation_not_open", status: violation.status }, { status: 409 });
 
   const resolvedAt = new Date();
-  const updated = await prisma.$transaction(async tx => {
-    const action = await tx.qcAction.create({
-      data: {
-        violationId: violation.id,
-        actionType,
-        description,
-        performedByUserId: session.user.id,
-      },
-    });
-    const resolved = await tx.qcRuleViolation.update({
-      where: { id: violation.id },
-      data: {
-        status: "RESOLVED",
-        resolvedByUserId: session.user.id,
-        resolvedAt,
-        resolutionNote,
-      },
-    });
+  let updated;
+  try {
+    updated = await prisma.$transaction(async tx => {
+      // Claim the open violation atomically before recording any corrective action.
+      const claim = await tx.qcRuleViolation.updateMany({
+        where: { id: violation.id, status: "OPEN", run: { organizationId: session.user.organizationId, branchId: violation.run.branchId } },
+        data: {
+          status: "RESOLVED",
+          resolvedByUserId: session.user.id,
+          resolvedAt,
+          resolutionNote,
+        },
+      });
+      if (claim.count !== 1) throw new Error("QC_VIOLATION_ALREADY_RESOLVED");
+
+      const action = await tx.qcAction.create({
+        data: {
+          violationId: violation.id,
+          actionType,
+          description,
+          performedByUserId: session.user.id,
+        },
+      });
+      const resolved = await tx.qcRuleViolation.findUniqueOrThrow({ where: { id: violation.id } });
     await tx.auditEvent.create({
       data: {
         organizationId: session.user.organizationId,
@@ -77,8 +83,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         userAgent: ctx.userAgent,
       },
     });
-    return resolved;
-  });
+      return resolved;
+    }, { isolationLevel: "Serializable", timeout: 30000 });
+  } catch (error) {
+    if (error instanceof Error && error.message === "QC_VIOLATION_ALREADY_RESOLVED") {
+      return NextResponse.json({ error: "qc_violation_not_open" }, { status: 409 });
+    }
+    return NextResponse.json({ error: "qc_violation_resolution_conflict" }, { status: 409 });
+  }
 
   return NextResponse.json({ status: "ok", violation: updated });
 }

@@ -10,6 +10,7 @@ import { releaseEligibility } from "@/lib/clinical-safety";
 
 class SpecimenClinicalHold extends Error {}
 class ReportReleaseStateChanged extends Error {}
+class AnalyzerQcClinicalHold extends Error {}
 
 export async function POST(_: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await requirePermission("results.release");
@@ -40,16 +41,26 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
       validationStage: result.validationStage,
     }, { status: 409 });
   }
+  const analyzerComponentIds = result.values
+    .filter(value => !value.isCalculated && value.analyzerImportId)
+    .map(value => value.componentId);
+  if (result.source === "ANALYZER" && (!result.analyzerId || analyzerComponentIds.length === 0)) {
+    return NextResponse.json({
+      error: "qc_release_blocked",
+      qcStatus: "BLOCK",
+      reasons: [{ code: "ANALYZER_RESULT_PROVENANCE_MISSING", componentId: null }],
+    }, { status: 409 });
+  }
   const qcGate = result.source === "ANALYZER" && result.analyzerId
     ? await resolveAnalyzerQcGate(prisma, {
         analyzerId: result.analyzerId,
         testId: result.orderItem.testId,
-        componentIds: result.values
-          .filter(value => !value.isCalculated && value.analyzerImportId)
-          .map(value => value.componentId),
+        componentIds: analyzerComponentIds,
         asOf: new Date(),
       })
     : null;
+
+  let committedQcGate = qcGate;
 
   const criticalValues = result.values.filter((value) => value.isCritical);
   const criticalEvent = result.criticalEvents[0] || null;
@@ -94,6 +105,28 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
     `;
     if (associatedSpecimens.some(specimen => specimen.status === "QUARANTINED")) {
       throw new SpecimenClinicalHold();
+    }
+    if (result.source === "ANALYZER" && result.analyzerId) {
+      // Share the analyzer lock with QC run/target writes and the equipment lock
+      // with downtime transitions. Preflight QC checks alone are race-prone.
+      const analyzerLocks = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM analyzers
+        WHERE id = ${result.analyzerId} AND organization_id = ${session.user.organizationId}
+        FOR UPDATE
+      `;
+      if (analyzerLocks.length !== 1) throw new AnalyzerQcClinicalHold();
+      await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM equipment
+        WHERE analyzer_id = ${result.analyzerId} AND organization_id = ${session.user.organizationId}
+        FOR UPDATE
+      `;
+      committedQcGate = await resolveAnalyzerQcGate(tx, {
+        analyzerId: result.analyzerId,
+        testId: result.orderItem.testId,
+        componentIds: analyzerComponentIds,
+        asOf: releasedAt,
+      });
+      if (committedQcGate.blocking) throw new AnalyzerQcClinicalHold();
     }
     // A second release request must not create a new report version from
     // an already-released result or a stale validation snapshot.
@@ -239,8 +272,8 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
           reportTemplateCode: effectiveTemplate?.template.code || null,
           amendedFromId: result.amendedFromId,
           microbiologyCaseId: result.microbiologyCase?.id || null,
-          qcGateStatus: qcGate?.status || null,
-          qcGateReasons: qcGate?.reasons || [],
+          qcGateStatus: committedQcGate?.status || null,
+          qcGateReasons: committedQcGate?.reasons || [],
           integrationQueue,
         },
         reason: result.amendmentReason || null,
@@ -260,6 +293,7 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
   }, { timeout: 30000 }).catch(error => {
     if (error instanceof SpecimenClinicalHold) return "CLINICAL_HOLD" as const;
     if (error instanceof ReportReleaseStateChanged) return "RELEASE_STATE_CHANGED" as const;
+    if (error instanceof AnalyzerQcClinicalHold) return "QC_HOLD" as const;
     throw error;
   });
   if (released === "CLINICAL_HOLD") {
@@ -267,6 +301,13 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
   }
   if (released === "RELEASE_STATE_CHANGED") {
     return NextResponse.json({ error: "result_already_released_or_state_changed" }, { status: 409 });
+  }
+  if (released === "QC_HOLD") {
+    return NextResponse.json({
+      error: "qc_release_blocked",
+      qcStatus: committedQcGate?.status || "BLOCK",
+      reasons: committedQcGate?.reasons || [{ code: "ANALYZER_UNAVAILABLE", componentId: null }],
+    }, { status: 409 });
   }
 
   return NextResponse.json({

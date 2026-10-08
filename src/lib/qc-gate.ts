@@ -48,6 +48,8 @@ export async function resolveAnalyzerQcGate(
     include: {
       downtimeEvents: { where: { status: "OPEN" }, take: 1 },
       calibrationEvents: { orderBy: { createdAt: "desc" }, take: 1 },
+      maintenancePlans: { where: { status: "ACTIVE", nextDueAt: { lte: asOf } }, take: 1 },
+      maintenanceEvents: { orderBy: { createdAt: "desc" }, take: 1 },
     },
   });
 
@@ -61,9 +63,17 @@ export async function resolveAnalyzerQcGate(
   if (equipment.downtimeEvents.length > 0) {
     reasons.push({ code: "EQUIPMENT_DOWNTIME_OPEN", componentId: null, detail: equipment.downtimeEvents[0].id });
   }
+  if (equipment.maintenanceEvents[0]?.status === "IN_PROGRESS") {
+    reasons.push({ code: "EQUIPMENT_MAINTENANCE_IN_PROGRESS", componentId: null, detail: equipment.maintenanceEvents[0].id });
+  }
+  if (equipment.maintenancePlans.length > 0) {
+    reasons.push({ code: "EQUIPMENT_MAINTENANCE_OVERDUE", componentId: null, detail: equipment.maintenancePlans[0].id });
+  }
   const latestCalibration = equipment.calibrationEvents[0] || null;
   if (latestCalibration?.status === "FAIL") {
     reasons.push({ code: "CALIBRATION_FAILED", componentId: null, detail: latestCalibration.id });
+  } else if (latestCalibration?.status === "PASS" && !latestCalibration.approvedAt) {
+    reasons.push({ code: "CALIBRATION_UNAPPROVED", componentId: null, detail: latestCalibration.id });
   } else if (latestCalibration?.status === "IN_PROGRESS") {
     reasons.push({ code: "CALIBRATION_IN_PROGRESS", componentId: null, detail: latestCalibration.id });
   } else if (
@@ -164,6 +174,9 @@ export async function resolveAnalyzerQcGate(
     "ANALYZER_EQUIPMENT_NOT_REGISTERED",
     "EQUIPMENT_NOT_ACTIVE",
     "EQUIPMENT_DOWNTIME_OPEN",
+    "EQUIPMENT_MAINTENANCE_IN_PROGRESS",
+    "EQUIPMENT_MAINTENANCE_OVERDUE",
+    "CALIBRATION_UNAPPROVED",
     "CALIBRATION_FAILED",
     "CALIBRATION_IN_PROGRESS",
     "CALIBRATION_DUE",

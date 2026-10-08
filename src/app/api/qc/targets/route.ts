@@ -80,23 +80,35 @@ export async function POST(request: Request) {
   });
   if (!mapping) return NextResponse.json({ error: "active_analyzer_mapping_required_for_qc_target" }, { status: 409 });
 
-  const overlapping = await prisma.qcTarget.findFirst({
-    where: {
-      organizationId: session.user.organizationId,
-      qcLotId,
-      analyzerId,
-      testId,
-      componentId,
-      status: "ACTIVE",
-      effectiveFrom: { lte: effectiveTo || new Date("9999-12-31") },
-      OR: [{ effectiveTo: null }, { effectiveTo: { gte: effectiveFrom } }],
-    },
-    select: { id: true },
-  });
-  if (overlapping) return NextResponse.json({ error: "overlapping_qc_target" }, { status: 409 });
+  // The overlap read must run behind an analyzer row lock in the same transaction
+  // as creation; checking outside a transaction allows concurrent overlapping targets.
 
-  const target = await prisma.$transaction(async tx => {
-    const created = await tx.qcTarget.create({
+  let target;
+  try {
+    target = await prisma.$transaction(async tx => {
+      const locked = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM analyzers WHERE id = ${analyzerId}
+        AND organization_id = ${session.user.organizationId} AND status = 'ACTIVE'
+        FOR UPDATE
+      `;
+      if (locked.length !== 1) throw new Error("ANALYZER_NOT_ACTIVE");
+
+      const [freshLot, overlapping] = await Promise.all([
+        tx.qcLot.findFirst({ where: { id: qcLotId, organizationId: session.user.organizationId, status: "ACTIVE" } }),
+        tx.qcTarget.findFirst({
+          where: {
+            organizationId: session.user.organizationId,
+            qcLotId, analyzerId, testId, componentId, status: "ACTIVE",
+            effectiveFrom: { lte: effectiveTo || new Date("9999-12-31") },
+            OR: [{ effectiveTo: null }, { effectiveTo: { gte: effectiveFrom } }],
+          },
+          select: { id: true },
+        }),
+      ]);
+      if (!freshLot) throw new Error("QC_LOT_NOT_ACTIVE");
+      if (overlapping) throw new Error("OVERLAPPING_QC_TARGET");
+
+      const created = await tx.qcTarget.create({
       data: {
         organizationId: session.user.organizationId,
         qcLotId,
@@ -139,8 +151,15 @@ export async function POST(request: Request) {
         userAgent: ctx.userAgent,
       },
     });
-    return created;
-  });
+      return created;
+    }, { isolationLevel: "Serializable", timeout: 30000 });
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : "";
+    if (reason === "OVERLAPPING_QC_TARGET") {
+      return NextResponse.json({ error: "overlapping_qc_target" }, { status: 409 });
+    }
+    return NextResponse.json({ error: "qc_target_creation_conflict" }, { status: 409 });
+  }
 
   return NextResponse.json({ status: "ok", target }, { status: 201 });
 }
