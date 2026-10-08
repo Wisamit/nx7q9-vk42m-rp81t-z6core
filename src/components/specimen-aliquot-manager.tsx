@@ -65,13 +65,13 @@ export function SpecimenAliquotManager({
 }) {
   const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
   const router = useRouter();
-  const [locations, setLocations] = useState<Array<{ id: string; path: string }>>([]);
+  const [locations, setLocations] = useState<Array<{ id: string; path: string; status: string }>>([]);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const usable = ["COLLECTED","RECEIVED","IN_PROCESS"].includes(status);
   useEffect(() => {
     if (!currentBranchId) return;
-    fetch(`/api/settings/specimen-storage-locations?branchId=${encodeURIComponent(currentBranchId)}`)
+    fetch(`/api/settings/specimen-storage-locations?branchId=${encodeURIComponent(currentBranchId)}&includeInactive=true`)
       .then(response => response.ok ? response.json() : { locations: [] })
       .then(data => setLocations(Array.isArray(data.locations) ? data.locations : []))
       .catch(() => setLocations([]));
@@ -96,6 +96,8 @@ export function SpecimenAliquotManager({
       usage_order_item_not_linked: tr("The selected test is not linked to this specimen.", "الفحص المحدد غير مرتبط بهذه العينة."),
       specimen_volume_changed: tr("Available volume changed concurrently. Review the updated balance and try again.", "تغير الحجم المتاح بالتزامن. راجع الرصيد الجديد وحاول مجددًا."),
       container_not_found: tr("Selected aliquot container is unavailable.", "حاوية الجزء المشتق المحددة غير متاحة."),
+      storage_location_has_active_specimens: tr("Move all active specimens out of this position before deactivating it.", "انقل جميع العينات الفعالة من هذا الموقع قبل تعطيله."),
+      invalid_storage_status_change: tr("Location, status and reason are required.", "الموقع والحالة والسبب مطلوبة."),
       storage_location_not_registered: tr("Choose a registered active storage position at this branch.", "اختر موقع تخزين معرّفًا وفعّالًا في هذا الفرع."),
       storage_location_exists: tr("This storage location is already registered.", "موقع التخزين معرّف مسبقًا."),
       storage_position_required: tr("Structured storage position is required.", "موقع التخزين المنظّم مطلوب."),
@@ -181,6 +183,29 @@ export function SpecimenAliquotManager({
     }
   }
 
+  async function changeStorageStatus(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const response = await fetch("/api/settings/specimen-storage-locations", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: form.get("locationId"), status: form.get("status"), reason: form.get("reason") }),
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      setMessage(errorMessage(body.error));
+      return;
+    }
+    if (currentBranchId) {
+      const refreshed = await fetch(`/api/settings/specimen-storage-locations?branchId=${encodeURIComponent(currentBranchId)}&includeInactive=true`);
+      if (refreshed.ok) {
+        const data = await refreshed.json();
+        setLocations(data.locations || []);
+      }
+    }
+    setMessage(tr("Storage location status updated and audited.", "تم تحديث حالة موقع التخزين وتسجيل العملية."));
+  }
+
   async function relocateStorage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
@@ -246,6 +271,20 @@ export function SpecimenAliquotManager({
 
     {canManage && usable && <details className="specimen-history">
       <summary>{tr("Update Physical Storage", "تحديث موقع التخزين الفعلي")}</summary>
+      {canManageStorageSettings && <form className="catalog-form specimen-action-form" onSubmit={changeStorageStatus}>
+        <strong className="form-span">{tr("Activate / deactivate storage location", "تفعيل / تعطيل موقع التخزين")}</strong>
+        <label className="form-span">{tr("Registered position", "الموقع المعرّف")}
+          <select name="locationId" defaultValue="" required>
+            <option value="">{tr("Select position", "اختر الموقع")}</option>
+            {locations.map(location => <option key={location.id} value={location.id}>{location.path} ({location.status})</option>)}
+          </select>
+        </label>
+        <label>{tr("New status", "الحالة الجديدة")}
+          <select name="status" defaultValue="INACTIVE"><option value="INACTIVE">{tr("Inactive", "غير فعّال")}</option><option value="ACTIVE">{tr("Active", "فعّال")}</option></select>
+        </label>
+        <label className="form-span">{tr("Reason", "السبب")}<textarea name="reason" maxLength={1000} required /></label>
+        <button className="secondary-button form-span">{tr("Save status", "حفظ الحالة")}</button>
+      </form>}
       {canManageStorageSettings && <form className="catalog-form specimen-action-form" onSubmit={registerStorage}>
         <strong className="form-span">{tr("Register branch storage position", "تعريف موقع تخزين في الفرع")}</strong>
         <label>{tr("Zone / area", "المنطقة")}<input name="zone" maxLength={40} required /></label>
@@ -258,7 +297,7 @@ export function SpecimenAliquotManager({
         <label className="form-span">{tr("Registered physical position", "موقع التخزين المعرّف")}
           <select name="selectedLocation" required defaultValue="">
             <option value="">{tr("Select a storage position", "اختر موقع التخزين")}</option>
-            {locations.map(location => <option key={location.id} value={location.path}>{location.path}</option>)}
+            {locations.filter(location => location.status === "ACTIVE").map(location => <option key={location.id} value={location.path}>{location.path}</option>)}
           </select>
         </label>
         <label className="form-span">{tr("Relocation reason", "سبب تغيير الموقع")}<textarea name="reason" rows={2} maxLength={1000} required /></label>
