@@ -15,6 +15,45 @@ class PatientMergeError extends Error {
   }
 }
 
+type MergeIdentityPatient = {
+  patientNumber: string;
+  fullNameEn: string;
+  fullNameAr: string | null;
+  dateOfBirth: Date | null;
+  sexAtBirth: string;
+  phone: string | null;
+  whatsapp: string | null;
+  email: string | null;
+  nationalityCode: string | null;
+  addressEn: string | null;
+  addressAr: string | null;
+  creationBranchId: string | null;
+  identifiers: Array<{
+    identifierType: string;
+    value: string;
+    issuingCountry: string | null;
+    isPrimary: boolean;
+  }>;
+};
+
+function mergeIdentitySnapshot(patient: MergeIdentityPatient) {
+  return {
+    patientNumber: patient.patientNumber,
+    fullNameEn: patient.fullNameEn,
+    fullNameAr: patient.fullNameAr,
+    dateOfBirth: patient.dateOfBirth?.toISOString().slice(0, 10) || null,
+    sexAtBirth: patient.sexAtBirth,
+    phone: patient.phone,
+    whatsapp: patient.whatsapp,
+    email: patient.email,
+    nationalityCode: patient.nationalityCode,
+    addressEn: patient.addressEn,
+    addressAr: patient.addressAr,
+    creationBranchId: patient.creationBranchId,
+    identifiers: patient.identifiers,
+  };
+}
+
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await requirePermission("patients.merge");
   const ctx = await requestContext();
@@ -71,23 +110,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       if (!eligibility.ok) throw new PatientMergeError(eligibility.error);
 
       const mergedAt = new Date();
-      const identitySnapshot = (patient: typeof source) => ({
-        patientNumber: patient.patientNumber,
-        fullNameEn: patient.fullNameEn,
-        fullNameAr: patient.fullNameAr,
-        dateOfBirth: patient.dateOfBirth?.toISOString().slice(0, 10) || null,
-        sexAtBirth: patient.sexAtBirth,
-        phone: patient.phone,
-        whatsapp: patient.whatsapp,
-        email: patient.email,
-        nationalityCode: patient.nationalityCode,
-        addressEn: patient.addressEn,
-        addressAr: patient.addressAr,
-        creationBranchId: patient.creationBranchId,
-        identifiers: patient.identifiers,
-      });
-      const sourceIdentitySnapshot = identitySnapshot(source);
-      const targetIdentitySnapshot = identitySnapshot(target);
+      const sourceIdentitySnapshot = mergeIdentitySnapshot(source);
+      const targetIdentitySnapshot = mergeIdentitySnapshot(target);
       const duplicateEvidenceSnapshot = patientDuplicateEvidence(source, target);
 
       const claimed = await tx.patient.updateMany({
