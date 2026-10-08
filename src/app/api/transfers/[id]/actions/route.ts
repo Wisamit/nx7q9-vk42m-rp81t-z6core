@@ -153,6 +153,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const receivedAt = new Date();
 
   const result = await prisma.$transaction(async (tx) => {
+    // Serialize receipts on the manifest, including receipts of different
+    // barcodes. Otherwise two operators can both write PARTIALLY_RECEIVED.
+    const lockedManifest = await tx.$queryRaw<Array<{ id: string; status: string }>>`
+      SELECT id, status FROM specimen_transfer_manifests
+      WHERE id = ${manifest.id} AND organization_id = ${session.user.organizationId}
+      FOR UPDATE
+    `;
+    if (lockedManifest.length !== 1 || !["DISPATCHED", "PARTIALLY_RECEIVED"].includes(lockedManifest[0].status)) {
+      throw new Error("SPECIMEN_PREANALYTICAL_STATE_CHANGED");
+    }
     const claimed = await tx.specimenTransferItem.updateMany({
       where: {
         manifestId: manifest.id,
