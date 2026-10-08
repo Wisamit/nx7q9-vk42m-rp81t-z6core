@@ -7,7 +7,7 @@ function source(file: string) {
   return readFileSync(new URL(file, import.meta.url), "utf8");
 }
 
-test("reference interval previews respect order-time frozen sex, DOB, recorded age and order timestamp", () => {
+test("reference interval previews freeze patient demographics but select currently effective reference policy", () => {
   const page = source("../src/app/worklists/[orderItemId]/page.tsx");
   const interval = page.slice(page.indexOf("resolveReferenceInterval(prisma, {"),page.indexOf("})",page.indexOf("resolveReferenceInterval(prisma, {")) + 2);
   for (const evidence of [
@@ -17,7 +17,7 @@ test("reference interval previews respect order-time frozen sex, DOB, recorded a
     "item.order.patientAgeUnitSnapshot",
     "item.order.patientAgeRecordedAtSnapshot",
     "ageAsOf: item.order.orderedAt",
-    "at: item.order.orderedAt",
+    "at: now",
   ]) assert.ok(interval.includes(evidence), "missing frozen interval input: "+evidence);
   assert.ok(!interval.includes("item.order.patient.sexAtBirth"));
   assert.ok(!interval.includes("item.order.patient.dateOfBirth"));
