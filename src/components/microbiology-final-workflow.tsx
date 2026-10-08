@@ -11,6 +11,7 @@ export function MicrobiologyFinalWorkflow({
   canEnter,
   canVerify,
   canRelease,
+  specimenReadyForProcessing,
   orderId,
   locale,
 }: {
@@ -21,6 +22,7 @@ export function MicrobiologyFinalWorkflow({
   canEnter: boolean;
   canVerify: boolean;
   canRelease: boolean;
+  specimenReadyForProcessing: boolean;
   orderId: string;
   locale: "ar" | "en";
 }) {
@@ -127,7 +129,7 @@ export function MicrobiologyFinalWorkflow({
     <h2>{tr("Final Microbiology Result", "نتيجة الأحياء الدقيقة النهائية")}</h2>
     <p className="muted">{tr("Submitting creates or updates a versioned LaboratoryResult. Verification and release remain separate controlled steps.", "يؤدي الإرسال إلى إنشاء أو تحديث LaboratoryResult ذي إصدار محفوظ، بينما يبقى التحقق والإصدار خطوتين مستقلتين ومضبوطتين.")}</p>
 
-    {canEnter && (!resultStatus || ["DRAFT","ENTERED"].includes(resultStatus)) && <form className="catalog-form" onSubmit={submitFinal}>
+    {canEnter && specimenReadyForProcessing && (!resultStatus || ["DRAFT","ENTERED"].includes(resultStatus)) && <form className="catalog-form" onSubmit={submitFinal}>
       <label className="form-span">{tr("Final interpretive comment", "التعليق التفسيري النهائي")}
         <textarea name="finalComment" rows={4} required defaultValue={finalComment} />
       </label>
@@ -145,11 +147,11 @@ export function MicrobiologyFinalWorkflow({
         <button className="secondary-button" type="button" disabled={busy !== ""} onClick={() => void withdraw()}>
           {busy === "withdraw" ? tr("Withdrawing…", "جارٍ السحب…") : tr("Withdraw for Correction", "سحب للتصحيح")}
         </button>}
-      {resultId && resultStatus === "ENTERED" && canVerify &&
+      {resultId && resultStatus === "ENTERED" && canVerify && specimenReadyForProcessing &&
         <button className="secondary-button" type="button" disabled={busy !== ""} onClick={() => void verify()}>
           {busy === "verify" ? tr("Verifying…", "جارٍ التحقق…") : tr("Verify Microbiology Result", "التحقق من نتيجة الأحياء الدقيقة")}
         </button>}
-      {resultId && resultStatus === "VERIFIED" && canRelease &&
+      {resultId && resultStatus === "VERIFIED" && canRelease && specimenReadyForProcessing &&
         <button className="primary-button" type="button" disabled={busy !== ""} onClick={() => void release()}>
           {busy === "release" ? tr("Releasing…", "جارٍ الإصدار…") : tr("Release Microbiology Result", "إصدار نتيجة الأحياء الدقيقة")}
         </button>}
