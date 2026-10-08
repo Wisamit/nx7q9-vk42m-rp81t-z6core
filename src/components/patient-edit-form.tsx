@@ -39,6 +39,7 @@ export function PatientEditForm({ patient, locale }: { patient: PatientEditValue
   const router = useRouter();
   const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
   const [busy, setBusy] = useState(false);
+  const [recordedAgeUnit, setRecordedAgeUnit] = useState<string>(patient.recordedAgeUnit || "YEAR");
   const [message, setMessage] = useState("");
   const [duplicateReview, setDuplicateReview] = useState<{ payload: PatientPayload; candidates: DuplicateCandidate[] } | null>(null);
   const [duplicateReason, setDuplicateReason] = useState("");
@@ -141,8 +142,8 @@ export function PatientEditForm({ patient, locale }: { patient: PatientEditValue
       <label>{tr("Full name (English)", "الاسم الكامل بالإنجليزية")}<input name="fullNameEn" required maxLength={220} defaultValue={patient.fullNameEn} /></label>
       <label dir="rtl">الاسم الكامل بالعربية<input name="fullNameAr" maxLength={220} dir="rtl" defaultValue={patient.fullNameAr || ""} /></label>
       <label>{tr("Date of birth (optional)", "تاريخ الميلاد (اختياري)")}<input name="dateOfBirth" type="date" defaultValue={patient.dateOfBirth || ""} /></label>
-      <label>{tr("Age", "العمر")}<input name="recordedAgeValue" type="number" min="0" max="150" step="1" defaultValue={patient.recordedAgeValue ?? ""} required /></label>
-      <label>{tr("Age unit", "وحدة العمر")}<select name="recordedAgeUnit" defaultValue={patient.recordedAgeUnit || "YEAR"} required><option value="YEAR">{tr("Years", "سنوات")}</option><option value="MONTH">{tr("Months", "أشهر")}</option><option value="DAY">{tr("Days", "أيام")}</option></select></label>
+      <label>{tr("Age", "العمر")}<input name="recordedAgeValue" type="number" min="0" max={recordedAgeUnit === "DAY" ? 54787 : recordedAgeUnit === "MONTH" ? 1800 : 150} step="1" defaultValue={patient.recordedAgeValue ?? ""} required /></label>
+      <label>{tr("Age unit", "وحدة العمر")}<select name="recordedAgeUnit" value={recordedAgeUnit} onChange={event => setRecordedAgeUnit(event.target.value)} required><option value="YEAR">{tr("Years", "سنوات")}</option><option value="MONTH">{tr("Months", "أشهر")}</option><option value="DAY">{tr("Days", "أيام")}</option></select></label>
       <label>{tr("Sex", "الجنس")}<select name="sexAtBirth" defaultValue={patient.sexAtBirth} required>{patient.sexAtBirth === "UNKNOWN" && <option value="UNKNOWN" disabled>{tr("Select sex", "اختر الجنس")}</option>}<option value="MALE">{tr("Male", "ذكر")}</option><option value="FEMALE">{tr("Female", "أنثى")}</option></select></label>
       <label>{tr("Phone", "الهاتف")}<input name="phone" maxLength={50} defaultValue={patient.phone || ""} /></label>
       <label>{tr("WhatsApp", "واتساب")}<input name="whatsapp" maxLength={50} defaultValue={patient.whatsapp || ""} /></label>
