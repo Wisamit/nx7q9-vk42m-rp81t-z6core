@@ -296,7 +296,7 @@ export function SpecimenAliquotManager({
           <select name="status" defaultValue="INACTIVE"><option value="INACTIVE">{tr("Inactive", "غير فعّال")}</option><option value="ACTIVE">{tr("Active", "فعّال")}</option></select>
         </label>
         <label className="form-span">{tr("Reason", "السبب")}<textarea name="reason" maxLength={1000} required /></label>
-        <button className="secondary-button form-span">{tr("Save status", "حفظ الحالة")}</button>
+        <button className="secondary-button form-span" disabled={storageBusy || busy}>{tr("Save status", "حفظ الحالة")}</button>
       </form>}
       {canManageStorageSettings && <form className="catalog-form specimen-action-form" onSubmit={registerStorage}>
         <strong className="form-span">{tr("Register branch storage position", "تعريف موقع تخزين في الفرع")}</strong>
