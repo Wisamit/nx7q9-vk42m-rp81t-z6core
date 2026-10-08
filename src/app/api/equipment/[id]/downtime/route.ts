@@ -44,7 +44,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         include: {
           downtimeEvents: { where: { status: "OPEN" }, take: 1 },
           calibrationEvents: { orderBy: { createdAt: "desc" }, take: 1 },
-          maintenanceEvents: { where: { status: "IN_PROGRESS" }, take: 1 },
+          maintenanceEvents: { orderBy: { createdAt: "desc" }, take: 1 },
           maintenancePlans: { where: { status: "ACTIVE", nextDueAt: { lte: now } }, take: 1 },
         },
       });
@@ -110,10 +110,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       if (current.status !== "OUT_OF_SERVICE") throw new Error("EQUIPMENT_NOT_OUT_OF_SERVICE");
       const calibration = current.calibrationEvents[0];
       if (calibration && (
-        calibration.status !== "PASS" || !calibration.approvedAt ||
-        (calibration.dueAt && calibration.dueAt <= now)
+        calibration.status !== "PASS" || !calibration.approvedAt
       )) throw new Error("CALIBRATION_NOT_CLEARED");
-      if (current.maintenanceEvents.length > 0 || current.maintenancePlans.length > 0) {
+      if (current.maintenanceEvents[0]?.status === "IN_PROGRESS" || current.maintenancePlans.length > 0) {
         throw new Error("MAINTENANCE_NOT_CLEARED");
       }
       const restored = await tx.equipment.updateMany({
