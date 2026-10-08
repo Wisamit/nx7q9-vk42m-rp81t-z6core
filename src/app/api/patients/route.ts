@@ -27,7 +27,7 @@ export async function POST(request: Request) {
   if (!sexAtBirth) return NextResponse.json({ error: "sex_required" }, { status: 400 });
   const ageText = text(body.recordedAgeValue, 4);
   const ageUnit = text(body.recordedAgeUnit, 8);
-  const recordedAgeValue = /^(0|[1-9][0-9]{0,2})$/.test(ageText) ? Number(ageText) : null;
+  const recordedAgeValue = /^(0|[1-9][0-9]{0,4})$/.test(ageText) ? Number(ageText) : null;
   if (recordedAgeValue === null || !["DAY","MONTH","YEAR"].includes(ageUnit) ||
       (ageUnit === "YEAR" && recordedAgeValue > 150) ||
       (ageUnit === "MONTH" && recordedAgeValue > 1800) ||
