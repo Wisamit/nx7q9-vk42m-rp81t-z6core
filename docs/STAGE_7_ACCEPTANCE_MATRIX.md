@@ -24,7 +24,7 @@ The existing repository already contains much of the Core Laboratory Results cap
 
 1. Correct reference-interval preview in the worklist detail page to use `patientSexSnapshot`, `patientDobSnapshot`, recorded-age snapshots and `orderedAt` as age context, but use the current effective date for reference policy selection as the entry API does.
 2. Prevent duplicate technical and medical reviews using an optimistic compare-and-swap against status, validation stage, `updatedAt` and organization, within the same transaction as clinical review/audit events.
-3. Lock the specimen row during technical and medical validation; disallow approval when sample status is not `RECEIVED`/`IN_PROCESS` or its current branch no longer matches the performing branch.
+3. Lock the specimen row during technical and medical validation; disallow **technical review and medical approval** when sample status is not `RECEIVED`/`IN_PROCESS` or its current branch no longer matches the performing branch. Medical RETURN for documented correction remains allowed after quarantine (it cannot approve or release a result).
 4. Reject malformed medical-validation actions instead of treating any value as an approval.
 5. Add automated fail-closed regression coverage.
 
