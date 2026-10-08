@@ -8,6 +8,7 @@ test("recorded ages accept day and month maximums while respecting unit limits",
     "../src/app/api/patients/[id]/route.ts",
   ]) {
     const source = readFileSync(new URL(path, import.meta.url), "utf8");
+    assert.ok(source.includes('const ageText = text(body.recordedAgeValue, 5)'));
     assert.ok(source.includes('/^(0|[1-9][0-9]{0,4})$/.test(ageText)'));
     assert.ok(source.includes('ageUnit === "YEAR" && recordedAgeValue > 150'));
     assert.ok(source.includes('ageUnit === "MONTH" && recordedAgeValue > 1800'));
