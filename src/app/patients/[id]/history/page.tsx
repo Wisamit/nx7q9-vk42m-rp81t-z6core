@@ -94,11 +94,11 @@ export default async function PatientHistoryPage({ params }: { params: Promise<{
         where: {
           organizationId: session.user.organizationId,
           status: { in: ["RELEASED", "AMENDED"] },
+          performingBranchId: { in: branchIds },
           orderItem: {
             order: {
               organizationId: session.user.organizationId,
               patientId: { in: patientIds },
-              orderingBranchId: { in: branchIds },
             },
             ...itemDepartmentFilter,
           },
@@ -123,7 +123,12 @@ export default async function PatientHistoryPage({ params }: { params: Promise<{
             },
           },
           values: {
-            orderBy: { componentCodeSnapshot: "asc" },
+            where: { reportVisibleSnapshot: { not: false } },
+            orderBy: [
+              { reportSectionOrderSnapshot: "asc" },
+              { reportDisplayOrderSnapshot: "asc" },
+              { componentCodeSnapshot: "asc" },
+            ],
           },
         },
         orderBy: [{ orderItemId: "asc" }, { version: "desc" }],
@@ -148,8 +153,8 @@ export default async function PatientHistoryPage({ params }: { params: Promise<{
       testNameAr: result.orderItem.testNameArSnapshot,
       componentId: value.componentId,
       componentCode: value.componentCodeSnapshot,
-      componentNameEn: value.componentNameEnSnapshot,
-      componentNameAr: value.componentNameArSnapshot,
+      componentNameEn: value.reportNameEnSnapshot || value.componentNameEnSnapshot,
+      componentNameAr: value.reportNameArSnapshot || value.componentNameArSnapshot,
       unit: value.unitSnapshot,
       valueNumeric: value.valueNumeric?.toString() || null,
       displayValue: value.displayValue,
@@ -303,8 +308,8 @@ export default async function PatientHistoryPage({ params }: { params: Promise<{
       ? result.orderItem.testNameArSnapshot || result.orderItem.testNameEnSnapshot
       : result.orderItem.testNameEnSnapshot,
     componentName: locale === "ar"
-      ? value.componentNameArSnapshot || value.componentNameEnSnapshot
-      : value.componentNameEnSnapshot,
+      ? value.reportNameArSnapshot || value.componentNameArSnapshot || value.reportNameEnSnapshot || value.componentNameEnSnapshot
+      : value.reportNameEnSnapshot || value.componentNameEnSnapshot,
     displayValue: value.displayValue,
     unit: value.unitSnapshot,
     flag: value.flag,

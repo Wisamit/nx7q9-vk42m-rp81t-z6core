@@ -11,6 +11,7 @@ type MergePatient = {
   dateOfBirth: string | null;
   phone: string | null;
   hasPortalAccount: boolean;
+  evidence: Array<"NAME_DOB" | "PHONE">;
 };
 
 export function PatientMergePanel({
@@ -26,6 +27,10 @@ export function PatientMergePanel({
   const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
+  const evidenceLabel = (code: MergePatient["evidence"][number]) =>
+    code === "NAME_DOB"
+      ? tr("Same normalized name + date of birth", "نفس الاسم المطبع + تاريخ الميلاد")
+      : tr("Same phone", "نفس رقم الهاتف");
 
   async function merge(source: MergePatient, target: MergePatient) {
     if (source.hasPortalAccount && target.hasPortalAccount) {
@@ -101,6 +106,7 @@ export function PatientMergePanel({
             <small className="table-subtext">
               {candidate.dateOfBirth || tr("DOB —", "الميلاد —")} · {candidate.phone || tr("Phone —", "الهاتف —")}
               {candidate.hasPortalAccount ? " · " + tr("Portal account", "حساب بوابة") : ""}
+              {candidate.evidence.length ? " · " + candidate.evidence.map(evidenceLabel).join(" · ") : ""}
             </small>
           </span>
           <span className="inline-actions">

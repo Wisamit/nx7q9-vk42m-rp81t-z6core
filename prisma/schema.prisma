@@ -1019,6 +1019,7 @@ model Organization {
   catalogImportMappings CatalogImportMapping[]
   patients Patient[]
   patientIdentifiers PatientIdentifier[]
+  patientIdentifierSchemes PatientIdentifierScheme[]
   patientMergeEvents PatientMergeEvent[]
   clients Client[]
   referrers Referrer[]
@@ -1166,6 +1167,7 @@ model Branch {
   analyzerMessages AnalyzerMessage[]
   userScopes   UserBranchScope[]
   auditEvents  AuditEvent[]
+  createdPatients Patient[] @relation("PatientCreationBranch")
   activeSessions UserSession[] @relation("ActiveBranchSessions")
   testAvailability TestBranchAvailability[]
   referenceIntervals ReferenceInterval[]
@@ -2271,8 +2273,14 @@ model Patient {
   sexAtBirth      PatientSex   @default(UNKNOWN) @map("sex_at_birth")
   phone           String?      @db.VarChar(50)
   normalizedPhone String?      @map("normalized_phone") @db.VarChar(50)
+  whatsapp        String?      @db.VarChar(50)
   email           String?      @db.VarChar(191)
   nationalityCode      String?      @map("nationality_code") @db.Char(2)
+  addressEn            String?      @map("address_en") @db.Text
+  addressAr            String?      @map("address_ar") @db.Text
+  notes                String?      @db.Text
+  clinicalInformation  String?      @map("clinical_information") @db.Text
+  creationBranchId     String?      @map("creation_branch_id") @db.Char(36)
   status               RecordStatus @default(ACTIVE)
   mergedIntoPatientId  String?      @map("merged_into_patient_id") @db.Char(36)
   mergedAt             DateTime?    @map("merged_at") @db.DateTime(3)
@@ -2281,6 +2289,7 @@ model Patient {
   deactivatedAt        DateTime?    @map("deactivated_at") @db.DateTime(3)
 
   organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  creationBranch Branch?            @relation("PatientCreationBranch", fields: [creationBranchId], references: [id], onDelete: Restrict)
   mergedInto   Patient?            @relation("PatientMergeLineage", fields: [mergedIntoPatientId], references: [id], onDelete: Restrict)
   mergedFrom   Patient[]           @relation("PatientMergeLineage")
   mergeEventsAsSource PatientMergeEvent[] @relation("PatientMergeSource")
@@ -2297,6 +2306,7 @@ model Patient {
   @@index([organizationId, normalizedName])
   @@index([organizationId, normalizedPhone])
   @@index([organizationId, dateOfBirth])
+  @@index([creationBranchId, createdAt])
   @@index([mergedIntoPatientId, status])
   @@map("patients")
 }
@@ -2308,6 +2318,9 @@ model PatientMergeEvent {
   targetPatientId             String   @map("target_patient_id") @db.Char(36)
   sourcePatientNumberSnapshot String   @map("source_patient_number_snapshot") @db.VarChar(40)
   targetPatientNumberSnapshot String   @map("target_patient_number_snapshot") @db.VarChar(40)
+  sourceIdentitySnapshot      Json?    @map("source_identity_snapshot")
+  targetIdentitySnapshot      Json?    @map("target_identity_snapshot")
+  duplicateEvidenceSnapshot   Json?    @map("duplicate_evidence_snapshot")
   reason                      String   @db.VarChar(1000)
   mergedByUserId              String   @map("merged_by_user_id") @db.Char(36)
   mergedAt                    DateTime @default(now()) @map("merged_at") @db.DateTime(3)
@@ -2322,10 +2335,32 @@ model PatientMergeEvent {
   @@map("patient_merge_events")
 }
 
+model PatientIdentifierScheme {
+  id                     String                @id @default(uuid()) @db.Char(36)
+  organizationId         String                @map("organization_id") @db.Char(36)
+  code                   String                @db.VarChar(80)
+  nameEn                 String                @map("name_en") @db.VarChar(180)
+  nameAr                 String?               @map("name_ar") @db.VarChar(180)
+  identifierType         PatientIdentifierType @default(OTHER) @map("identifier_type")
+  requiresIssuingCountry Boolean               @default(false) @map("requires_issuing_country")
+  status                 RecordStatus          @default(ACTIVE)
+  createdAt              DateTime              @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt              DateTime              @updatedAt @map("updated_at") @db.DateTime(3)
+  deactivatedAt          DateTime?             @map("deactivated_at") @db.DateTime(3)
+
+  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  identifiers  PatientIdentifier[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId, status])
+  @@map("patient_identifier_schemes")
+}
+
 model PatientIdentifier {
   id              String                @id @default(uuid()) @db.Char(36)
   organizationId  String                @map("organization_id") @db.Char(36)
   patientId       String                @map("patient_id") @db.Char(36)
+  schemeId        String                @map("scheme_id") @db.Char(36)
   identifierType  PatientIdentifierType @map("identifier_type")
   value           String                @db.VarChar(120)
   normalizedValue String                @map("normalized_value") @db.VarChar(120)
@@ -2335,11 +2370,13 @@ model PatientIdentifier {
   createdAt       DateTime              @default(now()) @map("created_at") @db.DateTime(3)
   updatedAt       DateTime              @updatedAt @map("updated_at") @db.DateTime(3)
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  patient      Patient      @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  organization Organization             @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  patient      Patient                  @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  scheme       PatientIdentifierScheme  @relation(fields: [schemeId], references: [id], onDelete: Restrict)
 
-  @@unique([organizationId, identifierType, normalizedValue])
+  @@unique([organizationId, schemeId, normalizedValue])
   @@index([patientId, status])
+  @@index([schemeId, status])
   @@map("patient_identifiers")
 }
 

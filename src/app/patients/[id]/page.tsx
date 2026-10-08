@@ -3,6 +3,10 @@ import { notFound } from "next/navigation";
 import { permissionSet, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { PatientMergePanel } from "@/components/patient-merge-panel";
+import { PatientEditForm } from "@/components/patient-edit-form";
+import { PatientIdentifierManager } from "@/components/patient-identifier-manager";
+import { calculatePatientAge } from "@/lib/patient-demographics";
+import { patientDuplicateEvidence, sortDuplicateCandidates } from "@/lib/patient-duplicate-review";
 import { getUiLocale, sexLabel, statusLabel, tr } from "@/lib/ui-i18n";
 
 export const dynamic = "force-dynamic";
@@ -13,11 +17,16 @@ export default async function PatientDetailPage({ params }: { params: Promise<{ 
   const locale = getUiLocale(session.user.preferredLocale);
   const permissions = permissionSet(session);
   const canMerge = permissions.has("patients.merge");
+  const canManage = permissions.has("patients.manage");
 
   const patient = await prisma.patient.findFirst({
     where: { id, organizationId: session.user.organizationId },
     include: {
-      identifiers: { orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }] },
+      identifiers: {
+        include: { scheme: true },
+        orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
+      },
+      creationBranch: { select: { code: true, nameEn: true, nameAr: true } },
       portalAccount: { select: { id: true } },
       mergedInto: {
         select: { id: true, patientNumber: true, fullNameEn: true, fullNameAr: true },
@@ -52,6 +61,20 @@ export default async function PatientDetailPage({ params }: { params: Promise<{ 
   });
   if (!patient) notFound();
 
+  const identifierSchemes = canManage && patient.status === "ACTIVE" && !patient.mergedIntoPatientId
+    ? await prisma.patientIdentifierScheme.findMany({
+        where: { organizationId: session.user.organizationId, status: "ACTIVE", code: { not: "LEGACY_OTHER" } },
+        select: {
+          id: true,
+          code: true,
+          nameEn: true,
+          nameAr: true,
+          requiresIssuingCountry: true,
+        },
+        orderBy: { code: "asc" },
+      })
+    : [];
+
   const duplicateCandidates = patient.status === "ACTIVE" && !patient.mergedIntoPatientId
     ? await prisma.patient.findMany({
         where: {
@@ -69,8 +92,10 @@ export default async function PatientDetailPage({ params }: { params: Promise<{ 
           patientNumber: true,
           fullNameEn: true,
           fullNameAr: true,
+          normalizedName: true,
           dateOfBirth: true,
           phone: true,
+          normalizedPhone: true,
           portalAccount: { select: { id: true } },
         },
         take: 10,
@@ -78,6 +103,16 @@ export default async function PatientDetailPage({ params }: { params: Promise<{ 
     : [];
 
   const sourceMerge = patient.mergeEventsAsSource[0] || null;
+  const age = calculatePatientAge(patient.dateOfBirth);
+  const ageLabel = age
+    ? age.value + " " + (
+        age.unit === "YEAR"
+          ? tr(locale, "year(s)", "سنة")
+          : age.unit === "MONTH"
+            ? tr(locale, "month(s)", "شهر")
+            : tr(locale, "day(s)", "يوم")
+      )
+    : "—";
 
   return <main className="catalog-shell">
     <header className="page-header">
@@ -119,22 +154,78 @@ export default async function PatientDetailPage({ params }: { params: Promise<{ 
           <dt>{tr(locale, "English name", "الاسم بالإنجليزية")}</dt><dd>{patient.fullNameEn}</dd>
           <dt>{tr(locale, "Arabic name", "الاسم بالعربية")}</dt><dd dir="rtl">{patient.fullNameAr || "—"}</dd>
           <dt>{tr(locale, "Date of birth", "تاريخ الميلاد")}</dt><dd>{patient.dateOfBirth ? patient.dateOfBirth.toISOString().slice(0,10) : "—"}</dd>
+          <dt>{tr(locale, "Calculated age", "العمر المحسوب")}</dt><dd>{ageLabel}</dd>
           <dt>{tr(locale, "Sex at birth", "الجنس عند الولادة")}</dt><dd>{sexLabel(locale, patient.sexAtBirth)}</dd>
           <dt>{tr(locale, "Phone", "الهاتف")}</dt><dd>{patient.phone || "—"}</dd>
+          <dt>{tr(locale, "WhatsApp", "واتساب")}</dt><dd>{patient.whatsapp || "—"}</dd>
           <dt>{tr(locale, "Email", "البريد الإلكتروني")}</dt><dd>{patient.email || "—"}</dd>
           <dt>{tr(locale, "Nationality", "الجنسية")}</dt><dd>{patient.nationalityCode || "—"}</dd>
+          <dt>{tr(locale, "Creation branch", "فرع الإنشاء")}</dt><dd>{patient.creationBranch ? patient.creationBranch.code + " — " + (locale === "ar" ? patient.creationBranch.nameAr || patient.creationBranch.nameEn : patient.creationBranch.nameEn) : "—"}</dd>
           <dt>{tr(locale, "Status", "الحالة")}</dt><dd>{statusLabel(locale, patient.status)}</dd>
         </dl>
       </article>
 
-      <article className="detail-card">
+      {!canManage || patient.status !== "ACTIVE" || patient.mergedIntoPatientId ? <article className="detail-card">
         <h2>{tr(locale, "Identifiers", "المعرّفات")}</h2>
         {patient.identifiers.length === 0 ? <p className="muted">{tr(locale, "No external identifiers recorded.", "لا توجد معرّفات خارجية مسجلة.")}</p> :
           <div className="summary-list">{patient.identifiers.map(identifier =>
-            <div key={identifier.id}><span>{identifier.identifierType}{identifier.isPrimary ? " · " + tr(locale, "Primary", "رئيسي") : ""}</span><strong>{identifier.value}</strong></div>
+            <div key={identifier.id}><span>{locale === "ar" ? identifier.scheme.nameAr || identifier.scheme.nameEn : identifier.scheme.nameEn}{identifier.isPrimary ? " · " + tr(locale, "Primary", "رئيسي") : ""}</span><strong>{identifier.value}</strong></div>
           )}</div>}
-      </article>
+      </article> : <PatientIdentifierManager
+        patientId={patient.id}
+        schemes={identifierSchemes}
+        identifiers={patient.identifiers.map(identifier => ({
+          id: identifier.id,
+          value: identifier.value,
+          issuingCountry: identifier.issuingCountry,
+          isPrimary: identifier.isPrimary,
+          status: identifier.status,
+          scheme: {
+            id: identifier.scheme.id,
+            code: identifier.scheme.code,
+            nameEn: identifier.scheme.nameEn,
+            nameAr: identifier.scheme.nameAr,
+          },
+        }))}
+        locale={locale}
+      />}
     </section>
+
+    {canManage && patient.status === "ACTIVE" && !patient.mergedIntoPatientId && <PatientEditForm
+      patient={{
+        id: patient.id,
+        updatedAt: patient.updatedAt.toISOString(),
+        fullNameEn: patient.fullNameEn,
+        fullNameAr: patient.fullNameAr,
+        dateOfBirth: patient.dateOfBirth?.toISOString().slice(0,10) || null,
+        sexAtBirth: patient.sexAtBirth,
+        phone: patient.phone,
+        whatsapp: patient.whatsapp,
+        email: patient.email,
+        nationalityCode: patient.nationalityCode,
+        addressEn: patient.addressEn,
+        addressAr: patient.addressAr,
+        notes: patient.notes,
+        clinicalInformation: patient.clinicalInformation,
+      }}
+      locale={locale}
+    />}
+
+    {(patient.addressEn || patient.addressAr || patient.clinicalInformation || patient.notes) && <section className="detail-grid">
+      <article className="detail-card">
+        <h2>{tr(locale, "Address", "العنوان")}</h2>
+        <dl>
+          <dt>{tr(locale, "English", "الإنجليزية")}</dt><dd>{patient.addressEn || "—"}</dd>
+          <dt>{tr(locale, "Arabic", "العربية")}</dt><dd dir="rtl">{patient.addressAr || "—"}</dd>
+        </dl>
+      </article>
+      <article className="detail-card">
+        <h2>{tr(locale, "Clinical Information", "المعلومات السريرية")}</h2>
+        <p>{patient.clinicalInformation || "—"}</p>
+        <h3>{tr(locale, "Notes", "ملاحظات")}</h3>
+        <p>{patient.notes || "—"}</p>
+      </article>
+    </section>}
 
     {patient.mergedFrom.length > 0 && <section className="detail-card">
       <h2>{tr(locale, "Merged Aliases", "السجلات المدمجة")}</h2>
@@ -160,8 +251,9 @@ export default async function PatientDetailPage({ params }: { params: Promise<{ 
         dateOfBirth: patient.dateOfBirth?.toISOString().slice(0,10) || null,
         phone: patient.phone,
         hasPortalAccount: Boolean(patient.portalAccount),
+        evidence: [],
       }}
-      candidates={duplicateCandidates.map(candidate => ({
+      candidates={sortDuplicateCandidates(duplicateCandidates.map(candidate => ({
         id: candidate.id,
         patientNumber: candidate.patientNumber,
         fullNameEn: candidate.fullNameEn,
@@ -169,7 +261,8 @@ export default async function PatientDetailPage({ params }: { params: Promise<{ 
         dateOfBirth: candidate.dateOfBirth?.toISOString().slice(0,10) || null,
         phone: candidate.phone,
         hasPortalAccount: Boolean(candidate.portalAccount),
-      }))}
+        evidence: patientDuplicateEvidence(patient, candidate),
+      })))}
       locale={locale}
     />}
 

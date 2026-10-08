@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   buildPatientTrendSeries,
   latestClinicalResultIds,
@@ -89,4 +90,15 @@ test("trend series use immutable snapshot labels and ignore non-numeric values",
   assert.equal(series[0].testNameEn, "CRP historical");
   assert.equal(series[0].componentNameEn, "CRP historical component");
   assert.equal(series[0].points.length, 1);
+});
+
+
+test("patient history page scopes clinical results to performing branch and uses report snapshots", () => {
+  const page = readFileSync(new URL("../src/app/patients/[id]/history/page.tsx", import.meta.url), "utf8");
+
+  assert.ok(page.includes('performingBranchId: { in: branchIds }'));
+  assert.ok(!page.includes('orderingBranchId: { in: branchIds },\n            },\n            ...itemDepartmentFilter'));
+  assert.ok(page.includes('where: { reportVisibleSnapshot: { not: false } }'));
+  assert.ok(page.includes('reportNameEnSnapshot || value.componentNameEnSnapshot'));
+  assert.ok(page.includes('reportNameArSnapshot || value.componentNameArSnapshot'));
 });
