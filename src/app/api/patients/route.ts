@@ -3,18 +3,10 @@ import { NextResponse } from "next/server";
 import { requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { patientDuplicateEvidence, sortDuplicateCandidates } from "@/lib/patient-duplicate-review";
+import { normalizePatientIdentifier, normalizePatientName, normalizePatientPhone } from "@/lib/patient-normalization";
 
 function text(value: unknown, max = 220) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
-}
-function normalizedName(value: string) {
-  return value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ").trim().toUpperCase();
-}
-function normalizedPhone(value: string) {
-  return value.replace(/[^0-9+]/g, "");
-}
-function normalizedIdentifier(value: string) {
-  return value.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
 }
 function newPatientNumber() {
   const now = new Date();
@@ -54,8 +46,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "invalid_passport_issuing_country" }, { status: 400 });
   }
 
-  const nameKey = normalizedName(fullNameEn);
-  const phoneKey = phone ? normalizedPhone(phone) : null;
+  const nameKey = normalizePatientName(fullNameEn);
+  const phoneKey = phone ? normalizePatientPhone(phone) : null;
   const dob = dateOfBirth ? new Date(`${dateOfBirth}T00:00:00.000Z`) : null;
   if (dateOfBirth && Number.isNaN(dob?.getTime())) return NextResponse.json({ error: "invalid_date_of_birth" }, { status: 400 });
 
@@ -108,8 +100,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "duplicate_review_reason_required" }, { status: 400 });
   }
 
-  const idKey = nationalId ? normalizedIdentifier(nationalId) : null;
-  const passportKey = passportNumber ? normalizedIdentifier(passportNumber) : null;
+  const idKey = nationalId ? normalizePatientIdentifier(nationalId) : null;
+  const passportKey = passportNumber ? normalizePatientIdentifier(passportNumber) : null;
   const identifierChecks = [
     ...(idKey ? [{ identifierType: "NATIONAL_ID" as const, normalizedValue: idKey }] : []),
     ...(passportKey ? [{ identifierType: "PASSPORT" as const, normalizedValue: passportKey }] : []),
