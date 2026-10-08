@@ -14,7 +14,7 @@ test("MariaDB serializes independent barcode receipts to prevent stale manifest 
   const db = await mysql.createConnection(config);
   const first = await mysql.createConnection(config);
   const second = await mysql.createConnection(config);
-  const org = randomUUID(), branch = randomUUID(), user = randomUUID();
+  const org = randomUUID(), branch = randomUUID(), destination = randomUUID(), user = randomUUID();
   const patient = randomUUID(), order = randomUUID(), manifest = randomUUID();
   const specimens = [randomUUID(), randomUUID()];
   const suffix = org.slice(0, 8);
@@ -28,6 +28,8 @@ test("MariaDB serializes independent barcode receipts to prevent stale manifest 
       [org,"RC-"+suffix,"Receipt CI"], "DELETE FROM organizations WHERE id = ?", [org]);
     await insert("INSERT INTO branches (id,organization_id,code,name_en,updated_at) VALUES (?,?,?,?,NOW(3))",
       [branch,org,"R-"+suffix,"Receipt Branch"], "DELETE FROM branches WHERE id = ?", [branch]);
+    await insert("INSERT INTO branches (id,organization_id,code,name_en,updated_at) VALUES (?,?,?,?,NOW(3))",
+      [destination,org,"D-"+suffix,"Destination Branch"], "DELETE FROM branches WHERE id = ?", [destination]);
     await insert("INSERT INTO users (id,organization_id,username,display_name_en,updated_at) VALUES (?,?,?,?,NOW(3))",
       [user,org,"r-"+suffix,"Receipt Actor"], "DELETE FROM users WHERE id = ?", [user]);
     await insert("INSERT INTO patients (id,organization_id,patient_number,full_name_en,normalized_name,updated_at) VALUES (?,?,?,?,?,NOW(3))",
@@ -39,7 +41,7 @@ test("MariaDB serializes independent barcode receipts to prevent stale manifest 
         [specimens[i],org,order,"RBC-"+suffix+"-"+i,String(i+1),branch], "DELETE FROM specimens WHERE id = ?", [specimens[i]]);
     }
     await insert("INSERT INTO specimen_transfer_manifests (id,organization_id,manifest_number,source_branch_id,destination_branch_id,status,created_by_user_id,updated_at) VALUES (?,?,?,?,?,'DISPATCHED',?,NOW(3))",
-      [manifest,org,"RM-"+suffix,branch,branch,user], "DELETE FROM specimen_transfer_manifests WHERE id = ?", [manifest]);
+      [manifest,org,"RM-"+suffix,branch,destination,user], "DELETE FROM specimen_transfer_manifests WHERE id = ?", [manifest]);
     for (let i = 0; i < specimens.length; i++) {
       await insert("INSERT INTO specimen_transfer_items (manifest_id,specimen_id,barcode_snapshot,status) VALUES (?,?,?,'DISPATCHED')",
         [manifest,specimens[i],"RBC-"+suffix+"-"+i], "DELETE FROM specimen_transfer_items WHERE manifest_id = ? AND specimen_id = ?", [manifest,specimens[i]]);
