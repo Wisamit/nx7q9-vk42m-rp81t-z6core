@@ -31,20 +31,22 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "microbiology_case_locked", status: microbiologyCase.status }, { status: 409 });
   }
 
-  const last = await prisma.microbiologyIsolate.findFirst({
-    where: { caseId: id },
-    orderBy: { sequenceNumber: "desc" },
-    select: { sequenceNumber: true },
-  });
-  const sequenceNumber = (last?.sequenceNumber || 0) + 1;
-
   const isolate = await prisma.$transaction(async tx => {
     await requireEditableMicrobiologyCase(tx, {
       organizationId: session.user.organizationId,
       caseId: microbiologyCase.id,
       specimenId: microbiologyCase.specimenId,
       performingBranchId: microbiologyCase.performingBranchId,
+      expectedCaseUpdatedAt: microbiologyCase.updatedAt,
     });
+    // A case row is locked, so sequence allocation is serialized even
+    // when two operators register isolates at the same instant.
+    const last = await tx.microbiologyIsolate.findFirst({
+      where: { caseId: id },
+      orderBy: { sequenceNumber: "desc" },
+      select: { sequenceNumber: true },
+    });
+    const sequenceNumber = (last?.sequenceNumber || 0) + 1;
     const created = await tx.microbiologyIsolate.create({
       data: {
         caseId: id,
