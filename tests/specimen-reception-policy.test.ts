@@ -113,3 +113,14 @@ test("denied reception is audited and never transitions a discrepant specimen to
 function requireSource() {
   return readFileSync(new URL("../src/app/api/specimens/[id]/actions/route.ts", import.meta.url), "utf8");
 }
+
+test("rejection rechecks source branch, order state and child aliquots inside transaction", () => {
+  const route = readFileSync(new URL("../src/app/api/specimens/[id]/rejections/route.ts", import.meta.url), "utf8");
+  const lockIndex = route.indexOf("const sourceChange = await tx.specimen.updateMany");
+  const childIndex = route.indexOf("const currentChildren = await tx.specimen.findMany");
+  const recordIndex = route.indexOf("const rejection = await tx.specimenRejection.create");
+  assert.ok(lockIndex >= 0 && childIndex > lockIndex && recordIndex > childIndex);
+  assert.ok(route.includes("currentBranchId: branchId,\n            order: { status: { notIn:"));
+  assert.ok(route.includes("parentRelationType: \"ALIQUOT\""));
+  assert.ok(route.includes("currentChildren.some(child =>"));
+});
