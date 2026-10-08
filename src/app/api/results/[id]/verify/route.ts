@@ -3,11 +3,16 @@ import { canAccessBranch, canAccessDepartment, requirePermission, requestContext
 import { prisma } from "@/lib/db";
 import { resolveAnalyzerQcGate } from "@/lib/qc-gate";
 import { notifyUsersWithPermission } from "@/lib/notifications";
+import { validationSpecimenCustodyError } from "@/lib/result-validation-custody";
 import { selectValidationPolicy, snapshotValidationPolicy, stageAfterTechnicalReview, type ValidationPolicySnapshot } from "@/lib/result-validation";
 import { Prisma } from "../../../../../../generated/prisma/client";
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const body = await request.json().catch(() => ({})) as {
+  const rawBody = await request.json().catch(() => null);
+  if (!rawBody || typeof rawBody !== "object" || Array.isArray(rawBody)) {
+    return NextResponse.json({ error: "invalid_request" }, { status: 400 });
+  }
+  const body = rawBody as {
     confirmDeltaWarnings?: boolean;
     confirmQcWarnings?: boolean;
     notes?: string;
@@ -156,8 +161,29 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     : null;
 
   const updated = await prisma.$transaction(async (tx) => {
-    const verified = await tx.laboratoryResult.update({
-      where: { id: result.id },
+    if (result.specimenId) {
+      // Serialize validation with specimen quarantine, rejection and transfers.
+      const custody = await tx.$queryRaw<Array<{ id: string; status: string; current_branch_id: string | null }>>`
+        SELECT id, status, current_branch_id FROM specimens
+        WHERE id = ${result.specimenId} AND organization_id = ${session.user.organizationId}
+        FOR UPDATE
+      `;
+      if (custody.length !== 1 || validationSpecimenCustodyError({
+        status: custody[0].status,
+        currentBranchId: custody[0].current_branch_id,
+        performingBranchId: result.performingBranchId,
+      })) throw new Error("RESULT_STATE_CHANGED");
+    }
+    // Claim this exact result revision before recording clinical review.
+    // Two reviewers or a concurrent result edit cannot both validate the same snapshot.
+    const claim = await tx.laboratoryResult.updateMany({
+      where: {
+        id: result.id,
+        organizationId: session.user.organizationId,
+        status: { in: ["DRAFT", "ENTERED"] },
+        validationStage: { in: ["ENTRY", "TECHNICAL_REVIEW"] },
+        updatedAt: result.updatedAt,
+      },
       data: {
         status: finalValidationComplete ? "VERIFIED" : "ENTERED",
         validationStage: nextValidationStage,
@@ -171,6 +197,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         verifiedAt: finalValidationComplete ? verifiedAt : null,
       },
     });
+
+    if (claim.count !== 1) throw new Error("RESULT_STATE_CHANGED");
 
     await tx.resultValidationReview.create({
       data: {
@@ -403,8 +431,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       },
     });
 
-    return verified;
-  }, { timeout: 30000 });
+    return { id: result.id, status: finalValidationComplete ? "VERIFIED" as const : "ENTERED" as const, validationStage: nextValidationStage };
+  }, { timeout: 30000 }).catch(error => {
+    if (error instanceof Error && error.message === "RESULT_STATE_CHANGED") return null;
+    throw error;
+  });
+  if (!updated) {
+    return NextResponse.json({ error: "result_state_changed_retry" }, { status: 409 });
+  }
 
   return NextResponse.json({
     status: "ok",

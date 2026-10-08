@@ -253,6 +253,12 @@ export function ResultEntryForm({
           ? `${tr("Saved with", "تم الحفظ مع")}: ${notices.join(", ")}. ${tr("Review validation items before verification.", "راجع عناصر التحقق قبل اعتماد النتيجة.")}`
           : body.complete ? tr("Result saved and ready for verification.", "تم حفظ النتيجة وهي جاهزة للتحقق.") : tr("Draft saved. Complete all required result fields before verification.", "تم حفظ المسودة. أكمل جميع حقول النتيجة المطلوبة قبل التحقق."));
       router.refresh();
+    } else if (body.error === "result_concurrently_updated_refresh") {
+      setMessage(tr("This result was changed or reviewed by another operator. Refresh before editing to avoid overwriting clinical history.", "تم تعديل هذه النتيجة أو مراجعتها بواسطة مستخدم آخر. حدّث الصفحة قبل التعديل لتجنب الكتابة فوق السجل السريري."));
+      router.refresh();
+    } else if (body.error === "specimen_preanalytical_state_changed") {
+      setMessage(tr("The specimen's clinical status or location changed. Reload the specimen before continuing.", "تغيرت حالة العينة السريرية أو موقعها. أعد تحميل العينة قبل المتابعة."));
+      router.refresh();
     } else {
       setMessage(body.error || tr("Result could not be saved.", "تعذر حفظ النتيجة."));
     }
@@ -311,6 +317,9 @@ export function ResultEntryForm({
         : criticalCount > 0
           ? tr("Required validation completed. Critical result acknowledgement/communication is required before release.", "اكتمل مسار التحقق المطلوب. يلزم توثيق التواصل والإقرار بالنتيجة الحرجة قبل الإصدار.")
           : tr("Required validation completed successfully.", "اكتمل مسار التحقق المطلوب بنجاح."));
+      router.refresh();
+    } else if (body.error === "result_state_changed_retry") {
+      setMessage(tr("This result or specimen changed during technical review. Refresh the current data before retrying.", "تغيرت النتيجة أو حالة العينة أثناء المراجعة الفنية. حدّث البيانات قبل إعادة المحاولة."));
       router.refresh();
     } else if (body.error === "reflex_review_required") {
       setMessage(tr("Technical review blocked: review all pending reflex recommendations first.", "المراجعة الفنية محظورة: راجع أولاً جميع توصيات الفحوص الانعكاسية المعلقة."));

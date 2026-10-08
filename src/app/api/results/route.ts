@@ -482,9 +482,37 @@ export async function POST(request: Request) {
       if (claimed.count !== 1) throw new Error("SPECIMEN_PREANALYTICAL_STATE_CHANGED");
     }
 
+    // This lock prevents an in-process specimen from being quarantined or
+    // transferred while an operator writes clinical result values.
+    const lockedSpecimen = await tx.$queryRaw<Array<{ id: string; status: string; current_branch_id: string | null }>>`
+      SELECT id, status, current_branch_id FROM specimens
+      WHERE id = ${specimen.id} AND organization_id = ${session.user.organizationId}
+      FOR UPDATE
+    `;
+    if (lockedSpecimen.length !== 1
+      || !["RECEIVED", "IN_PROCESS"].includes(lockedSpecimen[0].status)
+      || lockedSpecimen[0].current_branch_id !== performingBranchId) {
+      throw new Error("SPECIMEN_PREANALYTICAL_STATE_CHANGED");
+    }
+    const activeLineage = await tx.specimenOrderItem.count({
+      where: { specimenId: specimen.id, orderItemId, status: "ACTIVE" },
+    });
+    if (activeLineage !== 1) throw new Error("SPECIMEN_PREANALYTICAL_STATE_CHANGED");
+
     const result = existing
-      ? await tx.laboratoryResult.update({
-          where: { id: existing.id },
+      ? await (async () => {
+          // Never overwrite a draft revised or technically approved since
+          // the operator loaded it. The values below are replaced only after
+          // this optimistic revision claim succeeds.
+          const claimed = await tx.laboratoryResult.updateMany({
+          where: {
+            id: existing.id,
+            organizationId: session.user.organizationId,
+            status: { in: ["DRAFT", "ENTERED"] },
+            validationStage: { in: ["ENTRY", "TECHNICAL_REVIEW"] },
+            source: "MANUAL",
+            updatedAt: existing.updatedAt,
+          },
           data: {
             specimenId,
             performingBranchId,
@@ -507,7 +535,10 @@ export async function POST(request: Request) {
             enteredAt: new Date(),
             comments: comments || null,
           },
-        })
+        });
+          if (claimed.count !== 1) throw new Error("RESULT_STATE_CHANGED");
+          return tx.laboratoryResult.findUniqueOrThrow({ where: { id: existing.id } });
+        })()
       : await tx.laboratoryResult.create({
           data: {
             organizationId: session.user.organizationId,
@@ -892,9 +923,16 @@ export async function POST(request: Request) {
     });
   }, { timeout: 30000 }).catch(error => {
     if (error instanceof Error && error.message === "SPECIMEN_PREANALYTICAL_STATE_CHANGED") return null;
+    if (error instanceof Error && error.message === "RESULT_STATE_CHANGED") return "RESULT_STATE_CHANGED" as const;
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      return "RESULT_STATE_CHANGED" as const;
+    }
     throw error;
   });
 
+  if (saved === "RESULT_STATE_CHANGED") {
+    return NextResponse.json({ error: "result_concurrently_updated_refresh" }, { status: 409 });
+  }
   if (!saved) {
     return NextResponse.json({ error: "specimen_preanalytical_state_changed" }, { status: 409 });
   }

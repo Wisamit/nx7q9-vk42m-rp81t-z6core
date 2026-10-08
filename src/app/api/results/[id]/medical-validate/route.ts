@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { canAccessBranch, canAccessDepartment, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { resolveAnalyzerQcGate } from "@/lib/qc-gate";
+import { validationSpecimenCustodyError } from "@/lib/result-validation-custody";
 import { medicalReviewerAllowed, type ValidationPolicySnapshot } from "@/lib/result-validation";
 import { Prisma } from "../../../../../../generated/prisma/client";
 
@@ -9,7 +10,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const session = await requirePermission("results.medical_validate");
   const ctx = await requestContext();
   const { id } = await params;
-  const body = await request.json().catch(() => ({})) as {
+  const rawBody = await request.json().catch(() => null);
+  if (!rawBody || typeof rawBody !== "object" || Array.isArray(rawBody)) {
+    return NextResponse.json({ error: "invalid_request" }, { status: 400 });
+  }
+  const body = rawBody as {
     action?: "APPROVE" | "RETURN";
     reason?: string;
     notes?: string;
@@ -49,7 +54,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "medical_validation_not_required_by_snapshot" }, { status: 409 });
   }
 
-  const action = body.action === "RETURN" ? "RETURN" : "APPROVE";
+  // Never infer clinical approval from malformed or missing action input.
+  if (body.action !== "APPROVE" && body.action !== "RETURN") {
+    return NextResponse.json({ error: "invalid_medical_validation_action" }, { status: 400 });
+  }
+  const action = body.action;
   const reason = typeof body.reason === "string" ? body.reason.trim().slice(0, 1000) : "";
   const notes = typeof body.notes === "string" ? body.notes.trim().slice(0, 1000) || null : null;
 
@@ -58,21 +67,25 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     const returnedAt = new Date();
     const returned = await prisma.$transaction(async tx => {
-      await tx.resultValidationReview.create({
-        data: {
-          resultId: result.id,
-          stage: "MEDICAL_VALIDATION",
-          outcome: "RETURNED",
-          reviewerUserId: session.user.id,
-          automated: false,
-          reviewedAt: returnedAt,
-          notes: reason,
-          policySnapshot: validationSnapshot as unknown as Prisma.InputJsonValue,
+      if (result.specimenId) {
+        const custody = await tx.$queryRaw<Array<{ id: string; status: string; current_branch_id: string | null }>>`
+          SELECT id, status, current_branch_id FROM specimens
+          WHERE id = ${result.specimenId} AND organization_id = ${session.user.organizationId}
+          FOR UPDATE
+        `;
+        // Returning a result for correction is a safety action, not an
+        // approval. Permit return even when the specimen was quarantined or
+        // transferred; only approval is gated on ready specimen custody.
+        if (custody.length !== 1) throw new Error("RESULT_STATE_CHANGED");
+      }
+    const claimed = await tx.laboratoryResult.updateMany({
+        where: {
+          id: result.id,
+          organizationId: session.user.organizationId,
+          status: "ENTERED",
+          validationStage: "MEDICAL_VALIDATION",
+          updatedAt: result.updatedAt,
         },
-      });
-
-      const updated = await tx.laboratoryResult.update({
-        where: { id: result.id },
         data: {
           status: "ENTERED",
           validationStage: "TECHNICAL_REVIEW",
@@ -85,6 +98,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           autoVerified: false,
           autoverificationPolicyId: null,
           autoverificationDecisionSnapshot: Prisma.DbNull,
+        },
+      });
+      if (claimed.count !== 1) throw new Error("RESULT_STATE_CHANGED");
+      await tx.resultValidationReview.create({
+        data: {
+          resultId: result.id,
+          stage: "MEDICAL_VALIDATION",
+          outcome: "RETURNED",
+          reviewerUserId: session.user.id,
+          automated: false,
+          reviewedAt: returnedAt,
+          notes: reason,
+          policySnapshot: validationSnapshot as unknown as Prisma.InputJsonValue,
         },
       });
 
@@ -117,8 +143,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         },
       });
 
-      return updated;
+      return { status: "ENTERED" as const, validationStage: "TECHNICAL_REVIEW" as const };
+    }).catch(error => {
+      if (error instanceof Error && error.message === "RESULT_STATE_CHANGED") return null;
+      throw error;
     });
+    if (!returned) return NextResponse.json({ error: "result_state_changed_retry" }, { status: 409 });
 
     return NextResponse.json({
       status: "ok",
@@ -167,6 +197,38 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const validatedAt = new Date();
   const validated = await prisma.$transaction(async tx => {
+    // Approval requires live, ready specimen custody. Returning for correction
+    // is separately permitted even when the specimen has been quarantined.
+    if (result.specimenId) {
+      const custody = await tx.$queryRaw<Array<{ id: string; status: string; current_branch_id: string | null }>>`
+        SELECT id, status, current_branch_id FROM specimens
+        WHERE id = ${result.specimenId} AND organization_id = ${session.user.organizationId}
+        FOR UPDATE
+      `;
+      if (custody.length !== 1 || validationSpecimenCustodyError({
+        status: custody[0].status,
+        currentBranchId: custody[0].current_branch_id,
+        performingBranchId: result.performingBranchId,
+      })) throw new Error("RESULT_STATE_CHANGED");
+    }
+    const claimed = await tx.laboratoryResult.updateMany({
+      where: {
+        id: result.id,
+        organizationId: session.user.organizationId,
+        status: "ENTERED",
+        validationStage: "MEDICAL_VALIDATION",
+        updatedAt: result.updatedAt,
+      },
+      data: {
+        status: "VERIFIED",
+        validationStage: "COMPLETE",
+        medicallyValidatedByUserId: session.user.id,
+        medicallyValidatedAt: validatedAt,
+        verifiedByUserId: session.user.id,
+        verifiedAt: validatedAt,
+      },
+    });
+    if (claimed.count !== 1) throw new Error("RESULT_STATE_CHANGED");
     await tx.resultValidationReview.create({
       data: {
         resultId: result.id,
@@ -177,18 +239,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         reviewedAt: validatedAt,
         notes,
         policySnapshot: validationSnapshot as unknown as Prisma.InputJsonValue,
-      },
-    });
-
-    const updated = await tx.laboratoryResult.update({
-      where: { id: result.id },
-      data: {
-        status: "VERIFIED",
-        validationStage: "COMPLETE",
-        medicallyValidatedByUserId: session.user.id,
-        medicallyValidatedAt: validatedAt,
-        verifiedByUserId: session.user.id,
-        verifiedAt: validatedAt,
       },
     });
 
@@ -247,8 +297,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       },
     });
 
-    return updated;
-  }, { timeout: 30000 });
+    return { status: "VERIFIED" as const, validationStage: "COMPLETE" as const };
+  }, { timeout: 30000 }).catch(error => {
+    if (error instanceof Error && error.message === "RESULT_STATE_CHANGED") return null;
+    throw error;
+  });
+  if (!validated) return NextResponse.json({ error: "result_state_changed_retry" }, { status: 409 });
 
   return NextResponse.json({
     status: "ok",
