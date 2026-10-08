@@ -58,21 +58,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     const returnedAt = new Date();
     const returned = await prisma.$transaction(async tx => {
-      await tx.resultValidationReview.create({
-        data: {
-          resultId: result.id,
-          stage: "MEDICAL_VALIDATION",
-          outcome: "RETURNED",
-          reviewerUserId: session.user.id,
-          automated: false,
-          reviewedAt: returnedAt,
-          notes: reason,
-          policySnapshot: validationSnapshot as unknown as Prisma.InputJsonValue,
+      const claimed = await tx.laboratoryResult.updateMany({
+        where: {
+          id: result.id,
+          organizationId: session.user.organizationId,
+          status: "ENTERED",
+          validationStage: "MEDICAL_VALIDATION",
+          updatedAt: result.updatedAt,
         },
-      });
-
-      const updated = await tx.laboratoryResult.update({
-        where: { id: result.id },
         data: {
           status: "ENTERED",
           validationStage: "TECHNICAL_REVIEW",
@@ -85,6 +78,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           autoVerified: false,
           autoverificationPolicyId: null,
           autoverificationDecisionSnapshot: Prisma.DbNull,
+        },
+      });
+      if (claimed.count !== 1) throw new Error("RESULT_STATE_CHANGED");
+      await tx.resultValidationReview.create({
+        data: {
+          resultId: result.id,
+          stage: "MEDICAL_VALIDATION",
+          outcome: "RETURNED",
+          reviewerUserId: session.user.id,
+          automated: false,
+          reviewedAt: returnedAt,
+          notes: reason,
+          policySnapshot: validationSnapshot as unknown as Prisma.InputJsonValue,
         },
       });
 
@@ -117,8 +123,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         },
       });
 
-      return updated;
+      return { status: "ENTERED" as const, validationStage: "TECHNICAL_REVIEW" as const };
+    }).catch(error => {
+      if (error instanceof Error && error.message === "RESULT_STATE_CHANGED") return null;
+      throw error;
     });
+    if (!returned) return NextResponse.json({ error: "result_state_changed_retry" }, { status: 409 });
 
     return NextResponse.json({
       status: "ok",
@@ -167,6 +177,24 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const validatedAt = new Date();
   const validated = await prisma.$transaction(async tx => {
+    const claimed = await tx.laboratoryResult.updateMany({
+      where: {
+        id: result.id,
+        organizationId: session.user.organizationId,
+        status: "ENTERED",
+        validationStage: "MEDICAL_VALIDATION",
+        updatedAt: result.updatedAt,
+      },
+      data: {
+        status: "VERIFIED",
+        validationStage: "COMPLETE",
+        medicallyValidatedByUserId: session.user.id,
+        medicallyValidatedAt: validatedAt,
+        verifiedByUserId: session.user.id,
+        verifiedAt: validatedAt,
+      },
+    });
+    if (claimed.count !== 1) throw new Error("RESULT_STATE_CHANGED");
     await tx.resultValidationReview.create({
       data: {
         resultId: result.id,
@@ -177,18 +205,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         reviewedAt: validatedAt,
         notes,
         policySnapshot: validationSnapshot as unknown as Prisma.InputJsonValue,
-      },
-    });
-
-    const updated = await tx.laboratoryResult.update({
-      where: { id: result.id },
-      data: {
-        status: "VERIFIED",
-        validationStage: "COMPLETE",
-        medicallyValidatedByUserId: session.user.id,
-        medicallyValidatedAt: validatedAt,
-        verifiedByUserId: session.user.id,
-        verifiedAt: validatedAt,
       },
     });
 
@@ -247,8 +263,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       },
     });
 
-    return updated;
-  }, { timeout: 30000 });
+    return { status: "VERIFIED" as const, validationStage: "COMPLETE" as const };
+  }, { timeout: 30000 }).catch(error => {
+    if (error instanceof Error && error.message === "RESULT_STATE_CHANGED") return null;
+    throw error;
+  });
+  if (!validated) return NextResponse.json({ error: "result_state_changed_retry" }, { status: 409 });
 
   return NextResponse.json({
     status: "ok",
