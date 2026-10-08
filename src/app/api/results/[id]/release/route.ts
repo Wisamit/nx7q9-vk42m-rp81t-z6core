@@ -41,13 +41,21 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
       validationStage: result.validationStage,
     }, { status: 409 });
   }
+  const analyzerComponentIds = result.values
+    .filter(value => !value.isCalculated && value.analyzerImportId)
+    .map(value => value.componentId);
+  if (result.source === "ANALYZER" && (!result.analyzerId || analyzerComponentIds.length === 0)) {
+    return NextResponse.json({
+      error: "qc_release_blocked",
+      qcStatus: "BLOCK",
+      reasons: [{ code: "ANALYZER_RESULT_PROVENANCE_MISSING", componentId: null }],
+    }, { status: 409 });
+  }
   const qcGate = result.source === "ANALYZER" && result.analyzerId
     ? await resolveAnalyzerQcGate(prisma, {
         analyzerId: result.analyzerId,
         testId: result.orderItem.testId,
-        componentIds: result.values
-          .filter(value => !value.isCalculated && value.analyzerImportId)
-          .map(value => value.componentId),
+        componentIds: analyzerComponentIds,
         asOf: new Date(),
       })
     : null;
@@ -115,9 +123,7 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
       committedQcGate = await resolveAnalyzerQcGate(tx, {
         analyzerId: result.analyzerId,
         testId: result.orderItem.testId,
-        componentIds: result.values
-          .filter(value => !value.isCalculated && value.analyzerImportId)
-          .map(value => value.componentId),
+        componentIds: analyzerComponentIds,
         asOf: releasedAt,
       });
       if (committedQcGate.blocking) throw new AnalyzerQcClinicalHold();
