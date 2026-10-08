@@ -76,3 +76,10 @@ Scope source: `02_MASTER_SCOPE.md` sections 20–28, with related specimen secur
 - Manifest dispatch and destination receipt clear *current* path and registered FK atomically with the specimen status transition. The dispatch event retains prior path/ID for audit and chain of custody.
 - **Acceptance blockers**: MariaDB concurrent integration tests for every storage/transfer transition; reconciliation policy for historical unlinked paths; clarify quarantined, rejected, and physically retained specimens, as well as retention/disposal policy. Physical scanner/printer checks remain outstanding.
 - No historical patient/result/financial backfill. No Stage 6 merge or Hostinger deployment.
+
+
+## MariaDB two-connection concurrency test checkpoint
+
+- Added `tests/specimen-storage-mariadb.integration.test.ts`, executed against the CI MariaDB 10.11 database after migrations.
+- The test creates isolated organization, branch and storage master fixtures, acquires a real `SELECT ... FOR UPDATE` in one connection and verifies a second connection's deactivation UPDATE times out until the first transaction releases the lock. After release, the deactivation succeeds.
+- This test verifies the database's location-row serialization primitive, **not** the entire HTTP relocation/deactivation race with live specimen fixtures. End-to-end concurrent API tests, physical occupancy reconciliation, transfer conflicts and quarantine/retention acceptance remain open.
