@@ -69,11 +69,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           WHERE id = ${result.specimenId} AND organization_id = ${session.user.organizationId}
           FOR UPDATE
         `;
-        if (custody.length !== 1 || validationSpecimenCustodyError({
-          status: custody[0].status,
-          currentBranchId: custody[0].current_branch_id,
-          performingBranchId: result.performingBranchId,
-        })) throw new Error("RESULT_STATE_CHANGED");
+        // Returning a result for correction is a safety action, not an
+        // approval. Permit return even when the specimen was quarantined or
+        // transferred; only approval is gated on ready specimen custody.
+        if (custody.length !== 1) throw new Error("RESULT_STATE_CHANGED");
       }
       if (result.specimenId) {
       const custody = await tx.$queryRaw<Array<{ id: string; status: string; current_branch_id: string | null }>>`
