@@ -51,3 +51,8 @@ Keep `stage-6-specimen-operations-completion` and PR #124 in Draft; no merge, no
 
 - The locked specimen row now returns current branch custody as well as status. The print audit transaction rejects unauthorized current-branch custody changes that occurred after the initial lookup. Historic ordering-branch access alone does not override a known inaccessible current custody branch.
 - Continue to require hardware label-print validation and final CI at current HEAD before the Stage 6 release gate.
+
+## Distinct-barcode concurrent receipt consistency
+
+- Item receipts now lock the parent manifest row with `FOR UPDATE` before claiming an individual barcode and computing remaining unreceived items. Concurrent operators receiving different barcodes serialize, preventing a stale `PARTIALLY_RECEIVED` manifest after all items have been received.
+- Added source-level lock-order regression. Actual simultaneous authenticated two-branch receipt API acceptance remains required before operational signoff.
