@@ -156,7 +156,7 @@ export default async function PatientDetailPage({ params }: { params: Promise<{ 
           <dt>{tr(locale, "English name", "الاسم بالإنجليزية")}</dt><dd>{patient.fullNameEn}</dd>
           <dt>{tr(locale, "Arabic name", "الاسم بالعربية")}</dt><dd dir="rtl">{patient.fullNameAr || "—"}</dd>
           <dt>{tr(locale, "Date of birth", "تاريخ الميلاد")}</dt><dd>{patient.dateOfBirth ? patient.dateOfBirth.toISOString().slice(0,10) : "—"}</dd>
-          <dt>{tr(locale, "Age at registration", "العمر عند التسجيل")}</dt><dd>{ageLabel}</dd>
+          <dt>{tr(locale, "Recorded age", "العمر المسجّل")}</dt><dd>{ageLabel}</dd>
           <dt>{tr(locale, "Sex", "الجنس")}</dt><dd>{sexLabel(locale, patient.sexAtBirth)}</dd>
           <dt>{tr(locale, "Phone", "الهاتف")}</dt><dd>{patient.phone || "—"}</dd>
           <dt>{tr(locale, "WhatsApp", "واتساب")}</dt><dd>{patient.whatsapp || "—"}</dd>
