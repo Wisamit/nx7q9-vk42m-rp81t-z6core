@@ -12,3 +12,12 @@ test("interbranch receipt requires dispatched item and claims it atomically", ()
   assert.ok(route.includes('if (item.status !== "DISPATCHED")'));
   assert.ok(route.includes("preanalyticalVersion: item.specimen.preanalyticalVersion"));
 });
+
+test("dispatch atomically claims draft manifest and does not mistake another user's dispatch for success", () => {
+  const route = readFileSync(new URL("../src/app/api/transfers/[id]/actions/route.ts", import.meta.url), "utf8");
+  assert.ok(route.includes('const claimedManifest = await tx.specimenTransferManifest.updateMany'));
+  assert.ok(route.includes('where: { id: manifest.id, status: "DRAFT" }'));
+  assert.ok(route.includes('if (claimedManifest.count !== 1) throw new Error("SPECIMEN_PREANALYTICAL_STATE_CHANGED")'));
+  assert.ok(route.includes('if (dispatchedItems.count !== manifest.items.length) throw new Error("SPECIMEN_PREANALYTICAL_STATE_CHANGED")'));
+  assert.ok(route.includes('if (!dispatched)'));
+});
