@@ -144,3 +144,27 @@ test("MLLP listener NAKs malformed frames without writing clinical data", {timeo
     await rm(root,{recursive:true,force:true});
   }
 });
+
+test("ASTM E1381 frame checksums and frame sequencing are checked before normalization", async()=>{
+  const {parseE1381Frame,decodeE1381Message}=await import("../bridge/astm-e1381.mjs");
+  const encode=(seq,data,isFinal)=>{
+    const end=isFinal?0x03:0x17;
+    const head=Buffer.from(String(seq)+data,"utf8");
+    let sum=end;
+    for(const byte of head)sum=(sum+byte)&0xff;
+    return Buffer.concat([
+      Buffer.from([0x02]),head,Buffer.from([end]),
+      Buffer.from(sum.toString(16).toUpperCase().padStart(2,"0"),"ascii"),
+      Buffer.from([0x0d,0x0a]),
+    ]);
+  };
+  const raw="H|\\^&|||ANALYZER\rP|1\rO|1|BAR-9\rR|1|^^^GLU|6.8|mmol/L\rL|1\r";
+  const frames=[encode(1,raw.slice(0,22),false),encode(2,raw.slice(22),true)];
+  assert.equal(parseE1381Frame(frames[0]).frameNumber,1);
+  assert.equal(decodeE1381Message(frames),raw);
+  const badChecksum=Buffer.from(frames[0]);badChecksum[badChecksum.length-3]=0x30;
+  assert.throws(()=>parseE1381Frame(badChecksum),/ASTM_FRAME_CHECKSUM_INVALID/);
+  assert.throws(()=>decodeE1381Message([frames[1],frames[0]]),/ASTM_FRAME_SEQUENCE_INVALID/);
+  assert.throws(()=>decodeE1381Message([encode(1,"H|test\r",true),encode(2,"L|1\r",true)]),/ASTM_FRAME_FINALITY_INVALID/);
+  assert.throws(()=>decodeE1381Message(frames,{maxBytes:10}),/ASTM_FRAME_PAYLOAD_TOO_LARGE/);
+});
