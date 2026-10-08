@@ -36,6 +36,8 @@ async function lisPost(url, body, headers, sender=fetch) {
     method:"POST",
     headers:{"content-type":"application/json",...headers},
     body:JSON.stringify(body),
+    redirect:"error",
+    cache:"no-store",
     signal:AbortSignal.timeout(15000),
   });
   const payload=await response.json().catch(()=>({}));
