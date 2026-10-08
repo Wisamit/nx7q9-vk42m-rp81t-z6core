@@ -6,6 +6,7 @@ type MicrobiologyCaseLock = {
   result_id: string | null;
   specimen_id: string;
   performing_branch_id: string;
+  updated_at: Date;
 };
 
 /**
@@ -21,6 +22,8 @@ export async function lockMicrobiologyCaseForEdit(
     specimenId: string;
     performingBranchId: string;
     allowSubmittedResult?: boolean;
+    expectedCaseUpdatedAt?: Date;
+    expectedResultId?: string | null;
   },
 ): Promise<"READY" | "SPECIMEN_CHANGED" | "CASE_CHANGED" | "CASE_LOCKED" | "RESULT_ALREADY_SUBMITTED"> {
   const specimen = await tx.$queryRaw<Array<{ id: string; status: string; current_branch_id: string | null }>>`
@@ -36,7 +39,7 @@ export async function lockMicrobiologyCaseForEdit(
   }
 
   const cases = await tx.$queryRaw<MicrobiologyCaseLock[]>`
-    SELECT id, status, result_id, specimen_id, performing_branch_id
+    SELECT id, status, result_id, specimen_id, performing_branch_id, updated_at
     FROM microbiology_cases
     WHERE id = ${input.caseId}
       AND organization_id = ${input.organizationId}
@@ -47,6 +50,8 @@ export async function lockMicrobiologyCaseForEdit(
     cases[0].performing_branch_id !== input.performingBranchId) {
     return "CASE_CHANGED";
   }
+  if (input.expectedCaseUpdatedAt && cases[0].updated_at.getTime() !== input.expectedCaseUpdatedAt.getTime()) return "CASE_CHANGED";
+  if (input.expectedResultId !== undefined && cases[0].result_id !== input.expectedResultId) return "CASE_CHANGED";
   if (cases[0].status === "FINAL" || cases[0].status === "CANCELLED") return "CASE_LOCKED";
   if (cases[0].result_id && !input.allowSubmittedResult) return "RESULT_ALREADY_SUBMITTED";
   return "READY";
