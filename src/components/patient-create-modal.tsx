@@ -5,7 +5,21 @@ import { CrudModal } from "@/components/crud-modal";
 import { PatientCreateForm } from "@/components/patient-create-form";
 import { SystemIcon } from "@/components/system-icon";
 
-export function PatientCreateModal({ locale }: { locale: "ar" | "en" }) {
+type IdentifierSchemeOption = {
+  id: string;
+  code: string;
+  nameEn: string;
+  nameAr: string | null;
+  requiresIssuingCountry: boolean;
+};
+
+export function PatientCreateModal({
+  locale,
+  identifierSchemes,
+}: {
+  locale: "ar" | "en";
+  identifierSchemes: IdentifierSchemeOption[];
+}) {
   const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
   const [open, setOpen] = useState(false);
   const [notice, setNotice] = useState("");
@@ -24,7 +38,7 @@ export function PatientCreateModal({ locale }: { locale: "ar" | "en" }) {
       description={tr("Create a central patient record shared across all branches.", "إنشاء سجل مركزي للمريض مشترك بين جميع الفروع.")}
       size="lg"
     >
-      <PatientCreateForm locale={locale} onSuccess={message => {
+      <PatientCreateForm locale={locale} identifierSchemes={identifierSchemes} onSuccess={message => {
         setNotice(message);
         setOpen(false);
       }} />
