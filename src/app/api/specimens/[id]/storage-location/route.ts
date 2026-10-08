@@ -38,6 +38,18 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
 
   const result = await prisma.$transaction(async tx => {
+    // Claim the registered location row before the specimen row, matching the
+    // deactivation lock order. The guarded UPDATE obtains an InnoDB row lock.
+    const activeLocation = await tx.specimenStorageLocation.updateMany({
+      where: {
+        id: registered.id,
+        organizationId: session.user.organizationId,
+        branchId: specimen.currentBranchId!,
+        status: "ACTIVE",
+      },
+      data: { status: "ACTIVE" },
+    });
+    if (activeLocation.count !== 1) return null;
     const changed = await tx.specimen.updateMany({
       where: {
         id: specimen.id,
@@ -53,11 +65,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       },
     });
     if (changed.count !== 1) return null;
-    const stillActive = await tx.specimenStorageLocation.count({
-      where: { id: registered.id, organizationId: session.user.organizationId, branchId: specimen.currentBranchId!, status: "ACTIVE" },
-    });
-    if (stillActive !== 1) throw new Error("STORAGE_LOCATION_DEACTIVATED");
-
     await tx.specimenEvent.create({
       data: {
         specimenId: specimen.id,
@@ -94,9 +101,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     });
 
     return true;
-  }).catch(error => {
-    if (error instanceof Error && error.message === "STORAGE_LOCATION_DEACTIVATED") return null;
-    throw error;
   });
 
   if (!result) return NextResponse.json({ error: "specimen_state_changed" }, { status: 409 });
