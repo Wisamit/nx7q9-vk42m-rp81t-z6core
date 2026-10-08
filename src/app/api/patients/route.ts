@@ -25,7 +25,7 @@ export async function POST(request: Request) {
   const dateOfBirth = text(body.dateOfBirth, 20);
   const sexAtBirth = ["MALE","FEMALE"].includes(body.sexAtBirth) ? body.sexAtBirth as "MALE" | "FEMALE" : null;
   if (!sexAtBirth) return NextResponse.json({ error: "sex_required" }, { status: 400 });
-  const ageText = text(body.recordedAgeValue, 4);
+  const ageText = text(body.recordedAgeValue, 5);
   const ageUnit = text(body.recordedAgeUnit, 8);
   const recordedAgeValue = /^(0|[1-9][0-9]{0,4})$/.test(ageText) ? Number(ageText) : null;
   if (recordedAgeValue === null || !["DAY","MONTH","YEAR"].includes(ageUnit) ||
