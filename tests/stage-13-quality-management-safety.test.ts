@@ -53,3 +53,14 @@ test("effective SOP versions are serialized through the document parent", () => 
   assert.ok(workflow.includes("OLDER_VERSION_CANNOT_REPLACE_EFFECTIVE"));
   assert.ok(workflow.includes("currentDocument.currentEffectiveVersion"));
 });
+
+test("QMS console provides bilingual operator feedback for conflicts and clinical closure holds", () => {
+  const consoleSource = source("../src/components/quality-management-console.tsx");
+  for (const reason of ["completed_capa_action_required", "open_capa_blocks_nonconformance_closure",
+    "linked_capa_must_be_closed", "older_version_cannot_replace_effective",
+    "document_workflow_state_conflict"]) {
+    assert.ok(consoleSource.includes(reason));
+  }
+  assert.ok(consoleSource.includes("أغلق CAPA المرتبط"));
+  assert.ok(consoleSource.includes("تغيّرت حالة"));
+});
