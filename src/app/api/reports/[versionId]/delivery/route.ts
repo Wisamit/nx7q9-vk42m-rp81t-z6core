@@ -29,7 +29,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ ver
       return NextResponse.json({ error: "invalid_pdf_metadata" }, { status: 400 });
     }
     const input = metadata as Record<string, unknown>;
-    if (typeof input.fileName !== "string" || !/^[a-zA-Z0-9._-]{1,180}\\.pdf$/.test(input.fileName)
+    if (typeof input.fileName !== "string" || !/^[a-zA-Z0-9._-]{1,180}\.pdf$/.test(input.fileName)
       || input.mimeType !== "application/pdf"
       || typeof input.sha256 !== "string" || !/^[0-9a-f]{64}$/i.test(input.sha256)
       || typeof input.pageCount !== "number" || !Number.isInteger(input.pageCount)
