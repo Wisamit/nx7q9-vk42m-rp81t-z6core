@@ -194,6 +194,7 @@ export default async function PatientDetailPage({ params }: { params: Promise<{ 
         dateOfBirth: patient.dateOfBirth?.toISOString().slice(0,10) || null,
         phone: patient.phone,
         hasPortalAccount: Boolean(patient.portalAccount),
+        evidence: [],
       }}
       candidates={sortDuplicateCandidates(duplicateCandidates.map(candidate => ({
         id: candidate.id,
