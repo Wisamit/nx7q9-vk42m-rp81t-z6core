@@ -43,7 +43,7 @@ test("MariaDB QC resolution CAS, target serialization and equipment downtime loc
       [material,org,"EQ-"+suffix,"Control","Level 1"],"DELETE FROM qc_materials WHERE id=?",[material]);
     await seed("INSERT INTO qc_lots(id,organization_id,material_id,lot_number,updated_at) VALUES (?,?,?,?,NOW(3))",
       [lot,org,material,"LOT-"+suffix],"DELETE FROM qc_lots WHERE id=?",[lot]);
-    await seed("INSERT INTO qc_targets(id,organization_id,qc_lot_id,analyzer_id,test_id,target_mean,target_sd,enabled_rules,effective_from,updated_at) VALUES (?,?,?,?,?,100,2,'[\\"1:3s\\"]','2026-01-01',NOW(3))",
+    await seed("INSERT INTO qc_targets(id,organization_id,qc_lot_id,analyzer_id,test_id,target_mean,target_sd,enabled_rules,effective_from,effective_to,updated_at) VALUES (?,?,?,?,?,100,2,'[\"1:3s\"]','2026-01-01','2026-12-31',NOW(3))",
       [target,org,lot,analyzer,labTest],"DELETE FROM qc_targets WHERE id=?",[target]);
     await seed("INSERT INTO qc_runs(id,organization_id,branch_id,analyzer_id,operator_user_id,updated_at) VALUES (?,?,?,?,?,NOW(3))",
       [run,org,branch,analyzer,user],"DELETE FROM qc_runs WHERE id=?",[run]);
@@ -70,7 +70,7 @@ test("MariaDB QC resolution CAS, target serialization and equipment downtime loc
     await a.execute("SELECT id FROM analyzers WHERE id=? FOR UPDATE",[analyzer]);
     const [notOverlapping] = await a.execute<mysql.RowDataPacket[]>(overlapSql,[org,lot,analyzer,labTest,"2027-12-31","2027-01-01"]);
     assert.equal(notOverlapping.length, 0);
-    await a.execute("INSERT INTO qc_targets(id,organization_id,qc_lot_id,analyzer_id,test_id,target_mean,target_sd,enabled_rules,effective_from,effective_to,updated_at) VALUES (?,?,?,?,?,100,2,'[\\"1:3s\\"]','2027-01-01','2027-12-31',NOW(3))",
+    await a.execute("INSERT INTO qc_targets(id,organization_id,qc_lot_id,analyzer_id,test_id,target_mean,target_sd,enabled_rules,effective_from,effective_to,updated_at) VALUES (?,?,?,?,?,100,2,'[\"1:3s\"]','2027-01-01','2027-12-31',NOW(3))",
       [target2,org,lot,analyzer,labTest]);
     cleanup.unshift({ sql: "DELETE FROM qc_targets WHERE id=?", values:[target2] });
     await b.beginTransaction();
