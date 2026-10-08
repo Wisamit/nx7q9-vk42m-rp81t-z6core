@@ -67,8 +67,24 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (!currency || !/^[A-Z]{3}$/.test(currency)) return NextResponse.json({ error: "currency_required_for_cost" }, { status: 400 });
   }
 
-  const event = await prisma.$transaction(async tx => {
-    const created = await tx.maintenanceEvent.create({
+  let event;
+  try {
+    event = await prisma.$transaction(async tx => {
+      // Share the equipment row lock with downtime and RESTORE transitions.
+      const locked = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM equipment WHERE id = ${equipment.id}
+        AND organization_id = ${session.user.organizationId} FOR UPDATE
+      `;
+      if (locked.length !== 1) throw new Error("EQUIPMENT_NOT_FOUND");
+      const current = await tx.equipment.findUniqueOrThrow({ where: { id: equipment.id } });
+      if (current.status === "RETIRED") throw new Error("EQUIPMENT_RETIRED");
+      if (maintenancePlanId) {
+        const activePlan = await tx.maintenancePlan.findFirst({
+          where: { id: maintenancePlanId, equipmentId: current.id, status: "ACTIVE" },
+        });
+        if (!activePlan) throw new Error("MAINTENANCE_PLAN_CHANGED");
+      }
+      const created = await tx.maintenanceEvent.create({
       data: {
         equipmentId: equipment.id,
         analyzerId: equipment.analyzerId,
@@ -96,10 +112,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       });
     }
 
-    if (status === "IN_PROGRESS") {
-      await tx.equipment.update({ where: { id: equipment.id }, data: { status: "UNDER_MAINTENANCE" } });
-    } else if (status === "COMPLETED" && equipment.status === "UNDER_MAINTENANCE") {
-      await tx.equipment.update({ where: { id: equipment.id }, data: { status: "ACTIVE" } });
+    if (status === "IN_PROGRESS" && current.status === "ACTIVE") {
+      await tx.equipment.update({ where: { id: current.id }, data: { status: "UNDER_MAINTENANCE" } });
+    } else if (status === "COMPLETED" && current.status === "UNDER_MAINTENANCE") {
+      // Completion does not requalify an analyzer; require a separate guarded RESTORE.
+      await tx.equipment.update({ where: { id: current.id }, data: { status: "OUT_OF_SERVICE" } });
     }
 
     await tx.auditEvent.create({
@@ -125,8 +142,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         userAgent: ctx.userAgent,
       },
     });
-    return created;
-  });
+      return created;
+    }, { isolationLevel: "Serializable", timeout: 30000 });
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : "";
+    return NextResponse.json({
+      error: ["EQUIPMENT_RETIRED", "MAINTENANCE_PLAN_CHANGED"].includes(reason)
+        ? reason.toLowerCase() : "equipment_maintenance_conflict",
+    }, { status: 409 });
+  }
 
   return NextResponse.json({ status: "ok", event }, { status: 201 });
 }
