@@ -1166,6 +1166,7 @@ model Branch {
   analyzerMessages AnalyzerMessage[]
   userScopes   UserBranchScope[]
   auditEvents  AuditEvent[]
+  createdPatients Patient[] @relation("PatientCreationBranch")
   activeSessions UserSession[] @relation("ActiveBranchSessions")
   testAvailability TestBranchAvailability[]
   referenceIntervals ReferenceInterval[]
@@ -2271,8 +2272,14 @@ model Patient {
   sexAtBirth      PatientSex   @default(UNKNOWN) @map("sex_at_birth")
   phone           String?      @db.VarChar(50)
   normalizedPhone String?      @map("normalized_phone") @db.VarChar(50)
+  whatsapp        String?      @db.VarChar(50)
   email           String?      @db.VarChar(191)
   nationalityCode      String?      @map("nationality_code") @db.Char(2)
+  addressEn            String?      @map("address_en") @db.Text
+  addressAr            String?      @map("address_ar") @db.Text
+  notes                String?      @db.Text
+  clinicalInformation  String?      @map("clinical_information") @db.Text
+  creationBranchId     String?      @map("creation_branch_id") @db.Char(36)
   status               RecordStatus @default(ACTIVE)
   mergedIntoPatientId  String?      @map("merged_into_patient_id") @db.Char(36)
   mergedAt             DateTime?    @map("merged_at") @db.DateTime(3)
@@ -2281,6 +2288,7 @@ model Patient {
   deactivatedAt        DateTime?    @map("deactivated_at") @db.DateTime(3)
 
   organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  creationBranch Branch?            @relation("PatientCreationBranch", fields: [creationBranchId], references: [id], onDelete: Restrict)
   mergedInto   Patient?            @relation("PatientMergeLineage", fields: [mergedIntoPatientId], references: [id], onDelete: Restrict)
   mergedFrom   Patient[]           @relation("PatientMergeLineage")
   mergeEventsAsSource PatientMergeEvent[] @relation("PatientMergeSource")
@@ -2297,6 +2305,7 @@ model Patient {
   @@index([organizationId, normalizedName])
   @@index([organizationId, normalizedPhone])
   @@index([organizationId, dateOfBirth])
+  @@index([creationBranchId, createdAt])
   @@index([mergedIntoPatientId, status])
   @@map("patients")
 }
