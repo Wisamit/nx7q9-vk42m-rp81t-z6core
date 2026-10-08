@@ -4,6 +4,7 @@ import {
   buildOrderItemTatSnapshot,
   selectBestTatPolicy,
   tatPolicyMatches,
+  tatEscalationLevelsDue,
   tatRemainingMinutes,
   tatWorkState,
   type TatPolicyCandidate,
@@ -30,6 +31,8 @@ test("catalog TAT is snapshotted from ordered-at clock", () => {
   assert.equal(snapshot.tatClockStartedAt?.toISOString(), orderedAt.toISOString());
   assert.equal(snapshot.tatDueAt?.toISOString(), "2026-10-07T09:30:00.000Z");
   assert.equal(snapshot.tatAlertAt, null);
+  assert.equal(snapshot.tatFirstEscalationAt, null);
+  assert.equal(snapshot.tatEscalationPermissionCodeSnapshot, null);
   assert.equal(snapshot.tatPolicyId, null);
   assert.equal(snapshot.tatSnapshotSource, "CATALOG_SNAPSHOT");
 });
@@ -43,6 +46,11 @@ test("missing catalog TAT remains explicitly not configured", () => {
     tatDueAt: null,
     tatAlertBeforeMinutesSnapshot: null,
     tatAlertAt: null,
+    tatEscalationAfterMinutesSnapshot: null,
+    tatEscalationRepeatMinutesSnapshot: null,
+    tatMaxEscalationLevelSnapshot: null,
+    tatEscalationPermissionCodeSnapshot: null,
+    tatFirstEscalationAt: null,
     tatPolicyId: null,
     tatSnapshotSource: "NOT_CONFIGURED",
   });
@@ -128,4 +136,86 @@ test("remaining TAT rounds upward to the next minute", () => {
   const dueAt = new Date("2026-10-07T09:00:30.000Z");
   const now = new Date("2026-10-07T08:00:00.000Z");
   assert.equal(tatRemainingMinutes(dueAt, now), 61);
+});
+
+
+test("SLA escalation configuration is snapshotted with deterministic first escalation time", () => {
+  const orderedAt = new Date("2026-10-08T08:00:00.000Z");
+  const snapshot = buildOrderItemTatSnapshot(60, orderedAt, {
+    source: "SLA_POLICY",
+    policyId: "POLICY-ESC",
+    alertBeforeMinutes: 15,
+    escalationAfterMinutes: 10,
+    escalationRepeatMinutes: 20,
+    maxEscalationLevel: 3,
+    escalationPermissionCode: "results.verify",
+  });
+
+  assert.equal(snapshot.tatDueAt?.toISOString(), "2026-10-08T09:00:00.000Z");
+  assert.equal(snapshot.tatFirstEscalationAt?.toISOString(), "2026-10-08T09:10:00.000Z");
+  assert.equal(snapshot.tatEscalationAfterMinutesSnapshot, 10);
+  assert.equal(snapshot.tatEscalationRepeatMinutesSnapshot, 20);
+  assert.equal(snapshot.tatMaxEscalationLevelSnapshot, 3);
+  assert.equal(snapshot.tatEscalationPermissionCodeSnapshot, "results.verify");
+});
+
+test("multiple escalation levels require a positive repeat interval", () => {
+  assert.throws(
+    () => buildOrderItemTatSnapshot(60, new Date("2026-10-08T08:00:00.000Z"), {
+      source: "SLA_POLICY",
+      policyId: "P1",
+      escalationAfterMinutes: 0,
+      maxEscalationLevel: 2,
+      escalationPermissionCode: "results.verify",
+    }),
+    /TAT_ESCALATION_REPEAT_REQUIRED/,
+  );
+});
+
+test("escalation scheduler emits only levels already due after the latest persistent event", () => {
+  const first = new Date("2026-10-08T09:10:00.000Z");
+  assert.deepEqual(
+    tatEscalationLevelsDue({
+      firstEscalationAt: first,
+      repeatMinutes: 20,
+      maxLevel: 3,
+      latestLevel: 0,
+      now: new Date("2026-10-08T09:29:59.000Z"),
+    }).map(item => [item.level, item.dueAt.toISOString()]),
+    [[1, "2026-10-08T09:10:00.000Z"]],
+  );
+
+  assert.deepEqual(
+    tatEscalationLevelsDue({
+      firstEscalationAt: first,
+      repeatMinutes: 20,
+      maxLevel: 3,
+      latestLevel: 1,
+      now: new Date("2026-10-08T09:55:00.000Z"),
+    }).map(item => item.level),
+    [2, 3],
+  );
+});
+
+test("single-level escalation never repeats without an interval", () => {
+  assert.deepEqual(
+    tatEscalationLevelsDue({
+      firstEscalationAt: new Date("2026-10-08T09:00:00.000Z"),
+      repeatMinutes: null,
+      maxLevel: 1,
+      latestLevel: 0,
+      now: new Date("2026-10-08T12:00:00.000Z"),
+    }).map(item => item.level),
+    [1],
+  );
+  assert.deepEqual(
+    tatEscalationLevelsDue({
+      firstEscalationAt: new Date("2026-10-08T09:00:00.000Z"),
+      repeatMinutes: null,
+      maxLevel: 1,
+      latestLevel: 1,
+      now: new Date("2026-10-08T12:00:00.000Z"),
+    }),
+    [],
+  );
 });

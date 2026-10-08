@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { OrderQuestionManager } from "@/components/order-question-manager";
 import { ResultLayoutManager } from "@/components/result-layout-manager";
 import { ReferenceIntervalGovernanceActions } from "@/components/reference-interval-governance-actions";
+import { TatPolicyGovernanceActions } from "@/components/tat-policy-governance-actions";
 import { getUiLocale, statusLabel, tr } from "@/lib/ui-i18n";
 import { normalizeOrderQuestionOptions } from "@/lib/order-questions";
 
@@ -21,7 +22,7 @@ export default async function TestDetailPage({ params }: { params: Promise<{ id:
       department: true, specimenType: true, container: true, method: true, defaultUnit: true,
       branchAvailability: { include: { branch: true } },
       components: { include: { unit: true, resultSection: true, referenceIntervals: { include: { branch: true, method: true, analyzer: true, specimenType: true, createdBy: true, approvedBy: true, retiredBy: true }, orderBy: { effectiveFrom: "desc" } } }, orderBy: { displayOrder: "asc" } },
-      tatPolicies: { include: { branch: true, createdBy: true }, orderBy: [{ effectiveFrom: "desc" }, { createdAt: "desc" }] },
+      tatPolicies: { include: { branch: true, createdBy: true, approvedBy: true, retiredBy: true }, orderBy: [{ effectiveFrom: "desc" }, { createdAt: "desc" }] },
       resultSections: { orderBy: [{ displayOrder: "asc" }, { code: "asc" }] },
       orderQuestions: { orderBy: [{ code: "asc" }, { version: "desc" }, { effectiveFrom: "desc" }] },
     },
@@ -113,19 +114,32 @@ export default async function TestDetailPage({ params }: { params: Promise<{ id:
           <th>{tr(locale, "Priority", "الأولوية")}</th>
           <th>TAT</th>
           <th>{tr(locale, "Alert", "التنبيه")}</th>
+          <th>{tr(locale, "Escalation", "التصعيد")}</th>
           <th>{tr(locale, "Effective", "السريان")}</th>
-          <th>{tr(locale, "Created by", "أنشئ بواسطة")}</th>
-          <th>{tr(locale, "Status", "الحالة")}</th>
+          <th>{tr(locale, "Governance", "الحوكمة")}</th>
+          {permissions.has("catalog.tat_policies.approve") && <th>{tr(locale, "Action", "الإجراء")}</th>}
         </tr></thead>
-        <tbody>{test.tatPolicies.length === 0 ? <tr><td colSpan={7} className="empty-state">{tr(locale, "No TAT / SLA policies configured. The catalog TAT remains the fallback.", "لا توجد سياسات TAT / SLA مهيأة. يبقى زمن الإنجاز الأساسي في دليل الفحص هو الخيار الاحتياطي.")}</td></tr> :
+        <tbody>{test.tatPolicies.length === 0 ? <tr><td colSpan={permissions.has("catalog.tat_policies.approve") ? 8 : 7} className="empty-state">{tr(locale, "No TAT / SLA policies configured. The catalog TAT remains the fallback.", "لا توجد سياسات TAT / SLA مهيأة. يبقى زمن الإنجاز الأساسي في دليل الفحص هو الخيار الاحتياطي.")}</td></tr> :
           test.tatPolicies.map(policy => <tr key={policy.id}>
             <td>{policy.branch ? localizedName(policy.branch) : tr(locale, "Organization default", "افتراضي المؤسسة")}</td>
             <td>{policy.priority === "STAT" ? "STAT" : policy.priority === "URGENT" ? tr(locale, "Urgent", "عاجل") : policy.priority === "ROUTINE" ? tr(locale, "Routine", "عادي") : tr(locale, "Any priority", "كل الأولويات")}</td>
             <td><strong>{policy.tatMinutes} {tr(locale, "min", "دقيقة")}</strong></td>
             <td>{policy.alertBeforeMinutes === null ? "—" : policy.alertBeforeMinutes + " " + tr(locale, "min before due", "دقيقة قبل الاستحقاق")}</td>
+            <td>{policy.escalationAfterMinutes === null ? tr(locale, "Disabled", "معطل") : <>
+              <strong>{policy.escalationAfterMinutes} {tr(locale, "min after due", "دقيقة بعد الاستحقاق")}</strong>
+              <br/><small>{tr(locale, "Max level", "أقصى مستوى")}: {policy.maxEscalationLevel}{policy.escalationRepeatMinutes ? " · " + tr(locale, "repeat", "تكرار") + " " + policy.escalationRepeatMinutes + " " + tr(locale, "min", "دقيقة") : ""}</small>
+              <br/><small>{tr(locale, "Recipients", "المستلمون")}: {policy.escalationPermissionCode || "—"}</small>
+            </>}</td>
             <td>{policy.effectiveFrom.toISOString().slice(0,10)}{policy.effectiveTo ? " → " + policy.effectiveTo.toISOString().slice(0,10) : " → " + tr(locale, "current", "حالي")}</td>
-            <td>{locale === "ar" ? policy.createdBy.displayNameAr || policy.createdBy.displayNameEn : policy.createdBy.displayNameEn}</td>
-            <td>{statusLabel(locale, policy.status)}</td>
+            <td>
+              <strong>{referenceApprovalLabel(policy.approvalStatus)}</strong>
+              <br/><small>{tr(locale, "Created by", "أُنشئ بواسطة")}: {actorName(policy.createdBy)}</small>
+              {policy.approvedAt ? <><br/><small>{tr(locale, "Approved by", "اعتمد بواسطة")}: {actorName(policy.approvedBy)} · {policy.approvedAt.toISOString().replace("T"," ").slice(0,19)}</small></> : null}
+              {policy.retiredAt ? <><br/><small>{tr(locale, "Retired by", "أُوقف بواسطة")}: {actorName(policy.retiredBy)} · {policy.retiredAt.toISOString().replace("T"," ").slice(0,19)}</small></> : null}
+              {policy.retirementReason ? <><br/><small>{tr(locale, "Reason", "السبب")}: {policy.retirementReason}</small></> : null}
+              <br/><small>{tr(locale, "Record", "السجل")}: {statusLabel(locale, policy.status)}</small>
+            </td>
+            {permissions.has("catalog.tat_policies.approve") && <td><TatPolicyGovernanceActions id={policy.id} approvalStatus={policy.approvalStatus} locale={locale} /></td>}
           </tr>)}
         </tbody>
       </table></div>

@@ -98,14 +98,18 @@ export function ClinicalCatalogManager({
         <label>{tr("Priority scope", "نطاق الأولوية")}<select name="priority"><option value="ANY">{tr("Any priority", "كل الأولويات")}</option><option value="ROUTINE">{tr("Routine", "عادي")}</option><option value="URGENT">{tr("Urgent", "عاجل")}</option><option value="STAT">{tr("STAT", "STAT")}</option></select></label>
         <label>{tr("TAT minutes", "زمن الإنجاز بالدقائق")}<input name="tatMinutes" type="number" min="0" max="5256000" required /></label>
         <label>{tr("Alert before due (minutes)", "التنبيه قبل الاستحقاق (دقائق)")}<input name="alertBeforeMinutes" type="number" min="0" placeholder={tr("Optional", "اختياري")} /></label>
+        <label>{tr("Escalate after overdue (minutes)", "التصعيد بعد التأخر (دقائق)")}<input name="escalationAfterMinutes" type="number" min="0" placeholder={tr("Optional — leave blank to disable", "اختياري — اتركه فارغاً للتعطيل")} /></label>
+        <label>{tr("Repeat escalation every (minutes)", "تكرار التصعيد كل (دقائق)")}<input name="escalationRepeatMinutes" type="number" min="1" placeholder={tr("Required only for multiple levels", "مطلوب فقط عند تعدد المستويات")} /></label>
+        <label>{tr("Maximum escalation level", "الحد الأقصى لمستوى التصعيد")}<input name="maxEscalationLevel" type="number" min="1" max="10" defaultValue="1" /></label>
+        <label>{tr("Recipient permission code", "رمز صلاحية المستلمين")}<input name="escalationPermissionCode" maxLength={120} placeholder="results.verify" /></label>
         <label>{tr("Effective from", "ساري من")}<input name="effectiveFrom" type="date" required defaultValue={new Date().toISOString().slice(0, 10)} /></label>
         <label>{tr("Effective to", "ساري حتى")}<input name="effectiveTo" type="date" /></label>
         <p className="muted form-span">{tr(
-          "Resolution priority: exact branch + exact priority, branch default, organization priority, then organization default. The selected policy is snapshotted on the order item.",
-          "أولوية الاختيار: الفرع والأولوية المطابقان، ثم افتراضي الفرع، ثم أولوية المؤسسة، ثم افتراضي المؤسسة. يتم حفظ السياسة المختارة كلقطة تاريخية على الفحص المطلوب."
+          "New policies are saved as inactive drafts. After approval, resolution priority is exact branch + exact priority, branch default, organization priority, then organization default. TAT and escalation settings are snapshotted on the order item.",
+          "تُحفظ السياسات الجديدة كمسودات غير نشطة. بعد الاعتماد تكون أولوية الاختيار: الفرع والأولوية المطابقان، ثم افتراضي الفرع، ثم أولوية المؤسسة، ثم افتراضي المؤسسة. ويتم حفظ إعدادات TAT والتصعيد كلقطة تاريخية على الفحص المطلوب."
         )}</p>
         {message && <p className="form-error form-span">{message}</p>}
-        <button className="primary-button form-span" disabled={saving}>{saving ? tr("Saving…", "جارٍ الحفظ…") : tr("Save TAT / SLA Policy", "حفظ سياسة TAT / SLA")}</button>
+        <button className="primary-button form-span" disabled={saving}>{saving ? tr("Saving…", "جارٍ الحفظ…") : tr("Save TAT / SLA Draft", "حفظ مسودة TAT / SLA")}</button>
       </form>}
 
       {mode === "range" && <form className="catalog-form" onSubmit={e => send(e, "/api/catalog/reference-intervals")}>

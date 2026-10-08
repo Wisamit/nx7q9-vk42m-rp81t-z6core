@@ -59,7 +59,10 @@ export function NotificationCenterActions({
     });
     const body = await response.json().catch(() => ({}));
     setBusy("");
-    setMessage(response.ok ? tr(`Processed ${body.results?.length || 0} outbound deliveries.`, `تمت معالجة ${body.results?.length || 0} عملية تسليم صادرة.`) : tr("Dispatch failed.", "فشلت عملية الإرسال."));
+    setMessage(response.ok ? tr(
+      `Created ${body.tatEscalations?.length || 0} TAT escalation(s) and processed ${body.results?.length || 0} outbound deliveries.`,
+      `تم إنشاء ${body.tatEscalations?.length || 0} تصعيد TAT ومعالجة ${body.results?.length || 0} عملية تسليم صادرة.`,
+    ) : tr("Dispatch failed.", "فشلت عملية الإرسال."));
     if (response.ok) router.refresh();
   }
 
@@ -103,7 +106,7 @@ export function NotificationCenterActions({
         {busy === "read" ? tr("Updating…", "جارٍ التحديث…") : tr("Mark all read", "تعليم الكل كمقروء")}
       </button>}
       {canDispatch && <button className="secondary-button" type="button" disabled={busy === "dispatch"} onClick={() => void dispatch()}>
-        {busy === "dispatch" ? tr("Dispatching…", "جارٍ الإرسال…") : tr("Dispatch outbound queue", "إرسال قائمة الصادر")}
+        {busy === "dispatch" ? tr("Processing…", "جارٍ المعالجة…") : tr("Process alerts & outbound queue", "معالجة التنبيهات وقائمة الصادر")}
       </button>}
     </div>
 

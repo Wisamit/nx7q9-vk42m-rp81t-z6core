@@ -115,6 +115,18 @@ enum TatSnapshotSource {
   MIGRATED_BASELINE
 }
 
+enum TatPolicyApprovalStatus {
+  DRAFT
+  APPROVED
+  RETIRED
+}
+
+enum TatEscalationStatus {
+  OPEN
+  ACKNOWLEDGED
+  CLOSED
+}
+
 enum PriceListScope {
   ORGANIZATION
   BRANCH
@@ -1094,6 +1106,7 @@ model Organization {
   notificationTemplates NotificationTemplate[]
   notificationPreferences NotificationPreference[]
   notifications Notification[]
+  tatEscalationEvents TatEscalationEvent[]
   reportTemplates ReportTemplate[]
 
   @@map("organizations")
@@ -1218,6 +1231,7 @@ model Branch {
   edgeQueueMessages EdgeQueueMessage[]
 
   notifications Notification[]
+  tatEscalationEvents TatEscalationEvent[]
   reportTemplates ReportTemplate[]
 
   @@unique([organizationId, code])
@@ -1353,6 +1367,9 @@ model User {
   createdClientCreditPolicies ClientCreditPolicy[] @relation("ClientCreditPolicyCreator")
   createdTaxRules TaxRule[] @relation("TaxRuleCreator")
   createdTatPolicies TestTatPolicy[] @relation("TatPolicyCreator")
+  approvedTatPolicies TestTatPolicy[] @relation("TatPolicyApprover")
+  retiredTatPolicies TestTatPolicy[] @relation("TatPolicyRetirer")
+  acknowledgedTatEscalations TatEscalationEvent[] @relation("TatEscalationAcknowledgedBy")
   updatedClientCreditPolicies ClientCreditPolicy[] @relation("ClientCreditPolicyUpdater")
   orderStatusChanges OrderStatusHistory[] @relation("OrderStatusChanger")
   collectedSpecimens Specimen[] @relation("SpecimenCollector")
@@ -1847,29 +1864,73 @@ model LabTest {
 }
 
 model TestTatPolicy {
-  id                 String        @id @default(uuid()) @db.Char(36)
-  testId             String        @map("test_id") @db.Char(36)
-  branchId           String?       @map("branch_id") @db.Char(36)
-  priority           OrderPriority?
-  tatMinutes         Int           @map("tat_minutes")
-  alertBeforeMinutes Int?          @map("alert_before_minutes")
-  effectiveFrom      DateTime      @map("effective_from") @db.DateTime(3)
-  effectiveTo        DateTime?     @map("effective_to") @db.DateTime(3)
-  status             RecordStatus  @default(ACTIVE)
-  createdByUserId    String        @map("created_by_user_id") @db.Char(36)
-  createdAt          DateTime      @default(now()) @map("created_at") @db.DateTime(3)
-  updatedAt          DateTime      @updatedAt @map("updated_at") @db.DateTime(3)
+  id                         String                  @id @default(uuid()) @db.Char(36)
+  testId                     String                  @map("test_id") @db.Char(36)
+  branchId                   String?                 @map("branch_id") @db.Char(36)
+  priority                   OrderPriority?
+  tatMinutes                 Int                     @map("tat_minutes")
+  alertBeforeMinutes         Int?                    @map("alert_before_minutes")
+  escalationAfterMinutes     Int?                    @map("escalation_after_minutes")
+  escalationRepeatMinutes    Int?                    @map("escalation_repeat_minutes")
+  maxEscalationLevel         Int                     @default(1) @map("max_escalation_level")
+  escalationPermissionCode   String?                 @map("escalation_permission_code") @db.VarChar(120)
+  effectiveFrom              DateTime                @map("effective_from") @db.DateTime(3)
+  effectiveTo                DateTime?               @map("effective_to") @db.DateTime(3)
+  status                     RecordStatus            @default(INACTIVE)
+  approvalStatus             TatPolicyApprovalStatus @default(DRAFT) @map("approval_status")
+  createdByUserId            String                  @map("created_by_user_id") @db.Char(36)
+  approvedByUserId           String?                 @map("approved_by_user_id") @db.Char(36)
+  approvedAt                 DateTime?               @map("approved_at") @db.DateTime(3)
+  retiredByUserId            String?                 @map("retired_by_user_id") @db.Char(36)
+  retiredAt                  DateTime?               @map("retired_at") @db.DateTime(3)
+  retirementReason           String?                 @map("retirement_reason") @db.VarChar(1000)
+  createdAt                  DateTime                @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt                  DateTime                @updatedAt @map("updated_at") @db.DateTime(3)
 
-  test      LabTest @relation(fields: [testId], references: [id], onDelete: Restrict)
-  branch    Branch? @relation(fields: [branchId], references: [id], onDelete: Restrict)
-  createdBy User    @relation("TatPolicyCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  test       LabTest @relation(fields: [testId], references: [id], onDelete: Restrict)
+  branch     Branch? @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  createdBy  User    @relation("TatPolicyCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  approvedBy User?   @relation("TatPolicyApprover", fields: [approvedByUserId], references: [id], onDelete: Restrict)
+  retiredBy  User?   @relation("TatPolicyRetirer", fields: [retiredByUserId], references: [id], onDelete: Restrict)
   orderItems OrderItem[]
 
-  @@index([testId, status, effectiveFrom, effectiveTo])
-  @@index([branchId, status, effectiveFrom, effectiveTo])
-  @@index([testId, branchId, priority, status, effectiveFrom])
+  @@index([testId, status, approvalStatus, effectiveFrom, effectiveTo])
+  @@index([branchId, status, approvalStatus, effectiveFrom, effectiveTo])
+  @@index([testId, branchId, priority, status, approvalStatus, effectiveFrom])
   @@index([createdByUserId, createdAt])
+  @@index([approvedByUserId, approvedAt])
   @@map("test_tat_policies")
+}
+
+model TatEscalationEvent {
+  id                      String              @id @default(uuid()) @db.Char(36)
+  organizationId          String              @map("organization_id") @db.Char(36)
+  branchId                String              @map("branch_id") @db.Char(36)
+  orderItemId             String              @map("order_item_id") @db.Char(36)
+  level                   Int
+  status                  TatEscalationStatus @default(OPEN)
+  tatDueAtSnapshot        DateTime            @map("tat_due_at_snapshot") @db.DateTime(3)
+  escalationDueAtSnapshot DateTime            @map("escalation_due_at_snapshot") @db.DateTime(3)
+  permissionCodeSnapshot  String              @map("permission_code_snapshot") @db.VarChar(120)
+  recipientCount          Int                 @default(0) @map("recipient_count")
+  notificationIdsSnapshot Json?               @map("notification_ids_snapshot")
+  acknowledgedByUserId    String?             @map("acknowledged_by_user_id") @db.Char(36)
+  acknowledgedAt          DateTime?           @map("acknowledged_at") @db.DateTime(3)
+  acknowledgementNote     String?             @map("acknowledgement_note") @db.VarChar(1000)
+  closedAt                DateTime?           @map("closed_at") @db.DateTime(3)
+  createdAt               DateTime            @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt               DateTime            @updatedAt @map("updated_at") @db.DateTime(3)
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  branch         Branch       @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  orderItem      OrderItem    @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
+  acknowledgedBy User?        @relation("TatEscalationAcknowledgedBy", fields: [acknowledgedByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([orderItemId, level])
+  @@index([organizationId, status, escalationDueAtSnapshot])
+  @@index([branchId, status, createdAt])
+  @@index([acknowledgedByUserId, acknowledgedAt])
+  @@map("tat_escalation_events")
 }
 
 model TestComponent {
@@ -2579,6 +2640,11 @@ model OrderItem {
   tatDueAt              DateTime?       @map("tat_due_at") @db.DateTime(3)
   tatAlertBeforeMinutesSnapshot Int?      @map("tat_alert_before_minutes_snapshot")
   tatAlertAt             DateTime?       @map("tat_alert_at") @db.DateTime(3)
+  tatEscalationAfterMinutesSnapshot Int?   @map("tat_escalation_after_minutes_snapshot")
+  tatEscalationRepeatMinutesSnapshot Int?  @map("tat_escalation_repeat_minutes_snapshot")
+  tatMaxEscalationLevelSnapshot Int?        @map("tat_max_escalation_level_snapshot")
+  tatEscalationPermissionCodeSnapshot String? @map("tat_escalation_permission_code_snapshot") @db.VarChar(120)
+  tatFirstEscalationAt   DateTime?       @map("tat_first_escalation_at") @db.DateTime(3)
   tatPolicyId            String?         @map("tat_policy_id") @db.Char(36)
   tatSnapshotSource      TatSnapshotSource @default(NOT_CONFIGURED) @map("tat_snapshot_source")
   createdAt              DateTime        @default(now()) @map("created_at") @db.DateTime(3)
@@ -2601,12 +2667,14 @@ model OrderItem {
   packageLinks     OrderPackageItem[]
   answers          OrderAnswer[]
   sendOutReferrals SendOutReferral[]
+  tatEscalations TatEscalationEvent[]
 
   @@unique([orderId, testId])
   @@index([performedBranchId, status])
   @@index([testId, status])
   @@index([tatDueAt, status])
   @@index([tatAlertAt, tatDueAt, status])
+  @@index([tatFirstEscalationAt, status])
   @@index([tatPolicyId])
   @@map("order_items")
 }

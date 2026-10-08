@@ -9,6 +9,7 @@ import { scopedWorklistBranchIds } from "@/lib/clinical-safety";
 import { tatRemainingMinutes, tatWorkState } from "@/lib/tat";
 import { analyzerCanRouteWorkItem } from "@/lib/analyzer-routing";
 import { AnalyzerRoutingControl } from "@/components/analyzer-routing-control";
+import { TatEscalationAcknowledge } from "@/components/tat-escalation-acknowledge";
 
 export const dynamic = "force-dynamic";
 
@@ -165,6 +166,10 @@ export default async function WorklistsPage({
         },
         analyzerRoutes: {
           orderBy: { assignedAt: "asc" },
+        },
+        tatEscalations: {
+          orderBy: { level: "desc" },
+          take: 1,
         },
         results: {
           orderBy: { version: "desc" },
@@ -398,6 +403,7 @@ export default async function WorklistsPage({
                 const abnormalCount = result?.values.filter(value => value.isAbnormal).length || 0;
                 const tatState = tatWorkState(item.tatDueAt, item.status, now, item.tatAlertAt);
                 const tatRemaining = tatRemainingMinutes(item.tatDueAt, now);
+                const latestTatEscalation = item.tatEscalations[0] || null;
                 const readySpecimenBranchIds = [...new Set(item.specimenLinks
                   .map(link => link.specimen)
                   .filter(specimen =>
@@ -453,6 +459,17 @@ export default async function WorklistsPage({
                               : tr(locale, "Completed", "مكتمل")}
                       </strong>
                       <br/><small>{formatTatDueAt(item.tatDueAt, item.order.orderingBranch.timezone)} · {item.tatMinutesSnapshot ?? "—"} {tr(locale, "min", "دقيقة")}{item.tatSnapshotSource === "SLA_POLICY" ? " · SLA" : ""}</small>
+                      {item.tatFirstEscalationAt ? <><br/><small>{tr(locale, "Escalation starts", "بدء التصعيد")}: {formatTatDueAt(item.tatFirstEscalationAt, item.order.orderingBranch.timezone)} · {tr(locale, "max", "حد أقصى")} {item.tatMaxEscalationLevelSnapshot || 1}</small></> : null}
+                      {latestTatEscalation ? <div className={latestTatEscalation.status === "OPEN" ? "form-warning" : "muted"}>
+                        <strong>{tr(locale, "TAT escalation", "تصعيد TAT")} L{latestTatEscalation.level} · {statusLabel(locale, latestTatEscalation.status)}</strong>
+                        <br/><small>{latestTatEscalation.escalationDueAtSnapshot.toISOString().replace("T"," ").slice(0,19)} · {tr(locale, "recipients", "المستلمون")}: {latestTatEscalation.recipientCount}</small>
+                        {latestTatEscalation.status === "OPEN" && permissions.has("worklists.tat_escalations.acknowledge") && <TatEscalationAcknowledge
+                          orderItemId={item.id}
+                          eventId={latestTatEscalation.id}
+                          level={latestTatEscalation.level}
+                          locale={locale}
+                        />}
+                      </div> : null}
                     </> : <span className="muted">
                       {item.tatSnapshotSource === "MIGRATED_BASELINE"
                         ? tr(locale, "Historical item — no TAT snapshot", "عنصر تاريخي — لا توجد لقطة زمن إنجاز")
