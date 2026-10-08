@@ -85,3 +85,12 @@ test("bridge claim defers outage without cancelling a queued work order", () => 
   const cancel = route.indexOf('status: eligible ? "DEAD_LETTER" : "CANCELLED"', noDispatch);
   assert.ok(equipment >= 0 && downtime > equipment && noDispatch > downtime && cancel > noDispatch);
 });
+
+test("analyzer-sourced result without import provenance cannot bypass QC", () => {
+  const route = source("../src/app/api/results/[id]/release/route.ts");
+  const guard = route.indexOf('analyzerComponentIds.length === 0');
+  const preflight = route.indexOf('const qcGate = result.source === "ANALYZER"', guard);
+  assert.ok(guard >= 0 && preflight > guard);
+  assert.ok(route.includes('"ANALYZER_RESULT_PROVENANCE_MISSING"'));
+  assert.ok(route.includes("componentIds: analyzerComponentIds,"));
+});
