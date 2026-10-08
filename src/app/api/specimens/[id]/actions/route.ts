@@ -90,34 +90,66 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     const acceptanceError = receptionAcceptanceError({ labelAssessment, conditionCode, expectedContainerCode, observedContainerCode });
     if (acceptanceError) {
-      // A failed acceptance is a clinically significant observation, even though
-      // the specimen must remain outside the RECEIVED workflow.
-      await prisma.auditEvent.create({
-        data: {
-          organizationId: session.user.organizationId,
-          branchId,
-          actorUserId: session.user.id,
-          action: "SPECIMEN_RECEPTION_EXCEPTION_OBSERVED",
-          entityType: "Specimen",
-          entityId: specimen.id,
-          reason: discrepancyText || acceptanceError,
-          newValues: {
-            barcode: specimen.barcode,
-            specimenStatusUnchanged: specimen.status,
-            acceptanceError,
-            labelAssessment,
-            conditionCode,
-            expectedContainerCode,
-            observedContainerCode,
-            temperatureC: temperatureText || null,
-            discrepancyText,
-            notes: receptionNotes,
+      // An unacceptable reception creates a persistent, fail-closed clinical
+      // hold. It cannot silently return to reception or analytical processing.
+      const quarantined = await prisma.$transaction(async tx => {
+        const claimed = await tx.specimen.updateMany({
+          where: {
+            id: specimen.id,
+            organizationId: session.user.organizationId,
+            currentBranchId: branchId,
+            status: specimen.status,
+            preanalyticalVersion: specimen.preanalyticalVersion,
           },
-          ipAddress: ctx.ipAddress,
-          userAgent: ctx.userAgent,
-        },
+          data: {
+            status: "QUARANTINED",
+            preanalyticalVersion: { increment: 1 },
+          },
+        });
+        if (claimed.count !== 1) return false;
+        const observation = {
+          barcode: specimen.barcode,
+          acceptanceError,
+          labelAssessment,
+          conditionCode,
+          expectedContainerCode,
+          observedContainerCode,
+          temperatureC: temperatureText || null,
+          discrepancyText,
+          notes: receptionNotes,
+        };
+        await tx.specimenEvent.create({
+          data: {
+            specimenId: specimen.id,
+            eventType: "QUARANTINED",
+            branchId,
+            actorUserId: session.user.id,
+            fromStatus: specimen.status,
+            toStatus: "QUARANTINED",
+            details: observation,
+          },
+        });
+        await tx.auditEvent.create({
+          data: {
+            organizationId: session.user.organizationId,
+            branchId,
+            actorUserId: session.user.id,
+            action: "SPECIMEN_RECEPTION_QUARANTINED",
+            entityType: "Specimen",
+            entityId: specimen.id,
+            reason: discrepancyText || acceptanceError,
+            oldValues: { status: specimen.status },
+            newValues: { status: "QUARANTINED", ...observation },
+            ipAddress: ctx.ipAddress,
+            userAgent: ctx.userAgent,
+          },
+        });
+        return true;
       });
-      return NextResponse.json({ error: acceptanceError }, { status: 409 });
+      if (!quarantined) {
+        return NextResponse.json({ error: "specimen_preanalytical_state_changed" }, { status: 409 });
+      }
+      return NextResponse.json({ error: acceptanceError, specimenStatus: "QUARANTINED" }, { status: 409 });
     }
 
     const result = await prisma.$transaction(async (tx) => {
