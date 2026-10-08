@@ -1227,6 +1227,11 @@ export async function POST(request: Request) {
     });
   }, { timeout: 30000, isolationLevel: "Serializable" }).catch(error => {
     if (error instanceof Error && ["ANALYZER_IMPORT_CONCURRENT_STATE_CHANGE","SPECIMEN_PREANALYTICAL_STATE_CHANGED","ANALYZER_RESULT_STATE_CHANGED"].includes(error.message)) return null;
+    // Concurrent first imports can compete for a unique result version;
+    // serialization/deadlock conflicts must not surface as a 500 or produce
+    // any partial imported clinical history.
+    if (error instanceof Prisma.PrismaClientKnownRequestError
+      && ["P2002", "P2034"].includes(error.code)) return null;
     throw error;
   });
 
