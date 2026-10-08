@@ -133,12 +133,17 @@ export function PricingManager({
     });
     const body = await response.json().catch(() => ({}));
     if (response.ok) {
-      setMessage(tr("Test price added.", "تمت إضافة سعر الفحص."));
+      const superseded = Number(body.supersededCount || 0);
+      setMessage(superseded > 0
+        ? tr("New test price revision added; the previous effective price was closed automatically.", "تمت إضافة نسخة سعر جديدة للفحص وإغلاق السعر السابق تلقائيًا.")
+        : tr("Test price added.", "تمت إضافة سعر الفحص."));
       setTestId(""); setTestSearch("");
       event.currentTarget.reset();
       router.refresh();
       setOpen("");
-    } else setMessage(body.error || tr("Could not add test price.", "تعذر إضافة سعر الفحص."));
+    } else setMessage(body.error === "price_revision_must_start_after_latest"
+      ? tr("The new price must start after the latest existing revision.", "يجب أن يبدأ السعر الجديد بعد أحدث نسخة سعر موجودة.")
+      : body.error || tr("Could not add test price.", "تعذر إضافة سعر الفحص."));
     setBusy("");
   }
 
@@ -160,12 +165,17 @@ export function PricingManager({
     });
     const body = await response.json().catch(() => ({}));
     if (response.ok) {
-      setMessage(tr("Package price added.", "تمت إضافة سعر الباقة."));
+      const superseded = Number(body.supersededCount || 0);
+      setMessage(superseded > 0
+        ? tr("New package price revision added; the previous effective price was closed automatically.", "تمت إضافة نسخة سعر جديدة للباقة وإغلاق السعر السابق تلقائيًا.")
+        : tr("Package price added.", "تمت إضافة سعر الباقة."));
       setPackageId(""); setPackageSearch("");
       event.currentTarget.reset();
       router.refresh();
       setOpen("");
-    } else setMessage(body.error || tr("Could not add package price.", "تعذر إضافة سعر الباقة."));
+    } else setMessage(body.error === "price_revision_must_start_after_latest"
+      ? tr("The new price must start after the latest existing revision.", "يجب أن يبدأ السعر الجديد بعد أحدث نسخة سعر موجودة.")
+      : body.error || tr("Could not add package price.", "تعذر إضافة سعر الباقة."));
     setBusy("");
   }
 

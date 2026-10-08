@@ -1,6 +1,15 @@
 import type { Prisma, PrismaClient } from "../../generated/prisma/client";
 import { comparePricingCandidates } from "@/lib/pricing-policy";
 
+export class PricingConfigurationError extends Error {
+  constructor(
+    public readonly code: "ambiguous_test_price_revision" | "ambiguous_package_price_revision",
+    public readonly priceListId: string,
+  ) {
+    super(code);
+  }
+}
+
 type DbClient = PrismaClient | Prisma.TransactionClient;
 
 export async function resolveTestPrice(
@@ -60,8 +69,7 @@ export async function resolveTestPrice(
           effectiveFrom: { lte: at },
           OR: [{ effectiveTo: null }, { effectiveTo: { gte: at } }],
         },
-        orderBy: { effectiveFrom: "desc" },
-        take: 1,
+        orderBy: [{ effectiveFrom: "desc" }, { id: "desc" }],
       },
     },
   });
@@ -72,8 +80,11 @@ export async function resolveTestPrice(
     .sort((a, b) => comparePricingCandidates(a.list, b.list));
 
   const selected = ranked[0]?.list;
-  const item = selected?.items[0];
-  if (!selected || !item) return null;
+  if (!selected) return null;
+  if (selected.items.length !== 1) {
+    throw new PricingConfigurationError("ambiguous_test_price_revision", selected.id);
+  }
+  const item = selected.items[0];
 
   return {
     priceListId: selected.id,
@@ -143,8 +154,7 @@ export async function resolvePackagePrice(
           effectiveFrom: { lte: at },
           OR: [{ effectiveTo: null }, { effectiveTo: { gte: at } }],
         },
-        orderBy: { effectiveFrom: "desc" },
-        take: 1,
+        orderBy: [{ effectiveFrom: "desc" }, { id: "desc" }],
       },
     },
   });
@@ -155,8 +165,11 @@ export async function resolvePackagePrice(
     .sort((a, b) => comparePricingCandidates(a.list, b.list));
 
   const selected = ranked[0]?.list;
-  const item = selected?.packageItems[0];
-  if (!selected || !item) return null;
+  if (!selected) return null;
+  if (selected.packageItems.length !== 1) {
+    throw new PricingConfigurationError("ambiguous_package_price_revision", selected.id);
+  }
+  const item = selected.packageItems[0];
 
   return {
     priceListId: selected.id,
