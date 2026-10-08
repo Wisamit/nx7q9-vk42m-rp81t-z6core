@@ -1,7 +1,8 @@
-export type PricingScopeType = "ORGANIZATION" | "BRANCH" | "SOURCE" | "CLIENT" | "CONTRACT";
+export type PricingScopeType = "ORGANIZATION" | "BRANCH" | "SOURCE" | "REFERRER" | "CLIENT" | "CONTRACT";
 
 const scopeRank: Record<PricingScopeType, number> = {
-  CONTRACT: 500,
+  CONTRACT: 600,
+  REFERRER: 500,
   CLIENT: 400,
   SOURCE: 300,
   BRANCH: 200,
@@ -16,5 +17,17 @@ export function comparePricingCandidates(
     scopeRank[b.scopeType] - scopeRank[a.scopeType] ||
     b.priority - a.priority ||
     b.effectiveFrom.getTime() - a.effectiveFrom.getTime()
+  );
+}
+
+
+export function samePricingPrecedence(
+  a: { scopeType: PricingScopeType; priority: number; effectiveFrom: Date },
+  b: { scopeType: PricingScopeType; priority: number; effectiveFrom: Date },
+) {
+  return (
+    a.scopeType === b.scopeType
+    && a.priority === b.priority
+    && a.effectiveFrom.getTime() === b.effectiveFrom.getTime()
   );
 }

@@ -1,5 +1,18 @@
 import type { Prisma, PrismaClient } from "../../generated/prisma/client";
-import { comparePricingCandidates } from "@/lib/pricing-policy";
+import { comparePricingCandidates, samePricingPrecedence } from "@/lib/pricing-policy";
+
+export class PricingConfigurationError extends Error {
+  constructor(
+    public readonly code:
+      | "ambiguous_test_price_revision"
+      | "ambiguous_package_price_revision"
+      | "ambiguous_test_price_list"
+      | "ambiguous_package_price_list",
+    public readonly priceListId: string,
+  ) {
+    super(code);
+  }
+}
 
 type DbClient = PrismaClient | Prisma.TransactionClient;
 
@@ -9,6 +22,7 @@ export async function resolveTestPrice(
     organizationId: string;
     branchId: string;
     sourceId?: string | null;
+    referrerId?: string | null;
     clientId?: string | null;
     testId: string;
     at?: Date;
@@ -39,6 +53,7 @@ export async function resolveTestPrice(
           { scopeType: "ORGANIZATION" },
           { scopeType: "BRANCH", branchId: input.branchId },
           ...(input.sourceId ? [{ scopeType: "SOURCE" as const, sourceId: input.sourceId }] : []),
+          ...(input.referrerId ? [{ scopeType: "REFERRER" as const, referrerId: input.referrerId }] : []),
           ...(input.clientId ? [{ scopeType: "CLIENT" as const, clientId: input.clientId }] : []),
           ...(contractIds.length ? [{ scopeType: "CONTRACT" as const, contractId: { in: contractIds } }] : []),
         ],
@@ -60,8 +75,7 @@ export async function resolveTestPrice(
           effectiveFrom: { lte: at },
           OR: [{ effectiveTo: null }, { effectiveTo: { gte: at } }],
         },
-        orderBy: { effectiveFrom: "desc" },
-        take: 1,
+        orderBy: [{ effectiveFrom: "desc" }, { id: "desc" }],
       },
     },
   });
@@ -72,8 +86,15 @@ export async function resolveTestPrice(
     .sort((a, b) => comparePricingCandidates(a.list, b.list));
 
   const selected = ranked[0]?.list;
-  const item = selected?.items[0];
-  if (!selected || !item) return null;
+  if (!selected) return null;
+  const competing = ranked[1]?.list;
+  if (competing && samePricingPrecedence(selected, competing)) {
+    throw new PricingConfigurationError("ambiguous_test_price_list", selected.id);
+  }
+  if (selected.items.length !== 1) {
+    throw new PricingConfigurationError("ambiguous_test_price_revision", selected.id);
+  }
+  const item = selected.items[0];
 
   return {
     priceListId: selected.id,
@@ -92,6 +113,7 @@ export async function resolvePackagePrice(
     organizationId: string;
     branchId: string;
     sourceId?: string | null;
+    referrerId?: string | null;
     clientId?: string | null;
     packageId: string;
     at?: Date;
@@ -122,6 +144,7 @@ export async function resolvePackagePrice(
           { scopeType: "ORGANIZATION" },
           { scopeType: "BRANCH", branchId: input.branchId },
           ...(input.sourceId ? [{ scopeType: "SOURCE" as const, sourceId: input.sourceId }] : []),
+          ...(input.referrerId ? [{ scopeType: "REFERRER" as const, referrerId: input.referrerId }] : []),
           ...(input.clientId ? [{ scopeType: "CLIENT" as const, clientId: input.clientId }] : []),
           ...(contractIds.length ? [{ scopeType: "CONTRACT" as const, contractId: { in: contractIds } }] : []),
         ],
@@ -143,8 +166,7 @@ export async function resolvePackagePrice(
           effectiveFrom: { lte: at },
           OR: [{ effectiveTo: null }, { effectiveTo: { gte: at } }],
         },
-        orderBy: { effectiveFrom: "desc" },
-        take: 1,
+        orderBy: [{ effectiveFrom: "desc" }, { id: "desc" }],
       },
     },
   });
@@ -155,8 +177,15 @@ export async function resolvePackagePrice(
     .sort((a, b) => comparePricingCandidates(a.list, b.list));
 
   const selected = ranked[0]?.list;
-  const item = selected?.packageItems[0];
-  if (!selected || !item) return null;
+  if (!selected) return null;
+  const competing = ranked[1]?.list;
+  if (competing && samePricingPrecedence(selected, competing)) {
+    throw new PricingConfigurationError("ambiguous_package_price_list", selected.id);
+  }
+  if (selected.packageItems.length !== 1) {
+    throw new PricingConfigurationError("ambiguous_package_price_revision", selected.id);
+  }
+  const item = selected.packageItems[0];
 
   return {
     priceListId: selected.id,

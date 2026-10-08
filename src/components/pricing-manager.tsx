@@ -15,6 +15,7 @@ type PriceListOption = { id: string; code: string; nameEn: string; nameAr?: stri
 export function PricingManager({
   branches,
   sources,
+  referrers,
   clients,
   contracts,
   tests,
@@ -25,6 +26,7 @@ export function PricingManager({
 }: {
   branches: Option[];
   sources: SourceOption[];
+  referrers: Option[];
   clients: Option[];
   contracts: ContractOption[];
   tests: TestOption[];
@@ -35,7 +37,7 @@ export function PricingManager({
 }) {
   const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
   const localizedName = (item: { nameEn: string; nameAr?: string | null }) => locale === "ar" ? item.nameAr || item.nameEn : item.nameEn;
-  const scopeLabel = (value: string) => ({ ORGANIZATION: tr("Organization","المؤسسة"), BRANCH: tr("Branch","الفرع"), SOURCE: tr("Source / Campaign","المصدر / الحملة"), CLIENT: tr("Client","العميل"), CONTRACT: tr("Contract","العقد") }[value] || value);
+  const scopeLabel = (value: string) => ({ ORGANIZATION: tr("Organization","المؤسسة"), BRANCH: tr("Branch","الفرع"), SOURCE: tr("Source / Campaign","المصدر / الحملة"), REFERRER: tr("Referrer / Doctor","المحيل / الطبيب"), CLIENT: tr("Client","العميل"), CONTRACT: tr("Contract","العقد") }[value] || value);
   const router = useRouter();
   const [scopeType, setScopeType] = useState("ORGANIZATION");
   const [message, setMessage] = useState("");
@@ -96,6 +98,7 @@ export function PricingManager({
         scopeType,
         branchId: form.get("branchId"),
         sourceId: form.get("sourceId"),
+        referrerId: form.get("referrerId"),
         clientId: form.get("clientId"),
         contractId: form.get("contractId"),
         currency: form.get("currency"),
@@ -111,7 +114,12 @@ export function PricingManager({
       setScopeType("ORGANIZATION");
       router.refresh();
       setOpen("");
-    } else setMessage(body.error || tr("Could not create price list.", "تعذر إنشاء قائمة الأسعار."));
+    } else setMessage(body.error === "price_list_precedence_conflict"
+      ? tr(
+          "Another price list already has the same scope, target, priority and start date. Change the start date or priority.",
+          "توجد قائمة أسعار أخرى بنفس النطاق والهدف والأولوية وتاريخ البداية. غيّر تاريخ البداية أو الأولوية.",
+        )
+      : body.error || tr("Could not create price list.", "تعذر إنشاء قائمة الأسعار."));
     setBusy("");
   }
 
@@ -133,12 +141,17 @@ export function PricingManager({
     });
     const body = await response.json().catch(() => ({}));
     if (response.ok) {
-      setMessage(tr("Test price added.", "تمت إضافة سعر الفحص."));
+      const superseded = Number(body.supersededCount || 0);
+      setMessage(superseded > 0
+        ? tr("New test price revision added; the previous effective price was closed automatically.", "تمت إضافة نسخة سعر جديدة للفحص وإغلاق السعر السابق تلقائيًا.")
+        : tr("Test price added.", "تمت إضافة سعر الفحص."));
       setTestId(""); setTestSearch("");
       event.currentTarget.reset();
       router.refresh();
       setOpen("");
-    } else setMessage(body.error || tr("Could not add test price.", "تعذر إضافة سعر الفحص."));
+    } else setMessage(body.error === "price_revision_must_start_after_latest"
+      ? tr("The new price must start after the latest existing revision.", "يجب أن يبدأ السعر الجديد بعد أحدث نسخة سعر موجودة.")
+      : body.error || tr("Could not add test price.", "تعذر إضافة سعر الفحص."));
     setBusy("");
   }
 
@@ -160,12 +173,17 @@ export function PricingManager({
     });
     const body = await response.json().catch(() => ({}));
     if (response.ok) {
-      setMessage(tr("Package price added.", "تمت إضافة سعر الباقة."));
+      const superseded = Number(body.supersededCount || 0);
+      setMessage(superseded > 0
+        ? tr("New package price revision added; the previous effective price was closed automatically.", "تمت إضافة نسخة سعر جديدة للباقة وإغلاق السعر السابق تلقائيًا.")
+        : tr("Package price added.", "تمت إضافة سعر الباقة."));
       setPackageId(""); setPackageSearch("");
       event.currentTarget.reset();
       router.refresh();
       setOpen("");
-    } else setMessage(body.error || tr("Could not add package price.", "تعذر إضافة سعر الباقة."));
+    } else setMessage(body.error === "price_revision_must_start_after_latest"
+      ? tr("The new price must start after the latest existing revision.", "يجب أن يبدأ السعر الجديد بعد أحدث نسخة سعر موجودة.")
+      : body.error || tr("Could not add package price.", "تعذر إضافة سعر الباقة."));
     setBusy("");
   }
 
@@ -197,11 +215,12 @@ export function PricingManager({
     <CrudModal open={open === "list"} onClose={() => setOpen("")} title={tr("Create Price List", "إنشاء قائمة أسعار")} description={tr("Define pricing scope, currency, precedence and effective dates.", "حدد نطاق التسعير والعملة والأولوية وتواريخ السريان.")} size="lg">
       <form className="catalog-form" onSubmit={createList}>
         <label>{tr("Code", "الرمز")}<input name="code" placeholder={tr("Optional; generated from name","اختياري؛ يتم توليده من الاسم")} /></label>
-        <label>{tr("Scope", "النطاق")}<select value={scopeType} onChange={e => setScopeType(e.target.value)}><option value="ORGANIZATION">{scopeLabel("ORGANIZATION")}</option><option value="BRANCH">{scopeLabel("BRANCH")}</option><option value="SOURCE">{scopeLabel("SOURCE")}</option><option value="CLIENT">{scopeLabel("CLIENT")}</option><option value="CONTRACT">{scopeLabel("CONTRACT")}</option></select></label>
+        <label>{tr("Scope", "النطاق")}<select value={scopeType} onChange={e => setScopeType(e.target.value)}><option value="ORGANIZATION">{scopeLabel("ORGANIZATION")}</option><option value="BRANCH">{scopeLabel("BRANCH")}</option><option value="SOURCE">{scopeLabel("SOURCE")}</option><option value="REFERRER">{scopeLabel("REFERRER")}</option><option value="CLIENT">{scopeLabel("CLIENT")}</option><option value="CONTRACT">{scopeLabel("CONTRACT")}</option></select></label>
         <label>{tr("Name (English)", "الاسم بالإنجليزية")}<input name="nameEn" required /></label>
         <label>{tr("Name (Arabic)", "الاسم بالعربية")}<input name="nameAr" dir="rtl" /></label>
         {scopeType === "BRANCH" && <label>{tr("Branch", "الفرع")}<select name="branchId" required><option value="">{tr("Select branch…", "اختر الفرع…")}</option>{branches.map(x => <option key={x.id} value={x.id}>{x.code} — {localizedName(x)}</option>)}</select></label>}
         {scopeType === "SOURCE" && <label>{tr("Source / Campaign", "المصدر / الحملة")}<select name="sourceId" required><option value="">{tr("Select source or campaign…", "اختر المصدر أو الحملة…")}</option>{sources.map(x => <option key={x.id} value={x.id}>{x.code} — {localizedName(x)} · {x.category}</option>)}</select></label>}
+        {scopeType === "REFERRER" && <label>{tr("Referrer / Doctor", "المحيل / الطبيب")}<select name="referrerId" required><option value="">{tr("Select referrer or doctor…", "اختر المحيل أو الطبيب…")}</option>{referrers.map(x => <option key={x.id} value={x.id}>{x.code} — {localizedName(x)}</option>)}</select></label>}
         {scopeType === "CLIENT" && <label>{tr("Client", "العميل")}<select name="clientId" required><option value="">{tr("Select client…", "اختر العميل…")}</option>{clients.map(x => <option key={x.id} value={x.id}>{x.code} — {localizedName(x)}</option>)}</select></label>}
         {scopeType === "CONTRACT" && <label>{tr("Contract", "العقد")}<select name="contractId" required><option value="">{tr("Select contract…", "اختر العقد…")}</option>{contracts.map(x => <option key={x.id} value={x.id}>{x.code} — {localizedName(x)}</option>)}</select></label>}
         <label>{tr("Currency", "العملة")}<input name="currency" required maxLength={3} defaultValue={defaultCurrency} /></label>

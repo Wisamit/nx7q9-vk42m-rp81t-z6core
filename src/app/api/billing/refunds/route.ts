@@ -4,6 +4,7 @@ import { Prisma } from "../../../../../generated/prisma/client";
 import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
 import { invoiceAdjustmentState, refundError } from "@/lib/billing-adjustments";
 import { prisma } from "@/lib/db";
+import { paymentMethodReferenceError, paymentMethodSnapshot, resolveSettlementPaymentMethod } from "@/lib/payment-methods";
 
 function text(value: unknown, max = 1000) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -30,12 +31,11 @@ export async function POST(request: Request) {
   const invoiceId = text(body.invoiceId, 36);
   const reason = text(body.reason, 1000);
   const reference = text(body.reference, 150);
-  const method = ["CASH","CARD","BANK_TRANSFER","ONLINE","OTHER"].includes(String(body.method))
-    ? String(body.method) as "CASH" | "CARD" | "BANK_TRANSFER" | "ONLINE" | "OTHER"
-    : null;
+  const paymentMethodId = text(body.paymentMethodId, 36);
+  const legacyMethod = text(body.method, 60);
   const amountText = typeof body.amount === "string" || typeof body.amount === "number" ? String(body.amount) : "";
 
-  if (!paymentId || !invoiceId || !reason || !method || !/^\d+(\.\d{1,4})?$/.test(amountText)) {
+  if (!paymentId || !invoiceId || !reason || (!paymentMethodId && !legacyMethod) || !/^\d+(\.\d{1,4})?$/.test(amountText)) {
     return NextResponse.json({ error: "invalid_fields" }, { status: 400 });
   }
 
@@ -76,6 +76,15 @@ export async function POST(request: Request) {
     if (currentPayment.branchId !== currentInvoice.branchId || currentPayment.currency !== currentInvoice.currency) {
       return { error: "financial_context_mismatch", httpStatus: 409 } as const;
     }
+
+    const paymentMethod = await resolveSettlementPaymentMethod(tx, {
+      organizationId: session.user.organizationId,
+      paymentMethodId,
+      legacyMethod,
+    });
+    if (!paymentMethod) return { error: "payment_method_not_available", httpStatus: 409 } as const;
+    const referenceError = paymentMethodReferenceError(paymentMethod, reference);
+    if (referenceError) return { error: referenceError, httpStatus: 409 } as const;
 
     const cashierShift = await tx.cashierShift.findFirst({
       where: {
@@ -167,7 +176,7 @@ export async function POST(request: Request) {
         refundNumber,
         currency: currentPayment.currency,
         amount,
-        method,
+        ...paymentMethodSnapshot(paymentMethod),
         reason,
         reference: reference || null,
         paymentAmountSnapshot: currentPayment.amount,
@@ -197,7 +206,10 @@ export async function POST(request: Request) {
           invoiceNumber: currentInvoice.invoiceNumber,
           currency: currentPayment.currency,
           amount: amount.toFixed(4),
-          method,
+          paymentMethodCode: paymentMethod.code,
+          paymentMethodNameEn: paymentMethod.nameEn,
+          paymentMethodNameAr: paymentMethod.nameAr,
+          baseMethod: paymentMethod.baseMethod,
           reason,
           reference: reference || null,
           cashierShiftId: cashierShift.id,

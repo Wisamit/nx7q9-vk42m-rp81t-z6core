@@ -12,12 +12,13 @@ export default async function PricingPage() {
 
   const accessibleBranchIds = session.user.branchScopes.map(scope => scope.branchId);
 
-  const [priceLists, branches, sources, clients, contracts, tests, packages] = await Promise.all([
+  const [priceLists, branches, sources, referrers, clients, contracts, tests, packages] = await Promise.all([
     prisma.priceList.findMany({
       where: { organizationId: session.user.organizationId, OR: [{ scopeType: { not: "BRANCH" } }, { branchId: { in: accessibleBranchIds } }] },
       include: {
         branch: { select: { code: true, nameEn: true, nameAr: true } },
         source: { select: { code: true, category: true, nameEn: true, nameAr: true } },
+        referrer: { select: { code: true, nameEn: true, nameAr: true } },
         client: { select: { code: true, nameEn: true, nameAr: true } },
         contract: { select: { code: true, nameEn: true, nameAr: true } },
         _count: { select: { items: true, packageItems: true } },
@@ -33,6 +34,11 @@ export default async function PricingPage() {
       where: { organizationId: session.user.organizationId, status: "ACTIVE" },
       select: { id: true, code: true, category: true, nameEn: true, nameAr: true },
       orderBy: [{ category: "asc" }, { nameEn: "asc" }],
+    }),
+    prisma.referrer.findMany({
+      where: { organizationId: session.user.organizationId, status: "ACTIVE" },
+      select: { id: true, code: true, nameEn: true, nameAr: true },
+      orderBy: { nameEn: "asc" },
     }),
     prisma.client.findMany({
       where: { organizationId: session.user.organizationId, status: "ACTIVE" },
@@ -55,8 +61,8 @@ export default async function PricingPage() {
   ]);
 
   const localizedName = (item: { nameEn: string; nameAr?: string | null }) => locale === "ar" ? item.nameAr || item.nameEn : item.nameEn;
-  const scopeLabel = (value: string) => ({ ORGANIZATION: tr(locale,"Organization","المؤسسة"), BRANCH: tr(locale,"Branch","الفرع"), SOURCE: tr(locale,"Source / Campaign","المصدر / الحملة"), CLIENT: tr(locale,"Client","العميل"), CONTRACT: tr(locale,"Contract","العقد") }[value] || value);
-  const scopeTarget = (list: (typeof priceLists)[number]) => list.scopeType === "BRANCH" && list.branch ? `${list.branch.code} — ${localizedName(list.branch)}` : list.scopeType === "SOURCE" && list.source ? `${list.source.code} — ${localizedName(list.source)}` : list.scopeType === "CLIENT" && list.client ? `${list.client.code} — ${localizedName(list.client)}` : list.scopeType === "CONTRACT" && list.contract ? `${list.contract.code} — ${localizedName(list.contract)}` : tr(locale, "Organization default", "الافتراضي للمؤسسة");
+  const scopeLabel = (value: string) => ({ ORGANIZATION: tr(locale,"Organization","المؤسسة"), BRANCH: tr(locale,"Branch","الفرع"), SOURCE: tr(locale,"Source / Campaign","المصدر / الحملة"), REFERRER: tr(locale,"Referrer / Doctor","المحيل / الطبيب"), CLIENT: tr(locale,"Client","العميل"), CONTRACT: tr(locale,"Contract","العقد") }[value] || value);
+  const scopeTarget = (list: (typeof priceLists)[number]) => list.scopeType === "BRANCH" && list.branch ? `${list.branch.code} — ${localizedName(list.branch)}` : list.scopeType === "SOURCE" && list.source ? `${list.source.code} — ${localizedName(list.source)}` : list.scopeType === "REFERRER" && list.referrer ? `${list.referrer.code} — ${localizedName(list.referrer)}` : list.scopeType === "CLIENT" && list.client ? `${list.client.code} — ${localizedName(list.client)}` : list.scopeType === "CONTRACT" && list.contract ? `${list.contract.code} — ${localizedName(list.contract)}` : tr(locale, "Organization default", "الافتراضي للمؤسسة");
 
   return <main className="catalog-shell">
     <header className="page-header">
@@ -71,6 +77,7 @@ export default async function PricingPage() {
     <PricingManager
       branches={branches.map(x => ({ id: x.id, code: x.code, nameEn: x.nameEn, nameAr: x.nameAr }))}
       sources={sources}
+      referrers={referrers}
       clients={clients.map(x => ({ id: x.id, code: x.code, nameEn: x.nameEn, nameAr: x.nameAr }))}
       contracts={contracts.map(x => ({ id: x.id, code: x.code, nameEn: x.nameEn, nameAr: x.nameAr, clientId: x.clientId }))}
       tests={tests}

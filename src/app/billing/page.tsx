@@ -48,7 +48,7 @@ export default async function BillingPage() {
       .map(assignment => assignment.role.discountLimitPercent),
   });
 
-  const [invoices, recentPayments, discountApprovals, creditNotes, recentRefunds] = await Promise.all([
+  const [invoices, recentPayments, discountApprovals, creditNotes, recentRefunds, paymentMethods] = await Promise.all([
     prisma.invoice.findMany({
       where: { organizationId: session.user.organizationId, branchId: { in: accessibleBranchIds } },
       include: {
@@ -101,6 +101,15 @@ export default async function BillingPage() {
       orderBy: { processedAt: "desc" },
       take: 100,
     }),
+    prisma.paymentMethodConfig.findMany({
+      where: {
+        organizationId: session.user.organizationId,
+        status: "ACTIVE",
+        isSettlement: true,
+        baseMethod: { not: "CREDIT_ACCOUNT" },
+      },
+      orderBy: [{ sortOrder: "asc" }, { code: "asc" }],
+    }),
   ]);
 
   const openInvoices = invoices.filter(invoice => invoice.status === "ISSUED" || invoice.status === "PARTIALLY_PAID");
@@ -137,7 +146,9 @@ export default async function BillingPage() {
         currency: payment.currency,
         remainingRefundable: remaining.toFixed(4),
         receivedAt: payment.receivedAt.toISOString(),
-        method: payment.method,
+        method: locale === "ar"
+          ? payment.paymentMethodNameArSnapshot || payment.paymentMethodNameEnSnapshot
+          : payment.paymentMethodNameEnSnapshot,
       }];
     });
   });
@@ -160,16 +171,38 @@ export default async function BillingPage() {
         <p className="muted">{tr(locale, "Historical invoice values are stored as immutable snapshots. Payments are allocated separately and support partial settlement.", "يتم حفظ قيم الفواتير التاريخية كلقطات غير قابلة للتغيير، وتُسجل المدفوعات بشكل منفصل مع دعم السداد الجزئي.")}</p>
       </div>
       <div className="header-actions">
-        {canManageBilling && <PaymentCreateModal locale={locale} invoices={openInvoices.map(invoice => ({
-          id: invoice.id,
-          invoiceNumber: invoice.invoiceNumber,
-          currency: invoice.currency,
-          balanceAmount: invoice.balanceAmount.toString(),
-        }))} />}
+        {canManageBilling && <PaymentCreateModal
+          locale={locale}
+          paymentMethods={paymentMethods.map(method => ({
+            id: method.id,
+            code: method.code,
+            name: locale === "ar" ? method.nameAr || method.nameEn : method.nameEn,
+            baseMethod: method.baseMethod,
+            requiresReference: method.requiresReference,
+          }))}
+          invoices={openInvoices.map(invoice => ({
+            id: invoice.id,
+            invoiceNumber: invoice.invoiceNumber,
+            currency: invoice.currency,
+            balanceAmount: invoice.balanceAmount.toString(),
+          }))}
+        />}
         {canManageBilling && <CreditNoteCreateModal locale={locale} invoices={creditableInvoices} />}
-        {canManageBilling && <RefundCreateModal locale={locale} options={refundOptions} />}
+        {canManageBilling && <RefundCreateModal
+          locale={locale}
+          paymentMethods={paymentMethods.map(method => ({
+            id: method.id,
+            code: method.code,
+            name: locale === "ar" ? method.nameAr || method.nameEn : method.nameEn,
+            baseMethod: method.baseMethod,
+            requiresReference: method.requiresReference,
+          }))}
+          options={refundOptions}
+        />}
+        <Link className="secondary-link" href="/billing/reports">{tr(locale, "Financial Reports", "التقارير المالية")}</Link>
         <Link className="secondary-link" href="/billing/accounts">{tr(locale, "Client Accounts", "حسابات العملاء")}</Link>
         {permissions.has("billing.tax.manage") && <Link className="secondary-link" href="/billing/taxes">{tr(locale, "Tax Rules", "القواعد الضريبية")}</Link>}
+        {permissions.has("billing.payment_methods.manage") && <Link className="secondary-link" href="/billing/payment-methods">{tr(locale, "Payment Methods", "طرق الدفع")}</Link>}
         {(canManageBilling || permissions.has("billing.cashier.approve")) && <Link className="secondary-link" href="/billing/cashier">{tr(locale, "Cashier Closing", "إغلاق أمين الصندوق")}</Link>}
         <Link className="secondary-link" href="/orders"><SystemIcon name="orders" size={15} />{tr(locale, "Orders", "الطلبات")}</Link>
         <Link className="secondary-link" href="/pricing"><SystemIcon name="pricing" size={15} />{tr(locale, "Pricing", "الأسعار")}</Link>
@@ -254,7 +287,7 @@ export default async function BillingPage() {
                 <td>{payment.amount.toString()} {payment.currency}</td>
                 <td>{payment.refundedAmount.toString()} {payment.currency}</td>
                 <td>{payment.amount.sub(payment.refundedAmount).toString()} {payment.currency}</td>
-                <td>{payment.method}</td>
+                <td>{locale === "ar" ? payment.paymentMethodNameArSnapshot || payment.paymentMethodNameEnSnapshot : payment.paymentMethodNameEnSnapshot}</td>
                 <td>{payment.reference || "—"}</td>
                 <td>{payment.cashier.displayNameEn}</td>
                 <td><span className={"status-badge status-" + payment.status.toLowerCase().replaceAll("_","-")}>{statusLabel(locale, payment.status)}</span></td>
@@ -294,7 +327,7 @@ export default async function BillingPage() {
             <td>{refund.processedAt.toISOString().slice(0,16).replace("T"," ")}</td>
             <td><strong>{refund.refundNumber}</strong></td>
             <td>{refund.invoice.invoiceNumber}</td>
-            <td>{refund.method}</td>
+            <td>{locale === "ar" ? refund.paymentMethodNameArSnapshot || refund.paymentMethodNameEnSnapshot : refund.paymentMethodNameEnSnapshot}</td>
             <td>{refund.branch.code}</td>
             <td>{refund.amount.toString()} {refund.currency}</td>
             <td>{refund.reason}</td>

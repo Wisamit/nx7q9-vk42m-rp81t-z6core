@@ -15,6 +15,14 @@ type CreditInvoiceOption = {
   lines: Array<{ id: string; description: string; amountRemaining: string; taxAmount: string }>;
 };
 
+type PaymentMethodOption = {
+  id: string;
+  code: string;
+  name: string;
+  baseMethod: string;
+  requiresReference: boolean;
+};
+
 type RefundOption = {
   paymentId: string;
   invoiceId: string;
@@ -46,6 +54,8 @@ function errorMessage(locale: "ar" | "en", code: string) {
     payment_changed: tr("The payment changed while processing. Review it and try again.", "تغيرت الدفعة أثناء المعالجة. راجعها ثم أعد المحاولة."),
     cashier_shift_required: tr("Open a cashier shift for this branch and currency first.", "افتح وردية أمين صندوق لهذا الفرع وهذه العملة أولاً."),
     cashier_shift_changed: tr("The cashier shift changed while processing. Refresh and try again.", "تغيرت وردية أمين الصندوق أثناء المعالجة. حدّث الصفحة وحاول مجددًا."),
+    payment_method_not_available: tr("The selected payment method is no longer available.", "طريقة الدفع المحددة لم تعد متاحة."),
+    payment_method_reference_required: tr("This payment method requires a transaction/reference number.", "طريقة الدفع هذه تتطلب رقم مرجع أو عملية."),
   };
   return messages[code] || tr("The financial adjustment could not be posted.", "تعذر تسجيل التسوية المالية.");
 }
@@ -156,9 +166,11 @@ export function CreditNoteCreateModal({
 
 export function RefundCreateModal({
   options,
+  paymentMethods,
   locale,
 }: {
   options: RefundOption[];
+  paymentMethods: PaymentMethodOption[];
   locale: "ar" | "en";
 }) {
   const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
@@ -167,6 +179,8 @@ export function RefundCreateModal({
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [message, setMessage] = useState("");
+  const [paymentMethodId, setPaymentMethodId] = useState(paymentMethods[0]?.id || "");
+  const selectedPaymentMethod = paymentMethods.find(method => method.id === paymentMethodId);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -183,7 +197,7 @@ export function RefundCreateModal({
         paymentId,
         invoiceId,
         amount: form.get("amount"),
-        method: form.get("method"),
+        paymentMethodId,
         reason: form.get("reason"),
         reference: form.get("reference"),
       }),
@@ -224,10 +238,13 @@ export function RefundCreateModal({
           </select>
         </label>
         <label>{tr("Refund amount", "مبلغ الاسترداد")}<input name="amount" type="number" min="0.0001" step="0.0001" required /></label>
-        <label>{tr("Refund method", "طريقة الاسترداد")}<select name="method" required defaultValue=""><option value="">{tr("Select method…", "اختر الطريقة…")}</option><option value="CASH">{tr("Cash", "نقدي")}</option><option value="CARD">{tr("Card", "بطاقة")}</option><option value="BANK_TRANSFER">{tr("Bank transfer", "تحويل بنكي")}</option><option value="ONLINE">{tr("Online", "إلكتروني")}</option><option value="OTHER">{tr("Other", "أخرى")}</option></select></label>
+        <label>{tr("Refund method", "طريقة الاسترداد")}<select name="paymentMethodId" required value={paymentMethodId} onChange={event => setPaymentMethodId(event.target.value)}>
+          <option value="">{tr("Select method…", "اختر الطريقة…")}</option>
+          {paymentMethods.map(method => <option key={method.id} value={method.id}>{method.name} · {method.code}</option>)}
+        </select></label>
         <label className="form-span">{tr("Reason", "السبب")}<textarea name="reason" maxLength={1000} required /></label>
-        <label className="form-span">{tr("Reference", "المرجع")}<input name="reference" maxLength={150} placeholder={tr("Refund / bank / card reference", "مرجع الاسترداد / البنك / البطاقة")} /></label>
-        <button className="primary-button form-span" disabled={busy}>{busy ? tr("Posting…", "جارٍ التسجيل…") : tr("Post Refund", "تسجيل الاسترداد")}</button>
+        <label className="form-span">{tr("Reference", "المرجع")}<input name="reference" maxLength={150} required={selectedPaymentMethod?.requiresReference === true} placeholder={selectedPaymentMethod?.requiresReference ? tr("Required refund/reference number", "رقم مرجع الاسترداد مطلوب") : tr("Refund / bank / card reference", "مرجع الاسترداد / البنك / البطاقة")} /></label>
+        <button className="primary-button form-span" disabled={busy || !paymentMethodId || paymentMethods.length === 0}>{busy ? tr("Posting…", "جارٍ التسجيل…") : tr("Post Refund", "تسجيل الاسترداد")}</button>
         {message && <div className="form-error form-span">{message}</div>}
       </form>
     </CrudModal>

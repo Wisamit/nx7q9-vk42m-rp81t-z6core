@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { Prisma } from "../../../../generated/prisma/client";
 import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { resolvePackagePrice, resolveTestPrice } from "@/lib/pricing";
+import { PricingConfigurationError, resolvePackagePrice, resolveTestPrice } from "@/lib/pricing";
 import { discountApprovalMode, effectiveDiscountLimit } from "@/lib/discount-policy";
 import { discountApprovalFingerprint } from "@/lib/discount-approval";
 import { invoiceDueDateSnapshot } from "@/lib/accounts-receivable-aging";
@@ -333,27 +333,38 @@ export async function POST(request: Request) {
   const directTestIdSet = new Set(directTestIds);
   const directTests = tests.filter(test => directTestIdSet.has(test.id));
 
-  const directPrices = await Promise.all(directTests.map(async test => ({
-    test,
-    price: await resolveTestPrice(prisma, {
-      organizationId: session.user.organizationId,
-      branchId,
-      sourceId,
-      clientId: effectiveClientId,
-      testId: test.id,
-    }),
-  })));
+  let directPrices;
+  let packagePrices;
+  try {
+    directPrices = await Promise.all(directTests.map(async test => ({
+      test,
+      price: await resolveTestPrice(prisma, {
+        organizationId: session.user.organizationId,
+        branchId,
+        sourceId,
+        referrerId,
+        clientId: effectiveClientId,
+        testId: test.id,
+      }),
+    })));
 
-  const packagePrices = await Promise.all(packages.map(async pkg => ({
-    package: pkg,
-    price: await resolvePackagePrice(prisma, {
-      organizationId: session.user.organizationId,
-      branchId,
-      sourceId,
-      clientId: effectiveClientId,
-      packageId: pkg.id,
-    }),
-  })));
+    packagePrices = await Promise.all(packages.map(async pkg => ({
+      package: pkg,
+      price: await resolvePackagePrice(prisma, {
+        organizationId: session.user.organizationId,
+        branchId,
+        sourceId,
+        referrerId,
+        clientId: effectiveClientId,
+        packageId: pkg.id,
+      }),
+    })));
+  } catch (error) {
+    if (error instanceof PricingConfigurationError) {
+      return NextResponse.json({ error: error.code }, { status: 409 });
+    }
+    throw error;
+  }
 
   const missingPrices = directPrices.filter(entry => !entry.price).map(entry => ({
     id: entry.test.id,

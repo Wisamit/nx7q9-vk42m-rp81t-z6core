@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { planNextPriceRevision } from "@/lib/pricing-version-governance";
 
 function text(value: unknown, max = 220) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -31,7 +32,7 @@ export async function POST(request: Request) {
   const [priceList, pkg] = await Promise.all([
     prisma.priceList.findFirst({
       where: { id: priceListId, organizationId: session.user.organizationId, status: "ACTIVE" },
-      select: { id: true, currency: true },
+      select: { id: true, branchId: true, currency: true },
     }),
     prisma.commercialPackage.findFirst({
       where: { id: packageId, organizationId: session.user.organizationId, status: "ACTIVE" },
@@ -39,9 +40,22 @@ export async function POST(request: Request) {
     }),
   ]);
   if (!priceList || !pkg) return NextResponse.json({ error: "master_data_not_found" }, { status: 404 });
+  if (priceList.branchId && !session.user.branchScopes.some(scope => scope.branchId === priceList.branchId)) {
+    return NextResponse.json({ error: "branch_forbidden" }, { status: 403 });
+  }
 
   try {
     const created = await prisma.$transaction(async tx => {
+      await tx.$queryRaw`SELECT id FROM price_lists WHERE id = ${priceListId} FOR UPDATE`;
+
+      const existing = await tx.priceListPackageItem.findMany({
+        where: { priceListId, packageId },
+        select: { id: true, status: true, effectiveFrom: true, effectiveTo: true },
+        orderBy: [{ effectiveFrom: "asc" }, { id: "asc" }],
+      });
+      const plan = planNextPriceRevision(existing, effectiveFrom);
+      if (!plan.ok) throw new Error(plan.error);
+
       const item = await tx.priceListPackageItem.create({
         data: {
           priceListId,
@@ -51,6 +65,32 @@ export async function POST(request: Request) {
           effectiveTo,
         },
       });
+
+      const predecessors = existing.filter(revision => plan.predecessorIdsToClose.includes(revision.id));
+      for (const predecessor of predecessors) {
+        await tx.priceListPackageItem.update({
+          where: { id: predecessor.id },
+          data: { effectiveTo: plan.predecessorCloseAt },
+        });
+        await tx.auditEvent.create({
+          data: {
+            organizationId: session.user.organizationId,
+            branchId: session.activeBranchId,
+            actorUserId: session.user.id,
+            action: "PACKAGE_PRICE_SUPERSEDED",
+            entityType: "PriceListPackageItem",
+            entityId: predecessor.id,
+            oldValues: { effectiveTo: predecessor.effectiveTo },
+            newValues: {
+              effectiveTo: plan.predecessorCloseAt,
+              supersededByPriceListPackageItemId: item.id,
+              supersededByEffectiveFrom: effectiveFrom,
+            },
+            ipAddress: ctx.ipAddress,
+            userAgent: ctx.userAgent,
+          },
+        });
+      }
 
       await tx.auditEvent.create({
         data: {
@@ -68,16 +108,20 @@ export async function POST(request: Request) {
             currency: priceList.currency,
             effectiveFrom,
             effectiveTo,
+            supersededPriceListPackageItemIds: plan.predecessorIdsToClose,
           },
           ipAddress: ctx.ipAddress,
           userAgent: ctx.userAgent,
         },
       });
-      return item;
+      return { item, supersededCount: predecessors.length };
     });
 
-    return NextResponse.json({ status: "ok", item: created }, { status: 201 });
-  } catch {
+    return NextResponse.json({ status: "ok", item: created.item, supersededCount: created.supersededCount }, { status: 201 });
+  } catch (error) {
+    if (error instanceof Error && error.message === "PRICE_REVISION_MUST_START_AFTER_LATEST") {
+      return NextResponse.json({ error: "price_revision_must_start_after_latest" }, { status: 409 });
+    }
     return NextResponse.json({ error: "package_price_conflict" }, { status: 409 });
   }
 }
