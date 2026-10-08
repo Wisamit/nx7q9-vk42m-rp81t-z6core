@@ -42,15 +42,24 @@ export async function POST(request: Request) {
   if (documentVersionId && !documentVersion) return NextResponse.json({ error: "effective_document_version_required" }, { status: 409 });
   if (branchId && analyzer && analyzer.branchId !== branchId) return NextResponse.json({ error: "analyzer_branch_mismatch" }, { status: 409 });
 
-  const activeAuthorizations = analyzerId && result !== "PASS"
-    ? await prisma.analyzerAuthorization.findMany({
-        where: { organizationId: session.user.organizationId, userId, analyzerId, status: "ACTIVE" },
-        select: { id: true },
-      })
-    : [];
-
-  const assessment = await prisma.$transaction(async tx => {
-    const created = await tx.competencyAssessment.create({
+  let assessment;
+  try {
+    assessment = await prisma.$transaction(async tx => {
+      if (analyzerId) {
+        // Grants and failed competency submissions lock the same analyzer row.
+        const locked = await tx.$queryRaw<Array<{ id: string }>>`
+          SELECT id FROM analyzers WHERE id = ${analyzerId}
+          AND organization_id = ${session.user.organizationId}
+          AND status = 'ACTIVE' FOR UPDATE
+        `;
+        if (locked.length !== 1) throw new Error("ANALYZER_STATE_CHANGED");
+      }
+      const activeAuthorizations = analyzerId && result !== "PASS"
+        ? await tx.analyzerAuthorization.findMany({
+            where: { organizationId: session.user.organizationId, userId, analyzerId, status: "ACTIVE" },
+            select: { id: true },
+          }) : [];
+      const created = await tx.competencyAssessment.create({
       data: {
         organizationId: session.user.organizationId,
         branchId,
@@ -69,7 +78,7 @@ export async function POST(request: Request) {
     });
     if (activeAuthorizations.length > 0) {
       await tx.analyzerAuthorization.updateMany({
-        where: { id: { in: activeAuthorizations.map(item => item.id) } },
+        where: { id: { in: activeAuthorizations.map(item => item.id) }, organizationId: session.user.organizationId, status: "ACTIVE" },
         data: { status: "SUSPENDED" },
       });
       for (const authorization of activeAuthorizations) {
@@ -103,8 +112,11 @@ export async function POST(request: Request) {
         userAgent: ctx.userAgent,
       },
     });
-    return created;
-  });
+      return created;
+    }, { isolationLevel: "Serializable", timeout: 30000 });
+  } catch {
+    return NextResponse.json({ error: "competency_submission_conflict" }, { status: 409 });
+  }
 
   return NextResponse.json({ status: "ok", competencyAssessment: assessment }, { status: 201 });
 }
