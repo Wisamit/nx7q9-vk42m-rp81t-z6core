@@ -73,8 +73,11 @@ export async function PATCH(request: Request) {
         where: {
           organizationId: session.user.organizationId,
           currentBranchId: location.branchId,
-          storageLocation: location.path,
-          status: { in: ["COLLECTED", "RECEIVED", "IN_PROCESS", "IN_TRANSIT"] },
+          OR: [
+            { storageLocationId: location.id },
+            { storageLocationId: null, storageLocation: location.path },
+          ],
+          status: { not: "DISPOSED" },
         },
       });
       if (occupied) throw new Error("STORAGE_LOCATION_HAS_ACTIVE_SPECIMENS");
