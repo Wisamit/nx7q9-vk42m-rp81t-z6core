@@ -49,6 +49,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       FOR UPDATE
     `;
     if (lockedLocations.length !== 1) return null;
+    // Reject a relocation if its origin was deactivated concurrently. The
+    // recorded source must remain consistent until the specimen CAS commits.
+    if (specimen.storageLocationId && specimen.storageLocationId !== registered.id) {
+      const source = await tx.specimenStorageLocation.findFirst({
+        where: { id: specimen.storageLocationId, organizationId: session.user.organizationId },
+        select: { id: true, status: true },
+      });
+      if (!source) return null;
+    }
     const changed = await tx.specimen.updateMany({
       where: {
         id: specimen.id,
