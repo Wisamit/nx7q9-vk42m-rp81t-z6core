@@ -67,15 +67,16 @@ export function SpecimenAliquotManager({
   const router = useRouter();
   const [locations, setLocations] = useState<Array<{ id: string; path: string; status: string }>>([]);
   const [busy, setBusy] = useState(false);
+  const [storageBusy, setStorageBusy] = useState(false);
   const [message, setMessage] = useState("");
   const usable = ["COLLECTED","RECEIVED","IN_PROCESS"].includes(status);
   useEffect(() => {
     if (!currentBranchId) return;
-    fetch(`/api/settings/specimen-storage-locations?branchId=${encodeURIComponent(currentBranchId)}&includeInactive=true`)
+    fetch(`/api/settings/specimen-storage-locations?branchId=${encodeURIComponent(currentBranchId)}${canManageStorageSettings ? "&includeInactive=true" : ""}`)
       .then(response => response.ok ? response.json() : { locations: [] })
       .then(data => setLocations(Array.isArray(data.locations) ? data.locations : []))
       .catch(() => setLocations([]));
-  }, [currentBranchId]);
+  }, [currentBranchId, canManageStorageSettings]);
 
   function errorMessage(code: unknown) {
     const key = typeof code === "string" ? code : "";
@@ -185,25 +186,37 @@ export function SpecimenAliquotManager({
 
   async function changeStorageStatus(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (storageBusy || busy) return;
     const form = new FormData(event.currentTarget);
-    const response = await fetch("/api/settings/specimen-storage-locations", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: form.get("locationId"), status: form.get("status"), reason: form.get("reason") }),
-    });
-    const body = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      setMessage(errorMessage(body.error));
-      return;
-    }
-    if (currentBranchId) {
-      const refreshed = await fetch(`/api/settings/specimen-storage-locations?branchId=${encodeURIComponent(currentBranchId)}&includeInactive=true`);
-      if (refreshed.ok) {
-        const data = await refreshed.json();
-        setLocations(data.locations || []);
+    setStorageBusy(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/settings/specimen-storage-locations", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: form.get("locationId"), status: form.get("status"), reason: form.get("reason") }),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setMessage(errorMessage(body.error));
+        return;
       }
+      if (currentBranchId) {
+        const refreshed = await fetch(`/api/settings/specimen-storage-locations?branchId=${encodeURIComponent(currentBranchId)}&includeInactive=true`);
+        if (refreshed.ok) {
+          const data = await refreshed.json();
+          setLocations(Array.isArray(data.locations) ? data.locations : []);
+        } else {
+          setMessage(tr("Status saved, but location list could not refresh.", "تم حفظ الحالة ولكن تعذر تحديث قائمة مواقع التخزين."));
+          return;
+        }
+      }
+      setMessage(tr("Storage location status updated and audited.", "تم تحديث حالة موقع التخزين وتسجيل العملية."));
+    } catch {
+      setMessage(tr("Connection failed while updating storage status.", "فشل الاتصال أثناء تحديث حالة موقع التخزين."));
+    } finally {
+      setStorageBusy(false);
     }
-    setMessage(tr("Storage location status updated and audited.", "تم تحديث حالة موقع التخزين وتسجيل العملية."));
   }
 
   async function relocateStorage(event: FormEvent<HTMLFormElement>) {
