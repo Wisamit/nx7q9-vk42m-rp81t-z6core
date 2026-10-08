@@ -94,6 +94,15 @@ test("MariaDB serializes a storage deactivation behind a relocation location loc
     await deactivating.rollback();
     await relocating.commit();
 
+    // Legacy free-text occupancy remains blocking even with a NULL registered FK.
+    await setup.execute("UPDATE specimens SET storage_location_id = NULL WHERE id = ?", [specimenId]);
+    const [legacyOccupants] = await setup.execute<mysql.RowDataPacket[]>(
+      `SELECT COUNT(*) AS occupied FROM specimens WHERE current_branch_id = ?
+       AND (storage_location_id = ? OR (storage_location_id IS NULL AND storage_location = ?))
+       AND status <> 'DISPOSED'`,
+      [branchId, locationId, "Integration / Fridge / Rack / Slot"]);
+    assert.equal(Number(legacyOccupants[0]?.occupied), 1);
+
     // Remove the sample's current physical assignment before disabling.
     await setup.execute("UPDATE specimens SET storage_location_id = NULL, storage_location = NULL WHERE id = ?", [specimenId]);
     const [cleared] = await setup.execute<mysql.RowDataPacket[]>(
