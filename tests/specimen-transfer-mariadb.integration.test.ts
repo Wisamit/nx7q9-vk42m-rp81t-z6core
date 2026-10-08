@@ -90,6 +90,49 @@ test("MariaDB serializes independent barcode receipts to prevent stale manifest 
       "SELECT COUNT(*) AS received FROM specimens WHERE id IN (?, ?) AND status = 'RECEIVED' AND current_branch_id = ? AND preanalytical_version = 1",
       [specimens[0], specimens[1], destination]);
     assert.equal(Number(transferredSpecimens[0]?.received),2);
+    // An overlapping DRAFT manifest must not be created concurrently for an
+    // already-claimed specimen. The same lock ordering is used by POST /transfers.
+    const overlappingManifest = randomUUID();
+    cleanup.unshift({ sql: "DELETE FROM specimen_transfer_manifests WHERE id = ?", args: [overlappingManifest] });
+    await first.beginTransaction();
+    const [manifestCreateLock] = await first.execute<mysql.RowDataPacket[]>(
+      "SELECT id FROM specimens WHERE id = ? AND organization_id = ? AND current_branch_id = ? AND status = 'RECEIVED' FOR UPDATE",
+      [specimens[0],org,destination]);
+    assert.equal(manifestCreateLock.length,1);
+    const [noPriorDraft] = await first.execute<mysql.RowDataPacket[]>(
+      `SELECT COUNT(*) AS competing FROM specimen_transfer_items t
+       JOIN specimen_transfer_manifests m ON m.id = t.manifest_id
+       WHERE t.specimen_id = ? AND m.status IN ('DRAFT','DISPATCHED','PARTIALLY_RECEIVED')`,
+      [specimens[0]]);
+    assert.equal(Number(noPriorDraft[0]?.competing),0);
+
+    await second.beginTransaction();
+    await assert.rejects(
+      second.execute("SELECT id FROM specimens WHERE id = ? FOR UPDATE",[specimens[0]]),
+      (error: unknown) => typeof error === "object" && error !== null && "code" in error && error.code === "ER_LOCK_WAIT_TIMEOUT");
+    await second.rollback();
+
+    await first.execute(
+      "INSERT INTO specimen_transfer_manifests (id,organization_id,manifest_number,source_branch_id,destination_branch_id,status,created_by_user_id,updated_at) VALUES (?,?,?,?,?,'DRAFT',?,NOW(3))",
+      [overlappingManifest,org,"OVER-"+suffix,destination,branch,user]);
+    await first.execute(
+      "INSERT INTO specimen_transfer_items (manifest_id,specimen_id,barcode_snapshot,status) VALUES (?,?,?,'PLANNED')",
+      [overlappingManifest,specimens[0],"RBC-"+suffix+"-0"]);
+    cleanup.unshift({ sql: "DELETE FROM specimen_transfer_items WHERE manifest_id = ? AND specimen_id = ?", args: [overlappingManifest,specimens[0]] });
+    await first.commit();
+
+    await second.beginTransaction();
+    const [recheckedLock] = await second.execute<mysql.RowDataPacket[]>(
+      "SELECT id FROM specimens WHERE id = ? AND current_branch_id = ? AND status = 'RECEIVED' FOR UPDATE",
+      [specimens[0],destination]);
+    assert.equal(recheckedLock.length,1);
+    const [conflictingDraft] = await second.execute<mysql.RowDataPacket[]>(
+      `SELECT COUNT(*) AS competing FROM specimen_transfer_items t
+       JOIN specimen_transfer_manifests m ON m.id = t.manifest_id
+       WHERE t.specimen_id = ? AND m.status IN ('DRAFT','DISPATCHED','PARTIALLY_RECEIVED')`,
+      [specimens[0]]);
+    assert.equal(Number(conflictingDraft[0]?.competing),1);
+    await second.rollback();
   } finally {
     await Promise.all([first.rollback().catch(()=>{}),second.rollback().catch(()=>{})]);
     for(const item of cleanup) await db.execute(item.sql,item.args);
