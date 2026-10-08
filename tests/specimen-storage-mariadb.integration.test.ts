@@ -86,6 +86,11 @@ test("MariaDB serializes a storage deactivation behind a relocation location loc
       "UPDATE specimens SET status = 'QUARANTINED', preanalytical_version = preanalytical_version + 1 WHERE id = ? AND status = 'RECEIVED'",
       [specimenId]);
     assert.equal(held.affectedRows,1);
+    const [quarantineEvent] = await setup.execute<mysql.ResultSetHeader>(
+      `INSERT INTO specimen_events (id, specimen_id, event_type, branch_id, actor_user_id, from_status, to_status, details)
+       VALUES (?, ?, 'QUARANTINED', ?, ?, 'RECEIVED', 'QUARANTINED', JSON_OBJECT('reason', 'test quarantine'))`,
+      [randomUUID(),specimenId,branchId,userId]);
+    assert.equal(quarantineEvent.affectedRows,1);
     const [quarantinedOccupants] = await setup.execute<mysql.RowDataPacket[]>(
       "SELECT COUNT(*) AS occupied FROM specimens WHERE storage_location_id = ? AND status <> 'DISPOSED'",
       [locationId]);
