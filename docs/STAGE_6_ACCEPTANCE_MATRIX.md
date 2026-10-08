@@ -103,3 +103,11 @@ Keep `stage-6-specimen-operations-completion` and PR #124 in Draft; no merge, no
 
 - Specimen `RECEIVE` action now permits `COLLECTED` only. In-transit material must be received through the audited manifest `RECEIVE_ITEM` route; source-branch operators cannot bypass the transfer chain of custody with the generic reception endpoint. The scanner UI follows the same lifecycle rule.
 - Source and clinical lifecycle regressions cover `IN_TRANSIT` rejection from direct RECEIVE, and the explicit `QUARANTINED` state permits only controlled rejection/recollection without an unauthorized waiver.
+
+
+## Audited inter-branch receiving discrepancies and missing specimens
+
+- Destination operators can now report a manifest barcode as `MISSING`, `DAMAGED`, `LABEL_MISMATCH`, `TEMPERATURE_FAILURE`, or `OTHER` with mandatory details through `REPORT_EXCEPTION`. Both the item status (`EXCEPTION`) and its reason snapshot are durable, and a specimen event plus audit record identify actor, manifest, barcode and custody.
+- `MISSING` is **not** a receipt: the specimen remains `IN_TRANSIT` with no implied destination physical custody. Other discrepancies confirm arrival at the destination but put the specimen into `QUARANTINED`; analytical use and result release remain blocked.
+- Exceptions do not silently mark the manifest `RECEIVED`: it remains `PARTIALLY_RECEIVED` and requires reconciliation. The current fail-closed workflow does not allow a later unreviewed scan to clear the exception, and no clinically unapproved exception waiver is fabricated.
+- Added bilingual UI exception fields and safe server-side tests. Deferred full-project UAT and a future explicitly authorized exception reconciliation procedure must be recognized separately from code delivery.
