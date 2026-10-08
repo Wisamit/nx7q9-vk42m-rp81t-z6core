@@ -131,3 +131,17 @@ test("successful and failed collection require active orders and current custody
   assert.equal(route.split('currentBranchId: branchId,\n').length >= 3, true);
   assert.ok(route.includes('specimen.order.status === "CANCELLED" || specimen.order.status === "COMPLETED"'));
 });
+
+
+test("reception CAS requires matching branch custody and organization", () => {
+  const route = readFileSync(new URL("../src/app/api/specimens/[id]/actions/route.ts", import.meta.url), "utf8");
+  const receive = route.indexOf('if (body.action === "RECEIVE")');
+  const claim = route.indexOf("const changed = await tx.specimen.updateMany", receive);
+  const assessment = route.indexOf("tx.specimenReceptionAssessment.create", claim);
+  assert.ok(receive >= 0 && claim > receive && assessment > claim);
+  const guard = route.slice(claim, assessment);
+  assert.ok(guard.includes("organizationId: session.user.organizationId"));
+  assert.ok(guard.includes("currentBranchId: branchId"));
+  assert.ok(guard.includes("preanalyticalVersion: specimen.preanalyticalVersion"));
+  assert.ok(guard.includes('if (changed.count !== 1) throw new Error("SPECIMEN_STATE_CHANGED")'));
+});
