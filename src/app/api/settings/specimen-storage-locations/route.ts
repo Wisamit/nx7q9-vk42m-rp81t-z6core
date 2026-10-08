@@ -4,12 +4,13 @@ import { prisma } from "@/lib/db";
 import { structuredStorageLocation } from "@/lib/specimen-storage-location";
 
 export async function GET(request: Request) {
-  const session = await requirePermission("specimens.view");
   const url = new URL(request.url);
+  const includeInactive = url.searchParams.get("includeInactive") === "true";
+  const session = await requirePermission(includeInactive ? "settings.manage" : "specimens.view");
   const branchId = url.searchParams.get("branchId") || session.activeBranchId;
   if (!branchId || !canAccessBranch(session, branchId)) return NextResponse.json({ error: "branch_forbidden" }, { status: 403 });
   const locations = await prisma.specimenStorageLocation.findMany({
-    where: { organizationId: session.user.organizationId, branchId, ...(url.searchParams.get("includeInactive") === "true" ? {} : { status: "ACTIVE" }) },
+    where: { organizationId: session.user.organizationId, branchId, ...(includeInactive ? {} : { status: "ACTIVE" }) },
     orderBy: { path: "asc" },
     select: { id: true, path: true, zone: true, unit: true, rack: true, slot: true, status: true },
   });
