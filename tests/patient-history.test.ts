@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   buildPatientTrendSeries,
   latestClinicalResultIds,
@@ -93,7 +94,6 @@ test("trend series use immutable snapshot labels and ignore non-numeric values",
 
 
 test("patient history page scopes clinical results to performing branch and uses report snapshots", () => {
-  const { readFileSync } = require("node:fs");
   const page = readFileSync(new URL("../src/app/patients/[id]/history/page.tsx", import.meta.url), "utf8");
 
   assert.ok(page.includes('performingBranchId: { in: branchIds }'));
