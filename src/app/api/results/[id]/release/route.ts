@@ -9,6 +9,7 @@ import { resolveEffectiveReportTemplate } from "@/lib/report-template";
 import { releaseEligibility } from "@/lib/clinical-safety";
 
 class SpecimenClinicalHold extends Error {}
+class ReportReleaseStateChanged extends Error {}
 
 export async function POST(_: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await requirePermission("results.release");
@@ -94,13 +95,25 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
     if (associatedSpecimens.some(specimen => specimen.status === "QUARANTINED")) {
       throw new SpecimenClinicalHold();
     }
-    const updatedResult = await tx.laboratoryResult.update({
-      where: { id: result.id },
+    // A second release request must not create a new report version from
+    // an already-released result or a stale validation snapshot.
+    const claim = await tx.laboratoryResult.updateMany({
+      where: {
+        id: result.id,
+        organizationId: session.user.organizationId,
+        status: "VERIFIED",
+        validationStage: "COMPLETE",
+        updatedAt: result.updatedAt,
+      },
       data: {
         status: "RELEASED",
         releasedByUserId: session.user.id,
         releasedAt,
       },
+    });
+    if (claim.count !== 1) throw new ReportReleaseStateChanged();
+    const updatedResult = await tx.laboratoryResult.findUniqueOrThrow({
+      where: { id: result.id },
     });
 
     if (result.amendedFromId) {
@@ -139,6 +152,15 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
         orderId: result.orderItem.orderId,
       },
     });
+
+    // Different tests from one order can be released simultaneously.
+    // Serialize report version allocation on their shared report parent.
+    const lockedReport = await tx.$queryRaw<Array<{ id: string }>>`
+      SELECT id FROM diagnostic_reports
+      WHERE id = ${report.id} AND organization_id = ${session.user.organizationId}
+      FOR UPDATE
+    `;
+    if (lockedReport.length !== 1) throw new ReportReleaseStateChanged();
 
     const previousVersion = await tx.diagnosticReportVersion.findFirst({
       where: { reportId: report.id },
@@ -236,11 +258,15 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
       integrationQueue,
     };
   }, { timeout: 30000 }).catch(error => {
-    if (error instanceof SpecimenClinicalHold) return null;
+    if (error instanceof SpecimenClinicalHold) return "CLINICAL_HOLD" as const;
+    if (error instanceof ReportReleaseStateChanged) return "RELEASE_STATE_CHANGED" as const;
     throw error;
   });
-  if (!released) {
+  if (released === "CLINICAL_HOLD") {
     return NextResponse.json({ error: "specimen_clinical_quarantine_blocks_release" }, { status: 409 });
+  }
+  if (released === "RELEASE_STATE_CHANGED") {
+    return NextResponse.json({ error: "result_already_released_or_state_changed" }, { status: 409 });
   }
 
   return NextResponse.json({
