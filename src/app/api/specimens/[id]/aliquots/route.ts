@@ -14,6 +14,7 @@ function text(value: unknown, max: number) {
 }
 
 class SpecimenVolumeChanged extends Error {}
+class SpecimenStorageChanged extends Error {}
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await requirePermission("specimens.aliquot");
@@ -56,6 +57,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "branch_forbidden" }, { status: 403 });
   }
 
+  // A newly created aliquot may only claim an active registered storage position.
+  const registeredStorage = storageLocation
+    ? await prisma.specimenStorageLocation.findUnique({
+        where: { branchId_path: { branchId: currentBranchId, path: storageLocation } },
+        select: { id: true, organizationId: true, status: true },
+      })
+    : null;
+  if (storageLocation && (!registeredStorage || registeredStorage.organizationId !== session.user.organizationId || registeredStorage.status !== "ACTIVE")) {
+    return NextResponse.json({ error: "storage_location_not_registered" }, { status: 409 });
+  }
+
   const volumeError = specimenVolumeUseError({
     status: parent.status,
     remainingVolume: parent.remainingVolume?.toFixed(3) || null,
@@ -81,6 +93,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
       const result = await prisma.$transaction(async tx => {
+        if (registeredStorage) {
+          // Lock the location before the parent specimen, matching deactivation
+          // and relocation lock order. The record must still be ACTIVE.
+          const locked = await tx.$queryRaw<Array<{ id: string }>>`
+            SELECT id FROM specimen_storage_locations
+            WHERE id = ${registeredStorage.id}
+              AND organization_id = ${session.user.organizationId}
+              AND branch_id = ${currentBranchId}
+              AND status = 'ACTIVE'
+            FOR UPDATE
+          `;
+          if (locked.length !== 1) throw new SpecimenStorageChanged();
+        }
         const consumed = await tx.specimen.updateMany({
           where: {
             id: parent.id,
@@ -138,6 +163,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
             remainingVolume: volume,
             remainingVolumeUnit: parent.remainingVolumeUnit,
             storageLocation,
+            storageLocationId: registeredStorage?.id || null,
             notes,
           },
         });
@@ -164,6 +190,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
               volumeUnit: parent.remainingVolumeUnit,
               purpose,
               storageLocation,
+              storageLocationId: registeredStorage?.id || null,
               linkedOrderItemIds: requestedOrderItemIds,
             },
           },
@@ -242,6 +269,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         parentRemainingVolumeUnit: result.remainingVolumeUnit,
       }, { status: 201 });
     } catch (error) {
+      if (error instanceof SpecimenStorageChanged) {
+        return NextResponse.json({ error: "storage_location_not_registered" }, { status: 409 });
+      }
       if (error instanceof SpecimenVolumeChanged) {
         return NextResponse.json({ error: "specimen_volume_changed" }, { status: 409 });
       }
