@@ -66,6 +66,33 @@ export default async function PortalReportPage({ params }: { params: Promise<{ v
   }
   if (!allowed) notFound();
 
+  // Withdrawn versions must never expose clinical values through the portal
+  // and must not create a false PORTAL/DELIVERED receipt.
+  if (version.status === "RETRACTED") {
+    const ctx = await requestContext();
+    await prisma.auditEvent.create({
+      data: {
+        organizationId: account.organizationId,
+        branchId: version.branchId,
+        actorUserId: null,
+        action: "PORTAL_RETRACTED_REPORT_VIEW_BLOCKED",
+        entityType: "DiagnosticReportVersion",
+        entityId: version.id,
+        sessionId: session.id,
+        newValues: { reportId: version.reportId, version: version.version, reason: "RETRACTED" },
+        ipAddress: ctx.ipAddress,
+        userAgent: ctx.userAgent,
+      },
+    });
+    return <main className="catalog-shell" dir={locale === "ar" ? "rtl" : "ltr"}>
+      <section className="detail-card" role="alert">
+        <h1>{tr(locale, "Report retracted", "التقرير مسحوب")}</h1>
+        <p>{tr(locale, "This report was withdrawn and must not be used for clinical decisions. Contact the laboratory for the currently valid report.", "تم سحب هذا التقرير ولا يجوز استخدامه لاتخاذ قرارات سريرية. تواصل مع المختبر للحصول على التقرير الساري.")}</p>
+        <a className="secondary-link" href="/portal">{tr(locale, "Back to Portal", "العودة للبوابة")}</a>
+      </section>
+    </main>;
+  }
+
   const ctx = await requestContext();
   await prisma.$transaction([
     prisma.reportDeliveryEvent.create({
@@ -114,6 +141,11 @@ export default async function PortalReportPage({ params }: { params: Promise<{ v
       <article className="detail-card"><h2>{tr(locale, "Accession", "رقم الطلب")}</h2><strong>{snapshot.order?.accessionNumber || "—"}</strong><p className="muted">{priorityLabel(locale, snapshot.order?.priority)}</p></article>
       <article className="detail-card"><h2>{tr(locale, "Report Version", "إصدار التقرير")}</h2><strong>v{version.version}</strong><p className="muted">{statusLabel(locale, version.status)}</p></article>
     </section>
+
+    {version.report.currentVersion !== version.version && <section className="detail-card" role="alert">
+      <strong>{tr(locale, "Superseded report version — not current", "إصدار تقرير قديم — ليس الإصدار الحالي")}</strong>
+      <p>{tr(locale, "This historical report was replaced by a newer version. Review the latest version before making clinical decisions.", "تم استبدال هذا التقرير التاريخي بإصدار أحدث. راجع أحدث إصدار قبل اتخاذ قرارات سريرية.")}</p>
+    </section>}
 
     {(snapshot.results || []).map((result, index) => <section className="table-card detail-section" key={(result.testCode || "test") + index}>
       <div className="table-toolbar"><h2>{result.testCode} — {locale === "ar" ? result.testNameAr || result.testNameEn : result.testNameEn}</h2></div>
