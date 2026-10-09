@@ -58,8 +58,9 @@ test("MariaDB price staging: tenant/branch isolation, exact decimal, concurrent 
     }
     for (let n=1;n<=102;n++) {
       const id=randomUUID();
-      const from=n===1||n===102?"2026-10-01":n===2?"2026-09-10":"2027-01-01";
-      const to=n===1||n===102?"2026-10-31":n===2?"2026-09-20":"2027-01-01";
+      const ordinaryDay = new Date(Date.UTC(2027, 0, n)).toISOString().slice(0, 10);
+      const from=n===1||n===102?"2026-10-01":n===2?"2026-09-10":ordinaryDay;
+      const to=n===1||n===102?"2026-10-31":n===2?"2026-09-20":ordinaryDay;
       const normalized=JSON.stringify({
         priceListCode:"L-"+suffix,testCode:"T-"+suffix,
         unitPrice:"12345678901234.1234",effectiveFrom:from,effectiveTo:to,
