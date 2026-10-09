@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
-import { requirePermission, requestContext } from "@/lib/auth";
+import { permissionSet, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import type { Prisma } from "../../../../../generated/prisma/client";
 import { allowedImportEntities, normalizeImportRow, rowValidationStatus, validateImportRow, type ImportInputRow } from "@/lib/catalog-import";
@@ -10,6 +10,8 @@ export async function POST(request:Request){
  const payload=await request.json().catch(()=>null) as {sourceName?:string;rows?:ImportInputRow[]}|null;
  if(!payload?.sourceName||!Array.isArray(payload.rows)||payload.rows.length===0||payload.rows.length>20000)return NextResponse.json({error:"Invalid import payload."},{status:400});
  if(payload.rows.some(r=>!r||!allowedImportEntities.has(r.entityType)||!r.data||typeof r.data!=="object"||Array.isArray(r.data)))return NextResponse.json({error:"Unsupported import entity."},{status:400});
+ // Staging financial configuration requires the financial management permission too.
+ if(payload.rows.some(row=>row.entityType==="PRICE_LIST_ITEM") && !permissionSet(session).has("pricing.manage"))return NextResponse.json({error:"pricing_manage_required"},{status:403});
  const normalized=payload.rows.map((row,index)=>{const n=normalizeImportRow(row);const v=validateImportRow(row.entityType,n);return {row,index,n,v,status:rowValidationStatus(v)} as const});
  const checksum=createHash("sha256").update(JSON.stringify(payload.rows)).digest("hex");
  const counts=normalized.reduce((a,r)=>({...a,[r.status]:(a[r.status]||0)+1}),{} as Record<string,number>);

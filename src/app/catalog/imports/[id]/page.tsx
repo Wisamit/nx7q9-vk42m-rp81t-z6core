@@ -8,6 +8,7 @@ import { ReferenceRangeImportButton } from "@/components/reference-range-import-
 import { ComponentImportReconciliation } from "@/components/component-import-reconciliation";
 import { PriceImportReconciliation } from "@/components/price-import-reconciliation";
 import { getUiLocale, tr } from "@/lib/ui-i18n";
+import { authorizedStagedPrices, stagedPriceListCode } from "@/lib/catalog-import-disclosure";
 
 export const dynamic = "force-dynamic";
 
@@ -29,7 +30,7 @@ export default async function ImportBatchPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ status?: string }>;
 }) {
-  const session = await requirePermission("catalog.view");
+  const session = await requirePermission("catalog.manage");
   const locale = getUiLocale(session.user.preferredLocale);
   const permissions = permissionSet(session);
   const { id } = await params;
@@ -43,6 +44,26 @@ export default async function ImportBatchPage({
     where: { id, organizationId: session.user.organizationId },
   });
   if (!batch) notFound();
+
+  // Check the whole batch before loading monetary values, issues or summaries.
+  // Never expose cross-branch or unresolved price candidates to catalog staff.
+  const stagedPrices = await prisma.catalogImportRow.findMany({
+    where: { batchId: batch.id, entityType: "PRICE_LIST_ITEM" },
+    select: { normalizedData: true },
+  });
+  if (stagedPrices.length > 0) {
+    if (!permissions.has("pricing.manage")) notFound();
+    const allowedBranches = new Set(session.user.branchScopes
+      .filter(scope => scope.branch.status === "ACTIVE").map(scope => scope.branchId));
+    const codes = [...new Set(stagedPrices.map(row => stagedPriceListCode(row.normalizedData)).filter(Boolean))];
+    const lists = await prisma.priceList.findMany({
+      where: { organizationId: session.user.organizationId, code: { in: codes } },
+      select: { code: true, branchId: true },
+    });
+    if (!authorizedStagedPrices(stagedPrices.map(row => row.normalizedData), lists, allowedBranches)) {
+      notFound();
+    }
+  }
 
   const [groups, issueRows, rows, totalRows] = await Promise.all([
     prisma.catalogImportRow.groupBy({

@@ -15,6 +15,8 @@ export default async function CatalogPage() {
   const session = await requirePermission("catalog.view");
   const permissions = permissionSet(session);
   const locale = session.user.preferredLocale === "ar" ? "ar" : "en";
+  const canReviewPrices = permissions.has("catalog.manage") && permissions.has("pricing.manage");
+  const activeBranches = session.user.branchScopes.filter(scope => scope.branch.status === "ACTIVE").map(scope => scope.branchId);
   const [tests, departments, specimens, containers, methods, units, analyzers, panels, packages, importBatches] = await Promise.all([
     prisma.labTest.findMany({
       where: { organizationId: session.user.organizationId },
@@ -28,8 +30,28 @@ export default async function CatalogPage() {
     prisma.unit.findMany({ where: { organizationId: session.user.organizationId, status: "ACTIVE" }, orderBy: { code: "asc" } }),
     prisma.analyzer.findMany({ where: { organizationId: session.user.organizationId, status: "ACTIVE" }, include: { branch: true }, orderBy: [{ branch: { nameEn: "asc" } }, { name: "asc" }] }),
     prisma.testPanel.findMany({ where: { organizationId: session.user.organizationId }, include: { items: true }, orderBy: { nameEn: "asc" } }),
-    prisma.commercialPackage.findMany({ where: { organizationId: session.user.organizationId }, include: { items: { include: { test: true }, orderBy: { displayOrder: "asc" } }, priceListItems: { where: { status: "ACTIVE" }, orderBy: { effectiveFrom: "desc" }, take: 1, include: { priceList: true } } }, orderBy: { nameEn: "asc" } }),
-    prisma.catalogImportBatch.findMany({ where: { organizationId: session.user.organizationId }, include: { _count: { select: { rows: true } } }, orderBy: { createdAt: "desc" }, take: 10 }),
+    prisma.commercialPackage.findMany({ where: { organizationId: session.user.organizationId }, include: { items: { include: { test: true }, orderBy: { displayOrder: "asc" } }, priceListItems: {
+      where: {
+        status: "ACTIVE",
+        priceList: {
+          organizationId: session.user.organizationId,
+          scopeType: { in: ["ORGANIZATION", "BRANCH"] },
+          OR: [{ branchId: null }, { branchId: { in: activeBranches } }],
+        },
+        ...(canReviewPrices ? {} : { id: "00000000-0000-0000-0000-000000000000" }),
+      },
+      orderBy: { effectiveFrom: "desc" }, take: 1,
+      include: { priceList: true },
+    } }, orderBy: { nameEn: "asc" } }),
+    prisma.catalogImportBatch.findMany({ where: {
+      organizationId: session.user.organizationId,
+      ...(permissions.has("catalog.manage") ? {
+        OR: [
+          { rows: { none: { entityType: "PRICE_LIST_ITEM" } } },
+          ...(permissions.has("pricing.manage") ? [{ createdByUserId: session.user.id }] : []),
+        ],
+      } : { id: "00000000-0000-0000-0000-000000000000" }),
+    }, include: { _count: { select: { rows: true } } }, orderBy: { createdAt: "desc" }, take: 10 }),
   ]);
 
   return (
@@ -75,22 +97,22 @@ export default async function CatalogPage() {
 
       {permissions.has("catalog.manage") && <CatalogCsvReviewStaging locale={locale} canStagePricing={permissions.has("pricing.manage")} />}
 
-      <LegacyImportBatches locale={locale} batches={importBatches.map(batch => ({ id: batch.id, sourceName: batch.sourceName, sourceType: batch.sourceType, status: batch.status, rows: batch._count.rows, createdAt: batch.createdAt.toISOString() }))} />
+      {permissions.has("catalog.manage") && <LegacyImportBatches locale={locale} batches={importBatches.map(batch => ({ id: batch.id, sourceName: batch.sourceName, sourceType: batch.sourceType, status: batch.status, rows: batch._count.rows, createdAt: batch.createdAt.toISOString() }))} />}
 
       <section className="table-card detail-section">
         <div className="table-toolbar"><h2>{tr(locale, "Commercial Packages", "الباقات التجارية")}</h2><span>{tr(locale, "Commercial groupings are separate from clinical panels.", "الباقات التجارية مستقلة عن الباقات السريرية.")}</span></div>
         <div className="table-wrap">
           <table>
-            <thead><tr><th>{tr(locale, "Code", "الرمز")}</th><th>{tr(locale, "Name", "الاسم")}</th><th>{tr(locale, "Tests", "الفحوصات")}</th><th>{tr(locale, "Latest configured price", "آخر سعر مهيأ")}</th><th>{tr(locale, "Status", "الحالة")}</th></tr></thead>
+            <thead><tr><th>{tr(locale, "Code", "الرمز")}</th><th>{tr(locale, "Name", "الاسم")}</th><th>{tr(locale, "Tests", "الفحوصات")}</th>{canReviewPrices && <th>{tr(locale, "Latest configured price", "آخر سعر مهيأ")}</th>}<th>{tr(locale, "Status", "الحالة")}</th></tr></thead>
             <tbody>
-              {packages.length === 0 ? <tr><td colSpan={5} className="empty-state">{tr(locale, "No commercial packages configured.", "لا توجد باقات تجارية مهيأة.")}</td></tr> :
+              {packages.length === 0 ? <tr><td colSpan={canReviewPrices ? 5 : 4} className="empty-state">{tr(locale, "No commercial packages configured.", "لا توجد باقات تجارية مهيأة.")}</td></tr> :
                 packages.map(pkg => {
                   const price = pkg.priceListItems[0];
                   return <tr key={pkg.id}>
                     <td><strong>{pkg.code}</strong></td>
                     <td>{locale === "ar" ? pkg.nameAr || pkg.nameEn : pkg.nameEn}{pkg.nameAr && locale !== "ar" ? <><br/><small dir="rtl">{pkg.nameAr}</small></> : null}</td>
                     <td>{pkg.items.map(item => item.test.code).join(", ")}</td>
-                    <td>{price ? price.unitPrice.toString() + " " + price.priceList.currency + " · " + price.priceList.code : tr(locale, "Not priced", "غير مسعرة")}</td>
+                    {canReviewPrices && <td>{price ? price.unitPrice.toString() + " " + price.priceList.currency + " · " + price.priceList.code : tr(locale, "Not priced", "غير مسعرة")}</td>}
                     <td><span className={"status-badge status-" + pkg.status.toLowerCase()}>{statusLabel(locale, pkg.status)}</span></td>
                   </tr>;
                 })}
