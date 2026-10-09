@@ -71,9 +71,10 @@ export function normalizeImportRow(row: ImportInputRow): Prisma.InputJsonObject 
     high: d.H ?? d.high ?? null,
     unit: text(d["test unit"] || d.unit),
     sex: text(d.sex).toUpperCase() || "ANY",
-    ageFrom: d.agefrom ?? null,
-    ageTo: d.ageto ?? null,
-    ageUnit: text(d.ag).toUpperCase(),
+    ageFrom: d.ageFrom ?? d.agefrom ?? null,
+    ageTo: d.ageTo ?? d.ageto ?? null,
+    ageUnit: text(d.ageUnit || d.ag).toUpperCase(),
+    normalTextEn: text(d.normalTextEn || d.Normal),
   };
 }
 
