@@ -310,6 +310,7 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
   const { id } = await params;
   const batch = await prisma.catalogImportBatch.findFirst({ where: { id, organizationId: session.user.organizationId } });
   if (!batch) return NextResponse.json({ error: "batch_not_found" }, { status: 404 });
+  if (batch.sourceType === "CSV_REVIEW") return NextResponse.json({ error: "csv_review_is_not_clinical_import" }, { status: 409 });
 
   const analysis = await analyze(batch.id, session.user.organizationId);
   let imported = 0;
@@ -321,6 +322,18 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
   await prisma.$transaction(async (tx) => {
     for (const item of analysis.safe) {
       if (!item.test || !item.mappedUnit || !item.mappedSex) continue;
+      // Claim the *source row* before creating any clinical definition.
+      // updateMany is a conditional InnoDB UPDATE: an overlapping request
+      // sees zero claimed rows after the first commits. A transaction error
+      // rolls back both the claim and the clinical changes.
+      const claim = await tx.catalogImportRow.updateMany({
+        where: {
+          id: item.row.id, batchId: batch.id,
+          status: { in: ["VALID", "WARNING"] }, importedEntityId: null,
+        },
+        data: { status: "IMPORTED" },
+      });
+      if (claim.count !== 1) continue;
       if (!item.test.defaultUnitId && item.mappedUnit.id) {
         await tx.labTest.update({ where: { id: item.test.id }, data: { defaultUnitId: item.mappedUnit.id } });
       }
