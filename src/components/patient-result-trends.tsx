@@ -63,8 +63,8 @@ export function PatientResultTrends({
       <div>
         <h2>{tr("Result Trends", "اتجاهات النتائج")}</h2>
         <span>{tr(
-          "Numeric released results only. Different units are kept in separate series.",
-          "النتائج الرقمية الصادرة فقط. يتم فصل الوحدات المختلفة في سلاسل مستقلة.",
+          "Only current released report results. Units, methods and analyzers remain separate.",
+          "نتائج التقارير الصادرة الحالية فقط. الوحدات وطرق التحليل والأجهزة تُعرض بشكل منفصل.",
         )}</span>
       </div>
       <label className="history-series-select">
@@ -74,7 +74,7 @@ export function PatientResultTrends({
             const itemTest = locale === "ar" ? item.testNameAr || item.testNameEn : item.testNameEn;
             const itemComponent = locale === "ar" ? item.componentNameAr || item.componentNameEn : item.componentNameEn;
             return <option key={item.key} value={item.key}>
-              {itemTest} · {itemComponent}{item.unit ? " · " + item.unit : ""}
+              {itemTest} · {itemComponent}{item.unit ? " · " + item.unit : ""}{item.methodId ? " · " + tr("Method", "الطريقة") + " " + item.methodId.slice(0, 8) : " · " + tr("Method unknown", "الطريقة غير معروفة")}{item.analyzerCode ? " · " + item.analyzerCode : ""}
             </option>;
           })}
         </select>
@@ -83,16 +83,17 @@ export function PatientResultTrends({
 
     <div className="patient-trend-heading">
       <strong>{testLabel} · {label}</strong>
-      <span>{selected.unit || tr("No unit", "بدون وحدة")} · {selected.points.length} {tr("point(s)", "نقطة")}</span>
+      <span>{selected.unit || tr("No unit", "بدون وحدة")} · {selected.points.length} {tr("point(s)", "نقطة")}{selected.analyzerCode ? " · " + selected.analyzerCode : ""}</span>
     </div>
 
+    {!selected.comparable && <p className="muted">{tr("Method provenance is unknown; readings are shown individually and must not be compared as a trend.", "طريقة التحليل غير موثقة؛ تُعرض القراءات منفردة ولا يجوز اعتبارها اتجاهاً قابلاً للمقارنة.")}</p>}
     <div className="patient-trend-chart" role="img" aria-label={tr("Historical result trend chart", "مخطط اتجاه النتائج التاريخية")}>
       <svg viewBox={"0 0 " + chartWidth + " " + chartHeight} preserveAspectRatio="none">
         <line x1={left} y1={top} x2={left} y2={top + plotHeight} className="patient-trend-axis" />
         <line x1={left} y1={top + plotHeight} x2={left + plotWidth} y2={top + plotHeight} className="patient-trend-axis" />
         <text x={4} y={top + 5} className="patient-trend-label">{max.toLocaleString()}</text>
         <text x={4} y={top + plotHeight} className="patient-trend-label">{min.toLocaleString()}</text>
-        {selected.points.length > 1 && <polyline points={polyline} className="patient-trend-line" />}
+        {selected.comparable && selected.points.length > 1 && <polyline points={polyline} className="patient-trend-line" />}
         {selected.points.map((point, index) => <circle
           key={point.observedAt + ":" + point.accessionNumber}
           cx={x(index)}

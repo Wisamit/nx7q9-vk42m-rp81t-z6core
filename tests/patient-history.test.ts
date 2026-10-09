@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
   buildPatientTrendSeries,
+  currentReportResultIds,
   latestClinicalResultIds,
   patientIdentityGroupIds,
 } from "../src/lib/patient-history.ts";
@@ -29,6 +30,8 @@ test("trend series never mix the same analyte across different units", () => {
     testNameEn: "Glucose",
     testNameAr: "جلوكوز",
     componentId: "C1",
+    methodId: "M1",
+    analyzerCode: "A1",
     componentCode: "GLU",
     componentNameEn: "Glucose",
     componentNameAr: "جلوكوز",
@@ -101,4 +104,56 @@ test("patient history page scopes clinical results to performing branch and uses
   assert.ok(page.includes('where: { reportVisibleSnapshot: { not: false } }'));
   assert.ok(page.includes('reportNameEnSnapshot || value.componentNameEnSnapshot'));
   assert.ok(page.includes('reportNameArSnapshot || value.componentNameArSnapshot'));
+});
+
+test("only explicitly referenced results from the current non-retracted report are current", () => {
+  const pointer = (resultId: string) => [{ resultId, orderItemId: "I1", resultVersion: 1 }];
+  const ids = currentReportResultIds([
+    { currentVersion: 2, versions: [
+      { version: 2, status: "RETRACTED", resultVersionSnapshot: pointer("retracted") },
+      { version: 1, status: "FINAL", resultVersionSnapshot: pointer("obsolete") },
+    ] },
+    { currentVersion: 2, versions: [
+      { version: 2, status: "AMENDED", resultVersionSnapshot: pointer("corrected") },
+      { version: 1, status: "FINAL", resultVersionSnapshot: pointer("old") },
+    ] },
+    { currentVersion: 3, versions: [
+      { version: 2, status: "FINAL", resultVersionSnapshot: pointer("stale") },
+    ] },
+    { currentVersion: 1, versions: [
+      { version: 1, status: "PARTIAL", resultVersionSnapshot: pointer("partial") },
+    ] },
+    { currentVersion: 1, versions: [
+      { version: 1, status: "FINAL", resultVersionSnapshot: [{ resultId: "bad", orderItemId: "I2", resultVersion: "1" }] },
+    ] },
+  ]);
+  assert.deepEqual([...ids].sort(), ["corrected", "partial"]);
+});
+
+test("trends split analyzer and method identities and refuse to connect unknown methods", () => {
+  const base = {
+    testId: "T1", testCode: "CREA", testNameEn: "Creatinine", testNameAr: null,
+    componentId: "C1", componentCode: "CREA", componentNameEn: "Creatinine",
+    componentNameAr: null, unit: "mg/dL", valueNumeric: "1.0", displayValue: "1.0",
+    flag: "NORMAL", observedAt: "2026-01-01T00:00:00.000Z", resultVersion: 1,
+  };
+  const readings = buildPatientTrendSeries([
+    { ...base, methodId: "M1", analyzerCode: "A1", accessionNumber: "1", orderId: "O1" },
+    { ...base, methodId: "M1", analyzerCode: "A1", accessionNumber: "2", orderId: "O2" },
+    { ...base, methodId: "M2", analyzerCode: "A1", accessionNumber: "3", orderId: "O3" },
+    { ...base, methodId: "M1", analyzerCode: "A2", accessionNumber: "4", orderId: "O4" },
+    { ...base, methodId: null, analyzerCode: null, accessionNumber: "5", orderId: "O5" },
+    { ...base, methodId: null, analyzerCode: null, accessionNumber: "6", orderId: "O6" },
+  ]);
+  assert.equal(readings.length, 5);
+  assert.equal(readings.filter(row => row.points.length === 2).length, 1);
+  assert.equal(readings.filter(row => !row.comparable).length, 2);
+});
+
+test("history uses current report revision evidence and branch-scoped patient attachments", () => {
+  const page = readFileSync(new URL("../src/app/patients/[id]/history/page.tsx", import.meta.url), "utf8");
+  assert.ok(page.includes("currentReportResultIds(releaseEvidence)"));
+  assert.ok(page.includes("id: { in: [...currentResultIds] }"));
+  assert.ok(page.includes('select: { version: true, status: true, resultVersionSnapshot: true }'));
+  assert.ok(page.includes('targetType: "PATIENT", targetId: { in: patientIds }, branchId: { in: branchIds }'));
 });
