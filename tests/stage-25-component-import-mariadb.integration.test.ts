@@ -28,7 +28,7 @@ test("MariaDB staged components: tenant-scoped parent/unit lookup, duplicate ide
     }
     for (const [id,owner,k] of [[actor,org,"A"],[otherActor,other,"B"]]) {
       await insert("INSERT INTO users (id,organization_id,username,display_name_en,updated_at) VALUES (?,?,?,?,NOW(3))",
-        [id,code+k,"Component Author",owner].length === 0 ? [] : [id,owner,"c25-"+k+suffix,"Component Author"],"users",id);
+        [id,owner,"c25-"+k+suffix,"Component Author"],"users",id);
     }
     for (const [id,owner,k] of [[testId,org,"A"],[otherTest,other,"B"]]) {
       await insert("INSERT INTO lab_tests (id,organization_id,code,name_en,updated_at) VALUES (?,?,?,?,NOW(3))",
