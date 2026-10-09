@@ -74,6 +74,26 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
   const locale = session.user.preferredLocale === "ar" ? "ar" : "en";
   const params = await searchParams;
   const { period, start, end } = resolvePeriod(params);
+  const fromParam = first(params.from);
+  const toParam = first(params.to);
+  const isRealDate = (value: string) =>
+    /^\d{4}-\d{2}-\d{2}$/.test(value)
+    && !Number.isNaN(new Date(value + "T00:00:00Z").getTime())
+    && new Date(value + "T00:00:00Z").toISOString().slice(0, 10) === value;
+  if (period === "custom" && (
+    (fromParam && !isRealDate(fromParam)) ||
+    (toParam && !isRealDate(toParam)) ||
+    (fromParam && toParam && fromParam > toParam) ||
+    (!fromParam && !toParam)
+  )) {
+    return <main className="catalog-shell" dir={locale === "ar" ? "rtl" : "ltr"}>
+      <section className="detail-card" role="alert">
+        <h1>{tr(locale, "Invalid analytics date range", "فترة التحليلات غير صالحة")}</h1>
+        <p>{tr(locale, "Enter valid From/To dates, with From not after To.", "أدخل تاريخَي بداية ونهاية صحيحين بحيث لا تتجاوز البداية النهاية.")}</p>
+        <Link href="/analytics?period=30d">{tr(locale, "Back to last 30 days", "العودة إلى آخر 30 يوماً")}</Link>
+      </section>
+    </main>;
+  }
   const authorizedBranchIds = session.user.branchScopes.map(scope => scope.branchId);
   const requestedBranchId = first(params.branchId) || "";
   const selectedBranchId = requestedBranchId && authorizedBranchIds.includes(requestedBranchId)
@@ -295,6 +315,47 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
   // Revenue/discounts are selected by invoice issue date, collections by payment date,
   // and refunds/credits by their own posting dates. Outstanding is CURRENT for
   // invoices issued within the selected period, never a historical as-of balance.
+  const truncatedCollections = cappedDatasetNames({
+    orders: 20000,
+    invoices: 20000,
+    payments: 20000,
+    refunds: 20000,
+    creditNotes: 20000,
+    specimens: 30000,
+    tatItems: 30000,
+    criticalEvents: 10000,
+    qcViolations: 10000,
+    qualityIndicators: 500,
+    consumptionMovements: 50000,
+    sendOutCosts: 20000,
+  }, {
+    orders: orders.length,
+    invoices: invoices.length,
+    payments: payments.length,
+    refunds: refunds.length,
+    creditNotes: creditNotes.length,
+    specimens: specimens.length,
+    tatItems: tatItems.length,
+    criticalEvents: criticalEvents.length,
+    qcViolations: qcViolations.length,
+    qualityIndicators: qualityIndicators.length,
+    consumptionMovements: consumptionMovements.length,
+    sendOutCosts: sendOutCosts.length,
+  });
+  if (truncatedCollections.length > 0) {
+    // Do not publish falsely complete management totals from take-limited queries.
+    return <main className="catalog-shell" dir={locale === "ar" ? "rtl" : "ltr"}>
+      <section className="detail-card" role="alert">
+        <h1>{tr(locale, "Analytics dataset exceeds safe report limit", "بيانات التحليلات تجاوزت حد التقرير الآمن")}</h1>
+        <p>{tr(locale,
+          "No totals are shown because at least one dataset may be incomplete. Reduce the date range or select a branch before using these figures for clinical or financial decisions.",
+          "لم تُعرض الإجماليات لأن مجموعة بيانات واحدة على الأقل قد تكون غير مكتملة. قلّص الفترة أو اختر فرعاً قبل الاعتماد على هذه الأرقام سريرياً أو مالياً.")}</p>
+        <p>{tr(locale, "Affected datasets:", "مجموعات البيانات المتأثرة:")} {truncatedCollections.join(", ")}</p>
+        <Link className="secondary-link" href="/analytics?period=7d">{tr(locale, "View last 7 days", "عرض آخر سبعة أيام")}</Link>
+      </section>
+    </main>;
+  }
+
   const financeByCurrency = aggregateFinancialReport({
     invoices: invoices.map(item => ({
       currency: item.currency,
@@ -501,7 +562,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
       <div>
         <p className="eyebrow">{tr(locale, "Analytics & Management", "التحليلات والإدارة")}</p>
         <h1>{tr(locale, "Management Analytics", "التحليلات الإدارية")}</h1>
-        <p className="muted">{tr(locale, "Branch-scoped operational, financial, TAT, source/referrer, test profitability and quality KPIs. Money is never combined across currencies.", "مؤشرات تشغيلية ومالية وزمن الإنجاز والمصادر والمحيلين وربحية الفحوصات والجودة ضمن نطاق الفروع المصرح بها. لا يتم جمع الأموال بين عملات مختلفة.")}</p>
+        <p className="muted">{tr(locale, "Branch-scoped operational, financial, TAT, source/referrer, test cost-coverage and quality KPIs. Money is never combined across currencies. Reporting day windows follow server time (UTC), not branch local midnight.", "مؤشرات تشغيلية ومالية وزمن الإنجاز والمصادر والمحيلين وتغطية تكلفة الفحوصات والجودة ضمن نطاق الفروع المصرح بها. لا تُجمع العملات المختلفة. حدود أيام التقرير بتوقيت الخادم UTC وليست منتصف الليل المحلي للفروع.")}</p>
       </div>
       <div className="result-actions"><Link className="secondary-link" href="/dashboard">{tr(locale, "Back to Dashboard", "العودة إلى لوحة التحكم")}</Link></div>
     </header>
