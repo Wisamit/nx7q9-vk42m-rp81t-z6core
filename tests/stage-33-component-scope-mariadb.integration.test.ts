@@ -32,11 +32,11 @@ test("MariaDB: component reconciliation resolves only an active test in the gran
       [where.organizationId as string,a,aDept]);
     assert.equal(rows.length,1);
     assert.equal(rows[0].id,testA);
-    const indexes={tests:new Map(rows.map(r=>[String(r.code),{id:String(r.id),status:"ACTIVE"}])),
+    const indexes={tests:new Map(rows.map(r=>[String(r.code).toUpperCase(),{id:String(r.id),status:"ACTIVE"}])),
       units:new Map<string,{id:string;status:string}>(),components:new Set<string>()};
-    const permitted=reconcileComponentCandidate({testCode:"C33"+suffix+"TA",code:"HGB",nameEn:"Hemoglobin",unitCode:"",resultType:"NUMERIC"},indexes,1);
+    const permitted=reconcileComponentCandidate({testCode:("C33"+suffix+"TA").toUpperCase(),code:"HGB",nameEn:"Hemoglobin",unitCode:"",resultType:"NUMERIC"},indexes,1);
     assert.equal(permitted.disposition,"READY_FOR_GOVERNANCE");
-    const denied=reconcileComponentCandidate({testCode:"C33"+suffix+"TB",code:"HGB",nameEn:"Hemoglobin",unitCode:"",resultType:"NUMERIC"},indexes,1);
+    const denied=reconcileComponentCandidate({testCode:("C33"+suffix+"TB").toUpperCase(),code:"HGB",nameEn:"Hemoglobin",unitCode:"",resultType:"NUMERIC"},indexes,1);
     assert.equal(denied.disposition,"BLOCKED");
     assert.equal(denied.resolvedTestId,null);
     assert.ok(denied.issues.includes("PARENT_TEST_NOT_ACTIVE_OR_MISSING"));
