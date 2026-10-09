@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { CatalogManager } from "@/components/catalog-manager";
 import { ClinicalCatalogManager } from "@/components/clinical-catalog-manager";
 import { LegacyImportBatches } from "@/components/legacy-import-batches";
+import { CatalogConfigurationExport } from "@/components/catalog-configuration-export";
 import { CommercialPackageManager } from "@/components/commercial-package-manager";
 import { statusLabel, tr } from "@/lib/ui-i18n";
 
@@ -68,6 +69,8 @@ export default async function CatalogPage() {
         <article><strong>{panels.length}</strong><span>{tr(locale, "Panels / Profiles", "الباقات السريرية / الملفات")}</span></article>
         <article><strong>{packages.length}</strong><span>{tr(locale, "Commercial Packages", "الباقات التجارية")}</span></article>
       </section>
+
+      {permissions.has("catalog.manage") && <CatalogConfigurationExport locale={locale} canExportPricing={permissions.has("pricing.manage")} />}
 
       <LegacyImportBatches locale={locale} batches={importBatches.map(batch => ({ id: batch.id, sourceName: batch.sourceName, sourceType: batch.sourceType, status: batch.status, rows: batch._count.rows, createdAt: batch.createdAt.toISOString() }))} />
 
