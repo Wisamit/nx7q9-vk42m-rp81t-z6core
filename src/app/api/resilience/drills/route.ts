@@ -24,7 +24,15 @@ export async function POST(request:Request){
   if(!title||!Number.isInteger(targetRpoMinutes)||targetRpoMinutes<0||!Number.isInteger(targetRtoMinutes)||targetRtoMinutes<0||Number.isNaN(scheduledAt.getTime())) return NextResponse.json({error:"invalid_drill"},{status:400});
   if(actualRpoMinutes!==null&&(!Number.isInteger(actualRpoMinutes)||actualRpoMinutes<0)) return NextResponse.json({error:"invalid_actual_rpo"},{status:400});
   if(actualRtoMinutes!==null&&(!Number.isInteger(actualRtoMinutes)||actualRtoMinutes<0)) return NextResponse.json({error:"invalid_actual_rto"},{status:400});
-  if(["PASSED","FAILED"].includes(status)&&(!completedAt||actualRpoMinutes===null||actualRtoMinutes===null)) return NextResponse.json({error:"completed_drill_requires_actual_rpo_rto"},{status:409});
+  if(completedAt && (Number.isNaN(completedAt.getTime()) || completedAt<scheduledAt || completedAt.getTime()>Date.now())) {
+    return NextResponse.json({error:"invalid_drill_completion_time"},{status:400});
+  }
+  if(["PASSED","FAILED"].includes(status)&&(!completedAt||actualRpoMinutes===null||actualRtoMinutes===null||!evidenceReference)) {
+    return NextResponse.json({error:"completed_drill_requires_actual_rpo_rto_and_evidence"},{status:409});
+  }
+  if(status==="PASSED" && (actualRpoMinutes!>targetRpoMinutes||actualRtoMinutes!>targetRtoMinutes)) {
+    return NextResponse.json({error:"drill_targets_not_met"},{status:409});
+  }
   if(branchId&&!canAccessBranch(session,branchId)) return NextResponse.json({error:"branch_forbidden"},{status:403});
 
   const drill=await prisma.$transaction(async tx=>{
