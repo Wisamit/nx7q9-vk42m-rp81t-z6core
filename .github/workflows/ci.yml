@@ -61,6 +61,7 @@ jobs:
       - run: node --experimental-strip-types --test tests/stage-32-reference-range-csv-review-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-33-component-scope-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-34-range-csv-mariadb.integration.test.ts
+      - run: node --experimental-strip-types --test tests/stage-35-range-context-conflicts-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/microbiology-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/analyzer-work-orders-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/equipment-qc-mariadb.integration.test.ts
