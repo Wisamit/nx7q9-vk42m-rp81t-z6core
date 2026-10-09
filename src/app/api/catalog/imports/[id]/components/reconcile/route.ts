@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { clinicalImportTestWhere, resolveClinicalImportScope } from "@/lib/catalog-clinical-import-scope";
 import { reconcileComponentCandidate } from "@/lib/component-import-reconciliation";
 
 const PAGE_SIZE = 100;
@@ -14,6 +15,14 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const session = await requirePermission("catalog.manage");
   const ctx = await requestContext();
   const { id } = await params;
+  const scope = resolveClinicalImportScope({
+    organizationId: session.user.organizationId,
+    activeBranchId: session.activeBranchId,
+    activeBranch: session.activeBranch,
+    branchScopes: session.user.branchScopes,
+    departmentScopes: session.user.departmentScopes,
+  });
+  if (!scope) return NextResponse.json({ error: "active_clinical_import_scope_required" }, { status: 403 });
   const search = new URL(request.url).searchParams;
   const rawAfter = search.get("after");
   if (rawAfter !== null && (!/^[1-9]\d{0,8}$/.test(rawAfter) || Number(rawAfter) > 100000000)) {
@@ -50,7 +59,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
   const [tests, units, duplicateRows] = await Promise.all([
     prisma.labTest.findMany({
-      where: { organizationId: session.user.organizationId, code: { in: testCodes } },
+      where: { ...clinicalImportTestWhere(scope), code: { in: testCodes } },
       select: {
         id: true, code: true, status: true,
         components: { select: { code: true } },

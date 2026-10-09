@@ -39,6 +39,11 @@ test("unknown/inactive test, unit, result type, duplicate identity fail closed",
 test("read-only reconciliation route filters tenant, avoids imported writes and has bounded page with stable cursor", () => {
   const source = readFileSync(new URL("../src/app/api/catalog/imports/[id]/components/reconcile/route.ts", import.meta.url), "utf8");
   assert.ok(source.includes('requirePermission("catalog.manage")'));
+  assert.ok(source.includes("resolveClinicalImportScope("));
+  assert.ok(source.includes("clinicalImportTestWhere(scope)"));
+  assert.ok(source.includes("active_clinical_import_scope_required"));
+  assert.ok(source.indexOf("if (!scope)") < source.indexOf("prisma.catalogImportRow.findMany"));
+
   assert.ok(source.includes("organizationId: session.user.organizationId"));
   assert.ok(source.includes('entityType: "COMPONENT"'));
   assert.ok(source.includes('rowNumber: { gt: after }'));
