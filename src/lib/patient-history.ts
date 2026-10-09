@@ -78,6 +78,8 @@ export type TrendSeries = {
   componentNameEn: string;
   componentNameAr: string | null;
   unit: string | null;
+  methodId: string | null;
+  analyzerCode: string | null;
   comparable: boolean;
   points: Array<{
     value: number;
@@ -116,6 +118,8 @@ export function buildPatientTrendSeries(points: readonly TrendPointInput[]) {
       componentNameEn: point.componentNameEn,
       componentNameAr: point.componentNameAr,
       unit: point.unit,
+      methodId: point.methodId || null,
+      analyzerCode: point.analyzerCode || null,
       comparable: Boolean(point.methodId),
       points: [],
     };
