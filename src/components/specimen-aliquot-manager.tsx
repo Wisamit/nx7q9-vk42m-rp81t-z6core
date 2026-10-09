@@ -100,6 +100,7 @@ export function SpecimenAliquotManager({
       storage_location_has_active_specimens: tr("Move all active specimens out of this position before deactivating it.", "انقل جميع العينات الفعالة من هذا الموقع قبل تعطيله."),
       invalid_storage_status_change: tr("Location, status and reason are required.", "الموقع والحالة والسبب مطلوبة."),
       storage_location_not_registered: tr("Choose a registered active storage position at this branch.", "اختر موقع تخزين معرّفًا وفعّالًا في هذا الفرع."),
+      container_not_active: tr("The selected container was deactivated; choose another active container.", "تم تعطيل الحاوية المختارة؛ اختر حاوية فعّالة أخرى."),
       storage_location_exists: tr("This storage location is already registered.", "موقع التخزين معرّف مسبقًا."),
       storage_position_required: tr("Structured storage position is required.", "موقع التخزين المنظّم مطلوب."),
       storage_position_incomplete: tr("Enter zone, storage unit, rack and slot.", "أدخل المنطقة ووحدة التخزين والرف والموضع."),
