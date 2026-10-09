@@ -3,6 +3,8 @@ import { AnalyticsBars } from "@/components/analytics-bars";
 import { requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { tr } from "@/lib/ui-i18n";
+import { aggregateFinancialReport } from "@/lib/financial-reporting";
+import { addCurrencyAmount, moneyText, financialText, comparableMargin, cappedDatasetNames } from "@/lib/analytics-integrity";
 
 export const dynamic = "force-dynamic";
 
@@ -61,10 +63,6 @@ function dateWhere(start: Date | null, end: Date | null) {
   };
 }
 
-function money(value: number, currency: string) {
-  return currency + " " + value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
 function minuteLabel(value: number | null, locale: "ar" | "en") {
   if (value === null || !Number.isFinite(value)) return "—";
   if (value < 60) return Math.round(value) + (locale === "ar" ? " دقيقة" : " min");
@@ -89,6 +87,8 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
     orders,
     invoices,
     payments,
+    refunds,
+    creditNotes,
     specimens,
     tatItems,
     criticalEvents,
@@ -157,6 +157,26 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
         ...(periodWhere ? { receivedAt: periodWhere } : {}),
       },
       select: { branchId: true, currency: true, amount: true, method: true },
+      take: 20000,
+    }),
+    prisma.refund.findMany({
+      where: {
+        organizationId: session.user.organizationId,
+        branchId: { in: branchIds },
+        status: "POSTED",
+        ...(periodWhere ? { processedAt: periodWhere } : {}),
+      },
+      select: { currency: true, amount: true },
+      take: 20000,
+    }),
+    prisma.creditNote.findMany({
+      where: {
+        organizationId: session.user.organizationId,
+        branchId: { in: branchIds },
+        status: "ISSUED",
+        ...(periodWhere ? { issuedAt: periodWhere } : {}),
+      },
+      select: { currency: true, amount: true },
       take: 20000,
     }),
     prisma.specimen.findMany({
@@ -270,30 +290,23 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
     }),
   ]);
 
-  const financeByCurrency = new Map<string, {
-    gross: number;
-    discount: number;
-    tax: number;
-    invoiced: number;
-    paid: number;
-    outstanding: number;
-    collected: number;
-  }>();
-  for (const invoice of invoices) {
-    const row = financeByCurrency.get(invoice.currency) || { gross: 0, discount: 0, tax: 0, invoiced: 0, paid: 0, outstanding: 0, collected: 0 };
-    row.gross += invoice.subtotal.toNumber();
-    row.discount += invoice.discountTotal.toNumber();
-    row.tax += invoice.taxTotal.toNumber();
-    row.invoiced += invoice.total.toNumber();
-    row.paid += invoice.paidAmount.toNumber();
-    row.outstanding += invoice.balanceAmount.toNumber();
-    financeByCurrency.set(invoice.currency, row);
-  }
-  for (const payment of payments) {
-    const row = financeByCurrency.get(payment.currency) || { gross: 0, discount: 0, tax: 0, invoiced: 0, paid: 0, outstanding: 0, collected: 0 };
-    row.collected += payment.amount.toNumber();
-    financeByCurrency.set(payment.currency, row);
-  }
+  // Use the existing DECIMAL(18,4)-safe bigint accounting aggregator.
+  // Revenue/discounts are selected by invoice issue date, collections by payment date,
+  // and refunds/credits by their own posting dates. Outstanding is CURRENT for
+  // invoices issued within the selected period, never a historical as-of balance.
+  const financeByCurrency = aggregateFinancialReport({
+    invoices: invoices.map(item => ({
+      currency: item.currency,
+      subtotal: item.subtotal.toString(),
+      discountTotal: item.discountTotal.toString(),
+      taxTotal: item.taxTotal.toString(),
+      total: item.total.toString(),
+      balanceAmount: item.balanceAmount.toString(),
+    })),
+    paymentAllocations: payments.map(item => ({ currency: item.currency, amount: item.amount.toString() })),
+    refunds: refunds.map(item => ({ currency: item.currency, amount: item.amount.toString() })),
+    creditNotes: creditNotes.map(item => ({ currency: item.currency, amount: item.amount.toString() })),
+  });
 
   const testMap = new Map<string, {
     code: string;
@@ -501,19 +514,25 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
 
     <section className="detail-section">
       <div className="table-toolbar"><h2>{tr(locale, "Financial Summary", "الملخص المالي")}</h2><span>{tr(locale, "Per currency", "حسب كل عملة")}</span></div>
+      <p className="muted">{tr(locale,
+        "Issue-date invoice totals and current outstanding are not a historical balance at the period end. Collections, refunds and credits follow their own transaction dates; currencies are never combined.",
+        "قيم الفواتير حسب تاريخ إصدارها، والمستحق هو الرصيد الحالي وليس رصيد نهاية الفترة التاريخي. التحصيل والاسترداد والإشعارات الدائنة حسب تاريخ كل عملية، ولا يتم دمج العملات.")}</p>
       <div className="detail-grid">
-        {[...financeByCurrency.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([currency, row]) => <article className="detail-card" key={currency}>
-          <h2>{currency}</h2>
+        {financeByCurrency.map(row => <article className="detail-card" key={row.currency}>
+          <h2>{row.currency}</h2>
           <dl className="compact-kpis">
-            <div><dt>{tr(locale, "Gross", "الإجمالي قبل الخصومات")}</dt><dd>{money(row.gross, currency)}</dd></div>
-            <div><dt>{tr(locale, "Discounts", "الخصومات")}</dt><dd>{money(row.discount, currency)}</dd></div>
-            <div><dt>{tr(locale, "Tax", "الضريبة")}</dt><dd>{money(row.tax, currency)}</dd></div>
-            <div><dt>{tr(locale, "Invoiced", "المفوتر")}</dt><dd>{money(row.invoiced, currency)}</dd></div>
-            <div><dt>{tr(locale, "Collected", "المحصّل")}</dt><dd>{money(row.collected, currency)}</dd></div>
-            <div><dt>{tr(locale, "Outstanding", "المستحق")}</dt><dd>{money(row.outstanding, currency)}</dd></div>
+            <div><dt>{tr(locale, "Gross invoiced before discount", "قيمة الفواتير قبل الخصم")}</dt><dd>{financialText(row.gross, row.currency)}</dd></div>
+            <div><dt>{tr(locale, "Discounts", "الخصومات")}</dt><dd>{financialText(row.discounts, row.currency)}</dd></div>
+            <div><dt>{tr(locale, "Tax", "الضريبة")}</dt><dd>{financialText(row.tax, row.currency)}</dd></div>
+            <div><dt>{tr(locale, "Invoiced", "المفوتر")}</dt><dd>{financialText(row.invoiced, row.currency)}</dd></div>
+            <div><dt>{tr(locale, "Credit notes issued in period", "الإشعارات الدائنة الصادرة خلال الفترة")}</dt><dd>{financialText(row.creditNotes, row.currency)}</dd></div>
+            <div><dt>{tr(locale, "Gross collected in period", "إجمالي المحصّل خلال الفترة")}</dt><dd>{financialText(row.collected, row.currency)}</dd></div>
+            <div><dt>{tr(locale, "Refunds posted in period", "المسترد خلال الفترة")}</dt><dd>{financialText(row.refunds, row.currency)}</dd></div>
+            <div><dt>{tr(locale, "Net collected in period", "صافي المحصّل خلال الفترة")}</dt><dd>{financialText(row.netCollected, row.currency)}</dd></div>
+            <div><dt>{tr(locale, "Current outstanding on period invoices", "المستحق الحالي لفواتير الفترة")}</dt><dd>{financialText(row.outstandingCurrent, row.currency)}</dd></div>
           </dl>
         </article>)}
-        {financeByCurrency.size === 0 && <article className="detail-card"><p className="muted">{tr(locale, "No financial activity in the selected period.", "لا توجد حركة مالية ضمن الفترة المحددة.")}</p></article>}
+        {financeByCurrency.length === 0 && <article className="detail-card"><p className="muted">{tr(locale, "No financial activity in the selected period.", "لا توجد حركة مالية ضمن الفترة المحددة.")}</p></article>}
       </div>
     </section>
 
