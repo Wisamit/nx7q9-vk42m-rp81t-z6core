@@ -68,7 +68,7 @@ test("MariaDB two connections: clinical catalog imports stay in active branch/de
 
     const [foreignAttempt]=await reader.execute<mysql.RowDataPacket[]>(sql,[foreign,branchA,deptA,deptGlobal]);
     assert.equal(foreignAttempt.length,0);
-    const [branchBAttempt]=await reader.execute<mysql.RowDataPacket[]>(sql,[org,branchB,deptB,deptGlobal]);
+    const [branchBAttempt]=await reader.execute<mysql.RowDataPacket[]>(sql,[org,branchB,deptA,deptGlobal]);
     assert.equal(branchBAttempt.length,1,"out-of-branch department must still be excluded by grant list");
     assert.equal(String(branchBAttempt[0].id),testGlobal);
     const bad=resolveClinicalImportScope({...scopes,activeBranchId:branchB,activeBranch:{
