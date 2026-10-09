@@ -52,7 +52,7 @@ export default async function DashboardPage() {
         status: "WAITING",
       },
     }) : Promise.resolve(0),
-    branchId ? prisma.invoice.findMany({
+    branchId && permissions.has("billing.view") ? prisma.invoice.findMany({
       where: {
         organizationId: user.organizationId,
         branchId,
@@ -119,15 +119,15 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      <aside className="dashboard-panel">
-        <div className="dashboard-panel-head"><div><p className="eyebrow">{tr(locale, "Finance", "المالية")}</p><h2>{tr(locale, "Today", "اليوم")}</h2></div>{permissions.has("billing.view") && <Link href="/billing">{tr(locale, "Open billing", "فتح الفوترة")}</Link>}</div>
+      {permissions.has("billing.view") && <aside className="dashboard-panel">
+        <div className="dashboard-panel-head"><div><p className="eyebrow">{tr(locale, "Finance", "المالية")}</p><h2>{tr(locale, "Today", "اليوم")}</h2></div><Link href="/billing">{tr(locale, "Open billing", "فتح الفوترة")}</Link></div>
         <div className="finance-snapshot">
           {finance.size === 0 ? <p className="muted">{tr(locale, "No invoices issued today.", "لا توجد فواتير صادرة اليوم.")}</p> : [...finance.entries()].map(([currency, row]) => <div key={currency}>
             <div><strong>{currency}</strong><span>{row.total.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div>
             <small>{tr(locale, "Collected", "المحصّل")} {row.paid.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})} · {tr(locale, "Outstanding", "المتبقي")} {row.balance.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</small>
           </div>)}
         </div>
-      </aside>
+      </aside>}
     </section>
 
     {managementLinks.some(Boolean) && <section className="dashboard-panel dashboard-management">
