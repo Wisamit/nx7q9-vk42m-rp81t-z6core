@@ -5,6 +5,7 @@ import { CatalogManager } from "@/components/catalog-manager";
 import { ClinicalCatalogManager } from "@/components/clinical-catalog-manager";
 import { LegacyImportBatches } from "@/components/legacy-import-batches";
 import { CatalogConfigurationExport } from "@/components/catalog-configuration-export";
+import { CatalogCsvReviewStaging } from "@/components/catalog-csv-review-staging";
 import { CommercialPackageManager } from "@/components/commercial-package-manager";
 import { statusLabel, tr } from "@/lib/ui-i18n";
 
@@ -71,6 +72,8 @@ export default async function CatalogPage() {
       </section>
 
       {permissions.has("catalog.manage") && <CatalogConfigurationExport locale={locale} canExportPricing={permissions.has("pricing.manage")} />}
+
+      {permissions.has("catalog.manage") && <CatalogCsvReviewStaging locale={locale} canStagePricing={permissions.has("pricing.manage")} />}
 
       <LegacyImportBatches locale={locale} batches={importBatches.map(batch => ({ id: batch.id, sourceName: batch.sourceName, sourceType: batch.sourceType, status: batch.status, rows: batch._count.rows, createdAt: batch.createdAt.toISOString() }))} />
 
