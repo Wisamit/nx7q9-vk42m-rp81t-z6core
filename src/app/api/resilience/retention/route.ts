@@ -32,6 +32,13 @@ export async function POST(request: Request) {
   }
 
   const policy = await prisma.$transaction(async tx => {
+    // Organization mutex serializes policy upserts with actual purge execution,
+    // including when no policy row existed before this request.
+    const locked=await tx.$queryRaw<Array<{id:string}>>`
+      SELECT id FROM organizations WHERE id=${session.user.organizationId}
+      AND status='ACTIVE' FOR UPDATE
+    `;
+    if(locked.length!==1) throw new Error("ORGANIZATION_INACTIVE");
     const existing = await tx.retentionPolicy.findUnique({
       where: { organizationId_dataClass: { organizationId: session.user.organizationId, dataClass } },
     });
@@ -68,6 +75,6 @@ export async function POST(request: Request) {
       },
     });
     return saved;
-  });
+  },{isolationLevel:"Serializable",timeout:30000});
   return NextResponse.json({ status: "ok", policy });
 }
