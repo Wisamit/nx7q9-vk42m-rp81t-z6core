@@ -27,8 +27,12 @@ export async function POST(request: Request) {
 
   const results = [];
   for (const item of due) {
-    const updated = await dispatchWebhookDelivery(item.id);
-    results.push({ id: item.id, status: updated.status, attemptCount: updated.attemptCount });
+    try {
+      const updated = await dispatchWebhookDelivery(item.id);
+      results.push({ id: item.id, status: updated?.status || "SKIPPED_CONCURRENT_CLAIM", attemptCount: updated?.attemptCount ?? item.attemptCount });
+    } catch (error) {
+      results.push({ id: item.id, status: "DISPATCH_ERROR", reason: error instanceof Error ? error.message : "UNKNOWN" });
+    }
   }
 
   await prisma.auditEvent.create({
