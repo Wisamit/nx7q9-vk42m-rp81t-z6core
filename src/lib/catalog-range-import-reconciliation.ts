@@ -118,7 +118,7 @@ function stagedAgeWindow(candidate: RangeCandidate): { group: string; window: St
   const age = (raw: string): bigint | null => {
     // Canonical CSV ages use non-negative decimal(10,3). Accept equivalent
     // leading zero spellings for *comparison* without altering source data.
-    if (!/^\\d{1,7}(?:\\.\\d{1,3})?$/.test(raw)) return null;
+    if (!/^\d{1,7}(?:\.\d{1,3})?$/.test(raw)) return null;
     const [whole, fraction = ""] = raw.split(".");
     return BigInt(whole) * BigInt(1000) + BigInt(fraction.padEnd(3, "0") || "0");
   };
