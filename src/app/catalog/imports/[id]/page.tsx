@@ -162,7 +162,7 @@ export default async function ImportBatchPage({
           <Link className={status === "WARNING" ? "filter-chip active" : "filter-chip"} href={`/catalog/imports/${batch.id}?status=WARNING`}>{tr(locale, "Warnings", "تحذيرات")} ({counts.WARNING || 0})</Link>
           <Link className={status === "VALID" ? "filter-chip active" : "filter-chip"} href={`/catalog/imports/${batch.id}?status=VALID`}>{tr(locale, "Valid", "صالح")} ({counts.VALID || 0})</Link>
           {batch.status === "DRAFT" && batch.sourceType !== "CSV_REVIEW" && <RevalidateImportButton batchId={batch.id} locale={locale} />}
-          {batch.status === "VALIDATED" && safeMasterRemaining > 0 && <SafeImportButton batchId={batch.id} locale={locale} />}
+          {batch.status === "VALIDATED" && batch.sourceType !== "CSV_REVIEW" && safeMasterRemaining > 0 && <SafeImportButton batchId={batch.id} locale={locale} />}
         </div>
       </div>
       <div className="table-wrap">
