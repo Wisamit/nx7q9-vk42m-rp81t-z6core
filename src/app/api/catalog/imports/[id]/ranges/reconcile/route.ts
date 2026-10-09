@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { permissionSet, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { clinicalImportTestWhere, resolveClinicalImportScope } from "@/lib/catalog-clinical-import-scope";
-import { rangeReviewCandidate, reconcileRangeReviewCandidate } from "@/lib/catalog-range-import-reconciliation";
+import { rangeReviewCandidate, reconcileRangeReviewCandidate, stagedRangeContextIndex, stagedRangeContextIssue } from "@/lib/catalog-range-import-reconciliation";
 
 const PAGE_SIZE = 100;
 const issues = (value: unknown): string[] => Array.isArray(value) ? value.flatMap(item => {
@@ -41,6 +41,17 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     select: { rowNumber: true, status: true, normalizedData: true, validationIssues: true },
     take: PAGE_SIZE + 1,
   });
+  // A page-local duplicate check could miss a conflicting row on a later page.
+  // Canonical CSV staging is limited to 20,000 rows; fail closed on overflow.
+  const allStaged = await prisma.catalogImportRow.findMany({
+    where: { batchId: batch.id, entityType: "REFERENCE_INTERVAL", status: { in: ["VALID", "WARNING"] } },
+    select: { normalizedData: true, status: true },
+    take: 20001,
+  });
+  if (allStaged.length > 20000) {
+    return NextResponse.json({ error: "range_review_row_limit_exceeded" }, { status: 409 });
+  }
+  const contextIndex = stagedRangeContextIndex(allStaged);
   const page = staged.slice(0, PAGE_SIZE);
   const candidates = page.map(row => rangeReviewCandidate(row.normalizedData));
   const [tests, units] = await Promise.all([
@@ -61,11 +72,14 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     // An unresolved scoped test cannot disclose its raw staged clinical context
     // or source validation metadata through this additional review endpoint.
     const resolved = result.testId !== null;
+    const contextIssue = resolved && result.disposition === "REVIEW_REQUIRED"
+      ? stagedRangeContextIssue(candidates[i], contextIndex) : null;
     return {
       rowNumber: row.rowNumber, rowStatus: row.status,
       candidate: resolved ? candidates[i] : null,
       disposition: row.status === "IMPORTED" || row.status === "SKIPPED" ? "BLOCKED" : result.disposition,
-      issues: row.status === "IMPORTED" || row.status === "SKIPPED" ? ["ROW_ALREADY_PROCESSED"] : result.issues,
+      issues: row.status === "IMPORTED" || row.status === "SKIPPED" ? ["ROW_ALREADY_PROCESSED"] :
+        [...result.issues, ...(contextIssue ? [contextIssue] : [])],
       testId: result.testId, componentId: result.componentId, unitId: result.unitId,
     };
   });
@@ -76,6 +90,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       actorUserId: session.user.id, action: "CATALOG_CSV_RANGE_RECONCILED",
       entityType: "CatalogImportBatch", entityId: batch.id,
       newValues: { after, reviewed: rows.length,
+        stagedContextConflicts: rows.filter(row => row.issues.includes("CONFLICTING_STAGED_RANGE_CONTEXT")).length,
+        stagedContextDuplicates: rows.filter(row => row.issues.includes("DUPLICATE_STAGED_RANGE_CONTEXT")).length,
         reviewRequired: rows.filter(row => row.disposition === "REVIEW_REQUIRED").length },
       ipAddress: ctx.ipAddress, userAgent: ctx.userAgent,
     },
