@@ -43,3 +43,13 @@ test("reference range claims staged row before touching clinical definition and 
   assert.match(post, /approvalStatus: "DRAFT"/);
   assert.match(post, /importedEntityId: interval\.id/);
 });
+
+test("CSV_REVIEW source cannot reach older clinical mutation routes or page actions", () => {
+  for (const name of ["reference-ranges", "mappings", "prepare-units"]) {
+    const source = route(name);
+    assert.match(source,/batch\.sourceType === "CSV_REVIEW"/);
+    assert.match(source,/csv_review_is_not_clinical_import/);
+  }
+  const page = readFileSync("src/app/catalog/imports/[id]/page.tsx","utf8");
+  assert.match(page,/batch\.sourceType !== "CSV_REVIEW" && <section className="detail-card range-import-card"/);
+});
