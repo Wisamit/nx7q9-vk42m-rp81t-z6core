@@ -53,6 +53,7 @@ jobs:
       - run: node --experimental-strip-types --test tests/stage-24-catalog-export-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-25-component-import-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-26-price-import-mariadb.integration.test.ts
+      - run: node --experimental-strip-types --test tests/stage-27-catalog-review-csv-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/microbiology-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/analyzer-work-orders-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/equipment-qc-mariadb.integration.test.ts
