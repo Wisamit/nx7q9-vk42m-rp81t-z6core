@@ -177,10 +177,15 @@ export function medicalApprovalEvidenceError(input: {
     return "technical_review_evidence_missing";
   }
   const priorSnapshot = review.policySnapshot;
-  if (!priorSnapshot || typeof priorSnapshot !== "object" || Array.isArray(priorSnapshot)
-    || (priorSnapshot as Record<string, unknown>).policyId !== policy.policyId
-    || (priorSnapshot as Record<string, unknown>).requiresMedicalValidation !== true) {
+  if (!priorSnapshot || typeof priorSnapshot !== "object" || Array.isArray(priorSnapshot)) {
     return "technical_review_evidence_missing";
+  }
+  const priorPolicy = priorSnapshot as Record<string, unknown>;
+  for (const field of [
+    "source", "policyId", "code", "scope", "branchId",
+    "departmentId", "testId", "requiresMedicalValidation", "allowSameReviewer",
+  ]) {
+    if (priorPolicy[field] !== policy[field]) return "technical_review_evidence_missing";
   }
   if (review.automated) {
     if (!input.autoVerified || review.reviewerUserId !== null || input.technicalReviewedByUserId !== null) {
