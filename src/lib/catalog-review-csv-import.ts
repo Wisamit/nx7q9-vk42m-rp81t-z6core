@@ -91,7 +91,8 @@ export function parseCsvReviewFile(source: string): ImportInputRow[] {
     for (const key of headers) {
       if (key !== "entityType" && key !== "legacyKey") data[key] = columns[key];
     }
-    rows.push({ entityType, legacyKey: columns.legacyKey?.slice(0, 255) || undefined, data });
+    if ((columns.legacyKey || "").length > 255) throw new CsvStagingError("csv_legacy_key_too_long");
+    rows.push({ entityType, legacyKey: columns.legacyKey || undefined, data });
   }
   return rows;
 }
