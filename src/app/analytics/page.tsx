@@ -562,7 +562,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
       <div>
         <p className="eyebrow">{tr(locale, "Analytics & Management", "التحليلات والإدارة")}</p>
         <h1>{tr(locale, "Management Analytics", "التحليلات الإدارية")}</h1>
-        <p className="muted">{tr(locale, "Branch-scoped operational, financial, TAT, source/referrer, test cost-coverage and quality KPIs. Money is never combined across currencies. Reporting day windows follow server time (UTC), not branch local midnight.", "مؤشرات تشغيلية ومالية وزمن الإنجاز والمصادر والمحيلين وتغطية تكلفة الفحوصات والجودة ضمن نطاق الفروع المصرح بها. لا تُجمع العملات المختلفة. حدود أيام التقرير بتوقيت الخادم UTC وليست منتصف الليل المحلي للفروع.")}</p>
+        <p className="muted">{tr(locale, "Branch-scoped operational, financial, TAT, source/referrer, test cost-coverage and quality KPIs. Money is never combined across currencies. Reporting day windows currently follow server-local time, not branch-local midnight.", "مؤشرات تشغيلية ومالية وزمن الإنجاز والمصادر والمحيلين وتغطية تكلفة الفحوصات والجودة ضمن نطاق الفروع المصرح بها. لا تُجمع العملات المختلفة. حدود أيام التقرير حالياً بتوقيت الخادم، وليس منتصف الليل المحلي لكل فرع.")}</p>
       </div>
       <div className="result-actions"><Link className="secondary-link" href="/dashboard">{tr(locale, "Back to Dashboard", "العودة إلى لوحة التحكم")}</Link></div>
     </header>
