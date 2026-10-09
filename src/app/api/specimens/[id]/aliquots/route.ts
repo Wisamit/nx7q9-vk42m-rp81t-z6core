@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { Prisma } from "../../../../../../generated/prisma/client";
 import {
   aliquotPurposeRequiresTests,
   derivedAliquotInitialStatus,
@@ -15,6 +16,9 @@ function text(value: unknown, max: number) {
 
 class SpecimenVolumeChanged extends Error {}
 class SpecimenStorageChanged extends Error {}
+class AliquotOrderChanged extends Error {}
+class AliquotLinkedTestsChanged extends Error {}
+class AliquotContainerChanged extends Error {}
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await requirePermission("specimens.aliquot");
@@ -106,6 +110,50 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           `;
           if (locked.length !== 1) throw new SpecimenStorageChanged();
         }
+        // Serialize against order cancellation/completion. Preliminary checks outside
+        // the transaction do not authorize aliquoting after a concurrent order edit.
+        const lockedOrder = await tx.$queryRaw<Array<{ id: string }>>`
+          SELECT id FROM orders
+          WHERE id = ${parent.orderId}
+            AND organization_id = ${session.user.organizationId}
+            AND status NOT IN ('CANCELLED', 'COMPLETED')
+          FOR UPDATE
+        `;
+        if (lockedOrder.length !== 1) throw new AliquotOrderChanged();
+
+        // Lock each explicitly selected specimen-test association (and its test)
+        // before allocating volume. Rejection/cancellation may have changed links
+        // since the form and the preliminary lookup were rendered.
+        if (requestedOrderItemIds.length > 0) {
+          const eligibleLinks = await tx.$queryRaw<Array<{ orderItemId: string }>>(Prisma.sql`
+            SELECT soi.order_item_id AS orderItemId
+            FROM specimen_order_items soi
+            INNER JOIN order_items oi ON oi.id = soi.order_item_id
+            WHERE soi.specimen_id = ${parent.id}
+              AND soi.status = 'ACTIVE'
+              AND oi.status <> 'CANCELLED'
+              AND oi.order_id = ${parent.orderId}
+              AND soi.order_item_id IN (${Prisma.join(requestedOrderItemIds)})
+            FOR UPDATE
+          `);
+          if (eligibleLinks.length !== requestedOrderItemIds.length) {
+            throw new AliquotLinkedTestsChanged();
+          }
+        }
+
+        // Container deactivation cannot invalidate an aliquot between the initial
+        // form check and the committed child specimen record.
+        if (containerId) {
+          const lockedContainer = await tx.$queryRaw<Array<{ id: string }>>`
+            SELECT id FROM containers
+            WHERE id = ${containerId}
+              AND organization_id = ${session.user.organizationId}
+              AND status = 'ACTIVE'
+            FOR UPDATE
+          `;
+          if (lockedContainer.length !== 1) throw new AliquotContainerChanged();
+        }
+
         const consumed = await tx.specimen.updateMany({
           where: {
             id: parent.id,
@@ -114,6 +162,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
             currentBranchId: currentBranchId,
             remainingVolume: { gte: volume },
             preanalyticalVersion: parent.preanalyticalVersion,
+            order: {
+              organizationId: session.user.organizationId,
+              status: { notIn: ["CANCELLED", "COMPLETED"] },
+            },
+            // The selected test links are additionally checked under row locks.
+            // Keep the any-active-test requirement when the purpose is storage.
             orderItems: { some: { status: "ACTIVE", orderItem: { status: { not: "CANCELLED" } } } },
           },
           data: {
@@ -274,6 +328,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       }
       if (error instanceof SpecimenVolumeChanged) {
         return NextResponse.json({ error: "specimen_volume_changed" }, { status: 409 });
+      }
+      if (error instanceof AliquotOrderChanged) {
+        return NextResponse.json({ error: "aliquot_order_not_active" }, { status: 409 });
+      }
+      if (error instanceof AliquotLinkedTestsChanged) {
+        return NextResponse.json({ error: "aliquot_order_item_not_linked_to_parent" }, { status: 409 });
+      }
+      if (error instanceof AliquotContainerChanged) {
+        return NextResponse.json({ error: "container_not_active" }, { status: 409 });
       }
       if (error && typeof error === "object" && "code" in error && error.code === "P2002" && attempt < 2) {
         continue;
