@@ -381,6 +381,14 @@ export default async function PatientHistoryPage({
     resultStatus: result.status,
   })));
 
+  const currentPageHasNext = section === "orders" ? orderPage.hasNext
+    : section === "results" ? resultPage.hasNext
+    : section === "reports" ? reportVersionPage.hasNext
+    : section === "finance" ? invoicePage.hasNext
+    : attachmentPage.hasNext;
+  const historyLink = (target: PatientHistorySection) =>
+    "/patients/" + canonical.id + "/history?section=" + target + "&page=1";
+
   return <main className="catalog-shell patient-history-shell" dir={locale === "ar" ? "rtl" : "ltr"}>
     <header className="page-header">
       <div>
@@ -391,10 +399,35 @@ export default async function PatientHistoryPage({
         </p>
       </div>
       <div className="header-actions no-print">
-        {canViewReports && <PatientHistoryPrintButton locale={locale} />}
+        {canViewReports && section === "results" && <PatientHistoryPrintButton locale={locale} />}
         <Link className="secondary-link" href={"/patients/" + canonical.id}>{tr(locale, "Back to Patient", "العودة للمريض")}</Link>
       </div>
     </header>
+
+    <nav className="result-actions no-print" aria-label={tr(locale, "Patient history sections", "أقسام سجل المريض")}>
+      {accessibleSections.map(target => <Link
+        key={target}
+        className={section === target ? "primary-button" : "secondary-link"}
+        aria-current={section === target ? "page" : undefined}
+        href={historyLink(target)}
+      >{target === "orders" ? tr(locale, "Orders", "الطلبات")
+        : target === "results" ? tr(locale, "Results & trends", "النتائج والاتجاهات")
+        : target === "reports" ? tr(locale, "Report versions", "إصدارات التقارير")
+        : target === "finance" ? tr(locale, "Invoices & payments", "الفواتير والمدفوعات")
+        : tr(locale, "Attachments", "المرفقات")}</Link>)}
+    </nav>
+    {accessibleSections.length > 0 && <PatientHistoryPager
+      patientId={canonical.id}
+      section={section}
+      page={navigation.page}
+      hasNext={currentPageHasNext}
+      locale={locale}
+    />}
+    {section === "results" && canViewReports && <p className="muted" role="status">{tr(
+      locale,
+      "Clinical tables and trends reflect ONLY this page of up to 20 authorized diagnostic report records; use Next to review earlier reports. This is NOT the patient's complete longitudinal trend.",
+      "جداول النتائج ومخطط الاتجاهات يعرضان فقط هذه الصفحة من حتى 20 سجلاً لتقرير تشخيصي مصرح به؛ استخدم التالي لاستعراض الأقدم. هذا ليس الاتجاه الطولي الكامل للمريض.",
+    )}</p>}
 
     {patientIds.length > 1 && <section className="detail-card">
       <h2>{tr(locale, "Unified Identity", "الهوية الموحدة")}</h2>
@@ -412,9 +445,9 @@ export default async function PatientHistoryPage({
       </div>
     </section>}
 
-    {canViewOrders && <section className="table-card">
+    {canViewOrders && section === "orders" && <section className="table-card">
       <div className="table-toolbar">
-        <div><h2>{tr(locale, "Order History", "سجل الطلبات")}</h2><span>{orders.length} {tr(locale, "order(s)", "طلب")}</span></div>
+        <div><h2>{tr(locale, "Order History", "سجل الطلبات")}</h2><span>{orders.length} {tr(locale, "shown on this page", "معروض في هذه الصفحة")}</span></div>
       </div>
       <div className="table-wrap"><table>
         <thead><tr>
@@ -434,7 +467,7 @@ export default async function PatientHistoryPage({
       </table></div>
     </section>}
 
-    {canViewReports && <>
+    {canViewReports && section === "results" && <>
       <PatientResultTrends series={trendSeries} locale={locale} canViewOrders={canViewOrders} />
 
       <section className="table-card cumulative-history-table">
@@ -479,8 +512,11 @@ export default async function PatientHistoryPage({
         </table></div>
       </section>
 
+    </>}
+
+    {canViewReports && section === "reports" && <>
       <section className="table-card">
-        <div className="table-toolbar"><div><h2>{tr(locale, "Report Version History", "سجل إصدارات التقارير")}</h2><span>{reportVersions.length} {tr(locale, "version(s)", "إصدار")}</span></div></div>
+        <div className="table-toolbar"><div><h2>{tr(locale, "Report Version History", "سجل إصدارات التقارير")}</h2><span>{reportVersions.length} {tr(locale, "shown on this page", "معروض في هذه الصفحة")}</span></div></div>
         <div className="table-wrap"><table>
           <thead><tr>
             <th>{tr(locale, "Issued", "تاريخ الإصدار")}</th>
@@ -502,8 +538,8 @@ export default async function PatientHistoryPage({
       </section>
     </>}
 
-    {canViewBilling && <section className="table-card">
-      <div className="table-toolbar"><div><h2>{tr(locale, "Financial History", "السجل المالي")}</h2><span>{invoices.length} {tr(locale, "invoice(s)", "فاتورة")}</span></div></div>
+    {canViewBilling && section === "finance" && <section className="table-card">
+      <div className="table-toolbar"><div><h2>{tr(locale, "Financial History", "السجل المالي")}</h2><span>{invoices.length} {tr(locale, "shown on this page", "معروض في هذه الصفحة")}</span></div></div>
       <div className="table-wrap"><table>
         <thead><tr>
           <th>{tr(locale, "Issued", "الإصدار")}</th>
@@ -529,7 +565,7 @@ export default async function PatientHistoryPage({
         </tr>)}</tbody>
       </table></div>
 
-      <div className="table-toolbar history-subtable-toolbar"><div><h3>{tr(locale, "Payments", "المدفوعات")}</h3><span>{payments.length}</span></div></div>
+      <div className="table-toolbar history-subtable-toolbar"><div><h3>{tr(locale, "Payments", "المدفوعات")}</h3><span>{payments.length} {tr(locale, "from invoices on this page", "من فواتير هذه الصفحة")}</span></div></div>
       <div className="table-wrap"><table>
         <thead><tr>
           <th>{tr(locale, "Received", "تاريخ الاستلام")}</th>
@@ -554,8 +590,8 @@ export default async function PatientHistoryPage({
       </table></div>
     </section>}
 
-    {canViewAttachments && <section className="table-card no-print">
-      <div className="table-toolbar"><div><h2>{tr(locale, "Attachment History", "سجل المرفقات")}</h2><span>{attachments.length} {tr(locale, "file(s)", "ملف")}</span></div></div>
+    {canViewAttachments && section === "attachments" && <section className="table-card no-print">
+      <div className="table-toolbar"><div><h2>{tr(locale, "Attachment History", "سجل المرفقات")}</h2><span>{attachments.length} {tr(locale, "shown on this page", "معروض في هذه الصفحة")}</span></div></div>
       <div className="table-wrap"><table>
         <thead><tr>
           <th>{tr(locale, "Uploaded", "تاريخ الرفع")}</th>
@@ -574,7 +610,15 @@ export default async function PatientHistoryPage({
       </table></div>
     </section>}
 
-    {!canViewOrders && !canViewReports && !canViewBilling && <section className="detail-card">
+    {accessibleSections.length > 0 && <PatientHistoryPager
+      patientId={canonical.id}
+      section={section}
+      page={navigation.page}
+      hasNext={currentPageHasNext}
+      locale={locale}
+    />}
+
+    {!canViewOrders && !canViewReports && !canViewBilling && !canViewAttachments && <section className="detail-card">
       <p className="muted">{tr(
         locale,
         "You can view the patient identity, but your role does not include order, report, or billing history permissions.",
