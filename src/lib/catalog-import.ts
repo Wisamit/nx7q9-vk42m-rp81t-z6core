@@ -113,10 +113,10 @@ export function validateImportRow(entityType: ImportEntity, normalized: Prisma.I
     if (!normalized.priceListCode || !normalized.testCode) {
       out.push({ severity: "ERROR", code: "MISSING_PRICE_MAPPING", message: "Price-list code and test code must be supplied." });
     }
-    if (typeof normalized.unitPrice !== "string" || !/^(?:0|[1-9]\\d*)(?:\\.\\d{1,4})?$/.test(normalized.unitPrice)) {
+    if (typeof normalized.unitPrice !== "string" || !/^(?:0|[1-9]\d*)(?:\.\d{1,4})?$/.test(normalized.unitPrice)) {
       out.push({ severity: "ERROR", code: "INVALID_STAGED_PRICE", message: "Price must be a non-negative decimal with at most four fractional digits." });
     }
-    if (typeof normalized.effectiveFrom !== "string" || !/^\\d{4}-\\d{2}-\\d{2}/.test(normalized.effectiveFrom)
+    if (typeof normalized.effectiveFrom !== "string" || !/^\d{4}-\d{2}-\d{2}/.test(normalized.effectiveFrom)
         || Number.isNaN(new Date(normalized.effectiveFrom).getTime())) {
       out.push({ severity: "ERROR", code: "MISSING_PRICE_EFFECTIVE_DATE", message: "A valid effective-from date is required." });
     }
