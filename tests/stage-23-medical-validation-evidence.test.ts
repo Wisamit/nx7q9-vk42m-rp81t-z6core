@@ -31,9 +31,14 @@ test("medical approval requires the exact manual technical approval record", () 
   assert.equal(medicalApprovalEvidenceError(base), null);
   assert.equal(medicalApprovalEvidenceError({ ...base, candidateUserId: "TECH" }),
     "medical_validator_must_differ_from_technical_reviewer");
+  const sameReviewerPolicy = { ...configured, allowSameReviewer: true };
   assert.equal(medicalApprovalEvidenceError({
-    ...base, policySnapshot: { ...configured, allowSameReviewer: true }, candidateUserId: "TECH",
+    ...base, policySnapshot: sameReviewerPolicy,
+    technicalReview: { ...review, policySnapshot: sameReviewerPolicy }, candidateUserId: "TECH",
   }), null);
+  assert.equal(medicalApprovalEvidenceError({
+    ...base, policySnapshot: sameReviewerPolicy, candidateUserId: "TECH",
+  }), "technical_review_evidence_missing");
   for (const bad of [
     null,
     { ...review, reviewedAt: new Date("2026-10-08") },
@@ -73,11 +78,15 @@ test("missing, malformed, migrated or wrong-scoped policy snapshots fail closed"
     assert.equal(medicalApprovalEvidenceError({ ...base, policySnapshot }),
       "medical_validation_policy_snapshot_invalid");
   }
+  const departmentPolicy = { ...configured, scope: "DEPARTMENT" as const, testId: null, departmentId: "D1" };
   assert.equal(medicalApprovalEvidenceError({
-    ...base, policySnapshot: { ...configured, scope: "DEPARTMENT", testId: null, departmentId: "D1" },
+    ...base, policySnapshot: departmentPolicy,
+    technicalReview: { ...review, policySnapshot: departmentPolicy },
   }), null);
+  const orgPolicy = { ...configured, scope: "ORGANIZATION" as const, testId: null, departmentId: null };
   assert.equal(medicalApprovalEvidenceError({
-    ...base, policySnapshot: { ...configured, scope: "ORGANIZATION", testId: null, departmentId: null },
+    ...base, policySnapshot: orgPolicy,
+    technicalReview: { ...review, policySnapshot: orgPolicy },
   }), null);
 });
 
