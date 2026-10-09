@@ -73,6 +73,8 @@ export default async function CatalogPage() {
 
       {permissions.has("catalog.manage") && <CatalogConfigurationExport locale={locale} canExportPricing={permissions.has("pricing.manage")} />}
 
+      {permissions.has("catalog.manage") && <CatalogCsvReviewStaging locale={locale} canStagePricing={permissions.has("pricing.manage")} />}
+
       <LegacyImportBatches locale={locale} batches={importBatches.map(batch => ({ id: batch.id, sourceName: batch.sourceName, sourceType: batch.sourceType, status: batch.status, rows: batch._count.rows, createdAt: batch.createdAt.toISOString() }))} />
 
       <section className="table-card detail-section">
