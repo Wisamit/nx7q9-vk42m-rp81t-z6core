@@ -15,11 +15,18 @@ import {
 } from "@/lib/patient-history";
 import { PatientResultTrends } from "@/components/patient-result-trends";
 import { PatientHistoryPrintButton } from "@/components/patient-history-print-button";
+import { PatientHistoryPager } from "@/components/patient-history-pager";
+import { historyPageSlice, patientHistoryNavigation, scopedHistoryAttachments, type PatientHistorySection } from "@/lib/patient-history-pagination";
 import { getUiLocale, statusLabel, tr } from "@/lib/ui-i18n";
 
 export const dynamic = "force-dynamic";
 
-export default async function PatientHistoryPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function PatientHistoryPage({
+  params, searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ section?: string; page?: string }>;
+}) {
   const session = await requirePermission("patients.view");
   const { id } = await params;
   const locale = getUiLocale(session.user.preferredLocale);
@@ -32,6 +39,15 @@ export default async function PatientHistoryPage({ params }: { params: Promise<{
     .filter(scope => scope.branch.status === "ACTIVE")
     .map(scope => scope.branchId);
   const departmentIds = authorizedDepartmentIds(session);
+  const accessibleSections: PatientHistorySection[] = [
+    ...(canViewOrders ? ["orders" as const] : []),
+    ...(canViewReports ? ["results" as const, "reports" as const] : []),
+    ...(canViewBilling ? ["finance" as const] : []),
+    ...(canViewAttachments ? ["attachments" as const] : []),
+  ];
+  const query = await searchParams;
+  const navigation = patientHistoryNavigation(query.section, query.page, accessibleSections);
+  const section = navigation.section;
 
   const requestedPatient = await prisma.patient.findFirst({
     where: { id, organizationId: session.user.organizationId },
@@ -69,7 +85,7 @@ export default async function PatientHistoryPage({ params }: { params: Promise<{
     ...(departmentIds.length > 0 ? { items: { some: itemDepartmentFilter } } : {}),
   };
 
-  const orders = canViewOrders
+  const ordersData = canViewOrders && section === "orders"
     ? await prisma.labOrder.findMany({
         where: orderScope,
         include: {
@@ -86,18 +102,36 @@ export default async function PatientHistoryPage({ params }: { params: Promise<{
             orderBy: { createdAt: "asc" },
           },
         },
-        orderBy: { orderedAt: "desc" },
+        orderBy: [{ orderedAt: "desc" }, { id: "desc" }],
+        skip: navigation.skip,
+        take: navigation.take,
       })
     : [];
+  const orderPage = historyPageSlice(ordersData);
+  const orders = orderPage.rows;
 
   // Only exact result revisions referenced by a CURRENT, non-retracted report
   // may be presented as current longitudinal readings. This also prevents a
   // previously accessible result from surfacing after an amendment elsewhere.
-  const releaseEvidence = canViewReports
+  const reportEvidenceData = canViewReports && section === "results"
     ? await prisma.diagnosticReport.findMany({
         where: {
           organizationId: session.user.organizationId,
-          order: { organizationId: session.user.organizationId, patientId: { in: patientIds } },
+          order: {
+            organizationId: session.user.organizationId,
+            patientId: { in: patientIds },
+            OR: [
+              { orderingBranchId: { in: branchIds } },
+              { items: { some: {
+                ...itemDepartmentFilter,
+                results: { some: {
+                  organizationId: session.user.organizationId,
+                  performingBranchId: { in: branchIds },
+                  status: { in: ["RELEASED", "AMENDED"] },
+                } },
+              } } },
+            ],
+          },
         },
         select: {
           currentVersion: true,
@@ -107,8 +141,13 @@ export default async function PatientHistoryPage({ params }: { params: Promise<{
             select: { version: true, status: true, resultVersionSnapshot: true },
           },
         },
+        orderBy: [{ order: { orderedAt: "desc" } }, { id: "desc" }],
+        skip: navigation.skip,
+        take: navigation.take,
       })
     : [];
+  const resultPage = historyPageSlice(reportEvidenceData);
+  const releaseEvidence = resultPage.rows;
   const currentResultIds = currentReportResultIds(releaseEvidence);
 
   const resultCandidates = canViewReports && currentResultIds.size > 0
@@ -192,14 +231,17 @@ export default async function PatientHistoryPage({ params }: { params: Promise<{
   });
   const trendSeries = buildPatientTrendSeries(trendInputs);
 
-  const reportVersions = canViewReports
+  const reportVersionsData = canViewReports && section === "reports"
     ? await prisma.diagnosticReportVersion.findMany({
         where: {
+          branchId: { in: branchIds },
           report: {
             organizationId: session.user.organizationId,
             order: {
+              organizationId: session.user.organizationId,
               patientId: { in: patientIds },
               orderingBranchId: { in: branchIds },
+              ...(departmentIds.length ? { items: { some: itemDepartmentFilter } } : {}),
             },
           },
         },
@@ -217,11 +259,15 @@ export default async function PatientHistoryPage({ params }: { params: Promise<{
           },
           branch: { select: { nameEn: true, nameAr: true } },
         },
-        orderBy: { issuedAt: "desc" },
+        orderBy: [{ issuedAt: "desc" }, { id: "desc" }],
+        skip: navigation.skip,
+        take: navigation.take,
       })
     : [];
+  const reportVersionPage = historyPageSlice(reportVersionsData);
+  const reportVersions = reportVersionPage.rows;
 
-  const invoices = canViewBilling
+  const invoicesData = canViewBilling && section === "finance"
     ? await prisma.invoice.findMany({
         where: {
           organizationId: session.user.organizationId,
@@ -256,9 +302,13 @@ export default async function PatientHistoryPage({ params }: { params: Promise<{
             select: { id: true, refundNumber: true, amount: true, status: true, processedAt: true },
           },
         },
-        orderBy: { issuedAt: "desc" },
+        orderBy: [{ issuedAt: "desc" }, { id: "desc" }],
+        skip: navigation.skip,
+        take: navigation.take,
       })
     : [];
+  const invoicePage = historyPageSlice(invoicesData);
+  const invoices = invoicePage.rows;
 
   const paymentRows = new Map<string, {
     id: string;
@@ -292,37 +342,20 @@ export default async function PatientHistoryPage({ params }: { params: Promise<{
   }
   const payments = [...paymentRows.values()].sort((a, b) => b.receivedAt.getTime() - a.receivedAt.getTime());
 
-  const accessibleOrderIds = canViewOrders ? orders.map(order => order.id) : [];
-  const accessibleResultIdsForAttachments = canViewReports
-    ? clinicalResults
-        .filter(result => branchIds.includes(result.performingBranchId))
-        .map(result => result.id)
-    : [];
-  const attachments = canViewAttachments
-    ? await prisma.attachment.findMany({
-        where: {
-          organizationId: session.user.organizationId,
-          OR: [
-            { targetType: "PATIENT", targetId: { in: patientIds }, branchId: { in: branchIds } },
-            ...(canViewOrders && accessibleOrderIds.length > 0
-              ? [{ targetType: "ORDER" as const, targetId: { in: accessibleOrderIds }, branchId: { in: branchIds } }]
-              : []),
-            ...(canViewReports && accessibleResultIdsForAttachments.length > 0
-              ? [{ targetType: "RESULT" as const, targetId: { in: accessibleResultIdsForAttachments }, branchId: { in: branchIds } }]
-              : []),
-          ],
-        },
-        select: {
-          id: true,
-          targetType: true,
-          originalName: true,
-          contentType: true,
-          sizeBytes: true,
-          createdAt: true,
-        },
-        orderBy: { createdAt: "desc" },
+  const attachmentData = canViewAttachments && section === "attachments"
+    ? await scopedHistoryAttachments({
+        organizationId: session.user.organizationId,
+        patientIds,
+        branchIds,
+        departmentIds,
+        canViewOrders,
+        canViewReports,
+        skip: navigation.skip,
+        take: navigation.take,
       })
     : [];
+  const attachmentPage = historyPageSlice(attachmentData);
+  const attachments = attachmentPage.rows;
 
   const cumulativeRows = clinicalResults.flatMap(result => result.values.map(value => ({
     key: result.id + ":" + value.id,
