@@ -91,6 +91,8 @@ export default async function ImportBatchPage({
     CONTAINER: tr(locale, "Container", "حاوية"),
     PANEL: tr(locale, "Panel", "باقة فحوصات"),
     REFERENCE_INTERVAL: tr(locale, "Reference interval", "مدى مرجعي"),
+    COMPONENT: tr(locale, "Result component (review only)", "مكوّن نتائج (للمراجعة فقط)"),
+    PRICE_LIST_ITEM: tr(locale, "Price (review only)", "سعر (للمراجعة فقط)"),
   }[value] || value);
 
   const issueSummary = issueRows.flatMap((row) => issueCodes(row.validationIssues)).reduce((acc, code) => {
