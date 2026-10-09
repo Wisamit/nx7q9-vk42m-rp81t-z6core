@@ -48,19 +48,19 @@ test("MariaDB staged components: tenant-scoped parent/unit lookup, duplicate ide
       const id=randomUUID(), component=n<3?"DUP":n===3?"EXISTING":"NEW"+n;
       const normalized=JSON.stringify({testCode:"T-"+suffix,code:component,nameEn:"Analyte "+n,unitCode:"U-"+suffix,resultType:"NUMERIC"});
       await insert(
-        "INSERT INTO catalog_import_rows (id,batch_id,row_number,entity_type,status,source_data,normalized_data) VALUES (?,?,?,'COMPONENT','WARNING',?,?)",
+        "INSERT INTO catalog_import_rows (id,batch_id,`row_number`,entity_type,status,source_data,normalized_data) VALUES (?,?,?,'COMPONENT','WARNING',?,?)",
         [id,batch,n,normalized,normalized],"catalog_import_rows",id,
       ); staged.push({id,n});
     }
     const foreignRow=randomUUID();
     await insert(
-      "INSERT INTO catalog_import_rows (id,batch_id,row_number,entity_type,status,source_data,normalized_data) VALUES (?,?,1,'COMPONENT','WARNING',?,?)",
+      "INSERT INTO catalog_import_rows (id,batch_id,`row_number`,entity_type,status,source_data,normalized_data) VALUES (?,?,1,'COMPONENT','WARNING',?,?)",
       [foreignRow,otherBatch,JSON.stringify({testCode:"T-"+suffix,code:"PRIVATE"}),JSON.stringify({testCode:"T-"+suffix,code:"PRIVATE"})],
       "catalog_import_rows",foreignRow,
     );
     const load = async (after: number) => {
       const [rows]=await reader.execute<mysql.RowDataPacket[]>(
-        "SELECT id,row_number,normalized_data FROM catalog_import_rows WHERE batch_id=? AND entity_type='COMPONENT' AND row_number>? ORDER BY row_number ASC,id ASC LIMIT 101",
+        "SELECT id,`row_number`,normalized_data FROM catalog_import_rows WHERE batch_id=? AND entity_type='COMPONENT' AND `row_number`>? ORDER BY `row_number` ASC,id ASC LIMIT 101",
         [batch,after],
       );
       return rows;
