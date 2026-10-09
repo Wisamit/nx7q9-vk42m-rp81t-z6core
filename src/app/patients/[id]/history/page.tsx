@@ -15,11 +15,19 @@ import {
 } from "@/lib/patient-history";
 import { PatientResultTrends } from "@/components/patient-result-trends";
 import { PatientHistoryPrintButton } from "@/components/patient-history-print-button";
+import { PatientHistoryPager } from "@/components/patient-history-pager";
+import { historyPageSlice, patientHistoryNavigation, type PatientHistorySection } from "@/lib/patient-history-pagination";
+import { scopedHistoryAttachments } from "@/lib/patient-history-attachments";
 import { getUiLocale, statusLabel, tr } from "@/lib/ui-i18n";
 
 export const dynamic = "force-dynamic";
 
-export default async function PatientHistoryPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function PatientHistoryPage({
+  params, searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ section?: string; page?: string }>;
+}) {
   const session = await requirePermission("patients.view");
   const { id } = await params;
   const locale = getUiLocale(session.user.preferredLocale);
@@ -32,6 +40,15 @@ export default async function PatientHistoryPage({ params }: { params: Promise<{
     .filter(scope => scope.branch.status === "ACTIVE")
     .map(scope => scope.branchId);
   const departmentIds = authorizedDepartmentIds(session);
+  const accessibleSections: PatientHistorySection[] = [
+    ...(canViewOrders ? ["orders" as const] : []),
+    ...(canViewReports ? ["results" as const, "reports" as const] : []),
+    ...(canViewBilling ? ["finance" as const] : []),
+    ...(canViewAttachments ? ["attachments" as const] : []),
+  ];
+  const query = await searchParams;
+  const navigation = patientHistoryNavigation(query.section, query.page, accessibleSections);
+  const section = navigation.section;
 
   const requestedPatient = await prisma.patient.findFirst({
     where: { id, organizationId: session.user.organizationId },
@@ -69,7 +86,7 @@ export default async function PatientHistoryPage({ params }: { params: Promise<{
     ...(departmentIds.length > 0 ? { items: { some: itemDepartmentFilter } } : {}),
   };
 
-  const orders = canViewOrders
+  const ordersData = canViewOrders && section === "orders"
     ? await prisma.labOrder.findMany({
         where: orderScope,
         include: {
@@ -86,18 +103,36 @@ export default async function PatientHistoryPage({ params }: { params: Promise<{
             orderBy: { createdAt: "asc" },
           },
         },
-        orderBy: { orderedAt: "desc" },
+        orderBy: [{ orderedAt: "desc" }, { id: "desc" }],
+        skip: navigation.skip,
+        take: navigation.take,
       })
     : [];
+  const orderPage = historyPageSlice(ordersData);
+  const orders = orderPage.rows;
 
   // Only exact result revisions referenced by a CURRENT, non-retracted report
   // may be presented as current longitudinal readings. This also prevents a
   // previously accessible result from surfacing after an amendment elsewhere.
-  const releaseEvidence = canViewReports
+  const reportEvidenceData = canViewReports && section === "results"
     ? await prisma.diagnosticReport.findMany({
         where: {
           organizationId: session.user.organizationId,
-          order: { organizationId: session.user.organizationId, patientId: { in: patientIds } },
+          order: {
+            organizationId: session.user.organizationId,
+            patientId: { in: patientIds },
+            OR: [
+              { orderingBranchId: { in: branchIds } },
+              { items: { some: {
+                ...itemDepartmentFilter,
+                results: { some: {
+                  organizationId: session.user.organizationId,
+                  performingBranchId: { in: branchIds },
+                  status: { in: ["RELEASED", "AMENDED"] },
+                } },
+              } } },
+            ],
+          },
         },
         select: {
           currentVersion: true,
@@ -107,8 +142,13 @@ export default async function PatientHistoryPage({ params }: { params: Promise<{
             select: { version: true, status: true, resultVersionSnapshot: true },
           },
         },
+        orderBy: [{ order: { orderedAt: "desc" } }, { id: "desc" }],
+        skip: navigation.skip,
+        take: navigation.take,
       })
     : [];
+  const resultPage = historyPageSlice(reportEvidenceData);
+  const releaseEvidence = resultPage.rows;
   const currentResultIds = currentReportResultIds(releaseEvidence);
 
   const resultCandidates = canViewReports && currentResultIds.size > 0
@@ -192,14 +232,17 @@ export default async function PatientHistoryPage({ params }: { params: Promise<{
   });
   const trendSeries = buildPatientTrendSeries(trendInputs);
 
-  const reportVersions = canViewReports
+  const reportVersionsData = canViewReports && section === "reports"
     ? await prisma.diagnosticReportVersion.findMany({
         where: {
+          branchId: { in: branchIds },
           report: {
             organizationId: session.user.organizationId,
             order: {
+              organizationId: session.user.organizationId,
               patientId: { in: patientIds },
               orderingBranchId: { in: branchIds },
+              ...(departmentIds.length ? { items: { some: itemDepartmentFilter } } : {}),
             },
           },
         },
@@ -217,11 +260,15 @@ export default async function PatientHistoryPage({ params }: { params: Promise<{
           },
           branch: { select: { nameEn: true, nameAr: true } },
         },
-        orderBy: { issuedAt: "desc" },
+        orderBy: [{ issuedAt: "desc" }, { id: "desc" }],
+        skip: navigation.skip,
+        take: navigation.take,
       })
     : [];
+  const reportVersionPage = historyPageSlice(reportVersionsData);
+  const reportVersions = reportVersionPage.rows;
 
-  const invoices = canViewBilling
+  const invoicesData = canViewBilling && section === "finance"
     ? await prisma.invoice.findMany({
         where: {
           organizationId: session.user.organizationId,
@@ -256,9 +303,13 @@ export default async function PatientHistoryPage({ params }: { params: Promise<{
             select: { id: true, refundNumber: true, amount: true, status: true, processedAt: true },
           },
         },
-        orderBy: { issuedAt: "desc" },
+        orderBy: [{ issuedAt: "desc" }, { id: "desc" }],
+        skip: navigation.skip,
+        take: navigation.take,
       })
     : [];
+  const invoicePage = historyPageSlice(invoicesData);
+  const invoices = invoicePage.rows;
 
   const paymentRows = new Map<string, {
     id: string;
@@ -292,37 +343,20 @@ export default async function PatientHistoryPage({ params }: { params: Promise<{
   }
   const payments = [...paymentRows.values()].sort((a, b) => b.receivedAt.getTime() - a.receivedAt.getTime());
 
-  const accessibleOrderIds = canViewOrders ? orders.map(order => order.id) : [];
-  const accessibleResultIdsForAttachments = canViewReports
-    ? clinicalResults
-        .filter(result => branchIds.includes(result.performingBranchId))
-        .map(result => result.id)
-    : [];
-  const attachments = canViewAttachments
-    ? await prisma.attachment.findMany({
-        where: {
-          organizationId: session.user.organizationId,
-          OR: [
-            { targetType: "PATIENT", targetId: { in: patientIds }, branchId: { in: branchIds } },
-            ...(canViewOrders && accessibleOrderIds.length > 0
-              ? [{ targetType: "ORDER" as const, targetId: { in: accessibleOrderIds }, branchId: { in: branchIds } }]
-              : []),
-            ...(canViewReports && accessibleResultIdsForAttachments.length > 0
-              ? [{ targetType: "RESULT" as const, targetId: { in: accessibleResultIdsForAttachments }, branchId: { in: branchIds } }]
-              : []),
-          ],
-        },
-        select: {
-          id: true,
-          targetType: true,
-          originalName: true,
-          contentType: true,
-          sizeBytes: true,
-          createdAt: true,
-        },
-        orderBy: { createdAt: "desc" },
+  const attachmentData = canViewAttachments && section === "attachments"
+    ? await scopedHistoryAttachments({
+        organizationId: session.user.organizationId,
+        patientIds,
+        branchIds,
+        departmentIds,
+        canViewOrders,
+        canViewReports,
+        skip: navigation.skip,
+        take: navigation.take,
       })
     : [];
+  const attachmentPage = historyPageSlice(attachmentData);
+  const attachments = attachmentPage.rows;
 
   const cumulativeRows = clinicalResults.flatMap(result => result.values.map(value => ({
     key: result.id + ":" + value.id,
@@ -348,6 +382,14 @@ export default async function PatientHistoryPage({ params }: { params: Promise<{
     resultStatus: result.status,
   })));
 
+  const currentPageHasNext = section === "orders" ? orderPage.hasNext
+    : section === "results" ? resultPage.hasNext
+    : section === "reports" ? reportVersionPage.hasNext
+    : section === "finance" ? invoicePage.hasNext
+    : attachmentPage.hasNext;
+  const historyLink = (target: PatientHistorySection) =>
+    "/patients/" + canonical.id + "/history?section=" + target + "&page=1";
+
   return <main className="catalog-shell patient-history-shell" dir={locale === "ar" ? "rtl" : "ltr"}>
     <header className="page-header">
       <div>
@@ -358,10 +400,35 @@ export default async function PatientHistoryPage({ params }: { params: Promise<{
         </p>
       </div>
       <div className="header-actions no-print">
-        {canViewReports && <PatientHistoryPrintButton locale={locale} />}
+        {canViewReports && section === "results" && <PatientHistoryPrintButton locale={locale} />}
         <Link className="secondary-link" href={"/patients/" + canonical.id}>{tr(locale, "Back to Patient", "العودة للمريض")}</Link>
       </div>
     </header>
+
+    <nav className="result-actions no-print" aria-label={tr(locale, "Patient history sections", "أقسام سجل المريض")}>
+      {accessibleSections.map(target => <Link
+        key={target}
+        className={section === target ? "primary-button" : "secondary-link"}
+        aria-current={section === target ? "page" : undefined}
+        href={historyLink(target)}
+      >{target === "orders" ? tr(locale, "Orders", "الطلبات")
+        : target === "results" ? tr(locale, "Results & trends", "النتائج والاتجاهات")
+        : target === "reports" ? tr(locale, "Report versions", "إصدارات التقارير")
+        : target === "finance" ? tr(locale, "Invoices & payments", "الفواتير والمدفوعات")
+        : tr(locale, "Attachments", "المرفقات")}</Link>)}
+    </nav>
+    {accessibleSections.length > 0 && <PatientHistoryPager
+      patientId={canonical.id}
+      section={section}
+      page={navigation.page}
+      hasNext={currentPageHasNext}
+      locale={locale}
+    />}
+    {section === "results" && canViewReports && <p className="muted" role="status">{tr(
+      locale,
+      "Clinical tables and trends reflect ONLY this page of up to 20 authorized diagnostic report records; use Next to review earlier reports. This is NOT the patient's complete longitudinal trend.",
+      "جداول النتائج ومخطط الاتجاهات يعرضان فقط هذه الصفحة من حتى 20 سجلاً لتقرير تشخيصي مصرح به؛ استخدم التالي لاستعراض الأقدم. هذا ليس الاتجاه الطولي الكامل للمريض.",
+    )}</p>}
 
     {patientIds.length > 1 && <section className="detail-card">
       <h2>{tr(locale, "Unified Identity", "الهوية الموحدة")}</h2>
@@ -379,9 +446,9 @@ export default async function PatientHistoryPage({ params }: { params: Promise<{
       </div>
     </section>}
 
-    {canViewOrders && <section className="table-card">
+    {canViewOrders && section === "orders" && <section className="table-card">
       <div className="table-toolbar">
-        <div><h2>{tr(locale, "Order History", "سجل الطلبات")}</h2><span>{orders.length} {tr(locale, "order(s)", "طلب")}</span></div>
+        <div><h2>{tr(locale, "Order History", "سجل الطلبات")}</h2><span>{orders.length} {tr(locale, "shown on this page", "معروض في هذه الصفحة")}</span></div>
       </div>
       <div className="table-wrap"><table>
         <thead><tr>
@@ -401,7 +468,7 @@ export default async function PatientHistoryPage({ params }: { params: Promise<{
       </table></div>
     </section>}
 
-    {canViewReports && <>
+    {canViewReports && section === "results" && <>
       <PatientResultTrends series={trendSeries} locale={locale} canViewOrders={canViewOrders} />
 
       <section className="table-card cumulative-history-table">
@@ -446,8 +513,11 @@ export default async function PatientHistoryPage({ params }: { params: Promise<{
         </table></div>
       </section>
 
+    </>}
+
+    {canViewReports && section === "reports" && <>
       <section className="table-card">
-        <div className="table-toolbar"><div><h2>{tr(locale, "Report Version History", "سجل إصدارات التقارير")}</h2><span>{reportVersions.length} {tr(locale, "version(s)", "إصدار")}</span></div></div>
+        <div className="table-toolbar"><div><h2>{tr(locale, "Report Version History", "سجل إصدارات التقارير")}</h2><span>{reportVersions.length} {tr(locale, "shown on this page", "معروض في هذه الصفحة")}</span></div></div>
         <div className="table-wrap"><table>
           <thead><tr>
             <th>{tr(locale, "Issued", "تاريخ الإصدار")}</th>
@@ -469,8 +539,8 @@ export default async function PatientHistoryPage({ params }: { params: Promise<{
       </section>
     </>}
 
-    {canViewBilling && <section className="table-card">
-      <div className="table-toolbar"><div><h2>{tr(locale, "Financial History", "السجل المالي")}</h2><span>{invoices.length} {tr(locale, "invoice(s)", "فاتورة")}</span></div></div>
+    {canViewBilling && section === "finance" && <section className="table-card">
+      <div className="table-toolbar"><div><h2>{tr(locale, "Financial History", "السجل المالي")}</h2><span>{invoices.length} {tr(locale, "shown on this page", "معروض في هذه الصفحة")}</span></div></div>
       <div className="table-wrap"><table>
         <thead><tr>
           <th>{tr(locale, "Issued", "الإصدار")}</th>
@@ -496,7 +566,7 @@ export default async function PatientHistoryPage({ params }: { params: Promise<{
         </tr>)}</tbody>
       </table></div>
 
-      <div className="table-toolbar history-subtable-toolbar"><div><h3>{tr(locale, "Payments", "المدفوعات")}</h3><span>{payments.length}</span></div></div>
+      <div className="table-toolbar history-subtable-toolbar"><div><h3>{tr(locale, "Payments", "المدفوعات")}</h3><span>{payments.length} {tr(locale, "from invoices on this page", "من فواتير هذه الصفحة")}</span></div></div>
       <div className="table-wrap"><table>
         <thead><tr>
           <th>{tr(locale, "Received", "تاريخ الاستلام")}</th>
@@ -521,8 +591,8 @@ export default async function PatientHistoryPage({ params }: { params: Promise<{
       </table></div>
     </section>}
 
-    {canViewAttachments && <section className="table-card no-print">
-      <div className="table-toolbar"><div><h2>{tr(locale, "Attachment History", "سجل المرفقات")}</h2><span>{attachments.length} {tr(locale, "file(s)", "ملف")}</span></div></div>
+    {canViewAttachments && section === "attachments" && <section className="table-card no-print">
+      <div className="table-toolbar"><div><h2>{tr(locale, "Attachment History", "سجل المرفقات")}</h2><span>{attachments.length} {tr(locale, "shown on this page", "معروض في هذه الصفحة")}</span></div></div>
       <div className="table-wrap"><table>
         <thead><tr>
           <th>{tr(locale, "Uploaded", "تاريخ الرفع")}</th>
@@ -541,7 +611,15 @@ export default async function PatientHistoryPage({ params }: { params: Promise<{
       </table></div>
     </section>}
 
-    {!canViewOrders && !canViewReports && !canViewBilling && <section className="detail-card">
+    {accessibleSections.length > 0 && <PatientHistoryPager
+      patientId={canonical.id}
+      section={section}
+      page={navigation.page}
+      hasNext={currentPageHasNext}
+      locale={locale}
+    />}
+
+    {!canViewOrders && !canViewReports && !canViewBilling && !canViewAttachments && <section className="detail-card">
       <p className="muted">{tr(
         locale,
         "You can view the patient identity, but your role does not include order, report, or billing history permissions.",
