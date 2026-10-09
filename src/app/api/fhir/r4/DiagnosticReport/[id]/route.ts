@@ -86,7 +86,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       id: version.id,
       contained,
       identifier: snapshot.order?.accessionNumber ? [{ system: "urn:family-lab:accession", value: snapshot.order.accessionNumber }] : undefined,
-      status: version.status === "RETRACTED" ? "entered-in-error" : version.status === "PARTIAL" ? "partial" : version.status === "AMENDED" ? "amended" : "final",
+      status: version.status === "PARTIAL" ? "partial" : version.status === "AMENDED" ? "amended" : "final",
       category: [{ coding: [{ system: "http://terminology.hl7.org/CodeSystem/v2-0074", code: "LAB", display: "Laboratory" }] }],
       subject: snapshot.patient?.id ? { reference: `Patient/${snapshot.patient.id}` } : undefined,
       issued: version.issuedAt.toISOString(),
