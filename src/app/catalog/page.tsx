@@ -5,6 +5,7 @@ import { CatalogManager } from "@/components/catalog-manager";
 import { ClinicalCatalogManager } from "@/components/clinical-catalog-manager";
 import { LegacyImportBatches } from "@/components/legacy-import-batches";
 import { CatalogConfigurationExport } from "@/components/catalog-configuration-export";
+import { CatalogCsvReviewStaging } from "@/components/catalog-csv-review-staging";
 import { CommercialPackageManager } from "@/components/commercial-package-manager";
 import { statusLabel, tr } from "@/lib/ui-i18n";
 
