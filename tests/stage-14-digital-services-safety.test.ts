@@ -16,6 +16,7 @@ test("appointment and home collection status workflows lock the same appointment
   assert.ok(appointment.indexOf("SELECT id FROM appointments") < appointment.indexOf("tx.homeCollectionVisit.findUnique"));
   assert.ok(visit.indexOf("SELECT id FROM appointments") < visit.indexOf("tx.homeCollectionVisit.findUniqueOrThrow"));
   assert.ok(appointment.includes("HOME_COLLECTION_ALREADY_STARTED"));
+  assert.ok(appointment.includes("HOME_COLLECTION_NOT_DELIVERED"));
   assert.ok(visit.includes("SPECIMEN_CUSTODY_ALREADY_STARTED"));
   assert.ok(visit.includes('"APPOINTMENT_NOT_ACTIVE"'));
   assert.ok(visit.includes('"APPOINTMENT_NOT_READY"'));
@@ -41,4 +42,16 @@ test("corporate portal never discloses appointments of another portal identity",
   assert.ok(page.includes("id: { in: bookingPatientIds }"));
   assert.ok(book.includes("canBook: true"));
   assert.ok(book.includes("organizationId: account.organizationId"));
+});
+
+test("portal login and administrative disabling serialize account sessions", () => {
+  const login = file("../src/app/api/portal/auth/login/route.ts");
+  const admin = file("../src/app/api/portal-accounts/[id]/status/route.ts");
+  assert.equal((login.match(/SELECT id FROM portal_accounts/g) || []).length, 2);
+  assert.ok(admin.includes("SELECT id FROM portal_accounts"));
+  assert.ok(login.includes('current.status === "DISABLED"'));
+  assert.ok(login.includes("current.passwordHash !== account.passwordHash"));
+  assert.ok(login.indexOf("SELECT id FROM portal_accounts", login.indexOf("const token = newPortalToken()"))
+    < login.indexOf("tx.portalSession.create"));
+  assert.ok(admin.indexOf("SELECT id FROM portal_accounts") < admin.indexOf("tx.portalSession.updateMany"));
 });
