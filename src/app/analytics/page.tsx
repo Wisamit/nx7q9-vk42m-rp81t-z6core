@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { AnalyticsBars } from "@/components/analytics-bars";
-import { requirePermission } from "@/lib/auth";
+import { permissionSet, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { tr } from "@/lib/ui-i18n";
 import { aggregateFinancialReport } from "@/lib/financial-reporting";
@@ -71,6 +71,7 @@ function minuteLabel(value: number | null, locale: "ar" | "en") {
 
 export default async function AnalyticsPage({ searchParams }: { searchParams: SearchParams }) {
   const session = await requirePermission("analytics.view");
+  const canViewFinancial = permissionSet(session).has("billing.view");
   const locale = session.user.preferredLocale === "ar" ? "ar" : "en";
   const params = await searchParams;
   const { period, start, end } = resolvePeriod(params);
@@ -149,7 +150,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
       orderBy: { orderedAt: "desc" },
       take: 20000,
     }),
-    prisma.invoice.findMany({
+    canViewFinancial ? prisma.invoice.findMany({
       where: {
         organizationId: session.user.organizationId,
         branchId: { in: branchIds },
@@ -168,8 +169,8 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
         balanceAmount: true,
       },
       take: 20000,
-    }),
-    prisma.payment.findMany({
+    }) : Promise.resolve([]),
+    canViewFinancial ? prisma.payment.findMany({
       where: {
         organizationId: session.user.organizationId,
         branchId: { in: branchIds },
@@ -178,8 +179,8 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
       },
       select: { branchId: true, currency: true, amount: true, method: true },
       take: 20000,
-    }),
-    prisma.refund.findMany({
+    }) : Promise.resolve([]),
+    canViewFinancial ? prisma.refund.findMany({
       where: {
         organizationId: session.user.organizationId,
         branchId: { in: branchIds },
@@ -188,8 +189,8 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
       },
       select: { currency: true, amount: true },
       take: 20000,
-    }),
-    prisma.creditNote.findMany({
+    }) : Promise.resolve([]),
+    canViewFinancial ? prisma.creditNote.findMany({
       where: {
         organizationId: session.user.organizationId,
         branchId: { in: branchIds },
@@ -198,7 +199,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
       },
       select: { currency: true, amount: true },
       take: 20000,
-    }),
+    }) : Promise.resolve([]),
     prisma.specimen.findMany({
       where: {
         organizationId: session.user.organizationId,
@@ -285,7 +286,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
   const localizedName = (item: { nameEn: string; nameAr?: string | null }) => locale === "ar" ? item.nameAr || item.nameEn : item.nameEn;
 
   const orderItemIds = orders.flatMap(order => order.items.map(item => item.id));
-  const [consumptionMovements, sendOutCosts] = orderItemIds.length === 0 ? [[], []] : await Promise.all([
+  const [consumptionMovements, sendOutCosts] = !canViewFinancial || orderItemIds.length === 0 ? [[], []] : await Promise.all([
     prisma.stockMovement.findMany({
       where: {
         organizationId: session.user.organizationId,
@@ -595,7 +596,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
       <article className="detail-card"><h2>{tr(locale, "Open QC Blocks", "حالات حظر QC المفتوحة")}</h2><strong>{openQcBlocks}</strong><p className="muted">{tr(locale, "Unresolved blocking Westgard/QC violations.", "مخالفات Westgard/QC الحاجبة التي لم تُحل بعد.")}</p></article>
     </section>
 
-    <section className="detail-section">
+    {canViewFinancial && <section className="detail-section">
       <div className="table-toolbar"><h2>{tr(locale, "Financial Summary", "الملخص المالي")}</h2><span>{tr(locale, "Per currency", "حسب كل عملة")}</span></div>
       <p className="muted">{tr(locale,
         "Issue-date invoice totals and current outstanding are not a historical balance at the period end. Collections, refunds and credits follow their own transaction dates; currencies are never combined.",
@@ -617,7 +618,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
         </article>)}
         {financeByCurrency.length === 0 && <article className="detail-card"><p className="muted">{tr(locale, "No financial activity in the selected period.", "لا توجد حركة مالية ضمن الفترة المحددة.")}</p></article>}
       </div>
-    </section>
+    </section>}
 
     <section className="detail-grid detail-section">
       <AnalyticsBars title={tr(locale, "Top Tests by Volume", "أكثر الفحوصات حسب العدد")} emptyText={tr(locale, "No data for the selected period.", "لا توجد بيانات ضمن الفترة المحددة.")} items={topTests.map(test => ({ label: test.code + " — " + test.name, value: test.volume }))} />
@@ -628,9 +629,9 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
 
     <section className="table-card detail-section">
       <div className="table-toolbar"><h2>{tr(locale, "Branch Comparison", "مقارنة الفروع")}</h2><span>{branchMap.size} {tr(locale, "branches", "فروع")}</span></div>
-      <p className="muted">{tr(locale, "Average invoice and revenue are shown by original currency; current outstanding is not a historical period-end balance. TAT SLA covers only released tests with stored due-time snapshots.", "متوسط الفاتورة والإيرادات حسب العملة الأصلية؛ المستحق الحالي ليس رصيد نهاية الفترة التاريخي. الالتزام بزمن الإنجاز يشمل النتائج الصادرة ذات موعد الاستحقاق المحفوظ.")}</p>
+      {canViewFinancial && <p className="muted">{tr(locale, "Average invoice and revenue are shown by original currency; current outstanding is not a historical period-end balance. TAT SLA covers only released tests with stored due-time snapshots.", "متوسط الفاتورة والإيرادات حسب العملة الأصلية؛ المستحق الحالي ليس رصيد نهاية الفترة التاريخي. الالتزام بزمن الإنجاز يشمل النتائج الصادرة ذات موعد الاستحقاق المحفوظ.")}</p>}
       <div className="table-wrap"><table>
-        <thead><tr><th>{tr(locale, "Branch", "الفرع")}</th><th>{tr(locale, "Orders", "الطلبات")}</th><th>{tr(locale, "Patients", "المرضى")}</th><th>{tr(locale, "Tests", "الفحوصات")}</th><th>{tr(locale, "Completed", "المكتملة")}</th><th>{tr(locale, "Completion", "نسبة الإكمال")}</th><th>{tr(locale, "Avg TAT", "متوسط TAT")}</th><th>{tr(locale, "TAT SLA", "التزام وقت الفحوصات")}</th><th>{tr(locale, "Specimen rejection", "رفض العينات")}</th><th>{tr(locale, "Invoiced", "المفوتر")}</th><th>{tr(locale, "Average invoice", "متوسط الفاتورة")}</th><th>{tr(locale, "Discounts", "الخصومات")}</th><th>{tr(locale, "Current outstanding", "المستحق الحالي")}</th><th>{tr(locale, "Collected", "المحصّل")}</th></tr></thead>
+        <thead><tr><th>{tr(locale, "Branch", "الفرع")}</th><th>{tr(locale, "Orders", "الطلبات")}</th><th>{tr(locale, "Patients", "المرضى")}</th><th>{tr(locale, "Tests", "الفحوصات")}</th><th>{tr(locale, "Completed", "المكتملة")}</th><th>{tr(locale, "Completion", "نسبة الإكمال")}</th><th>{tr(locale, "Avg TAT", "متوسط TAT")}</th><th>{tr(locale, "TAT SLA", "التزام وقت الفحوصات")}</th><th>{tr(locale, "Specimen rejection", "رفض العينات")}</th>{canViewFinancial && <><th>{tr(locale, "Invoiced", "المفوتر")}</th><th>{tr(locale, "Average invoice", "متوسط الفاتورة")}</th><th>{tr(locale, "Discounts", "الخصومات")}</th><th>{tr(locale, "Current outstanding", "المستحق الحالي")}</th><th>{tr(locale, "Collected", "المحصّل")}</th></>}</tr></thead>
         <tbody>{[...branchMap.values()].map(branch => {
           const avg = branch.tatMinutes.length ? branch.tatMinutes.reduce((a,b) => a+b,0) / branch.tatMinutes.length : null;
           return <tr key={branch.id}>
@@ -643,17 +644,19 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
             <td>{minuteLabel(avg, locale)}</td>
             <td>{branch.slaCount ? (branch.slaWithin / branch.slaCount * 100).toFixed(1) + "% (n=" + branch.slaCount + ")" : "—"}</td>
             <td>{branch.specimens ? (branch.rejectedSpecimens / branch.specimens * 100).toFixed(2) + "%" : "—"}</td>
+            {canViewFinancial && <>
             <td>{[...branch.revenue.entries()].map(([currency, amount]) => moneyText(amount, currency)).join(" · ") || "—"}</td>
             <td>{[...branch.revenue.entries()].map(([currency, amount]) => moneyText(amount / BigInt(branch.invoiceCountByCurrency.get(currency) || 1), currency)).join(" · ") || "—"}</td>
             <td>{[...branch.discounts.entries()].map(([currency, amount]) => moneyText(amount, currency)).join(" · ") || "—"}</td>
             <td>{[...branch.outstanding.entries()].map(([currency, amount]) => moneyText(amount, currency)).join(" · ") || "—"}</td>
             <td>{[...branch.collected.entries()].map(([currency, amount]) => moneyText(amount, currency)).join(" · ") || "—"}</td>
+            </>}
           </tr>;
         })}</tbody>
       </table></div>
     </section>
 
-    <section className="table-card detail-section">
+    {canViewFinancial && <section className="table-card detail-section">
       <div className="table-toolbar"><h2>{tr(locale, "Ordered Test Value & Indicative Cost Coverage", "قيمة الفحوصات المطلوبة والتكاليف التقديرية المرتبطة")}</h2><span>{tr(locale, "Inventory cost is estimated from CURRENT lot prices, not preserved historical valuation.", "تكلفة المخزون مقدّرة بسعر الدفعة الحالي وليست لقطة تكلفة تاريخية محفوظة.")}</span></div>
       <div className="table-wrap"><table>
         <thead><tr><th>{tr(locale, "Test", "الفحص")}</th><th>{tr(locale, "Volume", "العدد")}</th><th>{tr(locale, "Revenue", "الإيراد")}</th><th>{tr(locale, "Attributed laboratory cost", "تكلفة المختبر المنسوبة")}</th><th>{tr(locale, "Margin only with full, historically comparable cost", "الهامش فقط مع تكلفة تاريخية مكتملة وقابلة للمقارنة")}</th><th>{tr(locale, "Linked-cost coverage (not completeness guarantee)", "نسبة البنود المرتبطة بتكلفة (ليست ضمان اكتمال)")}</th></tr></thead>
@@ -678,21 +681,21 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
           </tr>;
         })}</tbody>
       </table></div>
-    </section>
+    </section>}
 
     <section className="detail-grid detail-section">
       <article className="table-card">
         <div className="table-toolbar"><h2>{tr(locale, "Source Analytics", "تحليلات المصادر")}</h2><span>{sourceMap.size}</span></div>
         <div className="table-wrap"><table>
-          <thead><tr><th>{tr(locale, "Source", "المصدر")}</th><th>{tr(locale, "Orders", "الطلبات")}</th><th>{tr(locale, "Revenue", "الإيراد")}</th></tr></thead>
-          <tbody>{topSources.length === 0 ? <tr><td colSpan={3} className="empty-state">{tr(locale, "No source-linked orders.", "لا توجد طلبات مرتبطة بمصدر.")}</td></tr> : topSources.map(source => <tr key={source.name}><td>{source.name}</td><td>{source.orders}</td><td>{[...source.revenue.entries()].map(([currency, amount]) => moneyText(amount, currency)).join(" · ") || "—"}</td></tr>)}</tbody>
+          <thead><tr><th>{tr(locale, "Source", "المصدر")}</th><th>{tr(locale, "Orders", "الطلبات")}</th>{canViewFinancial && <th>{tr(locale, "Ordered value", "قيمة الطلبات")}</th>}</tr></thead>
+          <tbody>{topSources.length === 0 ? <tr><td colSpan={canViewFinancial ? 3 : 2} className="empty-state">{tr(locale, "No source-linked orders.", "لا توجد طلبات مرتبطة بمصدر.")}</td></tr> : topSources.map(source => <tr key={source.name}><td>{source.name}</td><td>{source.orders}</td>{canViewFinancial && <td>{[...source.revenue.entries()].map(([currency, amount]) => moneyText(amount, currency)).join(" · ") || "—"}</td>}</tr>)}</tbody>
         </table></div>
       </article>
       <article className="table-card">
         <div className="table-toolbar"><h2>{tr(locale, "Referrer Analytics", "تحليلات المحيلين")}</h2><span>{referrerMap.size}</span></div>
         <div className="table-wrap"><table>
-          <thead><tr><th>{tr(locale, "Referrer", "المحيل")}</th><th>{tr(locale, "Orders", "الطلبات")}</th><th>{tr(locale, "Revenue", "الإيراد")}</th></tr></thead>
-          <tbody>{topReferrers.length === 0 ? <tr><td colSpan={3} className="empty-state">{tr(locale, "No referrer-linked orders.", "لا توجد طلبات مرتبطة بمحيل.")}</td></tr> : topReferrers.map(referrer => <tr key={referrer.name}><td>{referrer.name}</td><td>{referrer.orders}</td><td>{[...referrer.revenue.entries()].map(([currency, amount]) => moneyText(amount, currency)).join(" · ") || "—"}</td></tr>)}</tbody>
+          <thead><tr><th>{tr(locale, "Referrer", "المحيل")}</th><th>{tr(locale, "Orders", "الطلبات")}</th>{canViewFinancial && <th>{tr(locale, "Ordered value", "قيمة الطلبات")}</th>}</tr></thead>
+          <tbody>{topReferrers.length === 0 ? <tr><td colSpan={canViewFinancial ? 3 : 2} className="empty-state">{tr(locale, "No referrer-linked orders.", "لا توجد طلبات مرتبطة بمحيل.")}</td></tr> : topReferrers.map(referrer => <tr key={referrer.name}><td>{referrer.name}</td><td>{referrer.orders}</td>{canViewFinancial && <td>{[...referrer.revenue.entries()].map(([currency, amount]) => moneyText(amount, currency)).join(" · ") || "—"}</td>}</tr>)}</tbody>
         </table></div>
       </article>
     </section>
