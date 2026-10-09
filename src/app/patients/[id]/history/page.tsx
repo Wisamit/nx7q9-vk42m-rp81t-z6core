@@ -8,6 +8,7 @@ import {
 import { prisma } from "@/lib/db";
 import {
   buildPatientTrendSeries,
+  currentReportResultIds,
   latestClinicalResultIds,
   patientIdentityGroupIds,
   type TrendPointInput,
@@ -89,10 +90,32 @@ export default async function PatientHistoryPage({ params }: { params: Promise<{
       })
     : [];
 
-  const resultCandidates = canViewReports
+  // Only exact result revisions referenced by a CURRENT, non-retracted report
+  // may be presented as current longitudinal readings. This also prevents a
+  // previously accessible result from surfacing after an amendment elsewhere.
+  const releaseEvidence = canViewReports
+    ? await prisma.diagnosticReport.findMany({
+        where: {
+          organizationId: session.user.organizationId,
+          order: { organizationId: session.user.organizationId, patientId: { in: patientIds } },
+        },
+        select: {
+          currentVersion: true,
+          versions: {
+            orderBy: { version: "desc" },
+            take: 1,
+            select: { version: true, status: true, resultVersionSnapshot: true },
+          },
+        },
+      })
+    : [];
+  const currentResultIds = currentReportResultIds(releaseEvidence);
+
+  const resultCandidates = canViewReports && currentResultIds.size > 0
     ? await prisma.laboratoryResult.findMany({
         where: {
           organizationId: session.user.organizationId,
+          id: { in: [...currentResultIds] },
           status: { in: ["RELEASED", "AMENDED"] },
           performingBranchId: { in: branchIds },
           orderItem: {
@@ -152,6 +175,8 @@ export default async function PatientHistoryPage({ params }: { params: Promise<{
       testNameEn: result.orderItem.testNameEnSnapshot,
       testNameAr: result.orderItem.testNameArSnapshot,
       componentId: value.componentId,
+      methodId: result.methodId,
+      analyzerCode: result.analyzerCodeSnapshot,
       componentCode: value.componentCodeSnapshot,
       componentNameEn: value.reportNameEnSnapshot || value.componentNameEnSnapshot,
       componentNameAr: value.reportNameArSnapshot || value.componentNameArSnapshot,
@@ -278,7 +303,7 @@ export default async function PatientHistoryPage({ params }: { params: Promise<{
         where: {
           organizationId: session.user.organizationId,
           OR: [
-            { targetType: "PATIENT", targetId: { in: patientIds } },
+            { targetType: "PATIENT", targetId: { in: patientIds }, branchId: { in: branchIds } },
             ...(canViewOrders && accessibleOrderIds.length > 0
               ? [{ targetType: "ORDER" as const, targetId: { in: accessibleOrderIds }, branchId: { in: branchIds } }]
               : []),
