@@ -39,18 +39,37 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
 
   const now = new Date();
-  await prisma.$transaction(async tx => {
-    await tx.appointment.update({
-      where: { id },
-      data: {
+  try {
+    await prisma.$transaction(async tx => {
+      // Queue check-in, home collection and appointment status share this lock.
+      const locked = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM appointments WHERE id = ${id}
+        AND organization_id = ${session.user.organizationId} FOR UPDATE
+      `;
+      if (locked.length !== 1) throw new Error("APPOINTMENT_CHANGED");
+      const current = await tx.appointment.findUniqueOrThrow({ where: { id } });
+      if (!(allowedTransitions[current.status] || []).includes(nextStatus) ||
+          current.updatedAt.getTime() !== appointment.updatedAt.getTime()) {
+        throw new Error("APPOINTMENT_CHANGED");
+      }
+      if (nextStatus === "CANCELLED" && current.mode === "HOME_COLLECTION") {
+        const visit = await tx.homeCollectionVisit.findUnique({ where: { appointmentId: id } });
+        if (visit && !["SCHEDULED", "ASSIGNED", "EN_ROUTE", "ARRIVED"].includes(visit.status)) {
+          throw new Error("HOME_COLLECTION_ALREADY_STARTED");
+        }
+      }
+      const claim = await tx.appointment.updateMany({
+        where: { id, organizationId: session.user.organizationId, status: current.status, updatedAt: current.updatedAt },
+        data: {
         status: nextStatus,
         checkedInAt: nextStatus === "CHECKED_IN" ? now : appointment.checkedInAt,
         completedAt: nextStatus === "COMPLETED" ? now : appointment.completedAt,
         cancelledAt: nextStatus === "CANCELLED" ? now : appointment.cancelledAt,
-        cancellationReason: nextStatus === "CANCELLED" ? reason : appointment.cancellationReason,
+        cancellationReason: nextStatus === "CANCELLED" ? reason : current.cancellationReason,
       },
     });
-    if (nextStatus === "CANCELLED" && appointment.mode === "HOME_COLLECTION") {
+      if (claim.count !== 1) throw new Error("APPOINTMENT_CHANGED");
+    if (nextStatus === "CANCELLED" && current.mode === "HOME_COLLECTION") {
       await tx.homeCollectionVisit.updateMany({
         where: { appointmentId: id, status: { not: "CANCELLED" } },
         data: { status: "CANCELLED" },
@@ -71,7 +90,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         userAgent: ctx.userAgent,
       },
     });
-  });
+    }, { isolationLevel: "Serializable", timeout: 30000 });
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : "";
+    return NextResponse.json({ error: reason === "HOME_COLLECTION_ALREADY_STARTED"
+      ? "home_collection_already_started" : "appointment_status_conflict" }, { status: 409 });
+  }
 
   return NextResponse.json({ status: "ok", appointmentStatus: nextStatus });
 }
