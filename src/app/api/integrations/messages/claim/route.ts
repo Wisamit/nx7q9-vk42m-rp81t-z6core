@@ -11,11 +11,27 @@ export async function POST(request: Request) {
 
     const now = new Date();
     const staleSent = new Date(now.getTime() - 5 * 60_000);
+    // Expired outbound leases must stop at the configured attempt limit,
+    // not be reclaimed forever after transport failures.
+    await prisma.integrationMessage.updateMany({
+      where: {
+        organizationId: auth.organizationId,
+        endpointId: auth.endpoint.id,
+        direction: "OUTBOUND",
+        attemptCount: { gte: auth.endpoint.maxAttempts },
+        OR: [
+          { status: "FAILED" },
+          { status: "SENT", updatedAt: { lte: staleSent } },
+        ],
+      },
+      data: { status: "DEAD_LETTER", nextAttemptAt: null, lastError: "Maximum HL7 delivery attempts exceeded" },
+    });
     const candidates = await prisma.integrationMessage.findMany({
       where: {
         organizationId: auth.organizationId,
         endpointId: auth.endpoint.id,
         direction: "OUTBOUND",
+        attemptCount: { lt: auth.endpoint.maxAttempts },
         OR: [
           { status: "QUEUED" },
           { status: "FAILED", OR: [{ nextAttemptAt: null }, { nextAttemptAt: { lte: now } }] },
@@ -32,6 +48,7 @@ export async function POST(request: Request) {
         where: {
           id: candidate.id,
           status: candidate.status,
+          attemptCount: candidate.attemptCount,
           updatedAt: candidate.updatedAt,
         },
         data: {

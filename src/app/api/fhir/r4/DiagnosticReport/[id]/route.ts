@@ -29,6 +29,10 @@ type Snapshot = {
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const auth = await requireIntegrationApiKey(request, "fhir.read");
+    if (!["FHIR_R4", "REST"].includes(auth.endpoint.endpointType) ||
+        !["OUTBOUND", "BIDIRECTIONAL"].includes(auth.endpoint.direction)) {
+      return NextResponse.json(operationOutcome("forbidden", "FHIR endpoint not authorized for outbound reads"), { status: 403 });
+    }
     const { id } = await params;
     const version = await prisma.diagnosticReportVersion.findFirst({
       where: {
@@ -39,6 +43,17 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     });
     if (!version) return NextResponse.json(operationOutcome("not-found","DiagnosticReport not found"), { status: 404 });
 
+    // Retractions remain traceable as FHIR entered-in-error metadata, but
+    // withdrawn clinical values must never leave the LIS via this endpoint.
+    if (version.status === "RETRACTED") {
+      return NextResponse.json({
+        resourceType: "DiagnosticReport",
+        id: version.id,
+        status: "entered-in-error",
+        issued: version.issuedAt.toISOString(),
+        result: [],
+      }, { headers: { "content-type": "application/fhir+json" } });
+    }
     const snapshot = version.contentSnapshot as unknown as Snapshot;
     const contained: Array<Record<string, unknown>> = [];
     const resultRefs: Array<{ reference: string }> = [];
@@ -71,7 +86,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       id: version.id,
       contained,
       identifier: snapshot.order?.accessionNumber ? [{ system: "urn:family-lab:accession", value: snapshot.order.accessionNumber }] : undefined,
-      status: version.status === "RETRACTED" ? "entered-in-error" : version.status === "PARTIAL" ? "partial" : version.status === "AMENDED" ? "amended" : "final",
+      status: version.status === "PARTIAL" ? "partial" : version.status === "AMENDED" ? "amended" : "final",
       category: [{ coding: [{ system: "http://terminology.hl7.org/CodeSystem/v2-0074", code: "LAB", display: "Laboratory" }] }],
       subject: snapshot.patient?.id ? { reference: `Patient/${snapshot.patient.id}` } : undefined,
       issued: version.issuedAt.toISOString(),

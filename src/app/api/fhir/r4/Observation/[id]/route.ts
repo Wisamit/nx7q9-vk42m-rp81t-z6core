@@ -7,12 +7,18 @@ import { prisma } from "@/lib/db";
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const auth = await requireIntegrationApiKey(request, "fhir.read");
+    if (!["FHIR_R4", "REST"].includes(auth.endpoint.endpointType) ||
+        !["OUTBOUND", "BIDIRECTIONAL"].includes(auth.endpoint.direction)) {
+      return NextResponse.json(operationOutcome("forbidden", "FHIR endpoint not authorized for outbound reads"), { status: 403 });
+    }
     const { id } = await params;
     const value = await prisma.laboratoryResultValue.findFirst({
       where: {
         id,
         result: {
           organizationId: auth.organizationId,
+          status: { in: ["RELEASED", "AMENDED"] },
+          releasedAt: { not: null },
           ...(auth.endpoint.branchId ? {
             OR: [
               { performingBranchId: auth.endpoint.branchId },
@@ -25,7 +31,27 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     });
     if (!value) return NextResponse.json(operationOutcome("not-found","Observation not found"), { status: 404 });
     const result = value.result;
-    const asOf = result.releasedAt || result.verifiedAt || result.enteredAt;
+    // Observations are returned only from the current non-retracted diagnostic
+    // report snapshot. A draft/verified value or superseded result can never
+    // appear as a newly final FHIR Observation.
+    const report = await prisma.diagnosticReport.findUnique({
+      where: { orderId: result.orderItem.orderId },
+      select: { id: true, currentVersion: true },
+    });
+    const currentVersion = report && report.currentVersion > 0
+      ? await prisma.diagnosticReportVersion.findUnique({
+          where: { reportId_version: { reportId: report.id, version: report.currentVersion } },
+          select: { status: true, contentSnapshot: true, branchId: true },
+        })
+      : null;
+    const contents = currentVersion?.contentSnapshot as { results?: Array<{ resultId?: string }> } | null;
+    if (!currentVersion || currentVersion.status === "RETRACTED" ||
+        (auth.endpoint.branchId && currentVersion.branchId !== auth.endpoint.branchId &&
+          result.performingBranchId !== auth.endpoint.branchId) ||
+        !contents?.results?.some(item => item.resultId === result.id)) {
+      return NextResponse.json(operationOutcome("not-found", "Current released Observation not found"), { status: 404 });
+    }
+    const asOf = result.releasedAt!;
     const mapping = await resolvePrimaryTerminologyMapping({
       organizationId: auth.organizationId,
       testId: result.orderItem.testId,

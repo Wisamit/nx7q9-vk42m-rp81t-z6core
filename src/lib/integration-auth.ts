@@ -34,7 +34,8 @@ export async function requireIntegrationApiKey(request: Request, requiredScope: 
     include: { endpoint: true },
   });
 
-  if (!apiKey || apiKey.revokedAt || apiKey.endpoint.status !== "ACTIVE") {
+  if (!apiKey || apiKey.revokedAt || apiKey.endpoint.status !== "ACTIVE" ||
+      apiKey.organizationId !== apiKey.endpoint.organizationId) {
     throw new IntegrationAuthError("integration_api_key_invalid");
   }
   if (apiKey.expiresAt && apiKey.expiresAt <= new Date()) {

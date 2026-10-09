@@ -9,10 +9,16 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => null) as { deliveryId?: unknown } | null;
   const deliveryId = typeof body?.deliveryId === "string" ? body.deliveryId.trim() : "";
 
+  const now = new Date();
+  const staleSent = new Date(now.getTime() - 5 * 60_000);
   const deliveries = await prisma.webhookDelivery.findMany({
     where: {
       organizationId: session.user.organizationId,
-      status: { in: ["QUEUED","FAILED"] },
+      OR: [
+        { status: "QUEUED" },
+        { status: "FAILED", OR: [{ nextAttemptAt: null }, { nextAttemptAt: { lte: now } }] },
+        { status: "SENT", updatedAt: { lte: staleSent } },
+      ],
       ...(deliveryId ? { id: deliveryId } : {}),
     },
     include: { subscription: { include: { endpoint: true } } },
@@ -21,14 +27,18 @@ export async function POST(request: Request) {
   });
 
   const due = deliveries.filter(item =>
-    (!item.nextAttemptAt || item.nextAttemptAt <= new Date()) &&
+    (!item.nextAttemptAt || item.nextAttemptAt <= now) &&
     (!item.subscription.endpoint.branchId || canAccessBranch(session, item.subscription.endpoint.branchId))
   );
 
   const results = [];
   for (const item of due) {
-    const updated = await dispatchWebhookDelivery(item.id);
-    results.push({ id: item.id, status: updated.status, attemptCount: updated.attemptCount });
+    try {
+      const updated = await dispatchWebhookDelivery(item.id);
+      results.push({ id: item.id, status: updated?.status || "SKIPPED_CONCURRENT_CLAIM", attemptCount: updated?.attemptCount ?? item.attemptCount });
+    } catch (error) {
+      results.push({ id: item.id, status: "DISPATCH_ERROR", reason: error instanceof Error ? error.message : "UNKNOWN" });
+    }
   }
 
   await prisma.auditEvent.create({

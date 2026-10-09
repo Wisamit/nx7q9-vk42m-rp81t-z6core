@@ -11,11 +11,18 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   try {
     const auth = await requireIntegrationApiKey(request, "messages.ack");
     const { id } = await params;
-    const body = await request.json().catch(() => null) as { code?: unknown; payload?: unknown; error?: unknown } | null;
+    const body = await request.json().catch(() => null) as { code?: unknown; attempt?: unknown; payload?: unknown; error?: unknown } | null;
     const code = ["AA","AE","AR"].includes(String(body?.code || "")) ? String(body?.code) : null;
+    const expectedAttempt = Number(body?.attempt);
     const acknowledgementPayload = typeof body?.payload === "string" ? body.payload.slice(0, 65535) : null;
     const lastError = typeof body?.error === "string" ? body.error.slice(0, 2000) : null;
-    if (!code) return NextResponse.json({ error: "invalid_acknowledgement_code" }, { status: 400 });
+    if (!code || !Number.isSafeInteger(expectedAttempt) || expectedAttempt < 1) {
+      return NextResponse.json({ error: "acknowledgement_code_and_attempt_required" }, { status: 400 });
+    }
+    if (auth.endpoint.endpointType !== "HL7_V2" ||
+        !["OUTBOUND", "BIDIRECTIONAL"].includes(auth.endpoint.direction)) {
+      return NextResponse.json({ error: "endpoint_not_outbound_hl7" }, { status: 403 });
+    }
 
     const message = await prisma.integrationMessage.findFirst({
       where: {
@@ -26,34 +33,47 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       },
     });
     if (!message) return NextResponse.json({ error: "message_not_found" }, { status: 404 });
-
-    if (code === "AA") {
-      const updated = await prisma.integrationMessage.update({
-        where: { id: message.id },
-        data: {
-          status: "ACKNOWLEDGED",
-          acknowledgementCode: code,
-          acknowledgementPayload,
-          processedAt: new Date(),
-          nextAttemptAt: null,
-          lastError: null,
-        },
-      });
-      return NextResponse.json({ status: "ok", messageStatus: updated.status });
+    if (message.status !== "SENT" || message.attemptCount !== expectedAttempt) {
+      return NextResponse.json({ error: "stale_or_unclaimed_acknowledgement" }, { status: 409 });
     }
 
-    const terminal = message.attemptCount >= auth.endpoint.maxAttempts;
-    const updated = await prisma.integrationMessage.update({
-      where: { id: message.id },
-      data: {
-        status: terminal ? "DEAD_LETTER" : "FAILED",
-        acknowledgementCode: code,
-        acknowledgementPayload,
-        lastError: lastError || `HL7 acknowledgement ${code}`,
-        nextAttemptAt: terminal ? null : retryAt(message.attemptCount),
-      },
-    });
-    return NextResponse.json({ status: "ok", messageStatus: updated.status, nextAttemptAt: updated.nextAttemptAt });
+    const terminal = code !== "AA" && expectedAttempt >= auth.endpoint.maxAttempts;
+    const nextStatus = code === "AA" ? "ACKNOWLEDGED" : terminal ? "DEAD_LETTER" : "FAILED";
+    const nextAttemptAt = code === "AA" || terminal ? null : retryAt(expectedAttempt);
+    const updated = await prisma.$transaction(async tx => {
+      const claim = await tx.integrationMessage.updateMany({
+        where: {
+          id, organizationId: auth.organizationId,
+          endpointId: auth.endpoint.id,
+          direction: "OUTBOUND", status: "SENT",
+          attemptCount: expectedAttempt, updatedAt: message.updatedAt,
+        },
+        data: {
+          status: nextStatus,
+          acknowledgementCode: code,
+          acknowledgementPayload,
+          processedAt: code === "AA" ? new Date() : null,
+          nextAttemptAt,
+          lastError: code === "AA" ? null : lastError || `HL7 acknowledgement ${code}`,
+        },
+      });
+      if (claim.count !== 1) return false;
+      await tx.auditEvent.create({
+        data: {
+          organizationId: auth.organizationId,
+          branchId: message.branchId,
+          actorUserId: null,
+          action: "HL7_OUTBOUND_ACKNOWLEDGEMENT",
+          entityType: "IntegrationMessage",
+          entityId: id,
+          newValues: { endpointId: auth.endpoint.id, code, attempt: expectedAttempt, nextStatus },
+          reason: "Acknowledgement matched current outbound delivery attempt",
+        },
+      });
+      return true;
+    }, { isolationLevel: "Serializable" });
+    if (!updated) return NextResponse.json({ error: "stale_or_unclaimed_acknowledgement" }, { status: 409 });
+    return NextResponse.json({ status: "ok", messageStatus: nextStatus, nextAttemptAt });
   } catch (error) {
     if (error instanceof IntegrationAuthError) {
       return NextResponse.json({ error: error.code }, { status: error.status });
