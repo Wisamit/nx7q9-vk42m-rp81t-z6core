@@ -36,7 +36,7 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
     (row.status === "VALID" && ["UNIT", "CONTAINER", "TEST", "PANEL"].includes(row.entityType)) ||
     isEligibleGeneratedTest(row)
   );
-  const results = { imported: 0, skipped: 0, deferred: batch.rows.filter(row => row.entityType === "REFERENCE_INTERVAL").length };
+  const results = { imported: 0, skipped: 0, deferred: batch.rows.filter(row => ["REFERENCE_INTERVAL", "COMPONENT", "PRICE_LIST_ITEM"].includes(row.entityType)).length };
 
   await prisma.$transaction(async tx => {
     const units = new Map<string, string>();

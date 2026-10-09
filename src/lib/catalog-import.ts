@@ -1,9 +1,9 @@
 import type { Prisma } from "../../generated/prisma/client";
 
-export type ImportEntity = "TEST" | "PANEL" | "UNIT" | "CONTAINER" | "REFERENCE_INTERVAL";
+export type ImportEntity = "TEST" | "PANEL" | "UNIT" | "CONTAINER" | "REFERENCE_INTERVAL" | "COMPONENT" | "PRICE_LIST_ITEM";
 export type ImportInputRow = { entityType: ImportEntity; legacyKey?: string; data: Prisma.InputJsonObject };
 
-export const allowedImportEntities = new Set<ImportEntity>(["TEST", "PANEL", "UNIT", "CONTAINER", "REFERENCE_INTERVAL"]);
+export const allowedImportEntities = new Set<ImportEntity>(["TEST", "PANEL", "UNIT", "CONTAINER", "REFERENCE_INTERVAL", "COMPONENT", "PRICE_LIST_ITEM"]);
 
 function text(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
@@ -46,6 +46,25 @@ export function normalizeImportRow(row: ImportInputRow): Prisma.InputJsonObject 
     const nameEn = text(d.nameEn || d.name);
     return { code: text(d.code || d.name).replace(/\s+/g, "_").toUpperCase(), nameEn };
   }
+  if (row.entityType === "COMPONENT") {
+    return {
+      testCode: text(d.testCode || d.parentTestCode || d.test).toUpperCase(),
+      code: text(d.code || d.componentCode).toUpperCase(),
+      nameEn: text(d.nameEn || d.componentName),
+      nameAr: text(d.nameAr),
+      unitCode: text(d.unitCode || d.unit).toUpperCase(),
+      resultType: text(d.resultType).toUpperCase(),
+    };
+  }
+  if (row.entityType === "PRICE_LIST_ITEM") {
+    return {
+      priceListCode: text(d.priceListCode).toUpperCase(),
+      testCode: text(d.testCode).toUpperCase(),
+      unitPrice: text(d.unitPrice),
+      effectiveFrom: text(d.effectiveFrom),
+      effectiveTo: text(d.effectiveTo),
+    };
+  }
   return {
     testName: text(d.testName || d["test name"]),
     low: d.L ?? d.low ?? null,
@@ -81,6 +100,33 @@ export function validateImportRow(entityType: ImportEntity, normalized: Prisma.I
   }
   if (entityType === "REFERENCE_INTERVAL" && !normalized.unit) {
     out.push({ severity: "WARNING", code: "MISSING_RANGE_UNIT", message: "Reference interval has no unit and requires review." });
+  }
+  // These entities are review-only. They are never eligible for the existing
+  // safe-master commit; clinical and price mapping requires separate approval.
+  if (entityType === "COMPONENT") {
+    if (!normalized.testCode || !normalized.code || !normalized.nameEn) {
+      out.push({ severity: "ERROR", code: "MISSING_COMPONENT_IDENTITY", message: "Parent test code, component code and English name are required." });
+    }
+    out.push({ severity: "WARNING", code: "COMPONENT_MAPPING_APPROVAL_REQUIRED", message: "Component staged for review only; no live create or update is permitted." });
+  }
+  if (entityType === "PRICE_LIST_ITEM") {
+    if (!normalized.priceListCode || !normalized.testCode) {
+      out.push({ severity: "ERROR", code: "MISSING_PRICE_MAPPING", message: "Price-list code and test code must be supplied." });
+    }
+    if (typeof normalized.unitPrice !== "string" || !/^(?:0|[1-9]\d*)(?:\.\d{1,4})?$/.test(normalized.unitPrice)) {
+      out.push({ severity: "ERROR", code: "INVALID_STAGED_PRICE", message: "Price must be a non-negative decimal with at most four fractional digits." });
+    }
+    if (typeof normalized.effectiveFrom !== "string" || !/^\d{4}-\d{2}-\d{2}/.test(normalized.effectiveFrom)
+        || Number.isNaN(new Date(normalized.effectiveFrom).getTime())) {
+      out.push({ severity: "ERROR", code: "MISSING_PRICE_EFFECTIVE_DATE", message: "A valid effective-from date is required." });
+    }
+    if (normalized.effectiveTo && (
+      typeof normalized.effectiveTo !== "string" || Number.isNaN(new Date(normalized.effectiveTo).getTime())
+      || new Date(normalized.effectiveTo).getTime() < new Date(String(normalized.effectiveFrom)).getTime()
+    )) {
+      out.push({ severity: "ERROR", code: "INVALID_PRICE_EFFECTIVE_WINDOW", message: "Price effective-to cannot precede effective-from." });
+    }
+    out.push({ severity: "WARNING", code: "PRICE_APPROVAL_REQUIRED", message: "Price staged for review only; no live pricing change or historical price rewrite is permitted." });
   }
   return out;
 }
