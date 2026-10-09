@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { AnalyticsBars } from "@/components/analytics-bars";
-import { requirePermission } from "@/lib/auth";
+import { permissionSet, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { tr } from "@/lib/ui-i18n";
+import { aggregateFinancialReport } from "@/lib/financial-reporting";
+import { addCurrencyAmount, moneyText, financialText, comparableMargin, cappedDatasetNames } from "@/lib/analytics-integrity";
 
 export const dynamic = "force-dynamic";
 
@@ -61,10 +63,6 @@ function dateWhere(start: Date | null, end: Date | null) {
   };
 }
 
-function money(value: number, currency: string) {
-  return currency + " " + value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
 function minuteLabel(value: number | null, locale: "ar" | "en") {
   if (value === null || !Number.isFinite(value)) return "—";
   if (value < 60) return Math.round(value) + (locale === "ar" ? " دقيقة" : " min");
@@ -73,9 +71,30 @@ function minuteLabel(value: number | null, locale: "ar" | "en") {
 
 export default async function AnalyticsPage({ searchParams }: { searchParams: SearchParams }) {
   const session = await requirePermission("analytics.view");
+  const canViewFinancial = permissionSet(session).has("billing.view");
   const locale = session.user.preferredLocale === "ar" ? "ar" : "en";
   const params = await searchParams;
   const { period, start, end } = resolvePeriod(params);
+  const fromParam = first(params.from);
+  const toParam = first(params.to);
+  const isRealDate = (value: string) =>
+    /^\d{4}-\d{2}-\d{2}$/.test(value)
+    && !Number.isNaN(new Date(value + "T00:00:00Z").getTime())
+    && new Date(value + "T00:00:00Z").toISOString().slice(0, 10) === value;
+  if (period === "custom" && (
+    (fromParam && !isRealDate(fromParam)) ||
+    (toParam && !isRealDate(toParam)) ||
+    (fromParam && toParam && fromParam > toParam) ||
+    (!fromParam && !toParam)
+  )) {
+    return <main className="catalog-shell" dir={locale === "ar" ? "rtl" : "ltr"}>
+      <section className="detail-card" role="alert">
+        <h1>{tr(locale, "Invalid analytics date range", "فترة التحليلات غير صالحة")}</h1>
+        <p>{tr(locale, "Enter valid From/To dates, with From not after To.", "أدخل تاريخَي بداية ونهاية صحيحين بحيث لا تتجاوز البداية النهاية.")}</p>
+        <Link href="/analytics?period=30d">{tr(locale, "Back to last 30 days", "العودة إلى آخر 30 يوماً")}</Link>
+      </section>
+    </main>;
+  }
   const authorizedBranchIds = session.user.branchScopes.map(scope => scope.branchId);
   const requestedBranchId = first(params.branchId) || "";
   const selectedBranchId = requestedBranchId && authorizedBranchIds.includes(requestedBranchId)
@@ -89,6 +108,8 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
     orders,
     invoices,
     payments,
+    refunds,
+    creditNotes,
     specimens,
     tatItems,
     criticalEvents,
@@ -129,7 +150,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
       orderBy: { orderedAt: "desc" },
       take: 20000,
     }),
-    prisma.invoice.findMany({
+    canViewFinancial ? prisma.invoice.findMany({
       where: {
         organizationId: session.user.organizationId,
         branchId: { in: branchIds },
@@ -148,8 +169,8 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
         balanceAmount: true,
       },
       take: 20000,
-    }),
-    prisma.payment.findMany({
+    }) : Promise.resolve([]),
+    canViewFinancial ? prisma.payment.findMany({
       where: {
         organizationId: session.user.organizationId,
         branchId: { in: branchIds },
@@ -158,7 +179,27 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
       },
       select: { branchId: true, currency: true, amount: true, method: true },
       take: 20000,
-    }),
+    }) : Promise.resolve([]),
+    canViewFinancial ? prisma.refund.findMany({
+      where: {
+        organizationId: session.user.organizationId,
+        branchId: { in: branchIds },
+        status: "POSTED",
+        ...(periodWhere ? { processedAt: periodWhere } : {}),
+      },
+      select: { currency: true, amount: true },
+      take: 20000,
+    }) : Promise.resolve([]),
+    canViewFinancial ? prisma.creditNote.findMany({
+      where: {
+        organizationId: session.user.organizationId,
+        branchId: { in: branchIds },
+        status: "ISSUED",
+        ...(periodWhere ? { issuedAt: periodWhere } : {}),
+      },
+      select: { currency: true, amount: true },
+      take: 20000,
+    }) : Promise.resolve([]),
     prisma.specimen.findMany({
       where: {
         organizationId: session.user.organizationId,
@@ -187,6 +228,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
         testCodeSnapshot: true,
         testNameEnSnapshot: true,
         testNameArSnapshot: true,
+        tatDueAt: true,
         order: { select: { orderedAt: true, orderingBranchId: true } },
         results: {
           where: { releasedAt: { not: null }, status: { in: ["RELEASED", "AMENDED"] } },
@@ -244,7 +286,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
   const localizedName = (item: { nameEn: string; nameAr?: string | null }) => locale === "ar" ? item.nameAr || item.nameEn : item.nameEn;
 
   const orderItemIds = orders.flatMap(order => order.items.map(item => item.id));
-  const [consumptionMovements, sendOutCosts] = orderItemIds.length === 0 ? [[], []] : await Promise.all([
+  const [consumptionMovements, sendOutCosts] = !canViewFinancial || orderItemIds.length === 0 ? [[], []] : await Promise.all([
     prisma.stockMovement.findMany({
       where: {
         organizationId: session.user.organizationId,
@@ -270,37 +312,72 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
     }),
   ]);
 
-  const financeByCurrency = new Map<string, {
-    gross: number;
-    discount: number;
-    tax: number;
-    invoiced: number;
-    paid: number;
-    outstanding: number;
-    collected: number;
-  }>();
-  for (const invoice of invoices) {
-    const row = financeByCurrency.get(invoice.currency) || { gross: 0, discount: 0, tax: 0, invoiced: 0, paid: 0, outstanding: 0, collected: 0 };
-    row.gross += invoice.subtotal.toNumber();
-    row.discount += invoice.discountTotal.toNumber();
-    row.tax += invoice.taxTotal.toNumber();
-    row.invoiced += invoice.total.toNumber();
-    row.paid += invoice.paidAmount.toNumber();
-    row.outstanding += invoice.balanceAmount.toNumber();
-    financeByCurrency.set(invoice.currency, row);
+  // Use the existing DECIMAL(18,4)-safe bigint accounting aggregator.
+  // Revenue/discounts are selected by invoice issue date, collections by payment date,
+  // and refunds/credits by their own posting dates. Outstanding is CURRENT for
+  // invoices issued within the selected period, never a historical as-of balance.
+  const truncatedCollections = cappedDatasetNames({
+    orders: 20000,
+    invoices: 20000,
+    payments: 20000,
+    refunds: 20000,
+    creditNotes: 20000,
+    specimens: 30000,
+    tatItems: 30000,
+    criticalEvents: 10000,
+    qcViolations: 10000,
+    qualityIndicators: 500,
+    consumptionMovements: 50000,
+    sendOutCosts: 20000,
+  }, {
+    orders: orders.length,
+    invoices: invoices.length,
+    payments: payments.length,
+    refunds: refunds.length,
+    creditNotes: creditNotes.length,
+    specimens: specimens.length,
+    tatItems: tatItems.length,
+    criticalEvents: criticalEvents.length,
+    qcViolations: qcViolations.length,
+    qualityIndicators: qualityIndicators.length,
+    consumptionMovements: consumptionMovements.length,
+    sendOutCosts: sendOutCosts.length,
+  });
+  if (truncatedCollections.length > 0) {
+    // Do not publish falsely complete management totals from take-limited queries.
+    return <main className="catalog-shell" dir={locale === "ar" ? "rtl" : "ltr"}>
+      <section className="detail-card" role="alert">
+        <h1>{tr(locale, "Analytics dataset exceeds safe report limit", "بيانات التحليلات تجاوزت حد التقرير الآمن")}</h1>
+        <p>{tr(locale,
+          "No totals are shown because at least one dataset may be incomplete. Reduce the date range or select a branch before using these figures for clinical or financial decisions.",
+          "لم تُعرض الإجماليات لأن مجموعة بيانات واحدة على الأقل قد تكون غير مكتملة. قلّص الفترة أو اختر فرعاً قبل الاعتماد على هذه الأرقام سريرياً أو مالياً.")}</p>
+        <p>{tr(locale, "Affected datasets:", "مجموعات البيانات المتأثرة:")} {truncatedCollections.join(", ")}</p>
+        <Link className="secondary-link" href="/analytics?period=7d">{tr(locale, "View last 7 days", "عرض آخر سبعة أيام")}</Link>
+      </section>
+    </main>;
   }
-  for (const payment of payments) {
-    const row = financeByCurrency.get(payment.currency) || { gross: 0, discount: 0, tax: 0, invoiced: 0, paid: 0, outstanding: 0, collected: 0 };
-    row.collected += payment.amount.toNumber();
-    financeByCurrency.set(payment.currency, row);
-  }
+
+  const financeByCurrency = aggregateFinancialReport({
+    invoices: invoices.map(item => ({
+      currency: item.currency,
+      subtotal: item.subtotal.toString(),
+      discountTotal: item.discountTotal.toString(),
+      taxTotal: item.taxTotal.toString(),
+      total: item.total.toString(),
+      balanceAmount: item.balanceAmount.toString(),
+    })),
+    paymentAllocations: payments.map(item => ({ currency: item.currency, amount: item.amount.toString() })),
+    refunds: refunds.map(item => ({ currency: item.currency, amount: item.amount.toString() })),
+    creditNotes: creditNotes.map(item => ({ currency: item.currency, amount: item.amount.toString() })),
+  });
 
   const testMap = new Map<string, {
     code: string;
     name: string;
     volume: number;
-    revenue: Map<string, number>;
-    cost: Map<string, number>;
+    revenue: Map<string, bigint>;
+    cost: Map<string, bigint>;
+    indicativeCostItems: Set<string>;
     costLinkedItems: Set<string>;
     orderItemIds: Set<string>;
   }>();
@@ -312,14 +389,15 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
         code: item.testCodeSnapshot,
         name: locale === "ar" ? item.testNameArSnapshot || item.testNameEnSnapshot : item.testNameEnSnapshot,
         volume: 0,
-        revenue: new Map<string, number>(),
-        cost: new Map<string, number>(),
+        revenue: new Map<string, bigint>(),
+        cost: new Map<string, bigint>(),
+        indicativeCostItems: new Set<string>(),
         costLinkedItems: new Set<string>(),
         orderItemIds: new Set<string>(),
       };
       row.volume += 1;
       row.orderItemIds.add(item.id);
-      row.revenue.set(item.currency, (row.revenue.get(item.currency) || 0) + item.finalPriceSnapshot.toNumber());
+      addCurrencyAmount(row.revenue, item.currency, item.finalPriceSnapshot.toString());
       testMap.set(item.testId, row);
     }
   }
@@ -329,8 +407,10 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
     if (!testId) continue;
     const row = testMap.get(testId);
     if (!row) continue;
-    const cost = movement.quantity.abs().mul(movement.lot.unitCost).toNumber();
-    row.cost.set(movement.lot.currency, (row.cost.get(movement.lot.currency) || 0) + cost);
+    const cost = movement.quantity.abs().mul(movement.lot.unitCost).toString();
+    addCurrencyAmount(row.cost, movement.lot.currency, cost);
+    // Lot prices are mutable master data, not immutable movement valuation snapshots.
+    row.indicativeCostItems.add(movement.referenceId);
     row.costLinkedItems.add(movement.referenceId);
   }
 
@@ -340,29 +420,28 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
     if (!testId) continue;
     const row = testMap.get(testId);
     if (!row) continue;
-    const cost = sendOut.costAmount.toNumber();
-    row.cost.set(sendOut.costCurrency, (row.cost.get(sendOut.costCurrency) || 0) + cost);
+    addCurrencyAmount(row.cost, sendOut.costCurrency, sendOut.costAmount.toString());
     row.costLinkedItems.add(sendOut.orderItemId);
   }
 
-  const sourceMap = new Map<string, { name: string; orders: number; revenue: Map<string, number> }>();
-  const referrerMap = new Map<string, { name: string; orders: number; revenue: Map<string, number> }>();
+  const sourceMap = new Map<string, { name: string; orders: number; revenue: Map<string, bigint> }>();
+  const referrerMap = new Map<string, { name: string; orders: number; revenue: Map<string, bigint> }>();
   for (const order of orders) {
-    const orderRevenue = new Map<string, number>();
+    const orderRevenue = new Map<string, bigint>();
     for (const item of order.items) {
-      orderRevenue.set(item.currency, (orderRevenue.get(item.currency) || 0) + item.finalPriceSnapshot.toNumber());
+      addCurrencyAmount(orderRevenue, item.currency, item.finalPriceSnapshot.toString());
     }
 
     const sourceKey = order.source?.id || "UNSPECIFIED";
-    const sourceRow = sourceMap.get(sourceKey) || { name: order.source ? localizedName(order.source) : tr(locale, "Unspecified", "غير محدد"), orders: 0, revenue: new Map<string, number>() };
+    const sourceRow = sourceMap.get(sourceKey) || { name: order.source ? localizedName(order.source) : tr(locale, "Unspecified", "غير محدد"), orders: 0, revenue: new Map<string, bigint>() };
     sourceRow.orders++;
-    for (const [currency, amount] of orderRevenue) sourceRow.revenue.set(currency, (sourceRow.revenue.get(currency) || 0) + amount);
+    for (const [currency, amount] of orderRevenue) sourceRow.revenue.set(currency, (sourceRow.revenue.get(currency) || BigInt(0)) + amount);
     sourceMap.set(sourceKey, sourceRow);
 
     if (order.referrer) {
-      const refRow = referrerMap.get(order.referrer.id) || { name: localizedName(order.referrer), orders: 0, revenue: new Map<string, number>() };
+      const refRow = referrerMap.get(order.referrer.id) || { name: localizedName(order.referrer), orders: 0, revenue: new Map<string, bigint>() };
       refRow.orders++;
-      for (const [currency, amount] of orderRevenue) refRow.revenue.set(currency, (refRow.revenue.get(currency) || 0) + amount);
+      for (const [currency, amount] of orderRevenue) refRow.revenue.set(currency, (refRow.revenue.get(currency) || BigInt(0)) + amount);
       referrerMap.set(order.referrer.id, refRow);
     }
   }
@@ -373,8 +452,15 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
     name: localizedName(branch),
     orders: 0,
     completed: 0,
-    revenue: new Map<string, number>(),
-    collected: new Map<string, number>(),
+    patients: new Set<string>(),
+    testVolume: 0,
+    invoiceCountByCurrency: new Map<string, number>(),
+    revenue: new Map<string, bigint>(),
+    discounts: new Map<string, bigint>(),
+    outstanding: new Map<string, bigint>(),
+    collected: new Map<string, bigint>(),
+    slaCount: 0,
+    slaWithin: 0,
     tatMinutes: [] as number[],
     specimens: 0,
     rejectedSpecimens: 0,
@@ -383,17 +469,22 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
     const row = branchMap.get(order.orderingBranchId);
     if (!row) continue;
     row.orders++;
+    row.patients.add(order.patientId);
+    row.testVolume += order.items.length;
     if (order.status === "COMPLETED") row.completed++;
   }
   for (const invoice of invoices) {
     const row = branchMap.get(invoice.branchId);
     if (!row) continue;
-    row.revenue.set(invoice.currency, (row.revenue.get(invoice.currency) || 0) + invoice.total.toNumber());
+    addCurrencyAmount(row.revenue, invoice.currency, invoice.total.toString());
+    addCurrencyAmount(row.discounts, invoice.currency, invoice.discountTotal.toString());
+    addCurrencyAmount(row.outstanding, invoice.currency, invoice.balanceAmount.toString());
+    row.invoiceCountByCurrency.set(invoice.currency, (row.invoiceCountByCurrency.get(invoice.currency) || 0) + 1);
   }
   for (const payment of payments) {
     const row = branchMap.get(payment.branchId);
     if (!row) continue;
-    row.collected.set(payment.currency, (row.collected.get(payment.currency) || 0) + payment.amount.toNumber());
+    addCurrencyAmount(row.collected, payment.currency, payment.amount.toString());
   }
 
   const tatMinutes: number[] = [];
@@ -405,7 +496,13 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
     if (minutes < 0 || !Number.isFinite(minutes)) continue;
     tatMinutes.push(minutes);
     const branchRow = branchMap.get(item.order.orderingBranchId);
-    branchRow?.tatMinutes.push(minutes);
+    if (branchRow) {
+      branchRow.tatMinutes.push(minutes);
+      if (item.tatDueAt) {
+        branchRow.slaCount++;
+        if (latest.releasedAt <= item.tatDueAt) branchRow.slaWithin++;
+      }
+    }
     const row = tatByTest.get(item.testId) || { label: item.testCodeSnapshot + " — " + (locale === "ar" ? item.testNameArSnapshot || item.testNameEnSnapshot : item.testNameEnSnapshot), values: [] };
     row.values.push(minutes);
     tatByTest.set(item.testId, row);
@@ -466,7 +563,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
       <div>
         <p className="eyebrow">{tr(locale, "Analytics & Management", "التحليلات والإدارة")}</p>
         <h1>{tr(locale, "Management Analytics", "التحليلات الإدارية")}</h1>
-        <p className="muted">{tr(locale, "Branch-scoped operational, financial, TAT, source/referrer, test profitability and quality KPIs. Money is never combined across currencies.", "مؤشرات تشغيلية ومالية وزمن الإنجاز والمصادر والمحيلين وربحية الفحوصات والجودة ضمن نطاق الفروع المصرح بها. لا يتم جمع الأموال بين عملات مختلفة.")}</p>
+        <p className="muted">{tr(locale, "Branch-scoped operational, financial, TAT, source/referrer, test cost-coverage and quality KPIs. Money is never combined across currencies. Reporting day windows currently follow server-local time, not branch-local midnight.", "مؤشرات تشغيلية ومالية وزمن الإنجاز والمصادر والمحيلين وتغطية تكلفة الفحوصات والجودة ضمن نطاق الفروع المصرح بها. لا تُجمع العملات المختلفة. حدود أيام التقرير حالياً بتوقيت الخادم، وليس منتصف الليل المحلي لكل فرع.")}</p>
       </div>
       <div className="result-actions"><Link className="secondary-link" href="/dashboard">{tr(locale, "Back to Dashboard", "العودة إلى لوحة التحكم")}</Link></div>
     </header>
@@ -499,23 +596,29 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
       <article className="detail-card"><h2>{tr(locale, "Open QC Blocks", "حالات حظر QC المفتوحة")}</h2><strong>{openQcBlocks}</strong><p className="muted">{tr(locale, "Unresolved blocking Westgard/QC violations.", "مخالفات Westgard/QC الحاجبة التي لم تُحل بعد.")}</p></article>
     </section>
 
-    <section className="detail-section">
+    {canViewFinancial && <section className="detail-section">
       <div className="table-toolbar"><h2>{tr(locale, "Financial Summary", "الملخص المالي")}</h2><span>{tr(locale, "Per currency", "حسب كل عملة")}</span></div>
+      <p className="muted">{tr(locale,
+        "Issue-date invoice totals and current outstanding are not a historical balance at the period end. Collections, refunds and credits follow their own transaction dates; currencies are never combined.",
+        "قيم الفواتير حسب تاريخ إصدارها، والمستحق هو الرصيد الحالي وليس رصيد نهاية الفترة التاريخي. التحصيل والاسترداد والإشعارات الدائنة حسب تاريخ كل عملية، ولا يتم دمج العملات.")}</p>
       <div className="detail-grid">
-        {[...financeByCurrency.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([currency, row]) => <article className="detail-card" key={currency}>
-          <h2>{currency}</h2>
+        {financeByCurrency.map(row => <article className="detail-card" key={row.currency}>
+          <h2>{row.currency}</h2>
           <dl className="compact-kpis">
-            <div><dt>{tr(locale, "Gross", "الإجمالي قبل الخصومات")}</dt><dd>{money(row.gross, currency)}</dd></div>
-            <div><dt>{tr(locale, "Discounts", "الخصومات")}</dt><dd>{money(row.discount, currency)}</dd></div>
-            <div><dt>{tr(locale, "Tax", "الضريبة")}</dt><dd>{money(row.tax, currency)}</dd></div>
-            <div><dt>{tr(locale, "Invoiced", "المفوتر")}</dt><dd>{money(row.invoiced, currency)}</dd></div>
-            <div><dt>{tr(locale, "Collected", "المحصّل")}</dt><dd>{money(row.collected, currency)}</dd></div>
-            <div><dt>{tr(locale, "Outstanding", "المستحق")}</dt><dd>{money(row.outstanding, currency)}</dd></div>
+            <div><dt>{tr(locale, "Gross invoiced before discount", "قيمة الفواتير قبل الخصم")}</dt><dd>{financialText(row.gross, row.currency)}</dd></div>
+            <div><dt>{tr(locale, "Discounts", "الخصومات")}</dt><dd>{financialText(row.discounts, row.currency)}</dd></div>
+            <div><dt>{tr(locale, "Tax", "الضريبة")}</dt><dd>{financialText(row.tax, row.currency)}</dd></div>
+            <div><dt>{tr(locale, "Invoiced", "المفوتر")}</dt><dd>{financialText(row.invoiced, row.currency)}</dd></div>
+            <div><dt>{tr(locale, "Credit notes issued in period", "الإشعارات الدائنة الصادرة خلال الفترة")}</dt><dd>{financialText(row.creditNotes, row.currency)}</dd></div>
+            <div><dt>{tr(locale, "Gross collected in period", "إجمالي المحصّل خلال الفترة")}</dt><dd>{financialText(row.collected, row.currency)}</dd></div>
+            <div><dt>{tr(locale, "Refunds posted in period", "المسترد خلال الفترة")}</dt><dd>{financialText(row.refunds, row.currency)}</dd></div>
+            <div><dt>{tr(locale, "Net collected in period", "صافي المحصّل خلال الفترة")}</dt><dd>{financialText(row.netCollected, row.currency)}</dd></div>
+            <div><dt>{tr(locale, "Current outstanding on period invoices", "المستحق الحالي لفواتير الفترة")}</dt><dd>{financialText(row.outstandingCurrent, row.currency)}</dd></div>
           </dl>
         </article>)}
-        {financeByCurrency.size === 0 && <article className="detail-card"><p className="muted">{tr(locale, "No financial activity in the selected period.", "لا توجد حركة مالية ضمن الفترة المحددة.")}</p></article>}
+        {financeByCurrency.length === 0 && <article className="detail-card"><p className="muted">{tr(locale, "No financial activity in the selected period.", "لا توجد حركة مالية ضمن الفترة المحددة.")}</p></article>}
       </div>
-    </section>
+    </section>}
 
     <section className="detail-grid detail-section">
       <AnalyticsBars title={tr(locale, "Top Tests by Volume", "أكثر الفحوصات حسب العدد")} emptyText={tr(locale, "No data for the selected period.", "لا توجد بيانات ضمن الفترة المحددة.")} items={topTests.map(test => ({ label: test.code + " — " + test.name, value: test.volume }))} />
@@ -526,61 +629,73 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
 
     <section className="table-card detail-section">
       <div className="table-toolbar"><h2>{tr(locale, "Branch Comparison", "مقارنة الفروع")}</h2><span>{branchMap.size} {tr(locale, "branches", "فروع")}</span></div>
+      {canViewFinancial && <p className="muted">{tr(locale, "Average invoice and revenue are shown by original currency; current outstanding is not a historical period-end balance. TAT SLA covers only released tests with stored due-time snapshots.", "متوسط الفاتورة والإيرادات حسب العملة الأصلية؛ المستحق الحالي ليس رصيد نهاية الفترة التاريخي. الالتزام بزمن الإنجاز يشمل النتائج الصادرة ذات موعد الاستحقاق المحفوظ.")}</p>}
       <div className="table-wrap"><table>
-        <thead><tr><th>{tr(locale, "Branch", "الفرع")}</th><th>{tr(locale, "Orders", "الطلبات")}</th><th>{tr(locale, "Completed", "المكتملة")}</th><th>{tr(locale, "Completion", "نسبة الإكمال")}</th><th>{tr(locale, "Avg TAT", "متوسط TAT")}</th><th>{tr(locale, "Specimen rejection", "رفض العينات")}</th><th>{tr(locale, "Revenue", "الإيراد")}</th><th>{tr(locale, "Collected", "المحصّل")}</th></tr></thead>
+        <thead><tr><th>{tr(locale, "Branch", "الفرع")}</th><th>{tr(locale, "Orders", "الطلبات")}</th><th>{tr(locale, "Patients", "المرضى")}</th><th>{tr(locale, "Tests", "الفحوصات")}</th><th>{tr(locale, "Completed", "المكتملة")}</th><th>{tr(locale, "Completion", "نسبة الإكمال")}</th><th>{tr(locale, "Avg TAT", "متوسط TAT")}</th><th>{tr(locale, "TAT SLA", "التزام وقت الفحوصات")}</th><th>{tr(locale, "Specimen rejection", "رفض العينات")}</th>{canViewFinancial && <><th>{tr(locale, "Invoiced", "المفوتر")}</th><th>{tr(locale, "Average invoice", "متوسط الفاتورة")}</th><th>{tr(locale, "Discounts", "الخصومات")}</th><th>{tr(locale, "Current outstanding", "المستحق الحالي")}</th><th>{tr(locale, "Collected", "المحصّل")}</th></>}</tr></thead>
         <tbody>{[...branchMap.values()].map(branch => {
           const avg = branch.tatMinutes.length ? branch.tatMinutes.reduce((a,b) => a+b,0) / branch.tatMinutes.length : null;
           return <tr key={branch.id}>
             <td><strong>{branch.code}</strong><br/><small>{branch.name}</small></td>
             <td>{branch.orders}</td>
+            <td>{branch.patients.size}</td>
+            <td>{branch.testVolume}</td>
             <td>{branch.completed}</td>
             <td>{branch.orders ? (branch.completed / branch.orders * 100).toFixed(1) + "%" : "—"}</td>
             <td>{minuteLabel(avg, locale)}</td>
+            <td>{branch.slaCount ? (branch.slaWithin / branch.slaCount * 100).toFixed(1) + "% (n=" + branch.slaCount + ")" : "—"}</td>
             <td>{branch.specimens ? (branch.rejectedSpecimens / branch.specimens * 100).toFixed(2) + "%" : "—"}</td>
-            <td>{[...branch.revenue.entries()].map(([currency, amount]) => money(amount, currency)).join(" · ") || "—"}</td>
-            <td>{[...branch.collected.entries()].map(([currency, amount]) => money(amount, currency)).join(" · ") || "—"}</td>
+            {canViewFinancial && <>
+            <td>{[...branch.revenue.entries()].map(([currency, amount]) => moneyText(amount, currency)).join(" · ") || "—"}</td>
+            <td>{[...branch.revenue.entries()].map(([currency, amount]) => moneyText(amount / BigInt(branch.invoiceCountByCurrency.get(currency) || 1), currency)).join(" · ") || "—"}</td>
+            <td>{[...branch.discounts.entries()].map(([currency, amount]) => moneyText(amount, currency)).join(" · ") || "—"}</td>
+            <td>{[...branch.outstanding.entries()].map(([currency, amount]) => moneyText(amount, currency)).join(" · ") || "—"}</td>
+            <td>{[...branch.collected.entries()].map(([currency, amount]) => moneyText(amount, currency)).join(" · ") || "—"}</td>
+            </>}
           </tr>;
         })}</tbody>
       </table></div>
     </section>
 
-    <section className="table-card detail-section">
-      <div className="table-toolbar"><h2>{tr(locale, "Test Revenue & Profitability Coverage", "إيرادات الفحوصات وتغطية الربحية")}</h2><span>{tr(locale, "Cost from linked inventory consumption + recorded send-out laboratory cost", "التكلفة من استهلاك المخزون المرتبط + تكلفة المختبر الخارجي المسجلة")}</span></div>
+    {canViewFinancial && <section className="table-card detail-section">
+      <div className="table-toolbar"><h2>{tr(locale, "Ordered Test Value & Indicative Cost Coverage", "قيمة الفحوصات المطلوبة والتكاليف التقديرية المرتبطة")}</h2><span>{tr(locale, "Inventory cost is estimated from CURRENT lot prices, not preserved historical valuation.", "تكلفة المخزون مقدّرة بسعر الدفعة الحالي وليست لقطة تكلفة تاريخية محفوظة.")}</span></div>
       <div className="table-wrap"><table>
-        <thead><tr><th>{tr(locale, "Test", "الفحص")}</th><th>{tr(locale, "Volume", "العدد")}</th><th>{tr(locale, "Revenue", "الإيراد")}</th><th>{tr(locale, "Attributed laboratory cost", "تكلفة المختبر المنسوبة")}</th><th>{tr(locale, "Margin where comparable", "الهامش عند إمكانية المقارنة")}</th><th>{tr(locale, "Cost coverage", "تغطية التكلفة")}</th></tr></thead>
+        <thead><tr><th>{tr(locale, "Test", "الفحص")}</th><th>{tr(locale, "Volume", "العدد")}</th><th>{tr(locale, "Revenue", "الإيراد")}</th><th>{tr(locale, "Attributed laboratory cost", "تكلفة المختبر المنسوبة")}</th><th>{tr(locale, "Margin only with full, historically comparable cost", "الهامش فقط مع تكلفة تاريخية مكتملة وقابلة للمقارنة")}</th><th>{tr(locale, "Linked-cost coverage (not completeness guarantee)", "نسبة البنود المرتبطة بتكلفة (ليست ضمان اكتمال)")}</th></tr></thead>
         <tbody>{topTests.length === 0 ? <tr><td colSpan={6} className="empty-state">{tr(locale, "No test activity in the selected period.", "لا توجد حركة فحوصات ضمن الفترة المحددة.")}</td></tr> : topTests.map(test => {
-          const revenueText = [...test.revenue.entries()].map(([currency, amount]) => money(amount, currency)).join(" · ");
-          const costText = [...test.cost.entries()].map(([currency, amount]) => money(amount, currency)).join(" · ") || tr(locale, "No linked cost", "لا توجد تكلفة مرتبطة");
-          const margins = [...test.revenue.entries()].flatMap(([currency, revenue]) => {
-            const cost = test.cost.get(currency);
-            return cost === undefined ? [] : [money(revenue - cost, currency)];
-          });
+          const revenueText = [...test.revenue.entries()].map(([currency, amount]) => moneyText(amount, currency)).join(" · ");
+          const costText = [...test.cost.entries()].map(([currency, amount]) => moneyText(amount, currency)).join(" · ") || tr(locale, "No linked cost", "لا توجد تكلفة مرتبطة");
+          const margins = [...comparableMargin({
+            revenue: test.revenue,
+            cost: test.cost,
+            totalItems: test.orderItemIds.size,
+            coveredItems: test.costLinkedItems.size,
+            indicativeCostItems: test.indicativeCostItems.size,
+          }).entries()].map(([currency, amount]) => moneyText(amount, currency));
           const coverage = test.orderItemIds.size ? test.costLinkedItems.size / test.orderItemIds.size * 100 : 0;
           return <tr key={test.code}>
             <td><strong>{test.code}</strong><br/><small>{test.name}</small></td>
             <td>{test.volume}</td>
             <td>{revenueText || "—"}</td>
             <td>{costText}</td>
-            <td>{margins.join(" · ") || tr(locale, "Insufficient linked cost data", "بيانات التكلفة المرتبطة غير كافية")}</td>
+            <td>{margins.join(" · ") || tr(locale, "Unverified: missing/indicative/mixed-currency cost", "غير موثوق: تكلفة ناقصة أو تقديرية أو بعملات مختلفة")}</td>
             <td>{coverage.toFixed(1)}%</td>
           </tr>;
         })}</tbody>
       </table></div>
-    </section>
+    </section>}
 
     <section className="detail-grid detail-section">
       <article className="table-card">
         <div className="table-toolbar"><h2>{tr(locale, "Source Analytics", "تحليلات المصادر")}</h2><span>{sourceMap.size}</span></div>
         <div className="table-wrap"><table>
-          <thead><tr><th>{tr(locale, "Source", "المصدر")}</th><th>{tr(locale, "Orders", "الطلبات")}</th><th>{tr(locale, "Revenue", "الإيراد")}</th></tr></thead>
-          <tbody>{topSources.length === 0 ? <tr><td colSpan={3} className="empty-state">{tr(locale, "No source-linked orders.", "لا توجد طلبات مرتبطة بمصدر.")}</td></tr> : topSources.map(source => <tr key={source.name}><td>{source.name}</td><td>{source.orders}</td><td>{[...source.revenue.entries()].map(([currency, amount]) => money(amount, currency)).join(" · ") || "—"}</td></tr>)}</tbody>
+          <thead><tr><th>{tr(locale, "Source", "المصدر")}</th><th>{tr(locale, "Orders", "الطلبات")}</th>{canViewFinancial && <th>{tr(locale, "Ordered value", "قيمة الطلبات")}</th>}</tr></thead>
+          <tbody>{topSources.length === 0 ? <tr><td colSpan={canViewFinancial ? 3 : 2} className="empty-state">{tr(locale, "No source-linked orders.", "لا توجد طلبات مرتبطة بمصدر.")}</td></tr> : topSources.map(source => <tr key={source.name}><td>{source.name}</td><td>{source.orders}</td>{canViewFinancial && <td>{[...source.revenue.entries()].map(([currency, amount]) => moneyText(amount, currency)).join(" · ") || "—"}</td>}</tr>)}</tbody>
         </table></div>
       </article>
       <article className="table-card">
         <div className="table-toolbar"><h2>{tr(locale, "Referrer Analytics", "تحليلات المحيلين")}</h2><span>{referrerMap.size}</span></div>
         <div className="table-wrap"><table>
-          <thead><tr><th>{tr(locale, "Referrer", "المحيل")}</th><th>{tr(locale, "Orders", "الطلبات")}</th><th>{tr(locale, "Revenue", "الإيراد")}</th></tr></thead>
-          <tbody>{topReferrers.length === 0 ? <tr><td colSpan={3} className="empty-state">{tr(locale, "No referrer-linked orders.", "لا توجد طلبات مرتبطة بمحيل.")}</td></tr> : topReferrers.map(referrer => <tr key={referrer.name}><td>{referrer.name}</td><td>{referrer.orders}</td><td>{[...referrer.revenue.entries()].map(([currency, amount]) => money(amount, currency)).join(" · ") || "—"}</td></tr>)}</tbody>
+          <thead><tr><th>{tr(locale, "Referrer", "المحيل")}</th><th>{tr(locale, "Orders", "الطلبات")}</th>{canViewFinancial && <th>{tr(locale, "Ordered value", "قيمة الطلبات")}</th>}</tr></thead>
+          <tbody>{topReferrers.length === 0 ? <tr><td colSpan={canViewFinancial ? 3 : 2} className="empty-state">{tr(locale, "No referrer-linked orders.", "لا توجد طلبات مرتبطة بمحيل.")}</td></tr> : topReferrers.map(referrer => <tr key={referrer.name}><td>{referrer.name}</td><td>{referrer.orders}</td>{canViewFinancial && <td>{[...referrer.revenue.entries()].map(([currency, amount]) => moneyText(amount, currency)).join(" · ") || "—"}</td>}</tr>)}</tbody>
         </table></div>
       </article>
     </section>

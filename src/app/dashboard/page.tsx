@@ -3,6 +3,8 @@ import { SystemIcon, type SystemIconName } from "@/components/system-icon";
 import { permissionSet, requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { getUiLocale, tr } from "@/lib/ui-i18n";
+import { money4ToMinor } from "@/lib/billing-adjustments";
+import { moneyText } from "@/lib/analytics-integrity";
 
 export const dynamic = "force-dynamic";
 
@@ -52,7 +54,7 @@ export default async function DashboardPage() {
         status: "WAITING",
       },
     }) : Promise.resolve(0),
-    branchId ? prisma.invoice.findMany({
+    branchId && permissions.has("billing.view") ? prisma.invoice.findMany({
       where: {
         organizationId: user.organizationId,
         branchId,
@@ -64,13 +66,20 @@ export default async function DashboardPage() {
     }) : Promise.resolve([]),
   ]);
 
-  const finance = new Map<string, { total: number; paid: number; balance: number }>();
-  for (const invoice of todayInvoices) {
-    const row = finance.get(invoice.currency) || { total: 0, paid: 0, balance: 0 };
-    row.total += invoice.total.toNumber();
-    row.paid += invoice.paidAmount.toNumber();
-    row.balance += invoice.balanceAmount.toNumber();
-    finance.set(invoice.currency, row);
+  const financialDataLimited = todayInvoices.length >= 5000;
+  const finance = new Map<string, { total: bigint; paid: bigint; balance: bigint }>();
+  if (!financialDataLimited) {
+    for (const invoice of todayInvoices) {
+      const row = finance.get(invoice.currency) || { total: BigInt(0), paid: BigInt(0), balance: BigInt(0) };
+      const total = money4ToMinor(invoice.total.toString());
+      const paid = money4ToMinor(invoice.paidAmount.toString());
+      const balance = money4ToMinor(invoice.balanceAmount.toString());
+      if (total === null || paid === null || balance === null) throw new Error("INVALID_DASHBOARD_FINANCIAL_AMOUNT");
+      row.total += total;
+      row.paid += paid;
+      row.balance += balance;
+      finance.set(invoice.currency, row);
+    }
   }
 
   const quickActions: Array<{ href: string; label: string; description: string; icon: SystemIconName } | null> = [
@@ -119,15 +128,19 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      <aside className="dashboard-panel">
-        <div className="dashboard-panel-head"><div><p className="eyebrow">{tr(locale, "Finance", "المالية")}</p><h2>{tr(locale, "Today", "اليوم")}</h2></div>{permissions.has("billing.view") && <Link href="/billing">{tr(locale, "Open billing", "فتح الفوترة")}</Link>}</div>
+      {permissions.has("billing.view") && <aside className="dashboard-panel">
+        <div className="dashboard-panel-head"><div><p className="eyebrow">{tr(locale, "Finance", "المالية")}</p><h2>{tr(locale, "Today", "اليوم")}</h2></div><Link href="/billing">{tr(locale, "Open billing", "فتح الفوترة")}</Link></div>
         <div className="finance-snapshot">
-          {finance.size === 0 ? <p className="muted">{tr(locale, "No invoices issued today.", "لا توجد فواتير صادرة اليوم.")}</p> : [...finance.entries()].map(([currency, row]) => <div key={currency}>
-            <div><strong>{currency}</strong><span>{row.total.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div>
-            <small>{tr(locale, "Collected", "المحصّل")} {row.paid.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})} · {tr(locale, "Outstanding", "المتبقي")} {row.balance.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</small>
+          {financialDataLimited
+            ? <p role="alert">{tr(locale, "Today's invoice volume exceeds the safe display limit. Use management analytics with a narrower date/branch filter; no partial totals are shown.", "تجاوز عدد فواتير اليوم الحد الآمن للعرض. استخدم تحليلات الإدارة مع نطاق أضيق؛ لم تُعرض إجماليات جزئية.")}</p>
+            : finance.size === 0
+              ? <p className="muted">{tr(locale, "No invoices issued today.", "لا توجد فواتير صادرة اليوم.")}</p>
+              : [...finance.entries()].map(([currency, row]) => <div key={currency}>
+            <div><strong>{currency}</strong><span>{moneyText(row.total, currency)}</span></div>
+            <small>{tr(locale, "Paid against today's invoices (current)", "المدفوع الحالي لفواتير اليوم")} {moneyText(row.paid, currency)} · {tr(locale, "Outstanding (current)", "المتبقي الحالي")} {moneyText(row.balance, currency)}</small>
           </div>)}
         </div>
-      </aside>
+      </aside>}
     </section>
 
     {managementLinks.some(Boolean) && <section className="dashboard-panel dashboard-management">
