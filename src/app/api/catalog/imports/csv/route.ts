@@ -27,7 +27,27 @@ export async function POST(request: Request) {
   })) {
     return NextResponse.json({ error: "invalid_csv_source_name" }, { status: 400 });
   }
-  const csvText = await request.text();
+  // Enforce the byte limit while reading, not after buffering untrusted input.
+  const reader = request.body?.getReader();
+  if (!reader) return NextResponse.json({ error: "csv_invalid_content" }, { status: 400 });
+  const chunks: Uint8Array[] = [];
+  let bytes = 0;
+  for (;;) {
+    const next = await reader.read();
+    if (next.done) break;
+    bytes += next.value.byteLength;
+    if (bytes > CSV_STAGE_MAX_BYTES) {
+      await reader.cancel("csv_file_too_large");
+      return NextResponse.json({ error: "csv_file_too_large" }, { status: 413 });
+    }
+    chunks.push(next.value);
+  }
+  let csvText: string;
+  try {
+    csvText = new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(chunks));
+  } catch {
+    return NextResponse.json({ error: "csv_invalid_utf8" }, { status: 400 });
+  }
   let inputs: ReturnType<typeof parseCsvReviewFile>;
   try {
     inputs = parseCsvReviewFile(csvText);
