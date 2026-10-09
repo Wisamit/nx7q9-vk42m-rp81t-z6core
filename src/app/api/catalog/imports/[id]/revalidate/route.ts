@@ -15,6 +15,12 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
   });
   if (!batch) return NextResponse.json({ error: "batch_not_found" }, { status: 404 });
   if (batch.sourceType === "CSV_REVIEW") return NextResponse.json({ error: "csv_review_is_not_committable" }, { status: 409 });
+  // Revalidation must never reset imported/skipped clinical or catalog rows
+  // to VALID/WARNING. Historical imported entity links are immutable.
+  if (batch.status === "IMPORTED" || batch.status === "FAILED" ||
+      batch.rows.some(row => row.status === "IMPORTED" || row.status === "SKIPPED" || row.importedEntityId !== null)) {
+    return NextResponse.json({ error: "processed_import_batch_immutable" }, { status: 409 });
+  }
 
   const prepared = batch.rows.map((row) => {
     const source = row.sourceData;
