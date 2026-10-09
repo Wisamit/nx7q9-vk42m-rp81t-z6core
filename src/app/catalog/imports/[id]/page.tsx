@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { requirePermission } from "@/lib/auth";
+import { permissionSet, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { SafeImportButton } from "@/components/safe-import-button";
 import { RevalidateImportButton } from "@/components/revalidate-import-button";
 import { ReferenceRangeImportButton } from "@/components/reference-range-import-button";
 import { ComponentImportReconciliation } from "@/components/component-import-reconciliation";
+import { PriceImportReconciliation } from "@/components/price-import-reconciliation";
 import { getUiLocale, tr } from "@/lib/ui-i18n";
 
 export const dynamic = "force-dynamic";
@@ -30,6 +31,7 @@ export default async function ImportBatchPage({
 }) {
   const session = await requirePermission("catalog.view");
   const locale = getUiLocale(session.user.preferredLocale);
+  const permissions = permissionSet(session);
   const { id } = await params;
   const query = await searchParams;
   const requested = query.status?.toUpperCase();
@@ -145,7 +147,8 @@ export default async function ImportBatchPage({
       <ReferenceRangeImportButton batchId={batch.id} locale={locale} />
     </section>
 
-    {entityCounts.COMPONENT > 0 && <ComponentImportReconciliation batchId={batch.id} locale={locale} />}
+    {entityCounts.COMPONENT > 0 && permissions.has("catalog.manage") && <ComponentImportReconciliation batchId={batch.id} locale={locale} />}
+    {entityCounts.PRICE_LIST_ITEM > 0 && permissions.has("catalog.manage") && permissions.has("pricing.manage") && <PriceImportReconciliation batchId={batch.id} locale={locale} />}
 
     <section className="table-card">
       <div className="table-toolbar">
