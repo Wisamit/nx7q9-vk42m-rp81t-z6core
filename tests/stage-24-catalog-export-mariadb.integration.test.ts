@@ -18,7 +18,7 @@ test("MariaDB: catalog export windows preserve exact price values and isolate or
   const rangeGlobal = randomUUID(), rangeA = randomUUID(), rangeB = randomUUID(), rangeForeign = randomUUID();
   const suffix = org.slice(0, 8);
   const testPriceIds: string[] = [];
-  async function insert(sql: string, data: Array<string | number>) {
+  async function insert(sql: string, data: Array<string | number | null>) {
     await writer.execute(sql, data);
   }
   async function listPrices(tenant: string, allowedBranches: string[], after: string | null) {
@@ -65,14 +65,14 @@ test("MariaDB: catalog export windows preserve exact price values and isolate or
         [id,tenant,"EX24-"+code+suffix,"Export Test"]);
     for (const [id,tid,code] of [[componentId,testId,"A"],[foreignComponent,foreignTest,"F"]])
       await insert("INSERT INTO test_components (id,test_id,code,name_en,updated_at) VALUES (?,?,?,?,NOW(3))",
-        [id,"EX24-"+code+suffix,"Export Component"]);
+        [id,tid,"EX24-"+code+suffix,"Export Component"]);
     for (const [id,tenant,code,branch] of [
       [globalList,org,"ALL",null],
       [privateList,org,"B",branchB],
       [foreignList,foreign,"F",foreignBranch],
     ]) await insert(
-      "INSERT INTO price_lists (id,organization_id,code,name_en,scope_type,branch_id,currency,effective_from,updated_at) VALUES (?,?,?,?,'ORGANIZATION',?,'AED','2025-01-01',NOW(3))",
-      [id,tenant,"EX24-"+code+suffix,"Export List",branch || ""].map((v,index) => index===4 && v==="" ? null as unknown as string : v),
+      "INSERT INTO price_lists (id,organization_id,code,name_en,scope_type,branch_id,currency,effective_from,updated_at) VALUES (?,?,?,?,?,?,'AED','2025-01-01',NOW(3))",
+      [id,tenant,"EX24-"+code+suffix,"Export List",branch ? "BRANCH" : "ORGANIZATION",branch || null],
     );
     for (const [id,comp,branch,low] of [
       [rangeGlobal,componentId,null,"70.125000"],
@@ -81,7 +81,7 @@ test("MariaDB: catalog export windows preserve exact price values and isolate or
       [rangeForeign,foreignComponent,foreignBranch,"99.999999"],
     ]) await insert(
       "INSERT INTO reference_intervals (id,component_id,branch_id,low_value,high_value,effective_from,approval_status,status,updated_at) VALUES (?,?,?,?,?,'2025-01-01','APPROVED','ACTIVE',NOW(3))",
-      [id,comp,branch || "" ,low,"180.000000"].map((v,index) => index===2 && v==="" ? null as unknown as string : v),
+      [id,comp,branch || null,low,"180.000000"],
     );
 
     // 252 effective-dated rows test true 250+1 lookahead and stable id keyset
