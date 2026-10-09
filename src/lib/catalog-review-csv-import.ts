@@ -2,15 +2,20 @@ import type { ImportInputRow } from "./catalog-import";
 
 export const CSV_STAGE_MAX_BYTES = 2 * 1024 * 1024;
 export const CSV_STAGE_MAX_ROWS = 20000;
-const MAX_COLUMNS = 12;
+const MAX_COLUMNS = 24;
 const MAX_FIELD_LENGTH = 8192;
 const HEADERS = new Set([
   "entityType", "legacyKey", "testCode", "code", "nameEn", "nameAr",
   "unitCode", "resultType", "priceListCode", "unitPrice", "effectiveFrom", "effectiveTo",
+  "testName", "unit", "sex", "ageFrom", "ageTo", "ageUnit", "low", "high", "normalTextEn",
 ]);
 export const CSV_STAGE_TEMPLATE_HEADERS = [
   "entityType", "legacyKey", "testCode", "code", "nameEn", "nameAr",
   "unitCode", "resultType", "priceListCode", "unitPrice", "effectiveFrom", "effectiveTo",
+] as const;
+export const CSV_STAGE_RANGE_TEMPLATE_HEADERS = [
+  "entityType", "legacyKey", "testName", "unit", "sex",
+  "ageFrom", "ageTo", "ageUnit", "low", "high", "normalTextEn",
 ] as const;
 
 export class CsvStagingError extends Error {
@@ -86,7 +91,7 @@ export function parseCsvReviewFile(source: string): ImportInputRow[] {
     if (fields.length !== headers.length) throw new CsvStagingError("csv_column_count_mismatch");
     const columns = Object.fromEntries(headers.map((key, index) => [key, fields[index]])) as Record<string, string>;
     const entityType = columns.entityType?.trim();
-    if (entityType !== "COMPONENT" && entityType !== "PRICE_LIST_ITEM") {
+    if (entityType !== "COMPONENT" && entityType !== "PRICE_LIST_ITEM" && entityType !== "REFERENCE_INTERVAL") {
       throw new CsvStagingError("csv_entity_review_only");
     }
     const data: Record<string, string> = {};
