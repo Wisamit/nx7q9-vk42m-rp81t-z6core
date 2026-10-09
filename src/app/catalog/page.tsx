@@ -8,6 +8,7 @@ import { CatalogConfigurationExport } from "@/components/catalog-configuration-e
 import { CatalogCsvReviewStaging } from "@/components/catalog-csv-review-staging";
 import { CommercialPackageManager } from "@/components/commercial-package-manager";
 import { statusLabel, tr } from "@/lib/ui-i18n";
+import { resolveClinicalImportScope } from "@/lib/catalog-clinical-import-scope";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +18,12 @@ export default async function CatalogPage() {
   const locale = session.user.preferredLocale === "ar" ? "ar" : "en";
   const canReviewPrices = permissions.has("catalog.manage") && permissions.has("pricing.manage");
   const activeBranches = session.user.branchScopes.filter(scope => scope.branch.status === "ACTIVE").map(scope => scope.branchId);
+  const canReviewCsvRanges = permissions.has("catalog.reference_ranges.manage") &&
+    resolveClinicalImportScope({
+      organizationId: session.user.organizationId,
+      activeBranchId: session.activeBranchId, activeBranch: session.activeBranch,
+      branchScopes: session.user.branchScopes, departmentScopes: session.user.departmentScopes,
+    }) !== null;
   const [tests, departments, specimens, containers, methods, units, analyzers, panels, packages, importBatches] = await Promise.all([
     prisma.labTest.findMany({
       where: { organizationId: session.user.organizationId },
@@ -45,6 +52,13 @@ export default async function CatalogPage() {
     } }, orderBy: { nameEn: "asc" } }),
     prisma.catalogImportBatch.findMany({ where: {
       organizationId: session.user.organizationId,
+      AND: [{
+        OR: [
+          { sourceType: { not: "CSV_REVIEW" } },
+          { rows: { none: { entityType: "REFERENCE_INTERVAL" } } },
+          ...(canReviewCsvRanges ? [{ createdByUserId: session.user.id }] : []),
+        ],
+      }],
       ...(permissions.has("catalog.manage") ? {
         OR: [
           { rows: { none: { entityType: "PRICE_LIST_ITEM" } } },
@@ -95,7 +109,7 @@ export default async function CatalogPage() {
 
       {permissions.has("catalog.manage") && <CatalogConfigurationExport locale={locale} canExportPricing={permissions.has("pricing.manage")} />}
 
-      {permissions.has("catalog.manage") && <CatalogCsvReviewStaging locale={locale} canStagePricing={permissions.has("pricing.manage")} />}
+      {permissions.has("catalog.manage") && <CatalogCsvReviewStaging locale={locale} canStagePricing={permissions.has("pricing.manage")} canStageRanges={permissions.has("catalog.reference_ranges.manage")} />}
 
       {permissions.has("catalog.manage") && <LegacyImportBatches locale={locale} batches={importBatches.map(batch => ({ id: batch.id, sourceName: batch.sourceName, sourceType: batch.sourceType, status: batch.status, rows: batch._count.rows, createdAt: batch.createdAt.toISOString() }))} />}
 

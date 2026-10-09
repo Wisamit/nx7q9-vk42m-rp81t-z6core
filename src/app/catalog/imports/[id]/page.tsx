@@ -9,6 +9,7 @@ import { ComponentImportReconciliation } from "@/components/component-import-rec
 import { PriceImportReconciliation } from "@/components/price-import-reconciliation";
 import { getUiLocale, tr } from "@/lib/ui-i18n";
 import { authorizedStagedPrices, stagedPriceListCode } from "@/lib/catalog-import-disclosure";
+import { resolveClinicalImportScope } from "@/lib/catalog-clinical-import-scope";
 
 export const dynamic = "force-dynamic";
 
@@ -45,6 +46,26 @@ export default async function ImportBatchPage({
   });
   if (!batch) notFound();
 
+  // CSV clinical source context must not be disclosed to catalog-only users.
+  // Authorize BEFORE any staged source/normalized/validation content is loaded.
+  if (batch.sourceType === "CSV_REVIEW") {
+    const stagedRanges = await prisma.catalogImportRow.count({
+      where: { batchId: batch.id, entityType: "REFERENCE_INTERVAL" },
+    });
+    if (stagedRanges > 0) {
+      // CSV clinical source rows are not tagged with a branch at the batch level.
+      // Until a branch-bound review assignment exists, only their author may
+      // read them, and only with active clinical permissions.
+      if (batch.createdByUserId !== session.user.id || !permissions.has("catalog.reference_ranges.manage")) notFound();
+      const scope = resolveClinicalImportScope({
+        organizationId: session.user.organizationId,
+        activeBranchId: session.activeBranchId, activeBranch: session.activeBranch,
+        branchScopes: session.user.branchScopes,
+        departmentScopes: session.user.departmentScopes,
+      });
+      if (!scope) notFound();
+    }
+  }
   // Check the whole batch before loading monetary values, issues or summaries.
   // Never expose cross-branch or unresolved price candidates to catalog staff.
   const stagedPrices = await prisma.catalogImportRow.findMany({
@@ -114,7 +135,7 @@ export default async function ImportBatchPage({
     UNIT: tr(locale, "Unit", "وحدة"),
     CONTAINER: tr(locale, "Container", "حاوية"),
     PANEL: tr(locale, "Panel", "باقة فحوصات"),
-    REFERENCE_INTERVAL: tr(locale, "Reference interval", "مدى مرجعي"),
+    REFERENCE_INTERVAL: tr(locale, "Reference interval" + (batch.sourceType === "CSV_REVIEW" ? " (review only)" : ""), "مدى مرجعي" + (batch.sourceType === "CSV_REVIEW" ? " (للمراجعة فقط)" : "")),
     COMPONENT: tr(locale, "Result component (review only)", "مكوّن نتائج (للمراجعة فقط)"),
     PRICE_LIST_ITEM: tr(locale, "Price (review only)", "سعر (للمراجعة فقط)"),
   }[value] || value);

@@ -5,6 +5,8 @@ import { prisma } from "@/lib/db";
 import type { Prisma } from "../../../../../../generated/prisma/client";
 import { normalizeImportRow, rowValidationStatus, validateImportRow } from "@/lib/catalog-import";
 import { CsvStagingError, CSV_STAGE_MAX_BYTES, parseCsvReviewFile } from "@/lib/catalog-review-csv-import";
+import { validateRangeCsvReview } from "@/lib/catalog-range-csv-review";
+import { resolveClinicalImportScope } from "@/lib/catalog-clinical-import-scope";
 
 export async function POST(request: Request) {
   const session = await requirePermission("catalog.manage");
@@ -60,9 +62,26 @@ export async function POST(request: Request) {
   if (inputs.some(row => row.entityType === "PRICE_LIST_ITEM") && !permissions.has("pricing.manage")) {
     return NextResponse.json({ error: "pricing_manage_required" }, { status: 403 });
   }
+  if (inputs.some(row => row.entityType === "REFERENCE_INTERVAL")) {
+    if (!permissions.has("catalog.reference_ranges.manage")) {
+      return NextResponse.json({ error: "reference_ranges_manage_required" }, { status: 403 });
+    }
+    const clinicalScope = resolveClinicalImportScope({
+      organizationId: session.user.organizationId,
+      activeBranchId: session.activeBranchId, activeBranch: session.activeBranch,
+      branchScopes: session.user.branchScopes,
+      departmentScopes: session.user.departmentScopes,
+    });
+    if (!clinicalScope) {
+      return NextResponse.json({ error: "active_clinical_import_scope_required" }, { status: 403 });
+    }
+  }
   const prepared = inputs.map((row, index) => {
     const normalized = normalizeImportRow(row);
-    const issues = validateImportRow(row.entityType, normalized);
+    const issues = [
+      ...validateImportRow(row.entityType, normalized),
+      ...validateRangeCsvReview(row),
+    ];
     return { row, rowNumber: index + 1, normalized, issues, status: rowValidationStatus(issues) };
   });
   const summary = prepared.reduce((counts, row) => {
