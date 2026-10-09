@@ -14,6 +14,7 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
     include: { rows: { orderBy: { rowNumber: "asc" } } },
   });
   if (!batch) return NextResponse.json({ error: "batch_not_found" }, { status: 404 });
+  if (batch.sourceType === "CSV_REVIEW") return NextResponse.json({ error: "csv_review_is_not_committable" }, { status: 409 });
 
   const prepared = batch.rows.map((row) => {
     const source = row.sourceData;
