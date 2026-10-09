@@ -34,19 +34,28 @@ export async function POST(request: Request) {
     }
 
     const payloadHash = createHash("sha256").update(payload).digest("hex");
-    const duplicate = await prisma.integrationMessage.findFirst({
-      where: {
-        endpointId: auth.endpoint.id,
-        direction: "INBOUND",
-        controlId: msh.controlId,
-        payloadHash,
-      },
-      select: { id: true, status: true },
-    });
+    // The sending system must never reuse an MSH-10 control ID with different
+    // clinical content. Lock the endpoint before the duplicate decision so
+    // parallel deliveries cannot independently create the same control ID.
+    const acceptance = await prisma.$transaction(async tx => {
+      const locked = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM integration_endpoints WHERE id = ${auth.endpoint.id}
+        AND organization_id = ${auth.organizationId} AND status = 'ACTIVE' FOR UPDATE
+      `;
+      if (locked.length !== 1) return "ENDPOINT_INACTIVE" as const;
 
-    if (!duplicate) {
-      const now = new Date();
-      const message = await prisma.integrationMessage.create({
+      const previous = await tx.integrationMessage.findFirst({
+        where: {
+          organizationId: auth.organizationId,
+          endpointId: auth.endpoint.id,
+          direction: "INBOUND",
+          controlId: msh.controlId,
+        },
+        select: { id: true, payloadHash: true },
+      });
+      if (previous) return previous.payloadHash === payloadHash ? "DUPLICATE" as const : "CONFLICT" as const;
+
+      const message = await tx.integrationMessage.create({
         data: {
           organizationId: auth.organizationId,
           branchId: auth.endpoint.branchId,
@@ -57,10 +66,10 @@ export async function POST(request: Request) {
           payloadText: payload,
           payloadHash,
           status: "RECEIVED",
-          receivedAt: now,
+          receivedAt: new Date(),
         },
       });
-      await prisma.auditEvent.create({
+      await tx.auditEvent.create({
         data: {
           organizationId: auth.organizationId,
           branchId: auth.endpoint.branchId,
@@ -77,6 +86,17 @@ export async function POST(request: Request) {
           reason: "Inbound HL7 message accepted into integration queue; no clinical mutation performed",
         },
       });
+      return "ACCEPTED" as const;
+    }, { isolationLevel: "Serializable", timeout: 30000 });
+
+    if (acceptance === "CONFLICT" || acceptance === "ENDPOINT_INACTIVE") {
+      return new NextResponse(buildHl7Ack({
+        originalSendingApplication: msh.sendingApplication,
+        originalSendingFacility: msh.sendingFacility,
+        controlId: msh.controlId,
+        acknowledgementCode: "AR",
+        message: acceptance === "CONFLICT" ? "Control ID already used with different payload" : "Endpoint disabled",
+      }), { status: 409, headers: { "content-type": "text/plain; charset=utf-8" } });
     }
 
     return new NextResponse(buildHl7Ack({
@@ -84,7 +104,7 @@ export async function POST(request: Request) {
       originalSendingFacility: msh.sendingFacility,
       controlId: msh.controlId,
       acknowledgementCode: "AA",
-      message: duplicate ? "Duplicate message already received" : "Accepted",
+      message: acceptance === "DUPLICATE" ? "Duplicate message already received" : "Accepted",
     }), { status: 200, headers: { "content-type": "text/plain; charset=utf-8" } });
   } catch (error) {
     if (error instanceof IntegrationAuthError) {
