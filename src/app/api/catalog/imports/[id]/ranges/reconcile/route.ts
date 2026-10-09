@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { permissionSet, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { clinicalImportTestWhere, resolveClinicalImportScope } from "@/lib/catalog-clinical-import-scope";
-import { rangeReviewCandidate, reconcileRangeReviewCandidate, stagedRangeContextIndex, stagedRangeContextIssue } from "@/lib/catalog-range-import-reconciliation";
+import { rangeReviewCandidate, reconcileRangeReviewCandidate, stagedRangeContextIndex, stagedRangeContextIssue, stagedRangeAgeOverlapIndex, stagedRangeAgeOverlapIssue } from "@/lib/catalog-range-import-reconciliation";
 
 const PAGE_SIZE = 100;
 const issues = (value: unknown): string[] => Array.isArray(value) ? value.flatMap(item => {
@@ -52,6 +52,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     return NextResponse.json({ error: "range_review_row_limit_exceeded" }, { status: 409 });
   }
   const contextIndex = stagedRangeContextIndex(allStaged);
+  const ageOverlaps = stagedRangeAgeOverlapIndex(allStaged);
   const page = staged.slice(0, PAGE_SIZE);
   const candidates = page.map(row => rangeReviewCandidate(row.normalizedData));
   const [tests, units] = await Promise.all([
@@ -74,12 +75,15 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     const resolved = result.testId !== null;
     const contextIssue = resolved && result.disposition === "REVIEW_REQUIRED"
       ? stagedRangeContextIssue(candidates[i], contextIndex) : null;
+    const ageOverlapIssue = resolved && result.disposition === "REVIEW_REQUIRED"
+      ? stagedRangeAgeOverlapIssue(candidates[i], ageOverlaps) : null;
     return {
       rowNumber: row.rowNumber, rowStatus: row.status,
       candidate: resolved ? candidates[i] : null,
       disposition: row.status === "IMPORTED" || row.status === "SKIPPED" ? "BLOCKED" : result.disposition,
       issues: row.status === "IMPORTED" || row.status === "SKIPPED" ? ["ROW_ALREADY_PROCESSED"] :
-        [...result.issues, ...(contextIssue ? [contextIssue] : [])],
+        [...result.issues, ...(contextIssue ? [contextIssue] : []),
+          ...(ageOverlapIssue ? [ageOverlapIssue] : [])],
       testId: result.testId, componentId: result.componentId, unitId: result.unitId,
     };
   });
@@ -92,6 +96,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       newValues: { after, reviewed: rows.length,
         stagedContextConflicts: rows.filter(row => row.issues.includes("CONFLICTING_STAGED_RANGE_CONTEXT")).length,
         stagedContextDuplicates: rows.filter(row => row.issues.includes("DUPLICATE_STAGED_RANGE_CONTEXT")).length,
+        stagedAgeWindowOverlaps: rows.filter(row => row.issues.includes("POTENTIAL_STAGED_AGE_WINDOW_OVERLAP")).length,
         reviewRequired: rows.filter(row => row.disposition === "REVIEW_REQUIRED").length },
       ipAddress: ctx.ipAddress, userAgent: ctx.userAgent,
     },

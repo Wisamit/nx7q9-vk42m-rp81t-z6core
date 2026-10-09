@@ -100,3 +100,66 @@ export function stagedRangeContextIssue(
   if (!entry || entry.count <= 1) return null;
   return entry.definitions.size > 1 ? "CONFLICTING_STAGED_RANGE_CONTEXT" : "DUPLICATE_STAGED_RANGE_CONTEXT";
 }
+
+/**
+ * Advisory review for intersections between DIFFERENT explicit staged age windows.
+ * Only identical source test/unit/sex/age-unit text is compared. No age-unit
+ * conversion, sex wildcard inference, method/specimen matching or clinical
+ * interval boundary policy is assumed. Touching endpoints are flagged because
+ * their clinical inclusivity has not been approved.
+ */
+type StagedAgeWindow = { from: bigint; to: bigint; key: string };
+
+function stagedAgeWindow(candidate: RangeCandidate): { group: string; window: StagedAgeWindow } | null {
+  const sex = normalized(candidate.sex), ageUnit = normalized(candidate.ageUnit);
+  if (!candidate.testName || !candidate.unit ||
+    !["ANY", "MALE", "FEMALE"].includes(sex) ||
+    !["DAY", "WEEK", "MONTH", "YEAR"].includes(ageUnit)) return null;
+  const age = (raw: string): bigint | null => {
+    // Canonical CSV ages use non-negative decimal(10,3). Accept equivalent
+    // leading zero spellings for *comparison* without altering source data.
+    if (!/^\d{1,7}(?:\.\d{1,3})?$/.test(raw)) return null;
+    const [whole, fraction = ""] = raw.split(".");
+    return BigInt(whole) * BigInt(1000) + BigInt(fraction.padEnd(3, "0") || "0");
+  };
+  const from = age(candidate.ageFrom), to = age(candidate.ageTo);
+  if (from === null || to === null || from > to) return null;
+  const group = JSON.stringify([
+    normalized(candidate.testName), normalized(candidate.unit), sex, ageUnit,
+  ]);
+  return { group, window: { from, to, key: JSON.stringify([from.toString(), to.toString()]) } };
+}
+
+export function stagedRangeAgeOverlapIndex(rows: readonly StagedRangeReviewRow[]): ReadonlySet<string> {
+  const groups = new Map<string, Map<string, StagedAgeWindow>>();
+  for (const row of rows) {
+    if (row.status !== "VALID" && row.status !== "WARNING") continue;
+    const item = stagedAgeWindow(rangeReviewCandidate(row.normalizedData));
+    if (!item) continue;
+    const windows = groups.get(item.group) || new Map<string, StagedAgeWindow>();
+    windows.set(item.window.key, item.window);
+    groups.set(item.group, windows);
+  }
+  const overlapping = new Set<string>();
+  for (const [group, unique] of groups) {
+    const windows = [...unique.values()].sort((a, b) =>
+      a.from < b.from ? -1 : a.from > b.from ? 1 : a.to < b.to ? -1 : a.to > b.to ? 1 : 0);
+    let largestEarlierEnd: bigint | null = null;
+    for (let i = 0; i < windows.length; i++) {
+      const current = windows[i];
+      const intersectsEarlier = largestEarlierEnd !== null && largestEarlierEnd >= current.from;
+      const intersectsLater = i + 1 < windows.length && windows[i + 1].from <= current.to;
+      if (intersectsEarlier || intersectsLater) overlapping.add(JSON.stringify([group, current.key]));
+      if (largestEarlierEnd === null || current.to > largestEarlierEnd) largestEarlierEnd = current.to;
+    }
+  }
+  return overlapping;
+}
+
+export function stagedRangeAgeOverlapIssue(
+  candidate: RangeCandidate, overlaps: ReadonlySet<string>,
+): "POTENTIAL_STAGED_AGE_WINDOW_OVERLAP" | null {
+  const item = stagedAgeWindow(candidate);
+  return item && overlaps.has(JSON.stringify([item.group, item.window.key]))
+    ? "POTENTIAL_STAGED_AGE_WINDOW_OVERLAP" : null;
+}
