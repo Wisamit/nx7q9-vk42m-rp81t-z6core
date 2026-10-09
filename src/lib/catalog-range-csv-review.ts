@@ -41,7 +41,7 @@ export function validateRangeCsvReview(row: ImportInputRow): CsvRangeReviewIssue
   const scaled = (v: string, digits: number) => {
     const negative = v.startsWith("-");
     const [whole, fraction = ""] = (negative ? v.slice(1) : v).split(".");
-    const unsigned = BigInt(whole) * (10n ** BigInt(digits)) +
+    const unsigned = BigInt(whole) * (BigInt(10) ** BigInt(digits)) +
       BigInt(fraction.padEnd(digits, "0") || "0");
     return negative ? -unsigned : unsigned;
   };
