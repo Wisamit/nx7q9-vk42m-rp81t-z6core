@@ -23,7 +23,7 @@ test("MariaDB two sessions: CSV evidence remains DRAFT, isolated by tenant and i
   const insert = async (sql: string, args: Array<string | number | null>) => writer.execute(sql, args);
   const read = async (tenant: string) => {
     const [rows] = await reader.execute<mysql.RowDataPacket[]>(
-      "SELECT r.id,r.entity_type,r.status,r.source_data,r.normalized_data,b.status AS batch_status,b.source_type FROM catalog_import_rows r JOIN catalog_import_batches b ON b.id=r.batch_id WHERE b.organization_id=? AND b.id=? ORDER BY r.row_number",
+      "SELECT r.id,r.entity_type,r.status,r.source_data,r.normalized_data,b.status AS batch_status,b.source_type FROM catalog_import_rows r JOIN catalog_import_batches b ON b.id=r.batch_id WHERE b.organization_id=? AND b.id=? ORDER BY r.\x60row_number\x60",
       [tenant, batch]);
     return rows;
   };
@@ -47,7 +47,7 @@ test("MariaDB two sessions: CSV evidence remains DRAFT, isolated by tenant and i
       assert.equal(status,"WARNING");
       stagedIds.push(id);
       await insert(
-        "INSERT INTO catalog_import_rows (id,batch_id,row_number,entity_type,legacy_key,status,source_data,normalized_data,validation_issues,updated_at) VALUES (?,?,?,?,?,?,?,?,?,NOW(3))",
+        "INSERT INTO catalog_import_rows (id,batch_id,\x60row_number\x60,entity_type,legacy_key,status,source_data,normalized_data,validation_issues,updated_at) VALUES (?,?,?,?,?,?,?,?,?,NOW(3))",
         [id,batch,i+1,row.entityType,row.legacyKey||null,status,JSON.stringify(row.data),JSON.stringify(normalized),JSON.stringify(issues)],
       );
     }
