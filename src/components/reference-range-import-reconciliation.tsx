@@ -63,7 +63,7 @@ export function ReferenceRangeImportReconciliation({
           body.rows.some(row => !Number.isSafeInteger(row.rowNumber) || row.rowNumber <= after ||
             !Array.isArray(row.issues) ||
             !["BLOCKED", "REVIEW_REQUIRED"].includes(row.disposition)) ||
-          (body.hasMore && (!Number.isSafeInteger(body.nextCursor) ||
+          (body.hasMore && (!Number.isSafeInteger(body.nextCursor ?? NaN) ||
             (body.nextCursor ?? 0) <= after))) {
         throw new Error("unexpected_read_only_review_response");
       }
