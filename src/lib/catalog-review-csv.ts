@@ -4,7 +4,8 @@ const provenanceColumns = ["exportFormat", "schemaVersion", "organizationId", "e
 const limit = 200;
 
 function record(value: unknown): Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!value || typeof value !== "object" || Array.isArray(value) ||
+      (Object.getPrototypeOf(value) !== Object.prototype && Object.getPrototypeOf(value) !== null)) {
     throw new Error("csv_export_record_not_object");
   }
   return value as Record<string, unknown>;
@@ -54,6 +55,9 @@ export function catalogReviewCsv(
   const rows = batch.records.map(item => flatten(record(item)));
   const keys = [...new Set(rows.flatMap(row => [...row.keys()]))].sort((a, b) => a.localeCompare(b, "en"));
   if (keys.length > limit) throw new Error("csv_export_too_many_columns");
+  if (keys.some(key => (provenanceColumns as readonly string[]).includes(key))) {
+    throw new Error("csv_export_reserved_field_collision");
+  }
   const headers = [...provenanceColumns, ...keys];
   const prefix = ["family-lab-catalog-review-csv", "1", organizationId,
     batch.entityType, exportedAt, "paged-live-not-atomic"];
