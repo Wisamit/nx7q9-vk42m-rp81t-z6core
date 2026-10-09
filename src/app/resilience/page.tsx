@@ -30,6 +30,8 @@ export default async function ResiliencePage() {
     integrationDeadLetters,
     webhookDeadLetters,
     analyzerDeadLetters,
+    latestVerifiedEvidence,
+    failedDrillCount,
   ] = await Promise.all([
     prisma.branch.findMany({
       where: { organizationId: session.user.organizationId, id: { in: branchIds }, status: "ACTIVE" },
@@ -76,16 +78,38 @@ export default async function ResiliencePage() {
       },
     }),
     prisma.webhookDelivery.count({
-      where: { organizationId: session.user.organizationId, status: "DEAD_LETTER" },
+      where: {
+        organizationId: session.user.organizationId,
+        status: "DEAD_LETTER",
+        subscription: { endpoint: { OR: [{ branchId: null }, { branchId: { in: branchIds } }] } },
+      },
     }),
     prisma.analyzerMessage.count({
       where: { analyzer: { organizationId: session.user.organizationId, branchId: { in: branchIds } }, status: "DEAD_LETTER" },
     }),
+    prisma.backupVerification.findFirst({
+      where: {
+        organizationId: session.user.organizationId,
+        OR: [{ branchId: null }, { branchId: { in: branchIds } }],
+        status: "VERIFIED",
+        restoreTestedAt: { not: null },
+        evidenceReference: { not: null },
+      },
+      select: { backupCreatedAt: true },
+      orderBy: { backupCreatedAt: "desc" },
+    }),
+    prisma.disasterRecoveryDrill.count({
+      where: {
+        organizationId: session.user.organizationId,
+        OR: [{ branchId: null }, { branchId: { in: branchIds } }],
+        status: "FAILED",
+      },
+    }),
   ]);
 
   const latestBackup = backups[0]?.backupCreatedAt || null;
-  const latestVerifiedBackup = backups.find(item => item.status === "VERIFIED")?.backupCreatedAt || null;
-  const failedDrills = drills.filter(item => item.status === "FAILED").length;
+  const latestVerifiedBackup = latestVerifiedEvidence?.backupCreatedAt || null;
+  const failedDrills = failedDrillCount;
   const pendingEdge = edgeQueueByStatus
     .filter(item => ["QUEUED","RECEIVED","FAILED"].includes(item.status))
     .reduce((sum, item) => sum + item._count._all, 0);

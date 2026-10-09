@@ -52,6 +52,7 @@ jobs:
       - run: node --experimental-strip-types --test tests/digital-services-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/analytics-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/interoperability-mariadb.integration.test.ts
+      - run: node --experimental-strip-types --test tests/resilience-mariadb.integration.test.ts
       - run: npx tsc --noEmit
       - run: npm run lint
       - run: npm run test:ui-theme

@@ -212,6 +212,7 @@ export function ResilienceManager({
     <article className="detail-card">
       <h2>{tr("Backup Evidence", "دليل النسخ الاحتياطي")}</h2>
       <p className="muted">{tr("Records evidence from the actual database/file backup system; this does not claim that the LIS itself created the backup.", "يسجل دليلاً من نظام النسخ الاحتياطي الفعلي لقاعدة البيانات/الملفات، ولا يعني أن LIS نفسه أنشأ النسخة الاحتياطية.")}</p>
+      <p className="muted">{tr("VERIFIED requires an isolated restore completed after backup creation, duration and external evidence reference; recording this status does not create or validate a backup automatically.", "حالة متحقق منه تتطلب اختبار استعادة مستقل بعد إنشاء النسخة، مع المدة ومرجع الدليل الخارجي؛ تسجيل الحالة لا ينشئ نسخة احتياطية ولا يتحقق منها تلقائياً.")}</p>
       <form className="catalog-form" onSubmit={backup}>
         <label>{tr("Scope", "النطاق")}<select name="branchId"><option value="">{tr("Organization-wide", "على مستوى المؤسسة")}</option>{branches.map(b=><option key={b.id} value={b.id}>{b.code} — {branchName(b)}</option>)}</select></label>
         <label>{tr("Provider", "المزود")}<input name="provider" required placeholder={tr("DB provider / object storage", "مزود قاعدة البيانات / تخزين الكائنات")} /></label>
@@ -228,6 +229,7 @@ export function ResilienceManager({
 
     <article className="detail-card">
       <h2>{tr("Disaster Recovery Drill", "اختبار التعافي من الكوارث")}</h2>
+      <p className="muted">{tr("PASSED/FAILED require completion time, actual RPO/RTO and evidence. PASSED is refused if either recovery target was missed.", "نجاح أو فشل الاختبار يتطلب وقت الاكتمال وRPO/RTO الفعليين ومرجع الدليل. لا يُقبل وصف الاختبار بالناجح إذا تجاوز أي هدف للتعافي.")}</p>
       <form className="catalog-form" onSubmit={drill}>
         <label>{tr("Scope", "النطاق")}<select name="branchId"><option value="">{tr("Organization-wide", "على مستوى المؤسسة")}</option>{branches.map(b=><option key={b.id} value={b.id}>{b.code} — {branchName(b)}</option>)}</select></label>
         <label>{tr("Title", "العنوان")}<input name="title" required /></label>

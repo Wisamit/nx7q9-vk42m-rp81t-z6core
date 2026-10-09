@@ -34,12 +34,19 @@ export async function POST(request: Request) {
   if (!canAccessBranch(session, branchId)) return NextResponse.json({ error: "branch_forbidden" }, { status: 403 });
   if (!/^[A-Z0-9._-]{2,80}$/.test(code)) return NextResponse.json({ error: "invalid_code" }, { status: 400 });
 
-  const policy = await prisma.branchContinuityPolicy.findUnique({ where: { branchId } });
-  if (!policy || policy.mode !== "BUFFER_NON_CLINICAL" || policy.offlineClinicalWritesAllowed) {
-    return NextResponse.json({ error: "branch_non_clinical_buffering_not_enabled" }, { status: 409 });
-  }
-
-  const node = await prisma.$transaction(async tx => {
+  let node;
+  try {
+    node = await prisma.$transaction(async tx => {
+      // Serializes registration with branch continuity disable.
+      const locked=await tx.$queryRaw<Array<{id:string}>>`
+        SELECT id FROM branches WHERE id=${branchId}
+        AND organization_id=${session.user.organizationId} AND status='ACTIVE' FOR UPDATE
+      `;
+      if (locked.length !== 1) throw new Error("BRANCH_NOT_ACTIVE");
+      const policy = await tx.branchContinuityPolicy.findUnique({ where: { branchId } });
+      if (!policy || policy.mode !== "BUFFER_NON_CLINICAL" || policy.offlineClinicalWritesAllowed) {
+        throw new Error("EDGE_BUFFERING_DISABLED");
+      }
     const created = await tx.edgeNode.create({
       data: {
         organizationId: session.user.organizationId,
@@ -65,7 +72,11 @@ export async function POST(request: Request) {
       },
     });
     return created;
-  });
+    },{isolationLevel:"Serializable",timeout:30000});
+  } catch (error) {
+    const code=error instanceof Error?error.message:"";
+    return NextResponse.json({error:code==="EDGE_BUFFERING_DISABLED"?"branch_non_clinical_buffering_not_enabled":"edge_node_registration_conflict"},{status:409});
+  }
 
   return NextResponse.json({ status: "ok", node }, { status: 201 });
 }

@@ -40,7 +40,7 @@ export async function POST(request: Request) {
     if (auth.endpoint.branchId && auth.endpoint.branchId !== node.branchId) {
       return NextResponse.json({ error: "edge_branch_scope_mismatch" }, { status: 403 });
     }
-    if (node.branch.continuityPolicy?.mode !== "BUFFER_NON_CLINICAL" || node.branch.continuityPolicy.offlineClinicalWritesAllowed) {
+    if (node.branch.status !== "ACTIVE" || node.branch.continuityPolicy?.mode !== "BUFFER_NON_CLINICAL" || node.branch.continuityPolicy.offlineClinicalWritesAllowed) {
       return NextResponse.json({ error: "edge_buffering_disabled" }, { status: 409 });
     }
 
@@ -55,6 +55,9 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "edge_event_type_not_allowed", eventType }, { status: 409 });
       }
       const payload = item.payload ?? {};
+      if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+        return NextResponse.json({ error: "invalid_edge_payload" }, { status: 400 });
+      }
       const serialized = JSON.stringify(payload);
       approximateBytes += Buffer.byteLength(serialized, "utf8");
       if (approximateBytes > 512_000) return NextResponse.json({ error: "edge_batch_too_large" }, { status: 413 });
@@ -69,6 +72,22 @@ export async function POST(request: Request) {
     const now = new Date();
     const accepted: Array<{ idempotencyKey: string; id: string; duplicate: boolean }> = [];
     await prisma.$transaction(async tx => {
+      // Branch is always locked before node, matching continuity changes and node registration.
+      const lockedBranch=await tx.$queryRaw<Array<{id:string}>>`
+        SELECT id FROM branches WHERE id=${node.branchId}
+        AND organization_id=${auth.organizationId} AND status='ACTIVE' FOR UPDATE
+      `;
+      if(lockedBranch.length!==1) throw new Error("EDGE_BUFFERING_DISABLED");
+      const currentPolicy=await tx.branchContinuityPolicy.findUnique({where:{branchId:node.branchId}});
+      if(currentPolicy?.mode!=="BUFFER_NON_CLINICAL" || currentPolicy.offlineClinicalWritesAllowed) {
+        throw new Error("EDGE_BUFFERING_DISABLED");
+      }
+      const lockedNode=await tx.$queryRaw<Array<{id:string}>>`
+        SELECT id FROM edge_nodes WHERE id=${node.id} AND organization_id=${auth.organizationId}
+        AND branch_id=${node.branchId} AND status='ACTIVE' FOR UPDATE
+      `;
+      if(lockedNode.length!==1) throw new Error("EDGE_NODE_INACTIVE");
+      // Same node lock serializes duplicate batch writers across all application instances.
       for (const item of normalized) {
         const existing = await tx.edgeQueueMessage.findUnique({
           where: {
@@ -78,10 +97,14 @@ export async function POST(request: Request) {
               idempotencyKey: item.idempotencyKey,
             },
           },
-          select: { id: true, payloadHash: true },
+          select: { id: true, eventType: true, payloadHash: true },
         });
         if (existing) {
-          if (existing.payloadHash !== item.payloadHash) throw new Error("IDEMPOTENCY_PAYLOAD_MISMATCH");
+          // The historical hash includes the payload only; retain backwards-compatible
+          // deduplication while binding the key to its original event type.
+          if (existing.payloadHash !== item.payloadHash || existing.eventType !== item.eventType) {
+            throw new Error("IDEMPOTENCY_PAYLOAD_MISMATCH");
+          }
           accepted.push({ idempotencyKey: item.idempotencyKey, id: existing.id, duplicate: true });
           continue;
         }
@@ -127,6 +150,9 @@ export async function POST(request: Request) {
     }
     if (error instanceof Error && error.message === "IDEMPOTENCY_PAYLOAD_MISMATCH") {
       return NextResponse.json({ error: "idempotency_payload_mismatch" }, { status: 409 });
+    }
+    if (error instanceof Error && ["EDGE_BUFFERING_DISABLED", "EDGE_NODE_INACTIVE"].includes(error.message)) {
+      return NextResponse.json({ error: error.message.toLowerCase() }, { status: 409 });
     }
     return NextResponse.json({ error: "edge_sync_failed" }, { status: 500 });
   }

@@ -22,7 +22,13 @@ export async function POST(request: Request) {
   if (!provider || !backupReference || Number.isNaN(backupCreatedAt.getTime())) return NextResponse.json({ error:"missing_required_fields" },{status:400});
   if (restoreTestedAt && Number.isNaN(restoreTestedAt.getTime())) return NextResponse.json({error:"invalid_restore_time"},{status:400});
   if (restoreDurationMinutes !== null && (!Number.isInteger(restoreDurationMinutes) || restoreDurationMinutes < 0)) return NextResponse.json({error:"invalid_restore_duration"},{status:400});
-  if (status === "VERIFIED" && !restoreTestedAt) return NextResponse.json({error:"restore_test_required_for_verified_backup"},{status:409});
+  if (backupCreatedAt.getTime() > Date.now()) return NextResponse.json({error:"backup_time_in_future"},{status:400});
+  if (restoreTestedAt && (restoreTestedAt < backupCreatedAt || restoreTestedAt.getTime() > Date.now())) {
+    return NextResponse.json({error:"restore_time_outside_backup_history"},{status:400});
+  }
+  if (status === "VERIFIED" && (!restoreTestedAt || !evidenceReference || restoreDurationMinutes === null)) {
+    return NextResponse.json({error:"verified_backup_requires_restore_evidence_and_duration"},{status:409});
+  }
   if (branchId && !canAccessBranch(session,branchId)) return NextResponse.json({error:"branch_forbidden"},{status:403});
 
   const record=await prisma.$transaction(async tx=>{

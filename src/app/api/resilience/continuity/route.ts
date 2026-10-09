@@ -11,7 +11,15 @@ export async function POST(request:Request){
   const localBufferMinutes=body?.localBufferMinutes===""||body?.localBufferMinutes==null?null:Number(body.localBufferMinutes);
   if(!branchId||!canAccessBranch(session,branchId)) return NextResponse.json({error:"branch_forbidden"},{status:403});
   if(localBufferMinutes!==null&&(!Number.isInteger(localBufferMinutes)||localBufferMinutes<1||localBufferMinutes>1440)) return NextResponse.json({error:"invalid_buffer_minutes"},{status:400});
-  const policy=await prisma.$transaction(async tx=>{
+  let policy;
+  try {
+    policy=await prisma.$transaction(async tx=>{
+      // Lock branch before switching mode; edge sync and registration use the same mutex.
+      const locked=await tx.$queryRaw<Array<{id:string}>>`
+        SELECT id FROM branches WHERE id=${branchId}
+        AND organization_id=${session.user.organizationId} AND status='ACTIVE' FOR UPDATE
+      `;
+      if(locked.length!==1) throw new Error("BRANCH_NOT_ACTIVE");
     const saved=await tx.branchContinuityPolicy.upsert({
       where:{branchId},
       update:{mode,offlineClinicalWritesAllowed:false,localBufferMinutes:mode==="BUFFER_NON_CLINICAL"?localBufferMinutes:null,notes:typeof body.notes==="string"?body.notes.trim().slice(0,1000)||null:null,updatedByUserId:session.user.id},
@@ -25,6 +33,9 @@ export async function POST(request:Request){
       ipAddress:ctx.ipAddress,userAgent:ctx.userAgent,
     }});
     return saved;
-  });
+    },{isolationLevel:"Serializable",timeout:30000});
+  } catch {
+    return NextResponse.json({error:"continuity_policy_conflict_or_branch_inactive"},{status:409});
+  }
   return NextResponse.json({status:"ok",policy});
 }
