@@ -52,6 +52,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           current.updatedAt.getTime() !== appointment.updatedAt.getTime()) {
         throw new Error("APPOINTMENT_CHANGED");
       }
+      if (nextStatus === "COMPLETED" && current.mode === "HOME_COLLECTION") {
+        const visit = await tx.homeCollectionVisit.findUnique({ where: { appointmentId: id } });
+        if (!visit || visit.status !== "DELIVERED") throw new Error("HOME_COLLECTION_NOT_DELIVERED");
+      }
       if (nextStatus === "CANCELLED" && current.mode === "HOME_COLLECTION") {
         const visit = await tx.homeCollectionVisit.findUnique({ where: { appointmentId: id } });
         if (visit && !["SCHEDULED", "ASSIGNED", "EN_ROUTE", "ARRIVED"].includes(visit.status)) {
@@ -94,7 +98,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   } catch (error) {
     const reason = error instanceof Error ? error.message : "";
     return NextResponse.json({ error: reason === "HOME_COLLECTION_ALREADY_STARTED"
-      ? "home_collection_already_started" : "appointment_status_conflict" }, { status: 409 });
+      ? "home_collection_already_started"
+      : reason === "HOME_COLLECTION_NOT_DELIVERED"
+        ? "home_collection_not_delivered" : "appointment_status_conflict" }, { status: 409 });
   }
 
   return NextResponse.json({ status: "ok", appointmentStatus: nextStatus });
