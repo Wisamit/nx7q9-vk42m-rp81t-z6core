@@ -59,6 +59,12 @@ test("analytics use organization and authorized branches and hide staff finance 
   const page=source("../src/app/analytics/page.tsx");
   const dash=source("../src/app/dashboard/page.tsx");
   assert.ok(page.includes('requirePermission("analytics.view")'));
+  assert.ok(page.includes('permissionSet(session).has("billing.view")'));
+  assert.equal((page.match(/canViewFinancial \? prisma\./g) || []).length, 4);
+  assert.ok(page.includes('{canViewFinancial && <section className="detail-section">'));
+  assert.ok(page.includes('{canViewFinancial && <section className="table-card detail-section">'));
+  assert.ok(page.includes('{canViewFinancial && <th>{tr(locale, "Ordered value"'));
+
   assert.ok(page.includes("authorizedBranchIds.includes(requestedBranchId)"));
   assert.ok(page.includes("orderingBranchId: { in: branchIds }"));
   assert.ok(page.includes("aggregateFinancialReport"));
