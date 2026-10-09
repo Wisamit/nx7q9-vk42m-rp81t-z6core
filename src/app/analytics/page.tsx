@@ -312,8 +312,9 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
     code: string;
     name: string;
     volume: number;
-    revenue: Map<string, number>;
-    cost: Map<string, number>;
+    revenue: Map<string, bigint>;
+    cost: Map<string, bigint>;
+    indicativeCostItems: Set<string>;
     costLinkedItems: Set<string>;
     orderItemIds: Set<string>;
   }>();
@@ -325,14 +326,15 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
         code: item.testCodeSnapshot,
         name: locale === "ar" ? item.testNameArSnapshot || item.testNameEnSnapshot : item.testNameEnSnapshot,
         volume: 0,
-        revenue: new Map<string, number>(),
-        cost: new Map<string, number>(),
+        revenue: new Map<string, bigint>(),
+        cost: new Map<string, bigint>(),
+        indicativeCostItems: new Set<string>(),
         costLinkedItems: new Set<string>(),
         orderItemIds: new Set<string>(),
       };
       row.volume += 1;
       row.orderItemIds.add(item.id);
-      row.revenue.set(item.currency, (row.revenue.get(item.currency) || 0) + item.finalPriceSnapshot.toNumber());
+      addCurrencyAmount(row.revenue, item.currency, item.finalPriceSnapshot.toString());
       testMap.set(item.testId, row);
     }
   }
@@ -342,8 +344,10 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
     if (!testId) continue;
     const row = testMap.get(testId);
     if (!row) continue;
-    const cost = movement.quantity.abs().mul(movement.lot.unitCost).toNumber();
-    row.cost.set(movement.lot.currency, (row.cost.get(movement.lot.currency) || 0) + cost);
+    const cost = movement.quantity.abs().mul(movement.lot.unitCost).toString();
+    addCurrencyAmount(row.cost, movement.lot.currency, cost);
+    // Lot prices are mutable master data, not immutable movement valuation snapshots.
+    row.indicativeCostItems.add(movement.referenceId);
     row.costLinkedItems.add(movement.referenceId);
   }
 
@@ -353,29 +357,28 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
     if (!testId) continue;
     const row = testMap.get(testId);
     if (!row) continue;
-    const cost = sendOut.costAmount.toNumber();
-    row.cost.set(sendOut.costCurrency, (row.cost.get(sendOut.costCurrency) || 0) + cost);
+    addCurrencyAmount(row.cost, sendOut.costCurrency, sendOut.costAmount.toString());
     row.costLinkedItems.add(sendOut.orderItemId);
   }
 
-  const sourceMap = new Map<string, { name: string; orders: number; revenue: Map<string, number> }>();
-  const referrerMap = new Map<string, { name: string; orders: number; revenue: Map<string, number> }>();
+  const sourceMap = new Map<string, { name: string; orders: number; revenue: Map<string, bigint> }>();
+  const referrerMap = new Map<string, { name: string; orders: number; revenue: Map<string, bigint> }>();
   for (const order of orders) {
-    const orderRevenue = new Map<string, number>();
+    const orderRevenue = new Map<string, bigint>();
     for (const item of order.items) {
-      orderRevenue.set(item.currency, (orderRevenue.get(item.currency) || 0) + item.finalPriceSnapshot.toNumber());
+      addCurrencyAmount(orderRevenue, item.currency, item.finalPriceSnapshot.toString());
     }
 
     const sourceKey = order.source?.id || "UNSPECIFIED";
-    const sourceRow = sourceMap.get(sourceKey) || { name: order.source ? localizedName(order.source) : tr(locale, "Unspecified", "غير محدد"), orders: 0, revenue: new Map<string, number>() };
+    const sourceRow = sourceMap.get(sourceKey) || { name: order.source ? localizedName(order.source) : tr(locale, "Unspecified", "غير محدد"), orders: 0, revenue: new Map<string, bigint>() };
     sourceRow.orders++;
-    for (const [currency, amount] of orderRevenue) sourceRow.revenue.set(currency, (sourceRow.revenue.get(currency) || 0) + amount);
+    for (const [currency, amount] of orderRevenue) sourceRow.revenue.set(currency, (sourceRow.revenue.get(currency) || BigInt(0)) + amount);
     sourceMap.set(sourceKey, sourceRow);
 
     if (order.referrer) {
-      const refRow = referrerMap.get(order.referrer.id) || { name: localizedName(order.referrer), orders: 0, revenue: new Map<string, number>() };
+      const refRow = referrerMap.get(order.referrer.id) || { name: localizedName(order.referrer), orders: 0, revenue: new Map<string, bigint>() };
       refRow.orders++;
-      for (const [currency, amount] of orderRevenue) refRow.revenue.set(currency, (refRow.revenue.get(currency) || 0) + amount);
+      for (const [currency, amount] of orderRevenue) refRow.revenue.set(currency, (refRow.revenue.get(currency) || BigInt(0)) + amount);
       referrerMap.set(order.referrer.id, refRow);
     }
   }
@@ -386,8 +389,8 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
     name: localizedName(branch),
     orders: 0,
     completed: 0,
-    revenue: new Map<string, number>(),
-    collected: new Map<string, number>(),
+    revenue: new Map<string, bigint>(),
+    collected: new Map<string, bigint>(),
     tatMinutes: [] as number[],
     specimens: 0,
     rejectedSpecimens: 0,
@@ -401,12 +404,12 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
   for (const invoice of invoices) {
     const row = branchMap.get(invoice.branchId);
     if (!row) continue;
-    row.revenue.set(invoice.currency, (row.revenue.get(invoice.currency) || 0) + invoice.total.toNumber());
+    addCurrencyAmount(row.revenue, invoice.currency, invoice.total.toString());
   }
   for (const payment of payments) {
     const row = branchMap.get(payment.branchId);
     if (!row) continue;
-    row.collected.set(payment.currency, (row.collected.get(payment.currency) || 0) + payment.amount.toNumber());
+    addCurrencyAmount(row.collected, payment.currency, payment.amount.toString());
   }
 
   const tatMinutes: number[] = [];
@@ -556,31 +559,34 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
             <td>{branch.orders ? (branch.completed / branch.orders * 100).toFixed(1) + "%" : "—"}</td>
             <td>{minuteLabel(avg, locale)}</td>
             <td>{branch.specimens ? (branch.rejectedSpecimens / branch.specimens * 100).toFixed(2) + "%" : "—"}</td>
-            <td>{[...branch.revenue.entries()].map(([currency, amount]) => money(amount, currency)).join(" · ") || "—"}</td>
-            <td>{[...branch.collected.entries()].map(([currency, amount]) => money(amount, currency)).join(" · ") || "—"}</td>
+            <td>{[...branch.revenue.entries()].map(([currency, amount]) => moneyText(amount, currency)).join(" · ") || "—"}</td>
+            <td>{[...branch.collected.entries()].map(([currency, amount]) => moneyText(amount, currency)).join(" · ") || "—"}</td>
           </tr>;
         })}</tbody>
       </table></div>
     </section>
 
     <section className="table-card detail-section">
-      <div className="table-toolbar"><h2>{tr(locale, "Test Revenue & Profitability Coverage", "إيرادات الفحوصات وتغطية الربحية")}</h2><span>{tr(locale, "Cost from linked inventory consumption + recorded send-out laboratory cost", "التكلفة من استهلاك المخزون المرتبط + تكلفة المختبر الخارجي المسجلة")}</span></div>
+      <div className="table-toolbar"><h2>{tr(locale, "Ordered Test Value & Indicative Cost Coverage", "قيمة الفحوصات المطلوبة والتكاليف التقديرية المرتبطة")}</h2><span>{tr(locale, "Inventory cost is estimated from CURRENT lot prices, not preserved historical valuation.", "تكلفة المخزون مقدّرة بسعر الدفعة الحالي وليست لقطة تكلفة تاريخية محفوظة.")}</span></div>
       <div className="table-wrap"><table>
-        <thead><tr><th>{tr(locale, "Test", "الفحص")}</th><th>{tr(locale, "Volume", "العدد")}</th><th>{tr(locale, "Revenue", "الإيراد")}</th><th>{tr(locale, "Attributed laboratory cost", "تكلفة المختبر المنسوبة")}</th><th>{tr(locale, "Margin where comparable", "الهامش عند إمكانية المقارنة")}</th><th>{tr(locale, "Cost coverage", "تغطية التكلفة")}</th></tr></thead>
+        <thead><tr><th>{tr(locale, "Test", "الفحص")}</th><th>{tr(locale, "Volume", "العدد")}</th><th>{tr(locale, "Revenue", "الإيراد")}</th><th>{tr(locale, "Attributed laboratory cost", "تكلفة المختبر المنسوبة")}</th><th>{tr(locale, "Margin only with full, historically comparable cost", "الهامش فقط مع تكلفة تاريخية مكتملة وقابلة للمقارنة")}</th><th>{tr(locale, "Linked-cost coverage (not completeness guarantee)", "نسبة البنود المرتبطة بتكلفة (ليست ضمان اكتمال)")}</th></tr></thead>
         <tbody>{topTests.length === 0 ? <tr><td colSpan={6} className="empty-state">{tr(locale, "No test activity in the selected period.", "لا توجد حركة فحوصات ضمن الفترة المحددة.")}</td></tr> : topTests.map(test => {
-          const revenueText = [...test.revenue.entries()].map(([currency, amount]) => money(amount, currency)).join(" · ");
-          const costText = [...test.cost.entries()].map(([currency, amount]) => money(amount, currency)).join(" · ") || tr(locale, "No linked cost", "لا توجد تكلفة مرتبطة");
-          const margins = [...test.revenue.entries()].flatMap(([currency, revenue]) => {
-            const cost = test.cost.get(currency);
-            return cost === undefined ? [] : [money(revenue - cost, currency)];
-          });
+          const revenueText = [...test.revenue.entries()].map(([currency, amount]) => moneyText(amount, currency)).join(" · ");
+          const costText = [...test.cost.entries()].map(([currency, amount]) => moneyText(amount, currency)).join(" · ") || tr(locale, "No linked cost", "لا توجد تكلفة مرتبطة");
+          const margins = [...comparableMargin({
+            revenue: test.revenue,
+            cost: test.cost,
+            totalItems: test.orderItemIds.size,
+            coveredItems: test.costLinkedItems.size,
+            indicativeCostItems: test.indicativeCostItems.size,
+          }).entries()].map(([currency, amount]) => moneyText(amount, currency));
           const coverage = test.orderItemIds.size ? test.costLinkedItems.size / test.orderItemIds.size * 100 : 0;
           return <tr key={test.code}>
             <td><strong>{test.code}</strong><br/><small>{test.name}</small></td>
             <td>{test.volume}</td>
             <td>{revenueText || "—"}</td>
             <td>{costText}</td>
-            <td>{margins.join(" · ") || tr(locale, "Insufficient linked cost data", "بيانات التكلفة المرتبطة غير كافية")}</td>
+            <td>{margins.join(" · ") || tr(locale, "Unverified: missing/indicative/mixed-currency cost", "غير موثوق: تكلفة ناقصة أو تقديرية أو بعملات مختلفة")}</td>
             <td>{coverage.toFixed(1)}%</td>
           </tr>;
         })}</tbody>
@@ -592,14 +598,14 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
         <div className="table-toolbar"><h2>{tr(locale, "Source Analytics", "تحليلات المصادر")}</h2><span>{sourceMap.size}</span></div>
         <div className="table-wrap"><table>
           <thead><tr><th>{tr(locale, "Source", "المصدر")}</th><th>{tr(locale, "Orders", "الطلبات")}</th><th>{tr(locale, "Revenue", "الإيراد")}</th></tr></thead>
-          <tbody>{topSources.length === 0 ? <tr><td colSpan={3} className="empty-state">{tr(locale, "No source-linked orders.", "لا توجد طلبات مرتبطة بمصدر.")}</td></tr> : topSources.map(source => <tr key={source.name}><td>{source.name}</td><td>{source.orders}</td><td>{[...source.revenue.entries()].map(([currency, amount]) => money(amount, currency)).join(" · ") || "—"}</td></tr>)}</tbody>
+          <tbody>{topSources.length === 0 ? <tr><td colSpan={3} className="empty-state">{tr(locale, "No source-linked orders.", "لا توجد طلبات مرتبطة بمصدر.")}</td></tr> : topSources.map(source => <tr key={source.name}><td>{source.name}</td><td>{source.orders}</td><td>{[...source.revenue.entries()].map(([currency, amount]) => moneyText(amount, currency)).join(" · ") || "—"}</td></tr>)}</tbody>
         </table></div>
       </article>
       <article className="table-card">
         <div className="table-toolbar"><h2>{tr(locale, "Referrer Analytics", "تحليلات المحيلين")}</h2><span>{referrerMap.size}</span></div>
         <div className="table-wrap"><table>
           <thead><tr><th>{tr(locale, "Referrer", "المحيل")}</th><th>{tr(locale, "Orders", "الطلبات")}</th><th>{tr(locale, "Revenue", "الإيراد")}</th></tr></thead>
-          <tbody>{topReferrers.length === 0 ? <tr><td colSpan={3} className="empty-state">{tr(locale, "No referrer-linked orders.", "لا توجد طلبات مرتبطة بمحيل.")}</td></tr> : topReferrers.map(referrer => <tr key={referrer.name}><td>{referrer.name}</td><td>{referrer.orders}</td><td>{[...referrer.revenue.entries()].map(([currency, amount]) => money(amount, currency)).join(" · ") || "—"}</td></tr>)}</tbody>
+          <tbody>{topReferrers.length === 0 ? <tr><td colSpan={3} className="empty-state">{tr(locale, "No referrer-linked orders.", "لا توجد طلبات مرتبطة بمحيل.")}</td></tr> : topReferrers.map(referrer => <tr key={referrer.name}><td>{referrer.name}</td><td>{referrer.orders}</td><td>{[...referrer.revenue.entries()].map(([currency, amount]) => moneyText(amount, currency)).join(" · ") || "—"}</td></tr>)}</tbody>
         </table></div>
       </article>
     </section>
