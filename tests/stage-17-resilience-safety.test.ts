@@ -55,3 +55,13 @@ test("backup and DR evidence cannot be verified solely by a caller flag", () => 
   assert.ok(ui.includes("VERIFIED requires an isolated restore"));
   assert.ok(ui.includes("PASSED/FAILED require completion time"));
 });
+
+test("resilience dashboard computes full-history recovery alerts without cross-branch webhook leakage", () => {
+  const page=read("../src/app/resilience/page.tsx");
+  assert.ok(page.includes("prisma.disasterRecoveryDrill.count"));
+  assert.ok(page.includes("failedDrillCount"));
+  assert.ok(page.includes("latestVerifiedEvidence?.backupCreatedAt"));
+  assert.ok(page.includes('evidenceReference: { not: null }'));
+  assert.ok(page.includes('subscription: { endpoint: { OR: [{ branchId: null }, { branchId: { in: branchIds } }] } }'));
+});
+
