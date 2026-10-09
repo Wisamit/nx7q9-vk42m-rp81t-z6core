@@ -16,7 +16,7 @@ test("MariaDB appointment, home collection, and queue transitions remain atomic"
   ]);
   const id = () => randomUUID();
   const org = id(), branch = id(), user = id(), patient = id();
-  const appointment = id(), visit = id(), queue = id();
+  const appointment = id(), visit = id(), queue = id(), portalAccount = id(), portalSession = id();
   const short = org.slice(0, 8);
   const cleanup: Array<{ sql: string; params: string[] }> = [];
   const seed = async (sql: string, params: string[], undo: string, values: string[]) => {
@@ -43,6 +43,10 @@ test("MariaDB appointment, home collection, and queue transitions remain atomic"
       [visit,appointment,branch],"DELETE FROM home_collection_visits WHERE id=?",[visit]);
     await seed("INSERT INTO queue_tickets(id,organization_id,branch_id,patient_id,appointment_id,ticket_number,queue_date,sequence,stage,issued_by_user_id,updated_at) VALUES (?,?,?,?,?,'R001',CURRENT_DATE(),1,'RECEPTION',?,NOW(3))",
       [queue,org,branch,patient,appointment,user],"DELETE FROM queue_tickets WHERE id=?",[queue]);
+    await seed("INSERT INTO portal_accounts(id,organization_id,type,patient_id,status,password_hash,updated_at) VALUES (?,?,'PATIENT',?,'ACTIVE','locked-pass',NOW(3))",
+      [portalAccount,org,patient],"DELETE FROM portal_accounts WHERE id=?",[portalAccount]);
+    await seed("INSERT INTO portal_sessions(id,portal_account_id,token_hash,expires_at) VALUES (?,?,?,DATE_ADD(NOW(3), INTERVAL 1 HOUR))",
+      [portalSession,portalAccount,"c".repeat(64)],"DELETE FROM portal_sessions WHERE id=?",[portalSession]);
     await b.query("SET SESSION innodb_lock_wait_timeout = 1");
 
     // Cancelling an appointment cannot race home collection events.
@@ -76,6 +80,20 @@ test("MariaDB appointment, home collection, and queue transitions remain atomic"
     const [second] = await b.execute<mysql.ResultSetHeader>(
       "UPDATE queue_tickets SET status='CALLED' WHERE id=? AND status='WAITING'",[queue]);
     assert.equal(second.affectedRows,0);
+
+    // Admin disabling a portal account must exclude a concurrent login and revoke sessions.
+    await a.beginTransaction();
+    await a.execute("SELECT id FROM portal_accounts WHERE id=? FOR UPDATE",[portalAccount]);
+    await a.execute("UPDATE portal_accounts SET status='DISABLED',deactivated_at=NOW(3) WHERE id=?",[portalAccount]);
+    await a.execute("UPDATE portal_sessions SET revoked_at=NOW(3) WHERE portal_account_id=? AND revoked_at IS NULL",[portalAccount]);
+    await b.beginTransaction();
+    await assert.rejects(b.execute("SELECT id FROM portal_accounts WHERE id=? FOR UPDATE",[portalAccount]),isLockTimeout);
+    await b.rollback();
+    await a.commit();
+    const [deactivated] = await b.execute<mysql.RowDataPacket[]>(
+      "SELECT a.status, s.revoked_at FROM portal_accounts a JOIN portal_sessions s ON s.portal_account_id=a.id WHERE a.id=?",[portalAccount]);
+    assert.equal(deactivated[0]?.status,"DISABLED");
+    assert.ok(deactivated[0]?.revoked_at);
   } finally {
     await Promise.all([a.rollback().catch(()=>{}),b.rollback().catch(()=>{})]);
     for (const item of cleanup) await db.execute(item.sql,item.params);
