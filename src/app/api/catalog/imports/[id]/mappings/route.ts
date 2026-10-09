@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { clinicalImportTestWhere, resolveClinicalImportScope } from "@/lib/catalog-clinical-import-scope";
 
 function looseKey(value: string) {
   return value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/[^A-Z0-9]+/g, "");
@@ -13,6 +14,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const session = await requirePermission("catalog.reference_ranges.manage");
   const ctx = await requestContext();
   const { id } = await params;
+  const scope = resolveClinicalImportScope({
+    organizationId: session.user.organizationId, activeBranchId: session.activeBranchId,
+    activeBranch: session.activeBranch, branchScopes: session.user.branchScopes,
+    departmentScopes: session.user.departmentScopes,
+  });
+  if (!scope) return NextResponse.json({ error: "active_clinical_import_scope_required" }, { status: 403 });
 
   const batch = await prisma.catalogImportBatch.findFirst({
     where: { id, organizationId: session.user.organizationId },
@@ -41,7 +48,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   let targetUnitId: string | null = null;
 
   if (mappingType === "TEST_ALIAS") {
-    const target = await prisma.labTest.findFirst({ where: { id: targetId, organizationId: session.user.organizationId }, select: { id: true } });
+    const target = await prisma.labTest.findFirst({ where: { ...clinicalImportTestWhere(scope), id: targetId, status: "ACTIVE" }, select: { id: true } });
     if (!target) return NextResponse.json({ error: "target_not_found" }, { status: 404 });
     targetTestId = target.id;
   } else {
