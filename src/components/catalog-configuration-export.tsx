@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { catalogReviewCsv } from "@/lib/catalog-review-csv";
 import {
   catalogExportTypes, exportBundle, type CatalogExportType,
 } from "@/lib/catalog-configuration-export";
@@ -28,8 +29,8 @@ export function CatalogConfigurationExport({
     PRICE_LIST_ITEM: tr("Prices and effective dates", "الأسعار وتواريخ السريان"),
   }[t]);
 
-  async function download() {
-    if (busy || selected.length === 0) return;
+  async function download(format: "json" | "csv") {
+    if (busy || selected.length === 0 || (format === "csv" && selected.length !== 1)) return;
     setBusy(true);
     setMessage("");
     try {
@@ -71,14 +72,19 @@ export function CatalogConfigurationExport({
         groups.push({ entityType, records });
       }
       if (!organizationId) throw new Error("export_organization_missing");
-      const bundle = exportBundle(groups, organizationId, new Date().toISOString());
-      const url = URL.createObjectURL(new Blob([JSON.stringify(bundle, null, 2)], {
-        type: "application/json;charset=utf-8",
+      const exportedAt = new Date().toISOString();
+      const bundle = exportBundle(groups, organizationId, exportedAt);
+      const fileContents = format === "csv"
+        ? catalogReviewCsv(groups[0], organizationId, exportedAt)
+        : JSON.stringify(bundle, null, 2);
+      const url = URL.createObjectURL(new Blob([fileContents], {
+        type: format === "csv" ? "text/csv;charset=utf-8" : "application/json;charset=utf-8",
       }));
       try {
         const link = document.createElement("a");
         link.href = url;
-        link.download = "family-lab-catalog-" + new Date().toISOString().slice(0, 10) + ".json";
+        link.download = "family-lab-catalog-" + (format === "csv" ? groups[0].entityType.toLowerCase() + "-" : "")
+          + exportedAt.slice(0, 10) + "." + format;
         document.body.appendChild(link);
         link.click();
         link.remove();
@@ -86,10 +92,11 @@ export function CatalogConfigurationExport({
         URL.revokeObjectURL(url);
       }
       const total = groups.reduce((n, group) => n + group.records.length, 0);
-      setMessage(tr(
-        "Exported " + total + " configuration records. This is a paged live export, not an atomic point-in-time backup. Import requires separate staged validation.",
-        "تم تصدير " + total + " سجل إعدادات. هذا تصدير متسلسل للبيانات الحالية، وليس نسخة احتياطية ثابتة للحظة واحدة. إعادة الاستيراد تتطلب مراجعة مستقلة.",
-      ));
+      setMessage(format === "csv"
+        ? tr("Exported " + total + " rows for review only. CSV protects against spreadsheet formulas but is not a lossless restore file. Use JSON for structured values. This export is not an atomic backup.",
+          "تم تصدير " + total + " صف للمراجعة فقط. CSV يحدّ من صيغ الجداول الضارة لكنه ليس ملف استعادة مطابقاً للأصل. استخدم JSON للبيانات المهيكلة. التصدير ليس نسخة احتياطية ثابتة.")
+        : tr("Exported " + total + " configuration records. This is a paged live export, not an atomic point-in-time backup. Import requires separate staged validation.",
+          "تم تصدير " + total + " سجل إعدادات. هذا تصدير متسلسل للبيانات الحالية، وليس نسخة احتياطية ثابتة للحظة واحدة. إعادة الاستيراد تتطلب مراجعة مستقلة."));
     } catch (error) {
       setMessage(tr("Export stopped; no partial file was saved: ", "توقف التصدير ولم يُحفظ ملف جزئي: ")
         + (error instanceof Error ? error.message : "unknown_error"));
@@ -115,9 +122,20 @@ export function CatalogConfigurationExport({
         </label>
       ))}
     </div>
-    <button type="button" className="primary-button" disabled={busy || selected.length === 0} onClick={download}>
-      {busy ? tr("Exporting…", "جارٍ التصدير…") : tr("Download selected configuration (JSON)", "تنزيل الإعدادات المختارة (JSON)")}
-    </button>
+    <div className="review-actions">
+      <button type="button" className="primary-button" disabled={busy || selected.length === 0}
+        onClick={() => void download("json")}>
+        {busy ? tr("Exporting…", "جارٍ التصدير…") : tr("Download selected configuration (JSON)", "تنزيل الإعدادات المختارة (JSON)")}
+      </button>
+      <button type="button" className="secondary-button" disabled={busy || selected.length !== 1}
+        onClick={() => void download("csv")}>
+        {tr("Download selected entity (CSV review)", "تنزيل العنصر المختار (CSV للمراجعة)")}
+      </button>
+    </div>
+    <p className="muted">{tr(
+      "For CSV, select exactly one category above. CSV is for spreadsheet review only; JSON preserves the original structured data and exact clinical/financial fields.",
+      "لتنزيل CSV اختر نوع بيانات واحداً فقط. CSV للمراجعة في الجداول، أما JSON فيحفظ البنية الأصلية والقيم الطبية والمالية بدقتها.",
+    )}</p>
     {message && <p role="status" className="muted">{message}</p>}
   </section>;
 }
