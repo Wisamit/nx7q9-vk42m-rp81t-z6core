@@ -36,10 +36,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const now = new Date();
   const counterLabel = text(body?.counterLabel) || ticket.counterLabel;
-  await prisma.$transaction(async tx => {
-    await tx.queueTicket.update({
-      where: { id },
-      data: {
+  try {
+    await prisma.$transaction(async tx => {
+      const changed = await tx.queueTicket.updateMany({
+        where: {
+          id, organizationId: session.user.organizationId, branchId: ticket.branchId,
+          status: ticket.status, updatedAt: ticket.updatedAt,
+        },
+        data: {
         status: nextStatus,
         counterLabel,
         calledByUserId: nextStatus === "CALLED" ? session.user.id : ticket.calledByUserId,
@@ -48,6 +52,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         completedAt: nextStatus === "COMPLETED" ? now : ticket.completedAt,
       },
     });
+      if (changed.count !== 1) throw new Error("QUEUE_STATUS_CONFLICT");
     await tx.auditEvent.create({
       data: {
         organizationId: session.user.organizationId,
@@ -62,7 +67,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         userAgent: ctx.userAgent,
       },
     });
-  });
+    }, { isolationLevel: "Serializable" });
+  } catch {
+    return NextResponse.json({ error: "queue_status_conflict" }, { status: 409 });
+  }
 
   return NextResponse.json({ status: "ok", queueStatus: nextStatus });
 }

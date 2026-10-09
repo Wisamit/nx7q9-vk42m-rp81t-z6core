@@ -55,13 +55,37 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const now = new Date();
   const transportNotes = text(body.transportNotes) || visit.transportNotes;
-  await prisma.$transaction(async tx => {
-    await tx.homeCollectionVisit.update({
-      where: { id },
-      data: {
+  const scheduledDepartureAt = body.scheduledDepartureAt
+    ? new Date(String(body.scheduledDepartureAt)) : visit.scheduledDepartureAt;
+  if (scheduledDepartureAt && Number.isNaN(scheduledDepartureAt.getTime())) {
+    return NextResponse.json({ error: "invalid_departure_date" }, { status: 400 });
+  }
+  try {
+    await prisma.$transaction(async tx => {
+      // Always lock appointment before its visit, matching appointment cancellation.
+      const locked = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM appointments WHERE id = ${visit.appointmentId}
+        AND organization_id = ${session.user.organizationId} FOR UPDATE
+      `;
+      if (locked.length !== 1) throw new Error("APPOINTMENT_CHANGED");
+      const parent = await tx.appointment.findUniqueOrThrow({ where: { id: visit.appointmentId } });
+      const current = await tx.homeCollectionVisit.findUniqueOrThrow({ where: { id } });
+      if (parent.mode !== "HOME_COLLECTION" || ["CANCELLED", "NO_SHOW"].includes(parent.status)) {
+        throw new Error("APPOINTMENT_NOT_ACTIVE");
+      }
+      if (current.updatedAt.getTime() !== visit.updatedAt.getTime() ||
+          (nextStatus !== current.status && !(transitions[current.status] || []).includes(nextStatus))) {
+        throw new Error("VISIT_STATE_CHANGED");
+      }
+      if (nextStatus === "CANCELLED" && ["COLLECTING", "COLLECTED", "DELIVERED"].includes(current.status)) {
+        throw new Error("SPECIMEN_CUSTODY_ALREADY_STARTED");
+      }
+      const claim = await tx.homeCollectionVisit.updateMany({
+        where: { id, appointmentId: visit.appointmentId, status: current.status, updatedAt: current.updatedAt },
+        data: {
         assignedCollectorUserId: collectorId,
         status: nextStatus,
-        scheduledDepartureAt: body.scheduledDepartureAt ? new Date(String(body.scheduledDepartureAt)) : visit.scheduledDepartureAt,
+        scheduledDepartureAt,
         dispatchedAt: nextStatus === "EN_ROUTE" ? now : visit.dispatchedAt,
         arrivedAt: nextStatus === "ARRIVED" ? now : visit.arrivedAt,
         collectionStartedAt: nextStatus === "COLLECTING" ? now : visit.collectionStartedAt,
@@ -70,9 +94,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         transportNotes,
       },
     });
-    if (nextStatus === "DELIVERED" && visit.appointment.status !== "COMPLETED") {
-      await tx.appointment.update({
-        where: { id: visit.appointmentId },
+      if (claim.count !== 1) throw new Error("VISIT_STATE_CHANGED");
+    if (nextStatus === "DELIVERED") {
+      if (!["CHECKED_IN", "CONFIRMED"].includes(parent.status)) throw new Error("APPOINTMENT_NOT_READY");
+      await tx.appointment.updateMany({
+        where: { id: visit.appointmentId, organizationId: session.user.organizationId, status: parent.status },
         data: { status: "COMPLETED", completedAt: now },
       });
     }
@@ -90,7 +116,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         userAgent: ctx.userAgent,
       },
     });
-  });
+    }, { isolationLevel: "Serializable", timeout: 30000 });
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : "";
+    const codes = ["APPOINTMENT_NOT_ACTIVE", "APPOINTMENT_NOT_READY", "SPECIMEN_CUSTODY_ALREADY_STARTED"];
+    return NextResponse.json({ error: codes.includes(reason) ? reason.toLowerCase() : "home_collection_state_conflict" }, { status: 409 });
+  }
 
   return NextResponse.json({ status: "ok", visitStatus: nextStatus });
 }

@@ -17,10 +17,12 @@ export default async function PortalPage() {
 
   let allowedPatientIds: string[] = [];
   let reportPatientIds: string[] = [];
+  let bookingPatientIds: string[] = [];
 
   if (account.type === "PATIENT" && account.patientId) {
     allowedPatientIds = [account.patientId];
     reportPatientIds = [account.patientId];
+    bookingPatientIds = [account.patientId];
   } else if (account.type === "CORPORATE" && account.clientId) {
     const access = await prisma.corporatePortalPatientAccess.findMany({
       where: {
@@ -33,6 +35,7 @@ export default async function PortalPage() {
     });
     allowedPatientIds = access.filter(item => item.canBook || item.canViewReports).map(item => item.patientId);
     reportPatientIds = access.filter(item => item.canViewReports).map(item => item.patientId);
+    bookingPatientIds = access.filter(item => item.canBook).map(item => item.patientId);
   }
 
   const orderWhere = account.type === "PATIENT"
@@ -50,7 +53,7 @@ export default async function PortalPage() {
   const appointmentWhere = account.type === "PATIENT"
     ? { organizationId: account.organizationId, patientId: account.patientId! }
     : account.type === "CORPORATE"
-      ? { organizationId: account.organizationId, patientId: { in: allowedPatientIds } }
+      ? { organizationId: account.organizationId, portalAccountId: account.id, patientId: { in: allowedPatientIds } }
       : { organizationId: account.organizationId, id: "__none__" };
 
   const [orders, reports, appointments, invoices, bookingBranches, bookingPatients] = await Promise.all([
@@ -108,7 +111,7 @@ export default async function PortalPage() {
         })
       : account.type === "CORPORATE"
         ? prisma.patient.findMany({
-            where: { id: { in: allowedPatientIds }, organizationId: account.organizationId, status: "ACTIVE" },
+            where: { id: { in: bookingPatientIds }, organizationId: account.organizationId, status: "ACTIVE" },
             select: { id: true, patientNumber: true, fullNameEn: true },
             orderBy: { fullNameEn: "asc" },
           })

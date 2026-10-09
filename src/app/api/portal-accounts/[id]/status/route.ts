@@ -15,8 +15,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   });
   if (!account) return NextResponse.json({ error: "portal_account_not_found" }, { status: 404 });
 
-  await prisma.$transaction(async tx => {
-    await tx.portalAccount.update({
+  try {
+    await prisma.$transaction(async tx => {
+      // Login transactions must claim the same account row before creating sessions.
+      const locked = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM portal_accounts WHERE id = ${id}
+        AND organization_id = ${session.user.organizationId} FOR UPDATE
+      `;
+      if (locked.length !== 1) throw new Error("PORTAL_ACCOUNT_CHANGED");
+      const current = await tx.portalAccount.findUniqueOrThrow({ where: { id } });
+      if (current.updatedAt.getTime() !== account.updatedAt.getTime()) throw new Error("PORTAL_ACCOUNT_CHANGED");
+      await tx.portalAccount.update({
       where: { id },
       data: {
         status,
@@ -45,7 +54,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         userAgent: ctx.userAgent,
       },
     });
-  });
+    }, { isolationLevel: "Serializable", timeout: 30000 });
+  } catch {
+    return NextResponse.json({ error: "portal_account_status_conflict" }, { status: 409 });
+  }
 
   return NextResponse.json({ status: "ok", portalAccountStatus: status });
 }

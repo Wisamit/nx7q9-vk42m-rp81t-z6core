@@ -49,6 +49,18 @@ export async function POST(request: Request) {
   for (let attempt = 0; attempt < 5; attempt += 1) {
     try {
       const ticket = await prisma.$transaction(async tx => {
+        if (appointmentId) {
+          const locked = await tx.$queryRaw<Array<{ id: string }>>`
+            SELECT id FROM appointments WHERE id = ${appointmentId}
+            AND organization_id = ${session.user.organizationId}
+            AND branch_id = ${branchId} AND patient_id = ${patientId} FOR UPDATE
+          `;
+          if (locked.length !== 1) throw new Error("APPOINTMENT_CHANGED");
+          const current = await tx.appointment.findUniqueOrThrow({ where: { id: appointmentId } });
+          if (!["CONFIRMED", "CHECKED_IN"].includes(current.status)) {
+            throw new Error("APPOINTMENT_NOT_READY_FOR_QUEUE");
+          }
+        }
         const latest = await tx.queueTicket.findFirst({
           where: { branchId, stage, queueDate },
           orderBy: { sequence: "desc" },
@@ -70,9 +82,9 @@ export async function POST(request: Request) {
             issuedByUserId: session.user.id,
           },
         });
-        if (appointment && appointment.status === "CONFIRMED") {
-          await tx.appointment.update({
-            where: { id: appointment.id },
+        if (appointmentId) {
+          await tx.appointment.updateMany({
+            where: { id: appointmentId, organizationId: session.user.organizationId, status: "CONFIRMED" },
             data: { status: "CHECKED_IN", checkedInAt: new Date() },
           });
         }
@@ -90,10 +102,17 @@ export async function POST(request: Request) {
           },
         });
         return created;
-      });
+      }, { isolationLevel: "Serializable", timeout: 30000 });
       return NextResponse.json({ status: "ok", ticket }, { status: 201 });
     } catch (error) {
-      if (attempt === 4) throw error;
+      if (error instanceof Error && error.message === "APPOINTMENT_NOT_READY_FOR_QUEUE") {
+        return NextResponse.json({ error: "appointment_not_ready_for_queue" }, { status: 409 });
+      }
+      const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";
+      // Retry only uniqueness conflicts or serialization deadlocks, not broken business rules.
+      if (!["P2002", "P2034"].includes(code) || attempt === 4) {
+        return NextResponse.json({ error: "queue_sequence_conflict" }, { status: 409 });
+      }
     }
   }
   return NextResponse.json({ error: "queue_sequence_conflict" }, { status: 409 });
