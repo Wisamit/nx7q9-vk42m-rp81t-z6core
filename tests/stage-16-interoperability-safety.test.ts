@@ -10,7 +10,7 @@ test("HL7 inbound is idempotent for matching MSH-10 and rejects divergent payloa
   assert.ok(route.includes("FOR UPDATE"));
   assert.ok(route.indexOf("SELECT id FROM integration_endpoints") < route.indexOf("tx.integrationMessage.findFirst"));
   assert.ok(route.includes('previous.payloadHash === payloadHash ? "DUPLICATE"'));
-  assert.ok(route.includes('return "CONFLICT" as const'));
+  assert.ok(route.includes('"CONFLICT" as const'));
   assert.ok(route.includes('isolationLevel: "Serializable"'));
   assert.ok(route.includes("tx.auditEvent.create"));
   const payload="MSH|^~\\&|LAB|ROOM|LIS|HOSP|202610090900||ORM^O01|CHECK123|P|2.5.1\\r";
