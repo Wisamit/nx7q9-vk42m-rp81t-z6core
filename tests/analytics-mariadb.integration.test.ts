@@ -36,7 +36,7 @@ test("MariaDB analytics keep DECIMAL precision, branch scope and credit-note att
       [inv3,b,"C-"+suffix,"EGP","7.0000","ISSUED"],
       [invVoid,a,"D-"+suffix,"EGP","50.0000","VOID"],
     ]) {
-      await seed(invoiceSql,[invoice,org,branch,number,currency,amount,amount,user,status],
+      await seed(invoiceSql,[invoice,org,branch,number,currency,amount,amount,amount,user,status],
         "DELETE FROM invoices WHERE id=?",[invoice]);
     }
     await seed("INSERT INTO credit_notes(id,organization_id,branch_id,invoice_id,credit_note_number,currency,amount,reason,invoice_total_snapshot,credited_before_snapshot,balance_before_snapshot,credited_after_snapshot,balance_after_snapshot,issued_by_user_id) VALUES (?,?,?,?,?, 'EGP',5.0000,'Adjustment',99999999999999.9999,0,99999999999999.9999,5,99999999999994.9999,?)",
