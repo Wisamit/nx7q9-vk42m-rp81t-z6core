@@ -69,6 +69,18 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     }),
   ]);
   const rows = page.map((row, i) => {
+    // Non-reviewable staging states must not expose a resolved mapping or
+    // clinical source through this endpoint, even if stale issue metadata
+    // would otherwise make the row appear eligible.
+    if (row.status !== "VALID" && row.status !== "WARNING") {
+      return {
+        rowNumber: row.rowNumber, rowStatus: row.status, candidate: null,
+        disposition: "BLOCKED" as const,
+        issues: [row.status === "IMPORTED" || row.status === "SKIPPED"
+          ? "ROW_ALREADY_PROCESSED" : "ROW_NOT_REVIEWABLE"],
+        testId: null, componentId: null, unitId: null,
+      };
+    }
     const result = reconcileRangeReviewCandidate(candidates[i], tests, units, issues(row.validationIssues));
     // An unresolved scoped test cannot disclose its raw staged clinical context
     // or source validation metadata through this additional review endpoint.
@@ -80,10 +92,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     return {
       rowNumber: row.rowNumber, rowStatus: row.status,
       candidate: resolved ? candidates[i] : null,
-      disposition: row.status === "IMPORTED" || row.status === "SKIPPED" ? "BLOCKED" : result.disposition,
-      issues: row.status === "IMPORTED" || row.status === "SKIPPED" ? ["ROW_ALREADY_PROCESSED"] :
-        [...result.issues, ...(contextIssue ? [contextIssue] : []),
-          ...(ageOverlapIssue ? [ageOverlapIssue] : [])],
+      disposition: result.disposition,
+      issues: [...result.issues, ...(contextIssue ? [contextIssue] : []),
+        ...(ageOverlapIssue ? [ageOverlapIssue] : [])],
       testId: result.testId, componentId: result.componentId, unitId: result.unitId,
     };
   });

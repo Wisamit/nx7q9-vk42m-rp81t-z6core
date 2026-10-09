@@ -7,6 +7,7 @@ import { RevalidateImportButton } from "@/components/revalidate-import-button";
 import { ReferenceRangeImportButton } from "@/components/reference-range-import-button";
 import { ComponentImportReconciliation } from "@/components/component-import-reconciliation";
 import { PriceImportReconciliation } from "@/components/price-import-reconciliation";
+import { ReferenceRangeImportReconciliation } from "@/components/reference-range-import-reconciliation";
 import { getUiLocale, tr } from "@/lib/ui-i18n";
 import { authorizedStagedPrices, stagedPriceListCode } from "@/lib/catalog-import-disclosure";
 import { resolveClinicalImportScope } from "@/lib/catalog-clinical-import-scope";
@@ -191,6 +192,8 @@ export default async function ImportBatchPage({
 
     {entityCounts.COMPONENT > 0 && permissions.has("catalog.manage") && <ComponentImportReconciliation batchId={batch.id} locale={locale} />}
     {entityCounts.PRICE_LIST_ITEM > 0 && permissions.has("catalog.manage") && permissions.has("pricing.manage") && <PriceImportReconciliation batchId={batch.id} locale={locale} />}
+    {batch.sourceType === "CSV_REVIEW" && entityCounts.REFERENCE_INTERVAL > 0 &&
+      permissions.has("catalog.reference_ranges.manage") && <ReferenceRangeImportReconciliation batchId={batch.id} locale={locale} />}
 
     <section className="table-card">
       <div className="table-toolbar">
