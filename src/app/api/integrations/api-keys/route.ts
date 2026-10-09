@@ -40,6 +40,18 @@ export async function POST(request: Request) {
   if (endpoint.branchId && !canAccessBranch(session, endpoint.branchId)) {
     return NextResponse.json({ error: "branch_forbidden" }, { status: 403 });
   }
+  if (scopes.some(scope =>
+    scope === "fhir.read"
+      ? !["FHIR_R4", "REST"].includes(endpoint.endpointType) ||
+        !["OUTBOUND", "BIDIRECTIONAL"].includes(endpoint.direction)
+      : scope === "hl7.write"
+        ? endpoint.endpointType !== "HL7_V2" ||
+          !["INBOUND", "BIDIRECTIONAL"].includes(endpoint.direction)
+        : endpoint.endpointType !== "HL7_V2" ||
+          !["OUTBOUND", "BIDIRECTIONAL"].includes(endpoint.direction)
+  )) {
+    return NextResponse.json({ error: "scope_endpoint_direction_mismatch" }, { status: 409 });
+  }
 
   const prefix = randomBytes(6).toString("hex");
   const secret = randomBytes(32).toString("base64url");
