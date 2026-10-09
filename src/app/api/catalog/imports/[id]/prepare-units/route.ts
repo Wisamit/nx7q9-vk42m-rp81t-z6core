@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { clinicalImportTestWhere, resolveClinicalImportScope } from "@/lib/catalog-clinical-import-scope";
 
 function object(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -21,6 +22,12 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
   const session = await requirePermission("catalog.reference_ranges.manage");
   const ctx = await requestContext();
   const { id } = await params;
+  const scope = resolveClinicalImportScope({
+    organizationId: session.user.organizationId, activeBranchId: session.activeBranchId,
+    activeBranch: session.activeBranch, branchScopes: session.user.branchScopes,
+    departmentScopes: session.user.departmentScopes,
+  });
+  if (!scope) return NextResponse.json({ error: "active_clinical_import_scope_required" }, { status: 403 });
 
   const batch = await prisma.catalogImportBatch.findFirst({
     where: { id, organizationId: session.user.organizationId },
@@ -43,6 +50,16 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
 
   const testRows = batch.rows.filter((row) => row.entityType === "TEST" && row.importedEntityId);
   const rangeRows = batch.rows.filter((row) => row.entityType === "REFERENCE_INTERVAL" && row.status !== "IMPORTED");
+  const importedIds = [...new Set(testRows.map(row => row.importedEntityId).filter((id): id is string => !!id))];
+  if (importedIds.length) {
+    const scopedTests = await prisma.labTest.findMany({
+      where: { ...clinicalImportTestWhere(scope), id: { in: importedIds }, status: "ACTIVE" },
+      select: { id: true },
+    });
+    if (scopedTests.length !== importedIds.length) {
+      return NextResponse.json({ error: "legacy_test_department_or_branch_scope_denied" }, { status: 403 });
+    }
+  }
 
   const rawUnits = new Set<string>();
   for (const row of testRows) {
@@ -95,7 +112,7 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
       if (!unit) continue;
 
       const test = await tx.labTest.findFirst({
-        where: { id: row.importedEntityId, organizationId: session.user.organizationId },
+        where: { ...clinicalImportTestWhere(scope), id: row.importedEntityId, status: "ACTIVE" },
         select: { id: true, defaultUnitId: true },
       });
       if (!test || test.defaultUnitId) continue;
