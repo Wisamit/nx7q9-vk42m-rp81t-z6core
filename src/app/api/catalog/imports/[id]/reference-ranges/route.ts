@@ -317,6 +317,14 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
   const session = await requirePermission("catalog.reference_ranges.manage");
   const ctx = await requestContext();
   const { id } = await params;
+  const scope = resolveClinicalImportScope({
+    organizationId: session.user.organizationId,
+    activeBranchId: session.activeBranchId,
+    activeBranch: session.activeBranch,
+    branchScopes: session.user.branchScopes,
+    departmentScopes: session.user.departmentScopes,
+  });
+  if (!scope) return NextResponse.json({ error: "active_clinical_import_scope_required" }, { status: 403 });
   const batch = await prisma.catalogImportBatch.findFirst({ where: { id, organizationId: session.user.organizationId } });
   if (!batch) return NextResponse.json({ error: "batch_not_found" }, { status: 404 });
   if (batch.sourceType === "CSV_REVIEW") return NextResponse.json({ error: "csv_review_is_not_clinical_import" }, { status: 409 });
