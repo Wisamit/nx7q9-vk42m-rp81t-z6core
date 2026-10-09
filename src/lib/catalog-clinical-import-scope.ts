@@ -1,3 +1,5 @@
+import type { Prisma } from "../../generated/prisma/client";
+
 export type ClinicalImportScope = {
   organizationId: string;
   branchId: string;
@@ -45,4 +47,19 @@ export function permittedClinicalImportTest(
   if (scope.departmentIds.length > 0 && (!test.departmentId || !scope.departmentIds.includes(test.departmentId))) return false;
   if (test.departmentId && (!test.department || test.department.status !== "ACTIVE")) return false;
   return !test.department?.branchId || test.department.branchId === scope.branchId;
+}
+
+/** Restrict database reads AND transaction-time clinical writes by test scope. */
+export function clinicalImportTestWhere(scope: ClinicalImportScope): Prisma.LabTestWhereInput {
+  return {
+    organizationId: scope.organizationId,
+    ...(scope.departmentIds.length ? { departmentId: { in: [...scope.departmentIds] } } : {}),
+    OR: [
+      { departmentId: null },
+      { department: { is: {
+        status: "ACTIVE",
+        OR: [{ branchId: null }, { branchId: scope.branchId }],
+      } } },
+    ],
+  };
 }
