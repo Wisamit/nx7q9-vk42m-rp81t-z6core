@@ -47,68 +47,96 @@ export async function POST(request: Request) {
 
   const ok = await compare(password, account.passwordHash);
   if (!ok) {
-    const attempts = account.failedLoginAttempts + 1;
-    const lock = attempts >= 5 ? new Date(Date.now() + 15 * 60_000) : null;
-    await prisma.$transaction([
-      prisma.portalAccount.update({
-        where: { id: account.id },
-        data: {
-          failedLoginAttempts: lock ? 0 : attempts,
-          lockedUntil: lock,
-          status: lock ? "LOCKED" : account.status,
-        },
-      }),
-      prisma.auditEvent.create({
-        data: {
-          organizationId: account.organizationId,
-          actorUserId: null,
-          action: "PORTAL_LOGIN_FAILED",
-          entityType: "PortalAccount",
-          entityId: account.id,
-          newValues: { locked: Boolean(lock) },
-          ipAddress: ctx.ipAddress,
-          userAgent: ctx.userAgent,
-        },
-      }),
-    ]);
+    try {
+      await prisma.$transaction(async tx => {
+        const locked = await tx.$queryRaw<Array<{ id: string }>>`
+          SELECT id FROM portal_accounts WHERE id = ${account.id}
+          AND organization_id = ${account.organizationId} FOR UPDATE
+        `;
+        if (locked.length !== 1) throw new Error("PORTAL_ACCOUNT_CHANGED");
+        const current = await tx.portalAccount.findUniqueOrThrow({ where: { id: account.id } });
+        if (current.status === "DISABLED") throw new Error("ACCOUNT_DISABLED");
+        // Do not count a failed comparison against a password that was replaced meanwhile.
+        if (current.passwordHash !== account.passwordHash) throw new Error("PASSWORD_CHANGED");
+        const attempts = current.failedLoginAttempts + 1;
+        const lock = attempts >= 5 ? new Date(Date.now() + 15 * 60_000) : null;
+        await tx.portalAccount.update({
+          where: { id: account.id },
+          data: {
+            failedLoginAttempts: lock ? 0 : attempts,
+            lockedUntil: lock,
+            status: lock ? "LOCKED" : current.status,
+          },
+        });
+        await tx.auditEvent.create({
+          data: {
+            organizationId: account.organizationId,
+            actorUserId: null,
+            action: "PORTAL_LOGIN_FAILED",
+            entityType: "PortalAccount",
+            entityId: account.id,
+            newValues: { locked: Boolean(lock) },
+            ipAddress: ctx.ipAddress,
+            userAgent: ctx.userAgent,
+          },
+        });
+      }, { isolationLevel: "Serializable", timeout: 30000 });
+    } catch {
+      return NextResponse.json({ error: "invalid_credentials" }, { status: 401 });
+    }
     return NextResponse.json({ error: "invalid_credentials" }, { status: 401 });
   }
 
   const token = newPortalToken();
   const expiresAt = portalSessionExpiry();
-  const session = await prisma.$transaction(async tx => {
-    const created = await tx.portalSession.create({
-      data: {
-        portalAccountId: account.id,
-        tokenHash: hashPortalToken(token),
-        ipAddress: ctx.ipAddress,
-        userAgent: ctx.userAgent,
-        expiresAt,
-      },
-    });
-    await tx.portalAccount.update({
-      where: { id: account.id },
-      data: {
-        status: "ACTIVE",
-        failedLoginAttempts: 0,
-        lockedUntil: null,
-        lastLoginAt: new Date(),
-      },
-    });
-    await tx.auditEvent.create({
-      data: {
-        organizationId: account.organizationId,
-        actorUserId: null,
-        action: "PORTAL_LOGIN_SUCCEEDED",
-        entityType: "PortalAccount",
-        entityId: account.id,
-        sessionId: created.id,
-        ipAddress: ctx.ipAddress,
-        userAgent: ctx.userAgent,
-      },
-    });
-    return created;
-  });
+  let session;
+  try {
+    session = await prisma.$transaction(async tx => {
+      const locked = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM portal_accounts WHERE id = ${account.id}
+        AND organization_id = ${account.organizationId} FOR UPDATE
+      `;
+      if (locked.length !== 1) throw new Error("PORTAL_ACCOUNT_CHANGED");
+      const current = await tx.portalAccount.findUniqueOrThrow({ where: { id: account.id } });
+      if (current.status === "DISABLED" || current.passwordHash !== account.passwordHash ||
+          (current.lockedUntil && current.lockedUntil > new Date())) {
+        throw new Error("PORTAL_ACCOUNT_CHANGED");
+      }
+      const created = await tx.portalSession.create({
+        data: {
+          portalAccountId: account.id,
+          tokenHash: hashPortalToken(token),
+          ipAddress: ctx.ipAddress,
+          userAgent: ctx.userAgent,
+          expiresAt,
+        },
+      });
+      await tx.portalAccount.update({
+        where: { id: account.id },
+        data: {
+          status: "ACTIVE",
+          failedLoginAttempts: 0,
+          lockedUntil: null,
+          lastLoginAt: new Date(),
+        },
+      });
+      await tx.auditEvent.create({
+        data: {
+          organizationId: account.organizationId,
+          actorUserId: null,
+          action: "PORTAL_LOGIN_SUCCEEDED",
+          entityType: "PortalAccount",
+          entityId: account.id,
+          sessionId: created.id,
+          ipAddress: ctx.ipAddress,
+          userAgent: ctx.userAgent,
+        },
+      });
+      return created;
+    }, { isolationLevel: "Serializable", timeout: 30000 });
+  } catch {
+    return NextResponse.json({ error: "invalid_credentials" }, { status: 401 });
+  }
 
   const store = await cookies();
   store.set(PORTAL_SESSION_COOKIE, token, {
