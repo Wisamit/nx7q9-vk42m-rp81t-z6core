@@ -3,9 +3,11 @@ import Link from "next/link";
 import Image from "next/image";
 import QRCode from "qrcode";
 import { notFound } from "next/navigation";
-import { canAccessBranch, permissionSet, requirePermission } from "@/lib/auth";
+import { authorizedDepartmentIds, canAccessBranch, permissionSet, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { canonicalReportOrigin } from "@/lib/report-origin";
+import { compareCurrentReportWithPrevious, type ReportComparisonEvidence } from "@/lib/report-cumulative";
+import { ReportCumulativeComparison } from "@/components/report-cumulative-comparison";
 import { PrintReportButton } from "@/components/print-report-button";
 import { ReportPdfButton } from "@/components/report-pdf-button";
 import { ReportOutboundDelivery } from "@/components/report-outbound-delivery";
@@ -204,6 +206,80 @@ export default async function DiagnosticReportPage({ params }: { params: Promise
       <section className="detail-card"><p className="muted">{tr(locale, "A report version is created when a verified result is released.", "يتم إنشاء إصدار تقرير عند إصدار نتيجة تم التحقق منها.")}</p></section>
     </main>;
   }
+
+  // Companion history is staff-only and never modifies a released report,
+  // PDF, template or clinical reference snapshot. A department-restricted user
+  // cannot infer another department's historic observations from this view.
+  const activeBranchIds = session.user.branchScopes
+    .filter(scope => scope.branch.status === "ACTIVE")
+    .map(scope => scope.branchId);
+  const comparisonEligible = latest.version === report.currentVersion
+    && ["PARTIAL", "FINAL", "AMENDED"].includes(latest.status)
+    && authorizedDepartmentIds(session).length === 0;
+  const canonicalPatientId = report.order.patient.mergedIntoPatientId || report.order.patientId;
+  const canonicalPatient = comparisonEligible
+    ? await prisma.patient.findFirst({
+        where: { id: canonicalPatientId, organizationId: session.user.organizationId },
+        select: { id: true, mergedFrom: { select: { id: true } } },
+      })
+    : null;
+  const linkedPatientIds = canonicalPatient
+    ? [canonicalPatient.id, ...canonicalPatient.mergedFrom.map(alias => alias.id)]
+    : [];
+
+  // Bound the previous-order scan, and disclose explicitly when older records
+  // remain. Never equate a bounded search with a complete clinical history.
+  const inspectedCandidates = comparisonEligible && linkedPatientIds.length > 0
+    ? await prisma.diagnosticReport.findMany({
+        where: {
+          organizationId: session.user.organizationId,
+          id: { not: report.id },
+          order: {
+            organizationId: session.user.organizationId,
+            patientId: { in: linkedPatientIds },
+            orderingBranchId: { in: activeBranchIds },
+            orderedAt: { lt: report.order.orderedAt },
+          },
+        },
+        select: {
+          currentVersion: true,
+          order: { select: { id: true, accessionNumber: true, orderedAt: true } },
+          versions: {
+            orderBy: { version: "desc" },
+            take: 1,
+            select: {
+              version: true,
+              status: true,
+              issuedAt: true,
+              contentSnapshot: true,
+              resultVersionSnapshot: true,
+            },
+          },
+        },
+        orderBy: { order: { orderedAt: "desc" } },
+        take: 101,
+      })
+    : [];
+  const moreComparisonHistory = inspectedCandidates.length > 100;
+  const comparisonHistory = inspectedCandidates.slice(0, 100);
+  const currentComparisonEvidence: ReportComparisonEvidence = {
+    currentVersion: report.currentVersion,
+    order: {
+      id: report.order.id,
+      accessionNumber: report.order.accessionNumber,
+      orderedAt: report.order.orderedAt,
+    },
+    versions: [{
+      version: latest.version,
+      status: latest.status,
+      issuedAt: latest.issuedAt,
+      contentSnapshot: latest.contentSnapshot,
+      resultVersionSnapshot: latest.resultVersionSnapshot,
+    }],
+  };
+  const comparisonRows = comparisonEligible
+    ? compareCurrentReportWithPrevious(currentComparisonEvidence, comparisonHistory, activeBranchIds)
+    : [];
 
   const snapshot = latest.contentSnapshot as unknown as Snapshot;
   const templateSnapshot = latest.templateSnapshot as unknown as ReportTemplateSnapshot | null;
@@ -456,6 +532,21 @@ export default async function DiagnosticReportPage({ params }: { params: Promise
         </div>
       </footer>
     </article>
+
+    {comparisonEligible && <ReportCumulativeComparison
+      rows={comparisonRows}
+      locale={locale}
+      examinedReports={comparisonHistory.length}
+      moreReportsAvailable={moreComparisonHistory}
+    />}
+
+    {latest.status === "RETRACTED" && <section className="detail-card no-print" role="alert">
+      <strong>{tr(locale, "Withdrawn report — no current comparison permitted", "تقرير مسحوب — لا يُسمح بعرض مقارنة حالية")}</strong>
+      <p>{tr(locale,
+        "Do not use this historical report to interpret current results.",
+        "لا تستخدم هذا التقرير التاريخي لتفسير النتائج الحالية.",
+      )}</p>
+    </section>}
 
     {permissions.has("reports.deliver") && <ReportOutboundDelivery
       reportVersionId={latest.id}
