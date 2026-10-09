@@ -11,7 +11,7 @@ Branch-aware management dashboard, test volume, source/referrer analytics, test 
 
 | Area | Verified gap and new guard |
 |---|---|
-| Dashboard finance authorization | Financial snapshot queried and displayed for users without `billing.view`. Now gated on both DB access and rendering by billing permission. |
+| Dashboard and management finance authorization | Financial snapshots and management reporting values were visible with operational analytics access alone. Both the dashboard and management analytics now require `billing.view` for DB money queries, invoice/refund/credit widgets, branch finances, source/referrer ordered values and profitability. Operational metrics remain available with `analytics.view`. |
 | Financial arithmetic | Replaced JavaScript floating-point accumulated currency totals with existing bigint-backed `aggregateFinancialReport` and fixed four-decimal formatting. |
 | Refund/credit reporting | Management report now explicitly includes dated POSTED refunds, ISSUED credit notes, gross and net collections separately by currency. |
 | Temporal semantics | Issue-period invoice totals and CURRENT receivable balances are explicitly distinguished from payment/refund/credit transaction flows; no implied historical as-of balance. |
