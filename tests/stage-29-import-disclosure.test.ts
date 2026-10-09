@@ -34,7 +34,7 @@ test("price recon never echoes financial candidate data on unresolved scope", ()
   assert.match(s,/PRICE_LIST_SCOPE_UNRESOLVED/);
   assert.match(s,/unitPrice: ""/);
   assert.match(s,/stagedIssues: \[\]/);
-  assert.match(s,/priceList: \{ organizationId/); // Not required: structural query is scoped by organization above.
+  assert.match(s,/organizationId, code: \{ in: listCodes \}/);
 });
 test("catalog-only staff cannot stage financial JSON or see package price/price batch listing", () => {
   const json = readFileSync("src/app/api/catalog/imports/route.ts","utf8");
