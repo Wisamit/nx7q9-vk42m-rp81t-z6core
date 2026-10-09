@@ -48,6 +48,7 @@ jobs:
       - run: node --experimental-strip-types --test tests/stage-19-longitudinal-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-20-report-cumulative-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-21-patient-history-mariadb.integration.test.ts
+      - run: node --experimental-strip-types --test tests/stage-22-aliquot-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/microbiology-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/analyzer-work-orders-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/equipment-qc-mariadb.integration.test.ts
