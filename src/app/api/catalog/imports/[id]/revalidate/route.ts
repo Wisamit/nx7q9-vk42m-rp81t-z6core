@@ -69,16 +69,32 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
 
   const nextBatchStatus = counts.ERROR ? "DRAFT" : "VALIDATED";
 
+  try {
   await prisma.$transaction(async (tx) => {
+    // A concurrent safe-master commit atomically moves the batch to IMPORTED.
+    // Never revalidate using a snapshot from before that state transition.
+    const batchClaim = await tx.catalogImportBatch.updateMany({
+      where: {
+        id: batch.id, organizationId: session.user.organizationId,
+        status: { in: ["DRAFT", "VALIDATED"] },
+        updatedAt: batch.updatedAt,
+      },
+      data: { updatedAt: new Date() },
+    });
+    if (batchClaim.count !== 1) throw new Error("catalog_revalidate_claim_conflict");
     for (const item of updates) {
-      await tx.catalogImportRow.update({
-        where: { id: item.row.id },
+      const claimed = await tx.catalogImportRow.updateMany({
+        where: {
+          id: item.row.id, batchId: batch.id,
+          status: { notIn: ["IMPORTED", "SKIPPED"] }, importedEntityId: null,
+        },
         data: {
           normalizedData: item.normalized,
           validationIssues: item.issues as Prisma.InputJsonArray,
           status: item.status,
         },
       });
+      if (claimed.count !== 1) throw new Error("catalog_revalidate_claim_conflict");
     }
 
     await tx.catalogImportBatch.update({
@@ -104,6 +120,12 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
       },
     });
   }, { timeout: 30000 });
+  } catch (error) {
+    if (error instanceof Error && error.message === "catalog_revalidate_claim_conflict") {
+      return NextResponse.json({ error: "processed_import_batch_immutable" }, { status: 409 });
+    }
+    throw error;
+  }
 
   return NextResponse.json({ status: nextBatchStatus, summary: { total: updates.length, ...counts } });
 }
