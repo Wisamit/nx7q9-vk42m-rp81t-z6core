@@ -53,6 +53,7 @@ export function permittedClinicalImportTest(
 export function clinicalImportTestWhere(scope: ClinicalImportScope): Prisma.LabTestWhereInput {
   return {
     organizationId: scope.organizationId,
+    status: "ACTIVE",
     ...(scope.departmentIds.length ? { departmentId: { in: [...scope.departmentIds] } } : {}),
     OR: [
       { departmentId: null },
