@@ -5,16 +5,24 @@ import { getUiLocale, statusLabel, tr } from "@/lib/ui-i18n";
 
 export const dynamic = "force-dynamic";
 
-export default async function ReportsPage() {
+export default async function ReportsPage({ searchParams }: { searchParams: Promise<{ page?: string }> }) {
   const session = await requirePermission("reports.view");
   const locale = getUiLocale(session.user.preferredLocale);
   const branchIds = session.user.branchScopes.map(scope => scope.branchId);
+  const params = await searchParams;
+  const requestedPage = params.page;
+  const parsedPage = typeof requestedPage === "string" && /^\\d{1,8}$/.test(requestedPage) ? Number(requestedPage) : 1;
+  const pageSize = 50;
+  const where = {
+    organizationId: session.user.organizationId,
+    order: { orderingBranchId: { in: branchIds } },
+  };
+  const totalReports = await prisma.diagnosticReport.count({ where });
+  const totalPages = Math.max(1, Math.ceil(totalReports / pageSize));
+  const page = Math.max(1, Math.min(parsedPage || 1, totalPages));
 
   const reports = await prisma.diagnosticReport.findMany({
-    where: {
-      organizationId: session.user.organizationId,
-      order: { orderingBranchId: { in: branchIds } },
-    },
+    where,
     include: {
       order: { include: { patient: true, orderingBranch: true } },
       versions: {
@@ -24,7 +32,8 @@ export default async function ReportsPage() {
       },
     },
     orderBy: { updatedAt: "desc" },
-    take: 200,
+    skip: (page - 1) * pageSize,
+    take: pageSize,
   });
 
   return <main className="catalog-shell">
@@ -38,7 +47,7 @@ export default async function ReportsPage() {
     </header>
 
     <section className="table-card">
-      <div className="table-toolbar"><h2>{tr(locale, "Released Reports", "التقارير الصادرة")}</h2><span>{reports.length} {tr(locale, "shown", "معروضة")}</span></div>
+      <div className="table-toolbar"><h2>{tr(locale, "Released Reports", "التقارير الصادرة")}</h2><span>{reports.length} {tr(locale, "shown", "معروضة")} · {totalReports} {tr(locale, "total", "الإجمالي")}</span></div>
       <div className="table-wrap">
         <table>
           <thead><tr><th>{tr(locale, "Accession", "رقم الطلب")}</th><th>{tr(locale, "Patient", "المريض")}</th><th>{tr(locale, "Branch", "الفرع")}</th><th>{tr(locale, "Version", "الإصدار")}</th><th>{tr(locale, "Type", "النوع")}</th><th>{tr(locale, "Issued", "تاريخ الإصدار")}</th><th>{tr(locale, "Issued by", "أصدر بواسطة")}</th><th></th></tr></thead>
@@ -61,6 +70,11 @@ export default async function ReportsPage() {
           </tbody>
         </table>
       </div>
+      <nav className="result-actions" aria-label={tr(locale, "Report pages", "صفحات التقارير")}>
+        {page > 1 && <Link className="secondary-link" href={`/reports?page=${page - 1}`}>{tr(locale, "Previous", "السابق")}</Link>}
+        <span>{tr(locale, "Page", "الصفحة")} {page} / {totalPages}</span>
+        {page < totalPages && <Link className="secondary-link" href={`/reports?page=${page + 1}`}>{tr(locale, "Next", "التالي")}</Link>}
+      </nav>
     </section>
   </main>;
 }
