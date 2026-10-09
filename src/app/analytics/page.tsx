@@ -207,6 +207,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
         testCodeSnapshot: true,
         testNameEnSnapshot: true,
         testNameArSnapshot: true,
+        tatDueAt: true,
         order: { select: { orderedAt: true, orderingBranchId: true } },
         results: {
           where: { releasedAt: { not: null }, status: { in: ["RELEASED", "AMENDED"] } },
@@ -389,8 +390,15 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
     name: localizedName(branch),
     orders: 0,
     completed: 0,
+    patients: new Set<string>(),
+    testVolume: 0,
+    invoiceCountByCurrency: new Map<string, number>(),
     revenue: new Map<string, bigint>(),
+    discounts: new Map<string, bigint>(),
+    outstanding: new Map<string, bigint>(),
     collected: new Map<string, bigint>(),
+    slaCount: 0,
+    slaWithin: 0,
     tatMinutes: [] as number[],
     specimens: 0,
     rejectedSpecimens: 0,
@@ -399,12 +407,17 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
     const row = branchMap.get(order.orderingBranchId);
     if (!row) continue;
     row.orders++;
+    row.patients.add(order.patientId);
+    row.testVolume += order.items.length;
     if (order.status === "COMPLETED") row.completed++;
   }
   for (const invoice of invoices) {
     const row = branchMap.get(invoice.branchId);
     if (!row) continue;
     addCurrencyAmount(row.revenue, invoice.currency, invoice.total.toString());
+    addCurrencyAmount(row.discounts, invoice.currency, invoice.discountTotal.toString());
+    addCurrencyAmount(row.outstanding, invoice.currency, invoice.balanceAmount.toString());
+    row.invoiceCountByCurrency.set(invoice.currency, (row.invoiceCountByCurrency.get(invoice.currency) || 0) + 1);
   }
   for (const payment of payments) {
     const row = branchMap.get(payment.branchId);
@@ -421,7 +434,13 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
     if (minutes < 0 || !Number.isFinite(minutes)) continue;
     tatMinutes.push(minutes);
     const branchRow = branchMap.get(item.order.orderingBranchId);
-    branchRow?.tatMinutes.push(minutes);
+    if (branchRow) {
+      branchRow.tatMinutes.push(minutes);
+      if (item.tatDueAt) {
+        branchRow.slaCount++;
+        if (latest.releasedAt <= item.tatDueAt) branchRow.slaWithin++;
+      }
+    }
     const row = tatByTest.get(item.testId) || { label: item.testCodeSnapshot + " — " + (locale === "ar" ? item.testNameArSnapshot || item.testNameEnSnapshot : item.testNameEnSnapshot), values: [] };
     row.values.push(minutes);
     tatByTest.set(item.testId, row);
@@ -548,18 +567,25 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
 
     <section className="table-card detail-section">
       <div className="table-toolbar"><h2>{tr(locale, "Branch Comparison", "مقارنة الفروع")}</h2><span>{branchMap.size} {tr(locale, "branches", "فروع")}</span></div>
+      <p className="muted">{tr(locale, "Average invoice and revenue are shown by original currency; current outstanding is not a historical period-end balance. TAT SLA covers only released tests with stored due-time snapshots.", "متوسط الفاتورة والإيرادات حسب العملة الأصلية؛ المستحق الحالي ليس رصيد نهاية الفترة التاريخي. الالتزام بزمن الإنجاز يشمل النتائج الصادرة ذات موعد الاستحقاق المحفوظ.")}</p>
       <div className="table-wrap"><table>
-        <thead><tr><th>{tr(locale, "Branch", "الفرع")}</th><th>{tr(locale, "Orders", "الطلبات")}</th><th>{tr(locale, "Completed", "المكتملة")}</th><th>{tr(locale, "Completion", "نسبة الإكمال")}</th><th>{tr(locale, "Avg TAT", "متوسط TAT")}</th><th>{tr(locale, "Specimen rejection", "رفض العينات")}</th><th>{tr(locale, "Revenue", "الإيراد")}</th><th>{tr(locale, "Collected", "المحصّل")}</th></tr></thead>
+        <thead><tr><th>{tr(locale, "Branch", "الفرع")}</th><th>{tr(locale, "Orders", "الطلبات")}</th><th>{tr(locale, "Patients", "المرضى")}</th><th>{tr(locale, "Tests", "الفحوصات")}</th><th>{tr(locale, "Completed", "المكتملة")}</th><th>{tr(locale, "Completion", "نسبة الإكمال")}</th><th>{tr(locale, "Avg TAT", "متوسط TAT")}</th><th>{tr(locale, "TAT SLA", "التزام وقت الفحوصات")}</th><th>{tr(locale, "Specimen rejection", "رفض العينات")}</th><th>{tr(locale, "Invoiced", "المفوتر")}</th><th>{tr(locale, "Average invoice", "متوسط الفاتورة")}</th><th>{tr(locale, "Discounts", "الخصومات")}</th><th>{tr(locale, "Current outstanding", "المستحق الحالي")}</th><th>{tr(locale, "Collected", "المحصّل")}</th></tr></thead>
         <tbody>{[...branchMap.values()].map(branch => {
           const avg = branch.tatMinutes.length ? branch.tatMinutes.reduce((a,b) => a+b,0) / branch.tatMinutes.length : null;
           return <tr key={branch.id}>
             <td><strong>{branch.code}</strong><br/><small>{branch.name}</small></td>
             <td>{branch.orders}</td>
+            <td>{branch.patients.size}</td>
+            <td>{branch.testVolume}</td>
             <td>{branch.completed}</td>
             <td>{branch.orders ? (branch.completed / branch.orders * 100).toFixed(1) + "%" : "—"}</td>
             <td>{minuteLabel(avg, locale)}</td>
+            <td>{branch.slaCount ? (branch.slaWithin / branch.slaCount * 100).toFixed(1) + "% (n=" + branch.slaCount + ")" : "—"}</td>
             <td>{branch.specimens ? (branch.rejectedSpecimens / branch.specimens * 100).toFixed(2) + "%" : "—"}</td>
             <td>{[...branch.revenue.entries()].map(([currency, amount]) => moneyText(amount, currency)).join(" · ") || "—"}</td>
+            <td>{[...branch.revenue.entries()].map(([currency, amount]) => moneyText(amount / BigInt(branch.invoiceCountByCurrency.get(currency) || 1), currency)).join(" · ") || "—"}</td>
+            <td>{[...branch.discounts.entries()].map(([currency, amount]) => moneyText(amount, currency)).join(" · ") || "—"}</td>
+            <td>{[...branch.outstanding.entries()].map(([currency, amount]) => moneyText(amount, currency)).join(" · ") || "—"}</td>
             <td>{[...branch.collected.entries()].map(([currency, amount]) => moneyText(amount, currency)).join(" · ") || "—"}</td>
           </tr>;
         })}</tbody>
