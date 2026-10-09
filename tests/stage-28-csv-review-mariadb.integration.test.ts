@@ -62,6 +62,7 @@ test("MariaDB two sessions: CSV evidence remains DRAFT, isolated by tenant and i
     const sourcePrice=typeof price.source_data==="string" ? JSON.parse(price.source_data) : price.source_data;
     assert.equal(sourcePrice.unitPrice,"123.4500");
     const component=visible.find(row=>row.entity_type==="COMPONENT");
+    assert.ok(component);
     const componentSource=typeof component.source_data==="string" ? JSON.parse(component.source_data) : component.source_data;
     assert.equal(componentSource.nameEn,"Glucose, fasting");
 
