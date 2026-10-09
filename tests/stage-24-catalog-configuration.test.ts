@@ -29,7 +29,7 @@ test("configuration bundle preserves group provenance and doesn't imply an atomi
   const result = exportBundle(group, "ORGANIZATION", date);
   assert.equal(result.consistency, "paged-live-not-atomic");
   assert.equal(result.schemaVersion, 1);
-  assert.equal(result.groups[0].records[0].unitPrice, "11.2350");
+  assert.equal((result.groups[0].records[0] as { unitPrice: string }).unitPrice, "11.2350");
   assert.equal(result.format, "family-lab-catalog-bundle");
 });
 
