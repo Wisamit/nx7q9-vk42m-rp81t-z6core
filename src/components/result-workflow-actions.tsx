@@ -211,6 +211,16 @@ export function ResultWorkflowActions({
 
       if (body.error === "medical_validator_must_differ_from_technical_reviewer") {
         setMessage(tr("Medical validation requires a different authorized user under the snapshotted policy.", "تتطلب سياسة التحقق المحفوظة مستخدماً مخولاً مختلفاً عن منفذ المراجعة الفنية."));
+      } else if (body.error === "technical_review_evidence_missing") {
+        setMessage(tr(
+          "Medical validation requires a matching, approved technical review record for this result. Return the result for technical re-review.",
+          "يتطلب الاعتماد الطبي سجل مراجعة فنية معتمداً ومطابقاً لهذه النتيجة. أعد النتيجة للمراجعة الفنية من جديد.",
+        ));
+      } else if (body.error === "medical_validation_policy_snapshot_invalid") {
+        setMessage(tr(
+          "The medical validation policy snapshot is missing or inconsistent with this test/branch. Do not approve; escalate for clinical review.",
+          "نسخة سياسة الاعتماد الطبي مفقودة أو لا تطابق هذا الفحص أو الفرع. لا تعتمد النتيجة؛ صعّدها للمراجعة السريرية.",
+        ));
       } else if (body.error === "validation_hold_review_required") {
         setMessage(tr("Medical validation is blocked until active blocking validation holds are resolved.", "التحقق الطبي محظور حتى تتم معالجة حجوزات التحقق المانعة النشطة."));
       } else if (body.error === "qc_blocking_hold") {

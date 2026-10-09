@@ -3,7 +3,7 @@ import { canAccessBranch, canAccessDepartment, requirePermission, requestContext
 import { prisma } from "@/lib/db";
 import { resolveAnalyzerQcGate } from "@/lib/qc-gate";
 import { validationSpecimenCustodyError } from "@/lib/result-validation-custody";
-import { medicalReviewerAllowed, type ValidationPolicySnapshot } from "@/lib/result-validation";
+import { medicalApprovalEvidenceError, type ValidationPolicySnapshot } from "@/lib/result-validation";
 import { Prisma } from "../../../../../../generated/prisma/client";
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -26,6 +26,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     include: {
       values: true,
       validationHoldEvents: { where: { status: "ACTIVE", severitySnapshot: "BLOCK" } },
+      validationReviews: {
+        where: { stage: "TECHNICAL_REVIEW" },
+        orderBy: [{ reviewedAt: "desc" }, { id: "desc" }],
+        take: 1,
+        select: {
+          stage: true, outcome: true, automated: true, reviewerUserId: true,
+          reviewedAt: true, policySnapshot: true,
+        },
+      },
       orderItem: {
         include: {
           test: true,
@@ -158,8 +167,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     });
   }
 
-  if (!medicalReviewerAllowed(validationSnapshot, result.technicalReviewedByUserId, session.user.id)) {
-    return NextResponse.json({ error: "medical_validator_must_differ_from_technical_reviewer" }, { status: 409 });
+  const evidenceError = medicalApprovalEvidenceError({
+    policySnapshot: result.validationPolicySnapshot,
+    performingBranchId: result.performingBranchId,
+    testId: result.orderItem.testId,
+    departmentId: result.orderItem.test.departmentId,
+    technicalReviewedByUserId: result.technicalReviewedByUserId,
+    technicalReviewedAt: result.technicalReviewedAt,
+    autoVerified: result.autoVerified,
+    technicalReview: result.validationReviews[0] || null,
+    candidateUserId: session.user.id,
+  });
+  if (evidenceError) {
+    return NextResponse.json({ error: evidenceError }, { status: 409 });
   }
 
   if (result.validationHoldEvents.length > 0) {

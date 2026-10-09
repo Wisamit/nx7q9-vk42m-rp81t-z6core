@@ -91,7 +91,7 @@ test("result operator gets bilingual guidance for concurrent saves and reviews",
 test("medical RETURN remains available for corrective action after specimen quarantine", () => {
   const route = source("../src/app/api/results/[id]/medical-validate/route.ts");
   const start = route.indexOf("const returned = await prisma.$transaction");
-  const end = route.indexOf("if (!medicalReviewerAllowed(", start);
+  const end = route.indexOf("const evidenceError = medicalApprovalEvidenceError({", start);
   const correctiveAction = route.slice(start,end);
   assert.ok(correctiveAction.includes("if (custody.length !== 1)"));
   assert.ok(!correctiveAction.includes("validationSpecimenCustodyError({"));
