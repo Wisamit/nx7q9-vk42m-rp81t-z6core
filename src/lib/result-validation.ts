@@ -123,3 +123,76 @@ export function medicalReviewerAllowed(
 export function isResultEntryLockedByValidation(stage: string | null | undefined) {
   return stage === "MEDICAL_VALIDATION" || stage === "COMPLETE";
 }
+
+/**
+ * Medical approval must be based on the exact previously approved technical
+ * review for this result revision, not just a mutable stage/timestamp flag.
+ * Historic baseline JSON is deliberately not upgraded into a medical policy.
+ */
+export function medicalApprovalEvidenceError(input: {
+  policySnapshot: unknown;
+  performingBranchId: string;
+  testId: string;
+  departmentId: string | null;
+  technicalReviewedByUserId: string | null;
+  technicalReviewedAt: Date | null;
+  autoVerified: boolean;
+  technicalReview: {
+    stage: string;
+    outcome: string;
+    reviewerUserId: string | null;
+    reviewedAt: Date;
+    automated: boolean;
+    policySnapshot: unknown;
+  } | null;
+  candidateUserId: string;
+}): "medical_validation_policy_snapshot_invalid"
+  | "technical_review_evidence_missing"
+  | "medical_validator_must_differ_from_technical_reviewer"
+  | null {
+  const snapshot = input.policySnapshot;
+  if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)) {
+    return "medical_validation_policy_snapshot_invalid";
+  }
+  const policy = snapshot as Record<string, unknown>;
+  const scope = policy.scope;
+  if (policy.source !== "CONFIGURED"
+    || typeof policy.policyId !== "string" || !policy.policyId
+    || typeof policy.code !== "string" || !policy.code
+    || policy.requiresMedicalValidation !== true
+    || typeof policy.allowSameReviewer !== "boolean"
+    || (policy.branchId !== null && policy.branchId !== input.performingBranchId)
+    || !["ORGANIZATION", "DEPARTMENT", "TEST"].includes(String(scope))
+    || (scope === "TEST" && policy.testId !== input.testId)
+    || (scope === "DEPARTMENT" && (!input.departmentId || policy.departmentId !== input.departmentId))
+    || (scope === "ORGANIZATION" && (policy.testId !== null || policy.departmentId !== null))) {
+    return "medical_validation_policy_snapshot_invalid";
+  }
+
+  const review = input.technicalReview;
+  if (!input.technicalReviewedAt || Number.isNaN(input.technicalReviewedAt.getTime())
+    || !review || review.stage !== "TECHNICAL_REVIEW" || review.outcome !== "APPROVED"
+    || !(review.reviewedAt instanceof Date)
+    || review.reviewedAt.getTime() !== input.technicalReviewedAt.getTime()) {
+    return "technical_review_evidence_missing";
+  }
+  const priorSnapshot = review.policySnapshot;
+  if (!priorSnapshot || typeof priorSnapshot !== "object" || Array.isArray(priorSnapshot)
+    || (priorSnapshot as Record<string, unknown>).policyId !== policy.policyId
+    || (priorSnapshot as Record<string, unknown>).requiresMedicalValidation !== true) {
+    return "technical_review_evidence_missing";
+  }
+  if (review.automated) {
+    if (!input.autoVerified || review.reviewerUserId !== null || input.technicalReviewedByUserId !== null) {
+      return "technical_review_evidence_missing";
+    }
+  } else if (!input.technicalReviewedByUserId || review.reviewerUserId !== input.technicalReviewedByUserId) {
+    return "technical_review_evidence_missing";
+  }
+
+  if (!review.automated && policy.allowSameReviewer === false
+    && input.technicalReviewedByUserId === input.candidateUserId) {
+    return "medical_validator_must_differ_from_technical_reviewer";
+  }
+  return null;
+}
