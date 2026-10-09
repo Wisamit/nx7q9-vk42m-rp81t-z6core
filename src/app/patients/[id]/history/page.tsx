@@ -16,7 +16,8 @@ import {
 import { PatientResultTrends } from "@/components/patient-result-trends";
 import { PatientHistoryPrintButton } from "@/components/patient-history-print-button";
 import { PatientHistoryPager } from "@/components/patient-history-pager";
-import { historyPageSlice, patientHistoryNavigation, scopedHistoryAttachments, type PatientHistorySection } from "@/lib/patient-history-pagination";
+import { historyPageSlice, patientHistoryNavigation, type PatientHistorySection } from "@/lib/patient-history-pagination";
+import { scopedHistoryAttachments } from "@/lib/patient-history-attachments";
 import { getUiLocale, statusLabel, tr } from "@/lib/ui-i18n";
 
 export const dynamic = "force-dynamic";
