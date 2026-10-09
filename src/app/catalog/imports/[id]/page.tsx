@@ -53,7 +53,10 @@ export default async function ImportBatchPage({
       where: { batchId: batch.id, entityType: "REFERENCE_INTERVAL" },
     });
     if (stagedRanges > 0) {
-      if (!permissions.has("catalog.reference_ranges.manage")) notFound();
+      // CSV clinical source rows are not tagged with a branch at the batch level.
+      // Until a branch-bound review assignment exists, only their author may
+      // read them, and only with active clinical permissions.
+      if (batch.createdByUserId !== session.user.id || !permissions.has("catalog.reference_ranges.manage")) notFound();
       const scope = resolveClinicalImportScope({
         organizationId: session.user.organizationId,
         activeBranchId: session.activeBranchId, activeBranch: session.activeBranch,
