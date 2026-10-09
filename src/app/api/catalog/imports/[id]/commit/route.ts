@@ -37,9 +37,20 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
     (row.status === "VALID" && ["UNIT", "CONTAINER", "TEST", "PANEL"].includes(row.entityType)) ||
     isEligibleGeneratedTest(row)
   );
+  if (safeRows.length === 0) {
+    return NextResponse.json({ error: "no_pending_safe_master_rows" }, { status: 409 });
+  }
   const results = { imported: 0, skipped: 0, deferred: batch.rows.filter(row => ["REFERENCE_INTERVAL", "COMPONENT", "PRICE_LIST_ITEM"].includes(row.entityType)).length };
 
+  try {
   await prisma.$transaction(async tx => {
+    // Serialize import execution using the batch status row. Competing POSTs
+    // can never both import the same master data; rollback releases the claim.
+    const claim = await tx.catalogImportBatch.updateMany({
+      where: { id: batch.id, organizationId: session.user.organizationId, status: "VALIDATED" },
+      data: { status: "IMPORTED", importedAt: new Date() },
+    });
+    if (claim.count !== 1) throw new Error("catalog_import_claim_conflict");
     const units = new Map<string, string>();
     for (const existing of await tx.unit.findMany({ where: { organizationId: session.user.organizationId } })) {
       units.set(existing.code.toUpperCase(), existing.id);
@@ -119,6 +130,12 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
       newValues: results, ipAddress: ctx.ipAddress, userAgent: ctx.userAgent,
     } });
   });
+  } catch (error) {
+    if (error instanceof Error && error.message === "catalog_import_claim_conflict") {
+      return NextResponse.json({ error: "batch_already_committed" }, { status: 409 });
+    }
+    throw error;
+  }
 
   return NextResponse.json({ status: "ok", ...results });
 }

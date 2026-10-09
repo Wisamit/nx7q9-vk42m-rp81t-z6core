@@ -32,6 +32,7 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
     },
   });
   if (!batch) return NextResponse.json({ error: "batch_not_found" }, { status: 404 });
+  if (batch.sourceType === "CSV_REVIEW") return NextResponse.json({ error: "csv_review_is_not_clinical_import" }, { status: 409 });
 
   const existingUnits = await prisma.unit.findMany({ where: { organizationId: session.user.organizationId } });
   const unitByKey = new Map<string, typeof existingUnits[number]>();

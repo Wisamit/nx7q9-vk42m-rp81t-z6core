@@ -16,9 +16,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const batch = await prisma.catalogImportBatch.findFirst({
     where: { id, organizationId: session.user.organizationId },
-    select: { id: true },
+    select: { id: true, sourceType: true },
   });
   if (!batch) return NextResponse.json({ error: "batch_not_found" }, { status: 404 });
+  if (batch.sourceType === "CSV_REVIEW") return NextResponse.json({ error: "csv_review_is_not_clinical_import" }, { status: 409 });
 
   const body = await request.json().catch(() => null) as {
     mappingType?: "TEST_ALIAS" | "UNIT_ALIAS";

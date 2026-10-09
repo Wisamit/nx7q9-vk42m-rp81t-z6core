@@ -162,11 +162,11 @@ export default async function ImportBatchPage({
       </article>
     </section>
 
-    <section className="detail-card range-import-card">
+    {batch.sourceType !== "CSV_REVIEW" && <section className="detail-card range-import-card">
       <h2>{tr(locale, "Reference Range Migration", "ترحيل المديات المرجعية")}</h2>
       <p className="muted">{tr(locale, "Only exact test matches with mapped units and unambiguous age/sex context are eligible for automatic import. Ambiguous rows remain staged for review.", "لا يُسمح بالاستيراد التلقائي إلا للتطابقات الدقيقة للفحوصات مع وحدات مربوطة وسياق عمر/جنس غير ملتبس. تبقى الصفوف الملتبسة مرحلية للمراجعة.")}</p>
       <ReferenceRangeImportButton batchId={batch.id} locale={locale} />
-    </section>
+    </section>}
 
     {entityCounts.COMPONENT > 0 && permissions.has("catalog.manage") && <ComponentImportReconciliation batchId={batch.id} locale={locale} />}
     {entityCounts.PRICE_LIST_ITEM > 0 && permissions.has("catalog.manage") && permissions.has("pricing.manage") && <PriceImportReconciliation batchId={batch.id} locale={locale} />}
