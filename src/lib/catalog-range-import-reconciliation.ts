@@ -47,11 +47,11 @@ export type StagedRangeReviewRow = { normalizedData: unknown; status: string };
 
 const exactDecimal = (input: string): string | null => {
   if (!input) return "";
-  if (!/^[+-]?\\d+(?:\\.\\d+)?$/.test(input)) return null;
+  if (!/^[+-]?\d+(?:\.\d+)?$/.test(input)) return null;
   const negative = input.startsWith("-") ? "-" : "";
   const unsigned = input.replace(/^[+-]/, "");
   const [whole, fraction = ""] = unsigned.split(".");
-  const intPart = whole.replace(/^0+(?=\\d)/, "") || "0";
+  const intPart = whole.replace(/^0+(?=\d)/, "") || "0";
   const fracPart = fraction.replace(/0+$/, "");
   if (intPart === "0" && !fracPart) return "0";
   return negative + intPart + (fracPart ? "." + fracPart : "");
