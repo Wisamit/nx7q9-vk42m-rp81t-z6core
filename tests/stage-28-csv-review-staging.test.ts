@@ -52,6 +52,9 @@ test("CSV staging requires permissions and remains DRAFT; commit and revalidatio
   assert.match(csvRoute,/branch\.status === "ACTIVE"/);
   assert.match(csvRoute,/sourceType: "CSV_REVIEW"/);
   assert.match(csvRoute,/status: "DRAFT"/);
+  assert.match(csvRoute,/request\.body\?\.getReader\(\)/);
+  assert.match(csvRoute,/bytes > CSV_STAGE_MAX_BYTES/);
+  assert.match(csvRoute,/TextDecoder\("utf-8", \{ fatal: true \}\)/);
   assert.match(csvRoute,/tx\.catalogImportRow\.createMany/);
   assert.doesNotMatch(csvRoute,/tx\.(?:labTest|testComponent|priceListItem)\.(?:create|update)/);
   for (const guard of [commit, revalidate]) {
