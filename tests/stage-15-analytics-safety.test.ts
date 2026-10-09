@@ -38,12 +38,12 @@ test("financial management summary distinguishes invoice totals, dated refunds a
 });
 
 test("profit margins stay suppressed with partial, mutable-lot or multi-currency attribution", () => {
-  const revenue=new Map([["EGP",120000n]]);
-  const cost=new Map([["EGP",20000n]]);
+  const revenue=new Map([["EGP",BigInt(120000)]]);
+  const cost=new Map([["EGP",BigInt(20000)]]);
   assert.deepEqual([...comparableMargin({revenue,cost,totalItems:2,coveredItems:1,indicativeCostItems:0})],[]);
   assert.deepEqual([...comparableMargin({revenue,cost,totalItems:2,coveredItems:2,indicativeCostItems:1})],[]);
-  assert.deepEqual([...comparableMargin({revenue,cost:new Map([["USD",20000n]]),totalItems:2,coveredItems:2,indicativeCostItems:0})],[]);
-  assert.deepEqual([...comparableMargin({revenue,cost,totalItems:2,coveredItems:2,indicativeCostItems:0})],[["EGP",100000n]]);
+  assert.deepEqual([...comparableMargin({revenue,cost:new Map([["USD",BigInt(20000)]]),totalItems:2,coveredItems:2,indicativeCostItems:0})],[]);
+  assert.deepEqual([...comparableMargin({revenue,cost,totalItems:2,coveredItems:2,indicativeCostItems:0})],[["EGP",BigInt(100000)]]);
 });
 
 test("never silently publish bounded partial management totals", () => {
