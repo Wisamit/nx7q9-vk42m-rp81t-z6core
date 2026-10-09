@@ -30,6 +30,7 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
     include: { rows: { orderBy: { rowNumber: "asc" } } },
   });
   if (!batch) return NextResponse.json({ error: "batch_not_found" }, { status: 404 });
+  if (batch.sourceType === "CSV_REVIEW") return NextResponse.json({ error: "csv_review_is_not_committable" }, { status: 409 });
   if (batch.status !== "VALIDATED") return NextResponse.json({ error: "batch_not_validated" }, { status: 409 });
 
   const safeRows = batch.rows.filter(row =>
