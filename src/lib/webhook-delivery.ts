@@ -49,6 +49,7 @@ export async function dispatchWebhookDelivery(id: string) {
     include: { subscription: { include: { endpoint: true } } },
   });
   if (!delivery) throw new Error("WEBHOOK_DELIVERY_NOT_FOUND");
+  const deliveryOrganizationId = delivery.organizationId;
   const endpoint = delivery.subscription.endpoint;
   if (endpoint.organizationId !== delivery.organizationId ||
       delivery.subscription.organizationId !== delivery.organizationId) {
@@ -84,7 +85,7 @@ export async function dispatchWebhookDelivery(id: string) {
   if (!claimable) return null;
   if (delivery.attemptCount >= endpoint.maxAttempts) {
     await prisma.webhookDelivery.updateMany({
-      where: { id, organizationId: delivery.organizationId, status: delivery.status, updatedAt: delivery.updatedAt },
+      where: { id, organizationId: deliveryOrganizationId, status: delivery.status, updatedAt: delivery.updatedAt },
       data: { status: "DEAD_LETTER", nextAttemptAt: null },
     });
     return null;
@@ -93,7 +94,7 @@ export async function dispatchWebhookDelivery(id: string) {
   const attemptCount = delivery.attemptCount + 1;
   const claim = await prisma.webhookDelivery.updateMany({
     where: {
-      id, organizationId: delivery.organizationId, status: delivery.status,
+      id, organizationId: deliveryOrganizationId, status: delivery.status,
       attemptCount: delivery.attemptCount, updatedAt: delivery.updatedAt,
     },
     data: {
@@ -117,7 +118,7 @@ export async function dispatchWebhookDelivery(id: string) {
   }) {
     const updated = await prisma.webhookDelivery.updateMany({
       where: {
-        id, organizationId: delivery.organizationId, status: "SENT",
+        id, organizationId: deliveryOrganizationId, status: "SENT",
         attemptCount, updatedAt: claimed.updatedAt,
       },
       data,
