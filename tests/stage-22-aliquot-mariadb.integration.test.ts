@@ -20,7 +20,7 @@ test("MariaDB: aliquot locks reject concurrent order closure, test rejection and
   const container = randomUUID(), foreignContainer = randomUUID();
   const suffix = tenant.slice(0, 8);
 
-  async function insert(sql: string, args: unknown[], table: string, id: string) {
+  async function insert(sql: string, args: Array<string | number>, table: string, id: string) {
     await writer.execute(sql, args);
     inserted.unshift({ table, id });
   }
