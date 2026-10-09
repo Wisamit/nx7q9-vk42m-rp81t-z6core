@@ -21,7 +21,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "csv_file_too_large" }, { status: 413 });
   }
   const sourceName = new URL(request.url).searchParams.get("sourceName")?.trim() ?? "";
-  if (!sourceName || sourceName.length > 255 || /[\x00-\x1f\x7f]/.test(sourceName)) {
+  if (!sourceName || sourceName.length > 255 || [...sourceName].some(char => {
+    const code = char.charCodeAt(0);
+    return code < 32 || code === 127;
+  })) {
     return NextResponse.json({ error: "invalid_csv_source_name" }, { status: 400 });
   }
   const csvText = await request.text();
