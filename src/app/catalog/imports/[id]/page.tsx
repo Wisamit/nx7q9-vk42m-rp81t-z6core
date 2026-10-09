@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { SafeImportButton } from "@/components/safe-import-button";
 import { RevalidateImportButton } from "@/components/revalidate-import-button";
 import { ReferenceRangeImportButton } from "@/components/reference-range-import-button";
+import { ComponentImportReconciliation } from "@/components/component-import-reconciliation";
 import { getUiLocale, tr } from "@/lib/ui-i18n";
 
 export const dynamic = "force-dynamic";
@@ -143,6 +144,8 @@ export default async function ImportBatchPage({
       <p className="muted">{tr(locale, "Only exact test matches with mapped units and unambiguous age/sex context are eligible for automatic import. Ambiguous rows remain staged for review.", "لا يُسمح بالاستيراد التلقائي إلا للتطابقات الدقيقة للفحوصات مع وحدات مربوطة وسياق عمر/جنس غير ملتبس. تبقى الصفوف الملتبسة مرحلية للمراجعة.")}</p>
       <ReferenceRangeImportButton batchId={batch.id} locale={locale} />
     </section>
+
+    {entityCounts.COMPONENT > 0 && <ComponentImportReconciliation batchId={batch.id} locale={locale} />}
 
     <section className="table-card">
       <div className="table-toolbar">
