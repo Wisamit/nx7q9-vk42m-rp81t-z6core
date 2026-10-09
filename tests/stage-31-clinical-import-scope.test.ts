@@ -66,6 +66,8 @@ test("import API and review routing use the same active branch/department limits
     assert.match(route,/clinicalImportTestWhere\(scope\)/);
   }
   assert.match(range,/prisma\.labTest\.findMany\(\{ where: clinicalImportTestWhere\(scope\)/);
+  assert.equal((range.match(/const scope = resolveClinicalImportScope/g) || []).length,2,
+    "both GET preview and POST clinical writes require independently validated branch scopes");
   assert.match(range,/const currentTest = await tx\.labTest\.findFirst/);
   assert.match(range,/clinical_import_test_scope_changed/);
   assert.ok(range.indexOf("const currentTest = await tx.labTest.findFirst") <
