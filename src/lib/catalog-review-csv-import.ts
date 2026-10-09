@@ -14,8 +14,10 @@ export const CSV_STAGE_TEMPLATE_HEADERS = [
 ] as const;
 
 export class CsvStagingError extends Error {
-  constructor(public readonly reason: string) {
+  readonly reason: string;
+  constructor(reason: string) {
     super(reason);
+    this.reason = reason;
   }
 }
 
