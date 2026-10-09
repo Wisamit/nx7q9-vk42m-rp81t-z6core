@@ -105,6 +105,19 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   }
 
   const resolved = candidates.map(({ row, candidate }) => {
+    // Reconciliation is not a disclosure grant. A staged candidate referencing
+    // an unknown or out-of-branch list must not echo any untrusted price amount,
+    // test code, effective date or validation metadata back to the caller.
+    if (!listIndex.has(candidate.priceListCode)) {
+      return {
+        rowNumber: row.rowNumber, rowStatus: row.status,
+        candidate: { priceListCode: "", testCode: "", unitPrice: "",
+          effectiveFrom: "", effectiveTo: "" },
+        disposition: "BLOCKED",
+        issues: ["PRICE_LIST_SCOPE_UNRESOLVED"], stagedIssues: [],
+        currency: null, resolvedPriceListId: null, resolvedTestId: null,
+      };
+    }
     const key = candidate.priceListCode + "|" + candidate.testCode;
     const overlapCount = (stagedWindows.get(key) ?? []).filter(other =>
       overlaps(candidate.effectiveFrom, candidate.effectiveTo || null,
