@@ -6,6 +6,10 @@ import { prisma } from "@/lib/db";
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const auth = await requireIntegrationApiKey(request, "fhir.read");
+    if (!["FHIR_R4", "REST"].includes(auth.endpoint.endpointType) ||
+        !["OUTBOUND", "BIDIRECTIONAL"].includes(auth.endpoint.direction)) {
+      return NextResponse.json(operationOutcome("forbidden", "FHIR endpoint not authorized for outbound reads"), { status: 403 });
+    }
     const { id } = await params;
     const patient = await prisma.patient.findFirst({
       where: {
