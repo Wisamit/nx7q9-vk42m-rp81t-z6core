@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { clinicalImportTestWhere, resolveClinicalImportScope, type ClinicalImportScope } from "@/lib/catalog-clinical-import-scope";
 
 function object(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -122,10 +123,10 @@ function ageUnit(value: unknown): "DAY" | "WEEK" | "MONTH" | "YEAR" | null {
   return null;
 }
 
-async function analyze(batchId: string, organizationId: string) {
+async function analyze(batchId: string, organizationId: string, scope: ClinicalImportScope) {
   const [rows, tests, units, legacyTests, legacyUnits, reviewedMappings] = await Promise.all([
     prisma.catalogImportRow.findMany({ where: { batchId, entityType: "REFERENCE_INTERVAL", status: { in: ["VALID", "WARNING"] } }, orderBy: { rowNumber: "asc" } }),
-    prisma.labTest.findMany({ where: { organizationId }, include: { defaultUnit: true, components: { include: { unit: true } } } }),
+    prisma.labTest.findMany({ where: clinicalImportTestWhere(scope), include: { department: true, defaultUnit: true, components: { include: { unit: true } } } }),
     prisma.unit.findMany({ where: { organizationId } }),
     prisma.catalogImportRow.findMany({ where: { batchId, entityType: "TEST", importedEntityId: { not: null } }, select: { importedEntityId: true, legacyKey: true, sourceData: true, normalizedData: true } }),
     prisma.catalogImportRow.findMany({ where: { batchId, entityType: "UNIT", importedEntityId: { not: null } }, select: { importedEntityId: true, legacyKey: true, sourceData: true, normalizedData: true } }),
@@ -255,9 +256,17 @@ async function analyze(batchId: string, organizationId: string) {
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await requirePermission("catalog.reference_ranges.manage");
   const { id } = await params;
+  const scope = resolveClinicalImportScope({
+    organizationId: session.user.organizationId,
+    activeBranchId: session.activeBranchId,
+    activeBranch: session.activeBranch,
+    branchScopes: session.user.branchScopes,
+    departmentScopes: session.user.departmentScopes,
+  });
+  if (!scope) return NextResponse.json({ error: "active_clinical_import_scope_required" }, { status: 403 });
   const batch = await prisma.catalogImportBatch.findFirst({ where: { id, organizationId: session.user.organizationId } });
   if (!batch) return NextResponse.json({ error: "batch_not_found" }, { status: 404 });
-  const analysis = await analyze(batch.id, session.user.organizationId);
+  const analysis = await analyze(batch.id, session.user.organizationId, scope);
   const generatedTestWarnings = await prisma.catalogImportRow.findMany({
     where: { batchId: batch.id, entityType: "TEST", status: "WARNING" },
     select: { validationIssues: true },
@@ -312,7 +321,7 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
   if (!batch) return NextResponse.json({ error: "batch_not_found" }, { status: 404 });
   if (batch.sourceType === "CSV_REVIEW") return NextResponse.json({ error: "csv_review_is_not_clinical_import" }, { status: 409 });
 
-  const analysis = await analyze(batch.id, session.user.organizationId);
+  const analysis = await analyze(batch.id, session.user.organizationId, scope);
   let imported = 0;
   const componentByTestId = new Map<string, NonNullable<(typeof analysis.safe)[number]["test"]>["components"][number]>();
   for (const item of analysis.safe) {
@@ -326,6 +335,13 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
       // updateMany is a conditional InnoDB UPDATE: an overlapping request
       // sees zero claimed rows after the first commits. A transaction error
       // rolls back both the claim and the clinical changes.
+      // Re-authorize the performing test within the transaction; preview data
+      // is not a permission token and may become stale before a POST executes.
+      const currentTest = await tx.labTest.findFirst({
+        where: { ...clinicalImportTestWhere(scope), id: item.test.id, status: "ACTIVE" },
+        select: { id: true, defaultUnitId: true },
+      });
+      if (!currentTest) throw new Error("clinical_import_test_scope_changed");
       const claim = await tx.catalogImportRow.updateMany({
         where: {
           id: item.row.id, batchId: batch.id,
@@ -334,8 +350,8 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
         data: { status: "IMPORTED" },
       });
       if (claim.count !== 1) continue;
-      if (!item.test.defaultUnitId && item.mappedUnit.id) {
-        await tx.labTest.update({ where: { id: item.test.id }, data: { defaultUnitId: item.mappedUnit.id } });
+      if (!currentTest.defaultUnitId && item.mappedUnit.id) {
+        await tx.labTest.update({ where: { id: currentTest.id }, data: { defaultUnitId: item.mappedUnit.id } });
       }
 
       let component = componentByTestId.get(item.test.id);
