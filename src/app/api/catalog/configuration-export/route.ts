@@ -37,13 +37,15 @@ export async function GET(request: NextRequest) {
     ...(departmentIds.length ? { departmentId: { in: departmentIds } } : {}),
   };
   const branchScope = { OR: [{ branchId: null }, { branchId: { in: branchIds } }] };
-  const base = { orderBy: { id: "asc" as const }, take: 251,
-    ...(parsed.cursor ? { cursor: { id: parsed.cursor }, skip: 1 } : {}) };
+  // Lexical id keyset paging does not depend on a cursor record still existing
+  // and never uses a foreign-tenant row as a Prisma cursor anchor.
+  const base = { orderBy: { id: "asc" as const }, take: 251 };
+  const cursorScope = parsed.cursor ? { id: { gt: parsed.cursor } } : {};
   let records: Array<{ id: string }> = [];
 
   if (type === "TEST") {
     records = await prisma.labTest.findMany({
-      ...base, where: testScope,
+      ...base, where: { ...testScope, ...cursorScope },
       select: {
         id: true, code: true, nameEn: true, nameAr: true, abbreviation: true,
         departmentId: true, specimenTypeId: true, containerId: true,
@@ -56,7 +58,7 @@ export async function GET(request: NextRequest) {
     });
   } else if (type === "COMPONENT") {
     records = await prisma.testComponent.findMany({
-      ...base, where: { test: testScope },
+      ...base, where: { test: testScope, ...cursorScope },
       select: {
         id: true, testId: true, code: true, nameEn: true, nameAr: true,
         unitId: true, resultType: true, decimalPrecision: true,
@@ -70,7 +72,7 @@ export async function GET(request: NextRequest) {
     });
   } else if (type === "UNIT") {
     records = await prisma.unit.findMany({
-      ...base, where: { organizationId },
+      ...base, where: { organizationId, ...cursorScope },
       select: {
         id: true, code: true, symbol: true, nameEn: true, nameAr: true,
         ucumCode: true, status: true,
@@ -79,7 +81,7 @@ export async function GET(request: NextRequest) {
     });
   } else if (type === "REFERENCE_INTERVAL") {
     records = await prisma.referenceInterval.findMany({
-      ...base, where: { component: { test: testScope }, ...branchScope },
+      ...base, where: { component: { test: testScope }, ...branchScope, ...cursorScope },
       select: {
         id: true, componentId: true, branchId: true, methodId: true,
         analyzerId: true, specimenTypeId: true, sex: true, ageFrom: true,
@@ -96,7 +98,7 @@ export async function GET(request: NextRequest) {
     });
   } else if (type === "PRICE_LIST") {
     records = await prisma.priceList.findMany({
-      ...base, where: { organizationId, ...branchScope },
+      ...base, where: { organizationId, ...branchScope, ...cursorScope },
       select: {
         id: true, code: true, nameEn: true, nameAr: true, scopeType: true,
         branchId: true, sourceId: true, referrerId: true, clientId: true,
@@ -108,7 +110,7 @@ export async function GET(request: NextRequest) {
   } else if (type === "PRICE_LIST_ITEM") {
     records = await prisma.priceListItem.findMany({
       ...base,
-      where: { priceList: { organizationId, ...branchScope }, test: testScope },
+      where: { priceList: { organizationId, ...branchScope }, test: testScope, ...cursorScope },
       select: {
         id: true, priceListId: true, testId: true, unitPrice: true,
         effectiveFrom: true, effectiveTo: true, status: true,
