@@ -127,7 +127,9 @@ export function compareCurrentReportWithPrevious(
   previousReports: readonly ReportComparisonEvidence[],
   authorizedBranches: readonly string[],
 ): CumulativeComparison[] {
+  const currentVersion = current.versions.find(version => version.version === current.currentVersion);
   const currentReadings = extractCurrentReportReadings(current, authorizedBranches);
+  if (!currentVersion || !CURRENT_STATUSES.has(currentVersion.status)) return [];
   const previousByIdentity = new Map<string, ReportReading>();
   for (const candidate of previousReports) {
     // A previous *order* can have a delayed report. Compare only reports
@@ -135,7 +137,7 @@ export function compareCurrentReportWithPrevious(
     if (candidate.order.orderedAt.getTime() >= current.order.orderedAt.getTime()) continue;
     for (const reading of extractCurrentReportReadings(candidate, authorizedBranches)) {
       const id = clinicalIdentity(reading);
-      if (!id || reading.issuedAt >= current.versions[0]?.issuedAt.toISOString()) continue;
+      if (!id || reading.issuedAt >= currentVersion.issuedAt.toISOString()) continue;
       const existing = previousByIdentity.get(id);
       if (!existing || reading.issuedAt > existing.issuedAt) previousByIdentity.set(id, reading);
     }
