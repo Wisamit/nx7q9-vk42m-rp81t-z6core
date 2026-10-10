@@ -74,7 +74,7 @@ async function inspectBundleDrift(request: NextRequest, { params }: Context, tri
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   const afterText = triage ? String(triage.rowNumber - 1)
     : request.nextUrl.searchParams.get("after") || "0";
-  if (!/^(?:0|[1-9]\\d{0,8})$/.test(afterText))
+  if (!/^(?:0|[1-9]\d{0,8})$/.test(afterText))
     return NextResponse.json({ error: "invalid_reconciliation_cursor" }, { status: 400 });
   const after = Number(afterText);
   const key = catalogBundleSigningSecret(process.env);
