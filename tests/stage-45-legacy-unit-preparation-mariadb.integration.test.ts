@@ -104,11 +104,9 @@ test("Stage 45 MariaDB: two writers serialize unit provenance; excluded rows and
       const [batchLock]=await writer.execute<mysql.RowDataPacket[]>(
         "SELECT id FROM catalog_import_batches WHERE id=? AND organization_id=? FOR UPDATE",[batch,org]);
       assert.equal(batchLock.length,1);
-      await reader.beginTransaction();
-      // This independent connection must wait for the same organization lock,
-      // then see the committed new unit instead of independently creating it.
-      const competing=reader.execute<mysql.RowDataPacket[]>(
-        "SELECT id FROM organizations WHERE id=? FOR UPDATE",[org]);
+      // Complete all writes before queuing the competing lock. An early
+      // contender can hold FK-related shared locks needed by this update,
+      // causing a circular wait unrelated to organization-lock serialization.
       const code=proposedLegacyUnitCode("stage45-unit");
       assert.ok(code);
       await writer.execute(
@@ -118,6 +116,11 @@ test("Stage 45 MariaDB: two writers serialize unit provenance; excluded rows and
         "UPDATE lab_tests SET default_unit_id=? WHERE id=? AND organization_id=? AND department_id=? AND default_unit_id IS NULL",
         [newUnit,testId,org,dept]);
       assert.equal(claim.affectedRows,1);
+      await reader.beginTransaction();
+      // This independent connection must wait on the organization lock
+      // until both the unit creation and test-unit claim are committed.
+      const competing=reader.execute<mysql.RowDataPacket[]>(
+        "SELECT id FROM organizations WHERE id=? FOR UPDATE",[org]);
       await writer.commit();
       const [acquired]=await competing;
       assert.equal(acquired.length,1);

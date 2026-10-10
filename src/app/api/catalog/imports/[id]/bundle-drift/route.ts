@@ -30,6 +30,16 @@ type ExpertInput = { flagEventId: string; disposition: ExpertDisposition };
 
 /** A bounded, live-scoped snapshot diff. No source or live values in response. */
 export async function GET(request: NextRequest, context: Context) {
+  const query = request.nextUrl.searchParams;
+  const requestedReview = query.get("reviewFlagId");
+  if (requestedReview !== null) {
+    // Explicit review inspection must not silently fall back to author mode.
+    if (!UUID.test(requestedReview) || [...query.keys()].some(key => key !== "reviewFlagId"))
+      return NextResponse.json({ error: "expert_preflight_invalid_request" }, { status: 400 });
+    return inspectBundleDrift(request, context, null, {
+      flagEventId: requestedReview, disposition: "CONFIRM_FINDING",
+    }, true);
+  }
   return inspectBundleDrift(request, context, null);
 }
 
@@ -108,6 +118,7 @@ export async function PUT(request: NextRequest, context: Context) {
 async function inspectBundleDrift(
   request: NextRequest, { params }: Context,
   triage: TriageInput | null, expert: ExpertInput | null = null,
+  expertPreflight = false,
 ) {
   const session = await getCurrentSession();
   if (!session) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
@@ -483,11 +494,22 @@ async function inspectBundleDrift(
       });
       if (priorDecision) {
         const old = record(priorDecision.newValues);
+        if (old?.disposition !== "CONFIRM_FINDING" &&
+            old?.disposition !== "RETURN_FOR_CORRECTION")
+          return { error: "expert_decision_integrity_error", httpStatus: 409 } as const;
+        if (!expertPreflight && old.disposition !== expert.disposition)
+          return { error: "expert_decision_conflict", httpStatus: 409 } as const;
         return {
           status: "EXPERT_DECISION_ALREADY_RECORDED", category: policy.category,
-          disposition: old?.disposition, approved: false, activated: false, liveWrites: false,
+          disposition: old.disposition, approved: false, activated: false, liveWrites: false,
         } as const;
       }
+      if (expertPreflight) return {
+        status: "EXPERT_REVIEW_READY", category: policy.category,
+        rowNumber: observed.rowNumber, disposition: null,
+        sourceVerified: verifiedSource,
+        approved: false, activated: false, liveWrites: false,
+      } as const;
       await tx.auditEvent.create({ data: {
         organizationId, branchId: liveScope.branchId, actorUserId: session.user.id,
         action: "CATALOG_BUNDLE_EXPERT_DECISION_RECORDED",
