@@ -494,9 +494,14 @@ async function inspectBundleDrift(
       });
       if (priorDecision) {
         const old = record(priorDecision.newValues);
+        if (old?.disposition !== "CONFIRM_FINDING" &&
+            old?.disposition !== "RETURN_FOR_CORRECTION")
+          return { error: "expert_decision_integrity_error", httpStatus: 409 } as const;
+        if (!expertPreflight && old.disposition !== expert.disposition)
+          return { error: "expert_decision_conflict", httpStatus: 409 } as const;
         return {
           status: "EXPERT_DECISION_ALREADY_RECORDED", category: policy.category,
-          disposition: old?.disposition, approved: false, activated: false, liveWrites: false,
+          disposition: old.disposition, approved: false, activated: false, liveWrites: false,
         } as const;
       }
       if (expertPreflight) return {
