@@ -35,7 +35,9 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
   // Lock the organization and batch before reading mutable source rows or units.
   // Two unit-preparation requests (even from different legacy batches) cannot
   // each create a separate unit for the same previously unseen source alias.
-  const result = await prisma.$transaction(async (tx) => {
+  let result: { createdUnits: number; assignedTests: number; sourceUnitCount: number; ambiguousUnits: number; unrepresentableUnits: number; unresolvedAssignments: number };
+  try {
+  result = await prisma.$transaction(async (tx) => {
     const ownedOrganization = await tx.$queryRaw<Array<{ id: string }>>`SELECT id FROM organizations WHERE id = ${scope.organizationId} FOR UPDATE`;
     if (ownedOrganization.length !== 1) throw new Error("legacy_unit_scope_changed");
     const ownedBatch = await tx.$queryRaw<Array<{ id: string }>>`SELECT id FROM catalog_import_batches WHERE id = ${id} AND organization_id = ${scope.organizationId} FOR UPDATE`;
@@ -161,6 +163,16 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
     return { createdUnits, assignedTests, sourceUnitCount: rawUnits.size,
       ambiguousUnits, unrepresentableUnits, unresolvedAssignments };
   }, { timeout: 60000 });
+  } catch (error) {
+    if (error instanceof Error && (error.message === "legacy_unit_scope_changed" ||
+        error.message === "legacy_test_department_or_branch_scope_denied")) {
+      return NextResponse.json({ error: "legacy_test_department_or_branch_scope_denied" }, { status: 403 });
+    }
+    if (error instanceof Error && error.message === "legacy_unit_batch_changed") {
+      return NextResponse.json({ error: "legacy_unit_batch_changed" }, { status: 409 });
+    }
+    throw error;
+  }
 
   return NextResponse.json({ status: "ok", ...result });
 
