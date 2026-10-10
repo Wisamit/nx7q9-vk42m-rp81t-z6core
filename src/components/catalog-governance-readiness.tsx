@@ -1,8 +1,15 @@
 "use client";
 
 import { useState } from "react";
+import { CatalogPolicyDraftEditor } from "@/components/catalog-policy-draft-editor";
+import type { CatalogPolicyProposal } from "@/lib/catalog-signatory-policy-draft";
 
 type Category = "CLINICAL" | "FINANCIAL" | "CATALOG";
+type PublicPolicyDraft = {
+  revision: number; proposal: CatalogPolicyProposal; proposalDigest: string;
+  state: "UNAPPROVED_DRAFT"; reviewOnly: true; approved: false;
+  signingEnabled: false; activated: false; liveWrites: false;
+};
 type Count = {
   total: number; unchanged: number; drifted: number;
   unflagged: number; driftUnflagged: number; pending: number; expertConfirmed: number;
@@ -15,6 +22,8 @@ type GovernanceReport = {
   reviewOnly: boolean; approved: boolean; activationAllowed: boolean;
   clinicalReleaseAllowed: boolean; pricePublicationAllowed: boolean;
   liveWrites: boolean;
+  policyDraft: PublicPolicyDraft | null;
+  policyDraftSave: "RECORDED" | "UNCHANGED" | null;
   signatoryPlanning: {
     clinicalReviewerCandidates: number; financialReviewerCandidates: number;
     crossQualifiedReviewers: number; distinctPairAvailable: boolean;
@@ -69,6 +78,11 @@ export function CatalogGovernanceReadiness({ batchId, locale }: {
           body.signatoryPlanning.clinicalApprovalAllowed !== false ||
           body.signatoryPlanning.financialApprovalAllowed !== false ||
           body.signatoryPlanning.liveWrites !== false ||
+          (body.policyDraft !== null &&
+            (!body.policyDraft || body.policyDraft.state !== "UNAPPROVED_DRAFT" ||
+              body.policyDraft.approved !== false || body.policyDraft.reviewOnly !== true ||
+              body.policyDraft.signingEnabled !== false ||
+              body.policyDraft.activated !== false || body.policyDraft.liveWrites !== false)) ||
           !Number.isSafeInteger(body.signatoryPlanning.clinicalReviewerCandidates) ||
           !Number.isSafeInteger(body.signatoryPlanning.financialReviewerCandidates) ||
           !Number.isSafeInteger(body.signatoryPlanning.crossQualifiedReviewers) ||
@@ -214,6 +228,12 @@ export function CatalogGovernanceReadiness({ batchId, locale }: {
             "لم يثبت توافر مراجعين طبي ومالي مختلفين"),
         } as Record<string, string>)[code] || code
       }</li>)}</ul>
+      <CatalogPolicyDraftEditor
+        key={report.policyDraft?.revision || 0}
+        batchId={batchId} locale={locale} savedDraft={report.policyDraft}
+        onSaved={draft => setReport(previous => previous
+          ? { ...previous, policyDraft: draft } : previous)}
+      />
       <p className="muted">{tr(
         "Confirming a discrepancy only acknowledges that a finding exists. It never authorizes changing laboratory reference intervals, catalog content or prices.",
         "تأكيد الاختلاف يعني الإقرار بوجود ملاحظة فقط، ولا يجيز تعديل المديات المرجعية أو دليل الفحوصات أو الأسعار.",
