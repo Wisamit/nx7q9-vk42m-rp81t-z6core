@@ -54,7 +54,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     prisma.priceList.findMany({
       where: {
         organizationId, code: { in: listCodes },
-        OR: [{ branchId: null }, { branchId: { in: branches } }],
+        // A null branch does not make CLIENT, CONTRACT, SOURCE or REFERRER prices public.
+        // Generic CSV review is supported for organization and active branch lists only.
+        OR: [
+          { scopeType: "ORGANIZATION", branchId: null },
+          { scopeType: "BRANCH", branchId: { in: branches } },
+        ],
       },
       select: {
         id: true, code: true, status: true, currency: true,
