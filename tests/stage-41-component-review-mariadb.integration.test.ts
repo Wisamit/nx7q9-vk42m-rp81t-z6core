@@ -72,7 +72,10 @@ test("Stage 41 MariaDB two sessions: CSV component ownership and non-reviewable 
       }
       // Duplicate reviewable identities across page boundaries remain visible;
       // error/imported/skipped rows must not invent additional collisions.
-      const codes=eligible.map(x=>JSON.parse(String(x.normalized_data)).code);
+      const codes=eligible.map(x => {
+        const value=typeof x.normalized_data === "string" ? JSON.parse(x.normalized_data) : x.normalized_data;
+        return String(value.code);
+      });
       assert.deepEqual(codes,["COMP-X","COMP-X"]);
     } finally {
       await exec("DELETE FROM catalog_import_rows WHERE batch_id IN (?,?)",[batch,foreignBatch]).catch(()=>{});
