@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { clinicalImportTestWhere, resolveClinicalImportScope } from "@/lib/catalog-clinical-import-scope";
 import { BUNDLE_REVIEW_SOURCE, BUNDLE_REVIEW_MAX_ROWS } from "@/lib/catalog-bundle-review";
 import { catalogBundleDrift } from "@/lib/catalog-bundle-drift";
+import { resolveFindingLifecycle, triageResubmission } from "@/lib/catalog-finding-lifecycle";
 import { catalogBundleSigningSecret } from "@/lib/catalog-bundle-attestation";
 import {
   bundleTriageClass, catalogDriftObservationToken, matchesCatalogDriftObservation,
@@ -391,22 +392,64 @@ async function inspectBundleDrift(
         action: "CATALOG_BUNDLE_EXPERT_REVIEW_FLAGGED",
         entityId: { in: shown.map(row => row.id) },
       },
-      orderBy: { occurredAt: "desc" }, take: 1000,
-      select: { entityId: true, newValues: true, occurredAt: true },
+      orderBy: [{ occurredAt: "desc" }, { id: "desc" }],
+      take: 1001,
+      select: { id: true, entityId: true, newValues: true, occurredAt: true },
     });
-    const lastFlag = new Map<string, { reasonCode: string; category: string; occurredAt: string }>();
+    // A truncated audit history can hide the latest authentic referral.
+    if (auditHistory.length > 1000)
+      return { error: "review_history_limit_exceeded", httpStatus: 409 } as const;
+    const lastFlag = new Map<string, {
+      id: string; reasonCode: string; category: string; occurredAt: string;
+      evidenceToken: string;
+    }>();
     for (const event of auditHistory) {
       if (lastFlag.has(event.entityId)) continue;
       const data = record(event.newValues);
-      if (typeof data?.reasonCode !== "string" || typeof data?.category !== "string") continue;
+      if (typeof data?.reasonCode !== "string" || typeof data?.category !== "string" ||
+          typeof data?.evidenceToken !== "string")
+        return { error: "review_history_corrupt", httpStatus: 409 } as const;
       lastFlag.set(event.entityId, {
-        reasonCode: data.reasonCode, category: data.category, occurredAt: event.occurredAt.toISOString(),
+        id: event.id, reasonCode: data.reasonCode, category: data.category,
+        occurredAt: event.occurredAt.toISOString(), evidenceToken: data.evidenceToken,
       });
     }
+    const latestIds = [...lastFlag.values()].map(item => item.id);
+    const decisions = latestIds.length ? await tx.auditEvent.findMany({
+      where: {
+        organizationId, action: "CATALOG_BUNDLE_EXPERT_DECISION_RECORDED",
+        entityType: "CatalogExpertReviewFlag", entityId: { in: latestIds },
+      },
+      select: { entityId: true, newValues: true },
+      take: latestIds.length + 1,
+    }) : [];
+    if (decisions.length > latestIds.length)
+      return { error: "review_decision_integrity_error", httpStatus: 409 } as const;
+    const latestDecisions = new Map<string, string>();
+    for (const event of decisions) {
+      if (latestDecisions.has(event.entityId))
+        return { error: "review_decision_integrity_error", httpStatus: 409 } as const;
+      const data = record(event.newValues);
+      if (data?.disposition !== "CONFIRM_FINDING" &&
+          data?.disposition !== "RETURN_FOR_CORRECTION")
+        return { error: "review_decision_integrity_error", httpStatus: 409 } as const;
+      latestDecisions.set(event.entityId, data.disposition);
+    }
     const verifiedSource = record(batch.summary)?.attestationStatus === "VERIFIED";
-    const displayed = rows.map((row, index) => ({
-      ...row, latestFlag: lastFlag.get(shown[index].id) || null,
-    }));
+    const displayed = rows.map((row, index) => {
+      const flag = lastFlag.get(shown[index].id);
+      const finding = resolveFindingLifecycle(flag ? {
+        evidenceToken: flag.evidenceToken,
+        currentObservation: row.observationToken,
+        decision: latestDecisions.get(flag.id) || null,
+      } : null);
+      return {
+        ...row, finding,
+        latestFlag: flag ? {
+          reasonCode: flag.reasonCode, category: flag.category, occurredAt: flag.occurredAt,
+        } : null,
+      };
+    });
     if (expert) {
       const index = shown.findIndex(row => row.id === expertRow!.id);
       if (index < 0) return { error: "expert_row_not_found", httpStatus: 404 } as const;
@@ -476,16 +519,13 @@ async function inspectBundleDrift(
         return { error: "triage_stale_observation", httpStatus: 409 } as const;
       if (triage.reasonCode === "SOURCE_VALUE_CHANGED" && observed.disposition !== "DRIFTED")
         return { error: "triage_reason_incompatible", httpStatus: 409 } as const;
-      const previous = await tx.auditEvent.findFirst({
-        where: {
-          organizationId, action: "CATALOG_BUNDLE_EXPERT_REVIEW_FLAGGED",
-          entityType: "CatalogImportRow", entityId: shown[index].id,
-        },
-        orderBy: { occurredAt: "desc" }, select: { newValues: true },
-      });
-      const oldEvidence = record(previous?.newValues);
-      if (oldEvidence?.evidenceToken === observed.observationToken &&
-          oldEvidence?.reasonCode === triage.reasonCode) {
+      const existingFlag = lastFlag.get(shown[index].id);
+      const resubmission = triageResubmission(existingFlag ? {
+        evidenceToken: existingFlag.evidenceToken,
+        currentObservation: observed.observationToken,
+        decision: latestDecisions.get(existingFlag.id) || null,
+      } : null, triage.reasonCode, existingFlag?.reasonCode);
+      if (resubmission === "ALREADY_FLAGGED") {
         return {
           status: "ALREADY_FLAGGED_FOR_EXPERT_REVIEW", category,
           rowNumber: observed.rowNumber, reasonCode: triage.reasonCode,
@@ -493,6 +533,10 @@ async function inspectBundleDrift(
           liveWrites: false,
         } as const;
       }
+      if (resubmission === "ALREADY_PENDING")
+        return { error: "triage_already_pending_expert", httpStatus: 409 } as const;
+      if (resubmission === "DECIDED")
+        return { error: "triage_decided_new_observation_required", httpStatus: 409 } as const;
       await tx.auditEvent.create({ data: {
         organizationId, branchId: liveScope.branchId, actorUserId: session.user.id,
         action: "CATALOG_BUNDLE_EXPERT_REVIEW_FLAGGED", entityType: "CatalogImportRow",
