@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { CatalogPolicyDraftEditor } from "@/components/catalog-policy-draft-editor";
-import type { CatalogPolicyProposal } from "@/lib/catalog-signatory-policy-draft";
+import type { CatalogPolicyProposal } from "@/lib/catalog-policy-options";
 
 type Category = "CLINICAL" | "FINANCIAL" | "CATALOG";
 type PublicPolicyDraft = {
