@@ -50,14 +50,20 @@ export default async function ImportBatchPage({
   // CSV clinical source context must not be disclosed to catalog-only users.
   // Authorize BEFORE any staged source/normalized/validation content is loaded.
   if (batch.sourceType === "CSV_REVIEW") {
-    const stagedRanges = await prisma.catalogImportRow.count({
-      where: { batchId: batch.id, entityType: "REFERENCE_INTERVAL" },
-    });
-    if (stagedRanges > 0) {
-      // CSV clinical source rows are not tagged with a branch at the batch level.
-      // Until a branch-bound review assignment exists, only their author may
-      // read them, and only with active clinical permissions.
-      if (batch.createdByUserId !== session.user.id || !permissions.has("catalog.reference_ranges.manage")) notFound();
+    const [stagedRanges, stagedComponents] = await Promise.all([
+      prisma.catalogImportRow.count({
+        where: { batchId: batch.id, entityType: "REFERENCE_INTERVAL" },
+      }),
+      prisma.catalogImportRow.count({
+        where: { batchId: batch.id, entityType: "COMPONENT" },
+      }),
+    ]);
+    if (stagedRanges > 0 || stagedComponents > 0) {
+      // Clinical CSV source lacks a branch-bound reviewer assignment.
+      // Both component and range previews are author-bound; reference ranges
+      // still additionally require their clinical management permission.
+      if (batch.createdByUserId !== session.user.id ||
+          (stagedRanges > 0 && !permissions.has("catalog.reference_ranges.manage"))) notFound();
       const scope = resolveClinicalImportScope({
         organizationId: session.user.organizationId,
         activeBranchId: session.activeBranchId, activeBranch: session.activeBranch,
