@@ -70,6 +70,7 @@ jobs:
       - run: node --experimental-strip-types --test tests/stage-44-safe-master-unit-provenance-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-45-legacy-unit-preparation-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-46-catalog-bundle-review-mariadb.integration.test.ts
+      - run: node --experimental-strip-types --test tests/stage-47-safe-master-import-serialization-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-38-staged-price-overlap-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/microbiology-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/analyzer-work-orders-mariadb.integration.test.ts
