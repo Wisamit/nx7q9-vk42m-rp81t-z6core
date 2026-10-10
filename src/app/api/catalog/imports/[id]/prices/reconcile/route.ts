@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { permissionSet, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { clinicalImportTestWhere, resolveClinicalImportScope } from "@/lib/catalog-clinical-import-scope";
 import {
   reconcilePriceCandidate, stagedPriceOverlapIndex, type PriceCandidate,
 } from "@/lib/price-import-reconciliation";
@@ -32,9 +33,17 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   }
   const after = raw === null ? 0 : Number(raw);
   const organizationId = session.user.organizationId;
+  const scope = resolveClinicalImportScope({
+    organizationId, activeBranchId: session.activeBranchId,
+    activeBranch: session.activeBranch, branchScopes: session.user.branchScopes,
+    departmentScopes: session.user.departmentScopes,
+  });
+  // Invalid/inactive department grants must never broaden the price review's
+  // matching test query to every department in the organization.
+  if (!scope) return NextResponse.json({ error: "active_clinical_import_scope_required" }, { status: 403 });
+  // Preserve existing finance access across explicitly granted active branches
+  // while clinical test identities remain limited to the active clinical scope.
   const branches = session.user.branchScopes.filter(s => s.branch.status === "ACTIVE").map(s => s.branchId);
-  if (!branches.length) return NextResponse.json({ error: "active_branch_scope_required" }, { status: 403 });
-  const departments = session.user.departmentScopes.filter(s => s.department.status === "ACTIVE").map(s => s.departmentId);
   const batch = await prisma.catalogImportBatch.findFirst({
     where: { id, organizationId }, select: { id: true, status: true },
   });
@@ -67,8 +76,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       },
     }),
     prisma.labTest.findMany({
-      where: { organizationId, code: { in: testCodes },
-        ...(departments.length ? { departmentId: { in: departments } } : {}) },
+      where: { ...clinicalImportTestWhere(scope), code: { in: testCodes } },
       select: { id: true, code: true, status: true },
     }),
     // Import API caps each batch at 20,000 rows. Review all staged windows
@@ -132,6 +140,18 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         currency: null, resolvedPriceListId: null, resolvedTestId: null,
       };
     }
+    // Even an in-scope price list is not permission to inspect the underlying
+    // clinical test or financial candidate for another branch/department.
+    if (!testIndex.has(candidate.testCode)) {
+      return {
+        rowNumber: row.rowNumber, rowStatus: row.status,
+        candidate: { priceListCode: "", testCode: "", unitPrice: "",
+          effectiveFrom: "", effectiveTo: "" },
+        disposition: "BLOCKED" as const,
+        issues: ["TEST_SCOPE_UNRESOLVED"], stagedIssues: [], currency: null,
+        resolvedPriceListId: null, resolvedTestId: null,
+      };
+    }
     const overlapCount = stagedCollisions.has(row.rowNumber) ? 2 : 1;
     const result = reconcilePriceCandidate(candidate, {
       lists: listIndex, tests: testIndex, existing,
@@ -155,7 +175,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         reviewed: resolved.length, after,
         readyForGovernance: resolved.filter(x => x.disposition === "READY_FOR_GOVERNANCE").length,
         stagedPriceWindowCollisions: resolved.filter(x => x.issues.includes("OVERLAPPING_STAGED_PRICE_WINDOWS")).length,
-        branchScoped: true, departmentScoped: departments.length > 0,
+        branchScoped: true, departmentScoped: scope.departmentIds.length > 0,
       },
       ipAddress: ctx.ipAddress, userAgent: ctx.userAgent,
     },
