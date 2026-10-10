@@ -7,6 +7,10 @@ import { catalogBundleDrift } from "@/lib/catalog-bundle-drift";
 import { resolveFindingLifecycle, triageResubmission } from "@/lib/catalog-finding-lifecycle";
 import { summarizeCatalogGovernance } from "@/lib/catalog-governance-readiness";
 import { summarizeSignatoryPlanning } from "@/lib/catalog-signatory-planning";
+import {
+  validateCatalogPolicyProposal, createPolicyDraftLedgerEntry, readPolicyDraftLedgerEntry,
+  type CatalogPolicyProposal,
+} from "@/lib/catalog-signatory-policy-draft";
 import { catalogBundleSigningSecret } from "@/lib/catalog-bundle-attestation";
 import {
   bundleTriageClass, catalogDriftObservationToken, matchesCatalogDriftObservation,
@@ -29,6 +33,7 @@ function record(value: unknown): Record<string, unknown> | null {
 type Context = { params: Promise<{ id: string }> };
 type TriageInput = { rowNumber: number; observationToken: string; reasonCode: TriageReason };
 type ExpertInput = { flagEventId: string; disposition: ExpertDisposition };
+type PolicyDraftInput = { expectedRevision: number; proposal: CatalogPolicyProposal };
 
 /** A bounded, live-scoped snapshot diff. No source or live values in response. */
 export async function GET(request: NextRequest, context: Context) {
@@ -52,6 +57,46 @@ export async function GET(request: NextRequest, context: Context) {
 
 /** Append a domain-scoped review request, never an activation or approval. */
 export async function POST(request: NextRequest, context: Context) {
+  if (request.nextUrl.searchParams.has("policyDraft")) {
+    const query = request.nextUrl.searchParams;
+    if (query.get("policyDraft") !== "1" ||
+        [...query.keys()].some(key => key !== "policyDraft"))
+      return NextResponse.json({ error: "policy_draft_invalid_query" }, { status: 400 });
+    if ((request.headers.get("content-type") || "").split(";")[0].trim().toLowerCase() !== "application/json")
+      return NextResponse.json({ error: "policy_draft_json_required" }, { status: 415 });
+    if (request.headers.get("sec-fetch-site") === "cross-site")
+      return NextResponse.json({ error: "policy_draft_cross_site_request" }, { status: 403 });
+    const suppliedLength = Number(request.headers.get("content-length") || "0");
+    if (!Number.isFinite(suppliedLength) || suppliedLength < 0 || suppliedLength > 2048)
+      return NextResponse.json({ error: "policy_draft_payload_too_large" }, { status: 413 });
+    const reader = request.body?.getReader();
+    if (!reader) return NextResponse.json({ error: "policy_draft_payload_missing" }, { status: 400 });
+    const chunks: Uint8Array[] = [];
+    let readLength = 0;
+    for (;;) {
+      const result = await reader.read();
+      if (result.done) break;
+      readLength += result.value.byteLength;
+      if (readLength > 2048) {
+        await reader.cancel("policy_draft_payload_too_large");
+        return NextResponse.json({ error: "policy_draft_payload_too_large" }, { status: 413 });
+      }
+      chunks.push(result.value);
+    }
+    let body: Record<string, unknown> | null = null;
+    try { body = record(JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(chunks)))); }
+    catch { return NextResponse.json({ error: "policy_draft_invalid_json" }, { status: 400 }); }
+    const proposal = validateCatalogPolicyProposal(body?.proposal);
+    if (!body || Object.keys(body).sort().join(",") !== "expectedRevision,proposal" ||
+        !Number.isSafeInteger(body.expectedRevision) ||
+        (body.expectedRevision as number) < 0 || (body.expectedRevision as number) >= 1000 ||
+        !proposal)
+      return NextResponse.json({ error: "policy_draft_invalid_request" }, { status: 400 });
+    return inspectBundleDrift(request, context, null, null, false, true, {
+      expectedRevision: body.expectedRevision as number, proposal,
+    });
+  }
+
   if (!/^application\/json(?:\s*;|$)/i.test(request.headers.get("content-type") || ""))
     return NextResponse.json({ error: "triage_json_required" }, { status: 415 });
   const len = Number(request.headers.get("content-length") || 0);
@@ -127,6 +172,7 @@ async function inspectBundleDrift(
   triage: TriageInput | null, expert: ExpertInput | null = null,
   expertPreflight = false,
   governance = false,
+  policyDraftInput: PolicyDraftInput | null = null,
 ) {
   const session = await getCurrentSession();
   if (!session) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
@@ -637,12 +683,66 @@ async function inspectBundleDrift(
           ))),
         })),
       });
+      const policyContext = {
+        organizationId, batchId: batch.id, branchId: liveScope.branchId,
+        sourceChecksum: batch.sourceChecksum,
+      };
+      const lastPolicyEvent = await tx.auditEvent.findFirst({
+        where: {
+          organizationId, branchId: liveScope.branchId,
+          actorUserId: batch.createdByUserId,
+          entityType: "CatalogImportBatch", entityId: batch.id,
+          action: "CATALOG_BUNDLE_SIGNATORY_POLICY_DRAFT_RECORDED",
+        },
+        orderBy: [{ occurredAt: "desc" }, { id: "desc" }],
+        select: { id: true, newValues: true },
+      });
+      const oldPolicy = lastPolicyEvent
+        ? readPolicyDraftLedgerEntry(lastPolicyEvent.newValues, policyContext) : null;
+      if (lastPolicyEvent && !oldPolicy)
+        return { error: "policy_draft_history_corrupt", httpStatus: 409 } as const;
+      let currentPolicy = oldPolicy;
+      let draftSave: "UNCHANGED" | "RECORDED" | null = null;
+      if (policyDraftInput) {
+        if (policyDraftInput.expectedRevision !== (oldPolicy?.revision || 0))
+          return { error: "policy_draft_revision_conflict", httpStatus: 409 } as const;
+        const next = createPolicyDraftLedgerEntry(
+          policyContext, policyDraftInput.proposal, (oldPolicy?.revision || 0) + 1,
+        );
+        if (oldPolicy?.proposalDigest === next.proposalDigest) {
+          draftSave = "UNCHANGED";
+        } else {
+          await tx.auditEvent.create({ data: {
+            organizationId, branchId: liveScope.branchId, actorUserId: session.user.id,
+            action: "CATALOG_BUNDLE_SIGNATORY_POLICY_DRAFT_RECORDED",
+            entityType: "CatalogImportBatch", entityId: batch.id,
+            newValues: next,
+            ipAddress: ctx.ipAddress, userAgent: ctx.userAgent,
+          } });
+          currentPolicy = next;
+          draftSave = "RECORDED";
+        }
+      }
+      // Return choices and revision only; ledger identity and source details
+      // stay inside the immutable audit record and never reach the browser.
+      const proposalView = currentPolicy ? {
+        revision: currentPolicy.revision,
+        proposal: currentPolicy.proposal,
+        proposalDigest: currentPolicy.proposalDigest,
+        state: "UNAPPROVED_DRAFT" as const,
+        reviewOnly: true as const, approved: false as const,
+        signingEnabled: false as const, activated: false as const,
+        liveWrites: false as const,
+      } : null;
       await tx.auditEvent.create({ data: {
         organizationId, branchId: liveScope.branchId, actorUserId: session.user.id,
         action: "CATALOG_BUNDLE_GOVERNANCE_INSPECTED", entityType: "CatalogImportBatch",
         entityId: batch.id, newValues: {
           rowCount: readiness.rowCount, sourceAttested: verified, blockers: readiness.blockers,
-          planningGaps: planning.gaps, planningReviewerCounts: {
+          planningGaps: planning.gaps,
+          policyDraftRevision: currentPolicy?.revision || 0,
+          policyDraftState: currentPolicy ? "UNAPPROVED_DRAFT" : "NOT_STARTED",
+          planningReviewerCounts: {
             clinical: planning.clinicalReviewerCandidates,
             financial: planning.financialReviewerCandidates,
             crossQualified: planning.crossQualifiedReviewers,
@@ -650,7 +750,8 @@ async function inspectBundleDrift(
           readOnly: true, approved: false, activated: false,
         }, ipAddress: ctx.ipAddress, userAgent: ctx.userAgent,
       } });
-      return { ...readiness, signatoryPlanning: planning };
+      return { ...readiness, signatoryPlanning: planning,
+        policyDraft: proposalView, policyDraftSave: draftSave };
     }
     await tx.auditEvent.create({ data: {
       organizationId, branchId: liveScope.branchId, actorUserId: session.user.id,
