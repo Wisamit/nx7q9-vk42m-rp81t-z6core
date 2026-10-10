@@ -65,7 +65,7 @@ test("Stage 53: bound idempotent input and append-only evidence, never writes la
   const liveRoles = source.indexOf("const activeUser = await tx.user.findFirst");
   const liveMasters = source.indexOf('if (type === "TEST")');
   const triage = source.indexOf("if (triage) {");
-  const audit = source.indexOf('action: "CATALOG_BUNDLE_EXPERT_REVIEW_FLAGGED"');
+  const audit = source.lastIndexOf('action: "CATALOG_BUNDLE_EXPERT_REVIEW_FLAGGED"');
   assert.ok(lock > 0 && liveRoles > lock && liveMasters > liveRoles && triage > liveMasters && audit > triage);
   assert.match(source, /sessionPermissions\.has\(code\) && livePermissions\.has\(code\)/);
   assert.match(source, /createdByUserId: session.user.id/);
