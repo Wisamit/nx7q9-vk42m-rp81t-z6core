@@ -100,6 +100,7 @@ export default async function CatalogPage() {
           />
           <CatalogManager locale={locale} departments={departments} specimens={specimens} containers={containers} methods={methods} units={units} />
           {permissions.has("catalog.manage") && <CommercialPackageManager locale={locale} tests={tests.map(test => ({ id: test.id, code: test.code, nameEn: test.nameEn, nameAr: test.nameAr }))} />}
+          {permissions.has("catalog.manage") && <Link className="secondary-link" href="/catalog/expert-reviews">{tr(locale, "Independent Expert Reviews", "المراجعات المستقلة للمختصين")}</Link>}
           <Link className="secondary-link" href="/dashboard">{tr(locale, "Back to Dashboard", "العودة إلى لوحة التحكم")}</Link>
         </div>
       </header>

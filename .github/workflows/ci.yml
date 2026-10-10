@@ -77,6 +77,7 @@ jobs:
       - run: node --experimental-strip-types --test tests/stage-51-catalog-attestation-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-52-catalog-bundle-drift-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-53-catalog-drift-triage-mariadb.integration.test.ts
+      - run: node --experimental-strip-types --test tests/stage-54-catalog-expert-disposition-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-38-staged-price-overlap-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/microbiology-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/analyzer-work-orders-mariadb.integration.test.ts
