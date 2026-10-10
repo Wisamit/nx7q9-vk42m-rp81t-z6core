@@ -3,6 +3,7 @@ import { requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { clinicalImportTestWhere, resolveClinicalImportScope } from "@/lib/catalog-clinical-import-scope";
 import { reconcileComponentCandidate } from "@/lib/component-import-reconciliation";
+import { blockedComponentReviewRow, componentCsvReviewAllowed, isReviewableComponentStatus } from "@/lib/component-review-disclosure";
 
 const PAGE_SIZE = 100;
 const asRecord = (value: unknown): Record<string, unknown> =>
@@ -31,9 +32,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const after = rawAfter === null ? 0 : Number(rawAfter);
   const batch = await prisma.catalogImportBatch.findFirst({
     where: { id, organizationId: session.user.organizationId },
-    select: { id: true, status: true },
+    select: { id: true, status: true, sourceType: true, createdByUserId: true },
   });
-  if (!batch) return NextResponse.json({ error: "batch_not_found" }, { status: 404 });
+  if (!batch || !componentCsvReviewAllowed(batch, session.user.id)) {
+    return NextResponse.json({ error: "batch_not_found" }, { status: 404 });
+  }
 
   const rows = await prisma.catalogImportRow.findMany({
     where: { batchId: batch.id, entityType: "COMPONENT", rowNumber: { gt: after } },
@@ -43,6 +46,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   });
   const visible = rows.slice(0, PAGE_SIZE);
   const candidates = visible.map(row => {
+    // Do not normalize or resolve already processed and erroneous source rows.
+    if (!isReviewableComponentStatus(row.status)) return { row, candidate: null };
     const d = asRecord(row.normalizedData);
     return {
       row, candidate: {
@@ -54,8 +59,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       },
     };
   });
-  const testCodes = [...new Set(candidates.map(x => x.candidate.testCode).filter(Boolean))];
-  const unitCodes = [...new Set(candidates.map(x => x.candidate.unitCode).filter(Boolean))];
+  const testCodes = [...new Set(candidates.map(x => x.candidate?.testCode).filter((v): v is string => !!v))];
+  const unitCodes = [...new Set(candidates.map(x => x.candidate?.unitCode).filter((v): v is string => !!v))];
 
   const [tests, units, duplicateRows] = await Promise.all([
     prisma.labTest.findMany({
@@ -72,10 +77,14 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     // Duplicate detection applies to the *whole batch*, not only the
     // current cursor page. Ambiguous identities must never be marked ready.
     prisma.catalogImportRow.findMany({
-      where: { batchId: batch.id, entityType: "COMPONENT" },
+      where: { batchId: batch.id, entityType: "COMPONENT", status: { in: ["VALID", "WARNING"] } },
       select: { normalizedData: true },
+      take: 20001,
     }),
   ]);
+  if (duplicateRows.length > 20000) {
+    return NextResponse.json({ error: "component_review_row_limit_exceeded" }, { status: 409 });
+  }
   const testIndex = new Map(tests.map(t => [t.code.toUpperCase(), { id: t.id, status: t.status }]));
   const unitIndex = new Map(units.map(u => [u.code.toUpperCase(), { id: u.id, status: u.status }]));
   const componentIndex = new Set(tests.flatMap(test =>
@@ -91,22 +100,22 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   }
 
   const reconciled = candidates.map(({ row, candidate }) => {
+    if (!candidate) return blockedComponentReviewRow(row);
     const assessment = reconcileComponentCandidate(candidate, {
       tests: testIndex, units: unitIndex, components: componentIndex,
     }, counts.get(candidate.testCode + "|" + candidate.code) || 0);
-    const issues = Array.isArray(row.validationIssues) ? row.validationIssues : [];
-    const alreadyImported = row.status === "IMPORTED" || row.status === "SKIPPED";
+    // Missing or out-of-department tests must never echo component identities,
+    // unmatched test codes, stale validation metadata or resolved unit IDs.
+    if (!assessment.resolvedTestId) {
+      return blockedComponentReviewRow(row, "PARENT_TEST_NOT_ACTIVE_OR_MISSING");
+    }
     return {
       rowNumber: row.rowNumber,
       rowStatus: row.status,
       candidate,
-      disposition: alreadyImported || row.status === "ERROR" ? "BLOCKED" : assessment.disposition,
-      issues: [
-        ...(row.status === "ERROR" ? ["STAGED_ROW_HAS_ERRORS"] : []),
-        ...(alreadyImported ? ["ROW_ALREADY_PROCESSED"] : []),
-        ...assessment.issues,
-      ],
-      stagedIssues: issues,
+      disposition: assessment.disposition,
+      issues: assessment.issues,
+      stagedIssues: Array.isArray(row.validationIssues) ? row.validationIssues : [],
       resolvedTestId: assessment.resolvedTestId,
       resolvedUnitId: assessment.resolvedUnitId,
     };
