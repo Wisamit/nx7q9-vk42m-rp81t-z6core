@@ -327,7 +327,7 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
   if (!scope) return NextResponse.json({ error: "active_clinical_import_scope_required" }, { status: 403 });
   const batch = await prisma.catalogImportBatch.findFirst({ where: { id, organizationId: session.user.organizationId } });
   if (!batch) return NextResponse.json({ error: "batch_not_found" }, { status: 404 });
-  if (batch.sourceType === "CSV_REVIEW") return NextResponse.json({ error: "csv_review_is_not_clinical_import" }, { status: 409 });
+  if ((batch.sourceType === "CSV_REVIEW" || batch.sourceType === "CONFIG_BUNDLE_REVIEW")) return NextResponse.json({ error: "csv_review_is_not_clinical_import" }, { status: 409 });
 
   const analysis = await analyze(batch.id, session.user.organizationId, scope);
   let imported = 0;
