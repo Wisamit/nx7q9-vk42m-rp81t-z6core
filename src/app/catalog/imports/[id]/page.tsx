@@ -12,6 +12,7 @@ import { getUiLocale, tr } from "@/lib/ui-i18n";
 import { authorizedStagedPrices, stagedPriceListCode, stagedPriceTestCode } from "@/lib/catalog-import-disclosure";
 import { clinicalImportTestWhere, resolveClinicalImportScope } from "@/lib/catalog-clinical-import-scope";
 import { BUNDLE_REVIEW_SOURCE } from "@/lib/catalog-bundle-review";
+import { CatalogBundleDriftReview } from "@/components/catalog-bundle-drift-review";
 
 export const dynamic = "force-dynamic";
 
@@ -254,6 +255,8 @@ export default async function ImportBatchPage({
           "Unverified source: signature missing or created before signing was supported. Review only; an atomic snapshot claim is not trusted without verified evidence. No settings are applied.",
           "مصدر غير موثّق: التوقيع مفقود أو الملف سابق لدعم التوقيع. للمراجعة فقط؛ لا يُعتمد ادعاء التصدير المتّسق دون دليل موثّق، ولا تُطبّق أي إعدادات.")
     }</p>}
+
+    {isBundleReview && <CatalogBundleDriftReview batchId={batch.id} locale={locale} />}
 
     <section className="catalog-stats">
       <article><strong>{totalRows}</strong><span>{tr(locale, "Total staged", "إجمالي الصفوف المرحلية")}</span></article>
