@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentSession, permissionSet, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { attestCatalogBundle, catalogBundleSigningSecret } from "@/lib/catalog-bundle-attestation";
 import { clinicalImportTestWhere, resolveClinicalImportScope } from "@/lib/catalog-clinical-import-scope";
 import { BUNDLE_REVIEW_MAX_BYTES, BUNDLE_REVIEW_MAX_ROWS } from "@/lib/catalog-bundle-review";
 import { catalogExportTypes, type CatalogExportType } from "@/lib/catalog-configuration-export";
@@ -42,6 +43,8 @@ export async function GET(request: NextRequest) {
   if (!scope) return NextResponse.json({ error: "active_clinical_export_scope_required" }, { status: 403 });
   const organizationId = scope.organizationId;
   const ctx = await requestContext();
+  const signingSecret = catalogBundleSigningSecret(process.env);
+  if (!signingSecret) return NextResponse.json({ error: "bundle_signing_key_unavailable" }, { status: 503 });
 
   const outcome = await prisma.$transaction(async tx => {
     // Prevent same-tenant coordinated changes before live authorization checks.
@@ -190,7 +193,7 @@ export async function GET(request: NextRequest) {
       groups,
     };
     // Same 4 MiB intake limit as the native JSON review endpoint.
-    const serialized = JSON.stringify(payload);
+    const serialized = JSON.stringify(attestCatalogBundle(JSON.parse(JSON.stringify(payload)), signingSecret));
     if (Buffer.byteLength(serialized, "utf8") > BUNDLE_REVIEW_MAX_BYTES) {
       return { error: "bundle_export_too_large", httpStatus: 413 } as const;
     }
