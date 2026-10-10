@@ -64,17 +64,17 @@ test("MariaDB two connections: financial review cannot cross tenant or unauthori
       ? JSON.parse(row.normalized_data) : row.normalized_data);
     assert.equal(candidates.length,3);
     const [tenantLists] = await reader.execute<mysql.RowDataPacket[]>(
-      "SELECT code,branch_id FROM price_lists WHERE organization_id=?",
+      "SELECT code,branch_id,scope_type FROM price_lists WHERE organization_id=?",
       [org],
     );
-    const lists = tenantLists.map(row => ({code:String(row.code),branchId:row.branch_id as string | null}));
+    const lists = tenantLists.map(row => ({code:String(row.code),branchId:row.branch_id as string | null,scopeType:String(row.scope_type)}));
     assert.equal(lists.length,3);
     assert.equal(authorizedStagedPrices(candidates,lists,new Set([branchA])),false);
     assert.equal(authorizedStagedPrices(candidates,lists,new Set([branchA,branchB])),true);
     const [otherTenantLists] = await reader.execute<mysql.RowDataPacket[]>(
-      "SELECT code,branch_id FROM price_lists WHERE organization_id=?",[other]);
+      "SELECT code,branch_id,scope_type FROM price_lists WHERE organization_id=?",[other]);
     assert.equal(authorizedStagedPrices(candidates,otherTenantLists.map(x => ({
-      code:String(x.code), branchId:x.branch_id as string | null,
+      code:String(x.code), branchId:x.branch_id as string | null, scopeType:String(x.scope_type),
     })),new Set([otherBranch])),false);
     assert.equal(authorizedStagedPrices(candidates.slice(0,2),lists,new Set([branchA])),true);
     // No patient, result, invoice, or live price changes during review.
