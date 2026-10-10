@@ -62,7 +62,7 @@ test("Stage 42 MariaDB two sessions: staged price test identities cannot cross b
         "SELECT t.code FROM lab_tests t JOIN departments d ON d.id=t.department_id WHERE t.organization_id=? AND t.status='ACTIVE' AND d.status='ACTIVE' AND (d.branch_id IS NULL OR d.branch_id=?) AND t.department_id IN (?)",
         [org,branchA,dA]);
       const codes=new Set(allowed.map(x=>String(x.code).toUpperCase()));
-      assert.deepEqual([...codes],[prefix+"TA"]);
+      assert.deepEqual([...codes],[(prefix+"TA").toUpperCase()]);
       const [rows]=await reader.execute<mysql.RowDataPacket[]>(
         "SELECT `row_number` AS `row_number`,normalized_data FROM catalog_import_rows WHERE batch_id=? AND entity_type='PRICE_LIST_ITEM' ORDER BY `row_number`",
         [batch]);
