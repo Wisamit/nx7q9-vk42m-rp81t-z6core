@@ -34,7 +34,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     where: { id, organizationId: session.user.organizationId },
     select: { id: true, status: true, sourceType: true, createdByUserId: true },
   });
-  if (!batch || !componentCsvReviewAllowed(batch, session.user.id)) {
+  if (!batch || batch.sourceType === "CONFIG_BUNDLE_REVIEW" || !componentCsvReviewAllowed(batch, session.user.id)) {
     return NextResponse.json({ error: "batch_not_found" }, { status: 404 });
   }
 

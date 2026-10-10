@@ -18,6 +18,9 @@ export async function GET(request: NextRequest) {
   if (!type || !catalogExportTypes.has(type as CatalogExportType)) {
     return NextResponse.json({ error: "unsupported_catalog_export_entity" }, { status: 400 });
   }
+  if (type === "REFERENCE_INTERVAL" && !permissions.has("catalog.reference_ranges.manage")) {
+    return NextResponse.json({ error: "reference_ranges_manage_required" }, { status: 403 });
+  }
   if ((type === "PRICE_LIST" || type === "PRICE_LIST_ITEM") && !permissions.has("pricing.manage")) {
     return NextResponse.json({ error: "pricing_export_forbidden" }, { status: 403 });
   }
@@ -37,6 +40,11 @@ export async function GET(request: NextRequest) {
     ...(departmentIds.length ? { departmentId: { in: departmentIds } } : {}),
   };
   const branchScope = { OR: [{ branchId: null }, { branchId: { in: branchIds } }] };
+  // Generic exports cannot disclose client/contract/source/referrer prices.
+  const genericPriceScope = { OR: [
+    { scopeType: "ORGANIZATION" as const, branchId: null },
+    { scopeType: "BRANCH" as const, branchId: { in: branchIds } },
+  ] };
   // Lexical id keyset paging does not depend on a cursor record still existing
   // and never uses a foreign-tenant row as a Prisma cursor anchor.
   const base = { orderBy: { id: "asc" as const }, take: 251 };
@@ -98,7 +106,7 @@ export async function GET(request: NextRequest) {
     });
   } else if (type === "PRICE_LIST") {
     records = await prisma.priceList.findMany({
-      ...base, where: { organizationId, ...branchScope, ...cursorScope },
+      ...base, where: { organizationId, ...genericPriceScope, ...cursorScope },
       select: {
         id: true, code: true, nameEn: true, nameAr: true, scopeType: true,
         branchId: true, sourceId: true, referrerId: true, clientId: true,
@@ -110,7 +118,7 @@ export async function GET(request: NextRequest) {
   } else if (type === "PRICE_LIST_ITEM") {
     records = await prisma.priceListItem.findMany({
       ...base,
-      where: { priceList: { organizationId, ...branchScope }, test: testScope, ...cursorScope },
+      where: { priceList: { organizationId, ...genericPriceScope }, test: testScope, ...cursorScope },
       select: {
         id: true, priceListId: true, testId: true, unitPrice: true,
         effectiveFrom: true, effectiveTo: true, status: true,

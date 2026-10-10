@@ -45,9 +45,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   // while clinical test identities remain limited to the active clinical scope.
   const branches = session.user.branchScopes.filter(s => s.branch.status === "ACTIVE").map(s => s.branchId);
   const batch = await prisma.catalogImportBatch.findFirst({
-    where: { id, organizationId }, select: { id: true, status: true },
+    where: { id, organizationId }, select: { id: true, status: true, sourceType: true },
   });
-  if (!batch) return NextResponse.json({ error: "batch_not_found" }, { status: 404 });
+  if (!batch || batch.sourceType === "CONFIG_BUNDLE_REVIEW") return NextResponse.json({ error: "batch_not_found" }, { status: 404 });
 
   const rows = await prisma.catalogImportRow.findMany({
     where: { batchId: batch.id, entityType: "PRICE_LIST_ITEM", rowNumber: { gt: after } },

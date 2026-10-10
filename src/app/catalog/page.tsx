@@ -6,6 +6,7 @@ import { ClinicalCatalogManager } from "@/components/clinical-catalog-manager";
 import { LegacyImportBatches } from "@/components/legacy-import-batches";
 import { CatalogConfigurationExport } from "@/components/catalog-configuration-export";
 import { CatalogCsvReviewStaging } from "@/components/catalog-csv-review-staging";
+import { CatalogBundleReviewStaging } from "@/components/catalog-bundle-review-staging";
 import { CommercialPackageManager } from "@/components/commercial-package-manager";
 import { statusLabel, tr } from "@/lib/ui-i18n";
 import { resolveClinicalImportScope } from "@/lib/catalog-clinical-import-scope";
@@ -58,10 +59,14 @@ export default async function CatalogPage() {
           { rows: { none: { entityType: "REFERENCE_INTERVAL" } } },
           ...(canReviewCsvRanges ? [{ createdByUserId: session.user.id }] : []),
         ],
-      }],
+      }, { OR: [
+        { sourceType: { not: "CONFIG_BUNDLE_REVIEW" } },
+        { createdByUserId: session.user.id },
+      ] }],
       ...(permissions.has("catalog.manage") ? {
         OR: [
-          { rows: { none: { entityType: "PRICE_LIST_ITEM" } } },
+          { AND: [{ rows: { none: { entityType: "PRICE_LIST_ITEM" } } },
+            { rows: { none: { entityType: "PRICE_LIST" } } }] },
           ...(permissions.has("pricing.manage") ? [{ createdByUserId: session.user.id }] : []),
         ],
       } : { id: "00000000-0000-0000-0000-000000000000" }),
@@ -107,7 +112,9 @@ export default async function CatalogPage() {
         <article><strong>{packages.length}</strong><span>{tr(locale, "Commercial Packages", "الباقات التجارية")}</span></article>
       </section>
 
-      {permissions.has("catalog.manage") && <CatalogConfigurationExport locale={locale} canExportPricing={permissions.has("pricing.manage")} />}
+      {permissions.has("catalog.manage") && <CatalogConfigurationExport locale={locale} canExportPricing={permissions.has("pricing.manage")} canExportRanges={canReviewCsvRanges} />}
+
+      {permissions.has("catalog.manage") && <CatalogBundleReviewStaging locale={locale} />}
 
       {permissions.has("catalog.manage") && <CatalogCsvReviewStaging locale={locale} canStagePricing={permissions.has("pricing.manage")} canStageRanges={permissions.has("catalog.reference_ranges.manage")} />}
 

@@ -30,7 +30,7 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
     },
   });
   if (!batch) return NextResponse.json({ error: "batch_not_found" }, { status: 404 });
-  if (batch.sourceType === "CSV_REVIEW") return NextResponse.json({ error: "csv_review_is_not_clinical_import" }, { status: 409 });
+  if ((batch.sourceType === "CSV_REVIEW" || batch.sourceType === "CONFIG_BUNDLE_REVIEW")) return NextResponse.json({ error: "csv_review_is_not_clinical_import" }, { status: 409 });
 
   // Lock the organization and batch before reading mutable source rows or units.
   // Two unit-preparation requests (even from different legacy batches) cannot
@@ -55,7 +55,7 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
         orderBy: { rowNumber: "asc" },
       } },
     });
-    if (!currentBatch || currentBatch.sourceType === "CSV_REVIEW" ||
+    if (!currentBatch || (currentBatch.sourceType === "CSV_REVIEW" || currentBatch.sourceType === "CONFIG_BUNDLE_REVIEW") ||
         currentBatch.status === "FAILED") throw new Error("legacy_unit_batch_changed");
 
     const eligibleRows = currentBatch.rows.filter(eligibleLegacyUnitSourceRow);
