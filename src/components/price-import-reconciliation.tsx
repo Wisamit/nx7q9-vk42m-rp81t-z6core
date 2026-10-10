@@ -9,6 +9,7 @@ const issueLabels: Record<string, [string, string]> = {
   OUTSIDE_PRICE_LIST_EFFECTIVE_WINDOW: ["Outside price list effective dates", "خارج فترة سريان قائمة الأسعار"],
   INVALID_EFFECTIVE_WINDOW: ["Invalid price effective dates", "تواريخ سريان السعر غير صحيحة"],
   PRICE_LIST_SCOPE_UNRESOLVED: ["Price list unavailable in your scope", "قائمة الأسعار خارج نطاق الصلاحية"],
+  TEST_SCOPE_UNRESOLVED: ["Test unavailable in your clinical scope", "الفحص خارج نطاق الصلاحية السريرية"],
   ROW_ALREADY_PROCESSED: ["Row already processed", "تمت معالجة الصف مسبقاً"],
   STAGED_ROW_HAS_ERRORS: ["Row is not reviewable", "الصف غير مؤهل للمراجعة"],
   PRICE_LIST_NOT_ACTIVE_OR_AUTHORIZED: ["Price list not active or authorized", "قائمة الأسعار غير مفعّلة أو غير مصرّح بها"],
