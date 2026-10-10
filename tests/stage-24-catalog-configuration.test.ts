@@ -76,8 +76,9 @@ test("export route requires explicit catalogue and financial permissions and ten
   assert.ok(s.includes('const organizationId = session.user.organizationId'));
   assert.ok(s.includes('component: { test: testScope }'));
   assert.ok(s.includes('test: testScope'));
-  assert.ok(s.includes('priceList: { organizationId, ...branchScope }'));
-  assert.ok(s.includes('...branchScope, ...cursorScope'));
+  assert.ok(s.includes('priceList: { organizationId, ...genericPriceScope }'));
+  assert.ok(s.includes('...genericPriceScope, ...cursorScope'));
+  assert.ok(s.includes('...branchScope, ...cursorScope'));\n  assert.ok(s.includes('permissions.has("catalog.reference_ranges.manage")'));
   assert.ok(s.includes('const base = { orderBy: { id: "asc" as const }, take: 251 }'));
   assert.ok(s.includes('hasMore = records.length > 250'));
   assert.ok(s.includes('Cache-Control": "private, no-store"'));
