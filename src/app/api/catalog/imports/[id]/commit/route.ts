@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import {
   isSafeMasterTestRow, registerPanelAlias, resolvedPanelMemberships, sameImportTestIdentity,
 } from "@/lib/catalog-panel-membership";
+import { fitsSafeMasterIdentity, registerSafeMasterUnitAlias, resolveSafeMasterUnitAlias, sameSafeMasterTestDefinition } from "@/lib/catalog-safe-master-units";
 
 function asObject(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -40,22 +41,23 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
       data: { status: "IMPORTED", importedAt: new Date() },
     });
     if (claim.count !== 1) throw new Error("catalog_import_claim_conflict");
-    const units = new Map<string, string>();
+    const units = new Map<string, string | null>();
     for (const existing of await tx.unit.findMany({ where: { organizationId: session.user.organizationId } })) {
-      units.set(existing.code.toUpperCase(), existing.id);
-      units.set(existing.symbol.toUpperCase(), existing.id);
+      registerSafeMasterUnitAlias(units, existing.code, existing.id);
+      registerSafeMasterUnitAlias(units, existing.symbol, existing.id);
     }
 
     for (const row of safeRows.filter(row => row.entityType === "UNIT")) {
       const n = asObject(row.normalizedData);
       const code = text(n.code).toUpperCase();
       const symbol = text(n.symbol);
-      if (!code || !symbol || units.has(code) || units.has(symbol.toUpperCase())) {
+      if (!fitsSafeMasterIdentity(code, symbol, 50, 50) || units.has(code) || units.has(symbol.toUpperCase())) {
         await tx.catalogImportRow.update({ where: { id: row.id }, data: { status: "SKIPPED", validationIssues: [{ severity: "WARNING", code: "DUPLICATE_OR_INVALID_UNIT", message: "Unit already exists or could not be imported safely." }] } });
         results.skipped++; continue;
       }
       const unit = await tx.unit.create({ data: { organizationId: session.user.organizationId, code: code.slice(0, 50), symbol: symbol.slice(0, 50), nameEn: symbol.slice(0, 150) } });
-      units.set(code, unit.id); units.set(symbol.toUpperCase(), unit.id);
+      registerSafeMasterUnitAlias(units, code, unit.id);
+      registerSafeMasterUnitAlias(units, symbol, unit.id);
       await tx.catalogImportRow.update({ where: { id: row.id }, data: { status: "IMPORTED", importedEntityId: unit.id } });
       results.imported++;
     }
@@ -63,7 +65,7 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
     for (const row of safeRows.filter(row => row.entityType === "CONTAINER")) {
       const n = asObject(row.normalizedData); const code = text(n.code).toUpperCase(); const nameEn = text(n.nameEn);
       const existing = code ? await tx.container.findUnique({ where: { organizationId_code: { organizationId: session.user.organizationId, code } } }) : null;
-      if (!code || !nameEn || existing) {
+      if (!fitsSafeMasterIdentity(code, nameEn, 50, 150) || existing) {
         await tx.catalogImportRow.update({ where: { id: row.id }, data: { status: "SKIPPED", validationIssues: [{ severity: "WARNING", code: "DUPLICATE_OR_INVALID_CONTAINER", message: "Container already exists or could not be imported safely." }] } });
         results.skipped++; continue;
       }
@@ -76,20 +78,24 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
     const testBySourceRowId = new Map<string, string>();
     for (const row of safeRows.filter(row => row.entityType === "TEST")) {
       const n = asObject(row.normalizedData); const code = text(n.code).toUpperCase(); const nameEn = text(n.nameEn);
+      const sourceUnit = resolveSafeMasterUnitAlias(units, text(n.unit));
       const existing = code ? await tx.labTest.findUnique({ where: { organizationId_code: { organizationId: session.user.organizationId, code } } }) : null;
-      if (!code || !nameEn || existing) {
-        // Only an exact existing code AND matching display identity may be
-        // reused for this eligible staged source row.
-        if (existing && sameImportTestIdentity(existing.nameEn, nameEn)) {
+      if (!fitsSafeMasterIdentity(code, nameEn, 80, 200) || !sourceUnit.ok || existing) {
+        // Reusing a test for a panel requires matching its clinical definition,
+        // not just its display name. Unknown/ambiguous units must never silently
+        // become NULL or resolve to whichever existing alias was loaded last.
+        if (existing && sourceUnit.ok && fitsSafeMasterIdentity(code, nameEn, 80, 200) &&
+          sameSafeMasterTestDefinition(existing, { nameEn, unitId: sourceUnit.unitId,
+            assay: text(n.assay), collection: text(n.collection) })) {
           testBySourceRowId.set(row.id, existing.id);
         }
-        await tx.catalogImportRow.update({ where: { id: row.id }, data: { status: "SKIPPED", validationIssues: [{ severity: "WARNING", code: "DUPLICATE_OR_INVALID_TEST", message: "Test already exists or could not be imported safely; no existing definition was overwritten." }] } });
+        const issue = sourceUnit.ok ? "DUPLICATE_OR_INVALID_TEST" : sourceUnit.reason;
+        await tx.catalogImportRow.update({ where: { id: row.id }, data: { status: "SKIPPED", validationIssues: [{ severity: "WARNING", code: issue, message: "Test definition or source unit could not be imported safely; no existing definition was overwritten." }] } });
         results.skipped++; continue;
       }
-      const unitText = text(n.unit).toUpperCase();
       const created = await tx.labTest.create({ data: {
         organizationId: session.user.organizationId, code: code.slice(0, 80), nameEn: nameEn.slice(0, 200),
-        abbreviation: code.slice(0, 80), defaultUnitId: units.get(unitText) || null,
+        abbreviation: code.slice(0, 80), defaultUnitId: sourceUnit.unitId,
         assay: text(n.assay).slice(0, 200) || null, collectionInstructions: text(n.collection) || null,
       } });
       if (session.activeBranchId) await tx.testBranchAvailability.create({ data: { testId: created.id, branchId: session.activeBranchId, performedHere: true } });
@@ -105,9 +111,10 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
       }) : null;
       // A legacy panel code with a different current identity must not change
       // that panel's membership through an unapproved import.
-      let panel = existingPanel && sameImportTestIdentity(existingPanel.nameEn, nameEn)
+      let panel = existingPanel && fitsSafeMasterIdentity(code, nameEn, 80, 200) &&
+        existingPanel.status === "ACTIVE" && sameImportTestIdentity(existingPanel.nameEn, nameEn)
         ? existingPanel : null;
-      if (!existingPanel && code && nameEn) {
+      if (!existingPanel && fitsSafeMasterIdentity(code, nameEn, 80, 200)) {
         panel = await tx.testPanel.create({ data: {
           organizationId: session.user.organizationId, code: code.slice(0, 80),
           nameEn: nameEn.slice(0, 200),
