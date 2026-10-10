@@ -64,7 +64,8 @@ test("MariaDB independent sessions: scoped staged pricing collisions cross pages
     assert.equal(rows.length,101);
     const collisions=stagedPriceOverlapIndex(rows);
     assert.deepEqual([...collisions].sort((a,b)=>a-b),[1,101]);
-    assert.equal(stagedPriceOverlapIndex(rows.slice(0,100)).has(1),false);
+    assert.equal(stagedPriceOverlapIndex(rows.filter(row => row.rowNumber <= 100)).has(1),false,
+      "review must use the first page cursor, not an unordered whole-batch database read");
     const [untouched]=await reader.execute<mysql.RowDataPacket[]>(
       "SELECT status,COUNT(*) AS qty FROM catalog_import_rows WHERE batch_id=? GROUP BY status",[batch]);
     assert.deepEqual(Object.fromEntries(untouched.map(row=>[String(row.status),Number(row.qty)])),
