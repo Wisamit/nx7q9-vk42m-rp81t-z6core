@@ -54,11 +54,11 @@ test("Stage 41 MariaDB two sessions: CSV component ownership and non-reviewable 
       assert.equal(componentCsvReviewAllowed(source,colleague),false);
 
       const [all]=await reader.execute<mysql.RowDataPacket[]>(
-        "SELECT `row_number` AS row_number,status,normalized_data FROM catalog_import_rows WHERE batch_id=? AND entity_type='COMPONENT' ORDER BY `row_number`,id",
+        "SELECT `row_number` AS `row_number`,status,normalized_data FROM catalog_import_rows WHERE batch_id=? AND entity_type='COMPONENT' ORDER BY `row_number`,id",
         [batch]);
       assert.deepEqual(all.map(x=>Number(x.row_number)),numbers);
       const [eligible]=await reader.execute<mysql.RowDataPacket[]>(
-        "SELECT `row_number` AS row_number,status,normalized_data FROM catalog_import_rows WHERE batch_id=? AND entity_type='COMPONENT' AND status IN ('VALID','WARNING') LIMIT 20001",
+        "SELECT `row_number` AS `row_number`,status,normalized_data FROM catalog_import_rows WHERE batch_id=? AND entity_type='COMPONENT' AND status IN ('VALID','WARNING') LIMIT 20001",
         [batch]);
       assert.deepEqual(eligible.map(x=>Number(x.row_number)).sort((a,b)=>a-b),[1,101]);
       assert.ok(eligible.every(x=>isReviewableComponentStatus(String(x.status))));
