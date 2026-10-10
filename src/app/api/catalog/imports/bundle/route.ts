@@ -63,18 +63,63 @@ export async function POST(request: Request) {
     throw error;
   }
 
-  const activeBranches = new Set(session.user.branchScopes.filter(item =>
-    item.branch.status === "ACTIVE" && item.branch.organizationId === scope.organizationId)
-    .map(item => item.branchId));
   const references = parsed.rows;
+  const ctx = await requestContext();
+  const checksum = createHash("sha256").update(JSON.stringify(payload)).digest("hex");
+  const outcome = await prisma.$transaction(async tx => {
+    // Same tenant lock as manual unit creation and legacy import commits.
+    const organizationLock = await tx.$queryRaw<Array<{ id: string }>>`
+      SELECT id FROM organizations WHERE id = ${scope.organizationId}
+        AND status = 'ACTIVE' FOR UPDATE
+    `;
+    if (organizationLock.length !== 1) {
+      return { error: "bundle_organization_inactive", httpStatus: 403 } as const;
+    }
+  // Session scopes can be stale. Revalidate actual grants after the
+  // organization lock, before reading master identities or writing review data.
+  const liveBranch = await tx.branch.findFirst({
+    where: { id: scope.branchId, organizationId: scope.organizationId, status: "ACTIVE" },
+    select: { id: true, organizationId: true, status: true },
+  });
+  const liveBranchGrants = await tx.userBranchScope.findMany({
+    where: { userId: session.user.id, branch: { organizationId: scope.organizationId, status: "ACTIVE" } },
+    select: { branchId: true },
+  });
+  const initiallyGrantedBranches = new Set(session.user.branchScopes.filter(
+    grant => grant.branch.status === "ACTIVE" && grant.branch.organizationId === scope.organizationId
+  ).map(grant => grant.branchId));
+  const currentBranchIds = liveBranchGrants.map(grant => grant.branchId)
+    .filter(id => initiallyGrantedBranches.has(id));
+  const liveDepartmentGrants = await tx.userDepartmentScope.findMany({
+    where: { userId: session.user.id },
+    select: { departmentId: true, department: {
+      select: { status: true, organizationId: true, branchId: true },
+    } },
+  });
+  const initiallyGrantedDepartments = new Set(session.user.departmentScopes.map(grant => grant.departmentId));
+  const currentDepartmentGrants = session.user.departmentScopes.length
+    ? liveDepartmentGrants.filter(grant => initiallyGrantedDepartments.has(grant.departmentId))
+    : liveDepartmentGrants;
+  // A revoked last department grant cannot turn restricted scope into global access.
+  if (session.user.departmentScopes.length && !currentDepartmentGrants.length) {
+    return { error: "bundle_department_scope_changed", httpStatus: 403 } as const;
+  }
+  const liveScope = resolveClinicalImportScope({
+    organizationId: scope.organizationId, activeBranchId: scope.branchId,
+    activeBranch: liveBranch,
+    branchScopes: currentBranchIds.map(branchId => ({ branchId, branch: { status: "ACTIVE" } })),
+    departmentScopes: currentDepartmentGrants,
+  });
+  if (!liveScope) return { error: "bundle_clinical_scope_changed", httpStatus: 403 } as const;
+  const activeBranches = new Set(currentBranchIds);
   for (const row of references) {
     const branchId = row.normalized.branchId;
     if (branchId && (typeof branchId !== "string" || !activeBranches.has(branchId))) {
-      return NextResponse.json({ error: "bundle_branch_scope_denied" }, { status: 403 });
+      return { error: "bundle_branch_scope_denied", httpStatus: 403 } as const;
     }
     if (row.normalized.scopeType === "BRANCH" && !branchId ||
         row.normalized.scopeType === "ORGANIZATION" && branchId) {
-      return NextResponse.json({ error: "bundle_price_scope_mismatch" }, { status: 403 });
+      return { error: "bundle_price_scope_mismatch", httpStatus: 403 } as const;
     }
   }
 
@@ -82,7 +127,7 @@ export async function POST(request: Request) {
   // read-only review of an actual export, NOT a foreign-database restore path.
   // In particular never disclose existing CLIENT/CONTRACT prices through this
   // generic catalog import surface.
-  const testWhere = { ...clinicalImportTestWhere(scope), status: undefined };
+  const testWhere = { ...clinicalImportTestWhere(liveScope), status: undefined };
   const testIds = [...new Set([
     ...parsed.ids.tests,
     ...references.filter(x => x.entityType === "COMPONENT" || x.entityType === "PRICE_LIST_ITEM")
@@ -111,27 +156,27 @@ export async function POST(request: Request) {
     ],
   };
   const [tests, units, components, intervals, lists, prices] = await Promise.all([
-    prisma.labTest.findMany({ where: { ...testWhere, id: { in: testIds } },
+    tx.labTest.findMany({ where: { ...testWhere, id: { in: testIds } },
       select: { id: true, code: true, departmentId: true } }),
-    prisma.unit.findMany({ where: { organizationId: scope.organizationId, id: { in: unitIds } },
+    tx.unit.findMany({ where: { organizationId: scope.organizationId, id: { in: unitIds } },
       select: { id: true, code: true } }),
-    prisma.testComponent.findMany({ where: { id: { in: componentIds }, test: testWhere },
+    tx.testComponent.findMany({ where: { id: { in: componentIds }, test: testWhere },
       select: { id: true, code: true, testId: true, unitId: true } }),
-    prisma.referenceInterval.findMany({ where: {
+    tx.referenceInterval.findMany({ where: {
       id: { in: parsed.ids.intervals },
       component: { test: testWhere },
       OR: [{ branchId: null }, { branchId: { in: [...activeBranches] } }],
     }, select: { id: true, componentId: true, branchId: true } }),
-    prisma.priceList.findMany({ where: { ...permittedPriceList, id: { in: priceListIds } },
+    tx.priceList.findMany({ where: { ...permittedPriceList, id: { in: priceListIds } },
       select: { id: true, code: true, scopeType: true, branchId: true } }),
-    prisma.priceListItem.findMany({ where: {
+    tx.priceListItem.findMany({ where: {
       id: { in: parsed.ids.prices }, priceList: permittedPriceList, test: testWhere,
     }, select: { id: true, priceListId: true, testId: true } }),
   ]);
   if (tests.length !== testIds.length || units.length !== unitIds.length ||
       components.length !== componentIds.length || intervals.length !== parsed.ids.intervals.length ||
       lists.length !== priceListIds.length || prices.length !== parsed.ids.prices.length) {
-    return NextResponse.json({ error: "bundle_master_identity_or_scope_changed" }, { status: 403 });
+    return { error: "bundle_master_identity_or_scope_changed", httpStatus: 403 } as const;
   }
   const byId = <T extends { id: string }>(rows: T[]) => new Map(rows.map(x => [x.id, x]));
   const testMap = byId(tests), unitMap = byId(units), componentMap = byId(components);
@@ -167,12 +212,9 @@ export async function POST(request: Request) {
         testMap.get(existing.testId)?.code === n.testCode &&
         typeof original.unitPrice === "string";
     }
-    if (!consistent) return NextResponse.json({ error: "bundle_master_mapping_mismatch" }, { status: 409 });
+    if (!consistent) return { error: "bundle_master_mapping_mismatch", httpStatus: 409 } as const;
   }
 
-  const ctx = await requestContext();
-  const checksum = createHash("sha256").update(JSON.stringify(payload)).digest("hex");
-  const batch = await prisma.$transaction(async tx => {
     const created = await tx.catalogImportBatch.create({ data: {
       organizationId: scope.organizationId, sourceType: BUNDLE_REVIEW_SOURCE,
       sourceName, sourceChecksum: checksum, status: "DRAFT", validatedAt: null,
@@ -202,7 +244,8 @@ export async function POST(request: Request) {
     } });
     return created;
   }, { timeout: 30000 });
-  return NextResponse.json({ id: batch.id, status: "DRAFT", reviewOnly: true,
+  if ("error" in outcome) return NextResponse.json({ error: outcome.error }, { status: outcome.httpStatus });
+  return NextResponse.json({ id: outcome.id, status: "DRAFT", reviewOnly: true,
     summary: { total: references.length, WARNING: references.length, counts: parsed.counts } },
   { status: 201, headers: { "Cache-Control": "private, no-store" } });
 }
