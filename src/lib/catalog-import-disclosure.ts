@@ -1,7 +1,8 @@
 /**
  * Financial import candidates must never be disclosed by a catalog-only role,
- * nor through a price list owned by a branch outside the user's active scope.
- * This checks only identifiers; never include monetary values in diagnostics.
+ * nor through a scoped customer, contract or other specialized price list.
+ * Only organization-wide or explicitly authorized branch price lists can be
+ * reviewed by this generic CSV staging workflow. This checks identifiers only.
  */
 export function stagedPriceListCode(normalized: unknown): string {
   if (!normalized || typeof normalized !== "object" || Array.isArray(normalized)) return "";
@@ -9,7 +10,24 @@ export function stagedPriceListCode(normalized: unknown): string {
   return typeof value === "string" ? value.trim().toUpperCase() : "";
 }
 
-export type ScopedPriceList = { code: string; branchId: string | null };
+export type ScopedPriceList = {
+  code: string;
+  branchId: string | null;
+  scopeType: string;
+};
+
+export function isGenericPriceReviewScope(
+  list: Pick<ScopedPriceList, "scopeType" | "branchId">,
+  activeBranchIds: ReadonlySet<string>,
+): boolean {
+  if (activeBranchIds.size === 0) return false;
+  if (list.scopeType === "ORGANIZATION") return list.branchId === null;
+  if (list.scopeType === "BRANCH") {
+    return typeof list.branchId === "string" && activeBranchIds.has(list.branchId);
+  }
+  // CLIENT / CONTRACT / SOURCE / REFERRER pricing needs separate governed review.
+  return false;
+}
 
 export function authorizedStagedPrices(
   candidates: readonly unknown[],
@@ -17,11 +35,16 @@ export function authorizedStagedPrices(
   activeBranchIds: ReadonlySet<string>,
 ): boolean {
   if (activeBranchIds.size === 0) return false;
-  const byCode = new Map(allowedLists.map(list => [list.code.toUpperCase(), list.branchId]));
+  const byCode = new Map<string, ScopedPriceList | null>();
+  for (const list of allowedLists) {
+    const key = list.code.trim().toUpperCase();
+    if (!key) continue;
+    // Duplicate identities must never be resolved by arbitrary input order.
+    byCode.set(key, byCode.has(key) ? null : list);
+  }
   return candidates.every(candidate => {
     const code = stagedPriceListCode(candidate);
-    if (!code || !byCode.has(code)) return false;
-    const branchId = byCode.get(code);
-    return branchId === null || (typeof branchId === "string" && activeBranchIds.has(branchId));
+    const list = byCode.get(code);
+    return Boolean(code && list && isGenericPriceReviewScope(list, activeBranchIds));
   });
 }

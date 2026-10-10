@@ -7,7 +7,7 @@ import {
 
 test("financial staging review fails closed without branch coverage and mapped list identity", () => {
   const rows = [{priceListCode:" GLOBAL "}, {priceListCode:"A"}];
-  const lists = [{code:"GLOBAL",branchId:null},{code:"A",branchId:"branch-a"}];
+  const lists = [{code:"GLOBAL",branchId:null,scopeType:"ORGANIZATION"},{code:"A",branchId:"branch-a",scopeType:"BRANCH"}];
   assert.equal(stagedPriceListCode(rows[0]),"GLOBAL");
   assert.equal(authorizedStagedPrices(rows,lists,new Set(["branch-a"])),true);
   assert.equal(authorizedStagedPrices(rows,lists,new Set(["branch-b"])),false);
@@ -15,7 +15,7 @@ test("financial staging review fails closed without branch coverage and mapped l
   assert.equal(authorizedStagedPrices([...rows,{priceListCode:"OTHER"}],lists,new Set(["branch-a"])),false);
   assert.equal(authorizedStagedPrices([...rows,{}],lists,new Set(["branch-a"])),false);
   assert.equal(authorizedStagedPrices([null],lists,new Set(["branch-a"])),false);
-  assert.equal(authorizedStagedPrices([{priceListCode:"A"}],[{code:"A",branchId:"branch-b"}],new Set(["branch-a"])),false);
+  assert.equal(authorizedStagedPrices([{priceListCode:"A"}],[{code:"A",branchId:"branch-b",scopeType:"BRANCH"}],new Set(["branch-a"])),false);
 });
 
 test("catalog batch page checks finance and branch scope before loading any monetary summaries or rows", () => {
