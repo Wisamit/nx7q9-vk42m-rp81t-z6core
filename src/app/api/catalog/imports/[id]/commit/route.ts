@@ -9,14 +9,6 @@ function asObject(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 function text(value: unknown) { return typeof value === "string" ? value.trim() : ""; }
-function issueCodes(value: unknown) {
-  if (!Array.isArray(value)) return [];
-  return value.flatMap((item) => {
-    if (!item || typeof item !== "object" || Array.isArray(item)) return [];
-    const code = (item as Record<string, unknown>).code;
-    return typeof code === "string" ? [code] : [];
-  });
-}
 export async function POST(_: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await requirePermission("catalog.manage");
   const ctx = await requestContext();
@@ -109,7 +101,17 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
     for (const row of safeRows.filter(row => row.entityType === "PANEL")) {
       const n = asObject(row.normalizedData); const code = text(n.code).toUpperCase(); const nameEn = text(n.nameEn);
       let panel = code ? await tx.testPanel.findUnique({ where: { organizationId_code: { organizationId: session.user.organizationId, code } } }) : null;
-      if (!panel && code && nameEn) panel = await tx.testPanel.create({ data: { organizationId: session.user.organizationId, code: code.slice(0, 80), nameEn: nameEn.slice(0, 200) } });
+      // Never use a mismatched existing panel code as a destination.
+      if (panel && !sameImportTestIdentity(panel.nameEn, nameEn)) panel = null;
+      if (!panel && code && nameEn &&
+          !(await tx.testPanel.findUnique({ where: { organizationId_code: {
+            organizationId: session.user.organizationId, code,
+          } } }))) {
+        panel = await tx.testPanel.create({ data: {
+          organizationId: session.user.organizationId, code: code.slice(0, 80),
+          nameEn: nameEn.slice(0, 200),
+        } });
+      }
       if (!panel) {
         await tx.catalogImportRow.update({ where: { id: row.id }, data: { status: "SKIPPED", validationIssues: [{ severity: "WARNING", code: "INVALID_PANEL", message: "Panel could not be imported safely." }] } }); results.skipped++; continue;
       }
