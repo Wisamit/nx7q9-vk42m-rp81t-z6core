@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { permissionSet, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import {
-  overlaps, reconcilePriceCandidate, type PriceCandidate,
+  reconcilePriceCandidate, stagedPriceOverlapIndex, type PriceCandidate,
 } from "@/lib/price-import-reconciliation";
 
 const PAGE_SIZE = 100;
@@ -69,10 +69,15 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     // Import API caps each batch at 20,000 rows. Review all staged windows
     // so a collision on a later page cannot pass as ready on this page.
     prisma.catalogImportRow.findMany({
-      where: { batchId: batch.id, entityType: "PRICE_LIST_ITEM" },
-      select: { normalizedData: true },
+      where: { batchId: batch.id, entityType: "PRICE_LIST_ITEM", status: { in: ["VALID", "WARNING"] } },
+      select: { rowNumber: true, status: true, normalizedData: true },
+      take: 20001,
     }),
   ]);
+  if (staged.length > 20000) {
+    return NextResponse.json({ error: "price_review_row_limit_exceeded" }, { status: 409 });
+  }
+  const stagedCollisions = stagedPriceOverlapIndex(staged);
   const listIndex = new Map(lists.map(l => [l.code.toUpperCase(), {
     id: l.id, status: l.status, currency: l.currency,
     effectiveFrom: l.effectiveFrom.toISOString(), effectiveTo: l.effectiveTo?.toISOString() ?? null,
@@ -94,17 +99,21 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     values.push({ effectiveFrom: item.effectiveFrom.toISOString(), effectiveTo: item.effectiveTo?.toISOString() ?? null });
     existing.set(key, values);
   }
-  const stagedWindows = new Map<string, PriceCandidate[]>();
-  for (const row of staged) {
-    const candidate = normalized(row.normalizedData);
-    if (!candidate.priceListCode || !candidate.testCode) continue;
-    const key = candidate.priceListCode + "|" + candidate.testCode;
-    const list = stagedWindows.get(key) ?? [];
-    list.push(candidate);
-    stagedWindows.set(key, list);
-  }
-
   const resolved = candidates.map(({ row, candidate }) => {
+    // Invalid or already processed rows cannot reveal price candidates,
+    // source issue metadata, or stale resolved finance identities.
+    if (row.status !== "VALID" && row.status !== "WARNING") {
+      return {
+        rowNumber: row.rowNumber, rowStatus: row.status,
+        candidate: { priceListCode: "", testCode: "", unitPrice: "",
+          effectiveFrom: "", effectiveTo: "" },
+        disposition: "BLOCKED" as const,
+        issues: [row.status === "IMPORTED" || row.status === "SKIPPED"
+          ? "ROW_ALREADY_PROCESSED" : "STAGED_ROW_HAS_ERRORS"],
+        stagedIssues: [], currency: null,
+        resolvedPriceListId: null, resolvedTestId: null,
+      };
+    }
     // Reconciliation is not a disclosure grant. A staged candidate referencing
     // an unknown or out-of-branch list must not echo any untrusted price amount,
     // test code, effective date or validation metadata back to the caller.
@@ -118,23 +127,15 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         currency: null, resolvedPriceListId: null, resolvedTestId: null,
       };
     }
-    const key = candidate.priceListCode + "|" + candidate.testCode;
-    const overlapCount = (stagedWindows.get(key) ?? []).filter(other =>
-      overlaps(candidate.effectiveFrom, candidate.effectiveTo || null,
-        other.effectiveFrom, other.effectiveTo || null)).length;
+    const overlapCount = stagedCollisions.has(row.rowNumber) ? 2 : 1;
     const result = reconcilePriceCandidate(candidate, {
       lists: listIndex, tests: testIndex, existing,
     }, overlapCount);
-    const alreadyProcessed = row.status === "IMPORTED" || row.status === "SKIPPED";
-    const disposition = row.status === "ERROR" || alreadyProcessed ? "BLOCKED" : result.disposition;
+    const disposition = result.disposition;
     return {
       rowNumber: row.rowNumber, rowStatus: row.status, candidate,
       disposition,
-      issues: [
-        ...(row.status === "ERROR" ? ["STAGED_ROW_HAS_ERRORS"] : []),
-        ...(alreadyProcessed ? ["ROW_ALREADY_PROCESSED"] : []),
-        ...result.issues,
-      ],
+      issues: result.issues,
       stagedIssues: row.validationIssues, currency: result.currency,
       resolvedPriceListId: result.resolvedPriceListId, resolvedTestId: result.resolvedTestId,
     };
@@ -148,6 +149,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       newValues: {
         reviewed: resolved.length, after,
         readyForGovernance: resolved.filter(x => x.disposition === "READY_FOR_GOVERNANCE").length,
+        stagedPriceWindowCollisions: resolved.filter(x => x.issues.includes("OVERLAPPING_STAGED_PRICE_WINDOWS")).length,
         branchScoped: true, departmentScoped: departments.length > 0,
       },
       ipAddress: ctx.ipAddress, userAgent: ctx.userAgent,
