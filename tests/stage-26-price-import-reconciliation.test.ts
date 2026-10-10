@@ -65,7 +65,8 @@ test("API has permission, tenant, branch and department protections and no finan
   assert.ok(s.includes('permissionSet(session).has("catalog.manage")'));
   assert.ok(s.includes("organizationId"));
   assert.ok(s.includes("branchId: { in: branches }"));
-  assert.ok(s.includes("departmentId: { in: departments }"));
+  assert.ok(s.includes("resolveClinicalImportScope("));
+  assert.ok(s.includes("clinicalImportTestWhere(scope)"));
   assert.ok(s.includes('entityType: "PRICE_LIST_ITEM"'));
   assert.ok(s.includes("take: PAGE_SIZE + 1"));
   assert.ok(s.includes("currencyConversion: false"));
