@@ -14,7 +14,7 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
     include: { rows: { orderBy: { rowNumber: "asc" } } },
   });
   if (!batch) return NextResponse.json({ error: "batch_not_found" }, { status: 404 });
-  if (batch.sourceType === "CSV_REVIEW") return NextResponse.json({ error: "csv_review_is_not_committable" }, { status: 409 });
+  if ((batch.sourceType === "CSV_REVIEW" || batch.sourceType === "CONFIG_BUNDLE_REVIEW")) return NextResponse.json({ error: "csv_review_is_not_committable" }, { status: 409 });
   // Revalidation must never reset imported/skipped clinical or catalog rows
   // to VALID/WARNING. Historical imported entity links are immutable.
   if (batch.status === "IMPORTED" || batch.status === "FAILED" ||
