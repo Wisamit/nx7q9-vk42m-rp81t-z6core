@@ -48,6 +48,9 @@ export default async function ImportBatchPage({
   });
   if (!batch) notFound();
   const isBundleReview = batch.sourceType === BUNDLE_REVIEW_SOURCE;
+  const bundleSummary = batch.summary && typeof batch.summary === "object" &&
+    !Array.isArray(batch.summary) ? batch.summary as Record<string, unknown> : {};
+  const bundleAttested = bundleSummary.attestationStatus === "VERIFIED";
   if (isBundleReview) {
     // Source documents can expose confidential clinical and financial context.
     // Re-check current author, branch, department and financial grants BEFORE
@@ -243,10 +246,14 @@ export default async function ImportBatchPage({
       <Link className="secondary-link" href="/catalog">{tr(locale, "Back to Test Catalog", "العودة إلى دليل الفحوصات")}</Link>
     </header>
 
-    {isBundleReview && <p className="muted">{tr(locale,
-      "This paged, non-atomic export is evidence for mapping review only. No configuration is created, approved, activated or restored by uploading it.",
-      "هذا التصدير غير المتزامن لجميع الصفحات للمراجعة والمطابقة فقط. رفعه لا ينشئ ولا يعتمد ولا يفعّل ولا يستعيد أي إعداد.",
-    )}</p>}
+    {isBundleReview && <p className="muted">{bundleAttested
+      ? tr(locale,
+          "Server signature verified: the source contents match a signed configuration export. This does NOT approve, restore or activate clinical or financial settings.",
+          "تم التحقق من توقيع الخادم: المحتوى مطابق لتصدير إعدادات موقّع. هذا لا يعتمد ولا يستعيد ولا يفعّل أي إعداد طبي أو مالي.")
+      : tr(locale,
+          "Unverified source: signature missing or created before signing was supported. Review only; an atomic snapshot claim is not trusted without verified evidence. No settings are applied.",
+          "مصدر غير موثّق: التوقيع مفقود أو الملف سابق لدعم التوقيع. للمراجعة فقط؛ لا يُعتمد ادعاء التصدير المتّسق دون دليل موثّق، ولا تُطبّق أي إعدادات.")
+    }</p>}
 
     <section className="catalog-stats">
       <article><strong>{totalRows}</strong><span>{tr(locale, "Total staged", "إجمالي الصفوف المرحلية")}</span></article>
