@@ -21,7 +21,7 @@ test("Stage 56: expert preflight is a separately scoped GET without clinical/pri
   assert.match(route, /const priorDecision = await tx\.auditEvent\.findFirst/);
   assert.match(route, /if \(expertPreflight\) return \{/);
   const preflight = route.indexOf('status: "EXPERT_REVIEW_READY"');
-  const auditWrite = route.indexOf('action: "CATALOG_BUNDLE_EXPERT_DECISION_RECORDED",');
+  const auditWrite = route.lastIndexOf('action: "CATALOG_BUNDLE_EXPERT_DECISION_RECORDED",');
   assert.ok(preflight > 0 && auditWrite > preflight,
     "return a preview before the approval-like audit writer; preview cannot write");
   assert.match(route, /approved: false, activated: false, liveWrites: false/);
