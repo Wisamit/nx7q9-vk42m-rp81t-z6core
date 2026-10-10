@@ -16,7 +16,8 @@ test("MariaDB two connections: financial review cannot cross tenant or unauthori
   const org = randomUUID(), other = randomUUID(), branchA = randomUUID(), branchB = randomUUID();
   const otherBranch = randomUUID(), actor = randomUUID(), otherActor = randomUUID();
   const batch = randomUUID(), listGlobal = randomUUID(), listA = randomUUID();
-  const listB = randomUUID(), listForeign = randomUUID(), suffix = org.slice(0,8);
+  const listB = randomUUID(), listForeign = randomUUID();
+  const listClient = randomUUID(), listContract = randomUUID(), suffix = org.slice(0,8);
   const prefix = "R29-" + suffix;
   const rowIds: string[] = [];
   const execute = async (sql: string, args: Array<string | number | null>) => writer.execute(sql, args);
@@ -38,6 +39,7 @@ test("MariaDB two connections: financial review cannot cross tenant or unauthori
     for (const [id, tenant, code, scope, branch] of [
       [listGlobal,org,"BASE","ORGANIZATION",null], [listA,org,"A","BRANCH",branchA],
       [listB,org,"B","BRANCH",branchB], [listForeign,other,"FOREIGN","BRANCH",otherBranch],
+      [listClient,org,"CLIENT","CLIENT",null], [listContract,org,"CONTRACT","CONTRACT",branchA],
     ]) {
       await execute(
         "INSERT INTO price_lists (id,organization_id,code,name_en,scope_type,branch_id,currency,effective_from,updated_at) VALUES (?,?,?,?,?,?,'AED','2026-01-01',NOW(3))",
@@ -68,7 +70,14 @@ test("MariaDB two connections: financial review cannot cross tenant or unauthori
       [org],
     );
     const lists = tenantLists.map(row => ({code:String(row.code),branchId:row.branch_id as string | null,scopeType:String(row.scope_type)}));
-    assert.equal(lists.length,3);
+    assert.equal(lists.length,5);
+    for (const restricted of ["CLIENT","CONTRACT"]) {
+      assert.equal(authorizedStagedPrices([{priceListCode:prefix+restricted,unitPrice:"9999.9999"}],lists,new Set([branchA])),false);
+    }
+    const [genericScopeRows] = await reader.execute<mysql.RowDataPacket[]>(
+      "SELECT code FROM price_lists WHERE organization_id=? AND ((scope_type='ORGANIZATION' AND branch_id IS NULL) OR (scope_type='BRANCH' AND branch_id=?))",
+      [org,branchA]);
+    assert.deepEqual(genericScopeRows.map(row => String(row.code)).sort(),[prefix+"A",prefix+"BASE"].sort());
     assert.equal(authorizedStagedPrices(candidates,lists,new Set([branchA])),false);
     assert.equal(authorizedStagedPrices(candidates,lists,new Set([branchA,branchB])),true);
     const [otherTenantLists] = await reader.execute<mysql.RowDataPacket[]>(
@@ -87,8 +96,8 @@ test("MariaDB two connections: financial review cannot cross tenant or unauthori
     await writer.rollback().catch(()=>{});
     await execute("DELETE FROM catalog_import_rows WHERE batch_id=?",[batch]).catch(()=>{});
     await execute("DELETE FROM catalog_import_batches WHERE id=?",[batch]).catch(()=>{});
-    await execute("DELETE FROM price_lists WHERE id IN (?,?,?,?)",
-      [listGlobal,listA,listB,listForeign]).catch(()=>{});
+    await execute("DELETE FROM price_lists WHERE id IN (?,?,?,?,?,?)",
+      [listGlobal,listA,listB,listForeign,listClient,listContract]).catch(()=>{});
     await execute("DELETE FROM users WHERE id IN (?,?)",[actor,otherActor]).catch(()=>{});
     await execute("DELETE FROM branches WHERE id IN (?,?,?)",
       [branchA,branchB,otherBranch]).catch(()=>{});
