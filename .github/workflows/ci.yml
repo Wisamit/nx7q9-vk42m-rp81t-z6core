@@ -66,6 +66,7 @@ jobs:
       - run: node --experimental-strip-types --test tests/stage-37-range-review-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-41-component-review-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-42-price-clinical-scope-mariadb.integration.test.ts
+      - run: node --experimental-strip-types --test tests/stage-43-safe-panel-membership-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-38-staged-price-overlap-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/microbiology-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/analyzer-work-orders-mariadb.integration.test.ts
