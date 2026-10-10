@@ -1,4 +1,4 @@
-import { sameImportTestIdentity } from "./catalog-panel-membership";
+import { sameImportTestIdentity } from "./catalog-panel-membership.ts";
 
 /**
  * Legacy UNIT codes and symbols are aliases, not unique clinical identities.
