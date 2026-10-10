@@ -45,7 +45,7 @@ test("Stage 44 MariaDB: source units remain tenant-scoped, conflicts fail closed
         [batchId,org,actor]);
       const sources=[
         {id:row1,code:"UNMATCHED",unit:"mg/dL"},
-        {id:row2,code:"U44"+suffix+"NEW",unit:"SAFE_UNIT"},
+        {id:row2,code:"U44"+suffix+"NEW",unit:"U44"+suffix+"SAFE_UNIT"},
       ];
       for(const [index,source] of sources.entries()){
         const normalized=JSON.stringify({nameEn:"Same Name",code:source.code,unit:source.unit,panel:"Valid Panel"});
@@ -96,9 +96,6 @@ test("Stage 44 MariaDB: source units remain tenant-scoped, conflicts fail closed
         "UPDATE catalog_import_batches SET status='IMPORTED' WHERE id=? AND organization_id=? AND status='VALIDATED'",
         [batchId,org]);
       assert.equal(claimed.affectedRows,1);
-      const competing=reader.execute<mysql.ResultSetHeader>(
-        "UPDATE catalog_import_batches SET status='IMPORTED' WHERE id=? AND organization_id=? AND status='VALIDATED'",
-        [batchId,org]);
       await writer.execute("INSERT INTO lab_tests(id,organization_id,code,name_en,default_unit_id,updated_at) VALUES(?,?,?,?,?,NOW(3))",
         [createdTest,org,"U44"+suffix+"NEW","Same Name",unitKnown]);
       const candidates=sources.map((source,index)=>({
@@ -118,6 +115,9 @@ test("Stage 44 MariaDB: source units remain tenant-scoped, conflicts fail closed
       const [invisible]=await reader.execute<mysql.RowDataPacket[]>(
         "SELECT test_id FROM test_panel_items WHERE panel_id=?",[panelId]);
       assert.equal(invisible.length,0,"separate connection cannot see uncommitted clinical membership");
+      const competing=reader.execute<mysql.ResultSetHeader>(
+        "UPDATE catalog_import_batches SET status='IMPORTED' WHERE id=? AND organization_id=? AND status='VALIDATED'",
+        [batchId,org]);
       await writer.commit();
       const [lost]=await competing;
       assert.equal(lost.affectedRows,0,"concurrent batch claim cannot silently reimport");
