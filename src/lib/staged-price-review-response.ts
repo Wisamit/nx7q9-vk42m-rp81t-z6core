@@ -25,6 +25,7 @@ const redactionIssues = new Set([
   "ROW_ALREADY_PROCESSED",
   "STAGED_ROW_HAS_ERRORS",
   "PRICE_LIST_SCOPE_UNRESOLVED",
+  "TEST_SCOPE_UNRESOLVED",
 ]);
 const candidateFields = [
   "priceListCode", "testCode", "unitPrice", "effectiveFrom", "effectiveTo",

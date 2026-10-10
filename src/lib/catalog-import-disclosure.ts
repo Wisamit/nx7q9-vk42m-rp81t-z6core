@@ -10,6 +10,13 @@ export function stagedPriceListCode(normalized: unknown): string {
   return typeof value === "string" ? value.trim().toUpperCase() : "";
 }
 
+/** Normalize staged test identity without exposing the financial candidate. */
+export function stagedPriceTestCode(normalized: unknown): string {
+  if (!normalized || typeof normalized !== "object" || Array.isArray(normalized)) return "";
+  const value = (normalized as Record<string, unknown>).testCode;
+  return typeof value === "string" ? value.trim().toUpperCase() : "";
+}
+
 export type ScopedPriceList = {
   code: string;
   branchId: string | null;

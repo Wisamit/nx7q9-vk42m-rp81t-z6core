@@ -9,8 +9,8 @@ import { ComponentImportReconciliation } from "@/components/component-import-rec
 import { PriceImportReconciliation } from "@/components/price-import-reconciliation";
 import { ReferenceRangeImportReconciliation } from "@/components/reference-range-import-reconciliation";
 import { getUiLocale, tr } from "@/lib/ui-i18n";
-import { authorizedStagedPrices, stagedPriceListCode } from "@/lib/catalog-import-disclosure";
-import { resolveClinicalImportScope } from "@/lib/catalog-clinical-import-scope";
+import { authorizedStagedPrices, stagedPriceListCode, stagedPriceTestCode } from "@/lib/catalog-import-disclosure";
+import { clinicalImportTestWhere, resolveClinicalImportScope } from "@/lib/catalog-clinical-import-scope";
 
 export const dynamic = "force-dynamic";
 
@@ -91,6 +91,24 @@ export default async function ImportBatchPage({
     if (!authorizedStagedPrices(stagedPrices.map(row => row.normalizedData), lists, allowedBranches)) {
       notFound();
     }
+    // Batch detail also contains raw normalized candidates and issue summaries.
+    // Protect them before loading any source values for off-scope clinical tests.
+    const priceScope = resolveClinicalImportScope({
+      organizationId: session.user.organizationId,
+      activeBranchId: session.activeBranchId, activeBranch: session.activeBranch,
+      branchScopes: session.user.branchScopes,
+      departmentScopes: session.user.departmentScopes,
+    });
+    if (!priceScope) notFound();
+    const priceTestCodes = [...new Set(stagedPrices
+      .map(row => stagedPriceTestCode(row.normalizedData)).filter(Boolean))];
+    if (!priceTestCodes.length || stagedPrices.some(row => !stagedPriceTestCode(row.normalizedData))) notFound();
+    const accessiblePriceTests = await prisma.labTest.findMany({
+      where: { ...clinicalImportTestWhere(priceScope), code: { in: priceTestCodes } },
+      select: { code: true },
+    });
+    const permittedPriceCodes = new Set(accessiblePriceTests.map(test => test.code.trim().toUpperCase()));
+    if (priceTestCodes.some(code => !permittedPriceCodes.has(code))) notFound();
   }
 
   const [groups, issueRows, rows, totalRows] = await Promise.all([
