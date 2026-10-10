@@ -9,8 +9,12 @@ export function isReviewOnlyCatalogSource(type: string): boolean {
 }
 
 export class CatalogBundleReviewError extends Error {
-  constructor(public readonly code: string, public readonly status = 400) {
+  readonly code: string;
+  readonly status: number;
+  constructor(code: string, status = 400) {
     super(code);
+    this.code = code;
+    this.status = status;
   }
 }
 
