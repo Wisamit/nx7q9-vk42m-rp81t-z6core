@@ -4,6 +4,11 @@ import { prisma } from "@/lib/db";
 import { clinicalImportTestWhere, resolveClinicalImportScope } from "@/lib/catalog-clinical-import-scope";
 import { BUNDLE_REVIEW_SOURCE, BUNDLE_REVIEW_MAX_ROWS } from "@/lib/catalog-bundle-review";
 import { catalogBundleDrift } from "@/lib/catalog-bundle-drift";
+import { catalogBundleSigningSecret } from "@/lib/catalog-bundle-attestation";
+import {
+  bundleTriageClass, catalogDriftObservationToken, matchesCatalogDriftObservation,
+  triagePermissionScope, validTriageReason, type TriageReason,
+} from "@/lib/catalog-drift-triage";
 import { catalogExportTypes, type CatalogExportType } from "@/lib/catalog-configuration-export";
 
 export const dynamic = "force-dynamic";
@@ -17,17 +22,63 @@ function record(value: unknown): Record<string, unknown> | null {
     ? value as Record<string, unknown> : null;
 }
 
+type Context = { params: Promise<{ id: string }> };
+type TriageInput = { rowNumber: number; observationToken: string; reasonCode: TriageReason };
+
 /** A bounded, live-scoped snapshot diff. No source or live values in response. */
-export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(request: NextRequest, context: Context) {
+  return inspectBundleDrift(request, context, null);
+}
+
+/** Append a domain-scoped review request, never an activation or approval. */
+export async function POST(request: NextRequest, context: Context) {
+  if (!/^application\/json(?:\s*;|$)/i.test(request.headers.get("content-type") || ""))
+    return NextResponse.json({ error: "triage_json_required" }, { status: 415 });
+  const len = Number(request.headers.get("content-length") || 0);
+  if (!Number.isFinite(len) || len < 0 || len > 1024)
+    return NextResponse.json({ error: "triage_payload_too_large" }, { status: 413 });
+  const reader = request.body?.getReader();
+  if (!reader) return NextResponse.json({ error: "triage_payload_missing" }, { status: 400 });
+  const chunks: Uint8Array[] = [];
+  let count = 0;
+  for (;;) {
+    const next = await reader.read();
+    if (next.done) break;
+    count += next.value.byteLength;
+    if (count > 1024) {
+      await reader.cancel("triage_payload_too_large");
+      return NextResponse.json({ error: "triage_payload_too_large" }, { status: 413 });
+    }
+    chunks.push(next.value);
+  }
+  let body: Record<string, unknown> | null = null;
+  try { body = record(JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(chunks)))); }
+  catch { return NextResponse.json({ error: "triage_invalid_json" }, { status: 400 }); }
+  if (!body || Object.keys(body).sort().join(",") !== "observationToken,reasonCode,rowNumber" ||
+      typeof body.rowNumber !== "number" || !Number.isSafeInteger(body.rowNumber) ||
+      body.rowNumber < 1 || body.rowNumber > 999999999 ||
+      typeof body.observationToken !== "string" || !/^[a-f0-9]{64}$/.test(body.observationToken) ||
+      !validTriageReason(body.reasonCode))
+    return NextResponse.json({ error: "triage_invalid_request" }, { status: 400 });
+  return inspectBundleDrift(request, context, {
+    rowNumber: body.rowNumber, observationToken: body.observationToken,
+    reasonCode: body.reasonCode,
+  });
+}
+
+async function inspectBundleDrift(request: NextRequest, { params }: Context, triage: TriageInput | null) {
   const session = await getCurrentSession();
   if (!session) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const sessionPermissions = permissionSet(session);
   if (!sessionPermissions.has("catalog.manage"))
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  const afterText = request.nextUrl.searchParams.get("after") || "0";
-  if (!/^(?:0|[1-9]\d{0,8})$/.test(afterText))
+  const afterText = triage ? String(triage.rowNumber - 1)
+    : request.nextUrl.searchParams.get("after") || "0";
+  if (!/^(?:0|[1-9]\\d{0,8})$/.test(afterText))
     return NextResponse.json({ error: "invalid_reconciliation_cursor" }, { status: 400 });
   const after = Number(afterText);
+  const key = catalogBundleSigningSecret(process.env);
+  if (!key) return NextResponse.json({ error: "review_observation_key_unavailable" }, { status: 503 });
   const { id: batchId } = await params;
   if (!UUID.test(batchId)) return NextResponse.json({ error: "bundle_review_not_found" }, { status: 404 });
   const organizationId = session.user.organizationId;
@@ -108,7 +159,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     // Authorize *all* 5k staged identities, not only the currently displayed page.
     const staged = await tx.catalogImportRow.findMany({
       where: { batchId: batch.id }, orderBy: { rowNumber: "asc" },
-      select: { rowNumber: true, entityType: true, sourceData: true,
+      select: { id: true, rowNumber: true, entityType: true, sourceData: true,
         normalizedData: true, status: true, importedEntityId: true },
     });
     if (!staged.length || staged.length > BUNDLE_REVIEW_MAX_ROWS ||
@@ -261,11 +312,71 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const rows = shown.map(row => {
       const id = String(record(row.normalizedData)?.id || "");
       const value = live.get(row.entityType + ":" + id);
+      // Date/Decimal values must match Stage 50/51 JSON wire serialization.
+      const currentJson: unknown = JSON.parse(JSON.stringify(value));
+      const observationToken = catalogDriftObservationToken(
+        key, batch.sourceChecksum!, row.rowNumber, row.entityType, row.sourceData, currentJson
+      );
       return {
         rowNumber: row.rowNumber, entityType: row.entityType,
-        ...catalogBundleDrift(row.sourceData, JSON.parse(JSON.stringify(value))),
+        ...catalogBundleDrift(row.sourceData, currentJson),
+        observationToken,
       };
     });
+    const auditHistory = await tx.auditEvent.findMany({
+      where: {
+        organizationId, entityType: "CatalogImportRow",
+        action: "CATALOG_BUNDLE_EXPERT_REVIEW_FLAGGED",
+        entityId: { in: shown.map(row => row.id) },
+      },
+      orderBy: { occurredAt: "desc" }, take: 1000,
+      select: { entityId: true, newValues: true, occurredAt: true },
+    });
+    const lastFlag = new Map<string, { reasonCode: string; category: string; occurredAt: string }>();
+    for (const event of auditHistory) {
+      if (lastFlag.has(event.entityId)) continue;
+      const data = record(event.newValues);
+      if (typeof data?.reasonCode !== "string" || typeof data?.category !== "string") continue;
+      lastFlag.set(event.entityId, {
+        reasonCode: data.reasonCode, category: data.category, occurredAt: event.occurredAt.toISOString(),
+      });
+    }
+    const displayed = rows.map((row, index) => ({
+      ...row, latestFlag: lastFlag.get(shown[index].id) || null,
+    }));
+    if (triage) {
+      const index = shown.findIndex(row => row.rowNumber === triage.rowNumber);
+      if (index < 0) return { error: "triage_row_not_found", httpStatus: 404 } as const;
+      const observed = rows[index];
+      const category = bundleTriageClass(observed.entityType);
+      if (!category || !triagePermissionScope(category, livePermissions) ||
+          !triagePermissionScope(category, sessionPermissions))
+        return { error: "triage_domain_permission_required", httpStatus: 403 } as const;
+      if (!matchesCatalogDriftObservation(triage.observationToken, observed.observationToken))
+        return { error: "triage_stale_observation", httpStatus: 409 } as const;
+      if (triage.reasonCode === "SOURCE_VALUE_CHANGED" && observed.disposition !== "DRIFTED")
+        return { error: "triage_reason_incompatible", httpStatus: 409 } as const;
+      await tx.auditEvent.create({ data: {
+        organizationId, branchId: liveScope.branchId, actorUserId: session.user.id,
+        action: "CATALOG_BUNDLE_EXPERT_REVIEW_FLAGGED", entityType: "CatalogImportRow",
+        entityId: shown[index].id,
+        newValues: {
+          batchId: batch.id, rowNumber: observed.rowNumber, entityType: observed.entityType,
+          category, reasonCode: triage.reasonCode, disposition: observed.disposition,
+          changedFields: observed.changedFields,
+          additionalFieldsOmitted: observed.additionalFieldsOmitted,
+          evidenceToken: observed.observationToken,
+          sourceVerified: record(batch.summary)?.attestationStatus === "VERIFIED",
+          reviewOnly: true, approved: false, activated: false,
+        },
+        ipAddress: ctx.ipAddress, userAgent: ctx.userAgent,
+      } });
+      return {
+        status: "FLAGGED_FOR_EXPERT_REVIEW", category, rowNumber: observed.rowNumber,
+        reasonCode: triage.reasonCode, disposition: observed.disposition,
+        approved: false, activated: false, liveWrites: false,
+      } as const;
+    }
     const verified = record(batch.summary)?.attestationStatus === "VERIFIED";
     await tx.auditEvent.create({ data: {
       organizationId, branchId: liveScope.branchId, actorUserId: session.user.id,
@@ -275,7 +386,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         sourceVerified: verified, readOnly: true,
       }, ipAddress: ctx.ipAddress, userAgent: ctx.userAgent,
     } });
-    return { rows, hasMore: page.length > PAGE_SIZE,
+    return { rows: displayed, hasMore: page.length > PAGE_SIZE,
       nextCursor: page.length > PAGE_SIZE ? shown[shown.length - 1].rowNumber : null,
       sourceVerified: verified, liveWrites: false, clinicalActivation: false,
       priceActivation: false, approvalRequired: true, reviewedAt: new Date().toISOString(),
