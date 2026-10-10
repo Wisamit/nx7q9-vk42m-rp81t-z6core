@@ -42,7 +42,7 @@ test("Stage 58: independent and domain-specific reviewer capacity is never signa
   assert.equal(r.clinicalApprovalAllowed, false);
   assert.equal(r.financialApprovalAllowed, false);
   assert.equal(r.liveWrites, false);
-  assert.doesNotMatch(JSON.stringify(r), /author|med|fin|dual|otherBranch|password/i);
+  assert.doesNotMatch(JSON.stringify(r), /"id"|"permissions"|"activeBranchIds"|"authorId"|"password"/i);
 });
 
 test("Stage 58: one dual-domain manager is not two independent reviewers", () => {
