@@ -12,6 +12,7 @@ type Queue = {
   error?: string;
 };
 type Decision = "CONFIRM_FINDING" | "RETURN_FOR_CORRECTION";
+type Inspection = "CHECKING" | "READY" | "STALE" | "CONFLICT";
 
 export function CatalogExpertReviewQueue({ locale }: { locale: "ar" | "en" }) {
   const tr = (en: string, ar: string) => locale === "ar" ? ar : en;
@@ -21,8 +22,10 @@ export function CatalogExpertReviewQueue({ locale }: { locale: "ar" | "en" }) {
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [inspections, setInspections] = useState<Record<string, Inspection>>({});
 
   async function refresh() {
+    setInspections({});
     setBusy(true);
     setError("");
     try {
@@ -48,8 +51,48 @@ export function CatalogExpertReviewQueue({ locale }: { locale: "ar" | "en" }) {
     }
   }
 
-  async function decide(entry: Entry, disposition: Decision) {
+  async function inspect(entry: Entry) {
     if (busy || decisionId) return;
+    setError("");
+    setNotice("");
+    setInspections(previous => ({ ...previous, [entry.flagEventId]: "CHECKING" }));
+    try {
+      const url = "/api/catalog/imports/" + encodeURIComponent(entry.batchId) +
+        "/bundle-drift?reviewFlagId=" + encodeURIComponent(entry.flagEventId);
+      const response = await fetch(url, {
+        cache: "no-store", credentials: "same-origin",
+      });
+      const data = await response.json() as {
+        status?: string; category?: string; error?: string;
+        approved?: boolean; activated?: boolean; liveWrites?: boolean;
+      };
+      if (response.ok && data.status === "EXPERT_REVIEW_READY" &&
+          data.category === entry.category && data.approved === false &&
+          data.activated === false && data.liveWrites === false) {
+        setInspections(previous => ({ ...previous, [entry.flagEventId]: "READY" }));
+      } else {
+        const stale = ["expert_evidence_stale", "expert_flag_not_found", "review_not_open"]
+          .includes(data.error || "");
+        setInspections(previous => ({
+          ...previous, [entry.flagEventId]: stale ? "STALE" : "CONFLICT",
+        }));
+        setError(tr(
+          "Review is not ready. Recheck permissions, latest evidence or an earlier decision. " +
+          "No action was recorded.",
+          "المراجعة غير جاهزة. تحقّق من الصلاحيات والبصمة الحالية أو وجود قرار سابق. " +
+          "لم يُسجل أي قرار.",
+        ));
+      }
+    } catch {
+      setInspections(previous => ({ ...previous, [entry.flagEventId]: "CONFLICT" }));
+      setError(tr("Could not verify this review. No action was recorded.",
+        "تعذّر التحقق من هذه الإحالة، ولم يُسجل أي قرار."));
+    }
+  }
+
+  async function decide(entry: Entry, disposition: Decision) {
+    if (busy || decisionId || inspections[entry.flagEventId] !== "READY") return;
+    // PUT independently validates all scopes and current HMAC after this preview.
     setDecisionId(entry.flagEventId);
     setError("");
     setNotice("");
@@ -69,6 +112,7 @@ export function CatalogExpertReviewQueue({ locale }: { locale: "ar" | "en" }) {
         result.activated !== false || result.liveWrites !== false) {
         throw new Error(result.error || "expert_decision_rejected");
       }
+      setInspections({});
       setNotice(tr("Review disposition recorded. No configuration was approved or activated.",
         "تم تسجيل قرار المراجعة، دون اعتماد أو تفعيل أي إعداد."));
       await refresh();
@@ -114,12 +158,37 @@ export function CatalogExpertReviewQueue({ locale }: { locale: "ar" | "en" }) {
           <td>{entry.reasonCode}</td>
           <td>
             <button type="button" className="secondary-button"
-              disabled={busy || decisionId !== null}
+              disabled={busy || decisionId !== null ||
+                inspections[entry.flagEventId] === "CHECKING"}
+              onClick={() => void inspect(entry)}>
+              {inspections[entry.flagEventId] === "CHECKING"
+                ? tr("Verifying live data…", "جارٍ فحص البيانات الحية…")
+                : tr("Verify current evidence", "فحص الدليل الحالي")}
+            </button>
+            {inspections[entry.flagEventId] === "READY" &&
+              <p className="muted">{tr(
+                "Current evidence matches. Final action rechecks it again.",
+                "الدليل الحالي مطابق، وسيُعاد التحقق عند تسجيل القرار.",
+              )}</p>}
+            {inspections[entry.flagEventId] === "STALE" &&
+              <p className="muted">{tr(
+                "Stale or replaced referral: a new source-author referral is required.",
+                "الإحالة قديمة أو مستبدلة، وتحتاج إحالة جديدة من صاحب المصدر.",
+              )}</p>}
+            {inspections[entry.flagEventId] === "CONFLICT" &&
+              <p className="muted">{tr(
+                "Conflict or access changed. Expert action unavailable.",
+                "يوجد تعارض أو تغيّر في الصلاحية. القرار غير متاح.",
+              )}</p>}
+            <button type="button" className="secondary-button"
+              disabled={busy || decisionId !== null ||
+                inspections[entry.flagEventId] !== "READY"}
               onClick={() => void decide(entry, "CONFIRM_FINDING")}>
               {tr("Confirm finding (not approval)", "تأكيد الملاحظة (ليس اعتماداً)")}
             </button>{" "}
             <button type="button" className="secondary-button"
-              disabled={busy || decisionId !== null}
+              disabled={busy || decisionId !== null ||
+                inspections[entry.flagEventId] !== "READY"}
               onClick={() => void decide(entry, "RETURN_FOR_CORRECTION")}>
               {tr("Return for correction", "إعادة للتصحيح")}
             </button>
