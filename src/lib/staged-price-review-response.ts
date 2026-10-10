@@ -56,7 +56,7 @@ export function parseStagedPriceReviewPage(body: unknown, after: number): Staged
       throw new Error("unexpected_read_only_price_review_response");
     }
 
-    const row = value as StagedPriceReviewRow;
+    const row = value as unknown as StagedPriceReviewRow;
     const restricted = row.issues.some(issue => redactionIssues.has(issue));
     if (restricted && (row.disposition !== "BLOCKED" || row.currency !== null ||
         candidateFields.some(key => row.candidate[key] !== ""))) {
