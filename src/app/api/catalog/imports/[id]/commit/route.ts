@@ -100,13 +100,14 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
     const panelMap = new Map<string, string | null>();
     for (const row of safeRows.filter(row => row.entityType === "PANEL")) {
       const n = asObject(row.normalizedData); const code = text(n.code).toUpperCase(); const nameEn = text(n.nameEn);
-      let panel = code ? await tx.testPanel.findUnique({ where: { organizationId_code: { organizationId: session.user.organizationId, code } } }) : null;
-      // Never use a mismatched existing panel code as a destination.
-      if (panel && !sameImportTestIdentity(panel.nameEn, nameEn)) panel = null;
-      if (!panel && code && nameEn &&
-          !(await tx.testPanel.findUnique({ where: { organizationId_code: {
-            organizationId: session.user.organizationId, code,
-          } } }))) {
+      const existingPanel = code ? await tx.testPanel.findUnique({
+        where: { organizationId_code: { organizationId: session.user.organizationId, code } },
+      }) : null;
+      // A legacy panel code with a different current identity must not change
+      // that panel's membership through an unapproved import.
+      let panel = existingPanel && sameImportTestIdentity(existingPanel.nameEn, nameEn)
+        ? existingPanel : null;
+      if (!existingPanel && code && nameEn) {
         panel = await tx.testPanel.create({ data: {
           organizationId: session.user.organizationId, code: code.slice(0, 80),
           nameEn: nameEn.slice(0, 200),
