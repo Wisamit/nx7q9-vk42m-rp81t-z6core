@@ -5,7 +5,8 @@ import { useState } from "react";
 type DriftRow = {
   rowNumber: number; entityType: string;
   disposition: "UNCHANGED" | "DRIFTED"; changedFields: string[];
-  additionalFieldsOmitted: boolean;
+  additionalFieldsOmitted: boolean; observationToken: string;
+  latestFlag?: { reasonCode: string; category: string; occurredAt: string } | null;
 };
 type DriftResponse = {
   rows?: DriftRow[]; nextCursor?: number | null; hasMore?: boolean;
@@ -27,7 +28,44 @@ export function CatalogBundleDriftReview({ batchId, locale }: {
   const [reviewedAt, setReviewedAt] = useState("");
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [flagging, setFlagging] = useState<number | null>(null);
+  const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+
+  async function flag(row: DriftRow) {
+    if (busy || flagging !== null) return;
+    setFlagging(row.rowNumber);
+    setNotice("");
+    setError("");
+    try {
+      const reasonCode = row.disposition === "DRIFTED"
+        ? "SOURCE_VALUE_CHANGED" : "REQUIRES_DOMAIN_ASSESSMENT";
+      const response = await fetch("/api/catalog/imports/" + encodeURIComponent(batchId) +
+        "/bundle-drift", {
+        method: "POST", credentials: "same-origin", cache: "no-store",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          rowNumber: row.rowNumber, observationToken: row.observationToken, reasonCode,
+        }),
+      });
+      const result = await response.json() as {
+        error?: string; status?: string; approved?: boolean; activated?: boolean; liveWrites?: boolean;
+      };
+      if (!response.ok || result.status !== "FLAGGED_FOR_EXPERT_REVIEW" ||
+          result.approved !== false || result.activated !== false ||
+          result.liveWrites !== false) {
+        throw new Error(result.error || "triage_rejected");
+      }
+      setNotice(tr("Expert review requested. No configuration approved or changed.",
+        "تمت إحالة السجل للمراجعة المختصة، دون اعتماد أو تغيير أي إعداد."));
+      // The next comparison uses a fresh read and displays latest immutable evidence.
+      await load(cursor, history);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "triage_failed");
+    } finally {
+      setFlagging(null);
+    }
+  }
 
   async function load(after: number, previousCursors: number[]) {
     if (busy) return;
@@ -46,7 +84,8 @@ export function CatalogBundleDriftReview({ batchId, locale }: {
             !["UNCHANGED", "DRIFTED"].includes(row.disposition) ||
             !Array.isArray(row.changedFields) ||
             row.changedFields.some(field => typeof field !== "string") ||
-            typeof row.additionalFieldsOmitted !== "boolean") ||
+            typeof row.additionalFieldsOmitted !== "boolean" ||
+            !/^[a-f0-9]{64}$/.test(row.observationToken)) ||
           (data.hasMore === true &&
             (!Number.isSafeInteger(data.nextCursor) || (data.nextCursor ?? 0) <= after))) {
         throw new Error("unexpected_reconciliation_response");
@@ -82,6 +121,7 @@ export function CatalogBundleDriftReview({ batchId, locale }: {
           : tr("Review live differences", "فحص الاختلافات الحالية")}
       </button>
     </div>
+    {notice && <p role="status" className="muted">{notice}</p>}
     {error && <p role="alert">{tr("Comparison unavailable: ", "تعذرت المقارنة: ")}{error}</p>}
     {loaded && <>
       <p className="muted">{sourceVerified
@@ -99,6 +139,7 @@ export function CatalogBundleDriftReview({ batchId, locale }: {
               <th>{tr("Entity", "الكيان")}</th>
               <th>{tr("Comparison", "نتيجة المقارنة")}</th>
               <th>{tr("Changed field names (not values)", "أسماء الحقول المختلفة (دون قيم)")}</th>
+              <th>{tr("Expert review triage (not approval)", "إحالة للمراجعة المختصة (ليست اعتماداً)")}</th>
             </tr></thead>
             <tbody>{rows.map(row => <tr key={row.rowNumber}>
               <td>{row.rowNumber}</td>
@@ -108,6 +149,17 @@ export function CatalogBundleDriftReview({ batchId, locale }: {
                 : tr("Review differences", "توجد اختلافات للمراجعة")}</td>
               <td>{row.changedFields.length ? row.changedFields.join(", ") : "—"}
                 {row.additionalFieldsOmitted && " …"}</td>
+              <td>
+                {row.latestFlag && <p className="muted">{tr("Previously flagged: ", "إحالة سابقة: ")}
+                  {row.latestFlag.category} · {row.latestFlag.reasonCode}</p>}
+                <button type="button" className="secondary-button"
+                  disabled={busy || flagging !== null}
+                  onClick={() => void flag(row)}>
+                  {flagging === row.rowNumber
+                    ? tr("Recording…", "جارٍ التسجيل…")
+                    : tr("Flag for expert review", "إحالة للمراجعة المختصة")}
+                </button>
+              </td>
             </tr>)}</tbody>
           </table></div>}
       <div className="review-actions">
