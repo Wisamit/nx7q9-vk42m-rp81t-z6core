@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import {
+  isSafeMasterTestRow, registerPanelAlias, resolvedPanelMemberships, sameImportTestIdentity,
+} from "@/lib/catalog-panel-membership";
 
 function asObject(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -14,12 +17,6 @@ function issueCodes(value: unknown) {
     return typeof code === "string" ? [code] : [];
   });
 }
-function isEligibleGeneratedTest(row: { entityType: string; status: string; validationIssues: unknown }) {
-  if (row.entityType !== "TEST" || row.status !== "WARNING") return false;
-  const codes = issueCodes(row.validationIssues);
-  return codes.length === 1 && codes[0] === "GENERATED_TEST_CODE";
-}
-
 export async function POST(_: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await requirePermission("catalog.manage");
   const ctx = await requestContext();
@@ -35,7 +32,7 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
 
   const safeRows = batch.rows.filter(row =>
     (row.status === "VALID" && ["UNIT", "CONTAINER", "TEST", "PANEL"].includes(row.entityType)) ||
-    isEligibleGeneratedTest(row)
+    isSafeMasterTestRow(row)
   );
   if (safeRows.length === 0) {
     return NextResponse.json({ error: "no_pending_safe_master_rows" }, { status: 409 });
@@ -82,12 +79,18 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
       await tx.catalogImportRow.update({ where: { id: row.id }, data: { status: "IMPORTED", importedEntityId: created.id } }); results.imported++;
     }
 
-    const testByLegacyName = new Map<string, string>();
+    // Keep the exact eligible source row -> resolved master identity.
+    // Test display names are not unique and must not determine panel members.
+    const testBySourceRowId = new Map<string, string>();
     for (const row of safeRows.filter(row => row.entityType === "TEST")) {
       const n = asObject(row.normalizedData); const code = text(n.code).toUpperCase(); const nameEn = text(n.nameEn);
       const existing = code ? await tx.labTest.findUnique({ where: { organizationId_code: { organizationId: session.user.organizationId, code } } }) : null;
       if (!code || !nameEn || existing) {
-        if (existing) testByLegacyName.set(nameEn.toUpperCase(), existing.id);
+        // Only an exact existing code AND matching display identity may be
+        // reused for this eligible staged source row.
+        if (existing && sameImportTestIdentity(existing.nameEn, nameEn)) {
+          testBySourceRowId.set(row.id, existing.id);
+        }
         await tx.catalogImportRow.update({ where: { id: row.id }, data: { status: "SKIPPED", validationIssues: [{ severity: "WARNING", code: "DUPLICATE_OR_INVALID_TEST", message: "Test already exists or could not be imported safely; no existing definition was overwritten." }] } });
         results.skipped++; continue;
       }
@@ -98,11 +101,11 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
         assay: text(n.assay).slice(0, 200) || null, collectionInstructions: text(n.collection) || null,
       } });
       if (session.activeBranchId) await tx.testBranchAvailability.create({ data: { testId: created.id, branchId: session.activeBranchId, performedHere: true } });
-      testByLegacyName.set(nameEn.toUpperCase(), created.id);
+      testBySourceRowId.set(row.id, created.id);
       await tx.catalogImportRow.update({ where: { id: row.id }, data: { status: "IMPORTED", importedEntityId: created.id } }); results.imported++;
     }
 
-    const panelMap = new Map<string, string>();
+    const panelMap = new Map<string, string | null>();
     for (const row of safeRows.filter(row => row.entityType === "PANEL")) {
       const n = asObject(row.normalizedData); const code = text(n.code).toUpperCase(); const nameEn = text(n.nameEn);
       let panel = code ? await tx.testPanel.findUnique({ where: { organizationId_code: { organizationId: session.user.organizationId, code } } }) : null;
@@ -110,17 +113,14 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
       if (!panel) {
         await tx.catalogImportRow.update({ where: { id: row.id }, data: { status: "SKIPPED", validationIssues: [{ severity: "WARNING", code: "INVALID_PANEL", message: "Panel could not be imported safely." }] } }); results.skipped++; continue;
       }
-      panelMap.set(nameEn.toUpperCase(), panel.id); panelMap.set(code, panel.id);
+      registerPanelAlias(panelMap, nameEn, panel.id);
+      registerPanelAlias(panelMap, code, panel.id);
       await tx.catalogImportRow.update({ where: { id: row.id }, data: { status: "IMPORTED", importedEntityId: panel.id } }); results.imported++;
     }
 
-    const testRows = batch.rows.filter(row => row.entityType === "TEST");
-    for (const row of testRows) {
-      const n = asObject(row.normalizedData); const panelName = text(n.panel); const testName = text(n.nameEn);
-      if (!panelName || !testName) continue;
-      const panelId = panelMap.get(panelName.toUpperCase()) || panelMap.get(panelName.replace(/\s+/g, "_").toUpperCase());
-      const testId = row.importedEntityId || testByLegacyName.get(testName.toUpperCase());
-      if (panelId && testId) await tx.testPanelItem.createMany({ data: [{ panelId, testId, displayOrder: 0, required: true }], skipDuplicates: true });
+    const panelMemberships = resolvedPanelMemberships(safeRows, testBySourceRowId, panelMap);
+    if (panelMemberships.length) {
+      await tx.testPanelItem.createMany({ data: panelMemberships, skipDuplicates: true });
     }
 
     await tx.catalogImportBatch.update({ where: { id: batch.id }, data: { summary: { ...(asObject(batch.summary)), safeMasterImport: results } } });
