@@ -15,6 +15,15 @@ type GovernanceReport = {
   reviewOnly: boolean; approved: boolean; activationAllowed: boolean;
   clinicalReleaseAllowed: boolean; pricePublicationAllowed: boolean;
   liveWrites: boolean;
+  signatoryPlanning: {
+    clinicalReviewerCandidates: number; financialReviewerCandidates: number;
+    crossQualifiedReviewers: number; distinctPairAvailable: boolean;
+    mfaEnabledPotentialReviewers: number; gaps: string[];
+    candidateCountsOnly: boolean; qualificationToSign: boolean;
+    signaturePolicyApproved: boolean; signingEnabled: boolean;
+    clinicalApprovalAllowed: boolean; financialApprovalAllowed: boolean;
+    liveWrites: boolean;
+  };
 };
 const categories: Category[] = ["CLINICAL", "FINANCIAL", "CATALOG"];
 const knownBlockers = [
@@ -52,6 +61,18 @@ export function CatalogGovernanceReadiness({ batchId, locale }: {
           !body.blockers.includes("SIGNATORY_POLICY_UNCONFIGURED") ||
           !body.blockers.includes("APPLICATION_WORKFLOW_UNAVAILABLE") ||
           body.blockers.some(code => !knownBlockers.includes(code)) ||
+          !body.signatoryPlanning ||
+          body.signatoryPlanning.candidateCountsOnly !== true ||
+          body.signatoryPlanning.qualificationToSign !== false ||
+          body.signatoryPlanning.signaturePolicyApproved !== false ||
+          body.signatoryPlanning.signingEnabled !== false ||
+          body.signatoryPlanning.clinicalApprovalAllowed !== false ||
+          body.signatoryPlanning.financialApprovalAllowed !== false ||
+          body.signatoryPlanning.liveWrites !== false ||
+          !Number.isSafeInteger(body.signatoryPlanning.clinicalReviewerCandidates) ||
+          !Number.isSafeInteger(body.signatoryPlanning.financialReviewerCandidates) ||
+          !Number.isSafeInteger(body.signatoryPlanning.crossQualifiedReviewers) ||
+          !Number.isSafeInteger(body.signatoryPlanning.mfaEnabledPotentialReviewers) ||
           !body.totals || !body.byCategory ||
           !categories.every(category => body.byCategory?.[category] &&
             Number.isSafeInteger(body.byCategory[category].total) &&
@@ -150,6 +171,49 @@ export function CatalogGovernanceReadiness({ batchId, locale }: {
       </table></div>
       <p><strong>{tr("Blocking conditions", "أسباب منع الاعتماد")}</strong></p>
       <ul>{report.blockers.map(code => <li key={code}>{blockerName(code)}</li>)}</ul>
+      <h3>{tr("Potential independent reviewer capacity (NOT signing authority)",
+        "القدرة المحتملة للمراجعين المستقلين (ليست صلاحية توقيع)")}</h3>
+      <p className="muted">{tr(
+        "Current active staff with existing catalog, clinical or financial management permissions in this branch, excluding the file author. These counts do not establish authorized signatories.",
+        "أعداد الموظفين النشطين الذين لديهم حالياً صلاحيات إدارة الدليل أو المديات أو الأسعار ضمن هذا الفرع، مع استبعاد صاحب الملف. هذه الأعداد لا تعني وجود موقّعين رسميين.",
+      )}</p>
+      <div className="summary-list">
+        <div><span>{tr("Potential clinical reviewers", "المراجعون الطبيون المحتملون")}</span>
+          <strong>{report.signatoryPlanning.clinicalReviewerCandidates}</strong></div>
+        <div><span>{tr("Potential financial reviewers", "المراجعون الماليون المحتملون")}</span>
+          <strong>{report.signatoryPlanning.financialReviewerCandidates}</strong></div>
+        <div><span>{tr("Qualified for both management domains", "لديهم صلاحيات إدارة المجالين")}</span>
+          <strong>{report.signatoryPlanning.crossQualifiedReviewers}</strong></div>
+        <div><span>{tr("Two separate potential reviewers available", "إمكانية وجود مراجعين مختلفين")}</span>
+          <strong>{report.signatoryPlanning.distinctPairAvailable
+            ? tr("Potentially yes", "ممكن مبدئياً") : tr("Not demonstrated", "غير متحقق")}</strong></div>
+        <div><span>{tr("Potential reviewers with MFA configured", "مراجعون محتملون مفعّل لديهم MFA")}</span>
+          <strong>{report.signatoryPlanning.mfaEnabledPotentialReviewers}</strong></div>
+      </div>
+      <p><strong>{tr("Unresolved signing policy and segregation prerequisites",
+        "متطلبات سياسة التوقيع وفصل المسؤوليات غير المحسومة")}</strong></p>
+      <ul>{report.signatoryPlanning.gaps.map(code => <li key={code}>{
+        ({
+          FORMAL_SIGNATORY_ROLES_NOT_ESTABLISHED: tr(
+            "Formal domain-specific clinical and financial signatory roles not established",
+            "لم تُحدّد أدوار الموقّعين الرسميين للمجالين الطبي والمالي"),
+          SIGNATURE_AUTHENTICATION_POLICY_UNDEFINED: tr(
+            "Final signing requires an approved authentication and re-verification policy",
+            "التوقيع النهائي يحتاج سياسة معتمدة للتحقق من الهوية وإعادة المصادقة"),
+          SIGNATURE_EVIDENCE_AND_VERSIONED_APPLICATION_NOT_IMPLEMENTED: tr(
+            "Signature evidence and version-preserving activation not implemented",
+            "توثيق التوقيع والتفعيل مع حفظ الإصدارات غير منفّذين"),
+          NO_INDEPENDENT_CLINICAL_REVIEW_CANDIDATE: tr(
+            "No separate potential clinical reviewer found in this branch",
+            "لم يوجد مراجع طبي محتمل مستقل ضمن هذا الفرع"),
+          NO_INDEPENDENT_FINANCIAL_REVIEW_CANDIDATE: tr(
+            "No separate potential financial reviewer found in this branch",
+            "لم يوجد مراجع مالي محتمل مستقل ضمن هذا الفرع"),
+          NO_TWO_DISTINCT_CROSS_DOMAIN_REVIEWERS: tr(
+            "Distinct clinical and financial reviewers not demonstrated",
+            "لم يثبت توافر مراجعين طبي ومالي مختلفين"),
+        } as Record<string, string>)[code] || code
+      }</li>)}</ul>
       <p className="muted">{tr(
         "Confirming a discrepancy only acknowledges that a finding exists. It never authorizes changing laboratory reference intervals, catalog content or prices.",
         "تأكيد الاختلاف يعني الإقرار بوجود ملاحظة فقط، ولا يجيز تعديل المديات المرجعية أو دليل الفحوصات أو الأسعار.",

@@ -6,6 +6,7 @@ import { BUNDLE_REVIEW_SOURCE, BUNDLE_REVIEW_MAX_ROWS } from "@/lib/catalog-bund
 import { catalogBundleDrift } from "@/lib/catalog-bundle-drift";
 import { resolveFindingLifecycle, triageResubmission } from "@/lib/catalog-finding-lifecycle";
 import { summarizeCatalogGovernance } from "@/lib/catalog-governance-readiness";
+import { summarizeSignatoryPlanning } from "@/lib/catalog-signatory-planning";
 import { catalogBundleSigningSecret } from "@/lib/catalog-bundle-attestation";
 import {
   bundleTriageClass, catalogDriftObservationToken, matchesCatalogDriftObservation,
@@ -593,15 +594,63 @@ async function inspectBundleDrift(
       // All scoped records and the latest audit histories were loaded in
       // this same repeatable-read transaction. Only bounded COUNTS leave it.
       const readiness = summarizeCatalogGovernance(displayed, verified);
+      // Planning only. Existing management grants are NOT signatory credentials.
+      // No identities, role names, passwords or personnel details leave this API.
+      const potentialReviewers = await tx.user.findMany({
+        where: { organizationId, status: "ACTIVE" },
+        take: 1001,
+        select: {
+          id: true, status: true, mfaEnabled: true,
+          roles: { select: { role: { select: {
+            organizationId: true, status: true,
+            permissions: { select: { permission: { select: { code: true } } } },
+          } } } },
+          branchScopes: { select: {
+            branchId: true, branch: { select: { status: true, organizationId: true } },
+          } },
+          departmentScopes: { select: { department: { select: {
+            status: true, organizationId: true, branchId: true,
+          } } } },
+        },
+      });
+      if (potentialReviewers.length > 1000)
+        return { error: "signatory_planning_user_limit_exceeded", httpStatus: 409 } as const;
+      const planning = summarizeSignatoryPlanning({
+        authorId: batch.createdByUserId, branchId: liveScope.branchId,
+        candidates: potentialReviewers.map(candidate => ({
+          id: candidate.id, status: candidate.status, mfaEnabled: candidate.mfaEnabled,
+          activeBranchIds: candidate.branchScopes.filter(scope =>
+            scope.branch.status === "ACTIVE" && scope.branch.organizationId === organizationId
+          ).map(scope => scope.branchId),
+          hasRestrictedDepartments: candidate.departmentScopes.length > 0,
+          hasActiveApplicableDepartment: candidate.departmentScopes.some(scope =>
+            scope.department.status === "ACTIVE" &&
+            scope.department.organizationId === organizationId &&
+            (scope.department.branchId === null ||
+              scope.department.branchId === liveScope.branchId)
+          ),
+          permissions: new Set(candidate.roles.filter(grant =>
+            grant.role.status === "ACTIVE" &&
+            grant.role.organizationId === organizationId
+          ).flatMap(grant => grant.role.permissions.map(permission =>
+            permission.permission.code
+          ))),
+        })),
+      });
       await tx.auditEvent.create({ data: {
         organizationId, branchId: liveScope.branchId, actorUserId: session.user.id,
         action: "CATALOG_BUNDLE_GOVERNANCE_INSPECTED", entityType: "CatalogImportBatch",
         entityId: batch.id, newValues: {
           rowCount: readiness.rowCount, sourceAttested: verified, blockers: readiness.blockers,
+          planningGaps: planning.gaps, planningReviewerCounts: {
+            clinical: planning.clinicalReviewerCandidates,
+            financial: planning.financialReviewerCandidates,
+            crossQualified: planning.crossQualifiedReviewers,
+          },
           readOnly: true, approved: false, activated: false,
         }, ipAddress: ctx.ipAddress, userAgent: ctx.userAgent,
       } });
-      return readiness;
+      return { ...readiness, signatoryPlanning: planning };
     }
     await tx.auditEvent.create({ data: {
       organizationId, branchId: liveScope.branchId, actorUserId: session.user.id,
