@@ -7,9 +7,8 @@ const TOKEN = /^[a-f0-9]{64}$/;
 const PURPOSE = "family-lab/catalog-drift-observation/v1\n";
 
 export function bundleTriageClass(entityType: string): TriageClass | null {
-  if (entityType === "REFERENCE_INTERVAL") return "CLINICAL";
+  if (["REFERENCE_INTERVAL", "TEST", "COMPONENT", "UNIT"].includes(entityType)) return "CLINICAL";
   if (entityType === "PRICE_LIST" || entityType === "PRICE_LIST_ITEM") return "FINANCIAL";
-  if (entityType === "TEST" || entityType === "COMPONENT" || entityType === "UNIT") return "CATALOG";
   return null;
 }
 
