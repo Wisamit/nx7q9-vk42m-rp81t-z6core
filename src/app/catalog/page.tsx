@@ -112,7 +112,7 @@ export default async function CatalogPage() {
         <article><strong>{packages.length}</strong><span>{tr(locale, "Commercial Packages", "الباقات التجارية")}</span></article>
       </section>
 
-      {permissions.has("catalog.manage") && <CatalogConfigurationExport locale={locale} canExportPricing={permissions.has("pricing.manage")} />}
+      {permissions.has("catalog.manage") && <CatalogConfigurationExport locale={locale} canExportPricing={permissions.has("pricing.manage")} canExportRanges={canReviewCsvRanges} />}
 
       {permissions.has("catalog.manage") && <CatalogBundleReviewStaging locale={locale} />}
 
