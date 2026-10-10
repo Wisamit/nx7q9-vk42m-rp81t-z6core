@@ -74,7 +74,7 @@ export async function POST(request: NextRequest, context: Context) {
  * financial master activation, mutate imported rows, or amend released data.
  */
 export async function PUT(request: NextRequest, context: Context) {
-  if (!/^application\\/json(?:\\s*;|$)/i.test(request.headers.get("content-type") || ""))
+  if (!/^application\/json(?:\s*;|$)/i.test(request.headers.get("content-type") || ""))
     return NextResponse.json({ error: "expert_json_required" }, { status: 415 });
   if (Number(request.headers.get("content-length") || 0) > 1024)
     return NextResponse.json({ error: "expert_request_too_large" }, { status: 413 });
