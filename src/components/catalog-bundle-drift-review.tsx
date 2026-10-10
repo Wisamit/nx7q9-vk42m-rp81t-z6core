@@ -6,6 +6,12 @@ type DriftRow = {
   rowNumber: number; entityType: string;
   disposition: "UNCHANGED" | "DRIFTED"; changedFields: string[];
   additionalFieldsOmitted: boolean; observationToken: string;
+  finding: {
+    status: "UNFLAGGED" | "AWAITING_EXPERT" | "EXPERT_CONFIRMED" |
+      "RETURNED_FOR_CORRECTION" | "STALE_REVIEW_REQUIRED";
+    canRefer: boolean; latestDisposition: "CONFIRM_FINDING" |
+      "RETURN_FOR_CORRECTION" | null; awaitingFreshEvidence: boolean;
+  };
   latestFlag?: { reasonCode: string; category: string; occurredAt: string } | null;
 };
 type DriftResponse = {
@@ -33,7 +39,7 @@ export function CatalogBundleDriftReview({ batchId, locale }: {
   const [error, setError] = useState("");
 
   async function flag(row: DriftRow) {
-    if (busy || flagging !== null) return;
+    if (busy || flagging !== null || row.finding.canRefer !== true) return;
     setFlagging(row.rowNumber);
     setNotice("");
     setError("");
@@ -85,7 +91,15 @@ export function CatalogBundleDriftReview({ batchId, locale }: {
             !Array.isArray(row.changedFields) ||
             row.changedFields.some(field => typeof field !== "string") ||
             typeof row.additionalFieldsOmitted !== "boolean" ||
-            !/^[a-f0-9]{64}$/.test(row.observationToken)) ||
+            !/^[a-f0-9]{64}$/.test(row.observationToken) ||
+            !row.finding || ![
+              "UNFLAGGED", "AWAITING_EXPERT", "EXPERT_CONFIRMED",
+              "RETURNED_FOR_CORRECTION", "STALE_REVIEW_REQUIRED",
+            ].includes(row.finding.status) ||
+            typeof row.finding.canRefer !== "boolean" ||
+            typeof row.finding.awaitingFreshEvidence !== "boolean" ||
+            (row.finding.canRefer !== ["UNFLAGGED", "STALE_REVIEW_REQUIRED"]
+              .includes(row.finding.status))) ||
           (data.hasMore === true &&
             (!Number.isSafeInteger(data.nextCursor) || (data.nextCursor ?? 0) <= after))) {
         throw new Error("unexpected_reconciliation_response");
@@ -139,6 +153,7 @@ export function CatalogBundleDriftReview({ batchId, locale }: {
               <th>{tr("Entity", "الكيان")}</th>
               <th>{tr("Comparison", "نتيجة المقارنة")}</th>
               <th>{tr("Changed field names (not values)", "أسماء الحقول المختلفة (دون قيم)")}</th>
+              <th>{tr("Review lifecycle", "حالة متابعة المراجعة")}</th>
               <th>{tr("Expert review triage (not approval)", "إحالة للمراجعة المختصة (ليست اعتماداً)")}</th>
             </tr></thead>
             <tbody>{rows.map(row => <tr key={row.rowNumber}>
@@ -149,15 +164,29 @@ export function CatalogBundleDriftReview({ batchId, locale }: {
                 : tr("Review differences", "توجد اختلافات للمراجعة")}</td>
               <td>{row.changedFields.length ? row.changedFields.join(", ") : "—"}
                 {row.additionalFieldsOmitted && " …"}</td>
+              <td>{row.finding.status === "UNFLAGGED"
+                ? tr("Not referred", "لم تُحل للمراجعة")
+                : row.finding.status === "AWAITING_EXPERT"
+                ? tr("Awaiting independent reviewer", "بانتظار المراجع المستقل")
+                : row.finding.status === "EXPERT_CONFIRMED"
+                ? tr("Finding confirmed (not approved)", "تم تأكيد الملاحظة (دون اعتماد)")
+                : row.finding.status === "RETURNED_FOR_CORRECTION"
+                ? tr("Returned for correction", "أعيدت للتصحيح")
+                : tr("Stale finding — new review required", "الملاحظة قديمة — تتطلب إحالة جديدة")}
+              </td>
               <td>
                 {row.latestFlag && <p className="muted">{tr("Previously flagged: ", "إحالة سابقة: ")}
                   {row.latestFlag.category} · {row.latestFlag.reasonCode}</p>}
                 <button type="button" className="secondary-button"
-                  disabled={busy || flagging !== null}
+                  disabled={busy || flagging !== null || !row.finding.canRefer}
                   onClick={() => void flag(row)}>
                   {flagging === row.rowNumber
                     ? tr("Recording…", "جارٍ التسجيل…")
-                    : tr("Flag for expert review", "إحالة للمراجعة المختصة")}
+                    : row.finding.status === "STALE_REVIEW_REQUIRED"
+                    ? tr("Refer new observation", "إحالة الملاحظة الجديدة")
+                    : row.finding.canRefer
+                    ? tr("Flag for expert review", "إحالة للمراجعة المختصة")
+                    : tr("Referral already in review history", "الإحالة موجودة بسجل المراجعة")}
                 </button>
               </td>
             </tr>)}</tbody>
