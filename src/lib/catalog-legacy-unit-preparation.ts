@@ -3,7 +3,7 @@
  * normalization; it does not imply clinical unit conversion or UCUM equivalence.
  */
 export function legacyPreparedUnitKey(value: string): string {
-  return value.trim().toUpperCase().replace(/[µμ]/g, "U")
+  return value.trim().replace(/[µμΜ]/g, "U").toUpperCase()
     .replace(/\s+/g, "").replace(/PER/g, "/").replace(/\.$/, "");
 }
 
