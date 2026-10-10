@@ -120,6 +120,10 @@ test("Stage 46: generic exports exclude private client/contract financial scopes
   assert.match(exp,/permissions\.has\("catalog\.reference_ranges\.manage"\)/);
   const catalog=readFileSync("src/app/catalog/page.tsx","utf8");
   assert.match(catalog,/CatalogBundleReviewStaging/);
+  assert.match(catalog,/canExportRanges=\{canReviewCsvRanges\}/);
+  const exportUi=readFileSync("src/components/catalog-configuration-export.tsx","utf8");
+  assert.match(exportUi,/canExportRanges \? \["REFERENCE_INTERVAL" as const\]/);
+  assert.match(exportUi,/canExportRanges \|\| t !== "REFERENCE_INTERVAL"/);
   const ui=readFileSync("src/components/catalog-bundle-review-staging.tsx","utf8");
   assert.match(ui,/reviewOnly !== true/);
   assert.match(ui,/Stage JSON bundle for review/);
