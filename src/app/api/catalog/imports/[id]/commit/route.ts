@@ -5,6 +5,7 @@ import {
   isSafeMasterTestRow, registerPanelAlias, resolvedPanelMemberships, sameImportTestIdentity,
 } from "@/lib/catalog-panel-membership";
 import { fitsSafeMasterIdentity, registerSafeMasterUnitAlias, resolveSafeMasterUnitAlias, sameSafeMasterTestDefinition } from "@/lib/catalog-safe-master-units";
+import { manualUnitIdentityError } from "@/lib/catalog-manual-unit-governance";
 
 function asObject(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -72,7 +73,11 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
     });
     if (claim.count !== 1) throw new Error("catalog_import_claim_conflict");
     const units = new Map<string, string | null>();
-    for (const existing of await tx.unit.findMany({ where: { organizationId: session.user.organizationId } })) {
+    const knownUnitIdentities = await tx.unit.findMany({
+      where: { organizationId: session.user.organizationId },
+      select: { id: true, code: true, symbol: true, status: true },
+    });
+    for (const existing of knownUnitIdentities) {
       registerSafeMasterUnitAlias(units, existing.code, existing.id);
       registerSafeMasterUnitAlias(units, existing.symbol, existing.id);
     }
@@ -81,13 +86,16 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
       const n = asObject(row.normalizedData);
       const code = text(n.code).toUpperCase();
       const symbol = text(n.symbol);
-      if (!fitsSafeMasterIdentity(code, symbol, 50, 50) || units.has(code) || units.has(symbol.toUpperCase())) {
+      if (!fitsSafeMasterIdentity(code, symbol, 50, 50) ||
+        manualUnitIdentityError(knownUnitIdentities, { code, symbol }) ||
+        units.has(code) || units.has(symbol.toUpperCase())) {
         await tx.catalogImportRow.update({ where: { id: row.id }, data: { status: "SKIPPED", validationIssues: [{ severity: "WARNING", code: "DUPLICATE_OR_INVALID_UNIT", message: "Unit already exists or could not be imported safely." }] } });
         results.skipped++; continue;
       }
       const unit = await tx.unit.create({ data: { organizationId: session.user.organizationId, code: code.slice(0, 50), symbol: symbol.slice(0, 50), nameEn: symbol.slice(0, 150) } });
       registerSafeMasterUnitAlias(units, code, unit.id);
       registerSafeMasterUnitAlias(units, symbol, unit.id);
+      knownUnitIdentities.push({ id: unit.id, code: unit.code, symbol: unit.symbol, status: unit.status });
       await tx.catalogImportRow.update({ where: { id: row.id }, data: { status: "IMPORTED", importedEntityId: unit.id } });
       results.imported++;
     }
