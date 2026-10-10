@@ -10,6 +10,7 @@ import {
   triagePermissionScope, validTriageReason, type TriageReason,
 } from "@/lib/catalog-drift-triage";
 import { catalogExportTypes, type CatalogExportType } from "@/lib/catalog-configuration-export";
+import { expertDispositionAllowed, validExpertDisposition, type ExpertDisposition } from "@/lib/catalog-expert-disposition";
 
 export const dynamic = "force-dynamic";
 const PAGE_SIZE = 100;
@@ -24,6 +25,7 @@ function record(value: unknown): Record<string, unknown> | null {
 
 type Context = { params: Promise<{ id: string }> };
 type TriageInput = { rowNumber: number; observationToken: string; reasonCode: TriageReason };
+type ExpertInput = { flagEventId: string; disposition: ExpertDisposition };
 
 /** A bounded, live-scoped snapshot diff. No source or live values in response. */
 export async function GET(request: NextRequest, context: Context) {
@@ -66,7 +68,46 @@ export async function POST(request: NextRequest, context: Context) {
   });
 }
 
-async function inspectBundleDrift(request: NextRequest, { params }: Context, triage: TriageInput | null) {
+/**
+ * Independent domain expert disposition for an existing triage event.
+ * A decision concerns the finding only. It cannot authorize clinical or
+ * financial master activation, mutate imported rows, or amend released data.
+ */
+export async function PUT(request: NextRequest, context: Context) {
+  if (!/^application\\/json(?:\\s*;|$)/i.test(request.headers.get("content-type") || ""))
+    return NextResponse.json({ error: "expert_json_required" }, { status: 415 });
+  if (Number(request.headers.get("content-length") || 0) > 1024)
+    return NextResponse.json({ error: "expert_request_too_large" }, { status: 413 });
+  const reader = request.body?.getReader();
+  if (!reader) return NextResponse.json({ error: "expert_request_missing" }, { status: 400 });
+  const parts: Uint8Array[] = [];
+  let bytes = 0;
+  for (;;) {
+    const chunk = await reader.read();
+    if (chunk.done) break;
+    bytes += chunk.value.byteLength;
+    if (bytes > 1024) {
+      await reader.cancel("expert_request_too_large");
+      return NextResponse.json({ error: "expert_request_too_large" }, { status: 413 });
+    }
+    parts.push(chunk.value);
+  }
+  let data: Record<string, unknown> | null = null;
+  try { data = record(JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(parts)))); }
+  catch { return NextResponse.json({ error: "expert_invalid_json" }, { status: 400 }); }
+  if (!data || Object.keys(data).sort().join(",") !== "disposition,flagEventId" ||
+      typeof data.flagEventId !== "string" || !UUID.test(data.flagEventId) ||
+      !validExpertDisposition(data.disposition))
+    return NextResponse.json({ error: "expert_invalid_request" }, { status: 400 });
+  return inspectBundleDrift(request, context, null, {
+    flagEventId: data.flagEventId, disposition: data.disposition,
+  });
+}
+
+async function inspectBundleDrift(
+  request: NextRequest, { params }: Context,
+  triage: TriageInput | null, expert: ExpertInput | null = null,
+) {
   const session = await getCurrentSession();
   if (!session) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const sessionPermissions = permissionSet(session);
@@ -92,11 +133,13 @@ async function inspectBundleDrift(request: NextRequest, { params }: Context, tri
     if (orgLock.length !== 1) return { error: "reconciliation_organization_inactive", httpStatus: 403 } as const;
     const batch = await tx.catalogImportBatch.findFirst({
       where: { id: batchId, organizationId, sourceType: BUNDLE_REVIEW_SOURCE,
-        createdByUserId: session.user.id, status: "DRAFT" },
-      select: { id: true, sourceChecksum: true, summary: true },
+        ...(expert ? {} : { createdByUserId: session.user.id }), status: "DRAFT" },
+      select: { id: true, sourceChecksum: true, summary: true, createdByUserId: true },
     });
     if (!batch || !batch.sourceChecksum)
       return { error: "bundle_review_not_found", httpStatus: 404 } as const;
+    if (expert && batch.createdByUserId === session.user.id)
+      return { error: "independent_reviewer_required", httpStatus: 403 } as const;
 
     // Require both original session permissions and present persisted grants.
     const activeUser = await tx.user.findFirst({
@@ -116,10 +159,10 @@ async function inspectBundleDrift(request: NextRequest, { params }: Context, tri
     });
     if (classes.some(item => !catalogExportTypes.has(item.entityType as CatalogExportType)))
       return { error: "reconciliation_invalid_entity", httpStatus: 409 } as const;
-    if (classes.some(item => item.entityType === "REFERENCE_INTERVAL") &&
+    if (!expert && classes.some(item => item.entityType === "REFERENCE_INTERVAL") &&
         !has("catalog.reference_ranges.manage"))
       return { error: "reconciliation_clinical_permission_revoked", httpStatus: 403 } as const;
-    if (classes.some(item => item.entityType.startsWith("PRICE_")) && !has("pricing.manage"))
+    if (!expert && classes.some(item => item.entityType.startsWith("PRICE_")) && !has("pricing.manage"))
       return { error: "reconciliation_pricing_permission_revoked", httpStatus: 403 } as const;
 
     const liveBranch = await tx.branch.findFirst({
@@ -165,6 +208,24 @@ async function inspectBundleDrift(request: NextRequest, { params }: Context, tri
     if (!staged.length || staged.length > BUNDLE_REVIEW_MAX_ROWS ||
         staged.some(row => row.status !== "WARNING" || row.importedEntityId !== null))
       return { error: "reconciliation_batch_changed", httpStatus: 409 } as const;
+
+    // A second reviewer may access only a previously flagged row and only
+    // after full-batch tenant/branch/department checks. Do not expose source.
+    const expertFlag = expert ? await tx.auditEvent.findFirst({
+      where: { id: expert.flagEventId, organizationId,
+        action: "CATALOG_BUNDLE_EXPERT_REVIEW_FLAGGED",
+        entityType: "CatalogImportRow" },
+      select: { id: true, entityId: true, actorUserId: true, newValues: true },
+    }) : null;
+    const expertFlagData = record(expertFlag?.newValues);
+    const expertRow = expertFlag ? staged.find(row => row.id === expertFlag.entityId) : null;
+    if (expert && (!expertFlag || !expertRow ||
+        expertFlagData?.batchId !== batch.id ||
+        expertFlagData?.rowNumber !== expertRow.rowNumber ||
+        expertFlagData?.entityType !== expertRow.entityType ||
+        typeof expertFlagData?.evidenceToken !== "string")) {
+      return { error: "expert_flag_not_found", httpStatus: 404 } as const;
+    }
 
     const idsByType = new Map<CatalogExportType, string[]>();
     const testRefs = new Set<string>(), unitRefs = new Set<string>();
@@ -307,7 +368,8 @@ async function inspectBundleDrift(request: NextRequest, { params }: Context, tri
         return { error: "reconciliation_live_master_scope_changed", httpStatus: 403 } as const;
       for (const current of records) live.set(type + ":" + current.id, current);
     }
-    const page = staged.filter(row => row.rowNumber > after).slice(0, PAGE_SIZE + 1);
+    const pageAfter = expertRow ? expertRow.rowNumber - 1 : after;
+    const page = staged.filter(row => row.rowNumber > pageAfter).slice(0, PAGE_SIZE + 1);
     const shown = page.slice(0, PAGE_SIZE);
     const rows = shown.map(row => {
       const id = String(record(row.normalizedData)?.id || "");
@@ -341,9 +403,67 @@ async function inspectBundleDrift(request: NextRequest, { params }: Context, tri
         reasonCode: data.reasonCode, category: data.category, occurredAt: event.occurredAt.toISOString(),
       });
     }
+    const verifiedSource = record(batch.summary)?.attestationStatus === "VERIFIED";
     const displayed = rows.map((row, index) => ({
       ...row, latestFlag: lastFlag.get(shown[index].id) || null,
     }));
+    if (expert) {
+      const index = shown.findIndex(row => row.id === expertRow!.id);
+      if (index < 0) return { error: "expert_row_not_found", httpStatus: 404 } as const;
+      const observed = rows[index];
+      const latestFlag = await tx.auditEvent.findFirst({
+        where: { organizationId, action: "CATALOG_BUNDLE_EXPERT_REVIEW_FLAGGED",
+          entityType: "CatalogImportRow", entityId: expertRow!.id },
+        orderBy: [{ occurredAt: "desc" }, { id: "desc" }],
+        select: { id: true },
+      });
+      const policy = expertDispositionAllowed({
+        expertUserId: session.user.id,
+        batchAuthorId: batch.createdByUserId,
+        flagActorUserId: expertFlag!.actorUserId,
+        eventCategory: expertFlagData?.category,
+        entityType: observed.entityType,
+        flaggedEvidence: expertFlagData?.evidenceToken,
+        latestEvidence: observed.observationToken,
+        sessionPermissions, livePermissions,
+        isLatestFlag: latestFlag?.id === expertFlag!.id,
+        isOpenDraft: true,
+      });
+      if (!policy.allowed) {
+        return { error: policy.reason,
+          httpStatus: policy.reason === "expert_evidence_stale" ? 409 : 403 } as const;
+      }
+      const priorDecision = await tx.auditEvent.findFirst({
+        where: { organizationId, action: "CATALOG_BUNDLE_EXPERT_DECISION_RECORDED",
+          entityType: "CatalogExpertReviewFlag", entityId: expertFlag!.id },
+        select: { id: true, newValues: true },
+      });
+      if (priorDecision) {
+        const old = record(priorDecision.newValues);
+        return {
+          status: "EXPERT_DECISION_ALREADY_RECORDED", category: policy.category,
+          disposition: old?.disposition, approved: false, activated: false, liveWrites: false,
+        } as const;
+      }
+      await tx.auditEvent.create({ data: {
+        organizationId, branchId: liveScope.branchId, actorUserId: session.user.id,
+        action: "CATALOG_BUNDLE_EXPERT_DECISION_RECORDED",
+        entityType: "CatalogExpertReviewFlag", entityId: expertFlag!.id,
+        newValues: {
+          batchId: batch.id, rowId: expertRow!.id,
+          rowNumber: observed.rowNumber, entityType: observed.entityType,
+          category: policy.category, disposition: expert.disposition,
+          evidenceToken: observed.observationToken, sourceVerified: verifiedSource,
+          reviewOnly: true, approved: false, activated: false,
+        },
+        ipAddress: ctx.ipAddress, userAgent: ctx.userAgent,
+      } });
+      return {
+        status: "EXPERT_DECISION_RECORDED", category: policy.category,
+        disposition: expert.disposition, rowNumber: observed.rowNumber,
+        approved: false, activated: false, liveWrites: false,
+      } as const;
+    }
     if (triage) {
       const index = shown.findIndex(row => row.rowNumber === triage.rowNumber);
       if (index < 0) return { error: "triage_row_not_found", httpStatus: 404 } as const;
