@@ -34,6 +34,36 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
 
   try {
   await prisma.$transaction(async tx => {
+    // Coordinate with other master import transactions and Stage 45 unit
+    // preparation. The organization lock covers all batches in this tenant,
+    // not just two POSTs targeting the same batch.
+    const ownerLock = await tx.$queryRaw<Array<{ id: string }>>`
+      SELECT id FROM organizations
+      WHERE id = ${session.user.organizationId} FOR UPDATE
+    `;
+    if (ownerLock.length !== 1) throw new Error("catalog_import_organization_changed");
+    const latestBatch = await tx.catalogImportBatch.findFirst({
+      where: { id: batch.id, organizationId: session.user.organizationId, status: "VALIDATED" },
+      include: { rows: { orderBy: { rowNumber: "asc" } } },
+    });
+    if (!latestBatch || latestBatch.sourceType === "CONFIG_BUNDLE_REVIEW" ||
+      latestBatch.sourceType === "CSV_REVIEW") throw new Error("catalog_import_claim_conflict");
+    // Never use a pre-lock source-row snapshot to write clinical master data.
+    const safeRows = latestBatch.rows.filter(row =>
+      (row.status === "VALID" && ["UNIT", "CONTAINER", "TEST", "PANEL"].includes(row.entityType)) ||
+      isSafeMasterTestRow(row)
+    );
+    if (safeRows.length === 0) throw new Error("catalog_import_no_safe_rows");
+    results.deferred = latestBatch.rows.filter(row =>
+      ["REFERENCE_INTERVAL", "COMPONENT", "PRICE_LIST_ITEM"].includes(row.entityType)).length;
+    const branch = session.activeBranchId ? await tx.branch.findFirst({
+      where: { id: session.activeBranchId, organizationId: session.user.organizationId, status: "ACTIVE" },
+      select: { id: true },
+    }) : null;
+    if (!branch || !session.user.branchScopes.some(grant =>
+      grant.branchId === branch.id && grant.branch.status === "ACTIVE")) {
+      throw new Error("catalog_import_branch_scope_changed");
+    }
     // Serialize import execution using the batch status row. Competing POSTs
     // can never both import the same master data; rollback releases the claim.
     const claim = await tx.catalogImportBatch.updateMany({
@@ -141,8 +171,12 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
     } });
   });
   } catch (error) {
-    if (error instanceof Error && error.message === "catalog_import_claim_conflict") {
+    if (error instanceof Error && (error.message === "catalog_import_claim_conflict" ||
+      error.message === "catalog_import_no_safe_rows")) {
       return NextResponse.json({ error: "batch_already_committed" }, { status: 409 });
+    }
+    if (error instanceof Error && error.message === "catalog_import_branch_scope_changed") {
+      return NextResponse.json({ error: "branch_forbidden" }, { status: 403 });
     }
     throw error;
   }
