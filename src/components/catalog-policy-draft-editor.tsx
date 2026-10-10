@@ -4,7 +4,7 @@ import { useState } from "react";
 import {
   catalogPolicyChoices, policyKeys, type CatalogPolicyProposal,
   type CatalogPolicyKey,
-} from "@/lib/catalog-signatory-policy-draft";
+} from "@/lib/catalog-policy-options";
 
 type PublicPolicyDraft = {
   revision: number; proposal: CatalogPolicyProposal; proposalDigest: string;
