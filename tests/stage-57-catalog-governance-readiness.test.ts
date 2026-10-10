@@ -26,6 +26,7 @@ test("Stage 57: full-bundle clinical/financial buckets remain counts-only and si
   assert.equal(result.byCategory.FINANCIAL.returnedForCorrection, 1);
   assert.equal(result.totals.drifted, 5);
   assert.equal(result.totals.unflagged, 2);
+  assert.equal(result.totals.driftUnflagged, 1);
   assert.equal(result.blockers.includes("DRIFT_NOT_TRIAGED"), true);
   assert.equal(result.blockers.includes("EXPERT_REVIEW_PENDING"), true);
   assert.equal(result.blockers.includes("STALE_REVIEW_EVIDENCE"), true);
@@ -51,6 +52,7 @@ test("Stage 57: an attested fully-reviewed snapshot is still NOT clinical/financ
   assert.equal(report.activationAllowed, false);
   assert.equal(report.approved, false);
   assert.equal(report.rowCount, 3);
+  assert.equal(report.totals.driftUnflagged, 0);
   const unsigned = summarizeCatalogGovernance([
     row("TEST", "UNCHANGED", "UNFLAGGED"),
   ], false);
@@ -80,7 +82,7 @@ test("Stage 57: governance GET uses all authorized staged identities in one tran
   const ui = readFileSync("src/components/catalog-governance-readiness.tsx", "utf8");
   assert.match(route, /query\.get\("governance"\) !== "1"/);
   assert.match(route, /inspectBundleDrift\(request, context, null, null, false, true\)/);
-  assert.match(route, /governance \? staged : staged\.filter/);
+  assert.match(route, /governance\s*\?\s*staged\s*:\s*staged\.filter/);
   assert.match(route, /governance \? page : page\.slice/);
   assert.match(route, /governance \? 25001 : 1001/);
   assert.match(route, /review_history_limit_exceeded/);
