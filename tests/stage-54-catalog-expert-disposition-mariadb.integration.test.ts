@@ -55,7 +55,7 @@ test("Stage 54 MariaDB: independently granted second expert, revocation, stale e
       await insert("INSERT INTO role_permissions(role_id,permission_id) VALUES(?,?)",[roleId,id]);
     await insert("INSERT INTO catalog_import_batches(id,organization_id,source_type,source_name,source_checksum,status,created_by_user_id,updated_at) VALUES(?,?,'CONFIG_BUNDLE_REVIEW','stage54.json',?,'DRAFT',?,NOW(3))",
       [batch,org,"a".repeat(64),author]);
-    await insert("INSERT INTO catalog_import_rows(id,batch_id,row_number,entity_type,status,legacy_key,source_data,normalized_data,validation_issues,updated_at) VALUES(?,?,1,'TEST','WARNING',?,?,?,?,NOW(3))",
+    await insert("INSERT INTO catalog_import_rows(id,batch_id,`row_number`,entity_type,status,legacy_key,source_data,normalized_data,validation_issues,updated_at) VALUES(?,?,1,'TEST','WARNING',?,?,?,?,NOW(3))",
       [row,batch,labTest,JSON.stringify(source),JSON.stringify(source),
         JSON.stringify([{severity:"WARNING",code:"CONFIGURATION_BUNDLE_REVIEW_ONLY"}])]);
     await insert("INSERT INTO audit_events(id,organization_id,branch_id,actor_user_id,action,entity_type,entity_id,new_values) VALUES(?,?,?,?,'CATALOG_BUNDLE_EXPERT_REVIEW_FLAGGED','CatalogImportRow',?,?)",
