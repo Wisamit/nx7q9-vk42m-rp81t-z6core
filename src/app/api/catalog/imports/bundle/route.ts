@@ -3,6 +3,9 @@ import { NextResponse } from "next/server";
 import type { Prisma } from "../../../../../../generated/prisma/client";
 import { permissionSet, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import {
+  CatalogBundleAttestationError, catalogBundleSigningSecret, verifyCatalogBundleAttestation,
+} from "@/lib/catalog-bundle-attestation";
 import { clinicalImportTestWhere, resolveClinicalImportScope } from "@/lib/catalog-clinical-import-scope";
 import {
   BUNDLE_REVIEW_MAX_BYTES, BUNDLE_REVIEW_SOURCE,
@@ -52,12 +55,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "bundle_invalid_json_or_utf8" }, { status: 400 });
   }
   let parsed: ReturnType<typeof parseCatalogBundleForReview>;
+  let attestationStatus: "VERIFIED" | "UNVERIFIED";
   try {
     parsed = parseCatalogBundleForReview(payload, scope.organizationId, {
       pricing: perms.has("pricing.manage"), ranges: perms.has("catalog.reference_ranges.manage"),
     });
+    attestationStatus = verifyCatalogBundleAttestation(payload, catalogBundleSigningSecret(process.env));
   } catch (error) {
-    if (error instanceof CatalogBundleReviewError) {
+    if (error instanceof CatalogBundleReviewError || error instanceof CatalogBundleAttestationError) {
       return NextResponse.json({ error: error.code }, { status: error.status });
     }
     throw error;
@@ -221,7 +226,7 @@ export async function POST(request: Request) {
       createdByUserId: session.user.id,
       summary: { total: references.length, WARNING: references.length, reviewOnly: true,
         format: "family-lab-catalog-bundle", consistency: parsed.consistency,
-        exportedAt: parsed.exportedAt, counts: parsed.counts },
+        attestationStatus, exportedAt: parsed.exportedAt, counts: parsed.counts },
     }, select: { id: true } });
     await tx.catalogImportRow.createMany({ data: references.map((row, index) => ({
       batchId: created.id, rowNumber: index + 1, entityType: row.entityType,
@@ -235,13 +240,18 @@ export async function POST(request: Request) {
           severity: "WARNING", code: "PAGED_NON_ATOMIC_EXPORT",
           message: "Source export was paged and not transactionally consistent.",
         }] : []),
+        ...(parsed.consistency === "transactional-consistent-read" &&
+            attestationStatus !== "VERIFIED" ? [{
+          severity: "WARNING", code: "UNVERIFIED_ATOMIC_PROVENANCE",
+          message: "The export declares a consistent snapshot, but lacks a verifiable server signature.",
+        }] : []),
       ] as Prisma.InputJsonArray,
     })) });
     await tx.auditEvent.create({ data: {
       organizationId: scope.organizationId, branchId: scope.branchId,
       actorUserId: session.user.id, action: "CATALOG_CONFIG_BUNDLE_REVIEW_STAGED",
       entityType: "CatalogImportBatch", entityId: created.id,
-      newValues: { total: references.length, reviewOnly: true, counts: parsed.counts },
+      newValues: { total: references.length, reviewOnly: true, attestationStatus, counts: parsed.counts },
       ipAddress: ctx.ipAddress, userAgent: ctx.userAgent,
     } });
     return created;
