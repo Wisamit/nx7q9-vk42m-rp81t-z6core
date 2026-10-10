@@ -5,6 +5,7 @@ import { clinicalImportTestWhere, resolveClinicalImportScope } from "@/lib/catal
 import { BUNDLE_REVIEW_SOURCE, BUNDLE_REVIEW_MAX_ROWS } from "@/lib/catalog-bundle-review";
 import { catalogBundleDrift } from "@/lib/catalog-bundle-drift";
 import { resolveFindingLifecycle, triageResubmission } from "@/lib/catalog-finding-lifecycle";
+import { summarizeCatalogGovernance } from "@/lib/catalog-governance-readiness";
 import { catalogBundleSigningSecret } from "@/lib/catalog-bundle-attestation";
 import {
   bundleTriageClass, catalogDriftObservationToken, matchesCatalogDriftObservation,
@@ -32,6 +33,11 @@ type ExpertInput = { flagEventId: string; disposition: ExpertDisposition };
 export async function GET(request: NextRequest, context: Context) {
   const query = request.nextUrl.searchParams;
   const requestedReview = query.get("reviewFlagId");
+  if (query.has("governance")) {
+    if (query.get("governance") !== "1" || [...query.keys()].some(key => key !== "governance"))
+      return NextResponse.json({ error: "governance_invalid_request" }, { status: 400 });
+    return inspectBundleDrift(request, context, null, null, false, true);
+  }
   if (requestedReview !== null) {
     // Explicit review inspection must not silently fall back to author mode.
     if (!UUID.test(requestedReview) || [...query.keys()].some(key => key !== "reviewFlagId"))
@@ -119,6 +125,7 @@ async function inspectBundleDrift(
   request: NextRequest, { params }: Context,
   triage: TriageInput | null, expert: ExpertInput | null = null,
   expertPreflight = false,
+  governance = false,
 ) {
   const session = await getCurrentSession();
   if (!session) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
@@ -381,8 +388,9 @@ async function inspectBundleDrift(
       for (const current of records) live.set(type + ":" + current.id, current);
     }
     const pageAfter = expertRow ? expertRow.rowNumber - 1 : after;
-    const page = staged.filter(row => row.rowNumber > pageAfter).slice(0, PAGE_SIZE + 1);
-    const shown = page.slice(0, PAGE_SIZE);
+    const page = governance
+      ? staged : staged.filter(row => row.rowNumber > pageAfter).slice(0, PAGE_SIZE + 1);
+    const shown = governance ? page : page.slice(0, PAGE_SIZE);
     const rows = shown.map(row => {
       const id = String(record(row.normalizedData)?.id || "");
       const value = live.get(row.entityType + ":" + id);
@@ -404,11 +412,11 @@ async function inspectBundleDrift(
         entityId: { in: shown.map(row => row.id) },
       },
       orderBy: [{ occurredAt: "desc" }, { id: "desc" }],
-      take: 1001,
-      select: { id: true, entityId: true, newValues: true, occurredAt: true },
+      take: governance ? 25001 : 1001,
+      select: { id: true, entityId: true, actorUserId: true, newValues: true, occurredAt: true },
     });
     // A truncated audit history can hide the latest authentic referral.
-    if (auditHistory.length > 1000)
+    if (auditHistory.length > (governance ? 25000 : 1000))
       return { error: "review_history_limit_exceeded", httpStatus: 409 } as const;
     const lastFlag = new Map<string, {
       id: string; reasonCode: string; category: string; occurredAt: string;
@@ -581,6 +589,20 @@ async function inspectBundleDrift(
       } as const;
     }
     const verified = record(batch.summary)?.attestationStatus === "VERIFIED";
+    if (governance) {
+      // All scoped records and the latest audit histories were loaded in
+      // this same repeatable-read transaction. Only bounded COUNTS leave it.
+      const readiness = summarizeCatalogGovernance(displayed, verified);
+      await tx.auditEvent.create({ data: {
+        organizationId, branchId: liveScope.branchId, actorUserId: session.user.id,
+        action: "CATALOG_BUNDLE_GOVERNANCE_INSPECTED", entityType: "CatalogImportBatch",
+        entityId: batch.id, newValues: {
+          rowCount: readiness.rowCount, sourceAttested: verified, blockers: readiness.blockers,
+          readOnly: true, approved: false, activated: false,
+        }, ipAddress: ctx.ipAddress, userAgent: ctx.userAgent,
+      } });
+      return readiness;
+    }
     await tx.auditEvent.create({ data: {
       organizationId, branchId: liveScope.branchId, actorUserId: session.user.id,
       action: "CATALOG_BUNDLE_DRIFT_REVIEWED", entityType: "CatalogImportBatch",
