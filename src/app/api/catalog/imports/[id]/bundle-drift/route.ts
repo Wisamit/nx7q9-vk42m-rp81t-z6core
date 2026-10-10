@@ -62,7 +62,7 @@ export async function POST(request: NextRequest, context: Context) {
     if (query.get("policyDraft") !== "1" ||
         [...query.keys()].some(key => key !== "policyDraft"))
       return NextResponse.json({ error: "policy_draft_invalid_query" }, { status: 400 });
-    if (!/^application\\/json(?:\\s*;|$)/i.test(request.headers.get("content-type") || ""))
+    if ((request.headers.get("content-type") || "").split(";")[0].trim().toLowerCase() !== "application/json")
       return NextResponse.json({ error: "policy_draft_json_required" }, { status: 415 });
     if (request.headers.get("sec-fetch-site") === "cross-site")
       return NextResponse.json({ error: "policy_draft_cross_site_request" }, { status: 403 });
