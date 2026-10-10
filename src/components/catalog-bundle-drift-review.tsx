@@ -51,7 +51,7 @@ export function CatalogBundleDriftReview({ batchId, locale }: {
       const result = await response.json() as {
         error?: string; status?: string; approved?: boolean; activated?: boolean; liveWrites?: boolean;
       };
-      if (!response.ok || result.status !== "FLAGGED_FOR_EXPERT_REVIEW" ||
+      if (!response.ok || !["FLAGGED_FOR_EXPERT_REVIEW", "ALREADY_FLAGGED_FOR_EXPERT_REVIEW"].includes(result.status || "") ||
           result.approved !== false || result.activated !== false ||
           result.liveWrites !== false) {
         throw new Error(result.error || "triage_rejected");
