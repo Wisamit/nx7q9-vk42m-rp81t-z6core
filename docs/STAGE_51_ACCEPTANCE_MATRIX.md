@@ -1,0 +1,26 @@
+# Stage 51 — Native Catalog Bundle Integrity Attestation
+
+**Baseline:** Stage 50 `main` commit `c74f99e1483e57fbaef31c50b664c1ee5f04926c`, independent main CI #964 SUCCESS, **Hostinger deployment explicitly confirmed by the owner**. Repository PUBLIC at stage start.
+
+## Verified gap
+Stage 50 produced a repeatable-read native configuration export and accepted a corresponding JSON bundle for staging. However, its `consistency: transactional-consistent-read` property was **self-reported by the uploaded file**. An arbitrary editor could change that string, clinical ranges, monetary amounts or linked source codes, while the import review might show no warning about the authenticity of the claimed atomic snapshot. These files were always review-only, but future import approval must not trust this property alone.
+
+## Implemented
+- Introduced `src/lib/catalog-bundle-attestation.ts` to sign the complete JSON representation with **HMAC-SHA256**, purpose-separated from other application cryptography. The signature covers organization, timestamp, format/consistency claims, every record and all nested values. Canonical key-order serialization makes cosmetic JSON key reordering safe while detecting changed decimal strings, clinical settings, identity links, arrays or export metadata.
+- New exports sign the **JSON-serialized** payload using the deployment-managed `CATALOG_BUNDLE_SIGNING_KEY` when available, with existing `APP_ENCRYPTION_KEY` as a domain-separated compatibility fallback (minimum 32 UTF-8 bytes; reject obvious example placeholders). Signing is unavailable/fails closed with HTTP 503 if neither adequate secret is configured. Recompute the strict **4 MiB limit** after attaching the signature; never send a truncated bundle or return a partial file.
+- The native JSON review endpoint validates a present signature **before staging any review rows**. Incorrect, malformed or wrong-key signatures fail; no unauthenticated downgrade to legacy mode. Historical unsigned bundles remain eligible only for `UNVERIFIED` source review and atomic-looking unsigned exports gain an explicit `UNVERIFIED_ATOMIC_PROVENANCE` warning.
+- Existing Stage 49 transactional live branch/department and test/price/reference UUID validation remains intact and independent of the signature. Even valid HMAC source does **not** prove that live values are still unchanged or that the reviewer may access other branches; role/scope checks are still required at review time.
+- Batch summary and audit retain only `attestationStatus` and counts, never secret or full source payload. Bilingual batch UI distinguishes a cryptographically verified source from an unsigned review file without implying medical/finance approval.
+- Historical source-only status remains `DRAFT` / `WARNING`, with no live test/component/unit/reference/price/order/result/report/invoice mutation. Legacy `CSV_REVIEW` import and safe-master paths remain unchanged; draft Analyzer Bridge PR #128 remains untouched.
+
+## Automated safety acceptance
+- `tests/stage-51-catalog-attestation.test.ts` proves nested price/identity/tenant/timestamp tamper detection, key mismatch rejection, valid JSON property reordering, malformed signature rejection, unsigned legacy downgraded to unverified, and static no-master-mutation guards.
+- `tests/stage-51-catalog-attestation-mariadb.integration.test.ts` exercises **two independent MariaDB connections**: authorization revocation before an organization-lock claimant stages prevents any review data; a restored explicit grant plus valid signed source stages only warning rows and leaves the original test untouched. Signature tampering and foreign organization evidence are rejected.
+- New MariaDB test wired into `.github/workflows/ci.yml`; full Prisma migration/status/generate, safety, all previous MariaDB suites, TS, ESLint, AR/EN theme and production build remain mandatory.
+
+## Explicit limitations / future delivery
+- This is **not** an electronic medical signature, an approval by a validator, signed PDF reporting, an offsite backup, clinical/financial certification, authorization to activate configuration or a cross-organization restoration feature.
+- **Signing key lifecycle** is a deployment responsibility: secure random key strength and rotation/keyring support require later operational review. Changing the effective HMAC secret invalidates old signed exports until deliberate versioned key-retention support is implemented. Do not expose or hardcode secrets in repository, CI, PR or logs.
+- External signing providers, cross-environment trust and key rotation are not implemented. A valid signature establishes only integrity/authenticity under the current server secret, not medical correctness, current data equivalence, or future approval authorization.
+- Full regulated clinical and accounting sign-off, report/device/scanner/manual UAT, penetration testing and provider/Hostinger security verification remain **DEFERRED until full implementation**, not passed.
+- All **88 sections of `02_MASTER_SCOPE.md` remain binding**. Governed clinical range/critical-limit activation, financial price approval, controlled round-trip including XLSX/legacy Access and complete analyzer bridge are still open scope.
