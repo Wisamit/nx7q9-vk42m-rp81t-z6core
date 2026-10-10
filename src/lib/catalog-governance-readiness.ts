@@ -8,7 +8,7 @@ export type GovernanceRow = {
 };
 export type GovernanceCount = {
   total: number; unchanged: number; drifted: number;
-  unflagged: number; pending: number; expertConfirmed: number;
+  unflagged: number; driftUnflagged: number; pending: number; expertConfirmed: number;
   returnedForCorrection: number; stale: number;
 };
 export type GovernanceBlocker =
@@ -21,7 +21,7 @@ export type GovernanceBlocker =
   | "STALE_REVIEW_EVIDENCE";
 const empty = (): GovernanceCount => ({
   total: 0, unchanged: 0, drifted: 0,
-  unflagged: 0, pending: 0, expertConfirmed: 0,
+  unflagged: 0, driftUnflagged: 0, pending: 0, expertConfirmed: 0,
   returnedForCorrection: 0, stale: 0,
 });
 
@@ -51,7 +51,10 @@ export function summarizeCatalogGovernance(rows: readonly GovernanceRow[], sourc
       bucket.total++;
       if (row.disposition === "DRIFTED") bucket.drifted++;
       else bucket.unchanged++;
-      if (status === "UNFLAGGED") bucket.unflagged++;
+      if (status === "UNFLAGGED") {
+        bucket.unflagged++;
+        if (row.disposition === "DRIFTED") bucket.driftUnflagged++;
+      }
       else if (status === "AWAITING_EXPERT") bucket.pending++;
       else if (status === "EXPERT_CONFIRMED") bucket.expertConfirmed++;
       else if (status === "RETURNED_FOR_CORRECTION") bucket.returnedForCorrection++;
@@ -62,7 +65,7 @@ export function summarizeCatalogGovernance(rows: readonly GovernanceRow[], sourc
     "SIGNATORY_POLICY_UNCONFIGURED", "APPLICATION_WORKFLOW_UNAVAILABLE",
   ];
   if (!sourceAttested) blockers.push("SOURCE_NOT_ATTESTED");
-  if (totals.drifted > 0 && totals.unflagged > 0) blockers.push("DRIFT_NOT_TRIAGED");
+  if (totals.driftUnflagged > 0) blockers.push("DRIFT_NOT_TRIAGED");
   if (totals.pending > 0) blockers.push("EXPERT_REVIEW_PENDING");
   if (totals.returnedForCorrection > 0) blockers.push("EXPERT_RETURNED_FOR_CORRECTION");
   if (totals.stale > 0) blockers.push("STALE_REVIEW_EVIDENCE");
