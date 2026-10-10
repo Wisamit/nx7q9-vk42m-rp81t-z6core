@@ -13,6 +13,7 @@ import { authorizedStagedPrices, stagedPriceListCode, stagedPriceTestCode } from
 import { clinicalImportTestWhere, resolveClinicalImportScope } from "@/lib/catalog-clinical-import-scope";
 import { BUNDLE_REVIEW_SOURCE } from "@/lib/catalog-bundle-review";
 import { CatalogBundleDriftReview } from "@/components/catalog-bundle-drift-review";
+import { CatalogGovernanceReadiness } from "@/components/catalog-governance-readiness";
 
 export const dynamic = "force-dynamic";
 
@@ -256,6 +257,7 @@ export default async function ImportBatchPage({
           "مصدر غير موثّق: التوقيع مفقود أو الملف سابق لدعم التوقيع. للمراجعة فقط؛ لا يُعتمد ادعاء التصدير المتّسق دون دليل موثّق، ولا تُطبّق أي إعدادات.")
     }</p>}
 
+    {isBundleReview && <CatalogGovernanceReadiness batchId={batch.id} locale={locale} />}
     {isBundleReview && <CatalogBundleDriftReview batchId={batch.id} locale={locale} />}
 
     <section className="catalog-stats">

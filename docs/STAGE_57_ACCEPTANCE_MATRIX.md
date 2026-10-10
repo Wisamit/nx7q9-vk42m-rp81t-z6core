@@ -1,0 +1,27 @@
+# Stage 57 — Whole-Bundle Clinical and Financial Governance Readiness (NO Approval)
+
+## Baseline
+Owner explicitly confirmed successful Stage 56 Hostinger deployment at merge SHA `237bea9448a13092d39ee281328166c2a5946895`. Independent main GitHub CI #980 completed SUCCESS. Repository PUBLIC by owner preference, unrelated Analyzer Bridge PR #128 remains DRAFT/unmerged. All 88 sections of `02_MASTER_SCOPE.md` remain required.
+
+## Purpose
+Stages 52–56 provide scoped source/live drift review, signed-source provenance, Stage 53 referrals, Stage 54 independent procedural expert finding dispositions and Stage 55–56 stale-evidence safeguards. Those controls apply to **review findings**, not authorization to activate clinical reference intervals or price lists. Before defining a formal signing and versioned application path, the operator needs a trustworthy **whole-bundle** counts-only view to identify outstanding review work rather than mistaking completed 100-row pages for completed governance.
+
+## Implemented
+- `src/lib/catalog-governance-readiness.ts`: deterministic, bounded, fail-closed counts by domain and all six configuration entity classes: TEST, COMPONENT, UNIT, REFERENCE_INTERVAL, PRICE_LIST, PRICE_LIST_ITEM. Summarizes total, unchanged, changed, unflagged, pending independent specialist review, finding confirmed, returned for correction, and stale. Unknown type/status/disposition throws rather than claiming success.
+- `GET /api/catalog/imports/[id]/bundle-drift?governance=1`: strict single-query-argument inspection endpoint. Reuses existing Stage 56 full-batch **author-only** authorization, tenant lock, RepeatableRead transaction, live org/branch/department roles and scoped parent associations, max 5,000 complete staging rows and live master lookups, Stage 51 attestation metadata and Stage 53–55 immutable audit evidence.
+- The governance mode **does not paginate over only the first 100 records**. It checks all authorized staged records and the latest referral and independent decision for each in one transaction. Audit history is limited to 25,000 + 1 events; an over-limit or inconsistent history **fails closed** with no misleading partial summary. No source records, raw price or reference values, patient identifiers, exact changed-field values, history tokens or source JSON appear in the response.
+- The response contains only per-domain numeric counts, original-at-import attestation status, and governance blocker codes. Immutable `CATALOG_BUNDLE_GOVERNANCE_INSPECTED` AuditEvent records actor, branch, total count and blocker codes, **never private clinical/financial values**.
+- Mandatory unconditional blockers: `SIGNATORY_POLICY_UNCONFIGURED` and `APPLICATION_WORKFLOW_UNAVAILABLE`. Also `SOURCE_NOT_ATTESTED`, `DRIFT_NOT_TRIAGED`, `EXPERT_REVIEW_PENDING`, `EXPERT_RETURNED_FOR_CORRECTION`, `STALE_REVIEW_EVIDENCE` where applicable. Even an attested source with every finding independently confirmed **cannot pass final approval**: response always explicitly `approved:false`, `activationAllowed:false`, `clinicalReleaseAllowed:false`, `pricePublicationAllowed:false`, `liveWrites:false`.
+- Bilingual author-side `CatalogGovernanceReadiness` UI on the bundle review page with an explicit **Assess entire bundle** action; categories and blockers listed without exposing original/live clinical/financial raw values, and clear "Final approval and activation: BLOCKED" wording in Arabic and English.
+- No updates to production catalog, test results, signed reports, invoices, effective-dated prices, reference intervals or any historical clinical/financial values. No new migration.
+
+## Acceptance
+- `tests/stage-57-catalog-governance-readiness.test.ts`: all five finding states, medical/finance split, attested and unverified sources, explicit unconditional signatory/application blocks, no raw-value disclosures, invalid source types fail closed, full-batch route checks, no master writes and bilingual UI.
+- `tests/stage-57-catalog-governance-readiness-mariadb.integration.test.ts`: **independent MariaDB sessions**; immutable source/flag/expert decision persisted, org-lock serialized post-review clinical value change, formerly confirmed finding becomes stale, whole-bundle blockers persist, no foreign tenant leakage, no review-related master mutation.
+- CI adds dedicated Stage 57 MariaDB integration alongside all safety, migration/status/generate, historical MariaDB integrations, TypeScript, ESLint, Arabic/English visual consistency and Next.js production build.
+- Final PR exact SHA must pass full CI; merge only after success and separately verify CI on resulting main SHA.
+
+## Deferred and policy gates
+- A **finding confirmation** from Stage 54 is not authorization to change imported clinical or financial values. Electronic signatory assignment, role segregation, signature/re-authentication policy, key rotation and the effective-dated **version-preserving** master application engine are intentionally not implemented or enabled in this stage. They require explicit clinical/financial policy decisions before activation.
+- No hardware/physical scanner or analyzer, clinical/finance production UAT, legal compliance validation, disaster-recovery restore or full system commissioning is claimed passed. Those remain DEFERRED until full implementation.
+- Do not change repository visibility or merge analyzer bridge Draft PR #128. No master scope removal.
