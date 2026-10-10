@@ -29,6 +29,7 @@ export type BundleReview = {
   rows: BundleReviewRow[];
   counts: Record<string, number>;
   exportedAt: string;
+  consistency: "paged-live-not-atomic" | "transactional-consistent-read";
   ids: {
     tests: string[];
     units: string[];
@@ -83,7 +84,8 @@ export function parseCatalogBundleForReview(
 ): BundleReview {
   const bundle = record(value);
   if (bundle.format !== "family-lab-catalog-bundle" || bundle.schemaVersion !== 1 ||
-      bundle.consistency !== "paged-live-not-atomic") {
+      bundle.consistency !== "paged-live-not-atomic" &&
+      bundle.consistency !== "transactional-consistent-read") {
     throw new CatalogBundleReviewError("bundle_unsupported_format");
   }
   if (bundle.organizationId !== organizationId) {
@@ -177,5 +179,5 @@ export function parseCatalogBundleForReview(
     }
   }
   if (!rows.length) throw new CatalogBundleReviewError("bundle_empty");
-  return { rows, counts, exportedAt, ids };
+  return { rows, counts, exportedAt, consistency: bundle.consistency as BundleReview["consistency"], ids };
 }

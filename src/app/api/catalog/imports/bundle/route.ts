@@ -220,7 +220,7 @@ export async function POST(request: Request) {
       sourceName, sourceChecksum: checksum, status: "DRAFT", validatedAt: null,
       createdByUserId: session.user.id,
       summary: { total: references.length, WARNING: references.length, reviewOnly: true,
-        format: "family-lab-catalog-bundle", consistency: "paged-live-not-atomic",
+        format: "family-lab-catalog-bundle", consistency: parsed.consistency,
         exportedAt: parsed.exportedAt, counts: parsed.counts },
     }, select: { id: true } });
     await tx.catalogImportRow.createMany({ data: references.map((row, index) => ({
@@ -231,8 +231,10 @@ export async function POST(request: Request) {
       validationIssues: [
         { severity: "WARNING", code: "CONFIGURATION_BUNDLE_REVIEW_ONLY",
           message: "Source snapshot only. Approval, mapping and effective-date reconciliation are required; no configuration is applied." },
-        { severity: "WARNING", code: "PAGED_NON_ATOMIC_EXPORT",
-          message: "Source export was paged and not transactionally consistent." },
+        ...(parsed.consistency === "paged-live-not-atomic" ? [{
+          severity: "WARNING", code: "PAGED_NON_ATOMIC_EXPORT",
+          message: "Source export was paged and not transactionally consistent.",
+        }] : []),
       ] as Prisma.InputJsonArray,
     })) });
     await tx.auditEvent.create({ data: {

@@ -35,6 +35,44 @@ export function CatalogConfigurationExport({
     setBusy(true);
     setMessage("");
     try {
+      if (format === "json") {
+        const types = ordered.filter(t => selected.includes(t));
+        const response = await fetch("/api/catalog/configuration-export/bundle?types=" +
+          encodeURIComponent(types.join(",")), { cache: "no-store", credentials: "same-origin" });
+        if (!response.ok) {
+          const failure = await response.json() as { error?: string };
+          throw new Error(failure.error || "export_request_failed_" + response.status);
+        }
+        const text = await response.text();
+        const bundle = JSON.parse(text) as {
+          format?: string; schemaVersion?: number; consistency?: string;
+          groups?: Array<{entityType:string; records: unknown[]}>;
+        };
+        if (bundle.format !== "family-lab-catalog-bundle" || bundle.schemaVersion !== 1 ||
+            bundle.consistency !== "transactional-consistent-read" ||
+            !Array.isArray(bundle.groups) || bundle.groups.length !== types.length ||
+            bundle.groups.some((group, index) =>
+              group.entityType !== types[index] || !Array.isArray(group.records))) {
+          throw new Error("atomic_bundle_invalid");
+        }
+        const url = URL.createObjectURL(new Blob([text], { type: "application/json;charset=utf-8" }));
+        try {
+          const link = document.createElement("a");
+          link.href = url;
+          link.download = "family-lab-catalog-" + new Date().toISOString().slice(0, 10) + ".json";
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+        } finally {
+          URL.revokeObjectURL(url);
+        }
+        const total = bundle.groups.reduce((sum, group) => sum + group.records.length, 0);
+        setMessage(tr("Exported " + total +
+          " records from one consistent database read. This is a scoped configuration source, not a full backup or an approved import.",
+          "تم تصدير " + total +
+          " سجل من قراءة واحدة متّسقة لقاعدة البيانات. هذا مصدر إعدادات محدود الصلاحيات، وليس نسخة احتياطية كاملة أو استيراداً معتمداً."));
+        return;
+      }
       let organizationId: string | null = null;
       const groups: Array<{ entityType: CatalogExportType; records: unknown[] }> = [];
       for (const entityType of ordered.filter(t => selected.includes(t))) {

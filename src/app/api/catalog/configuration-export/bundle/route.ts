@@ -1,0 +1,215 @@
+import { NextRequest, NextResponse } from "next/server";
+import { getCurrentSession, permissionSet, requestContext } from "@/lib/auth";
+import { prisma } from "@/lib/db";
+import { clinicalImportTestWhere, resolveClinicalImportScope } from "@/lib/catalog-clinical-import-scope";
+import { BUNDLE_REVIEW_MAX_BYTES, BUNDLE_REVIEW_MAX_ROWS } from "@/lib/catalog-bundle-review";
+import { catalogExportTypes, type CatalogExportType } from "@/lib/catalog-configuration-export";
+
+export const dynamic = "force-dynamic";
+
+const ordered: CatalogExportType[] = [
+  "TEST", "COMPONENT", "UNIT", "REFERENCE_INTERVAL", "PRICE_LIST", "PRICE_LIST_ITEM",
+];
+
+/**
+ * Point-in-time tenant-scoped source export. This is configuration evidence
+ * for a separate governed import review, NEVER a database restore or approval.
+ */
+export async function GET(request: NextRequest) {
+  const session = await getCurrentSession();
+  if (!session) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const permissions = permissionSet(session);
+  if (!permissions.has("catalog.manage")) {
+    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  }
+  const requested = request.nextUrl.searchParams.get("types")?.split(",") ?? [];
+  if (!requested.length || requested.length > ordered.length ||
+      requested.some(type => !catalogExportTypes.has(type as CatalogExportType)) ||
+      new Set(requested).size !== requested.length) {
+    return NextResponse.json({ error: "invalid_bundle_export_types" }, { status: 400 });
+  }
+  if (requested.includes("REFERENCE_INTERVAL") && !permissions.has("catalog.reference_ranges.manage")) {
+    return NextResponse.json({ error: "reference_ranges_manage_required" }, { status: 403 });
+  }
+  if (requested.some(type => type.startsWith("PRICE_")) && !permissions.has("pricing.manage")) {
+    return NextResponse.json({ error: "pricing_export_forbidden" }, { status: 403 });
+  }
+  const scope = resolveClinicalImportScope({
+    organizationId: session.user.organizationId,
+    activeBranchId: session.activeBranchId, activeBranch: session.activeBranch,
+    branchScopes: session.user.branchScopes, departmentScopes: session.user.departmentScopes,
+  });
+  if (!scope) return NextResponse.json({ error: "active_clinical_export_scope_required" }, { status: 403 });
+  const organizationId = scope.organizationId;
+  const ctx = await requestContext();
+
+  const outcome = await prisma.$transaction(async tx => {
+    // Prevent same-tenant coordinated changes before live authorization checks.
+    const orgLock = await tx.$queryRaw<Array<{ id: string }>>`SELECT id FROM organizations WHERE id = ${organizationId} AND status = 'ACTIVE' FOR UPDATE`;
+    if (orgLock.length !== 1) return { error: "export_organization_inactive", httpStatus: 403 } as const;
+    const liveBranch = await tx.branch.findFirst({
+      where: { id: scope.branchId, organizationId, status: "ACTIVE" },
+      select: { id: true, organizationId: true, status: true },
+    });
+    const liveBranches = await tx.userBranchScope.findMany({
+      where: { userId: session.user.id, branch: { organizationId, status: "ACTIVE" } },
+      select: { branchId: true },
+    });
+    const sessionBranches = new Set(session.user.branchScopes.filter(item =>
+      item.branch.organizationId === organizationId && item.branch.status === "ACTIVE"
+    ).map(item => item.branchId));
+    const branchIds = liveBranches.map(item => item.branchId).filter(id => sessionBranches.has(id));
+    const liveDepartments = await tx.userDepartmentScope.findMany({
+      where: { userId: session.user.id },
+      select: { departmentId: true, department: {
+        select: { organizationId: true, branchId: true, status: true },
+      } },
+    });
+    const sessionDepartments = new Set(session.user.departmentScopes.map(item => item.departmentId));
+    const restrictedDepartments = session.user.departmentScopes.length > 0;
+    const currentDepartments = restrictedDepartments
+      ? liveDepartments.filter(item => sessionDepartments.has(item.departmentId))
+      : liveDepartments;
+    if (restrictedDepartments && currentDepartments.length === 0) {
+      return { error: "export_department_scope_changed", httpStatus: 403 } as const;
+    }
+    const liveScope = resolveClinicalImportScope({
+      organizationId, activeBranchId: scope.branchId, activeBranch: liveBranch,
+      branchScopes: branchIds.map(branchId => ({ branchId, branch: { status: "ACTIVE" } })),
+      departmentScopes: currentDepartments,
+    });
+    if (!liveScope) return { error: "export_clinical_scope_changed", httpStatus: 403 } as const;
+
+    // The same repeatable-read snapshot covers all six groups. Subordinate
+    // masters do not need to participate in the organization locking convention.
+    const testScope = { ...clinicalImportTestWhere(liveScope), status: undefined };
+    const branchScope = { OR: [{ branchId: null }, { branchId: { in: branchIds } }] };
+    const genericPriceScope = { OR: [
+      { scopeType: "ORGANIZATION" as const, branchId: null },
+      { scopeType: "BRANCH" as const, branchId: { in: branchIds } },
+    ] };
+    const groups: Array<{ entityType: CatalogExportType; records: Array<{ id: string }> }> = [];
+    let total = 0;
+    for (const type of ordered.filter(value => requested.includes(value))) {
+      const base = { orderBy: { id: "asc" as const }, take: BUNDLE_REVIEW_MAX_ROWS - total + 1 };
+      const cursorScope = {};
+      let records: Array<{ id: string }> = [];
+  if (type === "TEST") {
+    records = await tx.labTest.findMany({
+      ...base, where: { ...testScope, ...cursorScope },
+      select: {
+        id: true, code: true, nameEn: true, nameAr: true, abbreviation: true,
+        departmentId: true, specimenTypeId: true, containerId: true,
+        methodId: true, defaultUnitId: true, resultType: true,
+        workflowType: true, resultEntryLayout: true, decimalPrecision: true,
+        minimumVolume: true, minimumVolumeUnit: true, assay: true,
+        tatMinutes: true, loincCode: true, status: true,
+        createdAt: true, updatedAt: true, deactivatedAt: true,
+      },
+    });
+  } else if (type === "COMPONENT") {
+    records = await tx.testComponent.findMany({
+      ...base, where: { test: testScope, ...cursorScope },
+      select: {
+        id: true, testId: true, code: true, nameEn: true, nameAr: true,
+        unitId: true, resultType: true, decimalPrecision: true,
+        displayOrder: true, resultSectionId: true,
+        reportNameEn: true, reportNameAr: true, reportDisplayOrder: true,
+        reportVisible: true, entryWidth: true, entryHintEn: true, entryHintAr: true,
+        status: true, createdAt: true, updatedAt: true, deactivatedAt: true,
+        test: { select: { code: true } },
+        unit: { select: { code: true, symbol: true } },
+      },
+    });
+  } else if (type === "UNIT") {
+    records = await tx.unit.findMany({
+      ...base, where: { organizationId, ...cursorScope },
+      select: {
+        id: true, code: true, symbol: true, nameEn: true, nameAr: true,
+        ucumCode: true, status: true,
+        createdAt: true, updatedAt: true, deactivatedAt: true,
+      },
+    });
+  } else if (type === "REFERENCE_INTERVAL") {
+    records = await tx.referenceInterval.findMany({
+      ...base, where: { component: { test: testScope }, ...branchScope, ...cursorScope },
+      select: {
+        id: true, componentId: true, branchId: true, methodId: true,
+        analyzerId: true, specimenTypeId: true, sex: true, ageFrom: true,
+        ageTo: true, ageUnit: true, pregnancyStatus: true,
+        gestationalAgeFromWeeks: true, gestationalAgeToWeeks: true,
+        populationCode: true, lowValue: true, highValue: true,
+        normalTextEn: true, normalTextAr: true, criticalLow: true,
+        criticalHigh: true, source: true, notes: true,
+        effectiveFrom: true, effectiveTo: true, approvalStatus: true,
+        status: true, approvedAt: true, retiredAt: true,
+        createdAt: true, updatedAt: true,
+        component: { select: { code: true, test: { select: { code: true } } } },
+      },
+    });
+  } else if (type === "PRICE_LIST") {
+    records = await tx.priceList.findMany({
+      ...base, where: { organizationId, ...genericPriceScope, ...cursorScope },
+      select: {
+        id: true, code: true, nameEn: true, nameAr: true, scopeType: true,
+        branchId: true, sourceId: true, referrerId: true, clientId: true,
+        contractId: true, currency: true, priority: true, effectiveFrom: true,
+        effectiveTo: true, status: true, createdAt: true, updatedAt: true,
+        deactivatedAt: true,
+      },
+    });
+  } else if (type === "PRICE_LIST_ITEM") {
+    records = await tx.priceListItem.findMany({
+      ...base,
+      where: { priceList: { organizationId, ...genericPriceScope }, test: testScope, ...cursorScope },
+      select: {
+        id: true, priceListId: true, testId: true, unitPrice: true,
+        effectiveFrom: true, effectiveTo: true, status: true,
+        createdAt: true, updatedAt: true, deactivatedAt: true,
+        test: { select: { code: true } },
+        priceList: { select: { code: true, currency: true, scopeType: true, branchId: true } },
+      },
+    });
+  }
+
+
+      if (records.length + total > BUNDLE_REVIEW_MAX_ROWS) {
+        return { error: "bundle_export_too_many_rows", httpStatus: 413 } as const;
+      }
+      total += records.length;
+      groups.push({ entityType: type, records });
+    }
+    if (!total) return { error: "bundle_export_empty", httpStatus: 409 } as const;
+
+    const payload = {
+      format: "family-lab-catalog-bundle",
+      schemaVersion: 1,
+      organizationId,
+      exportedAt: new Date().toISOString(),
+      consistency: "transactional-consistent-read",
+      groups,
+    };
+    // Same 4 MiB intake limit as the native JSON review endpoint.
+    const serialized = JSON.stringify(payload);
+    if (Buffer.byteLength(serialized, "utf8") > BUNDLE_REVIEW_MAX_BYTES) {
+      return { error: "bundle_export_too_large", httpStatus: 413 } as const;
+    }
+    await tx.auditEvent.create({ data: {
+      organizationId, branchId: scope.branchId, actorUserId: session.user.id,
+      action: "CATALOG_CONFIGURATION_ATOMIC_BUNDLE_EXPORTED",
+      entityType: "CatalogConfiguration", entityId: organizationId,
+      newValues: { types: requested, total, byteLength: Buffer.byteLength(serialized, "utf8"),
+        branchScoped: true, departmentScoped: liveScope.departmentIds.length > 0 },
+      ipAddress: ctx.ipAddress, userAgent: ctx.userAgent,
+    } });
+    return { serialized } as const;
+  }, { isolationLevel: "RepeatableRead", timeout: 30000 });
+  if ("error" in outcome) {
+    return NextResponse.json({ error: outcome.error }, { status: outcome.httpStatus });
+  }
+  return new Response(outcome.serialized, { status: 200, headers: {
+    "Content-Type": "application/json; charset=utf-8",
+    "Cache-Control": "private, no-store",
+    "Content-Disposition": 'attachment; filename="family-lab-catalog-bundle.json"',
+  } });
+}
