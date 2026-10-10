@@ -26,7 +26,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     select: { id: true, sourceType: true },
   });
   if (!batch) return NextResponse.json({ error: "batch_not_found" }, { status: 404 });
-  if (batch.sourceType === "CSV_REVIEW") return NextResponse.json({ error: "csv_review_is_not_clinical_import" }, { status: 409 });
+  if ((batch.sourceType === "CSV_REVIEW" || batch.sourceType === "CONFIG_BUNDLE_REVIEW")) return NextResponse.json({ error: "csv_review_is_not_clinical_import" }, { status: 409 });
 
   const body = await request.json().catch(() => null) as {
     mappingType?: "TEST_ALIAS" | "UNIT_ALIAS";
