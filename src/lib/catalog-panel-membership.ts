@@ -55,8 +55,14 @@ export function resolvedPanelMemberships(
     const testId = testBySourceRowId.get(row.id);
     const panel = text(record(row.normalizedData).panel);
     if (!testId || !panel) continue;
-    const panelId = panelAliases.get(panel.toUpperCase()) ??
-      panelAliases.get(panel.replace(/\s+/g, "_").toUpperCase());
+    const literalKey = panel.toUpperCase();
+    const normalizedKey = panel.replace(/\s+/g, "_").toUpperCase();
+    const direct = panelAliases.get(literalKey);
+    const normalized = panelAliases.get(normalizedKey);
+    // A conflicting literal/normalized alias must not silently pick one.
+    if (panelAliases.has(literalKey) && panelAliases.has(normalizedKey) &&
+        direct !== normalized) continue;
+    const panelId = panelAliases.has(literalKey) ? direct : normalized;
     if (!panelId) continue;
     const key = panelId + "|" + testId;
     if (seen.has(key)) continue;
