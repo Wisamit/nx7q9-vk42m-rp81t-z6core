@@ -11,11 +11,12 @@ const ordered: CatalogExportType[] = [
 ];
 
 export function CatalogConfigurationExport({
-  locale, canExportPricing,
-}: { locale: "ar" | "en"; canExportPricing: boolean }) {
+  locale, canExportPricing, canExportRanges,
+}: { locale: "ar" | "en"; canExportPricing: boolean; canExportRanges: boolean }) {
   const tr = (en: string, ar: string) => locale === "ar" ? ar : en;
   const [selected, setSelected] = useState<CatalogExportType[]>([
-    "TEST", "COMPONENT", "UNIT", "REFERENCE_INTERVAL",
+    "TEST", "COMPONENT", "UNIT",
+    ...(canExportRanges ? ["REFERENCE_INTERVAL" as const] : []),
     ...(canExportPricing ? ["PRICE_LIST" as const, "PRICE_LIST_ITEM" as const] : []),
   ]);
   const [busy, setBusy] = useState(false);
@@ -112,7 +113,8 @@ export function CatalogConfigurationExport({
       "تصدير للقراءة فقط مع المعرفات والقيم العشرية الأصلية وحالات الاعتماد وتواريخ السريان. تتطلب الأسعار صلاحية مستقلة. البيانات المصدرة لا تُستورد تلقائياً.",
     )}</p>
     <div className="form-grid">
-      {ordered.filter(t => canExportPricing || !t.startsWith("PRICE")).map(entity => (
+      {ordered.filter(t => (canExportPricing || !t.startsWith("PRICE")) &&
+        (canExportRanges || t !== "REFERENCE_INTERVAL")).map(entity => (
         <label key={entity} className="check-line">
           <input type="checkbox" checked={selected.includes(entity)} disabled={busy}
             onChange={event => setSelected(current => event.target.checked
