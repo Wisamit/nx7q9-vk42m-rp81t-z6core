@@ -90,3 +90,53 @@ export function reconcilePriceCandidate(
     currency: list?.currency ?? null,
   };
 }
+
+
+export type StagedPriceWindowRow = {
+  rowNumber: number;
+  status: string;
+  normalizedData: unknown;
+};
+
+/**
+ * Advisory price-window collisions across an entire bounded import batch.
+ * Only reviewable staged rows participate. Sorting unique row identities
+ * avoids quadratic page-by-page comparisons and never changes live prices.
+ * A shared end/start instant is conservatively treated as a collision.
+ */
+export function stagedPriceOverlapIndex(rows: readonly StagedPriceWindowRow[]): ReadonlySet<number> {
+  type Window = { rowNumber: number; start: number; end: number };
+  const groups = new Map<string, Window[]>();
+  for (const row of rows) {
+    if (row.status !== "VALID" && row.status !== "WARNING") continue;
+    if (!Number.isSafeInteger(row.rowNumber) || row.rowNumber < 1) continue;
+    if (!row.normalizedData || typeof row.normalizedData !== "object" ||
+      Array.isArray(row.normalizedData)) continue;
+    const data = row.normalizedData as Record<string, unknown>;
+    const source = (key: string) => typeof data[key] === "string" ? (data[key] as string).trim() : "";
+    const listCode = source("priceListCode").toUpperCase();
+    const testCode = source("testCode").toUpperCase();
+    if (!listCode || !testCode) continue;
+    const from = source("effectiveFrom"), to = source("effectiveTo");
+    const start = calendarInstant(from), end = to ? calendarInstant(to) : null;
+    if (start === null || (to && end === null) || (end !== null && end < start)) continue;
+    const key = JSON.stringify([listCode, testCode]);
+    const group = groups.get(key) ?? [];
+    group.push({ rowNumber: row.rowNumber, start, end: end ?? Number.POSITIVE_INFINITY });
+    groups.set(key, group);
+  }
+
+  const collisions = new Set<number>();
+  for (const group of groups.values()) {
+    group.sort((a, b) => a.start - b.start || a.end - b.end || a.rowNumber - b.rowNumber);
+    let greatestPreviousEnd = Number.NEGATIVE_INFINITY;
+    for (let i = 0; i < group.length; i++) {
+      const current = group[i];
+      const overlapsPrior = greatestPreviousEnd >= current.start;
+      const overlapsNext = i + 1 < group.length && group[i + 1].start <= current.end;
+      if (overlapsPrior || overlapsNext) collisions.add(current.rowNumber);
+      if (current.end > greatestPreviousEnd) greatestPreviousEnd = current.end;
+    }
+  }
+  return collisions;
+}
