@@ -356,6 +356,23 @@ async function inspectBundleDrift(request: NextRequest, { params }: Context, tri
         return { error: "triage_stale_observation", httpStatus: 409 } as const;
       if (triage.reasonCode === "SOURCE_VALUE_CHANGED" && observed.disposition !== "DRIFTED")
         return { error: "triage_reason_incompatible", httpStatus: 409 } as const;
+      const previous = await tx.auditEvent.findFirst({
+        where: {
+          organizationId, action: "CATALOG_BUNDLE_EXPERT_REVIEW_FLAGGED",
+          entityType: "CatalogImportRow", entityId: shown[index].id,
+        },
+        orderBy: { occurredAt: "desc" }, select: { newValues: true },
+      });
+      const oldEvidence = record(previous?.newValues);
+      if (oldEvidence?.evidenceToken === observed.observationToken &&
+          oldEvidence?.reasonCode === triage.reasonCode) {
+        return {
+          status: "ALREADY_FLAGGED_FOR_EXPERT_REVIEW", category,
+          rowNumber: observed.rowNumber, reasonCode: triage.reasonCode,
+          disposition: observed.disposition, approved: false, activated: false,
+          liveWrites: false,
+        } as const;
+      }
       await tx.auditEvent.create({ data: {
         organizationId, branchId: liveScope.branchId, actorUserId: session.user.id,
         action: "CATALOG_BUNDLE_EXPERT_REVIEW_FLAGGED", entityType: "CatalogImportRow",
