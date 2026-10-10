@@ -58,10 +58,10 @@ test("Stage 48: route locks organization, validates live branch grant and audits
 
 test("Stage 48: import-side UNIT materialization uses the same normalized collision policy",()=>{
  const route=readFileSync("src/app/api/catalog/imports/[id]/commit/route.ts","utf8");
- assert.match(route,/import \{ manualUnitIdentityError \} from "@\\/lib\\/catalog-manual-unit-governance"/);
- assert.match(route,/const knownUnitIdentities = await tx\\.unit\\.findMany/);
- assert.match(route,/manualUnitIdentityError\\(knownUnitIdentities, \{ code, symbol \}\\)/);
- assert.match(route,/knownUnitIdentities\\.push\\(\{ id: unit\\.id, code: unit\\.code, symbol: unit\\.symbol, status: unit\\.status \}\\)/);
+ assert.ok(route.includes('import { manualUnitIdentityError } from "@/lib/catalog-manual-unit-governance"'));
+ assert.ok(route.includes("const knownUnitIdentities = await tx.unit.findMany"));
+ assert.ok(route.includes("manualUnitIdentityError(knownUnitIdentities, { code, symbol })"));
+ assert.ok(route.includes("knownUnitIdentities.push({ id: unit.id, code: unit.code, symbol: unit.symbol, status: unit.status })"));
  assert.ok(route.indexOf("const knownUnitIdentities = await tx.unit.findMany")<
    route.indexOf("manualUnitIdentityError(knownUnitIdentities, { code, symbol })"));
 });
