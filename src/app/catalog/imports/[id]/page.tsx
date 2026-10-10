@@ -11,6 +11,7 @@ import { ReferenceRangeImportReconciliation } from "@/components/reference-range
 import { getUiLocale, tr } from "@/lib/ui-i18n";
 import { authorizedStagedPrices, stagedPriceListCode, stagedPriceTestCode } from "@/lib/catalog-import-disclosure";
 import { clinicalImportTestWhere, resolveClinicalImportScope } from "@/lib/catalog-clinical-import-scope";
+import { BUNDLE_REVIEW_SOURCE } from "@/lib/catalog-bundle-review";
 
 export const dynamic = "force-dynamic";
 
@@ -46,6 +47,68 @@ export default async function ImportBatchPage({
     where: { id, organizationId: session.user.organizationId },
   });
   if (!batch) notFound();
+  const isBundleReview = batch.sourceType === BUNDLE_REVIEW_SOURCE;
+  if (isBundleReview) {
+    // Source documents can expose confidential clinical and financial context.
+    // Re-check current author, branch, department and financial grants BEFORE
+    // loading original normalized source data for display.
+    if (batch.createdByUserId !== session.user.id) notFound();
+    const scoped = resolveClinicalImportScope({
+      organizationId: session.user.organizationId,
+      activeBranchId: session.activeBranchId, activeBranch: session.activeBranch,
+      branchScopes: session.user.branchScopes, departmentScopes: session.user.departmentScopes,
+    });
+    if (!scoped) notFound();
+    const authorBranches = new Set(session.user.branchScopes.filter(b =>
+      b.branch.status === "ACTIVE" && b.branch.organizationId === session.user.organizationId)
+      .map(b => b.branchId));
+    const candidates = await prisma.catalogImportRow.findMany({
+      where: { batchId: batch.id },
+      select: { entityType: true, normalizedData: true },
+    });
+    if (candidates.some(c => c.entityType.startsWith("PRICE_")) && !permissions.has("pricing.manage")) notFound();
+    if (candidates.some(c => c.entityType === "REFERENCE_INTERVAL") &&
+        !permissions.has("catalog.reference_ranges.manage")) notFound();
+    const ids = new Set<string>();
+    const components = new Set<string>();
+    const lists = new Set<string>();
+    for (const candidate of candidates) {
+      const d = candidate.normalizedData;
+      if (!d || typeof d !== "object" || Array.isArray(d)) notFound();
+      const branchId = typeof d.branchId === "string" ? d.branchId : null;
+      if (branchId && !authorBranches.has(branchId)) notFound();
+      if (candidate.entityType === "TEST") ids.add(String(d.id));
+      if (candidate.entityType === "COMPONENT" || candidate.entityType === "PRICE_LIST_ITEM") {
+        ids.add(String(d.testId));
+      }
+      if (candidate.entityType === "COMPONENT" || candidate.entityType === "REFERENCE_INTERVAL") {
+        if (candidate.entityType === "REFERENCE_INTERVAL") components.add(String(d.componentId));
+      }
+      if (candidate.entityType === "PRICE_LIST_ITEM") lists.add(String(d.priceListId));
+      if (candidate.entityType === "PRICE_LIST") lists.add(String(d.id));
+    }
+    const testWhere = { ...clinicalImportTestWhere(scoped), status: undefined };
+    if (ids.size) {
+      const allowed = await prisma.labTest.count({ where: { ...testWhere, id: { in: [...ids] } } });
+      if (allowed !== ids.size) notFound();
+    }
+    if (components.size) {
+      const allowed = await prisma.testComponent.count({
+        where: { id: { in: [...components] }, test: testWhere },
+      });
+      if (allowed !== components.size) notFound();
+    }
+    if (lists.size) {
+      const allowed = await prisma.priceList.count({ where: {
+        id: { in: [...lists] }, organizationId: session.user.organizationId,
+        OR: [
+          { scopeType: "ORGANIZATION", branchId: null },
+          { scopeType: "BRANCH", branchId: { in: [...authorBranches] } },
+        ],
+      } });
+      if (allowed !== lists.size) notFound();
+    }
+  }
 
   // CSV clinical source context must not be disclosed to catalog-only users.
   // Authorize BEFORE any staged source/normalized/validation content is loaded.
@@ -180,6 +243,11 @@ export default async function ImportBatchPage({
       <Link className="secondary-link" href="/catalog">{tr(locale, "Back to Test Catalog", "العودة إلى دليل الفحوصات")}</Link>
     </header>
 
+    {isBundleReview && <p className="muted">{tr(locale,
+      "This paged, non-atomic export is evidence for mapping review only. No configuration is created, approved, activated or restored by uploading it.",
+      "هذا التصدير غير المتزامن لجميع الصفحات للمراجعة والمطابقة فقط. رفعه لا ينشئ ولا يعتمد ولا يفعّل ولا يستعيد أي إعداد.",
+    )}</p>}
+
     <section className="catalog-stats">
       <article><strong>{totalRows}</strong><span>{tr(locale, "Total staged", "إجمالي الصفوف المرحلية")}</span></article>
       <article><strong>{counts.VALID || 0}</strong><span>{tr(locale, "Valid", "صالحة")}</span></article>
@@ -208,21 +276,21 @@ export default async function ImportBatchPage({
       </article>
     </section>
 
-    {batch.sourceType !== "CSV_REVIEW" && <section className="detail-card range-import-card">
+    {batch.sourceType !== "CSV_REVIEW" && !isBundleReview && <section className="detail-card range-import-card">
       <h2>{tr(locale, "Reference Range Migration", "ترحيل المديات المرجعية")}</h2>
       <p className="muted">{tr(locale, "Only exact test matches with mapped units and unambiguous age/sex context are eligible for automatic import. Ambiguous rows remain staged for review.", "لا يُسمح بالاستيراد التلقائي إلا للتطابقات الدقيقة للفحوصات مع وحدات مربوطة وسياق عمر/جنس غير ملتبس. تبقى الصفوف الملتبسة مرحلية للمراجعة.")}</p>
       <ReferenceRangeImportButton batchId={batch.id} locale={locale} />
     </section>}
 
-    {entityCounts.COMPONENT > 0 && permissions.has("catalog.manage") && <ComponentImportReconciliation batchId={batch.id} locale={locale} />}
-    {entityCounts.PRICE_LIST_ITEM > 0 && permissions.has("catalog.manage") && permissions.has("pricing.manage") && <PriceImportReconciliation batchId={batch.id} locale={locale} />}
+    {!isBundleReview && entityCounts.COMPONENT > 0 && permissions.has("catalog.manage") && <ComponentImportReconciliation batchId={batch.id} locale={locale} />}
+    {!isBundleReview && entityCounts.PRICE_LIST_ITEM > 0 && permissions.has("catalog.manage") && permissions.has("pricing.manage") && <PriceImportReconciliation batchId={batch.id} locale={locale} />}
     {batch.sourceType === "CSV_REVIEW" && entityCounts.REFERENCE_INTERVAL > 0 &&
       permissions.has("catalog.reference_ranges.manage") && <ReferenceRangeImportReconciliation batchId={batch.id} locale={locale} />}
 
     <section className="table-card">
       <div className="table-toolbar">
         <div>
-          <h2>{tr(locale, "Validation Review", "مراجعة التحقق")}</h2>
+          <h2>{isBundleReview ? tr(locale, "Configuration bundle review only", "مراجعة ملف الإعدادات فقط") : tr(locale, "Validation Review", "مراجعة التحقق")}</h2>
           <span>{tr(locale, "Status", "الحالة")}: {rowStatusLabel(batch.status)} · {tr(locale, "showing", "عرض")} {rows.length}{status ? ` ${rowStatusLabel(status)}` : ""} {tr(locale, "row(s)", "صف")}</span>
         </div>
         <div className="review-actions">
@@ -230,8 +298,8 @@ export default async function ImportBatchPage({
           <Link className={status === "ERROR" ? "filter-chip active" : "filter-chip"} href={`/catalog/imports/${batch.id}?status=ERROR`}>{tr(locale, "Errors", "أخطاء")} ({counts.ERROR || 0})</Link>
           <Link className={status === "WARNING" ? "filter-chip active" : "filter-chip"} href={`/catalog/imports/${batch.id}?status=WARNING`}>{tr(locale, "Warnings", "تحذيرات")} ({counts.WARNING || 0})</Link>
           <Link className={status === "VALID" ? "filter-chip active" : "filter-chip"} href={`/catalog/imports/${batch.id}?status=VALID`}>{tr(locale, "Valid", "صالح")} ({counts.VALID || 0})</Link>
-          {batch.status === "DRAFT" && batch.sourceType !== "CSV_REVIEW" && <RevalidateImportButton batchId={batch.id} locale={locale} />}
-          {batch.status === "VALIDATED" && batch.sourceType !== "CSV_REVIEW" && safeMasterRemaining > 0 && <SafeImportButton batchId={batch.id} locale={locale} />}
+          {batch.status === "DRAFT" && batch.sourceType !== "CSV_REVIEW" && !isBundleReview && <RevalidateImportButton batchId={batch.id} locale={locale} />}
+          {batch.status === "VALIDATED" && batch.sourceType !== "CSV_REVIEW" && !isBundleReview && safeMasterRemaining > 0 && <SafeImportButton batchId={batch.id} locale={locale} />}
         </div>
       </div>
       <div className="table-wrap">
