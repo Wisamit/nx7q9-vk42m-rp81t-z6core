@@ -40,6 +40,9 @@ test("Stage 45: an inactive unit cannot be silently reactivated through an alias
     active,{...inactive,symbol:"mg/L"},
   ]),"mg/L"),{kind:"ambiguous_or_inactive"});
   assert.equal(legacyPreparedUnitKey(" µ g PER dL. "), "UG/DL");
+  assert.equal(legacyPreparedUnitKey("μg/mL"),"UG/ML");
+  assert.equal(legacyPreparedUnitKey("Μg/mL"),"UG/ML");
+  assert.equal(legacyPreparedUnitKey("µg/mL"),"UG/ML");
 });
 
 test("Stage 45: proposed unit values are not silently truncated into new identifiers", () => {
