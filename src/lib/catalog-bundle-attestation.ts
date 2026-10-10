@@ -9,10 +9,7 @@ const SIGNATURE = /^[0-9a-f]{64}$/;
  * supported as a backwards-compatible fallback with domain-separated HMAC.
  * Secrets must be deployment-managed, never persisted in export or audit data.
  */
-export function catalogBundleSigningSecret(env: {
-  CATALOG_BUNDLE_SIGNING_KEY?: string;
-  APP_ENCRYPTION_KEY?: string;
-}): string | null {
+export function catalogBundleSigningSecret(env: Record<string, string | undefined>): string | null {
   const value = env.CATALOG_BUNDLE_SIGNING_KEY ?? env.APP_ENCRYPTION_KEY;
   if (!value || Buffer.byteLength(value, "utf8") < 32 ||
       value.startsWith("replace-with-")) return null;
