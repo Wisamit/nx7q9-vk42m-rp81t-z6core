@@ -5,7 +5,7 @@ import { useState } from "react";
 type Category = "CLINICAL" | "FINANCIAL" | "CATALOG";
 type Count = {
   total: number; unchanged: number; drifted: number;
-  unflagged: number; pending: number; expertConfirmed: number;
+  unflagged: number; driftUnflagged: number; pending: number; expertConfirmed: number;
   returnedForCorrection: number; stale: number;
 };
 type GovernanceReport = {
@@ -54,7 +54,8 @@ export function CatalogGovernanceReadiness({ batchId, locale }: {
           body.blockers.some(code => !knownBlockers.includes(code)) ||
           !body.totals || !body.byCategory ||
           !categories.every(category => body.byCategory?.[category] &&
-            Number.isSafeInteger(body.byCategory[category].total))) {
+            Number.isSafeInteger(body.byCategory[category].total) &&
+            Number.isSafeInteger(body.byCategory[category].driftUnflagged))) {
         throw new Error(body.error || "governance_review_unavailable");
       }
       setReport(body as GovernanceReport);
@@ -128,6 +129,7 @@ export function CatalogGovernanceReadiness({ batchId, locale }: {
           <th>{tr("Scope", "النطاق")}</th>
           <th>{tr("Rows", "صفوف")}</th>
           <th>{tr("Differences", "اختلافات")}</th>
+          <th>{tr("Not referred", "لم تُحل")}</th>
           <th>{tr("Pending", "معلقة")}</th>
           <th>{tr("Confirmed finding", "ملاحظة مؤكدة")}</th>
           <th>{tr("Returned", "معادة للتصحيح")}</th>
@@ -139,7 +141,8 @@ export function CatalogGovernanceReadiness({ batchId, locale }: {
             <td>{category === "CLINICAL" ? tr("Clinical", "طبي")
               : category === "FINANCIAL" ? tr("Financial", "مالي")
               : tr("Catalog", "دليل الفحوصات")}</td>
-            <td>{count.total}</td><td>{count.drifted}</td><td>{count.pending}</td>
+            <td>{count.total}</td><td>{count.drifted}</td>
+            <td>{count.driftUnflagged}</td><td>{count.pending}</td>
             <td>{count.expertConfirmed}</td><td>{count.returnedForCorrection}</td>
             <td>{count.stale}</td>
           </tr>;
