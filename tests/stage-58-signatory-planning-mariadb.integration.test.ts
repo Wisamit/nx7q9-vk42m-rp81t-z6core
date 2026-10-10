@@ -28,7 +28,7 @@ test("Stage 58 MariaDB: live branch and domain-grant revocation removes potentia
     for (const [id, tenant, suffix] of [
       [sourceAuthor, org, "A"], [clinician, org, "C"],
       [finance, org, "M"], [foreignUser, foreignOrg, "F"],
-    ]) await exec("INSERT INTO users(id,organization_id,username,display_name_en,updated_at) VALUES(?,?,?,?,NOW(3))",
+    ]) await exec("INSERT INTO users(id,organization_id,username,display_name_en,status,updated_at) VALUES(?,?,?,?,'ACTIVE',NOW(3))",
       [id, tenant, prefix + suffix, "Stage58 User"]);
     for (const [id, code] of [[medicalRole, prefix+"C"],[financialRole,prefix+"P"]])
       await exec("INSERT INTO roles(id,organization_id,code,name_en,updated_at) VALUES(?,?,?,?,NOW(3))",
