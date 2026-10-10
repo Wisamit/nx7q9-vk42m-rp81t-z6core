@@ -80,7 +80,7 @@ export default async function ImportBatchPage({
     const codes = [...new Set(stagedPrices.map(row => stagedPriceListCode(row.normalizedData)).filter(Boolean))];
     const lists = await prisma.priceList.findMany({
       where: { organizationId: session.user.organizationId, code: { in: codes } },
-      select: { code: true, branchId: true },
+      select: { code: true, branchId: true, scopeType: true },
     });
     if (!authorizedStagedPrices(stagedPrices.map(row => row.normalizedData), lists, allowedBranches)) {
       notFound();
