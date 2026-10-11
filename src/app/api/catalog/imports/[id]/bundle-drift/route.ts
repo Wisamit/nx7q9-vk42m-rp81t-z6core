@@ -7,6 +7,7 @@ import { catalogBundleDrift } from "@/lib/catalog-bundle-drift";
 import { resolveFindingLifecycle, triageResubmission } from "@/lib/catalog-finding-lifecycle";
 import { summarizeCatalogGovernance } from "@/lib/catalog-governance-readiness";
 import { summarizeSignatoryPlanning } from "@/lib/catalog-signatory-planning";
+import { policyDraftAuthorFeedback } from "@/lib/catalog-policy-feedback";
 import {
   validateCatalogPolicyProposal, createPolicyDraftLedgerEntry, readPolicyDraftLedgerEntry,
   type CatalogPolicyProposal,
@@ -702,6 +703,7 @@ async function inspectBundleDrift(
       if (lastPolicyEvent && !oldPolicy)
         return { error: "policy_draft_history_corrupt", httpStatus: 409 } as const;
       let currentPolicy = oldPolicy;
+      let currentPolicyEventId = lastPolicyEvent?.id || null;
       let draftSave: "UNCHANGED" | "RECORDED" | null = null;
       if (policyDraftInput) {
         if (policyDraftInput.expectedRevision !== (oldPolicy?.revision || 0))
@@ -712,17 +714,35 @@ async function inspectBundleDrift(
         if (oldPolicy?.proposalDigest === next.proposalDigest) {
           draftSave = "UNCHANGED";
         } else {
-          await tx.auditEvent.create({ data: {
+          const recordedDraft = await tx.auditEvent.create({ data: {
             organizationId, branchId: liveScope.branchId, actorUserId: session.user.id,
             action: "CATALOG_BUNDLE_SIGNATORY_POLICY_DRAFT_RECORDED",
             entityType: "CatalogImportBatch", entityId: batch.id,
             newValues: next,
             ipAddress: ctx.ipAddress, userAgent: ctx.userAgent,
-          } });
+          }, select: { id: true } });
+          currentPolicyEventId = recordedDraft.id;
           currentPolicy = next;
           draftSave = "RECORDED";
         }
       }
+      // Read exactly the latest revision's review AuditEvents. Old reviews
+      // remain in history but never count for the new proposal.
+      const reviewEvents = currentPolicyEventId ? await tx.auditEvent.findMany({
+        where: {
+          organizationId, branchId: liveScope.branchId,
+          action: "CATALOG_BUNDLE_POLICY_DRAFT_REVIEW_RECORDED",
+          entityType: "CatalogPolicyDraft", entityId: currentPolicyEventId,
+        },
+        select: { actorUserId: true, newValues: true }, take: 3,
+      }) : [];
+      const reviewFeedback = currentPolicy && currentPolicyEventId
+        ? policyDraftAuthorFeedback({
+            draftEventId: currentPolicyEventId, draft: currentPolicy,
+            authorUserId: batch.createdByUserId, events: reviewEvents,
+          }) : null;
+      if (currentPolicy && !reviewFeedback)
+        return { error: "policy_draft_review_history_corrupt", httpStatus: 409 } as const;
       // Return choices and revision only; ledger identity and source details
       // stay inside the immutable audit record and never reach the browser.
       const proposalView = currentPolicy ? {
@@ -751,7 +771,8 @@ async function inspectBundleDrift(
         }, ipAddress: ctx.ipAddress, userAgent: ctx.userAgent,
       } });
       return { ...readiness, signatoryPlanning: planning,
-        policyDraft: proposalView, policyDraftSave: draftSave };
+        policyDraft: proposalView, policyDraftSave: draftSave,
+        policyReviewFeedback: reviewFeedback };
     }
     await tx.auditEvent.create({ data: {
       organizationId, branchId: liveScope.branchId, actorUserId: session.user.id,
