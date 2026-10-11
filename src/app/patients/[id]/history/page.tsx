@@ -21,6 +21,7 @@ import { PatientHistoryPager } from "@/components/patient-history-pager";
 import { historyPageSlice, patientHistoryNavigation, type PatientHistorySection } from "@/lib/patient-history-pagination";
 import { scopedHistoryAttachments } from "@/lib/patient-history-attachments";
 import { resolvePatientLineage } from "@/lib/patient-identity-lineage";
+import { allowExtendedTrend, clinicalTrendWindow, EXTENDED_TREND_REPORT_LIMIT } from "@/lib/patient-history-trend-window";
 import { getUiLocale, statusLabel, tr } from "@/lib/ui-i18n";
 
 export const dynamic = "force-dynamic";
@@ -29,7 +30,7 @@ export default async function PatientHistoryPage({
   params, searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ section?: string; page?: string }>;
+  searchParams: Promise<{ section?: string; page?: string; trend?: string }>;
 }) {
   const session = await requirePermission("patients.view");
   const { id } = await params;
@@ -52,6 +53,7 @@ export default async function PatientHistoryPage({
   const query = await searchParams;
   const navigation = patientHistoryNavigation(query.section, query.page, accessibleSections);
   const section = navigation.section;
+  const expandedTrend = allowExtendedTrend(query.trend, section, navigation.page, canViewReports);
 
   const lineage = await prisma.$transaction(
     tx => resolvePatientLineage(tx, session.user.organizationId, id),
@@ -134,14 +136,16 @@ export default async function PatientHistoryPage({
           },
         },
         orderBy: [{ order: { orderedAt: "desc" } }, { id: "desc" }],
-        skip: navigation.skip,
-        take: navigation.take,
+        skip: expandedTrend ? 0 : navigation.skip,
+        take: expandedTrend ? EXTENDED_TREND_REPORT_LIMIT + 1 : navigation.take,
       })
     : [];
-  const resultPage = historyPageSlice(reportEvidenceData);
+  const trendWindow = clinicalTrendWindow(reportEvidenceData, expandedTrend);
+  const resultPage = trendWindow.page;
   const releaseEvidence = resultPage.rows;
-  const currentResultPointers = currentReportResultPointers(releaseEvidence);
-  const publishedEvidence = publishedHistoryEvidence(releaseEvidence);
+  const pageResultPointers = currentReportResultPointers(releaseEvidence);
+  const currentResultPointers = currentReportResultPointers(trendWindow.chartEvidence);
+  const publishedEvidence = publishedHistoryEvidence(trendWindow.chartEvidence);
   const currentResultIds = new Set(currentResultPointers.keys());
 
   const resultCandidates = canViewReports && currentResultIds.size > 0
@@ -197,15 +201,19 @@ export default async function PatientHistoryPage({
     resultMatchesCurrentReportPointer(result, currentResultPointers) &&
     resultMatchesPublishedHistory(result, publishedEvidence));
   const selectedResultKeys = latestClinicalResultIds(reportMatchedCandidates);
-  const clinicalResults = reportMatchedCandidates
+  const verifiedTrendResults = reportMatchedCandidates
     .filter(result => selectedResultKeys.has(result.orderItemId + ":" + result.version))
     .sort((a, b) => {
       const aAt = a.releasedAt || a.enteredAt;
       const bAt = b.releasedAt || b.enteredAt;
       return bAt.getTime() - aAt.getTime();
     });
+  // The cumulative table remains 20 reports/page; the chart may use a wider,
+  // independently bounded and fully snapshot-attested evidence window.
+  const clinicalResults = verifiedTrendResults.filter(result =>
+    resultMatchesCurrentReportPointer(result, pageResultPointers));
 
-  const trendInputs: TrendPointInput[] = clinicalResults.flatMap(result => {
+  const trendInputs: TrendPointInput[] = verifiedTrendResults.flatMap(result => {
     const observedAt = (result.releasedAt || result.enteredAt).toISOString();
     return result.values.map(value => ({
       testId: result.orderItem.testId,
@@ -422,11 +430,24 @@ export default async function PatientHistoryPage({
       hasNext={currentPageHasNext}
       locale={locale}
     />}
-    {section === "results" && canViewReports && <p className="muted" role="status">{tr(
-      locale,
-      "Clinical tables and trends reflect ONLY this page of up to 20 authorized diagnostic report records; use Next to review earlier reports. This is NOT the patient's complete longitudinal trend.",
-      "جداول النتائج ومخطط الاتجاهات يعرضان فقط هذه الصفحة من حتى 20 سجلاً لتقرير تشخيصي مصرح به؛ استخدم التالي لاستعراض الأقدم. هذا ليس الاتجاه الطولي الكامل للمريض.",
-    )}</p>}
+    {section === "results" && canViewReports && <section className="detail-card no-print">
+      <div className="result-actions">
+        <Link
+          className={expandedTrend ? "secondary-link" : "primary-button"}
+          href={`/patients/${canonical.id}/history?section=results&page=1&trend=extended`}
+        >{tr(locale, "Explore up to 250 reports in trends", "استعراض اتجاهات حتى 250 تقريرًا")}</Link>
+        {expandedTrend && <Link className="secondary-link"
+          href={`/patients/${canonical.id}/history?section=results&page=1`}
+        >{tr(locale, "Return to page-only trends", "العودة لاتجاهات هذه الصفحة")}</Link>}
+      </div>
+      <p className="muted" role="status">{expandedTrend
+        ? tr(locale,
+          `Trend charts use up to ${trendWindow.scannedReports} most recent authorized diagnostic reports (limit 250) across history pages; cumulative result tables still show only the first page of up to 20. ${trendWindow.truncated ? "Older reports exist outside this trend window. This is NOT the patient's complete trend." : "No additional accessible reports were found beyond this window; only currently issued, verified numeric readings appear."}`,
+          `تستخدم المخططات حتى ${trendWindow.scannedReports} تقريرًا تشخيصيًا حديثًا مصرحًا به عبر صفحات السجل (الحد 250)، بينما يعرض جدول النتائج أول 20 تقريرًا فقط. ${trendWindow.truncated ? "توجد تقارير أقدم خارج نافذة الاتجاهات؛ هذا ليس الاتجاه الكامل للمريض." : "لم تُعثر على تقارير مصرح بها إضافية خارج هذه النافذة؛ تظهر فقط القراءات الرقمية المنشورة والمتطابقة."}`)
+        : tr(locale,
+          "Clinical tables and trends reflect ONLY this page of up to 20 authorized diagnostic report records; select expanded trends to inspect older reports. This is NOT the patient's complete longitudinal trend.",
+          "جداول النتائج ومخططات الاتجاهات تعرض فقط هذه الصفحة من حتى 20 تقريرًا تشخيصيًا مصرحًا به؛ اختر الاتجاهات الموسّعة لاستعراض التقارير الأقدم. هذا ليس الاتجاه الطولي الكامل للمريض.")}</p>
+    </section>}
 
     {patientIds.length > 1 && <section className="detail-card">
       <h2>{tr(locale, "Unified Identity", "الهوية الموحدة")}</h2>

@@ -81,7 +81,7 @@ test("Stage 72: charts only use published plain numeric values, never source hid
 test("Stage 72: patient page includes published snapshot gate before chart and cumulative mapping",()=>{
   const source=readFileSync("src/app/patients/[id]/history/page.tsx","utf8");
   assert.match(source,/contentSnapshot: true/);
-  assert.match(source,/publishedHistoryEvidence\(releaseEvidence\)/);
+  assert.match(source,/publishedHistoryEvidence\(trendWindow\.chartEvidence\)/);
   assert.match(source,/resultMatchesCurrentReportPointer\(result, currentResultPointers\)/);
   assert.match(source,/resultMatchesPublishedHistory\(result, publishedEvidence\)/);
   assert.match(source,/publishedNumericValue\(value.displayValue, value.valueNumeric !== null\)/);
