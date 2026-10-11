@@ -57,6 +57,7 @@ jobs:
       - run: node --experimental-strip-types --test tests/stage-77-history-repeatable-read-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-78-critical-communication-concurrency-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-79-critical-queue-cursor-mariadb.integration.test.ts
+      - run: node --experimental-strip-types --test tests/stage-80-notification-lease-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-22-aliquot-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-23-medical-validation-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-24-catalog-export-mariadb.integration.test.ts
