@@ -16,7 +16,11 @@ export type LegacyMasterRow = {
 };
 
 export class LegacyMasterImportError extends Error {
-  constructor(readonly reason: string) { super(reason); }
+  readonly reason: string;
+  constructor(reason: string) {
+    super(reason);
+    this.reason = reason;
+  }
 }
 
 export const LEGACY_MASTER_COLUMNS: Record<LegacyMasterKind, readonly string[]> = {
