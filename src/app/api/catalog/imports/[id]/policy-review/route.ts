@@ -158,9 +158,9 @@ async function inspectPolicyReview(request: NextRequest, { params }: Context, in
     });
     if (!history)
       return { error: "policy_review_draft_integrity_error", httpStatus: 409 } as const;
-    if (!history.latestEventId || history.latestEventId !== input.draftEventId)
+    const latest = history.latestEventId ? { id: history.latestEventId } : null;
+    if (!latest || latest.id !== input.draftEventId)
       return { error: "policy_review_stale_revision", httpStatus: 409 } as const;
-    const latest = { id: history.latestEventId };
     const draft = history.draft!;
 
     // Preflight and POST recheck every staged identity under the same tenant lock.
