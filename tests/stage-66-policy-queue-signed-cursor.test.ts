@@ -38,7 +38,8 @@ test("Stage 66: signed cursor round trip is bound to tenant, branch, reviewer an
 test("Stage 66: tampering, noncanonical tokens, malformed UTF8 and legacy cursors fail closed",()=>{
   const token=signed();
   const [payload,signature]=token.split(".");
-  assert.equal(verifySignedPolicyQueueCursor(token.replace(/.$/,"0"),context,now),undefined);
+  const flipped=(signature[0]==="0" ? "1" : "0")+signature.slice(1);
+  assert.equal(verifySignedPolicyQueueCursor(payload+"."+flipped,context,now),undefined);
   const changed=Buffer.from(JSON.stringify({v:2,p:encodePolicyQueueCursor(anchor),
     a:encodePolicyQueueCursor(anchor),e:expiresAt}),"utf8").toString("base64url");
   assert.equal(verifySignedPolicyQueueCursor(changed+"."+signature,context,now),undefined);
