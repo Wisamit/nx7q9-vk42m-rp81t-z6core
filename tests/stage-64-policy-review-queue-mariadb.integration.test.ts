@@ -57,7 +57,7 @@ test("Stage 64 MariaDB: queue candidate is hidden on rogue audit and live branch
         [id,org,code+suffix,"Stage64 User"]);
     await write(
       "INSERT INTO catalog_import_batches(id,organization_id,source_type,source_name,source_checksum,status,created_by_user_id,updated_at) VALUES(?,?,'CONFIG_BUNDLE_REVIEW','stage64.json',?,'DRAFT',?,NOW(3))",
-      [batch,sourceChecksum,author]);
+      [batch,org,sourceChecksum,author]);
     await write(
       "INSERT INTO catalog_import_rows(id,batch_id,`row_number`,entity_type,status,legacy_key,source_data,normalized_data,validation_issues,updated_at) VALUES(?,?,1,'TEST','WARNING',?,?,?,?,NOW(3))",
       [rowId,batch,testId,JSON.stringify({id:testId}),JSON.stringify({id:testId,departmentId:deptA}),JSON.stringify([{severity:"WARNING",code:"REVIEW_ONLY"}])]);
