@@ -8,7 +8,8 @@ import {
 import { prisma } from "@/lib/db";
 import {
   buildPatientTrendSeries,
-  currentReportResultIds,
+  currentReportResultPointers,
+  resultMatchesCurrentReportPointer,
   latestClinicalResultIds,
   patientIdentityGroupIds,
   type TrendPointInput,
@@ -135,6 +136,7 @@ export default async function PatientHistoryPage({
           },
         },
         select: {
+          orderId: true,
           currentVersion: true,
           versions: {
             orderBy: { version: "desc" },
@@ -149,7 +151,8 @@ export default async function PatientHistoryPage({
     : [];
   const resultPage = historyPageSlice(reportEvidenceData);
   const releaseEvidence = resultPage.rows;
-  const currentResultIds = currentReportResultIds(releaseEvidence);
+  const currentResultPointers = currentReportResultPointers(releaseEvidence);
+  const currentResultIds = new Set(currentResultPointers.keys());
 
   const resultCandidates = canViewReports && currentResultIds.size > 0
     ? await prisma.laboratoryResult.findMany({
@@ -198,8 +201,12 @@ export default async function PatientHistoryPage({
       })
     : [];
 
-  const selectedResultKeys = latestClinicalResultIds(resultCandidates);
-  const clinicalResults = resultCandidates
+  // Even a legitimate released result must match the exact current report
+  // snapshot's order, order item and immutable result revision.
+  const reportMatchedCandidates = resultCandidates.filter(result =>
+    resultMatchesCurrentReportPointer(result, currentResultPointers));
+  const selectedResultKeys = latestClinicalResultIds(reportMatchedCandidates);
+  const clinicalResults = reportMatchedCandidates
     .filter(result => selectedResultKeys.has(result.orderItemId + ":" + result.version))
     .sort((a, b) => {
       const aAt = a.releasedAt || a.enteredAt;
