@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requirePermission } from "@/lib/auth";
 import { tr } from "@/lib/ui-i18n";
 import { CatalogExpertReviewQueue } from "@/components/catalog-expert-review-queue";
+import { CatalogPolicyDraftReviewQueue } from "@/components/catalog-policy-draft-review-queue";
 
 export const dynamic = "force-dynamic";
 
@@ -24,5 +25,6 @@ export default async function CatalogExpertReviewsPage() {
       </div>
     </header>
     <CatalogExpertReviewQueue locale={locale} />
+    <CatalogPolicyDraftReviewQueue locale={locale} />
   </main>;
 }
