@@ -4,9 +4,10 @@ import { prisma } from "@/lib/db";
 import { BUNDLE_REVIEW_SOURCE } from "@/lib/catalog-bundle-review";
 import { resolveClinicalImportScope } from "@/lib/catalog-clinical-import-scope";
 import { validatePolicyReviewBatchScope } from "@/lib/catalog-policy-review-scope";
+import { POLICY_DRAFT_HISTORY_LIMIT, verifyPolicyDraftHistory } from "@/lib/catalog-policy-draft-history";
 import {
   domainReviewPermissions, nextPolicyReviewRecord, parsePolicyReviewRecord,
-  policyDraftFromHistory, validPolicyReviewDisposition, validPolicyReviewDomain,
+  validPolicyReviewDisposition, validPolicyReviewDomain,
   validPolicyReviewReason, type PolicyReviewDisposition, type PolicyReviewDomain,
   type PolicyReviewReason,
 } from "@/lib/catalog-policy-draft-review";
@@ -142,20 +143,26 @@ async function inspectPolicyReview(request: NextRequest, { params }: Context, in
       return { error: "policy_review_not_found", httpStatus: 404 } as const;
     if (batch.createdByUserId === session.user.id)
       return { error: "policy_review_independent_reviewer_required", httpStatus: 403 } as const;
-    const latest = await tx.auditEvent.findFirst({
+    const draftEvents = await tx.auditEvent.findMany({
       where: { organizationId, branchId: scope.branchId,
-        actorUserId: batch.createdByUserId, entityType: "CatalogImportBatch",
-        entityId: batch.id, action: "CATALOG_BUNDLE_SIGNATORY_POLICY_DRAFT_RECORDED" },
+        entityType: "CatalogImportBatch", entityId: batch.id,
+        action: "CATALOG_BUNDLE_SIGNATORY_POLICY_DRAFT_RECORDED" },
       orderBy: [{ occurredAt: "desc" }, { id: "desc" }],
-      select: { id: true, newValues: true },
+      take: POLICY_DRAFT_HISTORY_LIMIT + 1,
+      select: { id: true, actorUserId: true, newValues: true },
     });
-    if (!latest || latest.id !== input.draftEventId)
-      return { error: "policy_review_stale_revision", httpStatus: 409 } as const;
-    const draft = policyDraftFromHistory(latest.newValues, {
+    const history = verifyPolicyDraftHistory({
+      events: draftEvents, authorUserId: batch.createdByUserId,
       organizationId, batchId: batch.id, branchId: scope.branchId,
       sourceChecksum: batch.sourceChecksum,
     });
-    if (!draft) return { error: "policy_review_draft_integrity_error", httpStatus: 409 } as const;
+    if (!history)
+      return { error: "policy_review_draft_integrity_error", httpStatus: 409 } as const;
+    if (!history.latestEventId || history.latestEventId !== input.draftEventId)
+      return { error: "policy_review_stale_revision", httpStatus: 409 } as const;
+    const latest = { id: history.latestEventId };
+    const draft = history.draft!;
+
     // Preflight and POST recheck every staged identity under the same tenant lock.
     // A domain reviewer cannot make a procedural statement about out-of-scope masters.
     const batchScope = await validatePolicyReviewBatchScope(tx, {
