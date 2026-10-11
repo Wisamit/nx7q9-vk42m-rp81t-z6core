@@ -92,7 +92,8 @@ test("Stage 71: patient history page enforces pointers before trend/cumulative d
   assert.match(page,/new Set\(currentResultPointers\.keys\(\)\)/);
   assert.match(page,/resultMatchesCurrentReportPointer\(result, currentResultPointers\)/);
   assert.match(page,/latestClinicalResultIds\(reportMatchedCandidates\)/);
-  assert.match(page,/const clinicalResults = reportMatchedCandidates/);
+  assert.match(page,/const clinicalResults = verifiedTrendResults\\.filter/);
+  assert.match(page,/resultMatchesCurrentReportPointer\\(result, pageResultPointers\\)/);
   assert.ok(page.indexOf("resultMatchesCurrentReportPointer(result") <
     page.indexOf("const trendInputs: TrendPointInput[]"));
   assert.match(page,/performingBranchId: \{ in: branchIds \}/);
