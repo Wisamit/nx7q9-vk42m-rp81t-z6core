@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import type { Prisma, PrismaClient } from "../../../../../generated/prisma/client";
 import { permissionSet, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { createLegacyMasterRecords } from "@/lib/legacy-master-import-commit";
 import {
   legacyMasterFingerprint, LegacyMasterImportError, parseLegacyMasterCsv,
   type LegacyMasterKind, type LegacyMasterRow,
@@ -109,28 +110,7 @@ export async function POST(request: Request) {
       // serializable creation transaction before writing a single record.
       const changed = await existingCodes(tx, kind, organizationId, codes);
       if (changed.length > 0) throw new LegacyMasterImportError("existing_codes_changed_since_preview");
-      if (kind === "REFERRER") {
-        await tx.referrer.createMany({ data: entries.map(row => ({
-          id: row.id, organizationId, code: row.code, nameEn: row.nameEn,
-          nameAr: row.nameAr, type: row.type!, phone: row.phone,
-          email: row.email, licenseNumber: row.licenseNumber,
-        })) });
-      } else if (kind === "SOURCE") {
-        await tx.orderSource.createMany({ data: entries.map(row => ({
-          id: row.id, organizationId, code: row.code, nameEn: row.nameEn,
-          nameAr: row.nameAr, category: row.category!,
-        })) });
-      } else if (kind === "ORGANISM") {
-        await tx.organism.createMany({ data: entries.map(row => ({
-          id: row.id, organizationId, code: row.code, nameEn: row.nameEn,
-          nameAr: row.nameAr, category: row.category,
-        })) });
-      } else {
-        await tx.antibiotic.createMany({ data: entries.map(row => ({
-          id: row.id, organizationId, code: row.code, nameEn: row.nameEn,
-          nameAr: row.nameAr, drugClass: row.drugClass,
-        })) });
-      }
+      await createLegacyMasterRecords(tx, kind, organizationId, entries);
 
       // One grouped import audit plus durable per-record identity.
       await tx.auditEvent.create({
