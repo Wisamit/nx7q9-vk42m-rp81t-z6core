@@ -38,6 +38,8 @@ export function samePolicyQueueAuditWatermark(
   expected: PolicyQueueAuditWatermark, actual: PolicyQueueAuditWatermark,
 ): boolean {
   return validCount(expected.count) && validCount(actual.count) &&
+    (expected.latest === null) === (expected.count === 0) &&
+    (actual.latest === null) === (actual.count === 0) &&
     expected.count === actual.count &&
     (expected.latest === null
       ? actual.latest === null
