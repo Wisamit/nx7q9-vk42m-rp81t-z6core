@@ -12,7 +12,7 @@ const counts=(pairs:[number,number][])=>pairs.map(([n,amount])=>({
 
 test("Stage 70: 201+ legitimate decisions across different drafts do not invalidate the page",()=>{
   const drafts=Array.from({length:100},(_,i)=>id(i));
-  const grouped=counts(Array.from({length:100},(_,i)=>[i,2]));
+  const grouped=counts(Array.from({length:100},(_,i):[number,number]=>[i,2]));
   const plan=planPolicyQueueDecisionFetch(drafts,grouped);
   assert.ok(plan);
   assert.equal(POLICY_QUEUE_REVIEWS_PER_DRAFT,2);
