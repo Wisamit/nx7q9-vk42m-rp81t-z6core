@@ -44,7 +44,8 @@ test("history page uses independent server windows and release evidence per curr
   assert.ok(source.includes('const attachmentData = canViewAttachments && section === "attachments"'));
   assert.ok((source.match(/skip: navigation.skip/g) || []).length >= 5);
   assert.ok((source.match(/take: navigation.take/g) || []).length >= 5);
-  assert.ok(source.includes("currentReportResultIds(releaseEvidence)"));
+  assert.ok(source.includes("currentReportResultPointers(releaseEvidence)"));
+  assert.ok(source.includes("resultMatchesCurrentReportPointer(result, currentResultPointers)"));
   assert.ok(source.includes("id: { in: [...currentResultIds] }"));
   assert.ok(source.includes('performingBranchId: { in: branchIds }'));
   assert.ok(source.includes('where: { reportVisibleSnapshot: { not: false } }'));
