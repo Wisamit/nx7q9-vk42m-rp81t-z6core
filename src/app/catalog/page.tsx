@@ -119,6 +119,17 @@ export default async function CatalogPage() {
 
       {permissions.has("catalog.manage") && <CatalogCsvReviewStaging locale={locale} canStagePricing={permissions.has("pricing.manage")} canStageRanges={permissions.has("catalog.reference_ranges.manage")} />}
 
+      {permissions.has("catalog.manage") &&
+        (permissions.has("referrers.manage") || permissions.has("sources.manage") || permissions.has("microbiology.manage")) &&
+        <section className="detail-card">
+          <h2>{tr(locale, "Legacy Reference Master Migration", "ترحيل البيانات المرجعية القديمة")}</h2>
+          <p className="muted">{tr(locale,
+            "Import referrers, order sources, organisms and antibiotics from reviewed CSV files without overwriting existing codes.",
+            "استيراد المحيلين ومصادر الطلبات والجراثيم والمضادات الحيوية عبر ملفات CSV مدققة دون استبدال الرموز الموجودة.")}</p>
+          <Link className="secondary-link" href="/catalog/legacy-master-data">{tr(locale,
+            "Open controlled master import", "فتح الاستيراد المرجعي المضبوط")}</Link>
+        </section>}
+
       {permissions.has("catalog.manage") && <LegacyImportBatches locale={locale} batches={importBatches.map(batch => ({ id: batch.id, sourceName: batch.sourceName, sourceType: batch.sourceType, status: batch.status, rows: batch._count.rows, createdAt: batch.createdAt.toISOString() }))} />}
 
       <section className="table-card detail-section">
