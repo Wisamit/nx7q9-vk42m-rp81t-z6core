@@ -94,7 +94,9 @@ test("Stage 59 author-only draft save uses full live batch gate and append-only 
   assert.match(route, /action: "CATALOG_BUNDLE_SIGNATORY_POLICY_DRAFT_RECORDED"/);
   assert.match(route, /policy_draft_history_corrupt/);
   assert.match(route, /policy_draft_revision_conflict/);
-  assert.match(route, /oldPolicy\?\.proposalDigest === next\.proposalDigest/);
+  // Stage 63 preserves unchanged-draft idempotence at revision 1,000.
+  assert.ok(route.includes("oldPolicy?.proposalDigest === catalogPolicyDraftDigest"));
+  assert.match(route, /policy_draft_revision_limit/);
   assert.match(route, /isolationLevel: "RepeatableRead"/);
   assert.doesNotMatch(route, /tx\.(?:labTest|priceList|priceListItem|referenceInterval|catalogImportBatch|catalogImportRow)\.(?:create|update|upsert|delete)/);
   assert.match(ui, /Nonbinding signature-policy proposal/);
