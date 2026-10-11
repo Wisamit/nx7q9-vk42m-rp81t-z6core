@@ -5,7 +5,7 @@ const obj = (x: unknown): x is Obj => x !== null && typeof x === "object" && !Ar
 const val = (x: unknown): x is string => typeof x === "string" && x.length > 0;
 const nullable = (x: unknown) => x === null || typeof x === "string";
 
-export type PublishedHistoryReport = OrderedCurrentReportEvidence & {
+export type PublishedHistoryReport = Omit<OrderedCurrentReportEvidence, "versions"> & {
   versions: readonly { version: number; status: string; resultVersionSnapshot: unknown; contentSnapshot: unknown }[];
 };
 type FrozenReading = {
