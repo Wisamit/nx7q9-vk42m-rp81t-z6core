@@ -17,7 +17,7 @@ test("Stage 72 MariaDB: only authorized unchanged published result values surviv
   const [org,otherOrg,branch,otherBranch,actor,patient,testId,order,item,result,valueId,reportId]=ids;
   const versionId=randomUUID(),prefix="H72"+org.slice(0,8);
   const cleanup:Array<{table:string;id:string}>=[];
-  async function write(table:string,id:string,sql:string,args:unknown[]){
+  async function write(table:string,id:string,sql:string,args:Array<string | number | null>){
     await writer.execute(sql,args);
     cleanup.unshift({table,id});
   }
