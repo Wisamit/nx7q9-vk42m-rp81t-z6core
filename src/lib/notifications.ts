@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import {
   NotificationChannel,
   NotificationDeliveryStatus,
@@ -138,6 +139,53 @@ function retryAt(attempt: number) {
   return new Date(Date.now() + seconds * 1000);
 }
 
+
+const DISPATCH_LEASE_MS = 10 * 60_000;
+
+/**
+ * A late gateway response can only finalize the attempt that it owns.
+ * A newer worker may have reclaimed an expired lease; neither status nor
+ * report delivery history can be rewritten by the old response.
+ */
+async function finalizeNotificationClaim(
+  db: PrismaClient,
+  delivery: {
+    id: string;
+    status: NotificationDeliveryStatus;
+    reportDeliveryEventId: string | null;
+  },
+  organizationId: string,
+  token: string,
+  attempt: number,
+  data: Prisma.NotificationDeliveryUpdateManyMutationInput,
+  reportData: { status: "FAILED" | "QUEUED" | "SENT" | "DELIVERED"; externalRef?: string | null } | null,
+) {
+  return db.$transaction(async tx => {
+    const updated = await tx.notificationDelivery.updateMany({
+      where: {
+        id: delivery.id,
+        notification: { organizationId },
+        status: delivery.status,
+        dispatchToken: token,
+        attemptCount: attempt,
+      },
+      data: {
+        ...data,
+        dispatchToken: null,
+        dispatchLeaseUntil: null,
+      },
+    });
+    if (updated.count !== 1) return false;
+    if (reportData && delivery.reportDeliveryEventId) {
+      await tx.reportDeliveryEvent.update({
+        where: { id: delivery.reportDeliveryEventId },
+        data: reportData,
+      });
+    }
+    return true;
+  });
+}
+
 export async function dispatchPendingNotifications(db: PrismaClient, organizationId: string, limit = 50) {
   const now = new Date();
   const deliveries = await db.notificationDelivery.findMany({
@@ -146,6 +194,10 @@ export async function dispatchPendingNotifications(db: PrismaClient, organizatio
       channel: { in: [NotificationChannel.EMAIL, NotificationChannel.SMS, NotificationChannel.WHATSAPP] },
       status: { in: [NotificationDeliveryStatus.PENDING, NotificationDeliveryStatus.FAILED] },
       OR: [{ nextAttemptAt: null }, { nextAttemptAt: { lte: now } }],
+      AND: [{ OR: [
+        { dispatchLeaseUntil: null },
+        { dispatchLeaseUntil: { lte: now } },
+      ] }],
     },
     include: { notification: true, reportDeliveryEvent: true },
     orderBy: { createdAt: "asc" },
@@ -155,16 +207,64 @@ export async function dispatchPendingNotifications(db: PrismaClient, organizatio
   const results: Array<{ id: string; status: NotificationDeliveryStatus; error?: string }> = [];
 
   for (const delivery of deliveries) {
+    // A crashed final retry is terminal, not eligible for an unbounded
+    // sixth attempt after its lease expires.
+    if (delivery.attemptCount >= delivery.maxAttempts) {
+      const exhausted = await db.$transaction(async tx => {
+        const closed = await tx.notificationDelivery.updateMany({
+          where: {
+            id: delivery.id,
+            notification: { organizationId },
+            status: delivery.status,
+            attemptCount: delivery.attemptCount,
+            dispatchToken: delivery.dispatchToken,
+            dispatchLeaseUntil: delivery.dispatchLeaseUntil,
+          },
+          data: {
+            status: NotificationDeliveryStatus.DEAD_LETTER,
+            dispatchToken: null,
+            dispatchLeaseUntil: null,
+            nextAttemptAt: null,
+            lastError: "notification_retry_budget_exhausted",
+          },
+        });
+        if (closed.count !== 1) return false;
+        if (delivery.reportDeliveryEventId) {
+          await tx.reportDeliveryEvent.update({
+            where: { id: delivery.reportDeliveryEventId },
+            data: { status: "FAILED" },
+          });
+        }
+        return true;
+      });
+      if (exhausted) results.push({
+        id: delivery.id,
+        status: NotificationDeliveryStatus.DEAD_LETTER,
+        error: "notification_retry_budget_exhausted",
+      });
+      continue;
+    }
+
     const attempt = delivery.attemptCount + 1;
+    const token = randomUUID();
+    const claimedAt = new Date();
     const claim = await db.notificationDelivery.updateMany({
       where: {
         id: delivery.id,
+        notification: { organizationId },
         status: delivery.status,
         attemptCount: delivery.attemptCount,
+        maxAttempts: delivery.maxAttempts,
+        OR: [{ nextAttemptAt: null }, { nextAttemptAt: { lte: claimedAt } }],
+        AND: [{ OR: [
+          { dispatchLeaseUntil: null },
+          { dispatchLeaseUntil: { lte: claimedAt } },
+        ] }],
       },
       data: {
         attemptCount: { increment: 1 },
-        nextAttemptAt: new Date(Date.now() + 5 * 60 * 1000),
+        dispatchToken: token,
+        dispatchLeaseUntil: new Date(claimedAt.getTime() + DISPATCH_LEASE_MS),
       },
     });
     if (claim.count !== 1) continue;
@@ -181,22 +281,16 @@ export async function dispatchPendingNotifications(db: PrismaClient, organizatio
         include: { report: { select: { currentVersion: true } } },
       });
       if (!version || version.status === "RETRACTED" || version.version !== version.report.currentVersion) {
-        await db.$transaction(async tx => {
-          await tx.notificationDelivery.update({
-            where: { id: delivery.id },
-            data: {
-              status: NotificationDeliveryStatus.SKIPPED,
-              attemptCount: attempt,
-              lastError: "report_version_superseded_or_retracted",
-              nextAttemptAt: null,
-            },
-          });
-          await tx.reportDeliveryEvent.update({
-            where: { id: delivery.reportDeliveryEventId! },
-            data: { status: "FAILED" },
-          });
+        const settled = await finalizeNotificationClaim(db, delivery, organizationId, token, attempt, {
+          status: NotificationDeliveryStatus.SKIPPED,
+          attemptCount: attempt,
+          lastError: "report_version_superseded_or_retracted",
+          nextAttemptAt: null,
+        }, { status: "FAILED" });
+        if (settled) results.push({
+          id: delivery.id, status: NotificationDeliveryStatus.SKIPPED,
+          error: "report_version_superseded_or_retracted",
         });
-        results.push({ id: delivery.id, status: NotificationDeliveryStatus.SKIPPED, error: "report_version_superseded_or_retracted" });
         continue;
       }
     }
@@ -204,57 +298,43 @@ export async function dispatchPendingNotifications(db: PrismaClient, organizatio
     const config = gatewayConfig(delivery.channel);
 
     if (!delivery.destination) {
-      await db.$transaction(async tx => {
-        await tx.notificationDelivery.update({
-          where: { id: delivery.id },
-          data: {
-            status: NotificationDeliveryStatus.SKIPPED,
-            attemptCount: attempt,
-            lastError: "destination_missing",
-            nextAttemptAt: null,
-          },
-        });
-        if (delivery.reportDeliveryEventId) {
-          await tx.reportDeliveryEvent.update({
-            where: { id: delivery.reportDeliveryEventId },
-            data: { status: "FAILED" },
-          });
-        }
+      const settled = await finalizeNotificationClaim(db, delivery, organizationId, token, attempt, {
+        status: NotificationDeliveryStatus.SKIPPED,
+        attemptCount: attempt,
+        lastError: "destination_missing",
+        nextAttemptAt: null,
+      }, { status: "FAILED" });
+      if (settled) results.push({
+        id: delivery.id, status: NotificationDeliveryStatus.SKIPPED, error: "destination_missing",
       });
-      results.push({ id: delivery.id, status: NotificationDeliveryStatus.SKIPPED, error: "destination_missing" });
       continue;
     }
 
     if (!config) {
       const dead = attempt >= delivery.maxAttempts;
       const status = dead ? NotificationDeliveryStatus.DEAD_LETTER : NotificationDeliveryStatus.FAILED;
-      await db.$transaction(async tx => {
-        await tx.notificationDelivery.update({
-          where: { id: delivery.id },
-          data: {
-            status,
-            attemptCount: attempt,
-            lastError: "notification_gateway_not_configured",
-            nextAttemptAt: dead ? null : retryAt(attempt),
-          },
-        });
-        if (delivery.reportDeliveryEventId) {
-          await tx.reportDeliveryEvent.update({
-            where: { id: delivery.reportDeliveryEventId },
-            data: { status: dead ? "FAILED" : "QUEUED" },
-          });
-        }
+      const settled = await finalizeNotificationClaim(db, delivery, organizationId, token, attempt, {
+        status,
+        attemptCount: attempt,
+        lastError: "notification_gateway_not_configured",
+        nextAttemptAt: dead ? null : retryAt(attempt),
+      }, { status: dead ? "FAILED" : "QUEUED" });
+      if (settled) results.push({
+        id: delivery.id, status, error: "notification_gateway_not_configured",
       });
-      results.push({ id: delivery.id, status, error: "notification_gateway_not_configured" });
       continue;
     }
 
+    // All attempts for one delivery use a stable idempotency key. The gateway
+    // MUST honor that key for provider-side deduplication after a crash.
+    const idempotencyKey = "familylab-notification:" + delivery.id;
     try {
       const response = await fetch(config.url, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          ...(config.token ? { Authorization: `Bearer ${config.token}` } : {}),
+          "Idempotency-Key": idempotencyKey,
+          ...(config.token ? { Authorization: "Bearer " + config.token } : {}),
         },
         body: JSON.stringify({
           channel: delivery.channel,
@@ -263,72 +343,43 @@ export async function dispatchPendingNotifications(db: PrismaClient, organizatio
           body: delivery.notification.body,
           eventCode: delivery.notification.eventCode,
           notificationId: delivery.notification.id,
+          deliveryId: delivery.id,
+          idempotencyKey,
           metadata: delivery.notification.metadata,
         }),
       });
-
-      if (!response.ok) {
-        throw new Error(`gateway_http_${response.status}`);
-      }
-
+      if (!response.ok) throw new Error("gateway_http_" + response.status);
       const payload = await response.json().catch(() => ({})) as {
-        messageId?: unknown;
-        status?: unknown;
-        delivered?: unknown;
+        messageId?: unknown; status?: unknown; delivered?: unknown;
       };
-      const providerMessageId = typeof payload.messageId === "string" ? payload.messageId.slice(0, 255) : null;
-      const providerDelivered = payload.delivered === true
-        || (typeof payload.status === "string" && payload.status.toUpperCase() === "DELIVERED");
+      const providerMessageId = typeof payload.messageId === "string"
+        ? payload.messageId.slice(0, 255) : null;
+      const providerDelivered = payload.delivered === true ||
+        (typeof payload.status === "string" && payload.status.toUpperCase() === "DELIVERED");
 
-      await db.$transaction(async tx => {
-        await tx.notificationDelivery.update({
-          where: { id: delivery.id },
-          data: {
-            status: NotificationDeliveryStatus.SENT,
-            attemptCount: attempt,
-            sentAt: new Date(),
-            provider: config.provider,
-            providerMessageId,
-            lastError: null,
-            nextAttemptAt: null,
-          },
-        });
-        if (delivery.reportDeliveryEventId) {
-          await tx.reportDeliveryEvent.update({
-            where: { id: delivery.reportDeliveryEventId },
-            data: {
-              status: providerDelivered ? "DELIVERED" : "SENT",
-              externalRef: providerMessageId,
-            },
-          });
-        }
-      });
-      results.push({ id: delivery.id, status: NotificationDeliveryStatus.SENT });
+      const settled = await finalizeNotificationClaim(db, delivery, organizationId, token, attempt, {
+        status: NotificationDeliveryStatus.SENT,
+        attemptCount: attempt,
+        sentAt: new Date(),
+        provider: config.provider,
+        providerMessageId,
+        lastError: null,
+        nextAttemptAt: null,
+      }, { status: providerDelivered ? "DELIVERED" : "SENT", externalRef: providerMessageId });
+      if (settled) results.push({ id: delivery.id, status: NotificationDeliveryStatus.SENT });
     } catch (error) {
       const dead = attempt >= delivery.maxAttempts;
       const status = dead ? NotificationDeliveryStatus.DEAD_LETTER : NotificationDeliveryStatus.FAILED;
       const message = error instanceof Error ? error.message.slice(0, 1000) : "notification_dispatch_failed";
-      await db.$transaction(async tx => {
-        await tx.notificationDelivery.update({
-          where: { id: delivery.id },
-          data: {
-            status,
-            attemptCount: attempt,
-            lastError: message,
-            nextAttemptAt: dead ? null : retryAt(attempt),
-          },
-        });
-        if (delivery.reportDeliveryEventId) {
-          await tx.reportDeliveryEvent.update({
-            where: { id: delivery.reportDeliveryEventId },
-            data: { status: dead ? "FAILED" : "QUEUED" },
-          });
-        }
-      });
-      results.push({ id: delivery.id, status, error: message });
+      const settled = await finalizeNotificationClaim(db, delivery, organizationId, token, attempt, {
+        status,
+        attemptCount: attempt,
+        lastError: message,
+        nextAttemptAt: dead ? null : retryAt(attempt),
+      }, { status: dead ? "FAILED" : "QUEUED" });
+      if (settled) results.push({ id: delivery.id, status, error: message });
     }
   }
-
   return results;
 }
 
