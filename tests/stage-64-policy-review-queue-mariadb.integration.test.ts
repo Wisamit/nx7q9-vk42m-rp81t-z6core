@@ -78,9 +78,9 @@ test("Stage 64 MariaDB: queue candidate is hidden on rogue audit and live branch
       sourceData:json(row.sourceData),normalizedData:json(row.normalizedData),
     }));
     assert.equal(policyReviewIdentityScope(identities,new Set([branchA])).ok,true);
-    assert.deepEqual(policyReviewIdentityScope(identities,new Set()),{
-      ok:false,error:"policy_review_batch_scope_changed",
-    }); // This batch's test belongs to a department, not branch-owned normalized row.
+    // A TEST has no explicit branchId in its serialized master identity:
+    // only the live department/branch join below can reject its relocation.
+    assert.equal(policyReviewIdentityScope(identities,new Set()).ok,true);
     const [scoped]=await reader.execute<mysql.RowDataPacket[]>(
       "SELECT t.id FROM lab_tests t JOIN departments d ON d.id=t.department_id WHERE t.organization_id=? AND t.id=? AND d.status='ACTIVE' AND (d.branch_id IS NULL OR d.branch_id=?)",
       [org,testId,branchA]);
