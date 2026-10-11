@@ -1,4 +1,4 @@
-import { currentReportResultPointers, resultMatchesCurrentReportPointer, type OrderedCurrentReportEvidence } from "./patient-history.ts";
+import { currentReportResultPointers, type OrderedCurrentReportEvidence } from "./patient-history.ts";
 
 type Obj = Record<string, unknown>;
 const obj = (x: unknown): x is Obj => x !== null && typeof x === "object" && !Array.isArray(x);
@@ -81,4 +81,44 @@ export function publishedHistoryEvidence(reports: readonly PublishedHistoryRepor
     }
   }
   return evidence;
+}
+
+export function resultMatchesPublishedHistory(
+  result: HistoryCandidate,
+  evidence: ReadonlyMap<string, FrozenReading>,
+): boolean {
+  const published = evidence.get(result.id);
+  if (!published || published.orderId !== result.orderItem.order.id ||
+    published.orderItemId !== result.orderItemId || published.version !== result.version ||
+    published.testId !== result.orderItem.testId ||
+    published.branchId !== result.performingBranchId ||
+    published.methodId !== result.methodId ||
+    published.analyzerCode !== result.analyzerCodeSnapshot ||
+    published.values.size !== result.values.length) return false;
+
+  return result.values.every(value => {
+    const frozen = published.values.get(value.componentCodeSnapshot);
+    return frozen !== undefined &&
+      frozen.componentId === value.componentId &&
+      frozen.componentNameEn === (value.reportNameEnSnapshot || value.componentNameEnSnapshot) &&
+      frozen.componentNameAr === (value.reportNameArSnapshot || value.componentNameArSnapshot) &&
+      frozen.displayValue === value.displayValue &&
+      frozen.unit === value.unitSnapshot &&
+      frozen.flag === value.flag &&
+      frozen.isCritical === value.isCritical &&
+      frozen.referenceLow === (value.referenceLowSnapshot?.toString() ?? null) &&
+      frozen.referenceHigh === (value.referenceHighSnapshot?.toString() ?? null) &&
+      frozen.referenceTextEn === value.referenceTextEnSnapshot &&
+      frozen.referenceTextAr === value.referenceTextArSnapshot;
+  });
+}
+
+// Chart the number printed on the released report rather than an unprinted
+// internal precision or a qualified textual observation. No unit conversion.
+export function publishedNumericValue(display: string, hadNumericResult: boolean): string | null {
+  const normalized = display.trim();
+  if (!hadNumericResult ||
+    !/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(normalized) ||
+    !Number.isFinite(Number(normalized))) return null;
+  return normalized;
 }
