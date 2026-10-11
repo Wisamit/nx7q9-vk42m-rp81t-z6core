@@ -169,10 +169,10 @@ export async function GET(request: NextRequest) {
     });
     const draftIds = [...latestByBatch.values()].map(event => event.id);
     const decisions = draftIds.length ? await tx.auditEvent.findMany({
-      where: { organizationId, branchId: scope.branchId,
+      where: { organizationId,
         action: "CATALOG_BUNDLE_POLICY_DRAFT_REVIEW_RECORDED",
         entityType: "CatalogPolicyDraft", entityId: { in: draftIds } },
-      select: { entityId: true, actorUserId: true, newValues: true },
+      select: { entityId: true, actorUserId: true, branchId: true, newValues: true },
       take: 201,
     }) : [];
     if (decisions.length > 200)
@@ -190,12 +190,12 @@ export async function GET(request: NextRequest) {
       // Do not list a seemingly valid latest revision if another actor,
       // missing revision, or corrupted prior AuditEvent poisons its chain.
       const allRevisions = await tx.auditEvent.findMany({
-        where: { organizationId, branchId: scope.branchId,
+        where: { organizationId,
           action: "CATALOG_BUNDLE_SIGNATORY_POLICY_DRAFT_RECORDED",
           entityType: "CatalogImportBatch", entityId: batch.id },
         orderBy: [{ occurredAt: "desc" }, { id: "desc" }],
         take: POLICY_DRAFT_HISTORY_LIMIT + 1,
-        select: { id: true, actorUserId: true, newValues: true },
+        select: { id: true, actorUserId: true, branchId: true, newValues: true },
       });
       const verified = verifiedPolicyQueueCandidate({
         events: allRevisions, candidateEventId: event.id,
@@ -205,6 +205,7 @@ export async function GET(request: NextRequest) {
       if (!verified?.draft) continue;
       const draft = verified.draft;
       const decided = decisions.filter(d => d.entityId === event.id);
+      if (decided.some(d => d.branchId !== scope.branchId)) continue;
       const parsed = decided.map(d => ({
         actorUserId: d.actorUserId, review: parsePolicyReviewRecord(d.newValues, {
           draftEventId: event.id, draft,
