@@ -3,8 +3,11 @@ import { getCurrentSession, permissionSet } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { resolveClinicalImportScope } from "@/lib/catalog-clinical-import-scope";
 import { BUNDLE_REVIEW_SOURCE } from "@/lib/catalog-bundle-review";
+import { POLICY_DRAFT_HISTORY_LIMIT } from "@/lib/catalog-policy-draft-history";
+import { verifiedPolicyQueueCandidate } from "@/lib/catalog-policy-review-queue-guard";
+import { validatePolicyReviewBatchScope } from "@/lib/catalog-policy-review-scope";
 import {
-  domainReviewPermissions, parsePolicyReviewRecord, policyDraftFromHistory,
+  domainReviewPermissions, parsePolicyReviewRecord,
   type PolicyReviewDomain,
 } from "@/lib/catalog-policy-draft-review";
 
@@ -58,10 +61,12 @@ export async function GET() {
       : departments;
     if (restricted && !departmentsNow.length)
       return { error: "policy_queue_department_revoked", httpStatus: 403 } as const;
+    const grantedBranchIds = branchGrants.filter(item => originalBranches.has(item.branchId))
+      .map(item => item.branchId);
     const scope = resolveClinicalImportScope({
       organizationId, activeBranchId: session.activeBranchId, activeBranch: branch,
-      branchScopes: branchGrants.filter(item => originalBranches.has(item.branchId))
-        .map(item => ({ branchId: item.branchId, branch: { status: "ACTIVE" } })),
+      branchScopes: grantedBranchIds
+        .map(branchId => ({ branchId, branch: { status: "ACTIVE" } })),
       departmentScopes: departmentsNow,
     });
     if (!scope) return { error: "policy_queue_branch_revoked", httpStatus: 403 } as const;
@@ -108,11 +113,23 @@ export async function GET() {
     for (const batch of batches) {
       const event = latestByBatch.get(batch.id);
       if (!event || !batch.sourceChecksum || event.actorUserId !== batch.createdByUserId) continue;
-      const draft = policyDraftFromHistory(event.newValues, {
-        organizationId, batchId: batch.id, branchId: scope.branchId,
-        sourceChecksum: batch.sourceChecksum,
+      // Do not list a seemingly valid latest revision if another actor,
+      // missing revision, or corrupted prior AuditEvent poisons its chain.
+      const allRevisions = await tx.auditEvent.findMany({
+        where: { organizationId, branchId: scope.branchId,
+          action: "CATALOG_BUNDLE_SIGNATORY_POLICY_DRAFT_RECORDED",
+          entityType: "CatalogImportBatch", entityId: batch.id },
+        orderBy: [{ occurredAt: "desc" }, { id: "desc" }],
+        take: POLICY_DRAFT_HISTORY_LIMIT + 1,
+        select: { id: true, actorUserId: true, newValues: true },
       });
-      if (!draft) continue;
+      const verified = verifiedPolicyQueueCandidate({
+        events: allRevisions, candidateEventId: event.id,
+        organizationId, branchId: scope.branchId, batchId: batch.id,
+        sourceChecksum: batch.sourceChecksum, authorUserId: batch.createdByUserId,
+      });
+      if (!verified?.draft) continue;
+      const draft = verified.draft;
       const decided = decisions.filter(d => d.entityId === event.id);
       const parsed = decided.map(d => ({
         actorUserId: d.actorUserId, review: parsePolicyReviewRecord(d.newValues, {
@@ -127,6 +144,12 @@ export async function GET() {
         !parsed.some(d => d.review?.domain === domain) &&
         !parsed.some(d => d.actorUserId === session.user.id));
       if (!eligible.length) continue;
+      // Discovery itself must enforce the same full 5,000-row live-master
+      // branch/department scope gate as independent GET preflight and POST.
+      const batchScope = await validatePolicyReviewBatchScope(tx, {
+        batchId: batch.id, scope, grantedBranchIds,
+      });
+      if (!batchScope.ok) continue;
       entries.push({
         batchId: batch.id, draftEventId: event.id, revision: draft.revision,
         recordedAt: event.occurredAt.toISOString(), domains: eligible,
