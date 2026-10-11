@@ -48,7 +48,7 @@ test("Stage 71 MariaDB: immutable report snapshots cannot disclose stale or wron
       [patient,org,prefix+"P","Stage71 Patient","stage71 patient"]);
     await write("lab_tests",testId,
       "INSERT INTO lab_tests(id,organization_id,code,name_en,updated_at) VALUES(?,?,?,?,NOW(3))",
-      [testId,prefix+"O"===prefix+"X"?outside:org,prefix+"T","Stage71 Test"]);
+      [testId,org,prefix+"T","Stage71 Test"]);
     for(let i=0;i<2;i++){
       await write("orders",orders[i],
         "INSERT INTO orders(id,organization_id,accession_number,ordering_branch_id,patient_id,created_by_user_id,updated_at) VALUES(?,?,?,?,?,?,NOW(3))",
