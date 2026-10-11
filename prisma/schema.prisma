@@ -1607,6 +1607,8 @@ model AuditEvent {
   @@index([branchId, occurredAt])
   @@index([actorUserId, occurredAt])
   @@index([entityType, entityId, occurredAt])
+  // Policy-review queue: scoped latest/COUNT, stable keyset and review decisions.
+  @@index([organizationId, branchId, action, entityType, occurredAt, id], map: "audit_events_policy_queue_scan_idx")
   @@map("audit_events")
 }
 
