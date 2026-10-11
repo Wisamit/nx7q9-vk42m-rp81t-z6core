@@ -127,7 +127,11 @@ export default async function PatientHistoryPage({
           },
         },
         select: {
+          organizationId: true,
           orderId: true,
+          order: {
+            select: { id: true, patientId: true, accessionNumber: true, orderingBranchId: true },
+          },
           currentVersion: true,
           versions: {
             orderBy: { version: "desc" },
@@ -174,6 +178,8 @@ export default async function PatientHistoryPage({
               order: {
                 select: {
                   id: true,
+                  organizationId: true,
+                  patientId: true,
                   accessionNumber: true,
                   orderedAt: true,
                   orderingBranchId: true,
