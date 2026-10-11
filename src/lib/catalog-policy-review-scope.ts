@@ -1,7 +1,7 @@
 import type { Prisma } from "../../generated/prisma/client";
-import { BUNDLE_REVIEW_MAX_ROWS } from "./catalog-bundle-review";
-import { clinicalImportTestWhere, type ClinicalImportScope } from "./catalog-clinical-import-scope";
-import { catalogExportTypes, type CatalogExportType } from "./catalog-configuration-export";
+import { BUNDLE_REVIEW_MAX_ROWS } from "./catalog-bundle-review.ts";
+import { clinicalImportTestWhere, type ClinicalImportScope } from "./catalog-clinical-import-scope.ts";
+import { catalogExportTypes, type CatalogExportType } from "./catalog-configuration-export.ts";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 type Identity = { entityType: string; normalizedData: unknown; sourceData: unknown;
