@@ -65,9 +65,9 @@ test("Stage 63: author and independent reviewer both verify entire audit lineage
   const author = readFileSync("src/app/api/catalog/imports/[id]/bundle-drift/route.ts", "utf8");
   const reviewer = readFileSync("src/app/api/catalog/imports/[id]/policy-review/route.ts", "utf8");
   for (const source of [author, reviewer]) {
-    assert.match(source, /verifyPolicyDraftHistory\(/);
+    assert.match(source, /verifyBranchScopedPolicyDraftHistory\(/);
     assert.match(source, /POLICY_DRAFT_HISTORY_LIMIT \+ 1/);
-    assert.match(source, /select: \{ id: true, actorUserId: true, newValues: true \}/);
+    assert.match(source, /select: \{ id: true, actorUserId: true, branchId: true, newValues: true \}/);
     assert.match(source, /isolationLevel: "RepeatableRead"/);
     assert.match(source, /FOR UPDATE/);
   }
