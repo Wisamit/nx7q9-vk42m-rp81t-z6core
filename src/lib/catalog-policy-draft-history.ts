@@ -57,3 +57,29 @@ export function verifyPolicyDraftHistory(input: {
     revisionCount: events.length,
   };
 }
+
+/**
+ * Historical audit events for one batch must be read tenant-wide, not
+ * prefiltered by branch. Otherwise a later wrong-branch event could be
+ * hidden and an older valid revision incorrectly treated as current.
+ * The branch gate applies to EVERY revision before digest/history checks.
+ */
+export function verifyBranchScopedPolicyDraftHistory(input: {
+  events: readonly (DraftEvent & { branchId: string | null })[];
+  organizationId: string; batchId: string; branchId: string;
+  sourceChecksum: string; authorUserId: string;
+}): VerifiedPolicyDraftHistory | null {
+  if (input.events.some(event => event.branchId !== input.branchId)) return null;
+  return verifyPolicyDraftHistory(input);
+}
+
+/**
+ * Read review comments across all branch assignments for the same draft ID
+ * before validating them. A foreign-branch audit must never vanish from
+ * the reviewer's conflict and distinct-reviewer checks.
+ */
+export function policyAuditBranchesMatch(
+  events: readonly { branchId: string | null }[], branchId: string,
+): boolean {
+  return events.every(event => event.branchId === branchId);
+}
