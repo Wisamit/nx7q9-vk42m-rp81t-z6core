@@ -75,7 +75,8 @@ test("Stage 65: older revision reached through cursor remains ineligible even wh
 test("Stage 65: API keyset and client page controls are scoped and fail-closed",()=>{
   const route=readFileSync("src/app/api/catalog/imports/policy-review-queue/route.ts","utf8");
   const ui=readFileSync("src/components/catalog-policy-draft-review-queue.tsx","utf8");
-  assert.match(route,/decodePolicyQueueCursor\(params\.get\("cursor"\)\)/);
+  // Stage 66 additionally binds pagination to reviewer, branch and tenant.
+  assert.match(route,/verifySignedPolicyQueueCursor\(token, signedContext, Date\.now\(\)\)/);
   assert.match(route,/params\.keys\(\)/);
   assert.match(route,/occurredAt: \{ lt: cursor\.occurredAt \}/);
   assert.match(route,/occurredAt: cursor\.occurredAt, id: \{ lt: cursor\.id \}/);
