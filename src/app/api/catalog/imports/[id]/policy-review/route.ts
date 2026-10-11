@@ -3,6 +3,7 @@ import { getCurrentSession, permissionSet, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { BUNDLE_REVIEW_SOURCE } from "@/lib/catalog-bundle-review";
 import { resolveClinicalImportScope } from "@/lib/catalog-clinical-import-scope";
+import { validatePolicyReviewBatchScope } from "@/lib/catalog-policy-review-scope";
 import {
   domainReviewPermissions, nextPolicyReviewRecord, parsePolicyReviewRecord,
   policyDraftFromHistory, validPolicyReviewDisposition, validPolicyReviewDomain,
@@ -124,10 +125,11 @@ async function inspectPolicyReview(request: NextRequest, { params }: Context, in
       : departments;
     if (restrictedDepartments && !matchingDepartments.length)
       return { error: "policy_review_department_revoked", httpStatus: 403 } as const;
+    const grantedBranchIds = branchGrants.filter(item => originalBranches.has(item.branchId))
+      .map(item => item.branchId);
     const scope = resolveClinicalImportScope({
       organizationId, activeBranchId: session.activeBranchId, activeBranch: branch,
-      branchScopes: branchGrants.filter(item => originalBranches.has(item.branchId))
-        .map(item => ({ branchId: item.branchId, branch: { status: "ACTIVE" } })),
+      branchScopes: grantedBranchIds.map(branchId => ({ branchId, branch: { status: "ACTIVE" } })),
       departmentScopes: matchingDepartments,
     });
     if (!scope) return { error: "policy_review_branch_scope_revoked", httpStatus: 403 } as const;
@@ -154,6 +156,13 @@ async function inspectPolicyReview(request: NextRequest, { params }: Context, in
       sourceChecksum: batch.sourceChecksum,
     });
     if (!draft) return { error: "policy_review_draft_integrity_error", httpStatus: 409 } as const;
+    // Preflight and POST recheck every staged identity under the same tenant lock.
+    // A domain reviewer cannot make a procedural statement about out-of-scope masters.
+    const batchScope = await validatePolicyReviewBatchScope(tx, {
+      batchId: batch.id, scope, grantedBranchIds,
+    });
+    if (!batchScope.ok)
+      return { error: batchScope.error, httpStatus: 403 } as const;
     const recorded = await tx.auditEvent.findMany({
       where: { organizationId, branchId: scope.branchId,
         action: "CATALOG_BUNDLE_POLICY_DRAFT_REVIEW_RECORDED",
