@@ -1,0 +1,21 @@
+# Stage 69 — Tenant-wide Cross-Branch Policy Audit Integrity
+
+## Security defect
+Prior Stage 59–68 unsigned signatory policy draft and independent procedural review paths scoped **audit-event lookup itself** to the active branch. For a batch that legitimately belongs to Branch A, a misdirected or unexpected revision or review AuditEvent recorded on Branch B could be hidden from a branch-A reader, falsely making a previous draft appear latest or making an otherwise contested review appear available. The author ledger, independent reviewer GET/POST and queue must all use a consistent fail-closed check rather than discarding contrary evidence.
+
+## Remediation
+- `src/lib/catalog-policy-draft-history.ts`: new `verifyBranchScopedPolicyDraftHistory` and `policyAuditBranchesMatch` guards. They validate **every** organization-wide revision's stored AuditEvent branch, including null, before running the existing 1,000-revision digests, author, sequence and latest-event history verification. A foreign-branch review event causes the review gate to fail.
+- `src/app/api/catalog/imports/[id]/bundle-drift/route.ts`: read ALL organization-bound revisions for the same batch `entityId`, irrespective of stored event branch, subject to the existing `POLICY_DRAFT_HISTORY_LIMIT+1`. Fail with the existing policy-history-integrity error if any mismatched branch. Read the current draft's reviewer decisions **organization-wide** and reject foreign-branch reviewer decisions before author feedback or author draft append.
+- `src/app/api/catalog/imports/[id]/policy-review/route.ts`: identical organization-wide full revision scan and branch guard for independent reviewer preflight and POST. Load procedural reviews across all stored branch assignments and reject inconsistent branch before allowing new review records. Keep the existing organization row lock, repeatable-read isolation, department/branch grants, author-versus-reviewer separation and full staged-batch live-master scope gate.
+- `src/app/api/catalog/imports/policy-review-queue/route.ts`: candidate discovery remains restricted to the current active branch, but verification of its full audit revision lineage and review records examines **all branches in the organization** and suppresses candidates whose stored event branches differ. The signed 20-minute cursor and Stage 67 paired counts remain independently guarded.
+- Update Stage 63–65 regression test fixtures and author/reviewer source checks for explicit stored-branch verification. New `tests/stage-69-policy-cross-branch-audit-integrity.test.ts` and two-connection MariaDB integration test cover a valid draft, wrong-branch revision, wrong-branch procedural review, independent reviewer contamination and foreign-tenant non-disclosure.
+- Add the MariaDB integration test to `.github/workflows/ci.yml`; all existing test/migration/build gates remain.
+
+## Important boundaries
+- A cross-branch AuditEvent for the same organization/batch/draft ID is **considered inconsistent evidence**, even when the embedded proposal digest is valid. It is never silently ignored, moved or deleted; the source remains auditable. Administrative manual investigation may be required to resolve upstream data integrity causes.
+- Only same-organization events are examined; no cross-tenant AuditEvent data should ever be returned to another organization's reviewers.
+- This is a conservative **read-time integrity gate**, not a cryptographically signed audit ledger or a means to repair malicious direct DB manipulation. It does not grant any additional business role or override any source/master scope.
+- No database migration, no clinical or financial master write, no published report or historical test result overwrite, and no price/range activation.
+- Draft and procedural-review flags remain `approved=false`, `signingEnabled=false`, `activated=false`, `liveWrites=false`.
+- Clinical and financial final approver governance, MFA reauthentication, legally relevant signing and UAT still require future user decisions before any irreversible activation.
+- Deployment proceeds only after successful feature-HEAD CI and independently successful exact merged-main SHA CI. The user reports Hostinger deployment separately.

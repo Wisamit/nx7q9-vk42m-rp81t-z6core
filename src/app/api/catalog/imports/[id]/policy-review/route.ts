@@ -4,7 +4,10 @@ import { prisma } from "@/lib/db";
 import { BUNDLE_REVIEW_SOURCE } from "@/lib/catalog-bundle-review";
 import { resolveClinicalImportScope } from "@/lib/catalog-clinical-import-scope";
 import { validatePolicyReviewBatchScope } from "@/lib/catalog-policy-review-scope";
-import { POLICY_DRAFT_HISTORY_LIMIT, verifyPolicyDraftHistory } from "@/lib/catalog-policy-draft-history";
+import {
+  POLICY_DRAFT_HISTORY_LIMIT, verifyBranchScopedPolicyDraftHistory,
+  policyAuditBranchesMatch,
+} from "@/lib/catalog-policy-draft-history";
 import {
   domainReviewPermissions, nextPolicyReviewRecord, parsePolicyReviewRecord,
   validPolicyReviewDisposition, validPolicyReviewDomain,
@@ -144,14 +147,14 @@ async function inspectPolicyReview(request: NextRequest, { params }: Context, in
     if (batch.createdByUserId === session.user.id)
       return { error: "policy_review_independent_reviewer_required", httpStatus: 403 } as const;
     const draftEvents = await tx.auditEvent.findMany({
-      where: { organizationId, branchId: scope.branchId,
+      where: { organizationId,
         entityType: "CatalogImportBatch", entityId: batch.id,
         action: "CATALOG_BUNDLE_SIGNATORY_POLICY_DRAFT_RECORDED" },
       orderBy: [{ occurredAt: "desc" }, { id: "desc" }],
       take: POLICY_DRAFT_HISTORY_LIMIT + 1,
-      select: { id: true, actorUserId: true, newValues: true },
+      select: { id: true, actorUserId: true, branchId: true, newValues: true },
     });
-    const history = verifyPolicyDraftHistory({
+    const history = verifyBranchScopedPolicyDraftHistory({
       events: draftEvents, authorUserId: batch.createdByUserId,
       organizationId, batchId: batch.id, branchId: scope.branchId,
       sourceChecksum: batch.sourceChecksum,
@@ -171,13 +174,13 @@ async function inspectPolicyReview(request: NextRequest, { params }: Context, in
     if (!batchScope.ok)
       return { error: batchScope.error, httpStatus: 403 } as const;
     const recorded = await tx.auditEvent.findMany({
-      where: { organizationId, branchId: scope.branchId,
+      where: { organizationId,
         action: "CATALOG_BUNDLE_POLICY_DRAFT_REVIEW_RECORDED",
         entityType: "CatalogPolicyDraft", entityId: latest.id },
-      select: { actorUserId: true, newValues: true },
+      select: { actorUserId: true, branchId: true, newValues: true },
       take: 3,
     });
-    if (recorded.length > 2)
+    if (recorded.length > 2 || !policyAuditBranchesMatch(recorded, scope.branchId))
       return { error: "policy_review_history_integrity_error", httpStatus: 409 } as const;
     const prior = recorded.map(row => ({
       actorUserId: row.actorUserId,

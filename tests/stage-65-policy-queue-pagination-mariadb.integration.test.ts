@@ -31,9 +31,10 @@ test("Stage 65 MariaDB: 103 audit events paginate without loss, duplicates or ol
   });
   const lookup=async(batchId:string)=>{
     const [rows]=await reader.execute<mysql.RowDataPacket[]>(
-      "SELECT id,actor_user_id,new_values FROM audit_events WHERE organization_id=? AND branch_id=? AND entity_type='CatalogImportBatch' AND action='CATALOG_BUNDLE_SIGNATORY_POLICY_DRAFT_RECORDED' AND entity_id=? ORDER BY occurred_at DESC,id DESC LIMIT 1001",
-      [org,branch,batchId]);
+      "SELECT id,actor_user_id,branch_id,new_values FROM audit_events WHERE organization_id=? AND entity_type='CatalogImportBatch' AND action='CATALOG_BUNDLE_SIGNATORY_POLICY_DRAFT_RECORDED' AND entity_id=? ORDER BY occurred_at DESC,id DESC LIMIT 1001",
+      [org,batchId]);
     return rows.map(row=>({id:String(row.id),actorUserId:row.actor_user_id as string|null,
+      branchId:row.branch_id as string|null,
       newValues:parse(row.new_values)}));
   };
   type QueueRow = mysql.RowDataPacket & {

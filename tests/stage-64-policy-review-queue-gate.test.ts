@@ -20,10 +20,10 @@ const revised = createPolicyDraftLedgerEntry(scope,{
   ...proposal,branchDelegation:"CENTRAL_WITH_BRANCH_SCOPE",
 },2);
 const one = {id:"55000000-0000-4000-8000-000000000055",
-  actorUserId:scope.authorUserId,newValues:current};
+  actorUserId:scope.authorUserId,branchId:scope.branchId,newValues:current};
 const two = {id:"66000000-0000-4000-8000-000000000066",
-  actorUserId:scope.authorUserId,newValues:revised};
-function inspect(events:{id:string;actorUserId:string|null;newValues:unknown}[],
+  actorUserId:scope.authorUserId,branchId:scope.branchId,newValues:revised};
+function inspect(events:{id:string;actorUserId:string|null;branchId:string|null;newValues:unknown}[],
   candidateEventId=two.id) {
   return verifiedPolicyQueueCandidate({...scope,events,candidateEventId});
 }
