@@ -80,8 +80,8 @@ export function CatalogPolicyDraftReviewQueue({ locale }: { locale: "ar" | "en" 
         setEntries([]); setLoaded(false); setCursor(null); setHistory([]);
         setHasMore(false); setNextCursor(null);
         throw new Error(tr(
-          "Policy drafts changed while paging. Refresh from the first page.",
-          "تغيّرت مسودات السياسة أثناء التصفح. حدّث القائمة من الصفحة الأولى.",
+          "Policy drafts or reviewer decisions changed while paging. Refresh from the first page.",
+          "تغيّرت مسودات السياسة أو قرارات المراجعة أثناء التصفح. حدّث القائمة من الصفحة الأولى.",
         ));
       }
       if (!response.ok || result.approval !== false || result.signingEnabled !== false ||
@@ -89,7 +89,7 @@ export function CatalogPolicyDraftReviewQueue({ locale }: { locale: "ar" | "en" 
           !Array.isArray(result.entries) || result.entries.length > 30 ||
           typeof result.hasMore !== "boolean" ||
           (result.hasMore ? (typeof result.nextCursor !== "string" ||
-            result.nextCursor.length > 512 ||
+            result.nextCursor.length > 768 ||
             !/^[A-Za-z0-9_-]+\\.[0-9a-f]{64}$/.test(result.nextCursor))
             : result.nextCursor !== null) ||
           result.entries.some(entry =>

@@ -61,7 +61,8 @@ test("Stage 66 MariaDB: two sessions invalidate a context-bound page after concu
     assert.equal(anchor.id,firstId);
     const now=Date.now();
     const token=issueSignedPolicyQueueCursor({...scope,after:anchor,
-      anchor,expiresAt:now+POLICY_QUEUE_CURSOR_TTL_MS});
+      anchor,draftCount:1,reviewWatermark:{latest:null,count:0},
+      expiresAt:now+POLICY_QUEUE_CURSOR_TTL_MS});
     const current=verifySignedPolicyQueueCursor(token,scope,now);
     assert.ok(current);
     assert.equal(samePolicyQueueAnchor(current.anchor,await top()),true);

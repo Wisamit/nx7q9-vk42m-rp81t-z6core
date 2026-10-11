@@ -7,7 +7,8 @@ import { POLICY_DRAFT_HISTORY_LIMIT } from "@/lib/catalog-policy-draft-history";
 import { catalogBundleSigningSecret } from "@/lib/catalog-bundle-attestation";
 import {
   issueSignedPolicyQueueCursor, verifySignedPolicyQueueCursor,
-  samePolicyQueueAnchor, POLICY_QUEUE_CURSOR_TTL_MS,
+  samePolicyQueueAnchor, samePolicyQueueAuditWatermark,
+  POLICY_QUEUE_CURSOR_TTL_MS,
 } from "@/lib/catalog-policy-queue-signed-cursor";
 import { verifiedPolicyQueueCandidate } from "@/lib/catalog-policy-review-queue-guard";
 import { validatePolicyReviewBatchScope } from "@/lib/catalog-policy-review-scope";
@@ -93,20 +94,46 @@ export async function GET(request: NextRequest) {
     const cursorState = verifySignedPolicyQueueCursor(token, signedContext, Date.now());
     if (cursorState === undefined)
       return { error: "policy_queue_cursor_invalid", httpStatus: 400 } as const;
-    // All actors count for the watermark, including the author of this
-    // reviewer session. Any newer draft requires a fresh first page.
-    const topEvent = await tx.auditEvent.findFirst({
-      where: { organizationId, branchId: scope.branchId,
-        action: "CATALOG_BUNDLE_SIGNATORY_POLICY_DRAFT_RECORDED",
-        entityType: "CatalogImportBatch" },
-      orderBy: [{ occurredAt: "desc" }, { id: "desc" }],
-      select: { id: true, occurredAt: true },
-    });
+    // Both actions participate in queue eligibility. Count PLUS latest is
+    // needed: an append with a backdated occurredAt or a same-ms lower UUID
+    // can leave the previous highest-sort event unchanged.
+    // Include every actor, not just the current reviewer's peers.
+    const draftWhere = {
+      organizationId, branchId: scope.branchId,
+      action: "CATALOG_BUNDLE_SIGNATORY_POLICY_DRAFT_RECORDED",
+      entityType: "CatalogImportBatch",
+    };
+    const reviewWhere = {
+      organizationId, branchId: scope.branchId,
+      action: "CATALOG_BUNDLE_POLICY_DRAFT_REVIEW_RECORDED",
+      entityType: "CatalogPolicyDraft",
+    };
+    const [topEvent, draftCount, topReview, reviewCount] = await Promise.all([
+      tx.auditEvent.findFirst({ where: draftWhere,
+        orderBy: [{ occurredAt: "desc" }, { id: "desc" }],
+        select: { id: true, occurredAt: true },
+      }),
+      tx.auditEvent.count({ where: draftWhere }),
+      tx.auditEvent.findFirst({ where: reviewWhere,
+        orderBy: [{ occurredAt: "desc" }, { id: "desc" }],
+        select: { id: true, occurredAt: true },
+      }),
+      tx.auditEvent.count({ where: reviewWhere }),
+    ]);
     const anchor = topEvent ? {
       id: topEvent.id, occurredAt: topEvent.occurredAt,
     } : null;
-    if (cursorState && !samePolicyQueueAnchor(cursorState.anchor, anchor))
-      return { error: "policy_queue_cursor_stale", httpStatus: 409 } as const;
+    const reviewWatermark = {
+      latest: topReview ? {
+        id: topReview.id, occurredAt: topReview.occurredAt,
+      } : null,
+      count: reviewCount,
+    };
+    if (cursorState && (
+      !samePolicyQueueAnchor(cursorState.anchor, anchor) ||
+      cursorState.draftCount !== draftCount ||
+      !samePolicyQueueAuditWatermark(cursorState.reviewWatermark, reviewWatermark)
+    )) return { error: "policy_queue_cursor_stale", httpStatus: 409 } as const;
     const cursor = cursorState?.after ?? null;
     const domains: PolicyReviewDomain[] = (["CLINICAL", "FINANCIAL"] as const).filter(
       domain => domainReviewPermissions(domain, original) && domainReviewPermissions(domain, live),
@@ -217,7 +244,7 @@ export async function GET(request: NextRequest) {
       ? issueSignedPolicyQueueCursor({
           ...signedContext, after: {
             id: lastScanned.id, occurredAt: lastScanned.occurredAt,
-          }, anchor,
+          }, anchor, draftCount, reviewWatermark,
           expiresAt: cursorState?.expiresAt ?? Date.now() + POLICY_QUEUE_CURSOR_TTL_MS,
         }) : null;
     return { entries, hasMore: Boolean(nextCursor), nextCursor } as const;
