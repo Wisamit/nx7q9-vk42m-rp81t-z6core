@@ -21,13 +21,13 @@ function fixture({
   const itemId = orderId + "-i";
   return {
     currentVersion: version,
-    order: { id: orderId, accessionNumber: orderId, orderedAt: new Date(ordered) },
+    order: { id: orderId, patientId: "PATIENT-1", accessionNumber: orderId, orderedAt: new Date(ordered) },
     versions: [{
       version, status, issuedAt: new Date(issued),
       resultVersionSnapshot: [{
         orderItemId: itemId, resultId: pointerMatches ? resultId : "WRONG", resultVersion: 1,
       }],
-      contentSnapshot: { results: [{
+      contentSnapshot: { order: { id: orderId, accessionNumber: orderId }, patient: { id: "PATIENT-1" }, results: [{
         orderItemId: itemId, resultId, resultVersion: 1,
         testId, testCode: "GLU", testNameEn: "Glucose", testNameAr: "غلوكوز",
         methodId: method, analyzer: analyzer ? { code: analyzer } : null,
