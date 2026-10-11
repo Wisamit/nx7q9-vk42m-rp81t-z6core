@@ -8,6 +8,7 @@ import { getUiLocale, statusLabel, tr } from "@/lib/ui-i18n";
 import { scopedWorklistBranchIds } from "@/lib/clinical-safety";
 import { tatRemainingMinutes, tatWorkState } from "@/lib/tat";
 import { analyzerCanRouteWorkItem } from "@/lib/analyzer-routing";
+import { WORKLIST_PAGE_SIZE, decodeWorklistCursor, worklistAfterWhere, worklistPage, worklistPageHref, type WorklistFilterState } from "@/lib/worklist-pagination";
 import { AnalyzerRoutingControl } from "@/components/analyzer-routing-control";
 import { TatEscalationAcknowledge } from "@/components/tat-escalation-acknowledge";
 
@@ -25,6 +26,7 @@ export default async function WorklistsPage({
     specimenStatus?: string;
     due?: string;
     analyzer?: string;
+    after?: string;
   }>;
 }) {
   const session = await requirePermission("worklists.view");
@@ -39,6 +41,12 @@ export default async function WorklistsPage({
   const specimenStatus = params.specimenStatus?.trim() || "";
   const due = params.due?.trim() || "";
   const analyzer = params.analyzer?.trim() || "";
+  const worklistFilters: WorklistFilterState = {
+    q, status, department: departmentId, branch: branchId, priority,
+    specimenStatus, due, analyzer,
+  };
+  const cursor = decodeWorklistCursor(params.after, worklistFilters);
+  const invalidCursor = Boolean(params.after && !cursor);
   const authorizedBranches = session.user.branchScopes
     .filter(scope => scope.branch.status === "ACTIVE")
     .map(scope => scope.branch);
@@ -62,6 +70,9 @@ export default async function WorklistsPage({
     : (departmentRestricted ? { departmentId: { in: scopedDepartmentIds } } : {});
   const now = new Date();
   const andFilters: Prisma.OrderItemWhereInput[] = [];
+  // Cursors never grant access; all original organization, branch,
+  // department, specimen, priority and SLA filters remain authoritative.
+  if (cursor) andFilters.push(worklistAfterWhere(cursor));
 
   if (q) {
     andFilters.push({
@@ -177,8 +188,8 @@ export default async function WorklistsPage({
           include: { values: true },
         },
       },
-      orderBy: { createdAt: "asc" },
-      take: 300,
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      take: WORKLIST_PAGE_SIZE + 1,
     }),
     prisma.department.findMany({
       where: { organizationId: session.user.organizationId, status: "ACTIVE", ...(departmentRestricted ? { id: { in: scopedDepartmentIds } } : {}) },
@@ -213,6 +224,11 @@ export default async function WorklistsPage({
     }),
   ]);
 
+  const worklistWindow = worklistPage(items, worklistFilters);
+  const visibleItems = worklistWindow.rows;
+  const firstPageHref = worklistPageHref(worklistFilters, null);
+  const nextPageHref = worklistWindow.nextCursor
+    ? worklistPageHref(worklistFilters, worklistWindow.nextCursor) : null;
   const localizedName = (item: { nameEn: string; nameAr?: string | null }) => locale === "ar" ? item.nameAr || item.nameEn : item.nameEn;
   const patientName = (item: { fullNameEn: string; fullNameAr?: string | null }) => locale === "ar" ? item.fullNameAr || item.fullNameEn : item.fullNameEn;
   const priorityLabel = (value: "ROUTINE" | "URGENT" | "STAT") => ({
@@ -239,12 +255,12 @@ export default async function WorklistsPage({
     { timeZone: timezone, year: "numeric", month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" },
   ).format(value);
 
-  const pendingEntry = items.filter(item => !item.results[0]).length;
-  const inProgress = items.filter(item => item.results[0] && !["VERIFIED","RELEASED","AMENDED"].includes(item.results[0].status)).length;
-  const verified = items.filter(item => item.results[0]?.status === "VERIFIED").length;
-  const critical = items.filter(item => item.results[0]?.values.some(value => value.isCritical)).length;
+  const pendingEntry = visibleItems.filter(item => !item.results[0]).length;
+  const inProgress = visibleItems.filter(item => item.results[0] && !["VERIFIED","RELEASED","AMENDED"].includes(item.results[0].status)).length;
+  const verified = visibleItems.filter(item => item.results[0]?.status === "VERIFIED").length;
+  const critical = visibleItems.filter(item => item.results[0]?.values.some(value => value.isCritical)).length;
 
-  const bulkRows = items.flatMap(item => {
+  const bulkRows = visibleItems.flatMap(item => {
     const readySpecimen = item.specimenLinks.map(link => link.specimen).find(specimen =>
       ["RECEIVED","IN_PROCESS"].includes(specimen.status) &&
       (!specimenStatusFilter || specimen.status === specimenStatusFilter) &&
@@ -326,6 +342,10 @@ export default async function WorklistsPage({
       </div>
     </header>
 
+    <p className="muted">{tr(locale,
+      "Worklist counters and bulk entry below apply to this 50-item page. Navigate to review the rest of the authorized queue.",
+      "العدادات وإدخال النتائج الجماعي أدناه يخصان هذه الصفحة المكونة من 50 فحصًا. انتقل بين الصفحات لمراجعة كامل قائمة العمل المصرّح بها."
+    )}</p>
     <section className="workflow-summary">
       <article><span>{tr(locale, "Awaiting entry", "بانتظار الإدخال")}</span><strong>{pendingEntry}</strong><small>{tr(locale, "received tests without result", "فحوصات مستلمة بدون نتيجة")}</small></article>
       <article><span>{tr(locale, "In progress", "قيد العمل")}</span><strong>{inProgress}</strong><small>{tr(locale, "entered / under review", "مدخلة / قيد المراجعة")}</small></article>
@@ -337,7 +357,7 @@ export default async function WorklistsPage({
 
     <section className="table-card">
       <div className="table-toolbar">
-        <div><h2>{tr(locale, "Laboratory Work Queue", "قائمة عمل المختبر")}</h2><span>{items.length} {tr(locale, "item(s)", "عنصر")}</span></div>
+        <div><h2>{tr(locale, "Laboratory Work Queue", "قائمة عمل المختبر")}</h2><span>{visibleItems.length} {tr(locale, "item(s) on this page", "عنصر بهذه الصفحة")}{worklistWindow.hasNext ? " · +" : ""}</span></div>
         <form className="inline-search" action="/worklists" method="get">
           <input name="q" defaultValue={q} placeholder={tr(locale, "Barcode, accession, patient, test…", "باركود، رقم طلب، مريض، فحص…")} />
           <select name="branch" defaultValue={branchId}>
@@ -390,8 +410,8 @@ export default async function WorklistsPage({
         <table>
           <thead><tr><th>{tr(locale, "Accession", "رقم الطلب")}</th><th>{tr(locale, "Patient", "المريض")}</th><th>{tr(locale, "Test", "الفحص")}</th><th>{tr(locale, "Priority", "الأولوية")}</th><th>{tr(locale, "Department", "القسم")}</th><th>{tr(locale, "Specimen", "العينة")}</th><th>{tr(locale, "Location", "الموقع")}</th><th>{tr(locale, "Analyzer", "جهاز التحليل")}</th><th>{tr(locale, "TAT / Due", "زمن الإنجاز / الاستحقاق")}</th><th>{tr(locale, "Result", "النتيجة")}</th><th>{tr(locale, "Validation", "التحقق")}</th><th>{tr(locale, "Flags", "الإشارات")}</th><th></th></tr></thead>
           <tbody>
-            {items.length === 0 ? <tr><td colSpan={13} className="empty-state">{tr(locale, "No received specimens are waiting for laboratory work.", "لا توجد عينات مستلمة بانتظار العمل المخبري.")}</td></tr> :
-              items.map(item => {
+            {visibleItems.length === 0 ? <tr><td colSpan={13} className="empty-state">{tr(locale, "No received specimens are waiting for laboratory work.", "لا توجد عينات مستلمة بانتظار العمل المخبري.")}</td></tr> :
+              visibleItems.map(item => {
                 const readySpecimen = item.specimenLinks.map(link => link.specimen).find(specimen =>
                   ["RECEIVED","IN_PROCESS"].includes(specimen.status) &&
                   (!specimenStatusFilter || specimen.status === specimenStatusFilter) &&
@@ -491,6 +511,15 @@ export default async function WorklistsPage({
           </tbody>
         </table>
       </div>
+      {invalidCursor && <p className="muted" role="status">{tr(locale,
+        "Invalid or outdated worklist page marker. Showing the first page.",
+        "مؤشر صفحة قائمة العمل غير صالح أو قديم؛ تُعرض الصفحة الأولى."
+      )}</p>}
+      <nav className="result-actions no-print" aria-label={tr(locale, "Worklist pagination", "صفحات قائمة العمل")}>
+        <span>{tr(locale, "Up to 50 results per page · ordered by registration time", "حتى 50 فحصًا بالصفحة · مرتبة بحسب وقت التسجيل")}</span>
+        {params.after && <Link className="secondary-link" href={firstPageHref}>{tr(locale, "First page", "الصفحة الأولى")}</Link>}
+        {worklistWindow.hasNext && nextPageHref && <Link className="secondary-link" rel="next" href={nextPageHref}>{tr(locale, "Next 50 tests", "الـ50 فحصًا التالية")}</Link>}
+      </nav>
     </section>
   </main>;
 }
