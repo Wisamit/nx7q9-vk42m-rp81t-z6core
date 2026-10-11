@@ -155,7 +155,8 @@ test("history uses current report revision evidence and branch-scoped patient at
   assert.ok(page.includes("currentReportResultPointers(releaseEvidence)"));
   assert.ok(page.includes("resultMatchesCurrentReportPointer(result, currentResultPointers)"));
   assert.ok(page.includes("id: { in: [...currentResultIds] }"));
-  assert.ok(page.includes('select: { version: true, status: true, resultVersionSnapshot: true }'));
+  assert.ok(page.includes('select: { version: true, status: true, resultVersionSnapshot: true, contentSnapshot: true }'));
+  assert.ok(page.includes('resultMatchesPublishedHistory(result, publishedEvidence)'));
   const attachments = readFileSync(new URL("../src/lib/patient-history-attachments.ts", import.meta.url), "utf8");
   assert.ok(attachments.includes("a.target_type = 'PATIENT' AND a.target_id IN ("));
   assert.ok(attachments.includes("a.branch_id IN ("));
