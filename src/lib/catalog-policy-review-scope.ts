@@ -7,6 +7,9 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 type Identity = { entityType: string; normalizedData: unknown; sourceData: unknown;
   status: string; importedEntityId: string | null };
 type TypeIds = Map<CatalogExportType, string[]>;
+type ScopedIdentities = { ok: true; ids: TypeIds; refs: {
+  tests: Set<string>; units: Set<string>; components: Set<string>; lists: Set<string>;
+} };
 
 export type PolicyReviewScopeCheck =
   | { ok: true }
@@ -23,9 +26,7 @@ function object(value: unknown): Record<string, unknown> | null {
  */
 export function policyReviewIdentityScope(
   rows: readonly Identity[], grantedBranches: ReadonlySet<string>,
-): { ok: true; ids: TypeIds; refs: {
-  tests: Set<string>; units: Set<string>; components: Set<string>; lists: Set<string>;
-} } | PolicyReviewScopeCheck {
+): ScopedIdentities | { ok: false; error: "policy_review_batch_scope_changed" | "policy_review_source_integrity_error" } {
   if (!rows.length || rows.length > BUNDLE_REVIEW_MAX_ROWS ||
       rows.some(row => row.status !== "WARNING" || row.importedEntityId !== null))
     return { ok: false, error: "policy_review_batch_scope_changed" };
