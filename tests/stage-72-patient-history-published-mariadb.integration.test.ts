@@ -100,7 +100,7 @@ test("Stage 72 MariaDB: only authorized unchanged published result values surviv
       "INSERT INTO laboratory_results(id,organization_id,order_item_id,performing_branch_id,version,status,entered_by_user_id,updated_at) VALUES(?,?,?,?,1,'RELEASED',?,NOW(3))",
       [result,org,item,branch,actor]);
     await write("laboratory_result_values",valueId,
-      "INSERT INTO laboratory_result_values(id,result_id,component_code_snapshot,component_name_en_snapshot,result_type_snapshot,display_value,unit_snapshot,flag,is_critical,reference_low_snapshot,reference_high_snapshot) VALUES (?,?,'HB','Hemoglobin','NUMERIC','13.5','g/dL','NORMAL',0,12,16)",
+      "INSERT INTO laboratory_result_values(id,result_id,component_code_snapshot,component_name_en_snapshot,result_type_snapshot,display_value,unit_snapshot,flag,is_critical,reference_low_snapshot,reference_high_snapshot,updated_at) VALUES (?,?,'HB','Hemoglobin','NUMERIC','13.5','g/dL','NORMAL',0,12,16,NOW(3))",
       [valueId,result]);
     await write("diagnostic_reports",reportId,
       "INSERT INTO diagnostic_reports(id,organization_id,order_id,current_version,updated_at) VALUES(?,?,?,1,NOW(3))",
