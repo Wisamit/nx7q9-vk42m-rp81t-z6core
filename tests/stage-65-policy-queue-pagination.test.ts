@@ -65,7 +65,7 @@ test("Stage 65: older revision reached through cursor remains ineligible even wh
     sourceChecksum:"b".repeat(64),authorUserId:id(14)};
   const proposal=Object.fromEntries(policyKeys.map(k=>[k,"UNDECIDED"])) as CatalogPolicyProposal;
   const rows=[2,1].map(revision=>({
-    id:id(revision),actorUserId:scope.authorUserId,
+    id:id(revision),actorUserId:scope.authorUserId,branchId:scope.branchId,
     newValues:createPolicyDraftLedgerEntry(scope,proposal,revision),
   }));
   assert.equal(verifiedPolicyQueueCandidate({...scope,events:rows,candidateEventId:id(1)}),null);
