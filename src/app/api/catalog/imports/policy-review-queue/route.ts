@@ -11,6 +11,7 @@ import {
   POLICY_QUEUE_CURSOR_TTL_MS,
 } from "@/lib/catalog-policy-queue-signed-cursor";
 import { verifiedPolicyQueueCandidate } from "@/lib/catalog-policy-review-queue-guard";
+import { planPolicyQueueDecisionFetch } from "@/lib/catalog-policy-queue-decision-plan";
 import { validatePolicyReviewBatchScope } from "@/lib/catalog-policy-review-scope";
 import {
   POLICY_QUEUE_ENTRY_LIMIT, POLICY_QUEUE_EVENT_WINDOW,
@@ -168,15 +169,35 @@ export async function GET(request: NextRequest) {
       select: { id: true, sourceChecksum: true, createdByUserId: true },
     });
     const draftIds = [...latestByBatch.values()].map(event => event.id);
-    const decisions = draftIds.length ? await tx.auditEvent.findMany({
-      where: { organizationId,
-        action: "CATALOG_BUNDLE_POLICY_DRAFT_REVIEW_RECORDED",
-        entityType: "CatalogPolicyDraft", entityId: { in: draftIds } },
-      select: { entityId: true, actorUserId: true, branchId: true, newValues: true },
-      take: 201,
+    // Count by draft id *across all branches in the organization*. A single
+    // invalid draft with >2 decisions cannot poison unrelated queue entries.
+    const decisionWhere = { organizationId,
+      action: "CATALOG_BUNDLE_POLICY_DRAFT_REVIEW_RECORDED",
+      entityType: "CatalogPolicyDraft",
+    };
+    const decisionCounts = draftIds.length ? await tx.auditEvent.groupBy({
+      by: ["entityId"],
+      where: { ...decisionWhere, entityId: { in: draftIds } },
+      _count: { _all: true },
     }) : [];
-    if (decisions.length > 200)
-      return { error: "policy_queue_decision_limit_exceeded", httpStatus: 409 } as const;
+    const decisionPlan = planPolicyQueueDecisionFetch(draftIds, decisionCounts);
+    if (!decisionPlan)
+      return { error: "policy_queue_decision_integrity_error", httpStatus: 409 } as const;
+    const decisions = decisionPlan.safeDraftIds.length ? await tx.auditEvent.findMany({
+      where: { ...decisionWhere, entityId: { in: decisionPlan.safeDraftIds } },
+      select: { entityId: true, actorUserId: true, branchId: true, newValues: true },
+      take: decisionPlan.maxRows,
+    }) : [];
+    if (decisions.length >= decisionPlan.maxRows && decisionPlan.safeDraftIds.length)
+      return { error: "policy_queue_decision_snapshot_inconsistent", httpStatus: 409 } as const;
+    const decisionByDraft = new Map<string, typeof decisions>();
+    for (const decision of decisions) {
+      if (!decisionPlan.safeDraftIds.includes(decision.entityId))
+        return { error: "policy_queue_decision_snapshot_inconsistent", httpStatus: 409 } as const;
+      const bucket = decisionByDraft.get(decision.entityId) ?? [];
+      bucket.push(decision);
+      decisionByDraft.set(decision.entityId, bucket);
+    }
     const entries: Array<{
       batchId: string; draftEventId: string; revision: number;
       recordedAt: string; domains: PolicyReviewDomain[];
@@ -204,7 +225,10 @@ export async function GET(request: NextRequest) {
       });
       if (!verified?.draft) continue;
       const draft = verified.draft;
-      const decided = decisions.filter(d => d.entityId === event.id);
+      if (decisionPlan.corruptDraftIds.has(event.id)) continue;
+      const decided = decisionByDraft.get(event.id) ?? [];
+      if (decided.length !== (decisionPlan.expectedCounts.get(event.id) ?? 0))
+        continue;
       if (decided.some(d => d.branchId !== scope.branchId)) continue;
       const parsed = decided.map(d => ({
         actorUserId: d.actorUserId, review: parsePolicyReviewRecord(d.newValues, {

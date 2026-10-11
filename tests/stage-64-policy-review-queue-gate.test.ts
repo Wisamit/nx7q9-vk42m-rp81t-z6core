@@ -70,7 +70,9 @@ test("Stage 64: queue enforces current session intersected scopes, whole-batch v
   assert.ok(route.indexOf("validatePolicyReviewBatchScope(tx,") <
     route.indexOf("entries.push({"));
   assert.match(route,/createdByUserId: \{ not: session\.user\.id \}/);
-  assert.match(route,/decision_limit_exceeded/);
+  assert.match(route,/planPolicyQueueDecisionFetch\(draftIds, decisionCounts\)/);
+  assert.match(route,/policy_queue_decision_snapshot_inconsistent/);
+  assert.doesNotMatch(route,/policy_queue_decision_limit_exceeded/);
   assert.match(route,/approval: false, signingEnabled: false/);
   assert.doesNotMatch(route, /tx\.(?:labTest|priceList|priceListItem|referenceInterval|catalogImportRow)\.(?:create|update|upsert|delete)/);
 });
