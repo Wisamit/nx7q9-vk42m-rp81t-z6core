@@ -49,6 +49,10 @@ const labels: Record<CatalogPolicyKey, [string, string]> = {
 export function CatalogPolicyDraftReviewQueue({ locale }: { locale: "ar" | "en" }) {
   const tr = (en: string, ar: string) => locale === "ar" ? ar : en;
   const [entries, setEntries] = useState<Entry[]>([]);
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [history, setHistory] = useState<Array<string | null>>([]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(false);
   const [selected, setSelected] = useState<{ entry: Entry; domain: Domain; detail: Detail } | null>(null);
   const [disposition, setDisposition] = useState<Disposition>("RETURN_FOR_REVISION");
   const [reason, setReason] = useState("CLINICAL_AUTHORITY_UNCLEAR");
@@ -56,22 +60,39 @@ export function CatalogPolicyDraftReviewQueue({ locale }: { locale: "ar" | "en" 
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  async function refresh() {
+  async function refresh(pageCursor: string | null = null,
+    previousCursors: Array<string | null> = []) {
     if (busy) return;
     setBusy(true); setError(""); setNotice(""); setSelected(null);
     try {
-      const response = await fetch("/api/catalog/imports/policy-review-queue", {
+      const url = "/api/catalog/imports/policy-review-queue" +
+        (pageCursor ? "?cursor=" + encodeURIComponent(pageCursor) : "");
+      const response = await fetch(url, {
         credentials: "same-origin", cache: "no-store",
       });
       const result = await response.json() as {
         entries?: Entry[]; error?: string; approval?: boolean; signingEnabled?: boolean;
-        activation?: boolean; liveWrites?: boolean;
+        activation?: boolean; liveWrites?: boolean; hasMore?: boolean;
+        nextCursor?: string | null;
       };
       if (!response.ok || result.approval !== false || result.signingEnabled !== false ||
           result.activation !== false || result.liveWrites !== false ||
-          !Array.isArray(result.entries) || result.entries.length > 30)
+          !Array.isArray(result.entries) || result.entries.length > 30 ||
+          typeof result.hasMore !== "boolean" ||
+          (result.hasMore ? (typeof result.nextCursor !== "string" ||
+            result.nextCursor.length > 256 || !/^[A-Za-z0-9_-]+$/.test(result.nextCursor))
+            : result.nextCursor !== null) ||
+          result.entries.some(entry =>
+            typeof entry.batchId !== "string" || typeof entry.draftEventId !== "string" ||
+            !Number.isSafeInteger(entry.revision) || entry.revision < 1 ||
+            !Array.isArray(entry.domains) || entry.domains.length < 1 ||
+            entry.domains.some(domain => domain !== "CLINICAL" && domain !== "FINANCIAL")))
         throw new Error(result.error || "policy_review_queue_unavailable");
       setEntries(result.entries);
+      setHasMore(result.hasMore);
+      setNextCursor(result.nextCursor ?? null);
+      setCursor(pageCursor);
+      setHistory(previousCursors);
       setLoaded(true);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "policy_review_queue_unavailable");
@@ -154,8 +175,11 @@ export function CatalogPolicyDraftReviewQueue({ locale }: { locale: "ar" | "en" 
     {error && <p role="alert">{tr("Review unavailable: ", "تعذرت المراجعة: ")}{error}</p>}
     {notice && <p role="status">{notice}</p>}
     {loaded && (entries.length === 0
-      ? <p className="muted">{tr("No eligible current policy drafts in this branch.",
-        "لا توجد مسودات سياسة حالية قابلة للمراجعة ضمن هذا الفرع.")}</p>
+      ? <p className="muted">{hasMore
+        ? tr("No eligible drafts on this page; continue to older records.",
+          "لا توجد مسودات قابلة للمراجعة في هذه الصفحة؛ تابع إلى السجلات الأقدم.")
+        : tr("No eligible current policy drafts on this page.",
+          "لا توجد مسودات سياسة حالية قابلة للمراجعة في هذه الصفحة.")}</p>
       : <div className="table-wrap"><table>
         <thead><tr><th>{tr("Revision", "النسخة")}</th>
           <th>{tr("Domain review", "المراجعة المتخصصة")}</th></tr></thead>
@@ -168,6 +192,19 @@ export function CatalogPolicyDraftReviewQueue({ locale }: { locale: "ar" | "en" 
             </button>)}</td>
         </tr>)}</tbody>
       </table></div>)}
+    {loaded && <div className="review-actions">
+      <span className="muted">{tr("Page", "الصفحة")} {history.length + 1}</span>
+      <button type="button" className="secondary-button"
+        disabled={busy || history.length === 0}
+        onClick={() => void refresh(history[history.length - 1], history.slice(0, -1))}>
+        {tr("Previous", "السابق")}
+      </button>
+      <button type="button" className="secondary-button"
+        disabled={busy || !hasMore || !nextCursor}
+        onClick={() => { if (nextCursor) void refresh(nextCursor, [...history, cursor]); }}>
+        {tr("Next", "التالي")}
+      </button>
+    </div>}
     {selected && <div className="table-card">
       <h3>{tr("Draft proposal review — no signatory authority", "مراجعة المسودة — دون صلاحية توقيع")}</h3>
       <p>{tr("Revision", "النسخة")}: {selected.detail.revision} · {
