@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getCurrentSession, permissionSet } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { resolveClinicalImportScope } from "@/lib/catalog-clinical-import-scope";
@@ -7,6 +7,10 @@ import { POLICY_DRAFT_HISTORY_LIMIT } from "@/lib/catalog-policy-draft-history";
 import { verifiedPolicyQueueCandidate } from "@/lib/catalog-policy-review-queue-guard";
 import { validatePolicyReviewBatchScope } from "@/lib/catalog-policy-review-scope";
 import {
+  decodePolicyQueueCursor, POLICY_QUEUE_ENTRY_LIMIT, POLICY_QUEUE_EVENT_WINDOW,
+  policyQueueNextPage,
+} from "@/lib/catalog-policy-queue-pagination";
+import {
   domainReviewPermissions, parsePolicyReviewRecord,
   type PolicyReviewDomain,
 } from "@/lib/catalog-policy-draft-review";
@@ -14,12 +18,19 @@ import {
 export const dynamic = "force-dynamic";
 
 /** Latest active-branch proposals only. No draft contents or actor identities. */
-export async function GET() {
+export async function GET(request: NextRequest) {
   const session = await getCurrentSession();
   if (!session) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const original = permissionSet(session);
   if (!original.has("catalog.manage"))
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  const params = request.nextUrl.searchParams;
+  if ([...params.keys()].some(key => key !== "cursor") ||
+      [...params.keys()].filter(key => key === "cursor").length > 1)
+    return NextResponse.json({ error: "policy_queue_cursor_invalid", }, { status: 400 });
+  const cursor = decodePolicyQueueCursor(params.get("cursor"));
+  if (cursor === undefined)
+    return NextResponse.json({ error: "policy_queue_cursor_invalid" }, { status: 400 });
   const organizationId = session.user.organizationId;
   const result = await prisma.$transaction(async tx => {
     const locked = await tx.$queryRaw<Array<{ id: string }>>`
@@ -73,20 +84,26 @@ export async function GET() {
     const domains: PolicyReviewDomain[] = (["CLINICAL", "FINANCIAL"] as const).filter(
       domain => domainReviewPermissions(domain, original) && domainReviewPermissions(domain, live),
     );
-    if (!domains.length) return { entries: [], hasMore: false } as const;
+    if (!domains.length) return { entries: [], hasMore: false, nextCursor: null } as const;
     const latestEvents = await tx.auditEvent.findMany({
       where: { organizationId, branchId: scope.branchId,
         action: "CATALOG_BUNDLE_SIGNATORY_POLICY_DRAFT_RECORDED",
-        entityType: "CatalogImportBatch", actorUserId: { not: session.user.id } },
+        entityType: "CatalogImportBatch", actorUserId: { not: session.user.id },
+        ...(cursor ? { OR: [
+          { occurredAt: { lt: cursor.occurredAt } },
+          { occurredAt: cursor.occurredAt, id: { lt: cursor.id } },
+        ] } : {}),
+      },
       orderBy: [{ occurredAt: "desc" }, { id: "desc" }],
-      take: 101, select: {
+      take: POLICY_QUEUE_EVENT_WINDOW + 1, select: {
         id: true, entityId: true, actorUserId: true, newValues: true, occurredAt: true,
       },
     });
-    if (latestEvents.length > 100)
-      return { error: "policy_queue_history_limit_exceeded", httpStatus: 409 } as const;
-    const latestByBatch = new Map<string, typeof latestEvents[number]>();
-    for (const event of latestEvents)
+    // One bounded candidate window per request. Overflow is a page, not a
+    // terminal error; prior draft revisions never become visible as current.
+    const windowEvents = latestEvents.slice(0, POLICY_QUEUE_EVENT_WINDOW);
+    const latestByBatch = new Map<string, typeof windowEvents[number]>();
+    for (const event of windowEvents)
       if (!latestByBatch.has(event.entityId)) latestByBatch.set(event.entityId, event);
     const batches = await tx.catalogImportBatch.findMany({
       where: {
@@ -110,9 +127,12 @@ export async function GET() {
       batchId: string; draftEventId: string; revision: number;
       recordedAt: string; domains: PolicyReviewDomain[];
     }> = [];
-    for (const batch of batches) {
-      const event = latestByBatch.get(batch.id);
-      if (!event || !batch.sourceChecksum || event.actorUserId !== batch.createdByUserId) continue;
+    const batchById = new Map(batches.map(batch => [batch.id, batch]));
+    let lastScanned: (typeof windowEvents)[number] | null = null;
+    for (const event of latestByBatch.values()) {
+      lastScanned = event;
+      const batch = batchById.get(event.entityId);
+      if (!batch || !batch.sourceChecksum || event.actorUserId !== batch.createdByUserId) continue;
       // Do not list a seemingly valid latest revision if another actor,
       // missing revision, or corrupted prior AuditEvent poisons its chain.
       const allRevisions = await tx.auditEvent.findMany({
@@ -154,9 +174,17 @@ export async function GET() {
         batchId: batch.id, draftEventId: event.id, revision: draft.revision,
         recordedAt: event.occurredAt.toISOString(), domains: eligible,
       });
-      if (entries.length >= 30) break;
+      if (entries.length >= POLICY_QUEUE_ENTRY_LIMIT) break;
     }
-    return { entries, hasMore: latestEvents.length === 100 } as const;
+    // If the page contains no eligible batches, advance past the full
+    // scanned window so hidden/corrupt events cannot trap pagination.
+    if (entries.length < POLICY_QUEUE_ENTRY_LIMIT && windowEvents.length)
+      lastScanned = windowEvents[windowEvents.length - 1];
+    const page = policyQueueNextPage({
+      window: windowEvents, lastScanned,
+      overflow: latestEvents.length > POLICY_QUEUE_EVENT_WINDOW,
+    });
+    return { entries, ...page } as const;
   }, { isolationLevel: "RepeatableRead", timeout: 30000 });
   if ("error" in result)
     return NextResponse.json({ error: result.error }, {
