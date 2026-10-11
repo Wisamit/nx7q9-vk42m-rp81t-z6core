@@ -52,7 +52,9 @@ test("Stage 75 MariaDB: extended window finds older authenticated reports withou
     await write("diagnostic_reports",reportId,
       "INSERT INTO diagnostic_reports(id,organization_id,order_id,current_version,updated_at) VALUES(?,?,?,1,NOW(3))",
       [reportId,tenant,orderId]);
-    const frozen={order:{id:orderId},results:[{
+    const frozen={
+      organization:{id:tenant},branch:{id:orderedAtBranch},patient:{id:patientId},
+      order:{id:orderId,accessionNumber:prefix+code},results:[{
       resultId,orderItemId:itemId,resultVersion:1,testId,methodId:null,analyzer:null,
       performingBranch:{id:performedBranch},
       values:[{componentId:null,componentCode:"HB",componentNameEn:"Hemoglobin",
@@ -67,7 +69,8 @@ test("Stage 75 MariaDB: extended window finds older authenticated reports withou
   }
   async function reportEvidence(tenant:string,person:string,allowedBranch:string,take:number){
     const [rows]=await reader.execute<mysql.RowDataPacket[]>(
-      "SELECT o.id AS order_id,d.current_version,v.version,v.status,v.content_snapshot,v.result_version_snapshot "+
+      "SELECT o.id AS order_id,o.patient_id,o.organization_id,o.accession_number,o.ordering_branch_id,"+
+      "d.current_version,v.version,v.status,v.content_snapshot,v.result_version_snapshot "+
       "FROM diagnostic_reports d JOIN orders o ON o.id=d.order_id "+
       "JOIN diagnostic_report_versions v ON v.report_id=d.id AND v.version=d.current_version "+
       "WHERE d.organization_id=? AND o.organization_id=? AND o.patient_id=? AND "+
@@ -77,7 +80,12 @@ test("Stage 75 MariaDB: extended window finds older authenticated reports withou
       "AND lr.performing_branch_id=? AND lr.status IN ('RELEASED','AMENDED'))) "+
       "ORDER BY o.ordered_at DESC,d.id DESC LIMIT ?",
       [tenant,tenant,person,allowedBranch,tenant,allowedBranch,take]);
-    return rows.map(row=>({orderId:String(row.order_id),currentVersion:Number(row.current_version),
+    return rows.map(row=>({
+      organizationId:String(row.organization_id),orderId:String(row.order_id),
+      order:{id:String(row.order_id),patientId:String(row.patient_id),
+        accessionNumber:String(row.accession_number),
+        orderingBranchId:String(row.ordering_branch_id)},
+      currentVersion:Number(row.current_version),
       versions:[{version:Number(row.version),status:String(row.status),
         contentSnapshot:decode(row.content_snapshot),resultVersionSnapshot:decode(row.result_version_snapshot)}]}));
   }
@@ -86,7 +94,8 @@ test("Stage 75 MariaDB: extended window finds older authenticated reports withou
     if(!pointers.size)return [];
     const [rows]=await reader.execute<mysql.RowDataPacket[]>(
       "SELECT lr.id,lr.order_item_id,lr.version,lr.performing_branch_id,lr.method_id,"+
-      "lr.analyzer_code_snapshot,oi.order_id,oi.test_id,v.component_id,v.component_code_snapshot,"+
+      "lr.analyzer_code_snapshot,oi.order_id,oi.test_id,o.patient_id,o.organization_id,"+
+      "o.accession_number,o.ordering_branch_id,v.component_id,v.component_code_snapshot,"+
       "v.component_name_en_snapshot,v.component_name_ar_snapshot,v.report_name_en_snapshot,"+
       "v.report_name_ar_snapshot,v.display_value,v.value_numeric,v.unit_snapshot,v.flag,v.is_critical,"+
       "v.reference_low_snapshot,v.reference_high_snapshot,v.reference_text_en_snapshot,v.reference_text_ar_snapshot "+
@@ -101,7 +110,10 @@ test("Stage 75 MariaDB: extended window finds older authenticated reports withou
         id:String(row.id),orderItemId:String(row.order_item_id),version:Number(row.version),
         performingBranchId:String(row.performing_branch_id),methodId:row.method_id,
         analyzerCodeSnapshot:row.analyzer_code_snapshot,
-        orderItem:{testId:String(row.test_id),order:{id:String(row.order_id)}},
+        orderItem:{testId:String(row.test_id),order:{
+          id:String(row.order_id),organizationId:String(row.organization_id),
+          patientId:String(row.patient_id),accessionNumber:String(row.accession_number),
+          orderingBranchId:String(row.ordering_branch_id)}},
         values:[{componentId:row.component_id,componentCodeSnapshot:String(row.component_code_snapshot),
           componentNameEnSnapshot:String(row.component_name_en_snapshot),
           componentNameArSnapshot:row.component_name_ar_snapshot,
