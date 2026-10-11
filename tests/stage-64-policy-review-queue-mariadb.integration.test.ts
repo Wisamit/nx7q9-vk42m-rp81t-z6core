@@ -30,12 +30,13 @@ test("Stage 64 MariaDB: queue candidate is hidden on rogue audit and live branch
   const json=(value:unknown)=>typeof value==="string"?JSON.parse(value):value;
   const history=async(candidateEventId:string)=>{
     const [rows]=await reader.execute<mysql.RowDataPacket[]>(
-      "SELECT id,actor_user_id,new_values FROM audit_events WHERE organization_id=? AND branch_id=? AND action='CATALOG_BUNDLE_SIGNATORY_POLICY_DRAFT_RECORDED' AND entity_type='CatalogImportBatch' AND entity_id=? ORDER BY occurred_at DESC,id DESC LIMIT 1001",
-      [org,branchA,batch]);
+      "SELECT id,actor_user_id,branch_id,new_values FROM audit_events WHERE organization_id=? AND action='CATALOG_BUNDLE_SIGNATORY_POLICY_DRAFT_RECORDED' AND entity_type='CatalogImportBatch' AND entity_id=? ORDER BY occurred_at DESC,id DESC LIMIT 1001",
+      [org,batch]);
     return verifiedPolicyQueueCandidate({
       ...policyScope,authorUserId:author,candidateEventId,
       events:rows.map(row=>({
         id:String(row.id),actorUserId:row.actor_user_id as string|null,
+        branchId:row.branch_id as string|null,
         newValues:json(row.new_values),
       })),
     });
