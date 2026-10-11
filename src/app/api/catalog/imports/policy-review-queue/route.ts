@@ -4,10 +4,15 @@ import { prisma } from "@/lib/db";
 import { resolveClinicalImportScope } from "@/lib/catalog-clinical-import-scope";
 import { BUNDLE_REVIEW_SOURCE } from "@/lib/catalog-bundle-review";
 import { POLICY_DRAFT_HISTORY_LIMIT } from "@/lib/catalog-policy-draft-history";
+import { catalogBundleSigningSecret } from "@/lib/catalog-bundle-attestation";
+import {
+  issueSignedPolicyQueueCursor, verifySignedPolicyQueueCursor,
+  samePolicyQueueAnchor, POLICY_QUEUE_CURSOR_TTL_MS,
+} from "@/lib/catalog-policy-queue-signed-cursor";
 import { verifiedPolicyQueueCandidate } from "@/lib/catalog-policy-review-queue-guard";
 import { validatePolicyReviewBatchScope } from "@/lib/catalog-policy-review-scope";
 import {
-  decodePolicyQueueCursor, POLICY_QUEUE_ENTRY_LIMIT, POLICY_QUEUE_EVENT_WINDOW,
+  POLICY_QUEUE_ENTRY_LIMIT, POLICY_QUEUE_EVENT_WINDOW,
   policyQueueNextPage,
 } from "@/lib/catalog-policy-queue-pagination";
 import {
@@ -28,9 +33,9 @@ export async function GET(request: NextRequest) {
   if ([...params.keys()].some(key => key !== "cursor") ||
       [...params.keys()].filter(key => key === "cursor").length > 1)
     return NextResponse.json({ error: "policy_queue_cursor_invalid", }, { status: 400 });
-  const cursor = decodePolicyQueueCursor(params.get("cursor"));
-  if (cursor === undefined)
-    return NextResponse.json({ error: "policy_queue_cursor_invalid" }, { status: 400 });
+  const secret = catalogBundleSigningSecret(process.env);
+  if (!secret) return NextResponse.json({ error: "policy_queue_key_unavailable" }, { status: 503 });
+  const token = params.get("cursor");
   const organizationId = session.user.organizationId;
   const result = await prisma.$transaction(async tx => {
     const locked = await tx.$queryRaw<Array<{ id: string }>>`
@@ -81,6 +86,28 @@ export async function GET(request: NextRequest) {
       departmentScopes: departmentsNow,
     });
     if (!scope) return { error: "policy_queue_branch_revoked", httpStatus: 403 } as const;
+    const signedContext = {
+      secret, organizationId, branchId: scope.branchId,
+      reviewerUserId: session.user.id,
+    };
+    const cursorState = verifySignedPolicyQueueCursor(token, signedContext, Date.now());
+    if (cursorState === undefined)
+      return { error: "policy_queue_cursor_invalid", httpStatus: 400 } as const;
+    // All actors count for the watermark, including the author of this
+    // reviewer session. Any newer draft requires a fresh first page.
+    const topEvent = await tx.auditEvent.findFirst({
+      where: { organizationId, branchId: scope.branchId,
+        action: "CATALOG_BUNDLE_SIGNATORY_POLICY_DRAFT_RECORDED",
+        entityType: "CatalogImportBatch" },
+      orderBy: [{ occurredAt: "desc" }, { id: "desc" }],
+      select: { id: true, occurredAt: true },
+    });
+    const anchor = topEvent ? {
+      id: topEvent.id, occurredAt: topEvent.occurredAt,
+    } : null;
+    if (cursorState && !samePolicyQueueAnchor(cursorState.anchor, anchor))
+      return { error: "policy_queue_cursor_stale", httpStatus: 409 } as const;
+    const cursor = cursorState?.after ?? null;
     const domains: PolicyReviewDomain[] = (["CLINICAL", "FINANCIAL"] as const).filter(
       domain => domainReviewPermissions(domain, original) && domainReviewPermissions(domain, live),
     );
@@ -184,7 +211,16 @@ export async function GET(request: NextRequest) {
       window: windowEvents, lastScanned,
       overflow: latestEvents.length > POLICY_QUEUE_EVENT_WINDOW,
     });
-    return { entries, ...page } as const;
+    // The continuation is signed for the *current* reviewer, organization
+    // and branch. Never return a raw positional cursor to the browser.
+    const nextCursor = page.hasMore && lastScanned && anchor
+      ? issueSignedPolicyQueueCursor({
+          ...signedContext, after: {
+            id: lastScanned.id, occurredAt: lastScanned.occurredAt,
+          }, anchor,
+          expiresAt: cursorState?.expiresAt ?? Date.now() + POLICY_QUEUE_CURSOR_TTL_MS,
+        }) : null;
+    return { entries, hasMore: Boolean(nextCursor), nextCursor } as const;
   }, { isolationLevel: "RepeatableRead", timeout: 30000 });
   if ("error" in result)
     return NextResponse.json({ error: result.error }, {

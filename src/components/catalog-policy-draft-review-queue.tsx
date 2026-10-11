@@ -75,12 +75,22 @@ export function CatalogPolicyDraftReviewQueue({ locale }: { locale: "ar" | "en" 
         activation?: boolean; liveWrites?: boolean; hasMore?: boolean;
         nextCursor?: string | null;
       };
+      if (response.status === 409 && result.error === "policy_queue_cursor_stale") {
+        // Do not keep a stale page of previously eligible reviewers visible.
+        setEntries([]); setLoaded(false); setCursor(null); setHistory([]);
+        setHasMore(false); setNextCursor(null);
+        throw new Error(tr(
+          "Policy drafts changed while paging. Refresh from the first page.",
+          "تغيّرت مسودات السياسة أثناء التصفح. حدّث القائمة من الصفحة الأولى.",
+        ));
+      }
       if (!response.ok || result.approval !== false || result.signingEnabled !== false ||
           result.activation !== false || result.liveWrites !== false ||
           !Array.isArray(result.entries) || result.entries.length > 30 ||
           typeof result.hasMore !== "boolean" ||
           (result.hasMore ? (typeof result.nextCursor !== "string" ||
-            result.nextCursor.length > 256 || !/^[A-Za-z0-9_-]+$/.test(result.nextCursor))
+            result.nextCursor.length > 512 ||
+            !/^[A-Za-z0-9_-]+\\.[0-9a-f]{64}$/.test(result.nextCursor))
             : result.nextCursor !== null) ||
           result.entries.some(entry =>
             typeof entry.batchId !== "string" || typeof entry.draftEventId !== "string" ||
