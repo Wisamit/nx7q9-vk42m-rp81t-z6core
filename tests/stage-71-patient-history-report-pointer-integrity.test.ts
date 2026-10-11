@@ -87,7 +87,9 @@ test("Stage 71: invalid snapshot pointers cannot enter the released trend select
 
 test("Stage 71: patient history page enforces pointers before trend/cumulative disclosure",()=>{
   const page=readFileSync("src/app/patients/[id]/history/page.tsx","utf8");
-  assert.match(page,/orderId: true,\s*currentVersion: true/);
+  assert.match(page,/organizationId: true,\s*orderId: true/);
+  assert.match(page,/order: \{\s*select: \{ id: true, patientId: true, accessionNumber: true, orderingBranchId: true \}/);
+  assert.match(page,/currentVersion: true/);
   assert.match(page,/currentReportResultPointers\(releaseEvidence\)/);
   assert.match(page,/new Set\(currentResultPointers\.keys\(\)\)/);
   assert.match(page,/resultMatchesCurrentReportPointer\(result, currentResultPointers\)/);
