@@ -103,11 +103,18 @@ export default async function PatientHistoryPage({
   const orderPage = historyPageSlice(ordersData);
   const orders = orderPage.rows;
 
+  // The current released report snapshot and its live results MUST come
+  // from the same database snapshot. An amendment, retraction or new result
+  // committed between separate SELECTs must never produce a mixed-time view.
+  // RepeatableRead gives a coherent as-of-read view without locking clinicians'
+  // release workflow or modifying immutable report versions.
+  const { trendWindow, resultPage, pageResultPointers, currentResultPointers,
+    publishedEvidence, resultCandidates } = await prisma.$transaction(async tx => {
   // Only exact result revisions referenced by a CURRENT, non-retracted report
   // may be presented as current longitudinal readings. This also prevents a
   // previously accessible result from surfacing after an amendment elsewhere.
   const reportEvidenceData = canViewReports && section === "results"
-    ? await prisma.diagnosticReport.findMany({
+    ? await tx.diagnosticReport.findMany({
         where: {
           organizationId: session.user.organizationId,
           order: {
@@ -153,7 +160,7 @@ export default async function PatientHistoryPage({
   const currentResultIds = new Set(currentResultPointers.keys());
 
   const resultCandidates = canViewReports && currentResultIds.size > 0
-    ? await prisma.laboratoryResult.findMany({
+    ? await tx.laboratoryResult.findMany({
         where: {
           organizationId: session.user.organizationId,
           id: { in: [...currentResultIds] },
@@ -200,6 +207,11 @@ export default async function PatientHistoryPage({
         orderBy: [{ orderItemId: "asc" }, { version: "desc" }],
       })
     : [];
+
+
+    return { trendWindow, resultPage, pageResultPointers, currentResultPointers,
+      publishedEvidence, resultCandidates };
+  }, { isolationLevel: "RepeatableRead", timeout: 20000 });
 
   // Even a legitimate released result must match the exact current report
   // snapshot's order, order item and immutable result revision.
