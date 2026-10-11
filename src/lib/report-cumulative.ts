@@ -96,11 +96,12 @@ export function extractCurrentReportReadings(
     const codes = new Set<string>();
     let validComponents = true;
     for (const value of result.values) {
-      if (!isRecord(value) || !nonEmpty(value.componentCode) || codes.has(value.componentCode)) {
+      const code = isRecord(value) ? nonEmpty(value.componentCode) : null;
+      if (!code || codes.has(code)) {
         validComponents = false;
         break;
       }
-      codes.add(value.componentCode);
+      codes.add(code);
     }
     if (!validComponents) continue;
 
