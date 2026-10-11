@@ -82,7 +82,9 @@ test("Stage 60 independent branch-and-live-role checks and fail-closed review pa
     /tx\.(?:labTest|priceList|priceListItem|referenceInterval|catalogImportRow|catalogImportBatch|role|user)\.(?:create|update|upsert|delete)/);
   assert.match(queue,/createdByUserId: \{ not: session\.user\.id \}/);
   assert.match(queue,/parsePolicyReviewRecord/);
-  assert.match(queue,/decision_limit_exceeded/);
+  assert.match(queue,/planPolicyQueueDecisionFetch\(draftIds, decisionCounts\)/);
+  assert.match(queue,/policy_queue_decision_snapshot_inconsistent/);
+  assert.doesNotMatch(queue,/decision_limit_exceeded/);
   assert.match(queue,/policy_queue_branch_revoked/);
   assert.match(ui,/independent policy-draft review/i);
   assert.match(ui,/مراجعة مستقلة لمسودات السياسة/);
