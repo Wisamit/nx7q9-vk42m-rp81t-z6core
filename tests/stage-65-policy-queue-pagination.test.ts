@@ -86,7 +86,9 @@ test("Stage 65: API keyset and client page controls are scoped and fail-closed",
   assert.match(route,/verifiedPolicyQueueCandidate\(/);
   assert.match(route,/FOR UPDATE/);
   assert.match(route,/isolationLevel: "RepeatableRead"/);
-  assert.match(route,/decision_limit_exceeded/);
+  assert.match(route,/planPolicyQueueDecisionFetch\(draftIds, decisionCounts\)/);
+  assert.match(route,/policy_queue_decision_snapshot_inconsistent/);
+  assert.doesNotMatch(route,/policy_queue_decision_limit_exceeded/);
   assert.match(route,/approval: false, signingEnabled: false/);
   assert.doesNotMatch(route,/policy_queue_history_limit_exceeded/);
   assert.doesNotMatch(route,/tx\.(?:labTest|priceList|referenceInterval|catalogImportRow)\.(?:create|update|upsert|delete)/);
