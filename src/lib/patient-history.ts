@@ -44,6 +44,78 @@ export function currentReportResultIds(reports: readonly CurrentReportEvidence[]
   return ids;
 }
 
+
+export type ReportResultPointer = {
+  orderId: string;
+  orderItemId: string;
+  resultVersion: number;
+};
+
+export type OrderedCurrentReportEvidence = CurrentReportEvidence & {
+  orderId: string;
+};
+
+/**
+ * A current report must explicitly attest the exact result revision,
+ * order item and issuing order. Result IDs alone are insufficient evidence
+ * for longitudinal clinical disclosure: a report snapshot might be stale,
+ * malformed or reference a different order within the same patient.
+ *
+ * Conflicting duplicate result IDs across current report snapshots are
+ * quarantined from this read-only view. No historical report is rewritten.
+ */
+export function currentReportResultPointers(
+  reports: readonly OrderedCurrentReportEvidence[],
+): Map<string, ReportResultPointer> {
+  const pointers = new Map<string, ReportResultPointer>();
+  const disputed = new Set<string>();
+  for (const report of reports) {
+    if (typeof report.orderId !== "string" || !report.orderId) continue;
+    const current = report.versions.find(version => version.version === report.currentVersion);
+    if (!current || !["PARTIAL", "FINAL", "AMENDED"].includes(current.status) ||
+        !Array.isArray(current.resultVersionSnapshot)) continue;
+    for (const raw of current.resultVersionSnapshot) {
+      if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
+      const pointer = raw as Record<string, unknown>;
+      if (typeof pointer.resultId !== "string" || !pointer.resultId ||
+          typeof pointer.orderItemId !== "string" || !pointer.orderItemId ||
+          !Number.isSafeInteger(pointer.resultVersion) || (pointer.resultVersion as number) < 1)
+        continue;
+      const id = pointer.resultId;
+      const expected: ReportResultPointer = {
+        orderId: report.orderId,
+        orderItemId: pointer.orderItemId,
+        resultVersion: pointer.resultVersion as number,
+      };
+      const previous = pointers.get(id);
+      if (previous && (
+        previous.orderId !== expected.orderId ||
+        previous.orderItemId !== expected.orderItemId ||
+        previous.resultVersion !== expected.resultVersion
+      )) {
+        disputed.add(id);
+        pointers.delete(id);
+      } else if (!disputed.has(id)) {
+        pointers.set(id, expected);
+      }
+    }
+  }
+  return pointers;
+}
+
+export function resultMatchesCurrentReportPointer(
+  result: { id: string; orderItemId: string; version: number; orderItem: {
+    order: { id: string };
+  } },
+  pointers: ReadonlyMap<string, ReportResultPointer>,
+): boolean {
+  const pointer = pointers.get(result.id);
+  return pointer !== undefined &&
+    pointer.orderId === result.orderItem.order.id &&
+    pointer.orderItemId === result.orderItemId &&
+    pointer.resultVersion === result.version;
+}
+
 export function patientIdentityGroupIds(canonicalId: string, aliasIds: readonly string[]) {
   return [...new Set([canonicalId, ...aliasIds.filter(id => id !== canonicalId)])];
 }
