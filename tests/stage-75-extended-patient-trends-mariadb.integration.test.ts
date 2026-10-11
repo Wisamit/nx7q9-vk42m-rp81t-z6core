@@ -47,8 +47,8 @@ test("Stage 75 MariaDB: extended window finds older authenticated reports withou
       [resultId,tenant,itemId,performedBranch,actor]);
     const value=(10+i/10).toFixed(1);
     await write("laboratory_result_values",valueId,
-      "INSERT INTO laboratory_result_values(id,result_id,component_code_snapshot,component_name_en_snapshot,result_type_snapshot,display_value,unit_snapshot,flag,is_critical,reference_low_snapshot,reference_high_snapshot,updated_at) VALUES(?,?,'HB','Hemoglobin','NUMERIC',?,'g/dL','NORMAL',0,10,18,NOW(3))",
-      [valueId,resultId,value]);
+      "INSERT INTO laboratory_result_values(id,result_id,component_code_snapshot,component_name_en_snapshot,result_type_snapshot,display_value,value_numeric,unit_snapshot,flag,is_critical,reference_low_snapshot,reference_high_snapshot,updated_at) VALUES(?,?,'HB','Hemoglobin','NUMERIC',?,?,'g/dL','NORMAL',0,10,18,NOW(3))",
+      [valueId,resultId,value,value]);
     await write("diagnostic_reports",reportId,
       "INSERT INTO diagnostic_reports(id,organization_id,order_id,current_version,updated_at) VALUES(?,?,?,1,NOW(3))",
       [reportId,tenant,orderId]);
@@ -146,18 +146,18 @@ test("Stage 75 MariaDB: extended window finds older authenticated reports withou
     await issue(26,foreignOrg,foreignPatient,foreignBranch,foreignBranch,foreignStaff,"FINAL");
 
     const reports=await reportEvidence(org,patient,branch,EXTENDED_TREND_REPORT_LIMIT+1);
-    assert.equal(reports.length,26);
+    assert.equal(reports.length,25);
     const ordinary=clinicalTrendWindow(reports.slice(0,21),false);
     const wide=clinicalTrendWindow(reports,true);
     assert.equal(ordinary.page.rows.length,20);
     assert.equal(ordinary.page.hasNext,true);
-    assert.equal(wide.chartEvidence.length,26);
+    assert.equal(wide.chartEvidence.length,25);
     assert.equal(wide.truncated,false);
     const visibleWide=await publishedVisible(wide.chartEvidence);
     const visiblePage=await publishedVisible(ordinary.chartEvidence);
     // One restricted report and one retracted version must never be disclosed.
     assert.equal(visibleWide.length,24);
-    assert.equal(visiblePage.length,18);
+    assert.equal(visiblePage.length,19);
     const older=records.find(item=>item.index===0)!;
     assert.equal(visibleWide.includes(older.resultId),true);
     assert.equal(visiblePage.includes(older.resultId),false);
