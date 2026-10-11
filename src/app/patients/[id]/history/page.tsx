@@ -14,6 +14,7 @@ import {
   patientIdentityGroupIds,
   type TrendPointInput,
 } from "@/lib/patient-history";
+import { publishedHistoryEvidence, resultMatchesPublishedHistory, publishedNumericValue } from "@/lib/patient-history-published";
 import { PatientResultTrends } from "@/components/patient-result-trends";
 import { PatientHistoryPrintButton } from "@/components/patient-history-print-button";
 import { PatientHistoryPager } from "@/components/patient-history-pager";
@@ -141,7 +142,7 @@ export default async function PatientHistoryPage({
           versions: {
             orderBy: { version: "desc" },
             take: 1,
-            select: { version: true, status: true, resultVersionSnapshot: true },
+            select: { version: true, status: true, resultVersionSnapshot: true, contentSnapshot: true },
           },
         },
         orderBy: [{ order: { orderedAt: "desc" } }, { id: "desc" }],
@@ -152,6 +153,7 @@ export default async function PatientHistoryPage({
   const resultPage = historyPageSlice(reportEvidenceData);
   const releaseEvidence = resultPage.rows;
   const currentResultPointers = currentReportResultPointers(releaseEvidence);
+  const publishedEvidence = publishedHistoryEvidence(releaseEvidence);
   const currentResultIds = new Set(currentResultPointers.keys());
 
   const resultCandidates = canViewReports && currentResultIds.size > 0
@@ -204,7 +206,8 @@ export default async function PatientHistoryPage({
   // Even a legitimate released result must match the exact current report
   // snapshot's order, order item and immutable result revision.
   const reportMatchedCandidates = resultCandidates.filter(result =>
-    resultMatchesCurrentReportPointer(result, currentResultPointers));
+    resultMatchesCurrentReportPointer(result, currentResultPointers) &&
+    resultMatchesPublishedHistory(result, publishedEvidence));
   const selectedResultKeys = latestClinicalResultIds(reportMatchedCandidates);
   const clinicalResults = reportMatchedCandidates
     .filter(result => selectedResultKeys.has(result.orderItemId + ":" + result.version))
@@ -228,7 +231,7 @@ export default async function PatientHistoryPage({
       componentNameEn: value.reportNameEnSnapshot || value.componentNameEnSnapshot,
       componentNameAr: value.reportNameArSnapshot || value.componentNameArSnapshot,
       unit: value.unitSnapshot,
-      valueNumeric: value.valueNumeric?.toString() || null,
+      valueNumeric: publishedNumericValue(value.displayValue, value.valueNumeric !== null),
       displayValue: value.displayValue,
       flag: value.flag,
       observedAt,
@@ -484,8 +487,8 @@ export default async function PatientHistoryPage({
             <h2>{tr(locale, "Cumulative Results", "النتائج التراكمية")}</h2>
             <span>{tr(
               locale,
-              "Uses immutable result snapshots and the latest released/amended result version per order item.",
-              "يعتمد على لقطات النتائج التاريخية وآخر إصدار صادر/معدل لكل فحص في الطلب.",
+              "Only values corroborated by the current immutable released report snapshot are shown.",
+              "تُعرض فقط القيم المطابقة للقطة التقرير الصادر الحالية والمحافظة على سجلها التاريخي.",
             )}</span>
           </div>
           <span>{cumulativeRows.length}</span>
