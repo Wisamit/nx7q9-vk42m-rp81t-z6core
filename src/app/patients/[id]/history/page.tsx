@@ -20,6 +20,7 @@ import { PatientHistoryPrintButton } from "@/components/patient-history-print-bu
 import { PatientHistoryPager } from "@/components/patient-history-pager";
 import { historyPageSlice, patientHistoryNavigation, type PatientHistorySection } from "@/lib/patient-history-pagination";
 import { scopedHistoryAttachments } from "@/lib/patient-history-attachments";
+import { resolvePatientLineage } from "@/lib/patient-identity-lineage";
 import { getUiLocale, statusLabel, tr } from "@/lib/ui-i18n";
 
 export const dynamic = "force-dynamic";
@@ -52,31 +53,18 @@ export default async function PatientHistoryPage({
   const navigation = patientHistoryNavigation(query.section, query.page, accessibleSections);
   const section = navigation.section;
 
-  const requestedPatient = await prisma.patient.findFirst({
-    where: { id, organizationId: session.user.organizationId },
-    select: { id: true, mergedIntoPatientId: true },
-  });
-  if (!requestedPatient) notFound();
+  const lineage = await prisma.$transaction(
+    tx => resolvePatientLineage(tx, session.user.organizationId, id),
+    { isolationLevel: "RepeatableRead" },
+  );
+  if (!lineage) notFound();
 
-  const canonicalId = requestedPatient.mergedIntoPatientId || requestedPatient.id;
   const canonical = await prisma.patient.findFirst({
-    where: { id: canonicalId, organizationId: session.user.organizationId },
-    include: {
-      mergedFrom: {
-        select: {
-          id: true,
-          patientNumber: true,
-          fullNameEn: true,
-          fullNameAr: true,
-          mergedAt: true,
-        },
-        orderBy: { mergedAt: "asc" },
-      },
-    },
+    where: { id: lineage.canonicalId, organizationId: session.user.organizationId },
   });
   if (!canonical) notFound();
 
-  const patientIds = patientIdentityGroupIds(canonical.id, canonical.mergedFrom.map(item => item.id));
+  const patientIds = patientIdentityGroupIds(canonical.id, lineage.aliases.map(item => item.id));
   const itemDepartmentFilter = departmentIds.length > 0
     ? { test: { departmentId: { in: departmentIds } } }
     : {};
@@ -449,7 +437,7 @@ export default async function PatientHistoryPage({
       )}</p>
       <div className="summary-list">
         <div><span>{tr(locale, "Canonical", "الأساسي")}</span><strong>{canonical.patientNumber}</strong></div>
-        {canonical.mergedFrom.map(alias => <div key={alias.id}>
+        {lineage.aliases.map(alias => <div key={alias.id}>
           <span>{tr(locale, "Historical alias", "سجل تاريخي")} · {alias.patientNumber}</span>
           <strong>{alias.mergedAt ? alias.mergedAt.toISOString().slice(0, 10) : "—"}</strong>
         </div>)}
