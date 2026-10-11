@@ -7,6 +7,7 @@ import { authorizedDepartmentIds, canAccessBranch, permissionSet, requirePermiss
 import { prisma } from "@/lib/db";
 import { canonicalReportOrigin } from "@/lib/report-origin";
 import { compareCurrentReportWithPrevious, type ReportComparisonEvidence } from "@/lib/report-cumulative";
+import { resolvePatientLineage } from "@/lib/patient-identity-lineage";
 import { ReportCumulativeComparison } from "@/components/report-cumulative-comparison";
 import { PrintReportButton } from "@/components/print-report-button";
 import { ReportPdfButton } from "@/components/report-pdf-button";
@@ -216,16 +217,13 @@ export default async function DiagnosticReportPage({ params }: { params: Promise
   const comparisonEligible = latest.version === report.currentVersion
     && ["PARTIAL", "FINAL", "AMENDED"].includes(latest.status)
     && authorizedDepartmentIds(session).length === 0;
-  const canonicalPatientId = report.order.patient.mergedIntoPatientId || report.order.patientId;
-  const canonicalPatient = comparisonEligible
-    ? await prisma.patient.findFirst({
-        where: { id: canonicalPatientId, organizationId: session.user.organizationId },
-        select: { id: true, mergedFrom: { select: { id: true } } },
-      })
+  const lineage = comparisonEligible
+    ? await prisma.$transaction(
+        tx => resolvePatientLineage(tx, session.user.organizationId, report.order.patientId),
+        { isolationLevel: "RepeatableRead" },
+      )
     : null;
-  const linkedPatientIds = canonicalPatient
-    ? [canonicalPatient.id, ...canonicalPatient.mergedFrom.map(alias => alias.id)]
-    : [];
+  const linkedPatientIds = lineage?.patientIds || [];
 
   // Bound the previous-order scan, and disclose explicitly when older records
   // remain. Never equate a bounded search with a complete clinical history.
