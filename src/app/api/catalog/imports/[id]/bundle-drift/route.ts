@@ -8,8 +8,9 @@ import { resolveFindingLifecycle, triageResubmission } from "@/lib/catalog-findi
 import { summarizeCatalogGovernance } from "@/lib/catalog-governance-readiness";
 import { summarizeSignatoryPlanning } from "@/lib/catalog-signatory-planning";
 import { policyDraftAuthorFeedback } from "@/lib/catalog-policy-feedback";
+import { POLICY_DRAFT_HISTORY_LIMIT, verifyPolicyDraftHistory } from "@/lib/catalog-policy-draft-history";
 import {
-  validateCatalogPolicyProposal, createPolicyDraftLedgerEntry, readPolicyDraftLedgerEntry,
+  validateCatalogPolicyProposal, createPolicyDraftLedgerEntry,
   type CatalogPolicyProposal,
 } from "@/lib/catalog-signatory-policy-draft";
 import { catalogBundleSigningSecret } from "@/lib/catalog-bundle-attestation";
@@ -688,26 +689,33 @@ async function inspectBundleDrift(
         organizationId, batchId: batch.id, branchId: liveScope.branchId,
         sourceChecksum: batch.sourceChecksum,
       };
-      const lastPolicyEvent = await tx.auditEvent.findFirst({
+      // Examine the entire bounded audit revision chain, including events
+      // by unexpected actors; a valid latest digest cannot hide older damage.
+      const policyEvents = await tx.auditEvent.findMany({
         where: {
           organizationId, branchId: liveScope.branchId,
-          actorUserId: batch.createdByUserId,
           entityType: "CatalogImportBatch", entityId: batch.id,
           action: "CATALOG_BUNDLE_SIGNATORY_POLICY_DRAFT_RECORDED",
         },
         orderBy: [{ occurredAt: "desc" }, { id: "desc" }],
-        select: { id: true, newValues: true },
+        take: POLICY_DRAFT_HISTORY_LIMIT + 1,
+        select: { id: true, actorUserId: true, newValues: true },
       });
-      const oldPolicy = lastPolicyEvent
-        ? readPolicyDraftLedgerEntry(lastPolicyEvent.newValues, policyContext) : null;
-      if (lastPolicyEvent && !oldPolicy)
+      const policyHistory = verifyPolicyDraftHistory({
+        events: policyEvents, authorUserId: batch.createdByUserId,
+        ...policyContext,
+      });
+      if (!policyHistory)
         return { error: "policy_draft_history_corrupt", httpStatus: 409 } as const;
+      const oldPolicy = policyHistory.draft;
       let currentPolicy = oldPolicy;
-      let currentPolicyEventId = lastPolicyEvent?.id || null;
+      let currentPolicyEventId = policyHistory.latestEventId;
       let draftSave: "UNCHANGED" | "RECORDED" | null = null;
       if (policyDraftInput) {
         if (policyDraftInput.expectedRevision !== (oldPolicy?.revision || 0))
           return { error: "policy_draft_revision_conflict", httpStatus: 409 } as const;
+        if (policyHistory.revisionCount >= POLICY_DRAFT_HISTORY_LIMIT)
+          return { error: "policy_draft_revision_limit", httpStatus: 409 } as const;
         const next = createPolicyDraftLedgerEntry(
           policyContext, policyDraftInput.proposal, (oldPolicy?.revision || 0) + 1,
         );
