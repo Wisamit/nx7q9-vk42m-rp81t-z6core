@@ -20,7 +20,7 @@ const draft = (revision: number) => createPolicyDraftLedgerEntry(scope, choices,
 const entry = (revision: number, actorUserId: string | null = scope.authorUserId) => ({
   id: String(revision).padStart(32, "0"), actorUserId, newValues: draft(revision),
 });
-const verify = (events: ReturnType<typeof entry>[]) =>
+const verify = (events: { id: string; actorUserId: string | null; newValues: unknown }[]) =>
   verifyPolicyDraftHistory({ ...scope, events });
 
 test("Stage 63: empty and consecutive history preserve latest identity and exact revision", () => {
