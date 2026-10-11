@@ -1,5 +1,5 @@
 import {
-  verifyPolicyDraftHistory, type VerifiedPolicyDraftHistory,
+  verifyBranchScopedPolicyDraftHistory, type VerifiedPolicyDraftHistory,
 } from "./catalog-policy-draft-history.ts";
 
 /**
@@ -11,12 +11,12 @@ import {
  * fresh tenant-locked history and live-master checks before showing any choices.
  */
 export function verifiedPolicyQueueCandidate(input: {
-  events: readonly { id: string; actorUserId: string | null; newValues: unknown }[];
+  events: readonly { id: string; actorUserId: string | null; branchId: string | null; newValues: unknown }[];
   candidateEventId: string;
   organizationId: string; branchId: string; batchId: string;
   sourceChecksum: string; authorUserId: string;
 }): VerifiedPolicyDraftHistory | null {
-  const history = verifyPolicyDraftHistory(input);
+  const history = verifyBranchScopedPolicyDraftHistory(input);
   if (!history || !history.draft ||
       history.latestEventId !== input.candidateEventId) return null;
   return history;
