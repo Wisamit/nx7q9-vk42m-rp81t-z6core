@@ -8,7 +8,10 @@ import { resolveFindingLifecycle, triageResubmission } from "@/lib/catalog-findi
 import { summarizeCatalogGovernance } from "@/lib/catalog-governance-readiness";
 import { summarizeSignatoryPlanning } from "@/lib/catalog-signatory-planning";
 import { policyDraftAuthorFeedback } from "@/lib/catalog-policy-feedback";
-import { POLICY_DRAFT_HISTORY_LIMIT, verifyPolicyDraftHistory } from "@/lib/catalog-policy-draft-history";
+import {
+  POLICY_DRAFT_HISTORY_LIMIT, verifyBranchScopedPolicyDraftHistory,
+  policyAuditBranchesMatch,
+} from "@/lib/catalog-policy-draft-history";
 import {
   validateCatalogPolicyProposal, createPolicyDraftLedgerEntry, catalogPolicyDraftDigest,
   type CatalogPolicyProposal,
@@ -693,15 +696,15 @@ async function inspectBundleDrift(
       // by unexpected actors; a valid latest digest cannot hide older damage.
       const policyEvents = await tx.auditEvent.findMany({
         where: {
-          organizationId, branchId: liveScope.branchId,
+          organizationId,
           entityType: "CatalogImportBatch", entityId: batch.id,
           action: "CATALOG_BUNDLE_SIGNATORY_POLICY_DRAFT_RECORDED",
         },
         orderBy: [{ occurredAt: "desc" }, { id: "desc" }],
         take: POLICY_DRAFT_HISTORY_LIMIT + 1,
-        select: { id: true, actorUserId: true, newValues: true },
+        select: { id: true, actorUserId: true, branchId: true, newValues: true },
       });
-      const policyHistory = verifyPolicyDraftHistory({
+      const policyHistory = verifyBranchScopedPolicyDraftHistory({
         events: policyEvents, authorUserId: batch.createdByUserId,
         ...policyContext,
       });
@@ -742,12 +745,14 @@ async function inspectBundleDrift(
       // remain in history but never count for the new proposal.
       const reviewEvents = currentPolicyEventId ? await tx.auditEvent.findMany({
         where: {
-          organizationId, branchId: liveScope.branchId,
+          organizationId,
           action: "CATALOG_BUNDLE_POLICY_DRAFT_REVIEW_RECORDED",
           entityType: "CatalogPolicyDraft", entityId: currentPolicyEventId,
         },
-        select: { actorUserId: true, newValues: true }, take: 3,
+        select: { actorUserId: true, branchId: true, newValues: true }, take: 3,
       }) : [];
+      if (!policyAuditBranchesMatch(reviewEvents, liveScope.branchId))
+        return { error: "policy_draft_review_history_corrupt", httpStatus: 409 } as const;
       const reviewFeedback = currentPolicy && currentPolicyEventId
         ? policyDraftAuthorFeedback({
             draftEventId: currentPolicyEventId, draft: currentPolicy,
