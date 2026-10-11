@@ -91,6 +91,7 @@ jobs:
       - run: node --experimental-strip-types --test tests/stage-65-policy-queue-pagination-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-66-policy-queue-signed-cursor-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-67-policy-queue-dual-audit-watermark-mariadb.integration.test.ts
+      - run: node --experimental-strip-types --test tests/stage-68-policy-queue-audit-index-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-38-staged-price-overlap-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/microbiology-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/analyzer-work-orders-mariadb.integration.test.ts
