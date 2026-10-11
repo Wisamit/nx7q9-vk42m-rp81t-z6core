@@ -22,7 +22,8 @@ test("Stage 72 MariaDB: only authorized unchanged published result values surviv
     cleanup.unshift({table,id});
   }
   const frozen={
-    order:{id:order},
+    organization:{id:org},branch:{id:branch},patient:{id:patient},
+    order:{id:order,accessionNumber:prefix+"ACC"},
     results:[{resultId:result,orderItemId:item,resultVersion:1,testId,
       performingBranch:{id:branch},methodId:null,analyzer:null,
       values:[{componentId:null,componentCode:"HB",componentNameEn:"Hemoglobin",
@@ -34,18 +35,26 @@ test("Stage 72 MariaDB: only authorized unchanged published result values surviv
   const decode=(x:unknown)=>typeof x==="string"?JSON.parse(x):x;
   async function readReport(){
     const [rows]=await reader.execute<mysql.RowDataPacket[]>(
-      "SELECT d.order_id,d.current_version,v.version,v.status,v.content_snapshot,v.result_version_snapshot "+
-      "FROM diagnostic_reports d JOIN diagnostic_report_versions v ON v.report_id=d.id "+
+      "SELECT d.organization_id,d.order_id,o.patient_id,o.accession_number,o.ordering_branch_id,"+
+      "d.current_version,v.version,v.status,v.content_snapshot,v.result_version_snapshot "+
+      "FROM diagnostic_reports d JOIN orders o ON o.id=d.order_id "+
+      "JOIN diagnostic_report_versions v ON v.report_id=d.id "+
       "AND v.version=d.current_version WHERE d.id=? AND d.organization_id=?",
       [reportId,org]);
-    return rows.map(x=>({orderId:String(x.order_id),currentVersion:Number(x.current_version),
+    return rows.map(x=>({organizationId:String(x.organization_id),
+      orderId:String(x.order_id),
+      order:{id:String(x.order_id),patientId:String(x.patient_id),
+        accessionNumber:String(x.accession_number),
+        orderingBranchId:String(x.ordering_branch_id)},
+      currentVersion:Number(x.current_version),
       versions:[{version:Number(x.version),status:String(x.status),
         contentSnapshot:decode(x.content_snapshot),resultVersionSnapshot:decode(x.result_version_snapshot)}]}));
   }
   async function readResult(scopedOrg:string,scopedBranch:string){
     const [rows]=await reader.execute<mysql.RowDataPacket[]>(
       "SELECT r.id,r.order_item_id,r.version,r.performing_branch_id,r.method_id,r.analyzer_code_snapshot,"+
-      "i.test_id,i.order_id,v.component_id,v.component_code_snapshot,v.component_name_en_snapshot,"+
+      "i.test_id,i.order_id,o.patient_id,o.organization_id,o.accession_number,o.ordering_branch_id,"+
+      "v.component_id,v.component_code_snapshot,v.component_name_en_snapshot,"+
       "v.component_name_ar_snapshot,v.report_name_en_snapshot,v.report_name_ar_snapshot,"+
       "v.display_value,v.unit_snapshot,v.flag,v.is_critical,v.reference_low_snapshot,"+
       "v.reference_high_snapshot,v.reference_text_en_snapshot,v.reference_text_ar_snapshot "+
@@ -58,7 +67,10 @@ test("Stage 72 MariaDB: only authorized unchanged published result values surviv
       id:String(x.id),orderItemId:String(x.order_item_id),version:Number(x.version),
       performingBranchId:String(x.performing_branch_id),methodId:x.method_id,
       analyzerCodeSnapshot:x.analyzer_code_snapshot,
-      orderItem:{testId:String(x.test_id),order:{id:String(x.order_id)}},
+      orderItem:{testId:String(x.test_id),order:{
+        id:String(x.order_id),patientId:String(x.patient_id),
+        organizationId:String(x.organization_id),accessionNumber:String(x.accession_number),
+        orderingBranchId:String(x.ordering_branch_id)}},
       values:[{componentId:x.component_id,componentCodeSnapshot:String(x.component_code_snapshot),
         componentNameEnSnapshot:String(x.component_name_en_snapshot),
         componentNameArSnapshot:x.component_name_ar_snapshot,
