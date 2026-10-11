@@ -55,6 +55,7 @@ jobs:
       - run: node --experimental-strip-types --test tests/stage-75-extended-patient-trends-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-76-patient-history-snapshot-identity-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-77-history-repeatable-read-mariadb.integration.test.ts
+      - run: node --experimental-strip-types --test tests/stage-78-critical-communication-concurrency-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-22-aliquot-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-23-medical-validation-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-24-catalog-export-mariadb.integration.test.ts
