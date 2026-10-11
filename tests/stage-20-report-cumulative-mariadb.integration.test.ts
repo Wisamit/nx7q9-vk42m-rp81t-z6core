@@ -29,10 +29,10 @@ test("MariaDB two-session report comparisons isolate tenant/branch and respect r
     await writer.execute(sql, params);
     cleanup.unshift({ sql: "DELETE FROM " + table + " WHERE id = ?", params: [id] });
   }
-  const snapshot = (orderId: string, branchId: string, value: string) => {
+  const snapshot = (orderId: string, branchId: string, value: string, patientId: string, accessionNumber: string) => {
     const resultId = orderId + "-result", itemId = orderId + "-item";
     return {
-      payload: JSON.stringify({ results: [{
+      payload: JSON.stringify({ order: { id: orderId, accessionNumber }, patient: { id: patientId }, results: [{
         orderItemId: itemId, resultId, resultVersion: 1,
         testId: "test-unchanged", testCode: "GLU", testNameEn: "Glucose",
         methodId: "method-unchanged", analyzer: { code: "ANA-1" },
@@ -45,8 +45,8 @@ test("MariaDB two-session report comparisons isolate tenant/branch and respect r
     };
   };
 
-  async function version(id: string, reportId: string, nr: string, status: string, branchId: string, issuer: string, issuedAt: string, orderId: string, value: string) {
-    const record = snapshot(orderId, branchId, value);
+  async function version(id: string, reportId: string, nr: string, status: string, branchId: string, issuer: string, issuedAt: string, orderId: string, value: string, patientId: string, accessionNumber: string) {
+    const record = snapshot(orderId, branchId, value, patientId, accessionNumber);
     await insert(
       "INSERT INTO diagnostic_report_versions (id,report_id,version,status,branch_id,content_snapshot,result_version_snapshot,verification_token,issued_by_user_id,issued_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
       [id, reportId, nr, status, branchId, record.payload, record.pointers, randomUUID(), issuer, issuedAt],
@@ -56,7 +56,7 @@ test("MariaDB two-session report comparisons isolate tenant/branch and respect r
 
   async function load(reportId: string): Promise<ReportComparisonEvidence> {
     const [rows] = await reader.execute<mysql.RowDataPacket[]>(
-      `SELECT d.current_version, o.id AS order_id, o.accession_number, o.ordered_at,
+      `SELECT d.current_version, o.id AS order_id, o.patient_id, o.accession_number, o.ordered_at,
          v.version, v.status, v.issued_at, v.content_snapshot, v.result_version_snapshot
        FROM diagnostic_reports d JOIN orders o ON o.id = d.order_id
        LEFT JOIN diagnostic_report_versions v ON v.report_id = d.id AND v.version = d.current_version
@@ -67,7 +67,7 @@ test("MariaDB two-session report comparisons isolate tenant/branch and respect r
     const decode = (value: unknown) => typeof value === "string" ? JSON.parse(value) : value;
     return {
       currentVersion: Number(row.current_version),
-      order: { id: String(row.order_id), accessionNumber: String(row.accession_number), orderedAt: new Date(row.ordered_at) },
+      order: { id: String(row.order_id), patientId: String(row.patient_id), accessionNumber: String(row.accession_number), orderedAt: new Date(row.ordered_at) },
       versions: row.version === null ? [] : [{
         version: Number(row.version), status: String(row.status), issuedAt: new Date(row.issued_at),
         contentSnapshot: decode(row.content_snapshot), resultVersionSnapshot: decode(row.result_version_snapshot),
@@ -115,10 +115,10 @@ test("MariaDB two-session report comparisons isolate tenant/branch and respect r
     ]) await insert("INSERT INTO diagnostic_reports (id,organization_id,order_id,updated_at) VALUES (?,?,?,NOW(3))",
       [id, org, orderId], "diagnostic_reports", id);
 
-    await version(randomUUID(), reportNow, "1", "FINAL", branchA, staff, "2026-10-09 12:00:00", orderNow, "99");
-    await version(randomUUID(), reportOldA, "1", "FINAL", branchA, staff, "2026-01-09 12:00:00", orderOldA, "91");
-    await version(randomUUID(), reportOldB, "1", "FINAL", branchB, staff, "2026-09-09 12:00:00", orderOldB, "93");
-    await version(randomUUID(), reportForeign, "1", "FINAL", foreignBranch, foreignStaff, "2026-08-09 12:00:00", orderForeign, "300");
+    await version(randomUUID(), reportNow, "1", "FINAL", branchA, staff, "2026-10-09 12:00:00", orderNow, "99", patient, "C20-N" + suffix);
+    await version(randomUUID(), reportOldA, "1", "FINAL", branchA, staff, "2026-01-09 12:00:00", orderOldA, "91", patient, "C20-A" + suffix);
+    await version(randomUUID(), reportOldB, "1", "FINAL", branchB, staff, "2026-09-09 12:00:00", orderOldB, "93", patient, "C20-B" + suffix);
+    await version(randomUUID(), reportForeign, "1", "FINAL", foreignBranch, foreignStaff, "2026-08-09 12:00:00", orderForeign, "300", foreignPatient, "C20-F" + suffix);
     for (const id of [reportNow, reportOldA, reportOldB, reportForeign])
       await writer.execute("UPDATE diagnostic_reports SET current_version = 1 WHERE id = ?", [id]);
 
@@ -134,7 +134,7 @@ test("MariaDB two-session report comparisons isolate tenant/branch and respect r
     // Commit a retraction from the writer connection, then verify its immediate
     // exclusion on the independent reader connection.
     await writer.beginTransaction();
-    await version(randomUUID(), reportOldB, "2", "RETRACTED", branchB, staff, "2026-09-10 12:00:00", orderOldB, "93");
+    await version(randomUUID(), reportOldB, "2", "RETRACTED", branchB, staff, "2026-09-10 12:00:00", orderOldB, "93", patient, "C20-B" + suffix);
     await writer.execute("UPDATE diagnostic_reports SET current_version = 2 WHERE id = ?", [reportOldB]);
     await writer.commit();
     const afterRetraction = await previous(tenant, patient, [branchA, branchB], current.order.orderedAt);
