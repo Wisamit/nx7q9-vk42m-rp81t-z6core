@@ -10,6 +10,16 @@ type PublicPolicyDraft = {
   state: "UNAPPROVED_DRAFT"; reviewOnly: true; approved: false;
   signingEnabled: false; activated: false; liveWrites: false;
 };
+type DomainReviewFeedback = {
+  status: "PENDING" | "NOTED_FOR_DISCUSSION" | "RETURN_FOR_REVISION";
+  reasonCode: string | null;
+};
+type PolicyReviewFeedback = {
+  revision: number;
+  domains: { CLINICAL: DomainReviewFeedback; FINANCIAL: DomainReviewFeedback };
+  reviewOnly: true; approved: false; signingEnabled: false;
+  activated: false; liveWrites: false;
+};
 type Count = {
   total: number; unchanged: number; drifted: number;
   unflagged: number; driftUnflagged: number; pending: number; expertConfirmed: number;
@@ -24,6 +34,7 @@ type GovernanceReport = {
   liveWrites: boolean;
   policyDraft: PublicPolicyDraft | null;
   policyDraftSave: "RECORDED" | "UNCHANGED" | null;
+  policyReviewFeedback: PolicyReviewFeedback | null;
   signatoryPlanning: {
     clinicalReviewerCandidates: number; financialReviewerCandidates: number;
     crossQualifiedReviewers: number; distinctPairAvailable: boolean;
@@ -78,6 +89,21 @@ export function CatalogGovernanceReadiness({ batchId, locale }: {
           body.signatoryPlanning.clinicalApprovalAllowed !== false ||
           body.signatoryPlanning.financialApprovalAllowed !== false ||
           body.signatoryPlanning.liveWrites !== false ||
+          (body.policyReviewFeedback !== null &&
+            (!body.policyReviewFeedback || !body.policyDraft ||
+             body.policyReviewFeedback.revision !== body.policyDraft.revision ||
+             body.policyReviewFeedback.reviewOnly !== true ||
+             body.policyReviewFeedback.approved !== false ||
+             body.policyReviewFeedback.signingEnabled !== false ||
+             body.policyReviewFeedback.activated !== false ||
+             body.policyReviewFeedback.liveWrites !== false ||
+             !(["CLINICAL", "FINANCIAL"] as const).every(domain => {
+               const state = body.policyReviewFeedback?.domains?.[domain];
+               return state && ["PENDING", "NOTED_FOR_DISCUSSION", "RETURN_FOR_REVISION"]
+                 .includes(state.status) && (state.status === "PENDING"
+                 ? state.reasonCode === null : typeof state.reasonCode === "string");
+             }))) ||
+          (body.policyDraft !== null && body.policyReviewFeedback === null) ||
           (body.policyDraft !== null &&
             (!body.policyDraft || body.policyDraft.state !== "UNAPPROVED_DRAFT" ||
               body.policyDraft.approved !== false || body.policyDraft.reviewOnly !== true ||
@@ -101,6 +127,19 @@ export function CatalogGovernanceReadiness({ batchId, locale }: {
     }
   }
 
+  const reviewReason = (code: string) => {
+    const reasons: Record<string, [string, string]> = {
+      NO_FURTHER_OBJECTION_TO_DISCUSSION: ["No further objection to discussion", "لا اعتراض إضافياً على النقاش"],
+      CLINICAL_AUTHORITY_UNCLEAR: ["Clinical authority unclear", "المسؤولية الطبية غير واضحة"],
+      FINANCIAL_AUTHORITY_UNCLEAR: ["Financial authority unclear", "المسؤولية المالية غير واضحة"],
+      BRANCH_SCOPE_UNCLEAR: ["Branch delegation unclear", "صلاحيات الفروع غير واضحة"],
+      MAKER_CHECKER_INDEPENDENCE_UNCLEAR: ["Reviewer independence unclear", "فصل المراجعين غير واضح"],
+      REAUTHENTICATION_UNDEFINED: ["Reauthentication undefined", "إعادة المصادقة غير محددة"],
+      VERSIONED_RELEASE_UNDEFINED: ["Versioned application undefined", "التطبيق وحفظ الإصدارات غير محددين"],
+      CLINICAL_SAFETY_REVIEW_UNDEFINED: ["Clinical safety review undefined", "مراجعة السلامة السريرية غير محددة"],
+    };
+    return reasons[code] ? tr(...reasons[code]) : code;
+  };
   const blockerName = (code: string) => {
     const labels: Record<string, [string, string]> = {
       SIGNATORY_POLICY_UNCONFIGURED: [
@@ -228,11 +267,46 @@ export function CatalogGovernanceReadiness({ batchId, locale }: {
             "لم يثبت توافر مراجعين طبي ومالي مختلفين"),
         } as Record<string, string>)[code] || code
       }</li>)}</ul>
+      {report.policyReviewFeedback && <div className="table-card">
+        <h3>{tr("Independent reviewer feedback — NOT approval",
+          "ملاحظات المراجعين المستقلين — ليست اعتماداً")}</h3>
+        <p className="muted">{tr(
+          "These outcomes apply only to the currently recorded unsigned draft revision. Older reviewer comments never carry forward as approval.",
+          "هذه الملاحظات تخص النسخة الحالية فقط من المسودة غير الموقّعة. المراجعات القديمة لا تنتقل إلى النسخة الجديدة كاعتماد.",
+        )} ({tr("Revision", "النسخة")} {report.policyReviewFeedback.revision})</p>
+        <div className="table-wrap"><table>
+          <thead><tr><th>{tr("Review domain", "مجال المراجعة")}</th>
+            <th>{tr("Procedural status", "الحالة التنظيمية")}</th>
+            <th>{tr("Review comment", "ملاحظة المراجعة")}</th></tr></thead>
+          <tbody>{(["CLINICAL", "FINANCIAL"] as const).map(domain => {
+            const feedback = report.policyReviewFeedback!.domains[domain];
+            return <tr key={domain}>
+              <td>{domain === "CLINICAL" ? tr("Clinical", "طبي") : tr("Financial", "مالي")}</td>
+              <td>{feedback.status === "PENDING" ? tr("Awaiting review", "بانتظار المراجعة")
+                : feedback.status === "RETURN_FOR_REVISION" ? tr("Returned for revision", "أعيد للتعديل")
+                : tr("Noted for discussion — NOT approval", "سُجّل للنقاش — ليس اعتماداً")}</td>
+              <td>{feedback.reasonCode ? reviewReason(feedback.reasonCode) : "—"}</td>
+            </tr>;
+          })}</tbody>
+        </table></div>
+      </div>}
       <CatalogPolicyDraftEditor
         key={report.policyDraft?.revision || 0}
         batchId={batchId} locale={locale} savedDraft={report.policyDraft}
         onSaved={draft => setReport(previous => previous
-          ? { ...previous, policyDraft: draft } : previous)}
+          ? { ...previous, policyDraft: draft,
+              policyReviewFeedback: previous.policyReviewFeedback &&
+                previous.policyReviewFeedback.revision === draft.revision
+                ? previous.policyReviewFeedback : {
+                  revision: draft.revision,
+                  domains: {
+                    CLINICAL: { status: "PENDING", reasonCode: null },
+                    FINANCIAL: { status: "PENDING", reasonCode: null },
+                  },
+                  reviewOnly: true, approved: false, signingEnabled: false,
+                  activated: false, liveWrites: false,
+                },
+            } : previous)}
       />
       <p className="muted">{tr(
         "Confirming a discrepancy only acknowledges that a finding exists. It never authorizes changing laboratory reference intervals, catalog content or prices.",
