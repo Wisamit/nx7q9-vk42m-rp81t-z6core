@@ -137,9 +137,11 @@ test("Stage 76 MariaDB: immutable original patient/tenant/ordering branch attest
       await insert("users",id,
         "INSERT INTO users(id,organization_id,username,display_name_en,updated_at) VALUES(?,?,?,?,NOW(3))",
         [id,tenant,prefix+code,"Stage76 User"]);
-    for(const [id,tenant,code,mergedTo] of [[canonical,org,"C",null],
-      [alias,org,"A",canonical],[otherPatient,org,"B",null],
-      [foreignPatient,otherOrg,"X",null]]){
+    const patientsToCreate: Array<[string, string, string, string | null]> = [
+      [canonical,org,"C",null], [alias,org,"A",canonical],
+      [otherPatient,org,"B",null], [foreignPatient,otherOrg,"X",null],
+    ];
+    for(const [id,tenant,code,mergedTo] of patientsToCreate){
       await insert("patients",id,
         "INSERT INTO patients(id,organization_id,patient_number,full_name_en,normalized_name,status,merged_into_patient_id,updated_at) VALUES(?,?,?,?,?,?,?,NOW(3))",
         [id,tenant,prefix+code,"Stage76 Patient","stage76 patient",mergedTo?"INACTIVE":"ACTIVE",mergedTo]);
