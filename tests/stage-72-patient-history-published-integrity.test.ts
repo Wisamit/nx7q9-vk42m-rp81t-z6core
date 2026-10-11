@@ -12,7 +12,10 @@ const value=()=>({
 const row=()=>({
   id:"result-1",orderItemId:"item-1",version:2,
   performingBranchId:"branch-1",methodId:"method-1",analyzerCodeSnapshot:"AN-1",
-  orderItem:{testId:"test-1",order:{id:"order-1"}},
+  orderItem:{testId:"test-1",order:{
+    id:"order-1",organizationId:"org-1",patientId:"patient-1",
+    accessionNumber:"ACC-1",orderingBranchId:"ordering-branch-1",
+  }},
   values:[{
     componentId:"comp-1",componentCodeSnapshot:"HB",
     reportNameEnSnapshot:null,componentNameEnSnapshot:"Hemoglobin",
@@ -24,11 +27,17 @@ const row=()=>({
   }],
 });
 const report=()=>({
-  orderId:"order-1",currentVersion:3,versions:[{
+  organizationId:"org-1",orderId:"order-1",
+  order:{id:"order-1",patientId:"patient-1",accessionNumber:"ACC-1",
+    orderingBranchId:"ordering-branch-1"},
+  currentVersion:3,versions:[{
     version:3,status:"AMENDED",resultVersionSnapshot:[{
       resultId:"result-1",orderItemId:"item-1",resultVersion:2,
     }],
-    contentSnapshot:{order:{id:"order-1"},results:[{
+    contentSnapshot:{
+      organization:{id:"org-1"},branch:{id:"ordering-branch-1"},
+      patient:{id:"patient-1"},order:{id:"order-1",accessionNumber:"ACC-1"},
+      results:[{
       resultId:"result-1",orderItemId:"item-1",resultVersion:2,
       testId:"test-1",performingBranch:{id:"branch-1"},
       methodId:"method-1",analyzer:{code:"AN-1"},values:[value()],
@@ -42,7 +51,7 @@ test("Stage 72: only exact released values with immutable published range, flags
   assert.equal(resultMatchesPublishedHistory(row(),evidence),true);
   assert.equal(resultMatchesPublishedHistory({...row(),methodId:"different"},evidence),false);
   assert.equal(resultMatchesPublishedHistory({...row(),performingBranchId:"other"},evidence),false);
-  assert.equal(resultMatchesPublishedHistory({...row(),orderItem:{testId:"different",order:{id:"order-1"}}},evidence),false);
+  assert.equal(resultMatchesPublishedHistory({...row(),orderItem:{...row().orderItem,testId:"different"}},evidence),false);
   for(const key of ["displayValue","unitSnapshot","flag","referenceLowSnapshot","referenceHighSnapshot","isCritical"] as const){
     const altered=row();
     (altered.values[0] as Record<string,unknown>)[key]=key==="isCritical"?true:"corrupted";
