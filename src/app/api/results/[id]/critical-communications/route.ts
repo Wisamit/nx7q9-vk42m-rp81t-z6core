@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { canAccessBranch, canAccessDepartment, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { claimCriticalCommunication } from "@/lib/critical-communication-claim";
 
 function text(value: unknown, max = 1000) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -62,6 +63,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const event = result.criticalEvents[0];
   if (!event) return NextResponse.json({ error: "critical_event_not_found" }, { status: 404 });
+  if (event.status !== "OPEN") {
+    return NextResponse.json({ error: "critical_event_not_open_reload" }, { status: 409 });
+  }
   if (outcome === "ACKNOWLEDGED" && event.requireReadBackSnapshot && !readBackConfirmed) {
     return NextResponse.json({ error: "read_back_confirmation_required" }, { status: 400 });
   }
@@ -78,6 +82,22 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     : event.nextEscalationDueAt;
 
   const communication = await prisma.$transaction(async (tx) => {
+    const claimed = await claimCriticalCommunication(tx, {
+      eventId: event.id,
+      resultId: result.id,
+      organizationId: session.user.organizationId,
+      performingBranchId: result.performingBranchId,
+      observedEscalationLevel: event.escalationLevel,
+      observedUpdatedAt: event.updatedAt,
+      outcome: outcome as "ACKNOWLEDGED" | "NO_ANSWER" | "LEFT_MESSAGE" | "FAILED" | "ESCALATED",
+      communicatedAt,
+      communicatorId: session.user.id,
+      nextEscalationDueAt,
+    });
+    // Do not create clinical history or an audit for a stale event. The
+    // claimant must reload the latest acknowledgement/escalation state.
+    if (!claimed) return null;
+
     const created = await tx.criticalResultCommunication.create({
       data: {
         criticalEventId: event.id,
@@ -93,26 +113,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         communicatedAt,
       },
     });
-
-    if (acknowledged) {
-      await tx.criticalResultEvent.update({
-        where: { id: event.id },
-        data: {
-          status: "ACKNOWLEDGED",
-          acknowledgedAt: communicatedAt,
-          acknowledgedByUserId: session.user.id,
-          nextEscalationDueAt: null,
-        },
-      });
-    } else if (escalated) {
-      await tx.criticalResultEvent.update({
-        where: { id: event.id },
-        data: {
-          escalationLevel: nextEscalationLevel,
-          nextEscalationDueAt,
-        },
-      });
-    }
 
     await tx.auditEvent.create({
       data: {
@@ -141,6 +141,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     return created;
   });
+  if (!communication) {
+    return NextResponse.json({ error: "critical_event_state_changed_reload" }, { status: 409 });
+  }
 
   return NextResponse.json({
     status: "ok",
