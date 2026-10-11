@@ -6431,6 +6431,8 @@ model NotificationDelivery {
   attemptCount      Int                        @default(0) @map("attempt_count")
   maxAttempts       Int                        @default(5) @map("max_attempts")
   nextAttemptAt     DateTime?                  @map("next_attempt_at") @db.DateTime(3)
+  dispatchToken     String?                    @map("dispatch_token") @db.Char(36)
+  dispatchLeaseUntil DateTime?                  @map("dispatch_lease_until") @db.DateTime(3)
   sentAt            DateTime?                  @map("sent_at") @db.DateTime(3)
   providerMessageId String?                    @map("provider_message_id") @db.VarChar(255)
   lastError         String?                    @map("last_error") @db.Text
