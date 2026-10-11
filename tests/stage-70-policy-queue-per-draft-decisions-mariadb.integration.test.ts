@@ -7,7 +7,7 @@ import {
   createPolicyDraftLedgerEntry, policyKeys, type CatalogPolicyProposal,
 } from "../src/lib/catalog-signatory-policy-draft.ts";
 import {
-  nextPolicyReviewRecord, parsePolicyReviewRecord,
+  nextPolicyReviewRecord, parsePolicyReviewRecord, type PolicyReviewReason,
 } from "../src/lib/catalog-policy-draft-review.ts";
 
 test("Stage 70 MariaDB: 200+ decisions across drafts coexist; malformed drafts are hidden individually",{
@@ -34,7 +34,7 @@ test("Stage 70 MariaDB: 200+ decisions across drafts coexist; malformed drafts a
   }>=[];
   const pushDecision=(index:number, domain:"CLINICAL"|"FINANCIAL",
     branchId=branch, actor=domain==="CLINICAL"?clinical:financial,
-    reasonCode=domain==="CLINICAL"?"CLINICAL_AUTHORITY_UNCLEAR":"FINANCIAL_AUTHORITY_UNCLEAR")=>{
+    reasonCode:PolicyReviewReason=domain==="CLINICAL"?"CLINICAL_AUTHORITY_UNCLEAR":"FINANCIAL_AUTHORITY_UNCLEAR")=>{
     const item=drafts[index];
     const scope={organizationId:org,branchId:branch,batchId:item.batchId,
       sourceChecksum:checksum};
