@@ -241,7 +241,7 @@ export default async function DiagnosticReportPage({ params }: { params: Promise
         },
         select: {
           currentVersion: true,
-          order: { select: { id: true, accessionNumber: true, orderedAt: true } },
+          order: { select: { id: true, patientId: true, accessionNumber: true, orderedAt: true } },
           versions: {
             orderBy: { version: "desc" },
             take: 1,
@@ -264,6 +264,7 @@ export default async function DiagnosticReportPage({ params }: { params: Promise
     currentVersion: report.currentVersion,
     order: {
       id: report.order.id,
+      patientId: report.order.patientId,
       accessionNumber: report.order.accessionNumber,
       orderedAt: report.order.orderedAt,
     },

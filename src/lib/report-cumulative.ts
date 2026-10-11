@@ -1,7 +1,9 @@
+import { currentReportResultPointers } from "./patient-history.ts";
+
 // Derived display-only comparisons: never write or reinterpret released report snapshots.
 export type ReportComparisonEvidence = {
   currentVersion: number;
-  order: { id: string; accessionNumber: string; orderedAt: Date };
+  order: { id: string; patientId: string; accessionNumber: string; orderedAt: Date };
   versions: readonly {
     version: number;
     status: string;
@@ -55,31 +57,53 @@ export function extractCurrentReportReadings(
 ): ReportReading[] {
   const version = report.versions.find(item => item.version === report.currentVersion);
   if (!version || !CURRENT_STATUSES.has(version.status)) return [];
-  if (!isRecord(version.contentSnapshot) || !Array.isArray(version.contentSnapshot.results)) return [];
-  if (!Array.isArray(version.resultVersionSnapshot)) return [];
+  const snapshot = version.contentSnapshot;
+  // Corroborate immutable report identity against the DB order, including the
+  // historical patient ID (which can be an alias after a legitimate merge).
+  if (!isRecord(snapshot) || !isRecord(snapshot.order) || !isRecord(snapshot.patient) ||
+      snapshot.order.id !== report.order.id ||
+      snapshot.order.accessionNumber !== report.order.accessionNumber ||
+      snapshot.patient.id !== report.order.patientId ||
+      !Array.isArray(snapshot.results)) return [];
 
-  const resultPointers = new Set<string>();
-  for (const pointer of version.resultVersionSnapshot) {
-    if (!isRecord(pointer)) continue;
-    const resultId = nonEmpty(pointer.resultId);
-    const orderItemId = nonEmpty(pointer.orderItemId);
-    if (resultId && orderItemId && Number.isSafeInteger(pointer.resultVersion) && Number(pointer.resultVersion) > 0) {
-      resultPointers.add([orderItemId, resultId, pointer.resultVersion].join("|"));
-    }
+  const pointers = currentReportResultPointers([{
+    orderId: report.order.id,
+    currentVersion: report.currentVersion,
+    versions: report.versions,
+  }]);
+  const resultCounts = new Map<string, number>();
+  for (const raw of snapshot.results) {
+    if (!isRecord(raw) || !nonEmpty(raw.resultId)) continue;
+    const id = raw.resultId as string;
+    resultCounts.set(id, (resultCounts.get(id) || 0) + 1);
   }
 
   const visibleBranches = new Set(authorizedPerformingBranches);
   const rows: ReportReading[] = [];
-  for (const result of version.contentSnapshot.results) {
+  for (const result of snapshot.results) {
     if (!isRecord(result) || !isRecord(result.performingBranch)) continue;
     const branchId = nonEmpty(result.performingBranch.id);
     if (!branchId || !visibleBranches.has(branchId)) continue;
     const resultId = nonEmpty(result.resultId);
     const orderItemId = nonEmpty(result.orderItemId);
     const resultVersion = result.resultVersion;
-    if (!resultId || !orderItemId || !Number.isSafeInteger(resultVersion)) continue;
-    if (!resultPointers.has([orderItemId, resultId, resultVersion].join("|"))) continue;
+    if (!resultId || !orderItemId || !Number.isSafeInteger(resultVersion) ||
+        Number(resultVersion) < 1 || resultCounts.get(resultId) !== 1) continue;
+    const attested = pointers.get(resultId);
+    if (!attested || attested.orderId !== report.order.id ||
+        attested.orderItemId !== orderItemId || attested.resultVersion !== resultVersion) continue;
     if (!Array.isArray(result.values)) continue;
+    const codes = new Set<string>();
+    let validComponents = true;
+    for (const value of result.values) {
+      const code = isRecord(value) ? nonEmpty(value.componentCode) : null;
+      if (!code || codes.has(code)) {
+        validComponents = false;
+        break;
+      }
+      codes.add(code);
+    }
+    if (!validComponents) continue;
 
     for (const value of result.values) {
       if (!isRecord(value) || typeof value.displayValue !== "string") continue;
