@@ -85,13 +85,14 @@ export async function validatePolicyReviewBatchScope(
   if (!validated.ok) return validated;
   const { ids, refs } = validated;
   const org = input.scope.organizationId;
+  const grantIds = [...input.grantedBranchIds];
   const testScope = { ...clinicalImportTestWhere(input.scope), status: undefined };
   const branchScope = { OR: [
-    { branchId: null }, { branchId: { in: input.grantedBranchIds } },
+    { branchId: null }, { branchId: { in: grantIds } },
   ] };
   const priceScope = { OR: [
     { scopeType: "ORGANIZATION" as const, branchId: null },
-    { scopeType: "BRANCH" as const, branchId: { in: input.grantedBranchIds } },
+    { scopeType: "BRANCH" as const, branchId: { in: grantIds } },
   ] };
   const counts = await Promise.all([
     tx.labTest.count({ where: { ...testScope,
