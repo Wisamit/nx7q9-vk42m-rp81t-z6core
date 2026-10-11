@@ -152,7 +152,8 @@ test("trends split analyzer and method identities and refuse to connect unknown 
 
 test("history uses current report revision evidence and branch-scoped patient attachments", () => {
   const page = readFileSync(new URL("../src/app/patients/[id]/history/page.tsx", import.meta.url), "utf8");
-  assert.ok(page.includes("currentReportResultIds(releaseEvidence)"));
+  assert.ok(page.includes("currentReportResultPointers(releaseEvidence)"));
+  assert.ok(page.includes("resultMatchesCurrentReportPointer(result, currentResultPointers)"));
   assert.ok(page.includes("id: { in: [...currentResultIds] }"));
   assert.ok(page.includes('select: { version: true, status: true, resultVersionSnapshot: true }'));
   const attachments = readFileSync(new URL("../src/lib/patient-history-attachments.ts", import.meta.url), "utf8");
