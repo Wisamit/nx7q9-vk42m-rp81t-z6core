@@ -66,7 +66,7 @@ test("Stage 71 MariaDB: immutable report snapshots cannot disclose stale or wron
     ] as const){
       await write("laboratory_results",resultIds[index],
         "INSERT INTO laboratory_results(id,organization_id,order_item_id,performing_branch_id,version,status,entered_by_user_id,updated_at) VALUES(?,?,?,?,?,?,?,NOW(3))",
-        [resultIds[index],org,itemId,version,status,actor]);
+        [resultIds[index],org,itemId,branch,version,status,actor]);
     }
     const reportEntries=[
       {version:1,report:reports[0],status:"FINAL",
