@@ -48,6 +48,7 @@ jobs:
       - run: node --experimental-strip-types --test tests/stage-19-longitudinal-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-20-report-cumulative-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-21-patient-history-mariadb.integration.test.ts
+      - run: node --experimental-strip-types --test tests/stage-71-patient-history-report-pointer-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-22-aliquot-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-23-medical-validation-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-24-catalog-export-mariadb.integration.test.ts
