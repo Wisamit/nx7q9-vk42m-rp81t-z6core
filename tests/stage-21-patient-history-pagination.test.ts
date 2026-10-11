@@ -42,9 +42,12 @@ test("history page uses independent server windows and release evidence per curr
   assert.ok(source.includes('const reportVersionsData = canViewReports && section === "reports"'));
   assert.ok(source.includes('const invoicesData = canViewBilling && section === "finance"'));
   assert.ok(source.includes('const attachmentData = canViewAttachments && section === "attachments"'));
-  assert.ok((source.match(/skip: navigation.skip/g) || []).length >= 5);
-  assert.ok((source.match(/take: navigation.take/g) || []).length >= 5);
+  assert.ok((source.match(/skip: navigation.skip/g) || []).length >= 4);
+  assert.ok(source.includes("skip: expandedTrend ? 0 : navigation.skip"));
+  assert.ok((source.match(/take: navigation.take/g) || []).length >= 4);
+  assert.ok(source.includes("take: expandedTrend ? EXTENDED_TREND_REPORT_LIMIT + 1 : navigation.take"));
   assert.ok(source.includes("currentReportResultPointers(releaseEvidence)"));
+  assert.ok(source.includes("currentReportResultPointers(trendWindow.chartEvidence)"));
   assert.ok(source.includes("resultMatchesCurrentReportPointer(result, currentResultPointers)"));
   assert.ok(source.includes("id: { in: [...currentResultIds] }"));
   assert.ok(source.includes('performingBranchId: { in: branchIds }'));
