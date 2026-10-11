@@ -6,9 +6,18 @@ const val = (x: unknown): x is string => typeof x === "string" && x.length > 0;
 const nullable = (x: unknown) => x === null || typeof x === "string";
 
 export type PublishedHistoryReport = Omit<OrderedCurrentReportEvidence, "versions"> & {
+  organizationId: string;
+  order: {
+    id: string;
+    patientId: string;
+    accessionNumber: string;
+    orderingBranchId: string;
+  };
   versions: readonly { version: number; status: string; resultVersionSnapshot: unknown; contentSnapshot: unknown }[];
 };
 type FrozenReading = {
+  organizationId: string; patientId: string; accessionNumber: string;
+  orderingBranchId: string;
   orderId: string; orderItemId: string; version: number; testId: string;
   branchId: string; methodId: string | null; analyzerCode: string | null;
   values: Map<string, Obj>;
@@ -16,7 +25,10 @@ type FrozenReading = {
 export type HistoryCandidate = {
   id: string; orderItemId: string; version: number;
   performingBranchId: string; methodId: string | null; analyzerCodeSnapshot: string | null;
-  orderItem: { testId: string; order: { id: string } };
+  orderItem: { testId: string; order: {
+    id: string; patientId: string; organizationId: string;
+    accessionNumber: string; orderingBranchId: string;
+  } };
   values: readonly {
     componentId: string | null; componentCodeSnapshot: string;
     reportNameEnSnapshot: string | null; componentNameEnSnapshot: string;
@@ -39,7 +51,19 @@ export function publishedHistoryEvidence(reports: readonly PublishedHistoryRepor
     const v = report.versions.find(item => item.version === report.currentVersion);
     if (!v || !["FINAL", "PARTIAL", "AMENDED"].includes(v.status)) continue;
     const content = v.contentSnapshot;
-    if (!obj(content) || !obj(content.order) || content.order.id !== report.orderId ||
+    // Verify immutable document provenance against the independently loaded
+    // order, institution and branch, not against today's merged patient master.
+    // Missing identity evidence is not inferred or repaired on a clinical view.
+    if (!val(report.organizationId) || !obj(report.order) ||
+      report.order.id !== report.orderId || !val(report.order.patientId) ||
+      !val(report.order.accessionNumber) || !val(report.order.orderingBranchId) ||
+      !obj(content) || !obj(content.order) || !obj(content.patient) ||
+      !obj(content.organization) || !obj(content.branch) ||
+      content.order.id !== report.orderId ||
+      content.order.accessionNumber !== report.order.accessionNumber ||
+      content.patient.id !== report.order.patientId ||
+      content.organization.id !== report.organizationId ||
+      content.branch.id !== report.order.orderingBranchId ||
       !Array.isArray(content.results)) continue;
     for (const row of content.results) {
       if (!obj(row) || !val(row.resultId) || !val(row.orderItemId) ||
@@ -74,7 +98,12 @@ export function publishedHistoryEvidence(reports: readonly PublishedHistoryRepor
         values.set(value.componentCode, value);
       }
       if (!safe) continue;
-      evidence.set(row.resultId, { orderId: report.orderId, orderItemId: row.orderItemId,
+      evidence.set(row.resultId, {
+        organizationId: report.organizationId,
+        patientId: report.order.patientId,
+        accessionNumber: report.order.accessionNumber,
+        orderingBranchId: report.order.orderingBranchId,
+        orderId: report.orderId, orderItemId: row.orderItemId,
         version: row.resultVersion as number, testId: row.testId,
         branchId: row.performingBranch.id, methodId: row.methodId as string | null,
         analyzerCode: analyzer, values });
@@ -89,6 +118,10 @@ export function resultMatchesPublishedHistory(
 ): boolean {
   const published = evidence.get(result.id);
   if (!published || published.orderId !== result.orderItem.order.id ||
+    published.organizationId !== result.orderItem.order.organizationId ||
+    published.patientId !== result.orderItem.order.patientId ||
+    published.accessionNumber !== result.orderItem.order.accessionNumber ||
+    published.orderingBranchId !== result.orderItem.order.orderingBranchId ||
     published.orderItemId !== result.orderItemId || published.version !== result.version ||
     published.testId !== result.orderItem.testId ||
     published.branchId !== result.performingBranchId ||
