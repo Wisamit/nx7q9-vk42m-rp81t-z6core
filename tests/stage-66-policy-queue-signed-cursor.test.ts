@@ -15,13 +15,17 @@ const context = {organizationId:id(1),branchId:id(2),reviewerUserId:id(3),
   secret:"family-lab-test-only-signing-key-".repeat(2)};
 const now = Date.UTC(2026,9,11,10,1,0);
 const expiresAt = now + POLICY_QUEUE_CURSOR_TTL_MS;
-const signed = () => issueSignedPolicyQueueCursor({ ...context, after, anchor, expiresAt });
+const reviewWatermark = { latest: null, count: 0 };
+const draftCount = 1;
+const signed = () => issueSignedPolicyQueueCursor({
+  ...context, after, anchor, draftCount, reviewWatermark, expiresAt,
+});
 
 test("Stage 66: signed cursor round trip is bound to tenant, branch, reviewer and time",()=>{
   const token=signed();
   assert.match(token,/^[A-Za-z0-9_-]+\.[0-9a-f]{64}$/);
   assert.deepEqual(verifySignedPolicyQueueCursor(token,context,now),{
-    anchor,after,expiresAt,
+    anchor,after,draftCount,reviewWatermark,expiresAt,
   });
   assert.equal(token.includes(context.organizationId),false);
   assert.equal(token.includes(context.branchId),false);
@@ -49,11 +53,12 @@ test("Stage 66: tampering, noncanonical tokens, malformed UTF8 and legacy cursor
   ]) assert.equal(verifySignedPolicyQueueCursor(invalid,context,now),undefined,invalid.slice(0,20));
   assert.deepEqual(decodePolicyQueueCursor(encodePolicyQueueCursor(after)),after);
   const futureIssued=issueSignedPolicyQueueCursor({
-    ...context,anchor,after,expiresAt:now+POLICY_QUEUE_CURSOR_TTL_MS+1,
+    ...context,anchor,after,draftCount,reviewWatermark,
+    expiresAt:now+POLICY_QUEUE_CURSOR_TTL_MS+1,
   });
   assert.equal(verifySignedPolicyQueueCursor(futureIssued,context,now),undefined);
   const reversed=issueSignedPolicyQueueCursor({
-    ...context,anchor:after,after:anchor,expiresAt,
+    ...context,anchor:after,after:anchor,draftCount,reviewWatermark,expiresAt,
   });
   assert.equal(verifySignedPolicyQueueCursor(reversed,context,now),undefined);
 });
@@ -88,8 +93,8 @@ test("Stage 66: API rejects reused wrong-user/branch and stale watermark before 
   assert.match(route,/verifiedPolicyQueueCandidate\(/);
   assert.match(route,/approval: false, signingEnabled: false/);
   assert.match(ui,/policy_queue_cursor_stale/);
-  assert.match(ui,/تغيّرت مسودات السياسة أثناء التصفح/);
-  assert.match(ui,/Policy drafts changed while paging/);
+  assert.match(ui,/تغيّرت مسودات السياسة أو قرارات المراجعة أثناء التصفح/);
+  assert.match(ui,/Policy drafts or reviewer decisions changed while paging/);
   assert.match(ui,/setLoaded\(false\)/);
   assert.match(ui,/\[0-9a-f\]\{64\}/);
   assert.doesNotMatch(route,/tx\.(?:labTest|referenceInterval|priceList|catalogImportBatch)\.(?:create|update|upsert|delete)/);
