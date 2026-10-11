@@ -82,11 +82,7 @@ test("Stage 74 MariaDB: frozen wrong-patient/order reports never contaminate cum
     await issue("NOW",org,patient,branch,staff,"2026-10-09 09:00:00","2026-10-09 12:00:00",patient,null,"97");
     await issue("OLD",org,patient,branch,staff,"2026-06-09 09:00:00","2026-06-09 12:00:00",patient,null,"88");
     await issue("BADPAT",org,patient,branch,staff,"2026-09-09 09:00:00","2026-09-09 12:00:00",anotherPatient,null,"500");
-    const swappedOrder=await issue("BADORDER",org,patient,branch,staff,"2026-08-09 09:00:00","2026-08-09 12:00:00",patient,null,"600");
-    // Produce a separate swapped-order report version as a malicious historical fixture.
-    await writer.execute(
-      "UPDATE diagnostic_report_versions SET content_snapshot=JSON_SET(content_snapshot,'$.order.id',?) WHERE report_id=?",
-      [swappedOrder==="UNKNOWN"?"UNKNOWN":"another-order",reports.BADORDER]);
+    await issue("BADORDER",org,patient,branch,staff,"2026-08-09 09:00:00","2026-08-09 12:00:00",patient,"another-order","600");
     await issue("RESTRICT",org,patient,otherBranch,staff,"2026-09-20 09:00:00","2026-09-20 12:00:00",patient,null,"700");
     await issue("FOREIGN",outside,foreignPatient,foreignBranch,foreignStaff,
       "2026-09-21 09:00:00","2026-09-21 12:00:00",foreignPatient,null,"900");
