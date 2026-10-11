@@ -10,7 +10,7 @@ import { summarizeSignatoryPlanning } from "@/lib/catalog-signatory-planning";
 import { policyDraftAuthorFeedback } from "@/lib/catalog-policy-feedback";
 import { POLICY_DRAFT_HISTORY_LIMIT, verifyPolicyDraftHistory } from "@/lib/catalog-policy-draft-history";
 import {
-  validateCatalogPolicyProposal, createPolicyDraftLedgerEntry,
+  validateCatalogPolicyProposal, createPolicyDraftLedgerEntry, catalogPolicyDraftDigest,
   type CatalogPolicyProposal,
 } from "@/lib/catalog-signatory-policy-draft";
 import { catalogBundleSigningSecret } from "@/lib/catalog-bundle-attestation";
@@ -714,14 +714,18 @@ async function inspectBundleDrift(
       if (policyDraftInput) {
         if (policyDraftInput.expectedRevision !== (oldPolicy?.revision || 0))
           return { error: "policy_draft_revision_conflict", httpStatus: 409 } as const;
-        if (policyHistory.revisionCount >= POLICY_DRAFT_HISTORY_LIMIT)
-          return { error: "policy_draft_revision_limit", httpStatus: 409 } as const;
-        const next = createPolicyDraftLedgerEntry(
-          policyContext, policyDraftInput.proposal, (oldPolicy?.revision || 0) + 1,
-        );
-        if (oldPolicy?.proposalDigest === next.proposalDigest) {
+        // An unchanged revision stays idempotent even at the 1,000-revision cap.
+        const unchanged = oldPolicy?.proposalDigest === catalogPolicyDraftDigest({
+          ...policyContext, proposal: policyDraftInput.proposal,
+        });
+        if (unchanged) {
           draftSave = "UNCHANGED";
         } else {
+          if (policyHistory.revisionCount >= POLICY_DRAFT_HISTORY_LIMIT)
+            return { error: "policy_draft_revision_limit", httpStatus: 409 } as const;
+          const next = createPolicyDraftLedgerEntry(
+            policyContext, policyDraftInput.proposal, (oldPolicy?.revision || 0) + 1,
+          );
           const recordedDraft = await tx.auditEvent.create({ data: {
             organizationId, branchId: liveScope.branchId, actorUserId: session.user.id,
             action: "CATALOG_BUNDLE_SIGNATORY_POLICY_DRAFT_RECORDED",
