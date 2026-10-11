@@ -133,7 +133,7 @@ test("Stage 78 MariaDB: competing critical attempts cannot acknowledge, escalate
 
     // Changing result eligibility is also guarded at claim time. No ghost
     // records may be added merely because an old UI saw a released result.
-    await setup.execute("UPDATE critical_result_events SET status='OPEN',escalation_level=0,updated_at=DATE_ADD(updated_at, INTERVAL 10 MILLISECOND) WHERE id=?",[event]);
+    await setup.execute("UPDATE critical_result_events SET status='OPEN',escalation_level=0,updated_at=DATE_ADD(updated_at, INTERVAL 10000 MICROSECOND) WHERE id=?",[event]);
     await setup.execute("UPDATE laboratory_results SET status='DRAFT' WHERE id=?",[result]);
     assert.equal(await attempt(operatorA,await state(),"ESCALATED"),false);
     const [auditAfter]=await setup.execute<mysql.RowDataPacket[]>(
