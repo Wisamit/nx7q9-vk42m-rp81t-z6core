@@ -137,7 +137,7 @@ export function OrderClinicalHandoverManager({locale,orderId,notes,currentUserId
      <h2>{tr("Full clinical handover timeline (this page)","سجل التسليم السريري (هذه الصفحة)")}</h2>
      {notes.length===0&&<p className="muted">{tr("No clinical handover revisions yet.","لا توجد ملاحظات سريرية بعد.")}</p>}
      {notes.map(note=><div key={note.id} className="detail-section">
-       <strong>{tr(...(categoryNames[note.category]??[note.category,note.category]))}
+       <strong>{tr(categoryNames[note.category]?.[0]||note.category,categoryNames[note.category]?.[1]||note.category)}
          {" · "}v{note.revisionNumber} · {note.status}</strong>
        <small className="table-subtext">{note.authorName} · {note.createdAt.replace("T"," ").slice(0,19)}</small>
        <p dir={note.language==="ar"?"rtl":"ltr"} style={{whiteSpace:"pre-wrap"}}>{note.body}</p>
