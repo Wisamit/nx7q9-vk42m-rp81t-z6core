@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-export type LegacyMasterKind = "REFERRER" | "SOURCE" | "ORGANISM" | "ANTIBIOTIC" | "CLIENT";
+export type LegacyMasterKind = "REFERRER" | "SOURCE" | "ORGANISM" | "ANTIBIOTIC" | "CLIENT" | "COMMENT_TEMPLATE";
 
 export type LegacyMasterRow = {
   rowNumber: number;
@@ -17,6 +17,11 @@ export type LegacyMasterRow = {
   addressEn: string | null;
   addressAr: string | null;
   paymentTermsDays: number | null;
+  commentScope: "ORGANIZATION" | "TEST" | "COMPONENT" | null;
+  testCode: string | null;
+  componentCode: string | null;
+  textEn: string | null;
+  textAr: string | null;
 };
 
 export class LegacyMasterImportError extends Error {
@@ -33,6 +38,7 @@ export const LEGACY_MASTER_COLUMNS: Record<LegacyMasterKind, readonly string[]> 
   ORGANISM: ["code", "name_en", "name_ar", "category"],
   ANTIBIOTIC: ["code", "name_en", "name_ar", "drug_class"],
   CLIENT: ["code", "name_en", "name_ar", "type", "phone", "email", "address_en", "address_ar", "payment_terms_days"],
+  COMMENT_TEMPLATE: ["code", "name_en", "name_ar", "text_en", "text_ar", "scope", "test_code", "component_code"],
 };
 
 export const LEGACY_MASTER_MAX_ROWS = 200;
@@ -143,6 +149,24 @@ export function parseLegacyMasterCsv(kind: LegacyMasterKind, csv: string): Legac
       (!/^(0|[1-9][0-9]{0,3})$/.test(terms) || Number(terms) > 3650)) {
       throw new LegacyMasterImportError("invalid_payment_terms_row_" + rowNumber);
     }
+    const commentScope = kind === "COMMENT_TEMPLATE" ? data.scope.toUpperCase() : null;
+    const testCode = kind === "COMMENT_TEMPLATE" ? (data.test_code || "").toUpperCase() : "";
+    const componentCode = kind === "COMMENT_TEMPLATE" ? (data.component_code || "").toUpperCase() : "";
+    if (kind === "COMMENT_TEMPLATE") {
+      if (!["ORGANIZATION", "TEST", "COMPONENT"].includes(commentScope!))
+        throw new LegacyMasterImportError("invalid_comment_scope_row_" + rowNumber);
+      if ((commentScope === "ORGANIZATION" && (testCode || componentCode)) ||
+          (commentScope === "TEST" && (!testCode || componentCode)) ||
+          (commentScope === "COMPONENT" && (!testCode || !componentCode)) ||
+          (testCode && !/^[A-Z0-9._-]{1,80}$/.test(testCode)) ||
+          (componentCode && !/^[A-Z0-9._-]{1,80}$/.test(componentCode))) {
+        throw new LegacyMasterImportError("invalid_comment_target_row_" + rowNumber);
+      }
+      if (!data.text_en || data.text_en.length > 5000 || (data.text_ar || "").length > 5000 ||
+          /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/.test(data.text_en + (data.text_ar || ""))) {
+        throw new LegacyMasterImportError("invalid_comment_text_row_" + rowNumber);
+      }
+    }
     const category = kind === "SOURCE" || kind === "ORGANISM" ? (data.category || null) : null;
     if (kind === "SOURCE" && !category) {
       throw new LegacyMasterImportError("source_category_required_row_" + rowNumber);
@@ -173,6 +197,11 @@ export function parseLegacyMasterCsv(kind: LegacyMasterKind, csv: string): Legac
       addressEn: kind === "CLIENT" ? data.address_en || null : null,
       addressAr: kind === "CLIENT" ? data.address_ar || null : null,
       paymentTermsDays: terms === "" ? null : Number(terms),
+      commentScope: commentScope as LegacyMasterRow["commentScope"],
+      testCode: testCode || null,
+      componentCode: componentCode || null,
+      textEn: kind === "COMMENT_TEMPLATE" ? data.text_en : null,
+      textAr: kind === "COMMENT_TEMPLATE" ? data.text_ar || null : null,
     };
   });
 }
