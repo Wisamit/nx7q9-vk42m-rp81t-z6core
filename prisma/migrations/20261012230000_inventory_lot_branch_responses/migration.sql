@@ -1,0 +1,20 @@
+CREATE TABLE `inventory_lot_branch_responses` (
+ `id` CHAR(36) NOT NULL,
+ `organization_id` CHAR(36) NOT NULL,
+ `lot_id` CHAR(36) NOT NULL,
+ `branch_id` CHAR(36) NOT NULL,
+ `safety_event_id` CHAR(36) NOT NULL,
+ `actor_user_id` CHAR(36) NOT NULL,
+ `action` VARCHAR(32) NOT NULL,
+ `note` VARCHAR(1000) NOT NULL,
+ `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+ PRIMARY KEY (`id`),
+ UNIQUE INDEX `ilbr_unique_response_action`(`safety_event_id`,`branch_id`,`action`),
+ INDEX `ilbr_branch_timeline`(`organization_id`,`branch_id`,`created_at`),
+ INDEX `ilbr_lot_timeline`(`lot_id`,`created_at`),
+ INDEX `ilbr_actor_fk`(`actor_user_id`),
+ CONSTRAINT `ilbr_lot_fk` FOREIGN KEY(`lot_id`) REFERENCES `inventory_lots`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
+ CONSTRAINT `ilbr_safety_fk` FOREIGN KEY(`safety_event_id`) REFERENCES `inventory_lot_safety_events`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
+ CONSTRAINT `ilbr_branch_fk` FOREIGN KEY(`branch_id`) REFERENCES `branches`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
+ CONSTRAINT `ilbr_actor_fk_constraint` FOREIGN KEY(`actor_user_id`) REFERENCES `users`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
