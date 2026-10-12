@@ -57,6 +57,14 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   });
 
   if (!order || !canAccessBranch(session, order.orderingBranchId)) notFound();
+  const handoverPendingAcknowledgements = await prisma.orderClinicalNote.count({
+    where:{
+      organizationId:session.user.organizationId,branchId:order.orderingBranchId,
+      orderId:order.id,status:"ACTIVE",requiresAcknowledgement:true,
+      createdByUserId:{not:session.user.id},
+      acknowledgements:{none:{acknowledgedByUserId:session.user.id}},
+    },
+  });
   const packageByOrderItemId = new Map(order.packages.flatMap(pkg =>
     pkg.items.map(link => [link.orderItemId, pkg] as const)
   ));
@@ -69,6 +77,11 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         <p className="muted">{order.patient.patientNumber} · {locale === "ar" ? order.patient.fullNameAr || order.patient.fullNameEn : order.patient.fullNameEn} · {locale === "ar" ? order.orderingBranch.nameAr || order.orderingBranch.nameEn : order.orderingBranch.nameEn}</p>
       </div>
       <div className="header-actions">
+        <Link className="secondary-link" href={`/orders/${order.id}/clinical-handover`}>
+          {tr(locale,"Clinical handover","التسليم السريري")}
+          {handoverPendingAcknowledgements>0 && ` · ${handoverPendingAcknowledgements} `+
+            tr(locale,"unacknowledged","بانتظار الاطلاع")}
+        </Link>
         {permissionSet(session).has("reports.view") && <Link className="secondary-link" href={`/reports/${order.id}/interpretation`}>{tr(locale, "Report interpretation", "التفسير السريري للتقرير")}</Link>}
         <Link className="secondary-link" href="/orders">{tr(locale, "Back to Orders", "العودة للطلبات")}</Link>
       </div>

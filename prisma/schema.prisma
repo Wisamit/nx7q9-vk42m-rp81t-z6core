@@ -1007,6 +1007,7 @@ enum EdgeQueueStatus {
 model Organization {
   doctorPortalAccess DoctorPortalPatientAccess[]
   doctorRequisitions DoctorRequisition[]
+  orderClinicalNotes OrderClinicalNote[]
   id              String       @id @default(uuid()) @db.Char(36)
   code            String       @unique @db.VarChar(50)
   nameEn          String       @map("name_en") @db.VarChar(200)
@@ -1199,6 +1200,7 @@ model Branch {
   priceLists PriceList[]
   orders LabOrder[] @relation("OrderingBranchOrders")
   doctorRequisitions DoctorRequisition[]
+  orderClinicalNotes OrderClinicalNote[]
   performedOrderItems OrderItem[] @relation("PerformedBranchOrderItems")
   invoices Invoice[]
   discountApprovalRequests DiscountApprovalRequest[]
@@ -1346,6 +1348,9 @@ model User {
   doctorAccessCreated DoctorPortalPatientAccess[] @relation("DoctorAccessCreator")
   doctorAccessRevoked DoctorPortalPatientAccess[] @relation("DoctorAccessRevoker")
   resolvedDoctorRequisitions DoctorRequisition[] @relation("DoctorRequisitionResolver")
+  createdClinicalHandoverNotes OrderClinicalNote[] @relation("OrderClinicalNoteAuthor")
+  retiredClinicalHandoverNotes OrderClinicalNote[] @relation("OrderClinicalNoteRetirer")
+  acknowledgedClinicalHandoverNotes OrderClinicalNoteAcknowledgement[]
   id             String     @id @default(uuid()) @db.Char(36)
   organizationId String     @map("organization_id") @db.Char(36)
   username       String     @db.VarChar(100)
@@ -2669,6 +2674,7 @@ model LabOrder {
   diagnosticReport DiagnosticReport?
   doctorRequisition DoctorRequisition?
   interpretiveComments ReportInterpretiveComment[]
+  clinicalHandoverNotes OrderClinicalNote[]
   homeCollectionVisit HomeCollectionVisit? @relation("HomeCollectionOrder")
 
   integrationMessages IntegrationMessage[]
@@ -3300,6 +3306,71 @@ model CashierShiftClosure {
   @@map("cashier_shift_closures")
 }
 
+
+
+enum OrderClinicalNoteCategory {
+  CLINICAL_CONTEXT
+  COLLECTION_INSTRUCTION
+  LAB_HANDOVER
+  QUALITY_CAUTION
+}
+
+enum OrderClinicalNoteStatus {
+  ACTIVE
+  SUPERSEDED
+  RETRACTED
+}
+
+model OrderClinicalNote {
+  id                     String @id @default(uuid()) @db.Char(36)
+  organizationId         String @map("organization_id") @db.Char(36)
+  branchId               String @map("branch_id") @db.Char(36)
+  orderId                String @map("order_id") @db.Char(36)
+  threadId               String @map("thread_id") @db.Char(36)
+  revisionNumber         Int @map("revision_number")
+  clientRequestId        String @map("client_request_id") @db.Char(36)
+  requestFingerprint     String @map("request_fingerprint") @db.Char(64)
+  category               OrderClinicalNoteCategory
+  language               String @db.VarChar(2)
+  body                   String @db.Text
+  status                 OrderClinicalNoteStatus @default(ACTIVE)
+  requiresAcknowledgement Boolean @default(false) @map("requires_acknowledgement")
+  replacesNoteId         String? @unique @map("replaces_note_id") @db.Char(36)
+  correctionReason       String? @map("correction_reason") @db.VarChar(1000)
+  createdByUserId        String @map("created_by_user_id") @db.Char(36)
+  createdAt              DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  retiredByUserId        String? @map("retired_by_user_id") @db.Char(36)
+  retiredAt              DateTime? @map("retired_at") @db.DateTime(3)
+  retirementReason       String? @map("retirement_reason") @db.VarChar(1000)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  branch Branch @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  order LabOrder @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  author User @relation("OrderClinicalNoteAuthor", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  retiredBy User? @relation("OrderClinicalNoteRetirer", fields: [retiredByUserId], references: [id], onDelete: Restrict)
+  replacesNote OrderClinicalNote? @relation("OrderClinicalNoteRevision", fields: [replacesNoteId], references: [id], onDelete: Restrict)
+  successor OrderClinicalNote? @relation("OrderClinicalNoteRevision")
+  acknowledgements OrderClinicalNoteAcknowledgement[]
+
+  @@unique([orderId, threadId, revisionNumber], map: "ocn_order_thread_revision_uq")
+  @@unique([organizationId, createdByUserId, clientRequestId], map: "ocn_idempotent_request_uq")
+  @@index([organizationId, branchId, orderId, status], map: "ocn_order_status_idx")
+  @@index([orderId, createdAt, id], map: "ocn_order_timeline_idx")
+  @@map("order_clinical_notes")
+}
+
+model OrderClinicalNoteAcknowledgement {
+  id                   String @id @default(uuid()) @db.Char(36)
+  noteId               String @map("note_id") @db.Char(36)
+  acknowledgedByUserId String @map("acknowledged_by_user_id") @db.Char(36)
+  acknowledgedAt       DateTime @default(now()) @map("acknowledged_at") @db.DateTime(3)
+  note OrderClinicalNote @relation(fields: [noteId], references: [id], onDelete: Restrict)
+  user User @relation(fields: [acknowledgedByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([noteId, acknowledgedByUserId], map: "ocna_note_user_uq")
+  @@index([acknowledgedByUserId, acknowledgedAt], map: "ocna_user_at_idx")
+  @@map("order_clinical_note_acknowledgements")
+}
 
 model OrderStatusHistory {
   id              String      @id @default(uuid()) @db.Char(36)
