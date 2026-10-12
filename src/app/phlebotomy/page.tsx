@@ -64,6 +64,7 @@ export default async function PhlebotomyPage({
       },
       order: {
         include: {
+          homeCollectionVisit: { include: { appointment: true } },
           patient: {
             include: {
               identifiers: {
@@ -168,6 +169,8 @@ export default async function PhlebotomyPage({
             specimen={{
               id: specimen.id,
               orderId: specimen.orderId,
+              homeCollectionVisitId: specimen.order.homeCollectionVisit?.id || null,
+              homeAddressSnapshot: specimen.order.homeCollectionVisit?.appointment.addressSnapshot?.slice(0,250) || null,
               barcode: specimen.barcode,
               accessionNumber: specimen.order.accessionNumber,
               patientNumber: specimen.order.patient.patientNumber,

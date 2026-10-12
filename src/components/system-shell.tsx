@@ -51,6 +51,7 @@ const groups: Array<{ labelEn: string; labelAr: string; items: NavItem[] }> = [
       { href: "/orders", labelEn: "Orders", labelAr: "الطلبات", icon: "orders", permission: "orders.view" },
       { href: "/billing", labelEn: "Billing", labelAr: "الفوترة", icon: "billing", permission: "billing.view" },
       { href: "/digital-services", labelEn: "Digital Services", labelAr: "الخدمات الرقمية", icon: "digital", permissionsAny: ["appointments.view","appointments.manage","home_collection.view","home_collection.manage","queue.view","queue.manage","portal_accounts.manage"] },
+      { href: "/home-collections", labelEn: "Home Collections", labelAr: "الزيارات والسحب المنزلي", icon: "specimen", permissionsAny: ["home_collection.view","home_collection.manage","specimens.collect","specimens.receive"] },
     ],
   },
   {

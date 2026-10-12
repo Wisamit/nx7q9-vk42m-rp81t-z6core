@@ -16,6 +16,8 @@ export function PhlebotomyCollectionCard({
   specimen: {
     id: string;
     orderId: string;
+    homeCollectionVisitId: string | null;
+    homeAddressSnapshot: string | null;
     barcode: string;
     accessionNumber: string;
     patientNumber: string;
@@ -40,7 +42,7 @@ export function PhlebotomyCollectionCard({
   const router = useRouter();
   const [outcome, setOutcome] = useState<"SUCCESS" | "FAILED">("SUCCESS");
   const [secondaryType, setSecondaryType] = useState(specimen.secondaryOptions[0]?.value || "PATIENT_NUMBER");
-  const [locationType, setLocationType] = useState<"BRANCH" | "HOME" | "OTHER">("BRANCH");
+  const [locationType, setLocationType] = useState<"BRANCH" | "HOME" | "OTHER">(specimen.homeCollectionVisitId ? "HOME" : "BRANCH");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
 
@@ -67,6 +69,7 @@ export function PhlebotomyCollectionCard({
       specimen_preanalytical_state_changed: tr("Specimen state changed. Refresh and review before retrying.", "تغيرت حالة العينة. حدّث الصفحة وراجعها قبل إعادة المحاولة."),
       collection_branch_must_match_specimen_location: tr("Collection must be recorded at the specimen's planned custody branch.", "يجب تسجيل السحب في فرع الحيازة المخطط للعينة."),
       order_cancelled: tr("The order is cancelled.", "الطلب ملغى."),
+      home_collection_visit_custody_required: tr("An assigned, active home collection visit is required. Open the linked visit and start collection before scanning.", "يجب وجود زيارة سحب منزلي فعالة ومخصصة لك. افتح الزيارة وابدأ السحب قبل تسجيل العينة."),
     };
     return messages[code] || code || tr("Collection action failed.", "فشل إجراء السحب.");
   }
@@ -87,6 +90,7 @@ export function PhlebotomyCollectionCard({
         secondaryVerificationType: secondaryType,
         secondaryVerificationValue: form.get("secondaryVerificationValue"),
         collectionLocationType: locationType,
+        homeCollectionVisitId: specimen.homeCollectionVisitId,
         collectionLocationText: form.get("collectionLocationText"),
         volume: form.get("volume"),
         volumeUnit: form.get("volumeUnit"),
@@ -103,7 +107,7 @@ export function PhlebotomyCollectionCard({
         : `${tr("Failed attempt recorded. New recollection barcode", "تم تسجيل محاولة السحب الفاشلة. باركود إعادة السحب الجديد")}: ${body.replacementBarcode || "—"}`);
       event.currentTarget.reset();
       setOutcome("SUCCESS");
-      setLocationType("BRANCH");
+      setLocationType(specimen.homeCollectionVisitId ? "HOME" : "BRANCH");
       setSecondaryType(specimen.secondaryOptions[0]?.value || "PATIENT_NUMBER");
       router.refresh();
     } else {
@@ -174,13 +178,13 @@ export function PhlebotomyCollectionCard({
       <label>{tr("Collection branch", "فرع السحب")}<select name="branchId" defaultValue={activeBranchId || branches[0]?.id || ""} required>
         {branches.map(branch => <option value={branch.id} key={branch.id}>{branch.code} — {branch.name}</option>)}
       </select></label>
-      <label>{tr("Collection location type", "نوع موقع السحب")}<select value={locationType} onChange={event => setLocationType(event.target.value as "BRANCH" | "HOME" | "OTHER")}>
+      <label>{tr("Collection location type", "نوع موقع السحب")}<select value={locationType} disabled={Boolean(specimen.homeCollectionVisitId)} onChange={event => setLocationType(event.target.value as "BRANCH" | "HOME" | "OTHER")}>
         <option value="BRANCH">{tr("Laboratory branch", "فرع المختبر")}</option>
         <option value="HOME">{tr("Home collection", "سحب منزلي")}</option>
         <option value="OTHER">{tr("Other location", "موقع آخر")}</option>
       </select></label>
       <label className="form-span">{tr(locationType === "BRANCH" ? "Room / chair (optional)" : "Location details", locationType === "BRANCH" ? "الغرفة / كرسي السحب (اختياري)" : "تفاصيل الموقع")}
-        <input name="collectionLocationText" maxLength={250} required={locationType !== "BRANCH"} />
+        <input name="collectionLocationText" maxLength={250} defaultValue={specimen.homeAddressSnapshot || ""} required={locationType !== "BRANCH"} />
       </label>
 
       <fieldset className="form-span">

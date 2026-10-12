@@ -1,3 +1,4 @@
+import type { Prisma } from "../../../../../../generated/prisma/client";
 import { NextResponse } from "next/server";
 import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
@@ -41,6 +42,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const secondaryType = text(body.secondaryVerificationType, 40);
   const secondaryValue = text(body.secondaryVerificationValue, 160);
   const locationType = text(body.collectionLocationType, 30);
+  const suppliedHomeVisitId = text(body.homeCollectionVisitId, 36);
   const locationText = text(body.collectionLocationText, 250) || null;
   const notes = text(body.notes, 1000) || null;
 
@@ -92,6 +94,23 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!specimen.currentBranchId || specimen.currentBranchId !== branchId) {
     return NextResponse.json({ error: "collection_branch_must_match_specimen_location" }, { status: 409 });
   }
+  const linkedHomeVisit = await prisma.homeCollectionVisit.findUnique({
+    where: { orderId: specimen.orderId },
+    include: { appointment: true },
+  });
+  if (linkedHomeVisit || suppliedHomeVisitId || locationType === "HOME") {
+    if (!linkedHomeVisit || linkedHomeVisit.id !== suppliedHomeVisitId ||
+        linkedHomeVisit.appointment.organizationId !== session.user.organizationId ||
+        linkedHomeVisit.appointment.patientId !== specimen.order.patientId ||
+        linkedHomeVisit.appointment.branchId !== branchId ||
+        linkedHomeVisit.branchId !== branchId ||
+        linkedHomeVisit.appointment.status !== "CONFIRMED" ||
+        linkedHomeVisit.status !== "COLLECTING" ||
+        linkedHomeVisit.assignedCollectorUserId !== session.user.id ||
+        locationType !== "HOME") {
+      return NextResponse.json({ error: "home_collection_visit_custody_required" }, { status: 409 });
+    }
+  }
   if (specimen.order.status === "CANCELLED" || specimen.order.status === "COMPLETED") {
     return NextResponse.json({ error: "order_cancelled" }, { status: 409 });
   }
@@ -142,6 +161,22 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const volumeText = body.volume == null || body.volume === "" ? "" : String(body.volume);
   const volumeUnit = text(body.volumeUnit, 30) || null;
+  const activeOrderId = specimen.orderId;
+  async function lockHomeCustody(tx: Prisma.TransactionClient) {
+    if (!linkedHomeVisit) return;
+    const parent = await tx.$queryRaw<Array<{ id: string }>>`
+      SELECT id FROM appointments WHERE id = ${linkedHomeVisit.appointmentId}
+      AND organization_id = ${session.user.organizationId} FOR UPDATE
+    `;
+    const visit = await tx.$queryRaw<Array<{ id: string }>>`
+      SELECT id FROM home_collection_visits WHERE id = ${linkedHomeVisit.id}
+      AND order_id = ${activeOrderId} AND branch_id = ${branchId}
+      AND assigned_collector_user_id = ${session.user.id}
+      AND status = 'COLLECTING' FOR UPDATE
+    `;
+    if (parent.length !== 1 || visit.length !== 1) throw new CollectionStateChanged();
+  }
+
   if (outcome === "SUCCESS") {
     const volume = volumeText ? Number(volumeText) : null;
     if (volume !== null && (!Number.isFinite(volume) || volume < 0)) {
@@ -163,6 +198,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     const attemptedAt = new Date();
     const result = await prisma.$transaction(async tx => {
+      await lockHomeCustody(tx);
       const changed = await tx.specimen.updateMany({
         where: {
           id: specimen.id,
@@ -193,6 +229,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         data: {
           organizationId: session.user.organizationId,
           specimenId: specimen.id,
+          homeCollectionVisitId: linkedHomeVisit?.id || null,
           branchId,
           collectorUserId: session.user.id,
           branchCodeSnapshot: collectionBranch.code,
@@ -281,6 +318,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
             patientId: patient.id,
             patientNumber: patient.patientNumber,
             outcome: "SUCCESS",
+            homeCollectionVisitId: linkedHomeVisit?.id || null,
             collectionLocationType: locationType,
             collectionLocationText: locationText,
             secondaryVerificationType: verification.secondaryType,
@@ -316,6 +354,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     try {
       const attemptedAt = new Date();
       const result = await prisma.$transaction(async tx => {
+        await lockHomeCustody(tx);
         const changed = await tx.specimen.updateMany({
           where: {
             id: specimen.id,
@@ -415,6 +454,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           data: {
             organizationId: session.user.organizationId,
             specimenId: specimen.id,
+            homeCollectionVisitId: linkedHomeVisit?.id || null,
             replacementSpecimenId: replacement.id,
             branchId,
             collectorUserId: session.user.id,
@@ -479,6 +519,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
               patientId: patient.id,
               patientNumber: patient.patientNumber,
               outcome: "FAILED",
+              homeCollectionVisitId: linkedHomeVisit?.id || null,
               failureReasonCode: reasonCode,
               collectionLocationType: locationType,
               collectionLocationText: locationText,
