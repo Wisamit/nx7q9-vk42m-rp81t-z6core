@@ -87,6 +87,7 @@ export default async function CommentReviewPage({
     SELF_APPROVAL: tr(locale, "A different authorized reviewer is required", "يلزم مراجع معتمد آخر غير المُنشئ"),
     TARGET_INACTIVE_OR_INVALID: tr(locale, "The test/component scope is inactive or invalid", "الفحص أو المكوّن المرتبط غير صالح أو غير نشط"),
     CONTENT_MISSING: tr(locale, "Required clinical wording is missing", "نص التعليق السريري المطلوب غير مكتمل"),
+    PREDECESSOR_INACTIVE: tr(locale, "Previous approved revision is no longer active", "النسخة المعتمدة السابقة لم تعد فعالة"),
   } as const;
   const next = page.at(-1);
   return <main className="page-shell">
