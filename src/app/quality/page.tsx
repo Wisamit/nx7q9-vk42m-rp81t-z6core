@@ -154,6 +154,7 @@ export default async function QualityPage() {
       </div>
       <div className="result-actions">
         {permissions.has("qc.view") && <Link className="secondary-link" href="/qc">{tr(locale, "QC", "ضبط الجودة")}</Link>}
+        {permissions.has("qc.view") && <Link className="secondary-link" href="/quality/eqa">{tr(locale, "EQA / Proficiency Testing", "اختبارات الكفاءة الخارجية EQA")}</Link>}
         <Link className="secondary-link" href="/dashboard">{tr(locale, "Back to Dashboard", "العودة للوحة التحكم")}</Link>
       </div>
     </header>
