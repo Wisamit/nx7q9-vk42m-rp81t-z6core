@@ -24,6 +24,7 @@ export async function POST(request:Request){
     return NextResponse.json({error:"invalid_step_up_request"},{status:400,headers});
   if(!permissionSet(session).has(stepUpPermissions[input.action]))
     return NextResponse.json({error:"step_up_permission_forbidden"},{status:403,headers});
+  const action=input.action as keyof typeof stepUpPermissions;
   const branchId=input.branchId as string;
   if(session.activeBranchId!==branchId||
       !session.user.branchScopes.some(s=>s.branchId===branchId&&
@@ -80,20 +81,20 @@ export async function POST(request:Request){
       await tx.auditEvent.create({data:{
         organizationId:session.user.organizationId,branchId,actorUserId:session.user.id,
         action:"STAFF_STEP_UP_DENIED",entityType:"UserSession",entityId:session.id,
-        newValues:{action:input.action},ipAddress:ctx.ipAddress,userAgent:ctx.userAgent,
+        newValues:{action:action},ipAddress:ctx.ipAddress,userAgent:ctx.userAgent,
       }});
       return {error:"step_up_invalid_credentials",httpStatus:401} as const;
     }
     const grant=await tx.staffStepUpGrant.create({data:{
       userId:session.user.id,sessionId:session.id,organizationId:session.user.organizationId,
-      branchId,action:input.action,resourceKey,
+      branchId,action:action,resourceKey,
       tokenHash:stepUpHash(token),proofMethod,
       expiresAt:new Date(now.getTime()+STEP_UP_TTL_MS),
     }});
     await tx.auditEvent.create({data:{
       organizationId:session.user.organizationId,branchId,actorUserId:session.user.id,
       action:"STAFF_STEP_UP_GRANTED",entityType:"StaffStepUpGrant",entityId:grant.id,
-      newValues:{action:input.action,resourceKey,proofMethod,
+      newValues:{action:action,resourceKey,proofMethod,
         expiresAt:grant.expiresAt,sessionId:session.id},
       ipAddress:ctx.ipAddress,userAgent:ctx.userAgent,
     }});
