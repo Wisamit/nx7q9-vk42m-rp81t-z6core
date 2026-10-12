@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import {lockLotsForSafety,assertLotUsable} from "@/lib/inventory-lot-safety";
 
 export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await requirePermission("inventory.transfer");
@@ -19,6 +20,9 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
       const current = await tx.inventoryTransfer.findUnique({ where: { id: transfer.id }, select: { status: true } });
       if (!current || current.status !== "APPROVED") throw new Error("STATE_CHANGED");
 
+      const safeLots=await lockLotsForSafety(tx,session.user.organizationId,
+        transfer.items.map(line=>line.lotId));
+      for(const line of transfer.items)assertLotUsable(safeLots,line.lotId);
       for (const line of transfer.items) {
         const qty = line.approvedQty;
         if (!qty || qty.lte(0)) throw new Error("APPROVED_QTY_MISSING");
