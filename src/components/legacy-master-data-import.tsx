@@ -3,13 +3,15 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-type Kind = "REFERRER" | "SOURCE" | "ORGANISM" | "ANTIBIOTIC";
+type Kind = "REFERRER" | "SOURCE" | "ORGANISM" | "ANTIBIOTIC" | "CLIENT";
 type PreviewRow = {
   rowNumber: number;
   code: string;
   nameEn: string;
   nameAr: string | null;
   status: "NEW" | "CONFLICT";
+  clientType?: string | null;
+  paymentTermsDays?: number | null;
 };
 type Preview = {
   kind: Kind;
@@ -25,6 +27,7 @@ const headers: Record<Kind, string> = {
   SOURCE: "code,name_en,name_ar,category",
   ORGANISM: "code,name_en,name_ar,category",
   ANTIBIOTIC: "code,name_en,name_ar,drug_class",
+  CLIENT: "code,name_en,name_ar,type,phone,email,address_en,address_ar,payment_terms_days",
 };
 
 export function LegacyMasterDataImport({
@@ -58,7 +61,7 @@ export function LegacyMasterDataImport({
         body: JSON.stringify({
           mode, kind, csv, sourceName,
           ...(mode === "APPLY" ? {
-            confirmation: "CREATE_NEW_RECORDS_ONLY",
+            confirmation: kind === "CLIENT" ? "CREATE_CLIENT_MASTERS_ONLY_NO_CONTRACTS" : "CREATE_NEW_RECORDS_ONLY",
             expectedFingerprint: preview?.fingerprint,
           } : {}),
         }),
@@ -104,6 +107,7 @@ export function LegacyMasterDataImport({
     SOURCE: tr("Order sources", "مصادر الطلبات"),
     ORGANISM: tr("Organisms", "الجراثيم"),
     ANTIBIOTIC: tr("Antibiotics", "المضادات الحيوية"),
+    CLIENT: tr("Corporate clients / accounts", "حسابات العملاء والجهات المتعاقدة"),
   };
   return <section className="detail-card">
     <h2>{tr("Controlled Legacy Master Data Import", "استيراد مضبوط للبيانات المرجعية القديمة")}</h2>
@@ -130,6 +134,10 @@ export function LegacyMasterDataImport({
           "Referrer type must be PHYSICIAN, CLINIC, HOSPITAL or OTHER.",
           "نوع المحيل يجب أن يكون PHYSICIAN أو CLINIC أو HOSPITAL أو OTHER.",
         )}</small>}
+        {kind === "CLIENT" && <p className="form-warning">{tr(
+          "Clients: explicit type INDIVIDUAL / CLINIC / HOSPITAL / COMPANY / INSURANCE / OTHER; payment_terms_days blank or 0–3650. Import creates client masters only, NOT contracts, client prices, financial balances, credit approvals, or referrer relationships.",
+          "العملاء: النوع يجب أن يكون INDIVIDUAL أو CLINIC أو HOSPITAL أو COMPANY أو INSURANCE أو OTHER؛ أيام الدفع فارغة أو من 0 إلى 3650. الاستيراد ينشئ بيانات العملاء فقط، ولا ينشئ عقودًا أو أسعارًا أو أرصدة أو موافقات ائتمانية أو ربطًا تلقائيًا بجهات الإحالة."
+        )}</p>}
       </div>
       <label>{tr("CSV content (up to 200 data rows, 64 KiB)", "محتوى CSV (حتى 200 صف، 64 كيلوبايت)")}
         <textarea rows={9} value={csv} disabled={Boolean(working)}
@@ -148,9 +156,9 @@ export function LegacyMasterDataImport({
       <h3>{tr("Preview — nothing has been saved", "المعاينة — لم يتم حفظ أي شيء")}</h3>
       <p>{tr("Rows", "الصفوف")}: {preview.total} · {tr("New", "جديدة")}: {preview.eligible} · {tr("Conflicts", "متعارضة")}: {preview.conflicts.length}</p>
       <div className="table-wrap"><table>
-        <thead><tr><th>#</th><th>{tr("Code", "الرمز")}</th><th>{tr("English", "الإنكليزية")}</th><th>{tr("Arabic", "العربية")}</th><th>{tr("Status", "الحالة")}</th></tr></thead>
+        <thead><tr><th>#</th><th>{tr("Code", "الرمز")}</th><th>{tr("English", "الإنكليزية")}</th><th>{tr("Arabic", "العربية")}</th>{kind === "CLIENT" && <><th>{tr("Client type", "نوع العميل")}</th><th>{tr("Payment terms (days)", "أيام الدفع")}</th></>}<th>{tr("Status", "الحالة")}</th></tr></thead>
         <tbody>{preview.rows.map(row => <tr key={row.rowNumber}>
-          <td>{row.rowNumber}</td><td>{row.code}</td><td>{row.nameEn}</td><td>{row.nameAr || "—"}</td>
+          <td>{row.rowNumber}</td><td>{row.code}</td><td>{row.nameEn}</td><td>{row.nameAr || "—"}</td>{kind === "CLIENT" && <><td>{row.clientType || "—"}</td><td>{row.paymentTermsDays ?? tr("Not set", "غير محددة")}</td></>}
           <td>{row.status === "NEW" ? tr("New", "جديد") : tr("Existing code — blocked", "رمز موجود — ممنوع")}</td>
         </tr>)}</tbody>
       </table></div>
@@ -162,8 +170,12 @@ export function LegacyMasterDataImport({
           <input type="checkbox" checked={confirmed} disabled={Boolean(working)}
             onChange={e => setConfirmed(e.target.checked)}/>
           {tr(
-            "I approve creating these NEW master records only. All records will be audited.",
-            "أوافق على إنشاء هذه السجلات المرجعية الجديدة فقط، مع تسجيل عملية تدقيق لكل سجل.",
+            kind === "CLIENT"
+              ? "I explicitly approve ONLY new client master records and displayed payment terms. No contracts, prices, balances or automatic referrer linking will be imported."
+              : "I approve creating these NEW master records only. All records will be audited.",
+            kind === "CLIENT"
+              ? "أوافق صراحةً على إنشاء العملاء الجدد وشروط الدفع المعروضة فقط. لن تُستورد عقود أو أسعار أو أرصدة ولن يُربط المحيلون تلقائيًا."
+              : "أوافق على إنشاء هذه السجلات المرجعية الجديدة فقط، مع تسجيل عملية تدقيق لكل سجل.",
           )}
         </label>
         <button type="button" className="primary-button"
