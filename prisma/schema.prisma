@@ -1006,6 +1006,7 @@ enum EdgeQueueStatus {
 
 model Organization {
   doctorPortalAccess DoctorPortalPatientAccess[]
+  doctorRequisitions DoctorRequisition[]
   id              String       @id @default(uuid()) @db.Char(36)
   code            String       @unique @db.VarChar(50)
   nameEn          String       @map("name_en") @db.VarChar(200)
@@ -1197,6 +1198,7 @@ model Branch {
   tatPolicies TestTatPolicy[]
   priceLists PriceList[]
   orders LabOrder[] @relation("OrderingBranchOrders")
+  doctorRequisitions DoctorRequisition[]
   performedOrderItems OrderItem[] @relation("PerformedBranchOrderItems")
   invoices Invoice[]
   discountApprovalRequests DiscountApprovalRequest[]
@@ -1343,6 +1345,7 @@ model ClinicalRuleGovernanceLock {
 model User {
   doctorAccessCreated DoctorPortalPatientAccess[] @relation("DoctorAccessCreator")
   doctorAccessRevoked DoctorPortalPatientAccess[] @relation("DoctorAccessRevoker")
+  resolvedDoctorRequisitions DoctorRequisition[] @relation("DoctorRequisitionResolver")
   id             String     @id @default(uuid()) @db.Char(36)
   organizationId String     @map("organization_id") @db.Char(36)
   username       String     @db.VarChar(100)
@@ -1883,6 +1886,7 @@ model LabTest {
   priceListItems     PriceListItem[]
   taxRules           TaxRule[]
   orderItems         OrderItem[]
+  doctorRequisitionItems DoctorRequisitionItem[]
   tatPolicies        TestTatPolicy[]
   orderQuestions     OrderQuestion[]
   deltaRules         DeltaRule[]
@@ -2304,6 +2308,7 @@ model CatalogImportMapping {
 
 model Patient {
   doctorPortalAccess DoctorPortalPatientAccess[]
+  doctorRequisitions DoctorRequisition[]
   id              String       @id @default(uuid()) @db.Char(36)
   organizationId  String       @map("organization_id") @db.Char(36)
   patientNumber   String       @map("patient_number") @db.VarChar(40)
@@ -2505,6 +2510,7 @@ model Referrer {
 
   portalAccount PortalAccount?
   doctorPortalAccess DoctorPortalPatientAccess[]
+  doctorRequisitions DoctorRequisition[]
 
   @@unique([organizationId, code])
   @@index([organizationId, nameEn])
@@ -2661,6 +2667,7 @@ model LabOrder {
   statusHistory OrderStatusHistory[]
   specimens     Specimen[]
   diagnosticReport DiagnosticReport?
+  doctorRequisition DoctorRequisition?
   interpretiveComments ReportInterpretiveComment[]
   homeCollectionVisit HomeCollectionVisit? @relation("HomeCollectionOrder")
 
@@ -5891,6 +5898,7 @@ model PortalAccount {
   referrer     Referrer?    @relation(fields: [referrerId], references: [id], onDelete: Restrict)
   client       Client?      @relation(fields: [clientId], references: [id], onDelete: Restrict)
   sessions     PortalSession[]
+  doctorRequisitions DoctorRequisition[]
   otpChallenges PortalOtpChallenge[]
   contactVerifications PortalContactVerification[]
   createdAppointments Appointment[] @relation("PortalAppointmentCreator")
@@ -5965,6 +5973,7 @@ model DoctorPortalPatientAccess {
   patientId       String       @map("patient_id") @db.Char(36)
   canViewOrders   Boolean      @default(true) @map("can_view_orders")
   canViewReports  Boolean      @default(false) @map("can_view_reports")
+  canRequestOrders Boolean      @default(false) @map("can_request_orders")
   effectiveFrom   DateTime     @map("effective_from") @db.DateTime(3)
   effectiveTo     DateTime?    @map("effective_to") @db.DateTime(3)
   status          RecordStatus @default(ACTIVE)
@@ -5986,6 +5995,63 @@ model DoctorPortalPatientAccess {
   @@index([organizationId, patientId, status])
   @@index([referrerId, patientId, createdAt])
   @@map("doctor_portal_patient_access")
+}
+
+
+enum DoctorRequisitionStatus {
+  SUBMITTED
+  CANCELLED
+  DECLINED
+  FULFILLED
+}
+
+model DoctorRequisition {
+  id                String @id @default(uuid()) @db.Char(36)
+  organizationId    String @map("organization_id") @db.Char(36)
+  branchId          String @map("branch_id") @db.Char(36)
+  patientId         String @map("patient_id") @db.Char(36)
+  referrerId        String @map("referrer_id") @db.Char(36)
+  portalAccountId   String @map("portal_account_id") @db.Char(36)
+  clientRequestId   String @map("client_request_id") @db.Char(36)
+  requestFingerprint String @map("request_fingerprint") @db.Char(64)
+  status            DoctorRequisitionStatus @default(SUBMITTED)
+  priority          OrderPriority @default(ROUTINE)
+  diagnosis         String? @db.VarChar(500)
+  clinicalNotes     String? @map("clinical_notes") @db.Text
+  submittedAt       DateTime @default(now()) @map("submitted_at") @db.DateTime(3)
+  resolvedAt        DateTime? @map("resolved_at") @db.DateTime(3)
+  resolvedByUserId  String? @map("resolved_by_user_id") @db.Char(36)
+  resolutionReason  String? @map("resolution_reason") @db.VarChar(1000)
+  fulfilledOrderId  String? @unique @map("fulfilled_order_id") @db.Char(36)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  branch       Branch @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  patient      Patient @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  referrer     Referrer @relation(fields: [referrerId], references: [id], onDelete: Restrict)
+  portalAccount PortalAccount @relation(fields: [portalAccountId], references: [id], onDelete: Restrict)
+  resolvedBy   User? @relation("DoctorRequisitionResolver", fields: [resolvedByUserId], references: [id], onDelete: Restrict)
+  fulfilledOrder LabOrder? @relation(fields: [fulfilledOrderId], references: [id], onDelete: Restrict)
+  items        DoctorRequisitionItem[]
+
+  @@unique([portalAccountId, clientRequestId])
+  @@index([organizationId, branchId, status, submittedAt])
+  @@index([organizationId, referrerId, patientId, submittedAt])
+  @@map("doctor_requisitions")
+}
+
+model DoctorRequisitionItem {
+  id              String @id @default(uuid()) @db.Char(36)
+  requisitionId   String @map("requisition_id") @db.Char(36)
+  testId          String @map("test_id") @db.Char(36)
+  testCodeSnapshot String @map("test_code_snapshot") @db.VarChar(80)
+  testNameEnSnapshot String @map("test_name_en_snapshot") @db.VarChar(220)
+  testNameArSnapshot String? @map("test_name_ar_snapshot") @db.VarChar(220)
+  requisition DoctorRequisition @relation(fields: [requisitionId], references: [id], onDelete: Restrict)
+  test LabTest @relation(fields: [testId], references: [id], onDelete: Restrict)
+
+  @@unique([requisitionId, testId])
+  @@index([testId])
+  @@map("doctor_requisition_items")
 }
 
 model CorporatePortalPatientAccess {
