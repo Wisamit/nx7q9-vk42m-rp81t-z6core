@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { statusLabel as sharedStatusLabel } from "@/lib/ui-i18n";
 
 type Option = { id: string; label: string };
@@ -370,7 +371,7 @@ export function DigitalServicesConsole({
       <div className="table-wrap"><table>
         <thead><tr><th>{tr("Booking", "الحجز")}</th><th>{tr("Patient", "المريض")}</th><th>{tr("Branch", "الفرع")}</th><th>{tr("Scheduled", "الموعد")}</th><th>{tr("Collector", "موظف السحب")}</th><th>{tr("Status", "الحالة")}</th><th>{tr("Next", "التالي")}</th></tr></thead>
         <tbody>{homeCollections.length === 0 ? <tr><td colSpan={7} className="empty-state">{tr("No home collection visits.", "لا توجد زيارات سحب منزلي.")}</td></tr> : homeCollections.map(item => <tr key={item.id}>
-          <td>{item.appointmentNumber}</td><td>{item.patient}</td><td>{item.branch}</td><td>{item.scheduledStart.replace("T"," ").slice(0,16)}</td><td>{item.collector || tr("Unassigned", "غير معين")}</td><td>{statusLabel(item.status)}</td>
+          <td><Link className="table-link" href={`/home-collections/${item.id}`}>{item.appointmentNumber}</Link></td><td>{item.patient}</td><td>{item.branch}</td><td>{item.scheduledStart.replace("T"," ").slice(0,16)}</td><td>{item.collector || tr("Unassigned", "غير معين")}</td><td>{statusLabel(item.status)}</td>
           <td>{permissions.homeCollection && <>
             {item.status === "SCHEDULED" && <div className="result-actions">
               <select value={collectorByVisit[item.id] || ""} onChange={event => setCollectorByVisit(current => ({ ...current, [item.id]: event.target.value }))}>
