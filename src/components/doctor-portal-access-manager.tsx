@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 type SelectOption = {id:string;label:string};
-type Grant = {id:string;doctor:string;patient:string;orders:boolean;reports:boolean;
+type Grant = {id:string;doctor:string;patient:string;orders:boolean;reports:boolean;requestOrders:boolean;
  from:string;to:string|null;status:string;createdBy:string;reason:string;revokedAt:string|null;revokeReason:string|null};
 export function DoctorPortalAccessManager({
  locale,doctors,patients,grants,
@@ -13,6 +13,7 @@ export function DoctorPortalAccessManager({
  const [busy,setBusy]=useState(false),[message,setMessage]=useState("");
  const [doctor,setDoctor]=useState(doctors[0]?.id??""),[patient,setPatient]=useState(patients[0]?.id??"");
  const [orders,setOrders]=useState(true),[reports,setReports]=useState(false);
+ const [requestOrders,setRequestOrders]=useState(false);
  const [from,setFrom]=useState(""),[to,setTo]=useState(""),[reason,setReason]=useState("");
  const [after,setAfter]=useState("");
  async function grant(e:React.FormEvent<HTMLFormElement>) {
@@ -22,6 +23,7 @@ export function DoctorPortalAccessManager({
    try {
     const r=await fetch("/api/doctor-portal-access",{method:"POST",headers:{"Content-Type":"application/json"},
       body:JSON.stringify({referrerId:doctor,patientId:patient,canViewOrders:orders,canViewReports:reports,
+       canRequestOrders:requestOrders,
        effectiveFrom:from?new Date(from).toISOString():undefined,
        effectiveTo:to?new Date(to).toISOString():undefined,reason})});
     const data=await r.json().catch(()=>({})) as {error?:string};
@@ -64,13 +66,15 @@ export function DoctorPortalAccessManager({
        {t("Allow laboratory orders","السماح بعرض طلبات المختبر")}</label>
       <label><input type="checkbox" checked={reports} onChange={e=>setReports(e.target.checked)}/>
        {t("Allow released diagnostic reports","السماح بعرض التقارير الصادرة")}</label>
+      <label><input type="checkbox" checked={requestOrders} onChange={e=>setRequestOrders(e.target.checked)}/>
+       {t("Allow new electronic test requisitions", "السماح بطلب فحوصات إلكترونيًا")}</label>
       <label>{t("Effective from (leave blank for now)","يبدأ السريان (اترك فارغًا للآن)")}
        <input type="datetime-local" value={from} onChange={e=>setFrom(e.target.value)}/></label>
       <label>{t("Effective until (optional)","ينتهي السريان (اختياري)")}
        <input type="datetime-local" value={to} onChange={e=>setTo(e.target.value)}/></label>
       <label>{t("Authorization reason (10–1000 chars)","سبب التفويض (10–1000 محرف)")}
        <textarea required minLength={10} maxLength={1000} value={reason} onChange={e=>setReason(e.target.value)}/></label>
-      <button className="primary-button" disabled={busy||!doctor||!patient||(!orders&&!reports)}>
+      <button className="primary-button" disabled={busy||!doctor||!patient||(!orders&&!reports&&!requestOrders)}>
        {busy?t("Saving…","جارٍ الحفظ…"):t("Grant doctor access","منح الطبيب الصلاحية")}
       </button>
     </form>
@@ -85,7 +89,7 @@ export function DoctorPortalAccessManager({
     </tr></thead><tbody>{visible.map(g=><tr key={g.id}>
      <td>{g.doctor}<small className="table-subtext">{g.patient}</small>
       <small className="table-subtext">{g.reason}</small></td>
-     <td>{g.orders?t("Orders ","طلبات "):""}{g.reports?t("Reports","تقارير"):""}</td>
+     <td>{g.orders?t("Orders ","طلبات "):""}{g.reports?t("Reports ","تقارير "):""}{g.requestOrders?t("Electronic requisitions","طلبات إلكترونية"):""}</td>
      <td>{g.status}<small className="table-subtext">{g.from} — {g.to||"∞"}</small>
       {g.revokeReason&&<small className="table-subtext">{g.revokeReason}</small>}</td>
      <td>{g.status==="ACTIVE"&&<button className="secondary-button" type="button"
