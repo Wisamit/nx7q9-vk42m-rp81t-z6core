@@ -1,3 +1,4 @@
+import type { Prisma } from "../../../../../../generated/prisma/client";
 import { NextResponse } from "next/server";
 import {
   authorizedDepartmentIds, canAccessBranch, getCurrentSession,
@@ -10,7 +11,7 @@ import {
 } from "@/lib/report-interpretation";
 
 type Session = NonNullable<Awaited<ReturnType<typeof getCurrentSession>>>;
-async function lockedOrder(tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
+async function lockedOrder(tx: Prisma.TransactionClient,
   orderId: string, session: Session) {
   const organizationId=session.user.organizationId;
   const rows=await tx.$queryRaw<Array<{id:string}>>`
