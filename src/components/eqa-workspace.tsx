@@ -38,6 +38,13 @@ export function EqaWorkspace({locale,actorId,branches,programs,rounds,components
     if(busy)return;
     const form=event.currentTarget;
     const data=Object.fromEntries(new FormData(form).entries());
+    if (action==="CREATE_ROUND" && typeof data.dueAt==="string" && data.dueAt) {
+      const parsed=new Date(data.dueAt);
+      if (!Number.isFinite(parsed.getTime())) {
+        setMessage(tr("Invalid local due date.","الموعد المحلي غير صحيح."));return;
+      }
+      data.dueAt=parsed.toISOString();
+    }
     if(!confirm(tr("Confirm "+action.replaceAll("_"," ").toLowerCase()+"? This step is audited.",
       "تأكيد العملية؟ سيتم تسجيلها في سجل التدقيق.")))return;
     setBusy(true);setMessage("");
@@ -89,7 +96,7 @@ export function EqaWorkspace({locale,actorId,branches,programs,rounds,components
         </select></label>
         <label>{tr("Provider round code","رمز الجولة")}<input name="roundCode" required maxLength={80}/></label>
         <label>{tr("External sample identifier","معرّف عينة التقييم")}<input name="sampleCode" required maxLength={120}/></label>
-        <label>{tr("Submission deadline (optional)","الموعد النهائي (اختياري)")}
+        <label>{tr("Submission deadline (your browser local time; optional)","الموعد النهائي بالتوقيت المحلي للمتصفح (اختياري)")}
           <input name="dueAt" type="datetime-local"/></label>
         <button className="primary-button" disabled={busy||!selectedProgramItem}>{tr("Create open round","إنشاء جولة مفتوحة")}</button>
       </form>
