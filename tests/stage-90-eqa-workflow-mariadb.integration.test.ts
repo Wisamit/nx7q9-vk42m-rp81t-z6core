@@ -117,7 +117,7 @@ test("Stage 90 MariaDB: EQA branch isolation, analyte snapshots, atomic submitte
     assert.equal(repeat.affectedRows,0,"provider assessment cannot be overwritten");
     const [evaluation]=await db.execute<mysql.RowDataPacket[]>(
       "SELECT assessment FROM eqa_observations WHERE round_id=?",[roundId]);
-    assert.equal(eqaAllReviewed(evaluation),true);
+    assert.equal(eqaAllReviewed(evaluation.map(row=>({assessment:row.assessment as string|null}))),true);
     await db.execute("UPDATE eqa_rounds SET status='ASSESSED',reviewed_by_user_id=?,"+
       "reviewed_at=NOW(3),review_reason='Independent provider failure review',updated_at=NOW(3) "+
       "WHERE id=? AND status='SUBMITTED'",[reviewer,roundId]);
