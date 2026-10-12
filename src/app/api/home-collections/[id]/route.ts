@@ -47,7 +47,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "invalid_status_transition", from: visit.status, to: nextStatus }, { status: 409 });
   }
 
-  const collectorId = text(body.assignedCollectorUserId, 36) || visit.assignedCollectorUserId;
+  const suppliedCollectorId = text(body.assignedCollectorUserId, 36);
+  const collectorId = nextStatus === "ASSIGNED" ? suppliedCollectorId : visit.assignedCollectorUserId;
+  if (nextStatus !== "ASSIGNED" && suppliedCollectorId && suppliedCollectorId !== visit.assignedCollectorUserId) {
+    return NextResponse.json({ error: "collector_reassignment_after_dispatch_forbidden" }, { status: 409 });
+  }
   if (nextStatus === "ASSIGNED" && !collectorId) {
     return NextResponse.json({ error: "collector_required" }, { status: 400 });
   }
@@ -93,6 +97,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       if (!manager && current.assignedCollectorUserId !== session.user.id) {
         throw new Error("ASSIGNED_COLLECTOR_REQUIRED");
       }
+      if (nextStatus !== "ASSIGNED" && current.assignedCollectorUserId !== collectorId) {
+        throw new Error("COLLECTOR_REASSIGNMENT_AFTER_DISPATCH_FORBIDDEN");
+      }
       if (current.updatedAt.getTime() !== visit.updatedAt.getTime() ||
           (nextStatus !== current.status && !(transitions[current.status] || []).includes(nextStatus))) {
         throw new Error("VISIT_STATE_CHANGED");
@@ -100,7 +107,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       if (nextStatus === "CANCELLED" && ["COLLECTING", "COLLECTED", "DELIVERED"].includes(current.status)) {
         throw new Error("SPECIMEN_CUSTODY_ALREADY_STARTED");
       }
-      if (["COLLECTING","COLLECTED","DELIVERED"].includes(nextStatus)) {
+      if (["EN_ROUTE","COLLECTING","COLLECTED","DELIVERED"].includes(nextStatus)) {
         if (!current.orderId) throw new Error("HOME_ORDER_LINK_REQUIRED");
         // Lock the accession as part of the same custody transaction. Concurrent
         // specimen collection always takes appointment then visit locks first.
@@ -136,7 +143,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           paidAmount: invoice.paidAmount.toString(),
           balanceAmount: invoice.balanceAmount.toString(),
         }));
-        const problem = nextStatus === "COLLECTING"
+        const problem = ["EN_ROUTE","COLLECTING"].includes(nextStatus)
           ? homeCollectionStartError(current, order.specimens.length, invoices)
           : homeCollectionCustodyError(current, nextStatus, order.specimens, invoices);
         if (problem) throw new Error(problem.toUpperCase());
@@ -183,7 +190,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const reason = error instanceof Error ? error.message : "";
     const codes = [
       "APPOINTMENT_NOT_ACTIVE", "APPOINTMENT_NOT_READY", "SPECIMEN_CUSTODY_ALREADY_STARTED",
-      "ASSIGNED_COLLECTOR_REQUIRED", "HOME_ORDER_LINK_REQUIRED", "HOME_ORDER_CHANGED", "HOME_COLLECTOR_REQUIRED",
+      "ASSIGNED_COLLECTOR_REQUIRED", "COLLECTOR_REASSIGNMENT_AFTER_DISPATCH_FORBIDDEN",
+      "HOME_ORDER_LINK_REQUIRED", "HOME_ORDER_CHANGED", "HOME_COLLECTOR_REQUIRED",
       "HOME_SPECIMENS_REQUIRED", "HOME_ISSUED_INVOICE_REQUIRED",
       "HOME_SPECIMEN_COLLECTION_EVIDENCE_MISSING", "HOME_SPECIMEN_NOT_COLLECTED",
       "HOME_SPECIMEN_RECEPTION_EVIDENCE_MISSING",
