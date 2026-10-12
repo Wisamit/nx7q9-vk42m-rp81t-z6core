@@ -58,7 +58,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         }),
         tx.labOrder.findFirst({
           where: { id: orderId, organizationId: org },
-          include: { _count: { select: { items: true, specimens: true, invoices: true } } },
+          include: {
+            specimens: { select: { status: true } },
+            _count: { select: { items: true, specimens: true, invoices: true } },
+          },
         }),
       ]);
       if (!order || freshVisit.appointment.mode !== "HOME_COLLECTION" ||
@@ -73,6 +76,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         visitBranchId: freshVisit.branchId,
         orderStatus: order.status, visitStatus: freshVisit.status,
         hasSpecimens: order._count.specimens > 0,
+        specimensAllPlanned: order.specimens.every(specimen => specimen.status === "PLANNED"),
         hasOrderItems: order._count.items > 0,
         alreadyLinked: freshVisit.orderId !== null,
       });
