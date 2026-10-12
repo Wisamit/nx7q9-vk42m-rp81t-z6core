@@ -2,20 +2,11 @@ import { NextResponse } from "next/server";
 import {getCurrentSession,permissionSet,requestContext} from "@/lib/auth";
 import {prisma} from "@/lib/db";
 import {lockLotsForSafety} from "@/lib/inventory-lot-safety";
+import {validLotResponse,lotResponseNote} from "@/lib/inventory-lot-branch-response";
 
 const noStore={"Cache-Control":"private, no-store"};
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const actions=["NOTICE_RECEIVED","STOCK_ISOLATED","ESCALATED_TO_QUALITY"] as const;
-type Action=typeof actions[number];
 class ResponseConflict extends Error {constructor(readonly code:string){super(code);}}
-export function validLotResponse(value:unknown):value is Action{
- return typeof value==="string"&&actions.some(a=>a===value);
-}
-export function lotResponseNote(value:unknown):string|null {
- if(typeof value!=="string"||value!==value.trim()||value.length<20||value.length>1000||
-   /[\u0000-\u001f\u007f]/.test(value))return null;
- return value;
-}
 export async function POST(request:Request){
  const session=await getCurrentSession();
  if(!session)return NextResponse.json({error:"unauthorized"},{status:401,headers:noStore});
