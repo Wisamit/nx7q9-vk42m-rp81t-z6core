@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 export function CommentTemplateStatusButton({
-  id, status, fingerprint, canManage, canApprove, locale,
+  id, status, fingerprint, canManage, canApprove, locale, supersedesTemplateId = null,
 }: {
   id: string;
   status: "ACTIVE" | "INACTIVE";
@@ -12,6 +12,7 @@ export function CommentTemplateStatusButton({
   canManage: boolean;
   canApprove: boolean;
   locale: "ar" | "en";
+  supersedesTemplateId?: string | null;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -25,10 +26,13 @@ export function CommentTemplateStatusButton({
     if (nextStatus === "ACTIVE" && !canApprove) return;
     if (nextStatus === "INACTIVE" && !canManage) return;
     const question = nextStatus === "ACTIVE"
-      ? tr(
-        "Review the complete English AND Arabic text and linked test/component displayed above. Approve EXACT text for future clinical use? The creator/importer cannot approve their own template.",
-        "راجع النص الكامل بالإنجليزية والعربية وربط الفحص والمكوّن المعروضين. هل تعتمد النص ذاته للاستخدام السريري اللاحق؟ لا يجوز للمُنشئ أو المستورد اعتماد قالب أنشأه.",
-      )
+      ? supersedesTemplateId
+        ? tr("Approve this exact revision and ATOMICALLY RETIRE the preceding approved template for future use? Released reports remain unchanged. Independent clinical approval is required.",
+          "هل تعتمد هذه النسخة المحددة وتوقف القالب المعتمد السابق ضمن العملية نفسها للاستخدام المستقبلي؟ التقارير الصادرة لا تتغير ويجب الاعتماد من مراجع سريري مستقل.")
+        : tr(
+          "Review the complete English AND Arabic text and linked test/component displayed above. Approve EXACT text for future clinical use? The creator/importer cannot approve their own template.",
+          "راجع النص الكامل بالإنجليزية والعربية وربط الفحص والمكوّن المعروضين. هل تعتمد النص ذاته للاستخدام السريري اللاحق؟ لا يجوز للمُنشئ أو المستورد اعتماد قالب أنشأه.",
+        )
       : tr(
         "Deactivate this template for future use? Released reports and recorded results will remain unchanged.",
         "هل تريد تعطيل استخدام القالب مستقبلًا؟ ستبقى التقارير الصادرة والنتائج المسجّلة دون تعديل.",
@@ -58,7 +62,9 @@ export function CommentTemplateStatusButton({
         body: JSON.stringify({
           id, status: nextStatus, reason, expectedFingerprint: fingerprint,
           ...(nextStatus === "ACTIVE" ? {
-            confirmation: "APPROVE_EXACT_BILINGUAL_CLINICAL_TEXT",
+            confirmation: supersedesTemplateId
+              ? "APPROVE_REVISION_AND_RETIRE_PREDECESSOR"
+              : "APPROVE_EXACT_BILINGUAL_CLINICAL_TEXT",
           } : {}),
         }),
       });
@@ -71,6 +77,8 @@ export function CommentTemplateStatusButton({
           comment_template_origin_unverified: ["Creation evidence missing; authorization blocked.", "مصدر إنشاء القالب غير موثق؛ التفعيل محظور."],
           comment_template_target_inactive_or_invalid: ["Linked clinical target is inactive or invalid.", "الفحص أو المكوّن المرتبط غير فعال أو غير صالح."],
           comment_template_state_changed: ["Template status has changed. Refresh the page.", "تغيرت حالة القالب. أعد تحميل الصفحة."],
+          comment_revision_predecessor_invalid_or_retired: ["The preceding approved revision is no longer active. Do not approve this draft.", "النسخة المعتمدة السابقة لم تعد فعالة. لا يمكن اعتماد المسودة."],
+          comment_revision_predecessor_superseded: ["A newer revision exists. Old text cannot be reactivated.", "توجد نسخة أحدث؛ لا يمكن إعادة تفعيل النص القديم."],
         };
         setError(errors[result.error || ""]?.[locale === "ar" ? 1 : 0] ||
           result.error || tr("Could not update template.", "تعذر تحديث القالب."));
