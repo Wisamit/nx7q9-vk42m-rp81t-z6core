@@ -1,3 +1,4 @@
+import { Prisma } from "../../../../../generated/prisma/client";
 import { NextResponse } from "next/server";
 import { getCurrentSession, permissionSet, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
@@ -73,8 +74,8 @@ export async function POST(request: Request) {
       }
       async function audit(
         event:string,entityType:string,entityId:string,branchId:string,
-        oldValues:Record<string,unknown>|null,
-        newValues:Record<string,unknown>|null,
+        oldValues:Prisma.InputJsonObject|null,
+        newValues:Prisma.InputJsonObject|null,
         reason:string|null = null,
       ) {
         await tx.auditEvent.create({data:{
@@ -159,8 +160,13 @@ export async function POST(request: Request) {
         const observedValue=eqaText(body.observedValue,300,true,"observed_value")!;
         const methodSnapshot=eqaText(body.methodSnapshot,220,false,"method_snapshot");
         const note=eqaText(body.note,1000,false,"note");
+        const departmentIds=session.user.departmentScopes
+          .filter(scope=>scope.department.status==="ACTIVE" &&
+            scope.department.organizationId===organizationId)
+          .map(scope=>scope.departmentId);
         const component=await tx.testComponent.findFirst({
-          where:{id:componentId,status:"ACTIVE",test:{organizationId,status:"ACTIVE"}},
+          where:{id:componentId,status:"ACTIVE",test:{organizationId,status:"ACTIVE",
+            ...(departmentIds.length?{departmentId:{in:departmentIds}}:{})}},
           include:{unit:true,test:{select:{code:true}}},
         });
         if (!component) throw new EqaWorkflowError("component_not_active_or_foreign",403);
