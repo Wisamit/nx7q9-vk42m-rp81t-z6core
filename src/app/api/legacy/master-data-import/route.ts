@@ -4,6 +4,7 @@ import type { Prisma, PrismaClient } from "../../../../../generated/prisma/clien
 import { permissionSet, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { createLegacyMasterRecords } from "@/lib/legacy-master-import-commit";
+import { resolveLegacyCommentTargets } from "@/lib/legacy-comment-targets";
 import {
   legacyMasterFingerprint, LegacyMasterImportError, parseLegacyMasterCsv,
   type LegacyMasterKind, type LegacyMasterRow,
@@ -15,6 +16,7 @@ const allowed: Record<LegacyMasterKind, string> = {
   ORGANISM: "microbiology.manage",
   ANTIBIOTIC: "microbiology.manage",
   CLIENT: "clients.manage",
+  COMMENT_TEMPLATE: "result_comments.manage",
 };
 
 async function existingCodes(
@@ -24,7 +26,9 @@ async function existingCodes(
   codes: string[],
 ): Promise<string[]> {
   const where = { organizationId, code: { in: codes } };
-  const records = kind === "CLIENT"
+  const records = kind === "COMMENT_TEMPLATE"
+    ? await db.resultCommentTemplate.findMany({ where, select: { code: true } })
+    : kind === "CLIENT"
     ? await db.client.findMany({ where, select: { code: true } })
     : kind === "REFERRER"
     ? await db.referrer.findMany({ where, select: { code: true } })
@@ -75,6 +79,14 @@ export async function POST(request: Request) {
   const codes = rows.map(row => row.code);
   const collisions = await existingCodes(prisma, kind, organizationId, codes);
   const collisionsSet = new Set(collisions.map(code => code.toUpperCase()));
+  if (kind === "COMMENT_TEMPLATE") {
+    try { await resolveLegacyCommentTargets(prisma, organizationId, rows); }
+    catch (error) {
+      if (error instanceof LegacyMasterImportError)
+        return NextResponse.json({ error: error.reason }, { status: 409 });
+      throw error;
+    }
+  }
 
   if (mode === "PREVIEW") {
     return NextResponse.json({
@@ -91,10 +103,13 @@ export async function POST(request: Request) {
       })),
       // Financial master previews explicitly expose terms; no hidden inferred contracts.
       financialScope: kind === "CLIENT" ? "CLIENT_MASTER_ONLY_NO_CONTRACTS_PRICES_OR_BALANCES" : null,
+      clinicalScope: kind === "COMMENT_TEMPLATE" ? "INACTIVE_TEMPLATES_ONLY_NO_RESULT_REPORT_CHANGES" : null,
     }, { headers: { "Cache-Control": "private, no-store" } });
   }
 
-  if (input.confirmation !== (kind === "CLIENT" ? "CREATE_CLIENT_MASTERS_ONLY_NO_CONTRACTS" : "CREATE_NEW_RECORDS_ONLY") || input.expectedFingerprint !== fingerprint) {
+  const confirmation = kind === "CLIENT" ? "CREATE_CLIENT_MASTERS_ONLY_NO_CONTRACTS"
+    : kind === "COMMENT_TEMPLATE" ? "CREATE_INACTIVE_COMMENT_TEMPLATES_ONLY" : "CREATE_NEW_RECORDS_ONLY";
+  if (input.confirmation !== confirmation || input.expectedFingerprint !== fingerprint) {
     return NextResponse.json({ error: "review_confirmation_or_fingerprint_required" }, { status: 409 });
   }
   if (collisionsSet.size > 0) {
@@ -127,6 +142,7 @@ export async function POST(request: Request) {
           newValues: { kind, sourceName, fingerprint, count: entries.length,
             entityIds: entries.map(row => row.id),
             ...(kind === "CLIENT" ? { financialScope: "MASTER_ONLY_NO_CONTRACTS_PRICES_OR_BALANCES" } : {}),
+            ...(kind === "COMMENT_TEMPLATE" ? { clinicalScope: "INACTIVE_ONLY_NO_RESULT_CHANGES" } : {}),
           },
           ipAddress: context.ipAddress, userAgent: context.userAgent,
         },
@@ -141,6 +157,11 @@ export async function POST(request: Request) {
             newValues: {
               importId, code: row.code, nameEn: row.nameEn,
               nameAr: row.nameAr, fingerprint, sourceName,
+              ...(kind === "COMMENT_TEMPLATE" ? {
+                scope: row.commentScope, testCode: row.testCode,
+                componentCode: row.componentCode, status: "INACTIVE",
+                clinicalScope: "INACTIVE_ONLY_NO_RESULT_CHANGES",
+              } : {}),
               ...(kind === "CLIENT" ? {
                 clientType: row.clientType,
                 paymentTermsDays: row.paymentTermsDays,

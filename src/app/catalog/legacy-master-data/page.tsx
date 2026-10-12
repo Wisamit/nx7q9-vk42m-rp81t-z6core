@@ -14,6 +14,7 @@ export default async function LegacyMasterDataPage() {
     ...(grants.has("sources.manage") ? ["SOURCE" as const] : []),
     ...(grants.has("microbiology.manage") ? ["ORGANISM" as const, "ANTIBIOTIC" as const] : []),
     ...(grants.has("clients.manage") ? ["CLIENT" as const] : []),
+    ...(grants.has("result_comments.manage") ? ["COMMENT_TEMPLATE" as const] : []),
   ];
   if (kinds.length === 0 || !session.activeBranchId ||
     !session.user.branchScopes.some(scope => scope.branchId === session.activeBranchId &&
@@ -27,8 +28,8 @@ export default async function LegacyMasterDataPage() {
         <p className="eyebrow">{tr(locale, "Migration", "ترحيل البيانات")}</p>
         <h1>{tr(locale, "Legacy Reference Master Data", "البيانات المرجعية من النظام القديم")}</h1>
         <p className="muted">{tr(locale,
-          "Safely review and import legacy referrers, order sources, organisms, antibiotics, and client masters without changing historical records, contracts or financial balances.",
-          "معاينة واستيراد المحيلين ومصادر الطلبات والجراثيم والمضادات الحيوية والعملاء دون المساس بالسجلات التاريخية أو العقود أو الأرصدة المالية.")}</p>
+          "Safely import legacy reference masters and INACTIVE clinical comment templates without changing released results, contracts or financial balances.",
+          "استيراد البيانات المرجعية وقوالب التعليقات السريرية غير المفعّلة دون تعديل النتائج الصادرة أو العقود أو الأرصدة المالية.")}</p>
       </div>
       <Link className="secondary-link" href="/catalog">{tr(locale, "Back to Catalog", "العودة للدليل")}</Link>
     </header>

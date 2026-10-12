@@ -1,5 +1,6 @@
 import type { Prisma } from "../../generated/prisma/client";
 import type { LegacyMasterKind, LegacyMasterRow } from "./legacy-master-data-import";
+import { resolveLegacyCommentTargets } from "./legacy-comment-targets.ts";
 
 export type NewLegacyMasterRow = LegacyMasterRow & { id: string };
 
@@ -39,6 +40,16 @@ export async function createLegacyMasterRecords(
       email: row.email, addressEn: row.addressEn, addressAr: row.addressAr,
       paymentTermsDays: row.paymentTermsDays,
       // Deliberately no contracts, credit policy, pricing or historical AR.
+    })) });
+  } else if (kind === "COMMENT_TEMPLATE") {
+    const targets = await resolveLegacyCommentTargets(tx, organizationId, entries);
+    await tx.resultCommentTemplate.createMany({ data: entries.map((row, i) => ({
+      id: row.id, organizationId, code: row.code, nameEn: row.nameEn,
+      nameAr: row.nameAr, textEn: row.textEn!, textAr: row.textAr,
+      scope: row.commentScope!, testId: targets[i].testId,
+      componentId: targets[i].componentId,
+      // Clinical interpretive text is ALWAYS imported inactive pending review.
+      status: "INACTIVE", deactivatedAt: new Date(),
     })) });
   } else {
     throw new Error("unsupported_master_kind");
