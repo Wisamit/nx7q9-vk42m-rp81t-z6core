@@ -66,7 +66,7 @@ test("Stage 93: electronic ordering is not derived from doctor read permissions 
   assert.match(migration,/UNIQUE INDEX `dr_portal_request_uq`/);
   assert.match(migration,/CONSTRAINT `dr_order_fk`/);
   assert.match(admin,/canRequestOrders:input\.canRequestOrders===true/);
-  assert.match(portal,/account\.type !== "DOCTOR"/);
+  assert.match(portal,/portalAccount\.type !== "DOCTOR"/);
   assert.match(portal,/can_request_orders=TRUE/);
   assert.match(portal,/WHERE organization_id=\$\{account\.organizationId\}/);
   assert.match(portal,/FROM organizations WHERE id=\$\{account\.organizationId\}/);
