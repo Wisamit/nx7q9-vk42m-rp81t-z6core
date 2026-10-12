@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { canAccessBranch, getCurrentSession, permissionSet, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { effectiveDiscountLimit } from "@/lib/discount-policy";
+import { consumeStaffStepUp, StaffStepUpError } from "@/lib/staff-step-up";
 
 function text(value: unknown, max = 1000) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -63,6 +64,12 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
 
   const ctx = await requestContext();
   const updated = await prisma.$transaction(async tx => {
+    const stepUp=action==="APPROVE" ? await consumeStaffStepUp(tx,{
+      token:request.headers.get("x-staff-step-up-token"),action:"DISCOUNT_APPROVAL",
+      resourceKey:approval.id,sessionId:session.id,userId:session.user.id,
+      organizationId:session.user.organizationId,branchId:approval.branchId,
+      ipAddress:ctx.ipAddress,userAgent:ctx.userAgent,
+    }) : null;
     const changed = await tx.discountApprovalRequest.updateMany({
       where: {
         id: approval.id,
@@ -100,6 +107,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
           requesterUserId: approval.requestedByUserId,
           approverLimitPercent: approverLimit.toFixed(2),
           note: note || null,
+          stepUpGrantId:stepUp?.grantId||null,stepUpProofMethod:stepUp?.proofMethod||null,
         },
         reason: approval.reason,
         ipAddress: ctx.ipAddress,
@@ -108,8 +116,10 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     });
 
     return tx.discountApprovalRequest.findUnique({ where: { id: approval.id } });
-  }).catch(() => null);
+  }).catch(error => error instanceof StaffStepUpError ? "STEP_UP_REQUIRED" as const : null);
 
+  if(updated==="STEP_UP_REQUIRED")
+    return NextResponse.json({error:"fresh_staff_reauthentication_required"},{status:403});
   if (!updated) return NextResponse.json({ error: "approval_state_changed" }, { status: 409 });
   return NextResponse.json({ status: "ok", approvalStatus: updated.status });
 }

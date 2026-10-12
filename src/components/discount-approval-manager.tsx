@@ -2,9 +2,11 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import {StaffStepUpDialog} from "@/components/staff-step-up-dialog";
 
 type ApprovalRow = {
   id: string;
+  branchId: string;
   branchCode: string;
   branchName: string;
   requesterName: string;
@@ -33,20 +35,22 @@ export function DiscountApprovalManager({
   const router = useRouter();
   const [busyId, setBusyId] = useState("");
   const [message, setMessage] = useState("");
+  const [pendingStepUpId,setPendingStepUpId]=useState<string|null>(null);
   const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
 
-  async function decide(id: string, action: "APPROVE" | "REJECT") {
+  async function decide(id: string, action: "APPROVE" | "REJECT", token?:string) {
     const row = approvals.find(item => item.id === id);
     if (!row) return;
 
     let note = "";
-    if (action === "APPROVE") {
+    if (action === "APPROVE" && !token) {
       const confirmed = confirm(tr(
         `Approve ${row.discountPercent}% discount for ${row.finalTotal} ${row.currency}?`,
         `اعتماد خصم ${row.discountPercent}% ليصبح الإجمالي ${row.finalTotal} ${row.currency}؟`,
       ));
       if (!confirmed) return;
-    } else {
+      setPendingStepUpId(id);return;
+    } else if(action==="REJECT") {
       const entered = prompt(tr("Optional rejection note:", "ملاحظة الرفض (اختيارية):"));
       if (entered === null) return;
       note = entered;
@@ -56,7 +60,8 @@ export function DiscountApprovalManager({
     setMessage("");
     const response = await fetch("/api/billing/discount-approvals/" + id, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json",
+        ...(token?{"x-staff-step-up-token":token}:{}) },
       body: JSON.stringify({ action, note }),
     });
     const body = await response.json().catch(() => ({}));
@@ -83,7 +88,15 @@ export function DiscountApprovalManager({
     setBusyId("");
   }
 
+  const pendingStepUpRow=approvals.find(item=>item.id===pendingStepUpId);
   return <section className="table-card detail-section">
+    <StaffStepUpDialog open={Boolean(pendingStepUpRow)} action="DISCOUNT_APPROVAL"
+      resourceKey={pendingStepUpRow?.id||""} branchId={pendingStepUpRow?.branchId||""}
+      locale={locale} onCancel={()=>setPendingStepUpId(null)}
+      onGranted={token=>{
+        const id=pendingStepUpId;setPendingStepUpId(null);
+        if(id)void decide(id,"APPROVE",token);
+      }}/>
     <div className="table-toolbar">
       <div>
         <h2>{tr("Discount Approval Queue", "قائمة اعتماد الخصومات")}</h2>

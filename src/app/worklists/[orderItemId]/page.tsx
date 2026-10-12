@@ -458,6 +458,7 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
       <h2>{tr(locale, "Validation, Release & Amendment", "التحقق والإصدار والتعديل")}</h2>
       <ResultWorkflowActions
         resultId={latestResult.id}
+        performingBranchId={latestResult.performingBranchId}
         resultStatus={latestResult.status}
         validationStage={latestResult.validationStage}
         validationPolicySnapshot={latestResult.validationPolicySnapshot}

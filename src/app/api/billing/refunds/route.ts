@@ -5,6 +5,7 @@ import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
 import { invoiceAdjustmentState, refundError } from "@/lib/billing-adjustments";
 import { prisma } from "@/lib/db";
 import { paymentMethodReferenceError, paymentMethodSnapshot, resolveSettlementPaymentMethod } from "@/lib/payment-methods";
+import { consumeStaffStepUp, StaffStepUpError } from "@/lib/staff-step-up";
 
 function text(value: unknown, max = 1000) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -127,6 +128,13 @@ export async function POST(request: Request) {
     });
     if (!state) return { error: "invalid_financial_state", httpStatus: 409 } as const;
 
+    const stepUp=await consumeStaffStepUp(tx,{
+      token:request.headers.get("x-staff-step-up-token"),action:"REFUND_POST",
+      resourceKey:[paymentId,invoiceId,amountText,paymentMethodId].join(":"),
+      sessionId:session.id,userId:session.user.id,
+      organizationId:session.user.organizationId,branchId:currentPayment.branchId,
+      ipAddress:ctx.ipAddress,userAgent:ctx.userAgent,
+    });
     const invoiceUpdated = await tx.invoice.updateMany({
       where: {
         id: currentInvoice.id,
@@ -221,6 +229,7 @@ export async function POST(request: Request) {
           invoiceBalanceBefore: currentInvoice.balanceAmount.toFixed(4),
           invoiceBalanceAfter: state.balance,
           invoiceStatus: state.status,
+          stepUpGrantId:stepUp.grantId,stepUpProofMethod:stepUp.proofMethod,
         },
         ipAddress: ctx.ipAddress,
         userAgent: ctx.userAgent,
@@ -240,6 +249,8 @@ export async function POST(request: Request) {
     } as const;
     }, { timeout: 30000 });
   } catch (error) {
+    if (error instanceof StaffStepUpError)
+      return NextResponse.json({error:"fresh_staff_reauthentication_required"},{status:403});
     if (error instanceof FinancialConflict) {
       return NextResponse.json({ error: error.code }, { status: 409 });
     }

@@ -1,9 +1,10 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CrudModal } from "@/components/crud-modal";
 import { SystemIcon } from "@/components/system-icon";
+import {StaffStepUpDialog} from "@/components/staff-step-up-dialog";
 
 type CreditInvoiceOption = {
   id: string;
@@ -24,6 +25,7 @@ type PaymentMethodOption = {
 };
 
 type RefundOption = {
+  branchId: string;
   paymentId: string;
   invoiceId: string;
   invoiceNumber: string;
@@ -180,6 +182,11 @@ export function RefundCreateModal({
   const [notice, setNotice] = useState("");
   const [message, setMessage] = useState("");
   const [paymentMethodId, setPaymentMethodId] = useState(paymentMethods[0]?.id || "");
+  const [pendingRefund,setPendingRefund]=useState<{
+    paymentId:string;invoiceId:string;branchId:string;amount:string;
+    paymentMethodId:string;reason:string;reference:string;
+  }|null>(null);
+  const refundFormRef=useRef<HTMLFormElement>(null);
   const selectedPaymentMethod = paymentMethods.find(method => method.id === paymentMethodId);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -187,19 +194,25 @@ export function RefundCreateModal({
     const form = new FormData(event.currentTarget);
     const allocation = String(form.get("allocation") || "");
     const [paymentId, invoiceId] = allocation.split("|");
-    setBusy(true);
-    setMessage("");
+    const option=options.find(o=>o.paymentId===paymentId&&o.invoiceId===invoiceId);
+    if(!option){setMessage(tr("Select a valid payment allocation.","اختر تخصيص دفعة صحيحًا."));return;}
+    setPendingRefund({
+      paymentId,invoiceId,branchId:option.branchId,
+      amount:String(form.get("amount")||""),
+      paymentMethodId,reason:String(form.get("reason")||""),
+      reference:String(form.get("reference")||""),
+    });
+  }
 
+  async function postRefund(payload:NonNullable<typeof pendingRefund>,stepUpToken:string){
+    setBusy(true);setMessage("");
     const response = await fetch("/api/billing/refunds", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "x-staff-step-up-token":stepUpToken },
       body: JSON.stringify({
-        paymentId,
-        invoiceId,
-        amount: form.get("amount"),
-        paymentMethodId,
-        reason: form.get("reason"),
-        reference: form.get("reference"),
+        paymentId:payload.paymentId,invoiceId:payload.invoiceId,
+        amount:payload.amount,paymentMethodId:payload.paymentMethodId,
+        reason:payload.reason,reference:payload.reference,
       }),
     });
     const body = await response.json().catch(() => ({}));
@@ -208,7 +221,7 @@ export function RefundCreateModal({
       const success = `${tr("Refund posted", "تم تسجيل الاسترداد")} · ${body.refundNumber} · ${tr("Invoice balance", "رصيد الفاتورة")}: ${body.balanceAmount}`;
       setNotice(success);
       setOpen(false);
-      event.currentTarget.reset();
+      refundFormRef.current?.reset();
       router.refresh();
     } else {
       setMessage(errorMessage(locale, body.error || ""));
@@ -230,7 +243,7 @@ export function RefundCreateModal({
       description={tr("Return money against an existing payment while keeping the original payment and allocation intact.", "أعد مبلغًا مقابل دفعة موجودة مع الإبقاء على الدفعة والتخصيص الأصليين دون تعديل.")}
       size="md"
     >
-      <form className="catalog-form" onSubmit={submit}>
+      <form ref={refundFormRef} className="catalog-form" onSubmit={submit}>
         <label className="form-span">{tr("Payment allocation", "تخصيص الدفعة")}
           <select name="allocation" required defaultValue="">
             <option value="">{tr("Select refundable payment…", "اختر دفعة قابلة للاسترداد…")}</option>
@@ -248,5 +261,16 @@ export function RefundCreateModal({
         {message && <div className="form-error form-span">{message}</div>}
       </form>
     </CrudModal>
+    <StaffStepUpDialog open={pendingRefund!==null} action="REFUND_POST"
+      resourceKey={pendingRefund ? [
+        pendingRefund.paymentId,pendingRefund.invoiceId,pendingRefund.amount,
+        pendingRefund.paymentMethodId,
+      ].join(":") : ""}
+      branchId={pendingRefund?.branchId||""} locale={locale}
+      onCancel={()=>setPendingRefund(null)}
+      onGranted={token=>{
+        const pending=pendingRefund;setPendingRefund(null);
+        if(pending)void postRefund(pending,token);
+      }}/>
   </>;
 }
