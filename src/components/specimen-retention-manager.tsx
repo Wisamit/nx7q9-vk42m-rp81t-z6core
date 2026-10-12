@@ -113,8 +113,8 @@ export function SpecimenRetentionManager({
       </form>
     </section>}
 
-    {mayAuthorize && <section className="detail-card">
-      <h2>{tr("Independent quality-review evidence", "دليل المراجعة المستقلة من الجودة")}</h2>
+    {(mayAuthorize || mayRequest) && <section className="detail-card">
+      <h2>{tr("Review or cancellation evidence", "دليل المراجعة أو الإلغاء")}</h2>
       <label>{tr("Document authorization, retirement or cancellation rationale (30+ characters)", "دوّن مبررات الاعتماد أو الإيقاف أو الإلغاء (30 حرفاً على الأقل)")}
         <textarea rows={3} minLength={30} maxLength={1000} value={reviewEvidence}
           onChange={e => setReviewEvidence(e.target.value)} />
