@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import mysql from "mysql2/promise";
 import {
   commentReviewBlocker, decodeCommentReviewCursor, encodeCommentReviewCursor,
+  type ReviewTemplate,
 } from "../src/lib/comment-template-review-queue.ts";
 
 test("Stage 86 MariaDB: tenant-bound active clinical targets, locked draft creation and independent review evidence",{
@@ -97,7 +98,7 @@ test("Stage 86 MariaDB: tenant-bound active clinical targets, locked draft creat
       "AND action='RESULT_COMMENT_TEMPLATE_CREATED'",[org,templateId]);
     assert.equal(origin.length,1);
     assert.equal(origin[0].actor_user_id,creator);
-    const target={
+    const target: ReviewTemplate={
       id:stored[0].id,organizationId:stored[0].organization_id,code:stored[0].code,
       scope:stored[0].scope,testId:stored[0].test_id,componentId:stored[0].component_id,
       nameEn:stored[0].name_en,nameAr:stored[0].name_ar,textEn:stored[0].text_en,
