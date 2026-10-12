@@ -7,6 +7,7 @@ import { AutoverificationValidationManager } from "@/components/autoverification
 import { CriticalEscalationManager } from "@/components/critical-escalation-manager";
 import { QualitativeResultOptionsManager } from "@/components/qualitative-result-options-manager";
 import { CommentTemplateStatusButton } from "@/components/comment-template-status-button";
+import { commentTemplateReviewFingerprint } from "@/lib/comment-template-approval";
 import { ResultValidationPolicyManager } from "@/components/result-validation-policy-manager";
 import { ClinicalRuleGovernanceButton } from "@/components/clinical-rule-governance-button";
 import { statusLabel, tr } from "@/lib/ui-i18n";
@@ -384,9 +385,13 @@ export default async function ClinicalRulesPage() {
               <td>{locale === "ar" ? template.nameAr || template.nameEn : template.nameEn}{template.nameAr && locale !== "ar" ? <><br/><small dir="rtl">{template.nameAr}</small></> : null}</td>
               <td>{scopeLabel(template.scope)}</td>
               <td>{template.component ? template.component.code + " — " + localizedName(template.component) : template.test ? template.test.code + " — " + localizedName(template.test) : tr(locale, "Organization", "المؤسسة")}</td>
-              <td>{locale === "ar" ? template.textAr || template.textEn : template.textEn}</td>
+              <td><div dir="ltr">{template.textEn}</div>{template.textAr && <div dir="rtl">{template.textAr}</div>}</td>
               <td>{statusLabel(locale, template.status)}</td>
-              <td><CommentTemplateStatusButton id={template.id} status={template.status} locale={locale} /></td>
+              <td><CommentTemplateStatusButton id={template.id} status={template.status}
+                fingerprint={commentTemplateReviewFingerprint(template)}
+                canManage={permissions.has("result_comments.manage")}
+                canApprove={permissions.has("result_comments.manage") && permissions.has("clinical_rules.approve")}
+                locale={locale} /></td>
             </tr>)}</tbody>
           </table>
         </div>
