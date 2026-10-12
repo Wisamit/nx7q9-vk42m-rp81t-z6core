@@ -156,6 +156,7 @@ export default async function SpecimensPage({
       </div>
       <div className="header-actions">
         {canCollect && <Link className="secondary-link" href="/phlebotomy"><SystemIcon name="specimen" size={15} />{tr(locale, "Phlebotomy", "سحب العينات")}</Link>}
+        <Link className="secondary-link" href="/specimens/retention">{tr(locale, "Retention & Disposal", "الاحتفاظ والإتلاف")}</Link>
         <Link className="secondary-link" href="/specimens/scan"><SystemIcon name="search" size={15} />{tr(locale, "Scan Station", "محطة المسح")}</Link>
         <Link className="secondary-link" href="/orders"><SystemIcon name="orders" size={15} />{tr(locale, "Orders", "الطلبات")}</Link>
         <Link className="secondary-link" href="/transfers"><SystemIcon name="transfer" size={15} />{tr(locale, "Transfers", "النقل بين الفروع")}</Link>
