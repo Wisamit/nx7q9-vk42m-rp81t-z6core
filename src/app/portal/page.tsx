@@ -1,3 +1,4 @@
+import { doctorAccessWhere } from "@/lib/doctor-portal-access";
 import Link from "next/link";
 import { requirePortalSession } from "@/lib/portal-auth";
 import { prisma } from "@/lib/db";
@@ -41,13 +42,13 @@ export default async function PortalPage() {
   const orderWhere = account.type === "PATIENT"
     ? { organizationId: account.organizationId, patientId: account.patientId! }
     : account.type === "DOCTOR"
-      ? { organizationId: account.organizationId, referrerId: account.referrerId! }
+      ? doctorAccessWhere({ organizationId: account.organizationId, referrerId: account.referrerId!, capability: "orders", now })
       : { organizationId: account.organizationId, clientId: account.clientId!, patientId: { in: allowedPatientIds } };
 
   const reportOrderWhere = account.type === "PATIENT"
     ? { organizationId: account.organizationId, patientId: account.patientId! }
     : account.type === "DOCTOR"
-      ? { organizationId: account.organizationId, referrerId: account.referrerId! }
+      ? doctorAccessWhere({ organizationId: account.organizationId, referrerId: account.referrerId!, capability: "reports", now })
       : { organizationId: account.organizationId, clientId: account.clientId!, patientId: { in: reportPatientIds } };
 
   const appointmentWhere = account.type === "PATIENT"
