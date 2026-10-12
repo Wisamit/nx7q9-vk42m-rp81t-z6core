@@ -1005,6 +1005,7 @@ enum EdgeQueueStatus {
 }
 
 model Organization {
+  doctorPortalAccess DoctorPortalPatientAccess[]
   id              String       @id @default(uuid()) @db.Char(36)
   code            String       @unique @db.VarChar(50)
   nameEn          String       @map("name_en") @db.VarChar(200)
@@ -1339,6 +1340,8 @@ model ClinicalRuleGovernanceLock {
 }
 
 model User {
+  doctorAccessCreated DoctorPortalPatientAccess[] @relation("DoctorAccessCreator")
+  doctorAccessRevoked DoctorPortalPatientAccess[] @relation("DoctorAccessRevoker")
   id             String     @id @default(uuid()) @db.Char(36)
   organizationId String     @map("organization_id") @db.Char(36)
   username       String     @db.VarChar(100)
@@ -2297,6 +2300,7 @@ model CatalogImportMapping {
 
 
 model Patient {
+  doctorPortalAccess DoctorPortalPatientAccess[]
   id              String       @id @default(uuid()) @db.Char(36)
   organizationId  String       @map("organization_id") @db.Char(36)
   patientNumber   String       @map("patient_number") @db.VarChar(40)
@@ -2497,6 +2501,7 @@ model Referrer {
   priceLists   PriceList[]
 
   portalAccount PortalAccount?
+  doctorPortalAccess DoctorPortalPatientAccess[]
 
   @@unique([organizationId, code])
   @@index([organizationId, nameEn])
@@ -5912,6 +5917,36 @@ model PortalOtpChallenge {
   @@index([portalAccountId, purpose, requestedAt])
   @@index([expiresAt, consumedAt])
   @@map("portal_otp_challenges")
+}
+
+model DoctorPortalPatientAccess {
+  id              String       @id @default(uuid()) @db.Char(36)
+  organizationId  String       @map("organization_id") @db.Char(36)
+  referrerId      String       @map("referrer_id") @db.Char(36)
+  patientId       String       @map("patient_id") @db.Char(36)
+  canViewOrders   Boolean      @default(true) @map("can_view_orders")
+  canViewReports  Boolean      @default(false) @map("can_view_reports")
+  effectiveFrom   DateTime     @map("effective_from") @db.DateTime(3)
+  effectiveTo     DateTime?    @map("effective_to") @db.DateTime(3)
+  status          RecordStatus @default(ACTIVE)
+  reason          String       @db.VarChar(1000)
+  createdByUserId String       @map("created_by_user_id") @db.Char(36)
+  revokedAt       DateTime?    @map("revoked_at") @db.DateTime(3)
+  revokedByUserId String?      @map("revoked_by_user_id") @db.Char(36)
+  revokeReason    String?      @map("revoke_reason") @db.VarChar(1000)
+  createdAt       DateTime     @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt       DateTime     @updatedAt @map("updated_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  referrer     Referrer     @relation(fields: [referrerId], references: [id], onDelete: Restrict)
+  patient      Patient      @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  createdBy    User         @relation("DoctorAccessCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  revokedBy    User?        @relation("DoctorAccessRevoker", fields: [revokedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, referrerId, status, effectiveFrom, effectiveTo])
+  @@index([organizationId, patientId, status])
+  @@index([referrerId, patientId, createdAt])
+  @@map("doctor_portal_patient_access")
 }
 
 model CorporatePortalPatientAccess {
