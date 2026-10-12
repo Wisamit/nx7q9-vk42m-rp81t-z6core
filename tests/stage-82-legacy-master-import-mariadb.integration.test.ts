@@ -7,14 +7,14 @@ import {
   type LegacyMasterRow,
 } from "../src/lib/legacy-master-data-import.ts";
 
-const fixtures: Record<LegacyMasterKind,string> = {
+const fixtures: Record<Exclude<LegacyMasterKind,"COMMENT_TEMPLATE">,string> = {
   REFERRER:"code,name_en,name_ar,type,phone,email,license_number\nDOCTOR1,Dr Ali,د علي,PHYSICIAN,0500000000,ali@example.com,LIC001",
   SOURCE:"code,name_en,name_ar,category\nCAMPAIGN1,Referral Campaign,حملة إحالة,CAMPAIGN",
   ORGANISM:"code,name_en,name_ar,category\nECOLI1,Escherichia coli,إشريكية قولونية,Gram negative",
   ANTIBIOTIC:"code,name_en,name_ar,drug_class\nAMOX1,Amoxicillin,أموكسيسيلين,Penicillins",
   CLIENT:"code,name_en,name_ar,type,phone,email,address_en,address_ar,payment_terms_days\nCL82,Corporate client,عميل مؤسسة,COMPANY,,,,,30",
 };
-const tables:Record<LegacyMasterKind,string> = {
+const tables:Record<Exclude<LegacyMasterKind,"COMMENT_TEMPLATE">,string> = {
   REFERRER:"referrers",SOURCE:"order_sources",ORGANISM:"organisms",ANTIBIOTIC:"antibiotics",CLIENT:"clients",
 };
 
