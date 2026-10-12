@@ -52,9 +52,10 @@ test("Stage 92: exact fingerprint, independent author/reviewer and controlled re
 
 test("Stage 92: clinical write, review and release respect immutable tenant-scoped report snapshots",()=>{
   const schema=readFileSync("prisma/schema.prisma","utf8");
-  const migration=readFileSync("prisma/migrations/20261012145000_report_interpretation_review/migration.sql","utf8");
+  const migration=readFileSync("prisma/migrations/20261012180000_report_interpretation_governance/migration.sql","utf8");
   const api=readFileSync("src/app/api/reports/interpretations/route.ts","utf8");
   const snapshot=readFileSync("src/lib/report-snapshot.ts","utf8");
+  const release=readFileSync("src/app/api/results/[id]/release/route.ts","utf8");
   const report=readFileSync("src/app/reports/[orderId]/page.tsx","utf8");
   const page=readFileSync("src/app/reports/[orderId]/interpretation/page.tsx","utf8");
   const ui=readFileSync("src/components/report-interpretation-manager.tsx","utf8");
@@ -77,6 +78,8 @@ test("Stage 92: clinical write, review and release respect immutable tenant-scop
   assert.match(api,/REPORT_INTERPRETATION_SUPERSEDED/);
   assert.match(api,/isolationLevel:"Serializable"/);
   assert.match(snapshot,/where: \{ status: "APPROVED" \}/);
+  assert.match(release,/lockedOrderForInterpretation/);
+  assert.match(release,/SELECT id FROM orders[\s\S]*FOR UPDATE/);
   assert.match(snapshot,/reportInterpretation: order\.interpretiveComments\[0\]/);
   assert.match(report,/snapshot\.reportInterpretation/);
   assert.match(report,/showEnglish.*snapshot\.reportInterpretation\.textEn/);
