@@ -141,6 +141,7 @@ export default async function BillingPage() {
       if (remaining.lte(0)) return [];
       return [{
         paymentId: payment.id,
+        branchId: payment.branchId,
         invoiceId: allocation.invoiceId,
         invoiceNumber: allocation.invoice.invoiceNumber,
         currency: payment.currency,
@@ -229,6 +230,7 @@ export default async function BillingPage() {
         const context = discountRequestContext(item.contextSnapshot);
         return {
         id: item.id,
+        branchId: item.branchId,
         branchCode: item.branch.code,
         branchName: locale === "ar" ? item.branch.nameAr || item.branch.nameEn : item.branch.nameEn,
         requesterName: locale === "ar" ? item.requestedBy.displayNameAr || item.requestedBy.displayNameEn : item.requestedBy.displayNameEn,
