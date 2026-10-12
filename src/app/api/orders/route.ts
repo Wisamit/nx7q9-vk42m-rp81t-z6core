@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { isUuid, matchingRequisitionOrder } from "@/lib/doctor-requisition";
 import { NextResponse } from "next/server";
 import { Prisma } from "../../../../generated/prisma/client";
 import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
@@ -23,6 +24,7 @@ function text(value: unknown, max = 500) {
 }
 
 class TaxConfigurationChanged extends Error {}
+class DoctorRequisitionConversionConflict extends Error {}
 
 class CreditControlError extends Error {
   constructor(
@@ -53,6 +55,9 @@ export async function POST(request: Request) {
   const patientId = text(body.patientId, 36);
   const sourceId = text(body.sourceId, 36);
   const referrerId = text(body.referrerId, 36) || null;
+  const doctorRequisitionId = text(body.doctorRequisitionId, 36) || null;
+  if (doctorRequisitionId && !isUuid(doctorRequisitionId))
+    return NextResponse.json({error:"invalid_requisition_id"},{status:400});
   const clientId = text(body.clientId, 36) || null;
   const directTestIds = uniqueIds(body.testIds);
   const packageIds = uniqueIds(body.packageIds);
@@ -648,6 +653,33 @@ export async function POST(request: Request) {
 
   try {
     const result = await prisma.$transaction(async (tx) => {
+      // The request is a referral intent, NOT an invoice or laboratory order.
+      // Lock it before any financial postings; a concurrent cancellation,
+      // decline or duplicate conversion can never create an extra invoice.
+      if (doctorRequisitionId) {
+        const locked = await tx.$queryRaw<Array<{id:string}>>`
+          SELECT id FROM doctor_requisitions
+          WHERE id=${doctorRequisitionId}
+            AND organization_id=${session.user.organizationId}
+          FOR UPDATE
+        `;
+        if(locked.length!==1)throw new DoctorRequisitionConversionConflict();
+        const req=await tx.doctorRequisition.findFirst({
+          where:{id:doctorRequisitionId,organizationId:session.user.organizationId,
+            branchId,patientId,referrerId:referrerId||undefined,status:"SUBMITTED"},
+          include:{items:{select:{testId:true}}},
+        });
+        if (!req || !referrerId || packageIds.length>0 ||
+            !matchingRequisitionOrder({
+              patientId,branchId,referrerId,priority,testIds:allTestIds,
+              diagnosis:diagnosis||null,clinicalNotes:clinicalNotes||null,
+            },{
+              patientId:req.patientId,branchId:req.branchId,referrerId:req.referrerId,
+              priority:req.priority,testIds:req.items.map(x=>x.testId),
+              diagnosis:req.diagnosis,clinicalNotes:req.clinicalNotes,
+            }))
+          throw new DoctorRequisitionConversionConflict();
+      }
       let creditControlSnapshot: Record<string, string | boolean> | null = null;
       if (effectiveClient) {
         // The first database statement in this transaction acquires a client-wide
@@ -758,6 +790,26 @@ export async function POST(request: Request) {
           createdByUserId: session.user.id,
         },
       });
+
+      if (doctorRequisitionId) {
+        const claimed=await tx.doctorRequisition.updateMany({
+          where:{id:doctorRequisitionId,organizationId:session.user.organizationId,
+            branchId,status:"SUBMITTED",fulfilledOrderId:null},
+          data:{status:"FULFILLED",fulfilledOrderId:order.id,
+            resolvedAt:new Date(),resolvedByUserId:session.user.id,
+            resolutionReason:"Registered through authorized LIS order and billing workflow"},
+        });
+        if(claimed.count!==1)throw new DoctorRequisitionConversionConflict();
+        await tx.auditEvent.create({data:{
+          organizationId:session.user.organizationId,branchId,actorUserId:session.user.id,
+          action:"DOCTOR_ELECTRONIC_REQUISITION_FULFILLED",
+          entityType:"DoctorRequisition",entityId:doctorRequisitionId,
+          oldValues:{status:"SUBMITTED"},
+          newValues:{status:"FULFILLED",orderId:order.id,accessionNumber,
+            selectedTestIds:allTestIds,sourceId,financialPosting:"STANDARD_ORDER_INVOICE"},
+          ipAddress:ctx.ipAddress,userAgent:ctx.userAgent,
+        }});
+      }
 
       await tx.orderStatusHistory.create({
         data: {
@@ -1266,6 +1318,9 @@ export async function POST(request: Request) {
       ...(result.creditControlSnapshot ? { creditControl: result.creditControlSnapshot } : {}),
     }, { status: 201 });
   } catch (error) {
+    if (error instanceof DoctorRequisitionConversionConflict) {
+      return NextResponse.json({error:"requisition_no_longer_pending_or_context_mismatch"},{status:409});
+    }
     if (error instanceof TaxConfigurationChanged) {
       return NextResponse.json({ error: "tax_configuration_changed" }, { status: 409 });
     }
