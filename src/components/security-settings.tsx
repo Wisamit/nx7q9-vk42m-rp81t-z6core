@@ -40,6 +40,54 @@ export function SecuritySettings({
   const [recoveryCodes, setRecoveryCodes] = useState<string[]>([]);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [passwordBusy, setPasswordBusy] = useState(false);
+  const [passwordMessage, setPasswordMessage] = useState("");
+
+  async function changePassword(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (passwordBusy) return;
+    const form = event.currentTarget;
+    const values = new FormData(form);
+    const newPassword = String(values.get("newPassword") || "");
+    const confirmPassword = String(values.get("confirmPassword") || "");
+    if (newPassword !== confirmPassword) {
+      setPasswordMessage(tr("New passwords do not match.", "كلمتا المرور الجديدتان غير متطابقتين."));
+      return;
+    }
+    if (!confirm(tr(
+      "Change your password and sign out ALL existing sessions, including this one?",
+      "هل تريد تغيير كلمة المرور وإنهاء جميع جلسات الدخول بما فيها الجلسة الحالية؟",
+    ))) return;
+    setPasswordBusy(true); setPasswordMessage("");
+    try {
+      const response = await fetch("/api/security/profile/password", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          currentPassword: values.get("currentPassword"),
+          newPassword, confirmPassword,
+        }),
+      });
+      const body = await response.json().catch(() => ({})) as { error?: string };
+      if (response.ok) {
+        form.reset();
+        window.location.assign("/login?passwordChanged=1");
+        return;
+      }
+      const errors: Record<string, [string,string]> = {
+        current_password_invalid: ["Current password incorrect.", "كلمة المرور الحالية غير صحيحة."],
+        new_password_must_differ: ["New password must differ from current password.", "يجب أن تختلف كلمة المرور الجديدة عن الحالية."],
+        password_policy_failed: ["Use at least 12 characters and at most 72 UTF-8 bytes.", "استخدم 12 محرفًا على الأقل وبحد أقصى 72 بايت UTF-8."],
+        password_confirmation_mismatch: ["New passwords do not match.", "كلمتا المرور الجديدتان غير متطابقتين."],
+        rate_limited: ["Too many requests. Try later.", "محاولات كثيرة، حاول لاحقًا."],
+        session_expired: ["Session expired. Sign in again.", "انتهت الجلسة، سجّل الدخول مجددًا."],
+      };
+      setPasswordMessage(errors[body.error ?? ""]?.[locale === "ar" ? 1 : 0] ||
+        tr("Password change failed. Please retry safely.", "فشل تغيير كلمة المرور. أعد المحاولة بأمان."));
+    } catch {
+      setPasswordMessage(tr("Connection failed. Check login status before retrying.",
+        "فشل الاتصال. تحقق من حالة الدخول قبل إعادة المحاولة."));
+    } finally { setPasswordBusy(false); }
+  }
 
   async function saveAvatar(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -152,6 +200,30 @@ export function SecuritySettings({
           </div>
         </div>
       </div>
+    </article>
+
+    <article className="detail-card">
+      <div className="section-title-row">
+        <div><p className="eyebrow">{tr("Staff Account", "حساب الموظف")}</p>
+          <h2>{tr("Change Password", "تغيير كلمة المرور")}</h2></div>
+      </div>
+      <p className="muted">{tr(
+        "Verify your current password. Changing it revokes every existing login session; your MFA settings remain unchanged.",
+        "أكّد كلمة المرور الحالية. تغييرها ينهي جميع جلسات الدخول وتبقى إعدادات المصادقة متعددة العوامل كما هي.",
+      )}</p>
+      <form className="form-stack" onSubmit={e => void changePassword(e)}>
+        <label>{tr("Current password", "كلمة المرور الحالية")}
+          <input name="currentPassword" type="password" required autoComplete="current-password" /></label>
+        <label>{tr("New password (minimum 12 characters)", "كلمة المرور الجديدة (12 محرفًا على الأقل)")}
+          <input name="newPassword" type="password" minLength={12} required autoComplete="new-password" /></label>
+        <label>{tr("Confirm new password", "تأكيد كلمة المرور الجديدة")}
+          <input name="confirmPassword" type="password" minLength={12} required autoComplete="new-password" /></label>
+        <button className="primary-button" disabled={passwordBusy}>
+          {passwordBusy ? tr("Changing…", "جارٍ التغيير…") :
+            tr("Change password and sign out", "تغيير كلمة المرور وتسجيل الخروج")}
+        </button>
+        {passwordMessage && <p role="alert" className="form-warning">{passwordMessage}</p>}
+      </form>
     </article>
 
     <article className="detail-card">

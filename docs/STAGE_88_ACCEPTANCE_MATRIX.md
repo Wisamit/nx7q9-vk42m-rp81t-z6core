@@ -1,0 +1,22 @@
+# Stage 88 — Audited Staff Password Change and System-Admin Recovery
+
+## Basis
+The owner confirmed Stage 87 deployed on Hostinger (main merge `60b74bc6774697871f006cf704e2bade64955ea9`, main CI #1087 SUCCESS). Their real-world incident exposed a missing supported path: staff could not change a leaked temporary password in the Security screen, and a forgotten sole-admin password had to be recovered by manual phpMyAdmin SQL. Master Scope §§63,64,78,79 require least privilege, branch/tenant isolation, strong hashes, session controls, auditable high-risk operations, and documented disaster recovery.
+
+## In-scope, implemented
+1. **Self-service rotation:** `/security` bilingual panel uses `POST /api/security/profile/password`; requires a current valid authenticated staff session, correct current password, confirmed different new password, minimum 12 characters/maximum 72 UTF-8 bytes (bcrypt truncation guard), rate limiting, active tenant-bound user row lock and an unrevoked session. Atomic `bcryptjs` cost-12 update, `passwordChangedAt` and lockout reset, revocation of **all** staff login sessions and immutable `STAFF_PASSWORD_CHANGED` audit with actor/branch/IP. Clear HTTP-only cookie and return user to login. MFA unchanged.
+2. **Admin-assisted other-staff reset:** active `SYSTEM_ADMIN` role **and** `users.manage` permission, plus valid active branch grant, are required. Separate bilingual Reset Password modal in Users; cannot target self, must re-enter *admin's own current password*, new password confirmation and documented 10–1000-character reason. Server independently rechecks role permissions, session and tenant-owned ACTIVE target **inside a Serializable transaction**, locking organization, branch, actor and target. Updates only credentials; revokes target sessions and pending MFA login challenges; clears lockout, audits `STAFF_PASSWORD_ADMIN_RESET`. Target identity, roles, grants, and existing MFA settings/codes remain unchanged.
+3. **Close old bypass:** generic `PATCH /api/admin/users/[id]` now rejects any `password` field, preventing an authenticated role-manager from silently changing staff passwords without reauthentication and system-admin verification. Existing other user-edit behavior preserved.
+4. **No public password-reset token/email endpoint**, no default predictable admin credentials, no plaintext credentials in DB, app logs or audit. System-admin recovery for a **sole locked-out administrator** still needs controlled documented break-glass DB recovery with Hostinger backup; nothing circumvents login or MFA.
+
+## Acceptance checks
+- `tests/stage-88-staff-password-safety.test.ts`: strict byte length (incl multibyte Arabic), confirmation, control chars, reason, same-tenant/different-user/active role authorization, server-side locks and re-auth evidence, revocation, cookie clearing, bilingual UI action, no generic PATCH credential bypass, no secret audit data.
+- `tests/stage-88-staff-password-mariadb.integration.test.ts`: seed two organizations, active branch, admin, user and foreign user, bcrypt hashes, two live sessions, MFA challenge; two connections prove row lock contention, rollback preservation and tenant isolation; atomic reset writes preserve MFA, revoke every session + challenge, write immutable audit without new secret, old password fails and new password verifies.
+- Full CI: MariaDB migration/status, Node safety tests, all existing MariaDB module integration tests, TypeScript, ESLint, RTL/LTR localization checks and Next production build. New MariaDB test explicitly wired.
+
+## Deployment and operator actions
+- No schema migration and no new environment variable.
+- On Hostinger deploy the verified main SHA by the normal process. After owner confirms deployment, **immediately rotate the earlier chat-exposed temporary `admin` password from Security & Profile → Change Password**; this signs out other sessions. Never share the replacement password or its hash in chat, screenshots or support tickets.
+- An active authenticated system administrator can now reset another staff member from Users; send the new temporary password only using a protected channel and instruct the employee to rotate immediately.
+- Remains in Master Scope: tested backups/restore, configured external password recovery provider if approved, policy-required reauthentication for other high-risk workflows. This change does not assert independent clinical security certification.
+- Analyzer Bridge PR #128 remains open/draft/unmerged/untouched.
