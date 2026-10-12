@@ -116,8 +116,8 @@ test("Stage 85 MariaDB: independent activation locks comment revision, denies co
       "SELECT action,actor_user_id,reason FROM audit_events WHERE organization_id=? AND entity_id=?",
       [org,templateId]);
     assert.equal(audits.length,2);
-    assert.equal(audits.find(x=>x.action==="RESULT_COMMENT_TEMPLATE_CLINICALLY_APPROVED").actor_user_id,reviewer);
-    assert.equal(audits.find(x=>x.action==="LEGACY_MASTER_RECORD_CREATED").actor_user_id,creator);
+    assert.equal(audits.find(x=>x.action==="RESULT_COMMENT_TEMPLATE_CLINICALLY_APPROVED")?.actor_user_id,reviewer);
+    assert.equal(audits.find(x=>x.action==="LEGACY_MASTER_RECORD_CREATED")?.actor_user_id,creator);
     // Retiring affects availability only; recorded result/report tables are never updated.
     const [retired]=await writer.execute<mysql.ResultSetHeader>(
       "UPDATE result_comment_templates SET status='INACTIVE',deactivated_at=NOW(3),updated_at=NOW(3) "+
