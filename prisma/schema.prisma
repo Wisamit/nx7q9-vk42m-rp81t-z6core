@@ -3447,7 +3447,7 @@ model SpecimenCollectionAttempt {
   collector User @relation("SpecimenCollectionAttemptCollector", fields: [collectorUserId], references: [id], onDelete: Restrict)
 
   @@index([specimenId, attemptedAt])
-  @@index([homeCollectionVisitId, attemptedAt])
+  @@index([homeCollectionVisitId, attemptedAt], map: "home_attempt_visit_time_idx")
   @@index([branchId, attemptedAt])
   @@index([collectorUserId, attemptedAt])
   @@map("specimen_collection_attempts")
