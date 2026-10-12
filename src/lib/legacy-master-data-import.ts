@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-export type LegacyMasterKind = "REFERRER" | "SOURCE" | "ORGANISM" | "ANTIBIOTIC";
+export type LegacyMasterKind = "REFERRER" | "SOURCE" | "ORGANISM" | "ANTIBIOTIC" | "CLIENT";
 
 export type LegacyMasterRow = {
   rowNumber: number;
@@ -13,6 +13,10 @@ export type LegacyMasterRow = {
   phone: string | null;
   email: string | null;
   licenseNumber: string | null;
+  clientType: "INDIVIDUAL" | "CLINIC" | "HOSPITAL" | "COMPANY" | "INSURANCE" | "OTHER" | null;
+  addressEn: string | null;
+  addressAr: string | null;
+  paymentTermsDays: number | null;
 };
 
 export class LegacyMasterImportError extends Error {
@@ -28,6 +32,7 @@ export const LEGACY_MASTER_COLUMNS: Record<LegacyMasterKind, readonly string[]> 
   SOURCE: ["code", "name_en", "name_ar", "category"],
   ORGANISM: ["code", "name_en", "name_ar", "category"],
   ANTIBIOTIC: ["code", "name_en", "name_ar", "drug_class"],
+  CLIENT: ["code", "name_en", "name_ar", "type", "phone", "email", "address_en", "address_ar", "payment_terms_days"],
 };
 
 export const LEGACY_MASTER_MAX_ROWS = 200;
@@ -113,7 +118,7 @@ export function parseLegacyMasterCsv(kind: LegacyMasterKind, csv: string): Legac
     const nameEn = data.name_en;
     const nameAr = data.name_ar || null;
     if (!/^[A-Z0-9._-]{1,80}$/.test(code) ||
-      code.length > (kind === "REFERRER" || kind === "SOURCE" ? 60 : 80)) {
+      code.length > (kind === "REFERRER" || kind === "SOURCE" || kind === "CLIENT" ? 60 : 80)) {
       throw new LegacyMasterImportError("invalid_code_row_" + rowNumber);
     }
     if (!nameEn || nameEn.length > 220 || (nameAr?.length || 0) > 220 ||
@@ -127,6 +132,17 @@ export function parseLegacyMasterCsv(kind: LegacyMasterKind, csv: string): Legac
       !["PHYSICIAN", "CLINIC", "HOSPITAL", "OTHER"].includes(type!)) {
       throw new LegacyMasterImportError("invalid_referrer_type_row_" + rowNumber);
     }
+    const clientType = kind === "CLIENT" ? data.type.toUpperCase() : null;
+    if (kind === "CLIENT" && !["INDIVIDUAL","CLINIC","HOSPITAL","COMPANY","INSURANCE","OTHER"].includes(clientType!)) {
+      throw new LegacyMasterImportError("invalid_client_type_row_" + rowNumber);
+    }
+    // Financial terms are imported exactly when explicitly supplied; no
+    // default credit period, contract, pricing or insurance policy is inferred.
+    const terms = kind === "CLIENT" ? data.payment_terms_days : "";
+    if (kind === "CLIENT" && terms !== "" &&
+      (!/^(0|[1-9][0-9]{0,3})$/.test(terms) || Number(terms) > 3650)) {
+      throw new LegacyMasterImportError("invalid_payment_terms_row_" + rowNumber);
+    }
     const category = kind === "SOURCE" || kind === "ORGANISM" ? (data.category || null) : null;
     if (kind === "SOURCE" && !category) {
       throw new LegacyMasterImportError("source_category_required_row_" + rowNumber);
@@ -135,10 +151,13 @@ export function parseLegacyMasterCsv(kind: LegacyMasterKind, csv: string): Legac
       (data.drug_class?.length || 0) > 150 ||
       (data.phone?.length || 0) > 50 ||
       (data.email?.length || 0) > 191 ||
-      (data.license_number?.length || 0) > 100) {
+      (data.license_number?.length || 0) > 100 ||
+      (data.address_en?.length || 0) > 4000 ||
+      (data.address_ar?.length || 0) > 4000 ||
+      /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/.test((data.address_en || "") + (data.address_ar || ""))) {
       throw new LegacyMasterImportError("invalid_detail_row_" + rowNumber);
     }
-    const email = kind === "REFERRER" && data.email ? data.email.toLowerCase() : null;
+    const email = (kind === "REFERRER" || kind === "CLIENT") && data.email ? data.email.toLowerCase() : null;
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       throw new LegacyMasterImportError("invalid_email_row_" + rowNumber);
     }
@@ -147,9 +166,13 @@ export function parseLegacyMasterCsv(kind: LegacyMasterKind, csv: string): Legac
       category,
       type: type as LegacyMasterRow["type"],
       drugClass: kind === "ANTIBIOTIC" ? data.drug_class || null : null,
-      phone: kind === "REFERRER" ? data.phone || null : null,
+      phone: (kind === "REFERRER" || kind === "CLIENT") ? data.phone || null : null,
       email,
       licenseNumber: kind === "REFERRER" ? data.license_number || null : null,
+      clientType: clientType as LegacyMasterRow["clientType"],
+      addressEn: kind === "CLIENT" ? data.address_en || null : null,
+      addressAr: kind === "CLIENT" ? data.address_ar || null : null,
+      paymentTermsDays: terms === "" ? null : Number(terms),
     };
   });
 }
