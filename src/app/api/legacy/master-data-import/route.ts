@@ -14,6 +14,7 @@ const allowed: Record<LegacyMasterKind, string> = {
   SOURCE: "sources.manage",
   ORGANISM: "microbiology.manage",
   ANTIBIOTIC: "microbiology.manage",
+  CLIENT: "clients.manage",
 };
 
 async function existingCodes(
@@ -23,7 +24,9 @@ async function existingCodes(
   codes: string[],
 ): Promise<string[]> {
   const where = { organizationId, code: { in: codes } };
-  const records = kind === "REFERRER"
+  const records = kind === "CLIENT"
+    ? await db.client.findMany({ where, select: { code: true } })
+    : kind === "REFERRER"
     ? await db.referrer.findMany({ where, select: { code: true } })
     : kind === "SOURCE"
       ? await db.orderSource.findMany({ where, select: { code: true } })
@@ -86,10 +89,12 @@ export async function POST(request: Request) {
       rows: rows.map(row => ({
         ...row, status: collisionsSet.has(row.code) ? "CONFLICT" : "NEW",
       })),
+      // Financial master previews explicitly expose terms; no hidden inferred contracts.
+      financialScope: kind === "CLIENT" ? "CLIENT_MASTER_ONLY_NO_CONTRACTS_PRICES_OR_BALANCES" : null,
     }, { headers: { "Cache-Control": "private, no-store" } });
   }
 
-  if (input.confirmation !== "CREATE_NEW_RECORDS_ONLY" || input.expectedFingerprint !== fingerprint) {
+  if (input.confirmation !== (kind === "CLIENT" ? "CREATE_CLIENT_MASTERS_ONLY_NO_CONTRACTS" : "CREATE_NEW_RECORDS_ONLY") || input.expectedFingerprint !== fingerprint) {
     return NextResponse.json({ error: "review_confirmation_or_fingerprint_required" }, { status: 409 });
   }
   if (collisionsSet.size > 0) {
@@ -120,7 +125,9 @@ export async function POST(request: Request) {
           action: "LEGACY_MASTER_DATA_IMPORT_COMMITTED",
           entityType: "LegacyMasterImport", entityId: importId,
           newValues: { kind, sourceName, fingerprint, count: entries.length,
-            entityIds: entries.map(row => row.id) },
+            entityIds: entries.map(row => row.id),
+            ...(kind === "CLIENT" ? { financialScope: "MASTER_ONLY_NO_CONTRACTS_PRICES_OR_BALANCES" } : {}),
+          },
           ipAddress: context.ipAddress, userAgent: context.userAgent,
         },
       });
@@ -134,6 +141,11 @@ export async function POST(request: Request) {
             newValues: {
               importId, code: row.code, nameEn: row.nameEn,
               nameAr: row.nameAr, fingerprint, sourceName,
+              ...(kind === "CLIENT" ? {
+                clientType: row.clientType,
+                paymentTermsDays: row.paymentTermsDays,
+                financialScope: "MASTER_ONLY_NO_CONTRACTS_PRICES_OR_BALANCES",
+              } : {}),
             },
             ipAddress: context.ipAddress, userAgent: context.userAgent,
           },
