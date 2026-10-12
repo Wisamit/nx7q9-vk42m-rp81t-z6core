@@ -1,7 +1,13 @@
 import { createHash } from "node:crypto";
 
 export class DoctorRequisitionError extends Error {
-  constructor(readonly code: string, readonly statusCode = 409) { super(code); }
+  readonly code:string;
+  readonly statusCode:number;
+  constructor(code: string, statusCode = 409) {
+    super(code);
+    this.code=code;
+    this.statusCode=statusCode;
+  }
 }
 export const isUuid = (x: unknown): x is string =>
   typeof x === "string" && /^[a-f\d]{8}(-[a-f\d]{4}){3}-[a-f\d]{12}$/i.test(x);
