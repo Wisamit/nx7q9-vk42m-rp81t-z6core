@@ -1005,6 +1005,8 @@ enum EdgeQueueStatus {
 }
 
 model Organization {
+  specimenRetentionPolicies SpecimenRetentionPolicy[]
+  specimenDisposalCases SpecimenDisposalCase[]
   doctorPortalAccess DoctorPortalPatientAccess[]
   doctorRequisitions DoctorRequisition[]
   orderClinicalNotes OrderClinicalNote[]
@@ -1166,6 +1168,8 @@ model OrganizationSetting {
 }
 
 model Branch {
+  specimenRetentionPolicies SpecimenRetentionPolicy[]
+  specimenDisposalCases SpecimenDisposalCase[]
   id              String       @id @default(uuid()) @db.Char(36)
   organizationId  String       @map("organization_id") @db.Char(36)
   code            String       @db.VarChar(50)
@@ -1349,6 +1353,12 @@ model ClinicalRuleGovernanceLock {
 }
 
 model User {
+  createdSpecimenRetentionPolicies SpecimenRetentionPolicy[] @relation("RetentionPolicyCreator")
+  approvedSpecimenRetentionPolicies SpecimenRetentionPolicy[] @relation("RetentionPolicyApprover")
+  retiredSpecimenRetentionPolicies SpecimenRetentionPolicy[] @relation("RetentionPolicyRetirer")
+  requestedSpecimenDisposals SpecimenDisposalCase[] @relation("DisposalCaseRequester")
+  authorizedSpecimenDisposals SpecimenDisposalCase[] @relation("DisposalCaseAuthorizer")
+  executedSpecimenDisposals SpecimenDisposalCase[] @relation("DisposalCaseExecutor")
   doctorAccessCreated DoctorPortalPatientAccess[] @relation("DoctorAccessCreator")
   doctorAccessRevoked DoctorPortalPatientAccess[] @relation("DoctorAccessRevoker")
   resolvedDoctorRequisitions DoctorRequisition[] @relation("DoctorRequisitionResolver")
@@ -1806,6 +1816,7 @@ enum CatalogImportMappingType {
 }
 
 model SpecimenType {
+  retentionPolicies SpecimenRetentionPolicy[]
   id             String       @id @default(uuid()) @db.Char(36)
   organizationId String       @map("organization_id") @db.Char(36)
   code           String       @db.VarChar(50)
@@ -3435,6 +3446,7 @@ model OrderStatusHistory {
 
 
 model Specimen {
+  disposalCases SpecimenDisposalCase[]
   id                  String         @id @default(uuid()) @db.Char(36)
   organizationId      String         @map("organization_id") @db.Char(36)
   orderId             String         @map("order_id") @db.Char(36)
@@ -7028,4 +7040,60 @@ model EqaObservation {
   @@unique([roundId, entryCode])
   @@index([componentId, createdAt])
   @@map("eqa_observations")
+}
+
+
+model SpecimenRetentionPolicy {
+  id String @id @default(uuid()) @db.Char(36)
+  organizationId String @map("organization_id") @db.Char(36)
+  branchId String @map("branch_id") @db.Char(36)
+  specimenTypeId String @map("specimen_type_id") @db.Char(36)
+  minimumDays Int @map("minimum_days")
+  rationale String @db.VarChar(1000)
+  status String @default("DRAFT") @db.VarChar(16)
+  createdByUserId String @map("created_by_user_id") @db.Char(36)
+  approvedByUserId String? @map("approved_by_user_id") @db.Char(36)
+  approvedAt DateTime? @map("approved_at") @db.DateTime(3)
+  retiredByUserId String? @map("retired_by_user_id") @db.Char(36)
+  retiredAt DateTime? @map("retired_at") @db.DateTime(3)
+  createdAt DateTime @default(now()) @map("created_at") @db.DateTime(3)
+
+  organization Organization @relation(fields:[organizationId],references:[id],onDelete:Restrict)
+  branch Branch @relation(fields:[branchId],references:[id],onDelete:Restrict)
+  specimenType SpecimenType @relation(fields:[specimenTypeId],references:[id],onDelete:Restrict)
+  creator User @relation("RetentionPolicyCreator",fields:[createdByUserId],references:[id],onDelete:Restrict)
+  approver User? @relation("RetentionPolicyApprover",fields:[approvedByUserId],references:[id],onDelete:Restrict)
+  retirer User? @relation("RetentionPolicyRetirer",fields:[retiredByUserId],references:[id],onDelete:Restrict)
+  disposalCases SpecimenDisposalCase[]
+  @@index([organizationId,branchId,specimenTypeId,status,approvedAt],map:"srp_scope_status_idx")
+  @@map("specimen_retention_policies")
+}
+
+model SpecimenDisposalCase {
+  id String @id @default(uuid()) @db.Char(36)
+  organizationId String @map("organization_id") @db.Char(36)
+  branchId String @map("branch_id") @db.Char(36)
+  specimenId String @map("specimen_id") @db.Char(36)
+  policyId String @map("policy_id") @db.Char(36)
+  status String @default("REQUESTED") @db.VarChar(16)
+  reason String @db.VarChar(1000)
+  specimenVersion Int @map("specimen_version")
+  retentionDueAt DateTime @map("retention_due_at") @db.DateTime(3)
+  requestedByUserId String @map("requested_by_user_id") @db.Char(36)
+  authorizedByUserId String? @map("authorized_by_user_id") @db.Char(36)
+  authorizedAt DateTime? @map("authorized_at") @db.DateTime(3)
+  executedByUserId String? @map("executed_by_user_id") @db.Char(36)
+  executedAt DateTime? @map("executed_at") @db.DateTime(3)
+  createdAt DateTime @default(now()) @map("created_at") @db.DateTime(3)
+
+  organization Organization @relation(fields:[organizationId],references:[id],onDelete:Restrict)
+  branch Branch @relation(fields:[branchId],references:[id],onDelete:Restrict)
+  specimen Specimen @relation(fields:[specimenId],references:[id],onDelete:Restrict)
+  policy SpecimenRetentionPolicy @relation(fields:[policyId],references:[id],onDelete:Restrict)
+  requester User @relation("DisposalCaseRequester",fields:[requestedByUserId],references:[id],onDelete:Restrict)
+  authorizer User? @relation("DisposalCaseAuthorizer",fields:[authorizedByUserId],references:[id],onDelete:Restrict)
+  executor User? @relation("DisposalCaseExecutor",fields:[executedByUserId],references:[id],onDelete:Restrict)
+  @@index([organizationId,branchId,status,createdAt],map:"sdc_branch_queue_idx")
+  @@index([specimenId,status],map:"sdc_specimen_status_idx")
+  @@map("specimen_disposal_cases")
 }
