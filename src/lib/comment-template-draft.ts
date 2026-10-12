@@ -10,7 +10,8 @@ export type ClinicalCommentDraft = {
 };
 
 export class ClinicalCommentDraftError extends Error {
-  constructor(readonly reason: string) { super(reason); }
+  readonly reason: string;
+  constructor(reason: string) { super(reason); this.reason = reason; }
 }
 
 export function parseClinicalCommentDraft(body: unknown): ClinicalCommentDraft {
