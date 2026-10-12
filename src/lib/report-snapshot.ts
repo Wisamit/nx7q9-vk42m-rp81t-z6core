@@ -10,6 +10,13 @@ export async function buildDiagnosticReportSnapshot(db: Prisma.TransactionClient
       patient: true,
       referrer: true,
       client: true,
+      interpretiveComments: {
+        where: { status: "APPROVED" },
+        orderBy: { revisionNumber: "desc" },
+        take: 1,
+        select: { id: true, revisionNumber: true, textEn: true, textAr: true,
+          approvedAt: true, approvedByUserId: true },
+      },
       items: {
         where: { status: { not: "CANCELLED" } },
         orderBy: { createdAt: "asc" },
@@ -201,6 +208,16 @@ export async function buildDiagnosticReportSnapshot(db: Prisma.TransactionClient
         diagnosis: order.diagnosis,
         clinicalNotes: order.clinicalNotes,
       },
+      // This is a point-in-time copy. Later review decisions never mutate
+      // already-issued report versions or their verification tokens.
+      reportInterpretation: order.interpretiveComments[0] ? {
+        id: order.interpretiveComments[0].id,
+        revisionNumber: order.interpretiveComments[0].revisionNumber,
+        textEn: order.interpretiveComments[0].textEn,
+        textAr: order.interpretiveComments[0].textAr,
+        approvedAt: order.interpretiveComments[0].approvedAt?.toISOString() ?? null,
+        approvedByUserId: order.interpretiveComments[0].approvedByUserId,
+      } : null,
       referrer: order.referrer ? {
         id: order.referrer.id,
         code: order.referrer.code,
