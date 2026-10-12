@@ -1,6 +1,7 @@
 "use client";
 import {useMemo,useState} from "react";
 import {useRouter} from "next/navigation";
+import Link from "next/link";
 
 type SafetyStatus="AVAILABLE"|"QUARANTINED"|"RECALLED";
 type Action="QUARANTINE"|"RECALL"|"RELEASE";
@@ -61,7 +62,7 @@ export function InventoryLotSafetyManager({lots,history,locale,canManage}:{
        <th>{tr("Visible branches","الفروع المسموحة")}</th><th>{tr("Expiry","انتهاء الصلاحية")}</th></tr></thead>
      <tbody>{lots.length===0?<tr><td colSpan={4}>{tr("No scoped inventory lots.","لا توجد تشغيلات ضمن صلاحياتك.")}</td></tr>:
        lots.map(lot=><tr key={lot.id}>
-         <td><strong>{lot.lotNumber}</strong><small> · {lot.itemCode} — {lot.itemName}</small></td>
+         <td><strong>{lot.lotNumber}</strong><small> · {lot.itemCode} — {lot.itemName}</small> <Link href={"/inventory/lot-impact/"+lot.id}>{tr("Investigate impact","تحقيق الأثر")}</Link></td>
          <td>{label(lot.safetyStatus)}</td><td>{lot.branches.join(" · ")}</td><td>{lot.expiryDate||"—"}</td>
        </tr>)}</tbody>
    </table></div>
