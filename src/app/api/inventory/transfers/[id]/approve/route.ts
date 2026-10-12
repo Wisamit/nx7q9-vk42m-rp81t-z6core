@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { Prisma } from "../../../../../../../generated/prisma/client";
 import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import {lockLotsForSafety,assertLotUsable} from "@/lib/inventory-lot-safety";
 
 function positive(value: unknown) {
   const raw = String(value ?? "").trim();
@@ -31,6 +32,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       const current = await tx.inventoryTransfer.findUnique({ where: { id: transfer.id }, select: { status: true } });
       if (!current || current.status !== "DRAFT") throw new Error("STATE_CHANGED");
 
+      const safeLots=await lockLotsForSafety(tx,session.user.organizationId,
+        transfer.items.map(line=>line.lotId));
+      for(const line of transfer.items)assertLotUsable(safeLots,line.lotId);
       for (const line of transfer.items) {
         const approvedQty = requestedApproval.has(line.id) ? positive(requestedApproval.get(line.id)) : line.requestedQty;
         if (approvedQty.gt(line.requestedQty)) throw new Error("APPROVED_EXCEEDS_REQUESTED");
