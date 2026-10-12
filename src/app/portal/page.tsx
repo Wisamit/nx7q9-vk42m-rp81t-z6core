@@ -4,6 +4,7 @@ import { requirePortalSession } from "@/lib/portal-auth";
 import { prisma } from "@/lib/db";
 import { PortalLogoutButton } from "@/components/portal-logout-button";
 import { PortalBookingForm } from "@/components/portal-booking-form";
+import { DoctorRequisitionForm } from "@/components/doctor-requisition-form";
 import { PortalContactVerification } from "@/components/portal-contact-verification";
 import { getUiLocale, statusLabel, tr } from "@/lib/ui-i18n";
 import { normalizePortalContactDestination } from "@/lib/report-outbound";
@@ -119,6 +120,44 @@ export default async function PortalPage() {
         : Promise.resolve([]),
   ]);
 
+  // Electronic ordering is a separate, opt-in entitlement. The view grants
+  // above intentionally do not authorize placing requisitions.
+  const doctorGrants = account.type === "DOCTOR" && account.referrerId
+    ? await prisma.doctorPortalPatientAccess.findMany({
+        where:{organizationId:account.organizationId,referrerId:account.referrerId,
+          canRequestOrders:true,status:"ACTIVE",effectiveFrom:{lte:now},
+          OR:[{effectiveTo:null},{effectiveTo:{gte:now}}],
+          patient:{organizationId:account.organizationId,status:"ACTIVE"}},
+        select:{patientId:true},
+      }) : [];
+  const doctorPatientIds = [...new Set(doctorGrants.map(g=>g.patientId))];
+  const [doctorPatients,doctorBranches,doctorTests,doctorRequests] =
+    account.type === "DOCTOR" ? await Promise.all([
+      prisma.patient.findMany({
+        where:{organizationId:account.organizationId,id:{in:doctorPatientIds},status:"ACTIVE"},
+        select:{id:true,patientNumber:true,fullNameEn:true,fullNameAr:true},
+        orderBy:{fullNameEn:"asc"},take:500,
+      }),
+      prisma.branch.findMany({
+        where:{organizationId:account.organizationId,status:"ACTIVE"},
+        select:{id:true,code:true,nameEn:true,nameAr:true},
+        orderBy:{code:"asc"},take:100,
+      }),
+      prisma.labTest.findMany({
+        where:{organizationId:account.organizationId,status:"ACTIVE"},
+        select:{id:true,code:true,nameEn:true,nameAr:true},
+        orderBy:{code:"asc"},take:500,
+      }),
+      prisma.doctorRequisition.findMany({
+        where:{organizationId:account.organizationId,portalAccountId:account.id,
+          patientId:{in:doctorPatientIds}},
+        include:{patient:{select:{patientNumber:true,fullNameEn:true,fullNameAr:true}},
+          branch:{select:{code:true,nameEn:true,nameAr:true}},
+          items:{select:{testCodeSnapshot:true,testNameEnSnapshot:true,testNameArSnapshot:true}}},
+        orderBy:{submittedAt:"desc"},take:50,
+      }),
+    ]) : [[],[],[],[]];
+
   const identity =
     account.type === "PATIENT" ? account.patient?.fullNameEn :
     account.type === "DOCTOR" ? account.referrer?.nameEn :
@@ -163,6 +202,23 @@ export default async function PortalPage() {
       phoneVerifiedAt={currentPhoneVerification?.verifiedAt.toISOString() || null}
       locale={locale}
     />
+
+    {account.type === "DOCTOR" && <DoctorRequisitionForm
+      locale={locale}
+      patients={doctorPatients.map(x=>({id:x.id,label:x.patientNumber+" — "+
+        (locale==="ar"?x.fullNameAr||x.fullNameEn:x.fullNameEn)}))}
+      branches={doctorBranches.map(x=>({id:x.id,label:x.code+" — "+
+        (locale==="ar"?x.nameAr||x.nameEn:x.nameEn)}))}
+      tests={doctorTests.map(x=>({id:x.id,code:x.code,
+        label:locale==="ar"?x.nameAr||x.nameEn:x.nameEn}))}
+      requests={doctorRequests.map(x=>({id:x.id,status:x.status,
+        submittedAt:x.submittedAt.toISOString(),priority:x.priority,
+        patientLabel:x.patient.patientNumber+" — "+
+          (locale==="ar"?x.patient.fullNameAr||x.patient.fullNameEn:x.patient.fullNameEn),
+        branchLabel:x.branch.code,orderId:x.fulfilledOrderId,
+        testNames:x.items.map(i=>i.testCodeSnapshot+" — "+
+          (locale==="ar"?i.testNameArSnapshot||i.testNameEnSnapshot:i.testNameEnSnapshot))}))}
+    />}
 
     {account.type !== "DOCTOR" && <PortalBookingForm
       branches={bookingBranches.map(branch => ({ id: branch.id, name: branch.nameEn || branch.nameAr || "Branch" }))}

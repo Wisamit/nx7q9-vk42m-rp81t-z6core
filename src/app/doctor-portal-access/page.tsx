@@ -42,7 +42,8 @@ export default async function DoctorPortalAccessPage() {
    grants={grants.map(x=>({id:x.id,doctor:x.referrer.code+" — "+
       (locale==="ar"?x.referrer.nameAr||x.referrer.nameEn:x.referrer.nameEn),
     patient:x.patient.patientNumber+" — "+(locale==="ar"?x.patient.fullNameAr||x.patient.fullNameEn:x.patient.fullNameEn),
-    orders:x.canViewOrders,reports:x.canViewReports,from:x.effectiveFrom.toISOString(),
+    orders:x.canViewOrders,reports:x.canViewReports,requestOrders:x.canRequestOrders,
+    from:x.effectiveFrom.toISOString(),
     to:x.effectiveTo?.toISOString()??null,status:x.status,createdBy:x.createdByUserId,
     reason:x.reason,revokedAt:x.revokedAt?.toISOString()??null,revokeReason:x.revokeReason}))}/>
  </main>;

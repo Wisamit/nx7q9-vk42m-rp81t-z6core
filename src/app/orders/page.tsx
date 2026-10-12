@@ -9,7 +9,9 @@ import { normalizeOrderQuestionOptions } from "@/lib/order-questions";
 
 export const dynamic = "force-dynamic";
 
-export default async function OrdersPage() {
+export default async function OrdersPage({ searchParams }: {
+  searchParams: Promise<{ doctorRequisitionId?: string }>;
+}) {
   const session = await requirePermission("orders.view");
   const locale = getUiLocale(session.user.preferredLocale);
   const questionAsOf = new Date();
@@ -109,6 +111,22 @@ export default async function OrdersPage() {
     }),
   ]);
 
+  const requestedRequisitionId = (await searchParams).doctorRequisitionId;
+  const linkedRequisition = requestedRequisitionId
+    ? await prisma.doctorRequisition.findFirst({
+        where:{id:requestedRequisitionId,organizationId:session.user.organizationId,
+          branchId:{in:branches.map(x=>x.id)},status:"SUBMITTED"},
+        include:{items:{select:{testId:true}},
+          patient:{select:{id:true,patientNumber:true,fullNameEn:true,phone:true,status:true}}},
+      }) : null;
+  const eligibleRequisition = linkedRequisition?.patient.status==="ACTIVE" &&
+    linkedRequisition.items.length>0 &&
+    linkedRequisition.items.every(item=>tests.some(test=>test.id===item.testId))
+    ? linkedRequisition:null;
+  const displayedPatients = eligibleRequisition &&
+    !patients.some(patient=>patient.id===eligibleRequisition.patientId)
+    ? [...patients,eligibleRequisition.patient] : patients;
+
   const todayStart = new Date(); todayStart.setHours(0,0,0,0);
   const todayOrders = orders.filter(order => order.orderedAt >= todayStart);
   const urgentOrders = orders.filter(order => ["URGENT","STAT"].includes(order.priority) && order.status !== "COMPLETED" && order.status !== "CANCELLED");
@@ -123,7 +141,14 @@ export default async function OrdersPage() {
       </div>
       <div className="header-actions">
         <OrderCreateModal
-          patients={patients}
+          patients={displayedPatients}
+          initialDoctorRequisition={eligibleRequisition ? {
+            id:eligibleRequisition.id,patientId:eligibleRequisition.patientId,
+            branchId:eligibleRequisition.branchId,referrerId:eligibleRequisition.referrerId,
+            priority:eligibleRequisition.priority,diagnosis:eligibleRequisition.diagnosis,
+            clinicalNotes:eligibleRequisition.clinicalNotes,
+            testIds:eligibleRequisition.items.map(x=>x.testId),
+          } : null}
           tests={tests.map(test => ({
             ...test,
             orderQuestions: test.orderQuestions.map(question => ({
@@ -140,6 +165,8 @@ export default async function OrdersPage() {
           discountLimitPercent={discountLimitPercent}
           locale={locale}
         />
+        <Link className="secondary-link" href="/doctor-requisitions">
+          {tr(locale,"Physician Requisitions","إحالات الأطباء")}</Link>
         <Link className="secondary-link" href="/pricing"><SystemIcon name="pricing" size={15} />{tr(locale, "Pricing", "الأسعار")}</Link>
         <Link className="secondary-link" href="/billing"><SystemIcon name="billing" size={15} />{tr(locale, "Billing", "الفوترة")}</Link>
         <Link className="secondary-link" href="/dashboard"><SystemIcon name="dashboard" size={15} />{tr(locale, "Back to Dashboard", "العودة للوحة التحكم")}</Link>
