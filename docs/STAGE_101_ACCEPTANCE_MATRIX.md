@@ -2,7 +2,7 @@
 
 ## Baseline and verified gap
 - Base: exact merged Stage 100 main `9730ea9cf34d3a95387fdf061183f977a14eb961`, independent CI #1157 SUCCESS (110/110).
-- Scope evidence: `02_MASTER_SCOPE.md` §§22–28 (specimen custody, barcoding, storage, aliquots), §§41/58–60 (clinical audit, quality), §78 (retention and privacy). The existing `POST /api/specimens/[id]/dispose` intentionally allows only **REJECTED** specimens; accepted/released retained material has no governed disposal policy.
+- Scope evidence: `02_MASTER_SCOPE.md` §§22–28 (specimen custody, barcoding, storage, aliquots), §§41/58–60 (clinical audit, quality), §79 (security/privacy retention controls), plus `06_WORKFLOWS.md` walk-in sample storage/disposal flow. The existing `POST /api/specimens/[id]/dispose` intentionally allows only **REJECTED** specimens; accepted/released retained material has no governed disposal policy.
 - Existing specimen collection, rejection, aliquoting, storage location, QMS, inter-branch transfer, clinical validation and report release are reused; this stage does **not** duplicate those modules or change released result history.
 
 ## End-to-end delivered
