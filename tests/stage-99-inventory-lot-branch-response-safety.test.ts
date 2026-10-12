@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
-import {validLotResponse,lotResponseNote} from "../src/app/api/inventory/lot-responses/route.ts";
+import {validLotResponse,lotResponseNote} from "../src/lib/inventory-lot-branch-response.ts";
 
 test("Stage 99: exact response codes, clear 20-1000-character evidence",()=>{
  for(const a of ["NOTICE_RECEIVED","STOCK_ISOLATED","ESCALATED_TO_QUALITY"])assert.equal(validLotResponse(a),true);
