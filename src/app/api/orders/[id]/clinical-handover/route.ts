@@ -45,7 +45,8 @@ export async function POST(request: Request, {params}: {params:Promise<{id:strin
       }
       if(order.status==="CANCELLED")
         throw new ClinicalHandoverError("cancelled_order_not_editable");
-      let threadId=randomUUID(),revisionNumber=1;
+      let threadId: string = randomUUID();
+      let revisionNumber = 1;
       if(input.replacesNoteId) {
         const locks=await tx.$queryRaw<Array<{id:string}>>`
           SELECT id FROM order_clinical_notes WHERE id=${input.replacesNoteId}
