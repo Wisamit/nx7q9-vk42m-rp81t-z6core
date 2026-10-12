@@ -1090,6 +1090,7 @@ model Organization {
   suppliers Supplier[]
   inventoryLots InventoryLot[]
   inventoryLotBranchResponses InventoryLotBranchResponse[]
+  inventoryLotQualityCases InventoryLotQualityCase[]
   stockMovements StockMovement[]
   purchaseRequests PurchaseRequest[]
   purchaseOrders PurchaseOrder[]
@@ -1234,6 +1235,7 @@ model Branch {
   branchStocks BranchStock[]
   inventoryLotStocks InventoryLotStock[]
   inventoryLotBranchResponses InventoryLotBranchResponse[]
+  inventoryLotQualityCases InventoryLotQualityCase[]
   stockMovements StockMovement[]
   purchaseRequests PurchaseRequest[]
   purchaseOrders PurchaseOrder[]
@@ -1388,6 +1390,7 @@ model User {
   mfaChallenges     StaffMfaChallenge[]
   stepUpGrants StaffStepUpGrant[]
   stepUpAttempts StaffStepUpAttempt[]
+  inventoryLotQualityCases InventoryLotQualityCase[]
   createdReferenceIntervals ReferenceInterval[] @relation("ReferenceIntervalCreator")
   approvedReferenceIntervals ReferenceInterval[] @relation("ReferenceIntervalApprover")
   retiredReferenceIntervals ReferenceInterval[] @relation("ReferenceIntervalRetirer")
@@ -5014,6 +5017,26 @@ enum InventoryLotSafetyStatus {
   RECALLED
 }
 
+model InventoryLotQualityCase {
+  id String @id @default(uuid()) @db.Char(36)
+  organizationId String @map("organization_id") @db.Char(36)
+  lotId String @map("lot_id") @db.Char(36)
+  branchId String @map("branch_id") @db.Char(36)
+  safetyEventId String @map("safety_event_id") @db.Char(36)
+  nonconformanceId String @unique @map("nonconformance_id") @db.Char(36)
+  createdByUserId String @map("created_by_user_id") @db.Char(36)
+  createdAt DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  organization Organization @relation(fields:[organizationId],references:[id],onDelete:Restrict)
+  lot InventoryLot @relation(fields:[lotId],references:[id],onDelete:Restrict)
+  safetyEvent InventoryLotSafetyEvent @relation(fields:[safetyEventId],references:[id],onDelete:Restrict)
+  branch Branch @relation(fields:[branchId],references:[id],onDelete:Restrict)
+  nonconformance Nonconformance @relation(fields:[nonconformanceId],references:[id],onDelete:Restrict)
+  createdBy User @relation(fields:[createdByUserId],references:[id],onDelete:Restrict)
+  @@unique([safetyEventId,branchId],map:"ilqc_event_branch_unique")
+  @@index([organizationId,branchId,createdAt],map:"ilqc_branch_history")
+  @@map("inventory_lot_quality_cases")
+}
+
 model InventoryLotBranchResponse {
   id            String   @id @default(uuid()) @db.Char(36)
   organizationId String   @map("organization_id") @db.Char(36)
@@ -5049,6 +5072,7 @@ model InventoryLotSafetyEvent {
 
   lot InventoryLot @relation(fields:[lotId],references:[id],onDelete:Restrict)
   branchResponses InventoryLotBranchResponse[]
+  qualityCases InventoryLotQualityCase[]
   @@index([organizationId,createdAt],map:"ilse_org_created_idx")
   @@index([lotId,createdAt],map:"ilse_lot_created_idx")
   @@map("inventory_lot_safety_events")
@@ -5083,6 +5107,7 @@ model InventoryLot {
   qcLots QcLot[]
   safetyEvents InventoryLotSafetyEvent[]
   branchResponses InventoryLotBranchResponse[]
+  qualityCases InventoryLotQualityCase[]
 
   @@unique([organizationId, itemId, lotNumber])
   @@index([itemId, expiryDate, status])
@@ -5708,6 +5733,7 @@ model Nonconformance {
   owner        User?        @relation("NonconformanceOwner", fields: [ownerUserId], references: [id], onDelete: Restrict)
   closedBy     User?        @relation("NonconformanceCloser", fields: [closedByUserId], references: [id], onDelete: Restrict)
   capas        Capa[]
+  inventoryLotQualityCase InventoryLotQualityCase?
 
   @@unique([organizationId, caseNumber])
   @@index([branchId, status, detectedAt])
