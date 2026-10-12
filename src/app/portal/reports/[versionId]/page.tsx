@@ -13,6 +13,8 @@ type ReportSnapshot = {
   branch?: { nameEn?: string; nameAr?: string | null };
   patient?: { patientNumber?: string; fullNameEn?: string; fullNameAr?: string | null; dateOfBirth?: string | null; sexAtBirth?: string };
   order?: { accessionNumber?: string; orderedAt?: string; priority?: string };
+  reportInterpretation?: { id: string; revisionNumber: number; textEn: string;
+    textAr: string; approvedAt: string | null; approvedByUserId: string | null } | null;
   results?: Array<{
     testCode?: string;
     testNameEn?: string;
@@ -150,6 +152,13 @@ export default async function PortalReportPage({ params }: { params: Promise<{ v
     {version.report.currentVersion !== version.version && <section className="detail-card" role="alert">
       <strong>{tr(locale, "Superseded report version — not current", "إصدار تقرير قديم — ليس الإصدار الحالي")}</strong>
       <p>{tr(locale, "This historical report was replaced by a newer version. Review the latest version before making clinical decisions.", "تم استبدال هذا التقرير التاريخي بإصدار أحدث. راجع أحدث إصدار قبل اتخاذ قرارات سريرية.")}</p>
+    </section>}
+
+    {snapshot.reportInterpretation && <section className="detail-card">
+      <h2>{tr(locale, "Approved report interpretation", "التفسير السريري المعتمد")} · v{snapshot.reportInterpretation.revisionNumber}</h2>
+      <p dir={locale === "ar" ? "rtl" : "ltr"} style={{ whiteSpace: "pre-wrap" }}>
+        {locale === "ar" ? snapshot.reportInterpretation.textAr : snapshot.reportInterpretation.textEn}
+      </p>
     </section>}
 
     {(snapshot.results || []).map((result, index) => <section className="table-card detail-section" key={(result.testCode || "test") + index}>
