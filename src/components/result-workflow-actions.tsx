@@ -3,6 +3,7 @@
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { statusLabel as sharedStatusLabel } from "@/lib/ui-i18n";
+import { StaffStepUpDialog, type StepUpPurpose } from "@/components/staff-step-up-dialog";
 
 type Communication = {
   id: string;
@@ -46,6 +47,7 @@ type ValidationSnapshot = {
 
 export function ResultWorkflowActions({
   resultId,
+  performingBranchId,
   resultStatus,
   validationStage,
   validationPolicySnapshot,
@@ -67,6 +69,7 @@ export function ResultWorkflowActions({
   locale,
 }: {
   resultId: string;
+  performingBranchId: string;
   resultStatus: string;
   validationStage: string;
   validationPolicySnapshot: unknown;
@@ -120,6 +123,7 @@ export function ResultWorkflowActions({
   const [showCommunication, setShowCommunication] = useState(false);
   const [showAmendment, setShowAmendment] = useState(false);
   const [showMedicalReturn, setShowMedicalReturn] = useState(false);
+  const [stepUpPending,setStepUpPending]=useState<StepUpPurpose|null>(null);
 
   const snapshot = validationPolicySnapshot && typeof validationPolicySnapshot === "object"
     ? validationPolicySnapshot as ValidationSnapshot
@@ -170,11 +174,14 @@ export function ResultWorkflowActions({
     setBusy("");
   }
 
-  async function approveMedicalValidation() {
+  async function approveMedicalValidation(stepUpToken?:string) {
+    if(!stepUpToken){
     if (!confirm(tr(
       "Approve medical validation? This completes the required validation path and locks the result for release.",
       "اعتماد التحقق الطبي؟ سيؤدي ذلك إلى إكمال مسار التحقق المطلوب وقفل النتيجة تمهيداً للإصدار.",
     ))) return;
+    setStepUpPending("MEDICAL_APPROVAL");return;
+    }
 
     setBusy("medical");
     setMessage("");
@@ -183,7 +190,7 @@ export function ResultWorkflowActions({
     for (let attempt = 0; attempt < 2; attempt++) {
       const response = await fetch("/api/results/" + resultId + "/medical-validate", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "x-staff-step-up-token":stepUpToken },
         body: JSON.stringify({ action: "APPROVE", confirmQcWarnings }),
       });
       const body = await response.json().catch(() => ({})) as Record<string, unknown>;
@@ -263,12 +270,16 @@ export function ResultWorkflowActions({
     setBusy("");
   }
 
-  async function releaseResult() {
+  async function releaseResult(stepUpToken?:string) {
+    if(!stepUpToken){
     if (!confirm(tr("Release this verified result? A new immutable diagnostic report version will be created.", "هل تريد إصدار هذه النتيجة المتحقق منها؟ سيتم إنشاء إصدار تقرير تشخيصي جديد غير قابل للتغيير."))) return;
+    setStepUpPending("RESULT_RELEASE");return;
+    }
     setBusy("release");
     setMessage("");
 
-    const response = await fetch("/api/results/" + resultId + "/release", { method: "POST" });
+    const response = await fetch("/api/results/" + resultId + "/release", { method: "POST",
+      headers:{"x-staff-step-up-token":stepUpToken} });
     const body = await response.json().catch(() => ({}));
 
     if (response.ok) {
@@ -316,6 +327,15 @@ export function ResultWorkflowActions({
   const pendingMedical = resultStatus === "ENTERED" && validationStage === "MEDICAL_VALIDATION";
 
   return <div className="result-workflow-box">
+    <StaffStepUpDialog open={stepUpPending!==null}
+      action={stepUpPending||"MEDICAL_APPROVAL"} resourceKey={resultId}
+      branchId={performingBranchId} locale={locale}
+      onCancel={()=>setStepUpPending(null)}
+      onGranted={token=>{
+        const action=stepUpPending;setStepUpPending(null);
+        if(action==="MEDICAL_APPROVAL")void approveMedicalValidation(token);
+        if(action==="RESULT_RELEASE")void releaseResult(token);
+      }}/>
     <div className="result-workflow-status">
       <div><span>{tr("Result status", "حالة النتيجة")}</span><strong>{sharedStatusLabel(locale, resultStatus)}</strong></div>
       <div><span>{tr("Validation stage", "مرحلة التحقق")}</span><strong>{validationStageLabel(validationStage)}</strong></div>
