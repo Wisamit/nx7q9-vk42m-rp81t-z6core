@@ -4,7 +4,13 @@ export type EqaAction = "CREATE_PROGRAM" | "CREATE_ROUND" | "ADD_OBSERVATION" |
   "FINALIZE_REVIEW" | "CLOSE_ROUND" | "DEACTIVATE_PROGRAM";
 
 export class EqaWorkflowError extends Error {
-  constructor(readonly code: string, readonly statusCode = 400) { super(code); }
+  readonly code: string;
+  readonly statusCode: number;
+  constructor(code: string, statusCode = 400) {
+    super(code);
+    this.code = code;
+    this.statusCode = statusCode;
+  }
 }
 
 const codeExpression = /^[A-Z0-9][A-Z0-9._-]{0,79}$/;
