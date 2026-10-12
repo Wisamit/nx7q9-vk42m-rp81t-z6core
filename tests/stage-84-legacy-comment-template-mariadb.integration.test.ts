@@ -36,11 +36,12 @@ test("Stage 84 MariaDB: tenant-specific ACTIVE component linkage, inactive-only 
   }
   async function add(db:mysql.Connection,tenant:string,row:ReturnType<typeof parseLegacyMasterCsv>[number],
     id:string,testIdValue:string|null,componentIdValue:string|null){
+    if (!row.textEn || !row.commentScope) throw Error("invalid_comment_template_fixture");
     await db.execute(
       "INSERT INTO result_comment_templates(id,organization_id,code,name_en,name_ar,text_en,text_ar,"+
       "scope,test_id,component_id,status,deactivated_at,updated_at) "+
       "VALUES(?,?,?,?,?,?,?,?,?,?,'INACTIVE',NOW(3),NOW(3))",
-      [id,tenant,row.code,row.nameEn,row.nameAr,row.textEn,row.textAr,
+      [id,tenant,row.code,row.nameEn,row.nameAr,row.textEn,row.textAr ?? null,
         row.commentScope,testIdValue,componentIdValue]);
   }
   try {
