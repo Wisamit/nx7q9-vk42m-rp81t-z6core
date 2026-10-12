@@ -86,7 +86,7 @@ export function LegacyMasterConfigurationExport({locale,kinds}:{
           <td>{part.partNumber}</td><td>{part.rowCount}</td>
           <td>{part.firstCode} – {part.lastCode}</td>
           <td><button type="button" className="secondary-button" onClick={()=>
-            download("\uFEFF"+part.csv,"family-lab-"+archive.kind.toLowerCase()+
+            download(part.csv,"family-lab-"+archive.kind.toLowerCase()+
               "-part-"+part.partNumber+".csv","text/csv;charset=utf-8")}>
             {tr("Download CSV","تحميل CSV")}</button></td>
         </tr>)}</tbody>
