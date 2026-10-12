@@ -65,8 +65,7 @@ export async function POST(request: Request) {
       if(!portal)throw new AccessError("doctor_portal_account_required",409);
       const existing=await tx.doctorPortalPatientAccess.findFirst({
         where:{organizationId,referrerId:input.referrerId as string,
-          patientId:input.patientId as string,status:"ACTIVE",
-          OR:[{effectiveTo:null},{effectiveTo:{gte:start}}]},
+          patientId:input.patientId as string,status:"ACTIVE"},
         select:{id:true},
       });
       if(existing)throw new AccessError("active_grant_already_exists",409);
