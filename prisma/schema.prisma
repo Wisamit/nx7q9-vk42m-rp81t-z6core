@@ -3820,7 +3820,7 @@ model SendOutReferral {
   verifiedBy         User?              @relation("SendOutVerifiedBy", fields: [verifiedByUserId], references: [id], onDelete: Restrict)
   events             SendOutEvent[]
 
-  @@index([organizationId, status, createdAt])
+  @@index([organizationId, status, createdAt], map: "ric_org_status_created_idx")
   @@index([branchId, status, expectedResultAt])
   @@index([orderItemId, createdAt])
   @@index([externalLaboratoryId, status])
@@ -4149,16 +4149,16 @@ model ReportInterpretiveComment {
   createdAt            DateTime @default(now()) @map("created_at") @db.DateTime(3)
   approvedAt           DateTime? @map("approved_at") @db.DateTime(3)
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  order LabOrder @relation(fields: [orderId], references: [id], onDelete: Restrict)
-  createdBy User @relation("InterpretationCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
-  approvedBy User? @relation("InterpretationApprover", fields: [approvedByUserId], references: [id], onDelete: Restrict)
-  supersedes ReportInterpretiveComment? @relation("InterpretationLineage", fields: [supersedesCommentId], references: [id], onDelete: Restrict)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict, map: "ric_org_fk")
+  order LabOrder @relation(fields: [orderId], references: [id], onDelete: Restrict, map: "ric_order_fk")
+  createdBy User @relation("InterpretationCreator", fields: [createdByUserId], references: [id], onDelete: Restrict, map: "ric_creator_fk")
+  approvedBy User? @relation("InterpretationApprover", fields: [approvedByUserId], references: [id], onDelete: Restrict, map: "ric_approver_fk")
+  supersedes ReportInterpretiveComment? @relation("InterpretationLineage", fields: [supersedesCommentId], references: [id], onDelete: Restrict, map: "ric_parent_fk")
   nextRevisions ReportInterpretiveComment[] @relation("InterpretationLineage")
 
-  @@unique([orderId, revisionNumber])
+  @@unique([orderId, revisionNumber], map: "ric_order_revision_uq")
   @@index([organizationId, status, createdAt])
-  @@index([orderId, status, revisionNumber])
+  @@index([orderId, status, revisionNumber], map: "ric_order_status_revision_idx")
   @@map("report_interpretive_comments")
 }
 
