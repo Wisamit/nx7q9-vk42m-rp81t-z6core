@@ -25,6 +25,11 @@ type SimpleOption = { id: string; code: string; nameEn: string };
 type ReferrerOption = SimpleOption & { clientId: string | null };
 type SourceOption = SimpleOption & { category: string };
 type BranchOption = SimpleOption;
+export type DoctorRequisitionPrefill = {
+  id:string;patientId:string;branchId:string;referrerId:string;
+  priority:"ROUTINE"|"URGENT"|"STAT";testIds:string[];
+  diagnosis:string|null;clinicalNotes:string|null;
+};
 
 export function OrderCreateForm({
   patients,
@@ -38,6 +43,7 @@ export function OrderCreateForm({
   discountLimitPercent,
   locale,
   onSuccess,
+  initialDoctorRequisition,
 }: {
   patients: PatientOption[];
   tests: TestOption[];
@@ -50,13 +56,17 @@ export function OrderCreateForm({
   discountLimitPercent: number;
   locale: "ar" | "en";
   onSuccess?: (message: string) => void;
+  initialDoctorRequisition?: DoctorRequisitionPrefill | null;
 }) {
   const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
   const router = useRouter();
-  const [patientSearch, setPatientSearch] = useState("");
-  const [patientId, setPatientId] = useState("");
+  const [patientSearch, setPatientSearch] = useState(() => {
+    const patient=patients.find(p=>p.id===initialDoctorRequisition?.patientId);
+    return patient ? `${patient.patientNumber} — ${patient.fullNameEn}${patient.phone ? " — "+patient.phone : ""}` : "";
+  });
+  const [patientId, setPatientId] = useState(initialDoctorRequisition?.patientId || "");
   const [testSearch, setTestSearch] = useState("");
-  const [selectedTestIds, setSelectedTestIds] = useState<string[]>([]);
+  const [selectedTestIds, setSelectedTestIds] = useState<string[]>(initialDoctorRequisition?.testIds || []);
   const [packageSearch, setPackageSearch] = useState("");
   const [selectedPackageIds, setSelectedPackageIds] = useState<string[]>([]);
   const [message, setMessage] = useState("");
@@ -114,6 +124,13 @@ export function OrderCreateForm({
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (initialDoctorRequisition && (
+      patientId!==initialDoctorRequisition.patientId ||
+      new Set(effectiveTestIds).size!==initialDoctorRequisition.testIds.length ||
+      initialDoctorRequisition.testIds.some(id=>!effectiveTestIds.includes(id)) ||
+      selectedPackageIds.length>0
+    )) { setMessage(tr("Requisition contents cannot be changed; return to the review queue.",
+      "لا يمكن تعديل محتويات إحالة الطبيب؛ ارجع لقائمة المراجعة."));return; }
     if (!patientId) { setMessage(tr("Select a valid patient.", "اختر مريضًا صحيحًا.")); return; }
     if (effectiveTestIds.length === 0) { setMessage(tr("Add at least one test or commercial package.", "أضف فحصًا واحدًا أو باقة تجارية واحدة على الأقل.")); return; }
 
@@ -133,6 +150,7 @@ export function OrderCreateForm({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         branchId: form.get("branchId"),
+        doctorRequisitionId: initialDoctorRequisition?.id || null,
         patientId,
         sourceId: form.get("sourceId"),
         referrerId: form.get("referrerId"),
@@ -227,14 +245,18 @@ export function OrderCreateForm({
 
   return <form className="order-form" onSubmit={submit}>
     <div className="form-grid">
+      {initialDoctorRequisition && <p className="form-warning form-span">
+        {tr("Physician requisition conversion: patient, branch, referrer, tests, priority and original clinical text are fixed. Choose billing source, verify test-specific questions and register through standard pricing.",
+        "تحويل إحالة طبيب: المريض والفرع والمحيل والفحوصات والأولوية والنص السريري الأصلي ثابتة. اختر مصدر الفوترة وتحقق من الأسئلة الخاصة بالفحوصات ثم سجّل وفق التسعير الاعتيادي.")}
+      </p>}
       <label>{tr("Ordering branch", "فرع الطلب")}
-        <select name="branchId" required defaultValue={activeBranchId || ""}>
+        <select name="branchId" required defaultValue={initialDoctorRequisition?.branchId || activeBranchId || ""}>
           <option value="">{tr("Select branch…", "اختر الفرع…")}</option>
           {branches.map(branch => <option key={branch.id} value={branch.id}>{branch.code} — {branch.nameEn}</option>)}
         </select>
       </label>
       <label>{tr("Priority", "الأولوية")}
-        <select name="priority" defaultValue="ROUTINE"><option value="ROUTINE">{tr("Routine", "عادي")}</option><option value="URGENT">{tr("Urgent", "عاجل")}</option><option value="STAT">{tr("STAT", "فوري")}</option></select>
+        <select name="priority" defaultValue={initialDoctorRequisition?.priority || "ROUTINE"}><option value="ROUTINE">{tr("Routine", "عادي")}</option><option value="URGENT">{tr("Urgent", "عاجل")}</option><option value="STAT">{tr("STAT", "فوري")}</option></select>
       </label>
 
       <label className="form-span">{tr("Patient", "المريض")}
@@ -249,6 +271,7 @@ export function OrderCreateForm({
             setPatientId(match?.id || "");
           }}
           required
+          readOnly={Boolean(initialDoctorRequisition)}
         />
         <datalist id="order-patient-options">{patientOptions.map(p => <option key={p.id} value={p.label} />)}</datalist>
       </label>
@@ -260,7 +283,7 @@ export function OrderCreateForm({
         </select>
       </label>
       <label>{tr("Referrer", "المحيل")}
-        <select name="referrerId" defaultValue="">
+        <select name="referrerId" defaultValue={initialDoctorRequisition?.referrerId || ""}>
           <option value="">{tr("No referrer", "بدون محيل")}</option>
           {referrers.map(x => <option key={x.id} value={x.id}>{x.code} — {x.nameEn}</option>)}
         </select>
@@ -275,7 +298,7 @@ export function OrderCreateForm({
       <label>{tr("Fasting", "صيام")}
         <select name="fasting" defaultValue=""><option value="">{tr("Unknown / not stated", "غير معروف / غير مذكور")}</option><option value="YES">{tr("Yes", "نعم")}</option><option value="NO">{tr("No", "لا")}</option></select>
       </label>
-      <label>{tr("Diagnosis / indication", "التشخيص / سبب الطلب")}<input name="diagnosis" maxLength={500} /></label>
+      <label>{tr("Diagnosis / indication", "التشخيص / سبب الطلب")}<input name="diagnosis" maxLength={500} defaultValue={initialDoctorRequisition?.diagnosis || ""} readOnly={Boolean(initialDoctorRequisition)} /></label>
       <label>{tr("Pregnancy status", "حالة الحمل")}
         <select
           name="pregnancyStatus"
@@ -301,9 +324,9 @@ export function OrderCreateForm({
         <input name="referencePopulationCode" maxLength={80} placeholder={tr("Optional configured code", "رمز اختياري مُهيأ")} />
       </label>
       <label className="form-span">{tr("Pregnancy information", "معلومات الحمل")}<input name="pregnancyInfo" maxLength={500} /></label>
-      <label className="form-span">{tr("Clinical notes", "ملاحظات سريرية")}<textarea name="clinicalNotes" rows={3} /></label>
+      <label className="form-span">{tr("Clinical notes", "ملاحظات سريرية")}<textarea name="clinicalNotes" rows={3} defaultValue={initialDoctorRequisition?.clinicalNotes || ""} readOnly={Boolean(initialDoctorRequisition)} /></label>
 
-      {packages.length > 0 && <div className="form-span order-test-picker">
+      {packages.length > 0 && !initialDoctorRequisition && <div className="form-span order-test-picker">
         <label>{tr("Commercial packages", "الباقات التجارية")}
           <div className="inline-search">
             <input
@@ -331,9 +354,10 @@ export function OrderCreateForm({
               list="order-test-options"
               placeholder={tr("Type test code or name…", "اكتب رمز الفحص أو اسمه…")}
               value={testSearch}
+              disabled={Boolean(initialDoctorRequisition)}
               onChange={e => setTestSearch(e.target.value)}
             />
-            <button className="secondary-button" type="button" onClick={addTest}>{tr("Add Test", "إضافة فحص")}</button>
+            <button className="secondary-button" type="button" disabled={Boolean(initialDoctorRequisition)} onClick={addTest}>{tr("Add Test", "إضافة فحص")}</button>
           </div>
           <datalist id="order-test-options">{testOptions.map(test => <option key={test.id} value={test.label} />)}</datalist>
         </label>
@@ -343,7 +367,7 @@ export function OrderCreateForm({
               const fromPackage = packageTestIds.includes(test.id);
               return <span className={"selected-test-chip" + (fromPackage ? " package-member-chip" : "")} key={test.id}>
                 {test.code} — {test.nameEn}{fromPackage ? " · " + tr("package", "باقة") : ""}
-                {!fromPackage && <button type="button" onClick={() => setSelectedTestIds(ids => ids.filter(id => id !== test.id))}>×</button>}
+                {!fromPackage && !initialDoctorRequisition && <button type="button" onClick={() => setSelectedTestIds(ids => ids.filter(id => id !== test.id))}>×</button>}
               </span>;
             })
           }
