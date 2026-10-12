@@ -7,12 +7,13 @@ import { resolveAnalyzerQcGate } from "@/lib/qc-gate";
 import { queueReportIntegrations } from "@/lib/integration-outbox";
 import { resolveEffectiveReportTemplate } from "@/lib/report-template";
 import { releaseEligibility } from "@/lib/clinical-safety";
+import { consumeStaffStepUp, StaffStepUpError } from "@/lib/staff-step-up";
 
 class SpecimenClinicalHold extends Error {}
 class ReportReleaseStateChanged extends Error {}
 class AnalyzerQcClinicalHold extends Error {}
 
-export async function POST(_: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await requirePermission("results.release");
   const ctx = await requestContext();
   const { id } = await params;
@@ -130,6 +131,12 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
     }
     // A second release request must not create a new report version from
     // an already-released result or a stale validation snapshot.
+    const stepUp=await consumeStaffStepUp(tx,{
+      token:request.headers.get("x-staff-step-up-token"),action:"RESULT_RELEASE",
+      resourceKey:result.id,sessionId:session.id,userId:session.user.id,
+      organizationId:session.user.organizationId,branchId:result.performingBranchId,
+      ipAddress:ctx.ipAddress,userAgent:ctx.userAgent,
+    });
     const claim = await tx.laboratoryResult.updateMany({
       where: {
         id: result.id,
@@ -286,6 +293,7 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
           qcGateStatus: committedQcGate?.status || null,
           qcGateReasons: committedQcGate?.reasons || [],
           integrationQueue,
+          stepUpGrantId:stepUp.grantId,stepUpProofMethod:stepUp.proofMethod,
         },
         reason: result.amendmentReason || null,
         ipAddress: ctx.ipAddress,
@@ -302,11 +310,14 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
       integrationQueue,
     };
   }, { timeout: 30000 }).catch(error => {
+    if (error instanceof StaffStepUpError) return "STEP_UP_REQUIRED" as const;
     if (error instanceof SpecimenClinicalHold) return "CLINICAL_HOLD" as const;
     if (error instanceof ReportReleaseStateChanged) return "RELEASE_STATE_CHANGED" as const;
     if (error instanceof AnalyzerQcClinicalHold) return "QC_HOLD" as const;
     throw error;
   });
+  if (released === "STEP_UP_REQUIRED")
+    return NextResponse.json({error:"fresh_staff_reauthentication_required"},{status:403});
   if (released === "CLINICAL_HOLD") {
     return NextResponse.json({ error: "specimen_clinical_quarantine_blocks_release" }, { status: 409 });
   }
