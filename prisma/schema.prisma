@@ -1381,8 +1381,8 @@ model User {
   roles            UserRole[]
   branchScopes     UserBranchScope[]
   departmentScopes UserDepartmentScope[]
-  auditEvents      AuditEvent[]
-  inventoryLotBranchResponses InventoryLotBranchResponse[]          @relation("AuditActor")
+  auditEvents      AuditEvent[] @relation("AuditActor")
+  inventoryLotBranchResponses InventoryLotBranchResponse[]
   homeCollectionOrderLinks HomeCollectionVisit[] @relation("HomeCollectionOrderLinker")
   sessions         UserSession[]
   mfaChallenges     StaffMfaChallenge[]
@@ -5024,6 +5024,7 @@ model InventoryLotBranchResponse {
   action        String   @db.VarChar(32)
   note          String   @db.VarChar(1000)
   createdAt     DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  organization Organization @relation(fields:[organizationId],references:[id],onDelete:Restrict)
   lot InventoryLot @relation(fields:[lotId],references:[id],onDelete:Restrict)
   safetyEvent InventoryLotSafetyEvent @relation(fields:[safetyEventId],references:[id],onDelete:Restrict)
   branch Branch @relation(fields:[branchId],references:[id],onDelete:Restrict)
