@@ -59,7 +59,7 @@ test("Stage 89: clinical write, review and release respect immutable tenant-scop
   const page=readFileSync("src/app/reports/[orderId]/interpretation/page.tsx","utf8");
   const ui=readFileSync("src/components/report-interpretation-manager.tsx","utf8");
   assert.match(schema,/model ReportInterpretiveComment \{/);
-  assert.match(schema, /@@unique\(\[orderId, revisionNumber\]\)/);
+  assert.match(schema, /@@unique\(\[orderId, revisionNumber\], map: "ric_order_revision_uq"\)/);
   assert.match(migration,/FOREIGN KEY \(`order_id`\)/);
   assert.match(migration,/ON DELETE RESTRICT/);
   assert.match(api,/rights\.has\("results\.medical_validate"\)/);
