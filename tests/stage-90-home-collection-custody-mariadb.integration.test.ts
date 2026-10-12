@@ -74,7 +74,7 @@ test("Stage 90 MariaDB: order link uniqueness, two-connection custody locks, col
       orderOrganizationId:otherOrg,visitOrganizationId:org,
       orderPatientId:patient,visitPatientId:patient,
       orderingBranchId:branch,visitBranchId:branch,orderStatus:"REGISTERED",
-      visitStatus:"ASSIGNED",hasSpecimens:true,hasOrderItems:true,alreadyLinked:false,
+      visitStatus:"ASSIGNED",hasSpecimens:true,specimensAllPlanned:true,hasOrderItems:true,alreadyLinked:false,
     }),"home_order_patient_branch_mismatch");
     const [foreign]=await db.execute<mysql.RowDataPacket[]>(
       "SELECT id FROM orders WHERE id=? AND organization_id=?",[order,otherOrg]);
