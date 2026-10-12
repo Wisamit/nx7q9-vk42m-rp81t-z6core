@@ -58,6 +58,7 @@ test("Stage 92: clinical write, review and release respect immutable tenant-scop
   const release=readFileSync("src/app/api/results/[id]/release/route.ts","utf8");
   const report=readFileSync("src/app/reports/[orderId]/page.tsx","utf8");
   const page=readFileSync("src/app/reports/[orderId]/interpretation/page.tsx","utf8");
+  const portal=readFileSync("src/app/portal/reports/[versionId]/page.tsx","utf8");
   const ui=readFileSync("src/components/report-interpretation-manager.tsx","utf8");
   assert.match(schema,/model ReportInterpretiveComment \{/);
   assert.match(schema, /@@unique\(\[orderId, revisionNumber\], map: "ric_order_revision_uq"\)/);
@@ -77,13 +78,16 @@ test("Stage 92: clinical write, review and release respect immutable tenant-scop
   assert.match(api,/REPORT_INTERPRETATION_INDEPENDENTLY_APPROVED/);
   assert.match(api,/REPORT_INTERPRETATION_SUPERSEDED/);
   assert.match(api,/isolationLevel:"Serializable"/);
-  assert.match(snapshot,/where: \{ status: "APPROVED" \}/);
+  assert.match(snapshot,/status = 'APPROVED'/);
+  assert.match(snapshot,/LIMIT 1 FOR UPDATE/);
   assert.match(release,/lockedOrderForInterpretation/);
   assert.match(release,/SELECT id FROM orders[\s\S]*FOR UPDATE/);
-  assert.match(snapshot,/reportInterpretation: order\.interpretiveComments\[0\]/);
+  assert.match(snapshot,/reportInterpretation: approvedInterpretation/);
   assert.match(report,/snapshot\.reportInterpretation/);
   assert.match(report,/showEnglish.*snapshot\.reportInterpretation\.textEn/);
   assert.match(report,/showArabic.*snapshot\.reportInterpretation\.textAr/);
+  assert.match(portal,/snapshot\.reportInterpretation/);
+  assert.match(portal,/locale === "ar" \? snapshot\.reportInterpretation\.textAr/);
   assert.match(page,/requirePermission\("reports\.view"\)/);
   assert.match(page,/canAccessBranch\(session,order\.orderingBranchId\)/);
   assert.match(ui,/APPROVE_EXACT_BILINGUAL_REPORT_INTERPRETATION/);
