@@ -108,7 +108,7 @@ test("Stage 86 MariaDB: tenant-bound active clinical targets, locked draft creat
     };
     assert.equal(commentReviewBlocker(target,origin[0].actor_user_id,creator),"SELF_APPROVAL");
     assert.equal(commentReviewBlocker(target,origin[0].actor_user_id,reviewer),null);
-    assert.equal(commentReviewBlocker({...target,test:{...target.test,organizationId:outside}},
+    assert.equal(commentReviewBlocker({...target,test:{...target.test!,organizationId:outside}},
       creator,reviewer),"TARGET_INACTIVE_OR_INVALID");
     const [outsideTemplate]=await competing.execute<mysql.RowDataPacket[]>(
       "SELECT id FROM result_comment_templates WHERE id=? AND organization_id=?",
@@ -117,7 +117,7 @@ test("Stage 86 MariaDB: tenant-bound active clinical targets, locked draft creat
     await db.execute("UPDATE test_components SET status='INACTIVE' WHERE id=?",[componentId]);
     const [inactive]=await db.execute<mysql.RowDataPacket[]>(targetQuery,[testId,org,componentId]);
     assert.equal(inactive.length,0);
-    assert.equal(commentReviewBlocker({...target,component:{...target.component,status:"INACTIVE"}},
+    assert.equal(commentReviewBlocker({...target,component:{...target.component!,status:"INACTIVE"}},
       creator,reviewer),"TARGET_INACTIVE_OR_INVALID");
     const cursor=encodeCommentReviewCursor({createdAt:new Date("2026-10-12T12:00:00.000Z"),id:templateId});
     assert.equal(decodeCommentReviewCursor(cursor)?.id,templateId);
