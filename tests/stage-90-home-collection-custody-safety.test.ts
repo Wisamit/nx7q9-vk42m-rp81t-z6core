@@ -9,7 +9,7 @@ const match = {
   orderPatientId:"patient", visitPatientId:"patient",
   orderingBranchId:"branch",visitBranchId:"branch",
   orderStatus:"REGISTERED",visitStatus:"ASSIGNED",
-  hasSpecimens:true,hasOrderItems:true,alreadyLinked:false,
+  hasSpecimens:true,specimensAllPlanned:true,hasOrderItems:true,alreadyLinked:false,
 };
 const visit = {id:"visit",orderId:"order",branchId:"branch",
   assignedCollectorUserId:"collector",status:"COLLECTING"};
@@ -30,6 +30,8 @@ test("Stage 90: strictly link same patient, tenant, branch and active order with
   assert.equal(homeOrderMatch({...match,orderStatus:"CANCELLED"}),"home_order_not_active");
   assert.equal(homeOrderMatch({...match,visitStatus:"COLLECTING"}),"home_visit_too_advanced_to_link");
   assert.equal(homeOrderMatch({...match,hasSpecimens:false}),"home_order_specimens_not_ready");
+  assert.equal(homeOrderMatch({...match,specimensAllPlanned:false}),"home_order_specimens_not_ready");
+  assert.equal(homeOrderMatch({...match,orderStatus:"COLLECTED"}),"home_order_not_active");
   assert.equal(homeOrderMatch({...match,hasOrderItems:false}),"home_order_specimens_not_ready");
 });
 test("Stage 90: no home draw before priced order and assigned collector",()=>{
@@ -40,6 +42,7 @@ test("Stage 90: no home draw before priced order and assigned collector",()=>{
   assert.equal(homeCollectionStartError(visit,1,[]),"home_issued_invoice_required");
   assert.equal(homeCollectionStartError(visit,1,[{...invoice,status:"DRAFT"}]),"home_issued_invoice_required");
   assert.equal(homeCollectionStartError(visit,1,[{...invoice,status:"VOID"}]),"home_issued_invoice_required");
+  assert.equal(homeCollectionStartError(visit,1,[{...invoice,status:"CREDITED"}]),"home_issued_invoice_required");
 });
 test("Stage 90: delivered requires accepted per-barcode reception for every physical sample",()=>{
   assert.equal(homeCollectionCustodyError(visit,"COLLECTED",[specimen],[invoice]),null);
@@ -91,6 +94,8 @@ test("Stage 90: full operational workflow spans schema, approved LIS order, home
   assert.match(link,/isolationLevel: "Serializable"/);
   assert.match(transition,/homeCollectionCustodyError/);
   assert.match(transition,/homeCollectionStartError/);
+  assert.match(transition,/\["EN_ROUTE","COLLECTING"\]/);
+  assert.match(transition,/COLLECTOR_REASSIGNMENT_AFTER_DISPATCH_FORBIDDEN/);
   assert.match(transition,/receptionAssessments/);
   assert.match(transition,/SELECT id FROM home_collection_visits[\s\S]*FOR UPDATE/);
   assert.match(transition,/HOME_SPECIMEN_RECEPTION_EVIDENCE_MISSING/);
