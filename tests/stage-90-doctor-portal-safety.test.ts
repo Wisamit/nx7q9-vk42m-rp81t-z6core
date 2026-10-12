@@ -1,0 +1,61 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { doctorAccessWhere,validDoctorAccessDates,validDoctorAccessReason } from "../src/lib/doctor-portal-access.ts";
+
+const now=new Date("2026-10-12T11:00:00.000Z");
+test("Stage 90: doctor portal enforces explicit independently scoped grants",()=>{
+ const orders=doctorAccessWhere({organizationId:"org",referrerId:"doctor",
+  capability:"orders",now});
+ const reports=doctorAccessWhere({organizationId:"org",referrerId:"doctor",
+  capability:"reports",now});
+ assert.equal(orders.organizationId,"org");
+ assert.equal(orders.referrerId,"doctor");
+ const o=orders.patient?.doctorPortalAccess?.some;
+ const r=reports.patient?.doctorPortalAccess?.some;
+ assert.equal(o?.organizationId,"org");
+ assert.equal(o?.referrerId,"doctor");
+ assert.equal(o?.status,"ACTIVE");
+ assert.deepEqual(o?.effectiveFrom,{lte:now});
+ assert.deepEqual(o?.OR,[{effectiveTo:null},{effectiveTo:{gte:now}}]);
+ assert.equal(o?.canViewOrders,true);
+ assert.equal(o?.canViewReports,undefined);
+ assert.equal(r?.canViewReports,true);
+ assert.equal(r?.canViewOrders,undefined);
+ assert.equal(validDoctorAccessDates(now,new Date(now.getTime()+1000)),true);
+ assert.equal(validDoctorAccessDates(now,new Date(now.getTime()-1000)),false);
+ assert.equal(validDoctorAccessDates(new Date("invalid"),null),false);
+ assert.equal(validDoctorAccessReason("Explicit physician approval"),true);
+ assert.equal(validDoctorAccessReason("no"),false);
+ assert.equal(validDoctorAccessReason("a".repeat(1001)),false);
+});
+test("Stage 90: list/detail endpoints and admin API all use fail-closed tenant predicates",()=>{
+ const schema=readFileSync("prisma/schema.prisma","utf8");
+ const migration=readFileSync("prisma/migrations/20261012170000_doctor_portal_patient_access/migration.sql","utf8");
+ const portal=readFileSync("src/app/portal/page.tsx","utf8");
+ const detail=readFileSync("src/app/portal/reports/[versionId]/page.tsx","utf8");
+ const api=readFileSync("src/app/api/doctor-portal-access/route.ts","utf8");
+ const page=readFileSync("src/app/doctor-portal-access/page.tsx","utf8");
+ const ui=readFileSync("src/components/doctor-portal-access-manager.tsx","utf8");
+ const digital=readFileSync("src/app/digital-services/page.tsx","utf8");
+ assert.match(schema,/model DoctorPortalPatientAccess/);
+ assert.match(migration,/CREATE TABLE `doctor_portal_patient_access`/);
+ assert.match(migration,/ON DELETE RESTRICT/);
+ assert.match(portal,/capability: "orders"/);
+ assert.match(portal,/capability: "reports"/);
+ assert.match(detail,/doctorAccessWhere\(\{ organizationId: account\.organizationId/);
+ assert.doesNotMatch(detail,/allowed = order\.referrerId === account\.referrerId/);
+ assert.match(api,/requirePermission\("portal_accounts\.manage"\)/);
+ assert.match(api,/AND type='PHYSICIAN'/);
+ assert.match(api,/AND organization_id=\$\{organizationId\} AND status='ACTIVE' FOR UPDATE/);
+ assert.match(api,/doctor_portal_patient_access/);
+ assert.match(api,/DOCTOR_PATIENT_PORTAL_ACCESS_GRANTED/);
+ assert.match(api,/DOCTOR_PATIENT_PORTAL_ACCESS_REVOKED/);
+ assert.match(api,/isolationLevel:"Serializable"/);
+ assert.match(api,/status:"INACTIVE",revokedAt:now/);
+ assert.match(api,/active_grant_already_exists/);
+ assert.match(page,/requirePermission\("portal_accounts\.manage"\)/);
+ assert.match(ui,/canViewOrders:orders,canViewReports:reports/);
+ assert.match(ui,/revoke/);
+ assert.match(digital,/href="\/doctor-portal-access"/);
+});
