@@ -1,6 +1,6 @@
 import Link from "next/link";
 import {notFound} from "next/navigation";
-import {canAccessBranch,permissionSet,requirePermission} from "@/lib/auth";
+import {requirePermission} from "@/lib/auth";
 import {prisma} from "@/lib/db";
 import {getUiLocale,tr} from "@/lib/ui-i18n";
 export const dynamic="force-dynamic";
@@ -11,7 +11,7 @@ export default async function LotImpactPage({params,searchParams}:{
  searchParams:Promise<{page?:string}>;
 }){
  const session=await requirePermission("inventory.view");
- const permissions=permissionSet(session),locale=getUiLocale(session.user.preferredLocale);
+ const locale=getUiLocale(session.user.preferredLocale);
  const {lotId}=await params,{page:rawPage}=await searchParams;
  const page=pageNum(rawPage);
  const organizationId=session.user.organizationId;
@@ -40,14 +40,13 @@ export default async function LotImpactPage({params,searchParams}:{
  const transferFilter={lotId,transfer:{organizationId,OR:[
    {sourceBranchId:{in:allowedBranches}},{destinationBranchId:{in:allowedBranches}},
  ]}};
- const qcFilter={inventoryLotId:lotId,organizationId};
  const [stocks,counts,movements,transfers,qcResults]=await Promise.all([
    prisma.inventoryLotStock.findMany({where:{lotId,branchId:{in:allowedBranches}},
      include:{branch:{select:{code:true,nameEn:true,nameAr:true}}},orderBy:{branchId:"asc"}}),
    Promise.all([
      prisma.stockMovement.count({where:movementFilter}),
      prisma.inventoryTransferItem.count({where:transferFilter}),
-     prisma.qcResult.count({where:{target:{lot:{inventoryLotId:lotId,organizationId}},
+     prisma.qcResult.count({where:{target:{qcLot:{inventoryLotId:lotId,organizationId}},
        run:{organizationId,branchId:{in:allowedBranches}}}}),
    ]),
    prisma.stockMovement.findMany({where:movementFilter,
@@ -58,15 +57,14 @@ export default async function LotImpactPage({params,searchParams}:{
        destinationBranchId:true,requestedAt:true,
        sourceBranch:{select:{code:true}},destinationBranch:{select:{code:true}}}}},
      orderBy:[{createdAt:"desc"},{id:"desc"}],skip:(page-1)*PAGE_SIZE,take:PAGE_SIZE}),
-   prisma.qcResult.findMany({where:{target:{lot:{inventoryLotId:lotId,organizationId}},
+   prisma.qcResult.findMany({where:{target:{qcLot:{inventoryLotId:lotId,organizationId}},
       run:{organizationId,branchId:{in:allowedBranches}}},
      include:{run:{select:{runAt:true,status:true,branch:{select:{code:true}}}},
        target:{select:{id:true}}},
      orderBy:[{createdAt:"desc"},{id:"desc"}],skip:(page-1)*PAGE_SIZE,take:PAGE_SIZE}),
  ]);
  const [movementTotal,transferTotal,qcTotal]=counts;
- const branchCodes=new Map(stocks.map(x=>[x.branchId,x.branch.code]));
- const maxPages=Math.max(1,Math.ceil(Math.max(...counts)/PAGE_SIZE));
+const maxPages=Math.max(1,Math.ceil(Math.max(...counts)/PAGE_SIZE));
  const effectivePage=Math.min(page,maxPages);
  // Outbound transfers include the partner branch's code but never disclose its
  // private stock ledger or user data without that branch's own scope.
