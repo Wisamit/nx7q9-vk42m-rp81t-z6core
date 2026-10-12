@@ -1,4 +1,4 @@
-import { Prisma } from "../../generated/prisma/client";
+import type { Prisma } from "../../generated/prisma/client";
 
 export type LotSafetyAction="QUARANTINE"|"RECALL"|"RELEASE";
 export type LotSafetyStatus="AVAILABLE"|"QUARANTINED"|"RECALLED";
@@ -26,13 +26,16 @@ export async function lockLotsForSafety(
 ):Promise<Map<string,LotSafetyRow>>{
   const ids=[...new Set(lotIds)].sort();
   if(ids.length===0)return new Map();
-  const rows=await tx.$queryRaw<LotSafetyRow[]>(Prisma.sql`
-    SELECT id, safety_status, status, item_id
-    FROM inventory_lots
-    WHERE organization_id=${organizationId} AND id IN (${Prisma.join(ids)})
-    ORDER BY id FOR UPDATE
-  `);
-  if(rows.length!==ids.length)throw new Error("LOT_SAFETY_NOT_FOUND");
+  const rows:LotSafetyRow[]=[];
+  for(const id of ids){
+    const found=await tx.$queryRaw<LotSafetyRow[]>`
+      SELECT id, safety_status, status, item_id
+      FROM inventory_lots
+      WHERE organization_id=${organizationId} AND id=${id} FOR UPDATE
+    `;
+    if(found.length!==1)throw new Error("LOT_SAFETY_NOT_FOUND");
+    rows.push(found[0]);
+  }
   return new Map(rows.map(r=>[r.id,r]));
 }
 export function assertLotUsable(rows:ReadonlyMap<string,LotSafetyRow>,lotId:string){
