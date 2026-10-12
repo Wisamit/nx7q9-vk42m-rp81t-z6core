@@ -1368,6 +1368,7 @@ model User {
   branchScopes     UserBranchScope[]
   departmentScopes UserDepartmentScope[]
   auditEvents      AuditEvent[]          @relation("AuditActor")
+  homeCollectionOrderLinks HomeCollectionVisit[] @relation("HomeCollectionOrderLinker")
   sessions         UserSession[]
   mfaChallenges     StaffMfaChallenge[]
   createdReferenceIntervals ReferenceInterval[] @relation("ReferenceIntervalCreator")
@@ -2652,6 +2653,7 @@ model LabOrder {
   statusHistory OrderStatusHistory[]
   specimens     Specimen[]
   diagnosticReport DiagnosticReport?
+  homeCollectionVisit HomeCollectionVisit? @relation("HomeCollectionOrder")
 
   integrationMessages IntegrationMessage[]
 
@@ -3414,6 +3416,7 @@ model SpecimenCollectionAttempt {
   id                            String                           @id @default(uuid()) @db.Char(36)
   organizationId                String                           @map("organization_id") @db.Char(36)
   specimenId                    String                           @map("specimen_id") @db.Char(36)
+  homeCollectionVisitId         String?                          @map("home_collection_visit_id") @db.Char(36)
   replacementSpecimenId         String?                          @unique @map("replacement_specimen_id") @db.Char(36)
   branchId                      String                           @map("branch_id") @db.Char(36)
   collectorUserId               String                           @map("collector_user_id") @db.Char(36)
@@ -3438,11 +3441,13 @@ model SpecimenCollectionAttempt {
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   specimen Specimen @relation("SpecimenCollectionAttemptSource", fields: [specimenId], references: [id], onDelete: Restrict)
+  homeCollectionVisit HomeCollectionVisit? @relation("HomeCollectionSpecimenAttempts", fields: [homeCollectionVisitId], references: [id], onDelete: Restrict)
   replacementSpecimen Specimen? @relation("SpecimenCollectionAttemptReplacement", fields: [replacementSpecimenId], references: [id], onDelete: Restrict)
   branch Branch @relation(fields: [branchId], references: [id], onDelete: Restrict)
   collector User @relation("SpecimenCollectionAttemptCollector", fields: [collectorUserId], references: [id], onDelete: Restrict)
 
   @@index([specimenId, attemptedAt])
+  @@index([homeCollectionVisitId, attemptedAt])
   @@index([branchId, attemptedAt])
   @@index([collectorUserId, attemptedAt])
   @@map("specimen_collection_attempts")
@@ -5975,6 +5980,9 @@ model Appointment {
 model HomeCollectionVisit {
   id                      String               @id @default(uuid()) @db.Char(36)
   appointmentId           String               @unique @map("appointment_id") @db.Char(36)
+  orderId                 String?              @unique @map("order_id") @db.Char(36)
+  orderLinkedByUserId     String?              @map("order_linked_by_user_id") @db.Char(36)
+  orderLinkedAt           DateTime?            @map("order_linked_at") @db.DateTime(3)
   branchId                String               @map("branch_id") @db.Char(36)
   assignedCollectorUserId String?              @map("assigned_collector_user_id") @db.Char(36)
   status                  HomeCollectionStatus @default(SCHEDULED)
@@ -5989,6 +5997,9 @@ model HomeCollectionVisit {
   updatedAt               DateTime             @updatedAt @map("updated_at") @db.DateTime(3)
 
   appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Restrict)
+  order LabOrder? @relation("HomeCollectionOrder", fields: [orderId], references: [id], onDelete: Restrict)
+  orderLinkedBy User? @relation("HomeCollectionOrderLinker", fields: [orderLinkedByUserId], references: [id], onDelete: Restrict)
+  specimenAttempts SpecimenCollectionAttempt[] @relation("HomeCollectionSpecimenAttempts")
   branch Branch @relation(fields: [branchId], references: [id], onDelete: Restrict)
   assignedCollector User? @relation("HomeCollectionCollector", fields: [assignedCollectorUserId], references: [id], onDelete: Restrict)
 
