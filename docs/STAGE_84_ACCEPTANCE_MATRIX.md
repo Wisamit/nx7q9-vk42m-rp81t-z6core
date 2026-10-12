@@ -17,7 +17,7 @@ Baseline: merged Stage 83 main `d3242fb678d5400d2989bdc3a99cadef96f7ec7a`, indep
 ## Automated acceptance
 
 - `tests/stage-84-legacy-comment-template-safety.test.ts`: bilingual/multiline/CSV parsing and rejection, exact scope/cross-tenant target resolution, non-active persisted status and consent/permission/write-path assertions.
-- `tests/stage-84-legacy-comment-template-mariadb.integration.test.ts`: actual MariaDB with two connections and Prisma transactional writes, scoped component IDs and bilingual inactive values, durable audit, other-organization false mapping rejection and atomic duplicate-code rollback.
+- `tests/stage-84-legacy-comment-template-mariadb.integration.test.ts`: actual MariaDB with two connections, transactional SQL verifying the target tables and scoped component IDs and bilingual inactive values, durable audit, other-organization false mapping rejection and atomic duplicate-code rollback.
 - Dedicated MariaDB test added to `.github/workflows/ci.yml`; existing safety suite, Prisma migrate/status/generate, TypeScript, lint, UI i18n and production build remain in CI.
 
 ## Delivery boundaries
