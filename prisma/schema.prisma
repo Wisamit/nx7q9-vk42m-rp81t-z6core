@@ -1092,6 +1092,7 @@ model Organization {
   qualityIndicators QualityIndicator[]
   internalAudits InternalAudit[]
 
+  reportInterpretiveComments ReportInterpretiveComment[]
   portalAccounts PortalAccount[]
   appointments Appointment[]
   queueTickets QueueTicket[]
