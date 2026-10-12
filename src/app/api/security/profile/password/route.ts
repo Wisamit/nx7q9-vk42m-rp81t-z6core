@@ -73,6 +73,10 @@ export async function POST(request: Request) {
         where: { userId, revokedAt: null },
         data: { revokedAt: new Date() },
       });
+      await tx.staffMfaChallenge.updateMany({
+        where: { userId, consumedAt: null },
+        data: { consumedAt: new Date() },
+      });
       await tx.auditEvent.create({
         data: {
           organizationId, branchId: session.activeBranchId,
@@ -80,6 +84,7 @@ export async function POST(request: Request) {
           entityType: "User", entityId: userId,
           newValues: {
             sessionsRevoked: true,
+            pendingMfaChallengesRevoked: true,
             mfaPreserved: true,
             changedBySelf: true,
           },
