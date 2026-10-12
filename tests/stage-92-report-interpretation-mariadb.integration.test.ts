@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import mysql from "mysql2/promise";
 import { interpretationFingerprint, interpretationReviewError } from "../src/lib/report-interpretation.ts";
 
-test("Stage 89 MariaDB: immutable issued report, bilingual approved interpretation and independent audit",{
+test("Stage 92 MariaDB: immutable issued report, bilingual approved interpretation and independent audit",{
   timeout:75000,
 },async()=>{
   if(!process.env.DATABASE_URL)throw Error("DATABASE_URL required");
@@ -24,26 +24,26 @@ test("Stage 89 MariaDB: immutable issued report, bilingual approved interpretati
   try{
     for(const [id,k] of [[org,"A"],[foreignOrg,"B"]])
       await put("organizations",id,"INSERT INTO organizations(id,code,name_en,updated_at) VALUES(?,?,?,NOW(3))",
-        [id,"S89"+suffix+k,"Stage89 Lab"]);
+        [id,"S92"+suffix+k,"Stage92 Lab"]);
     await put("branches",branch,
       "INSERT INTO branches(id,organization_id,code,name_en,updated_at) VALUES(?,?,?,?,NOW(3))",
-      [branch,org,"S89"+suffix,"Report Origin"]);
+      [branch,org,"S92"+suffix,"Report Origin"]);
     for(const [id,k] of [[author,"A"],[reviewer,"B"]])
       await put("users",id,
         "INSERT INTO users(id,organization_id,username,display_name_en,updated_at) VALUES(?,?,?,?,NOW(3))",
-        [id,org,"s89"+suffix+k,"Stage89 Reviewer"]);
+        [id,org,"s92"+suffix+k,"Stage92 Reviewer"]);
     await put("patients",patient,
       "INSERT INTO patients(id,organization_id,patient_number,full_name_en,normalized_name,updated_at) VALUES(?,?,?,?,?,NOW(3))",
-      [patient,org,"S89"+suffix+"P","Stage89 Patient","stage89 patient"]);
+      [patient,org,"S92"+suffix+"P","Stage92 Patient","stage92 patient"]);
     await put("lab_tests",testId,
       "INSERT INTO lab_tests(id,organization_id,code,name_en,updated_at) VALUES(?,?,?,?,NOW(3))",
-      [testId,org,"S89"+suffix+"T","Stage89 Test"]);
+      [testId,org,"S92"+suffix+"T","Stage92 Test"]);
     await put("orders",orderId,
       "INSERT INTO orders(id,organization_id,accession_number,ordering_branch_id,patient_id,created_by_user_id,updated_at) VALUES(?,?,?,?,?,?,NOW(3))",
-      [orderId,org,"S89"+suffix+"ACC",branch,patient,author]);
+      [orderId,org,"S92"+suffix+"ACC",branch,patient,author]);
     await put("order_items",itemId,
       "INSERT INTO order_items(id,order_id,test_id,test_code_snapshot,test_name_en_snapshot,currency,updated_at) VALUES(?,?,?,?,?,'AED',NOW(3))",
-      [itemId,orderId,testId,"S89TEST","Stage89 Test"]);
+      [itemId,orderId,testId,"S92TEST","Stage92 Test"]);
     await put("diagnostic_reports",reportId,
       "INSERT INTO diagnostic_reports(id,organization_id,order_id,current_version,updated_at) VALUES(?,?,?,1,NOW(3))",
       [reportId,org,orderId]);
