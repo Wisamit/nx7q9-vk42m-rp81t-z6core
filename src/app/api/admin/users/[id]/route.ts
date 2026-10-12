@@ -1,4 +1,3 @@
-import { hash } from "bcryptjs";
 import { NextResponse } from "next/server";
 import { getCurrentSession, permissionSet, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
@@ -52,7 +51,9 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   const roleIds = body.roleIds === undefined ? target.roles.map(x => x.roleId) : ids(body.roleIds);
   const branchIds = body.branchIds === undefined ? target.branchScopes.map(x => x.branchId) : ids(body.branchIds);
   const departmentIds = body.departmentIds === undefined ? target.departmentScopes.map(x => x.departmentId) : ids(body.departmentIds);
-  const password = typeof body.password === "string" ? body.password : "";
+  if (body.password !== undefined) {
+    return NextResponse.json({ error: "use_secure_password_reset_workflow" }, { status: 400 });
+  }
   if (body.discountLimitPercent !== undefined && !permissions.has("billing.discount.limits.manage")) {
     return NextResponse.json({ error: "discount_limit_forbidden" }, { status: 403 });
   }
@@ -60,7 +61,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     ? (target.discountLimitPercent ? Number(target.discountLimitPercent.toString()) : null)
     : optionalDiscountPercent(body.discountLimitPercent);
 
-  if (!displayNameEn || roleIds.length === 0 || branchIds.length === 0 || (password && password.length < 12) || discountLimitPercent === undefined) {
+  if (!displayNameEn || roleIds.length === 0 || branchIds.length === 0 || discountLimitPercent === undefined) {
     return NextResponse.json({ error: "invalid_fields" }, { status: 400 });
   }
   if (id === session.user.id && status !== "ACTIVE") {
@@ -176,7 +177,6 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     if (otherAdmins === 0) return NextResponse.json({ error: "last_system_admin" }, { status: 409 });
   }
 
-  const passwordHash = password ? await hash(password, 12) : undefined;
   const ctx = await requestContext();
 
   await prisma.$transaction(async tx => {
@@ -189,7 +189,6 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
         preferredLocale,
         discountLimitPercent: discountLimitPercent === null ? null : discountLimitPercent.toFixed(2),
         status,
-        ...(passwordHash ? { passwordHash, passwordChangedAt: new Date(), failedLoginAttempts: 0, lockedUntil: null } : {}),
       },
     });
     await tx.userRole.deleteMany({ where: { userId: id } });
@@ -198,7 +197,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     await tx.userBranchScope.createMany({ data: branchIds.map(branchId => ({ userId: id, branchId })) });
     await tx.userDepartmentScope.deleteMany({ where: { userId: id } });
     if (departmentIds.length > 0) await tx.userDepartmentScope.createMany({ data: departmentIds.map(departmentId => ({ userId: id, departmentId })) });
-    if (passwordHash || status !== "ACTIVE") await tx.userSession.updateMany({ where: { userId: id, revokedAt: null }, data: { revokedAt: new Date() } });
+    if (status !== "ACTIVE") await tx.userSession.updateMany({ where: { userId: id, revokedAt: null }, data: { revokedAt: new Date() } });
     await tx.auditEvent.create({
       data: {
         organizationId,
@@ -208,7 +207,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
         entityType: "User",
         entityId: id,
         oldValues: { displayNameEn: target.displayNameEn, displayNameAr: target.displayNameAr, email: target.email, preferredLocale: target.preferredLocale, discountLimitPercent: target.discountLimitPercent?.toString() ?? null, status: target.status, roleIds: target.roles.map(x => x.roleId), branchIds: target.branchScopes.map(x => x.branchId), departmentIds: target.departmentScopes.map(x => x.departmentId) },
-        newValues: { displayNameEn, displayNameAr: displayNameAr || null, email: email || null, preferredLocale, discountLimitPercent: discountLimitPercent === null ? null : discountLimitPercent.toFixed(2), status, roleIds, branchIds, departmentIds, passwordReset: Boolean(passwordHash) },
+        newValues: { displayNameEn, displayNameAr: displayNameAr || null, email: email || null, preferredLocale, discountLimitPercent: discountLimitPercent === null ? null : discountLimitPercent.toFixed(2), status, roleIds, branchIds, departmentIds, passwordReset: false },
         ipAddress: ctx.ipAddress,
         userAgent: ctx.userAgent,
       },
