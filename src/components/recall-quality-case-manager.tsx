@@ -49,7 +49,7 @@ export function RecallQualityCaseManager({lotId,safetyEventId,canCreate,
       <option value="CRITICAL">{tr("Critical","حرجة")}</option></select></label>
     <label>{tr("Documented investigation context (at least 30 characters)","سياق التحقيق الموثق (30 حرفًا على الأقل)")}
      <textarea name="description" minLength={30} maxLength={5000} rows={4} required/></label>
-    <button className="primary-button" disabled={busy}>{busy?tr("Opening…","جارٍ الفتح…"):
+    <button type="submit" className="primary-button" disabled={busy}>{busy?tr("Opening…","جارٍ الفتح…"):
      tr("Open governed nonconformance","فتح قضية عدم مطابقة مضبوطة")}</button>
    </form>:<p>{tr(
     "To open a case, an authorized branch must first record ESCALATED_TO_QUALITY for the current lot safety event and have quality nonconformance management permission.",
