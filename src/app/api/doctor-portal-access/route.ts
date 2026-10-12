@@ -24,9 +24,10 @@ export async function POST(request: Request) {
   const input=body as Record<string,unknown>;
   if (!uuid(input.referrerId) || !uuid(input.patientId) ||
     !validDoctorAccessReason(input.reason) ||
-    (input.canViewOrders !== true && input.canViewReports !== true) ||
+    (input.canViewOrders !== true && input.canViewReports !== true && input.canRequestOrders !== true) ||
     (input.canViewOrders !== undefined && typeof input.canViewOrders !== "boolean") ||
-    (input.canViewReports !== undefined && typeof input.canViewReports !== "boolean"))
+    (input.canViewReports !== undefined && typeof input.canViewReports !== "boolean") ||
+    (input.canRequestOrders !== undefined && typeof input.canRequestOrders !== "boolean"))
     return NextResponse.json({error:"invalid_doctor_grant"},{status:400});
   const start=typeof input.effectiveFrom==="string" ? new Date(input.effectiveFrom) : new Date();
   const end=typeof input.effectiveTo==="string" && input.effectiveTo ? new Date(input.effectiveTo) : null;
@@ -74,6 +75,7 @@ export async function POST(request: Request) {
         patientId:input.patientId as string,
         canViewOrders:input.canViewOrders===true,
         canViewReports:input.canViewReports===true,
+        canRequestOrders:input.canRequestOrders===true,
         effectiveFrom:start,effectiveTo:end,
         reason:(input.reason as string).trim(),createdByUserId:session.user.id,
       }});
@@ -84,6 +86,7 @@ export async function POST(request: Request) {
         reason:row.reason,newValues:{
           referrerId:row.referrerId,patientId:row.patientId,
           canViewOrders:row.canViewOrders,canViewReports:row.canViewReports,
+          canRequestOrders:row.canRequestOrders,
           effectiveFrom:start.toISOString(),effectiveTo:end?.toISOString()??null,
         },ipAddress:ctx.ipAddress,userAgent:ctx.userAgent,
       }});
@@ -144,7 +147,7 @@ export async function PATCH(request: Request) {
         entityType:"DoctorPortalPatientAccess",entityId:row.id,
         reason:updated.revokeReason,
         oldValues:{status:row.status,canViewOrders:row.canViewOrders,
-          canViewReports:row.canViewReports},
+          canViewReports:row.canViewReports,canRequestOrders:row.canRequestOrders},
         newValues:{status:"INACTIVE",revokedAt:now.toISOString()},
         ipAddress:ctx.ipAddress,userAgent:ctx.userAgent,
       }});
