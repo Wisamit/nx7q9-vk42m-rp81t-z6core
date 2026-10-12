@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { canAccessBranch, requirePermission } from "@/lib/auth";
+import { canAccessBranch, permissionSet, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { getUiLocale, priorityLabel, statusLabel, tr } from "@/lib/ui-i18n";
 import { specimenRequirementSnapshotFromDetails } from "@/lib/specimen-requirement-engine";
@@ -68,7 +68,10 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         <h1>{order.accessionNumber}</h1>
         <p className="muted">{order.patient.patientNumber} · {locale === "ar" ? order.patient.fullNameAr || order.patient.fullNameEn : order.patient.fullNameEn} · {locale === "ar" ? order.orderingBranch.nameAr || order.orderingBranch.nameEn : order.orderingBranch.nameEn}</p>
       </div>
-      <Link className="secondary-link" href="/orders">{tr(locale, "Back to Orders", "العودة للطلبات")}</Link>
+      <div className="header-actions">
+        {permissionSet(session).has("reports.view") && <Link className="secondary-link" href={`/reports/${order.id}/interpretation`}>{tr(locale, "Report interpretation", "التفسير السريري للتقرير")}</Link>}
+        <Link className="secondary-link" href="/orders">{tr(locale, "Back to Orders", "العودة للطلبات")}</Link>
+      </div>
     </header>
 
     <section className="detail-grid">
