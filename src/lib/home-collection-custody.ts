@@ -26,6 +26,23 @@ export type HomeVisitEvidence = {
   status: string;
 };
 
+export function homeCollectionStartError(
+  visit: HomeVisitEvidence,
+  specimenCount: number,
+  invoices: HomeFinancialEvidence[],
+): string | null {
+  if (!visit.orderId) return "home_order_link_required";
+  if (!visit.assignedCollectorUserId) return "home_collector_required";
+  if (specimenCount < 1) return "home_specimens_required";
+  if (!invoices.some(invoice =>
+    !["DRAFT","VOID"].includes(invoice.status) &&
+    invoice.currency.length === 3 &&
+    Number.isFinite(Number(invoice.total)))) {
+    return "home_issued_invoice_required";
+  }
+  return null;
+}
+
 export function homeCollectionCustodyError(
   visit: HomeVisitEvidence,
   nextStatus: string,
