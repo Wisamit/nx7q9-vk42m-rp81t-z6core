@@ -1,3 +1,4 @@
+import type { Prisma } from "../../../../../../generated/prisma/client";
 import { NextResponse } from "next/server";
 import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
@@ -160,7 +161,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const volumeText = body.volume == null || body.volume === "" ? "" : String(body.volume);
   const volumeUnit = text(body.volumeUnit, 30) || null;
-  async function lockHomeCustody(tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0]) {
+  async function lockHomeCustody(tx: Prisma.TransactionClient) {
     if (!linkedHomeVisit) return;
     const parent = await tx.$queryRaw<Array<{ id: string }>>`
       SELECT id FROM appointments WHERE id = ${linkedHomeVisit.appointmentId}
