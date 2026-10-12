@@ -15,12 +15,12 @@ CREATE TABLE `report_interpretive_comments` (
   `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   `approved_at` DATETIME(3) NULL,
   PRIMARY KEY (`id`),
-  UNIQUE INDEX `report_interpretive_comments_order_id_revision_number_key` (`order_id`,`revision_number`),
-  INDEX `report_interpretive_comments_organization_id_status_created_at_idx` (`organization_id`,`status`,`created_at`),
-  INDEX `report_interpretive_comments_order_id_status_revision_number_idx` (`order_id`,`status`,`revision_number`),
-  CONSTRAINT `report_interpretive_comments_organization_id_fkey` FOREIGN KEY (`organization_id`) REFERENCES `organizations`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
-  CONSTRAINT `report_interpretive_comments_order_id_fkey` FOREIGN KEY (`order_id`) REFERENCES `orders`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
-  CONSTRAINT `report_interpretive_comments_supersedes_comment_id_fkey` FOREIGN KEY (`supersedes_comment_id`) REFERENCES `report_interpretive_comments`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
-  CONSTRAINT `report_interpretive_comments_created_by_user_id_fkey` FOREIGN KEY (`created_by_user_id`) REFERENCES `users`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
-  CONSTRAINT `report_interpretive_comments_approved_by_user_id_fkey` FOREIGN KEY (`approved_by_user_id`) REFERENCES `users`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE
+  UNIQUE INDEX `ric_order_revision_uq` (`order_id`,`revision_number`),
+  INDEX `ric_org_status_created_idx` (`organization_id`,`status`,`created_at`),
+  INDEX `ric_order_status_revision_idx` (`order_id`,`status`,`revision_number`),
+  CONSTRAINT `ric_org_fk` FOREIGN KEY (`organization_id`) REFERENCES `organizations`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
+  CONSTRAINT `ric_order_fk` FOREIGN KEY (`order_id`) REFERENCES `orders`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
+  CONSTRAINT `ric_parent_fk` FOREIGN KEY (`supersedes_comment_id`) REFERENCES `report_interpretive_comments`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
+  CONSTRAINT `ric_creator_fk` FOREIGN KEY (`created_by_user_id`) REFERENCES `users`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
+  CONSTRAINT `ric_approver_fk` FOREIGN KEY (`approved_by_user_id`) REFERENCES `users`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
