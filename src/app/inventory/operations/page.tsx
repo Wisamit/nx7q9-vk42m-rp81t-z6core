@@ -76,6 +76,7 @@ export default async function InventoryOperationsPage() {
         <Link className="secondary-link" href="/inventory">{tr(locale, "Inventory", "المخزون")}</Link>
         <Link className="secondary-link" href="/inventory/procurement">{tr(locale, "Procurement", "المشتريات")}</Link>
         <Link className="secondary-link" href="/inventory/transfers">{tr(locale, "Transfers", "النقل")}</Link>
+        {permissions.has("quality.nonconformance.manage") && <Link className="secondary-link" href="/inventory/recall-quality">{tr(locale, "Recall Quality Follow-up", "متابعة جودة الاستدعاءات")}</Link>}
       </div>
     </header>
 
