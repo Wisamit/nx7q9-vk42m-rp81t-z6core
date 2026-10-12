@@ -13,6 +13,8 @@ CREATE TABLE `inventory_lot_branch_responses` (
  INDEX `ilbr_branch_timeline`(`organization_id`,`branch_id`,`created_at`),
  INDEX `ilbr_lot_timeline`(`lot_id`,`created_at`),
  INDEX `ilbr_actor_fk`(`actor_user_id`),
+ INDEX `ilbr_org_fk_idx`(`organization_id`),
+ CONSTRAINT `ilbr_org_fk` FOREIGN KEY(`organization_id`) REFERENCES `organizations`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
  CONSTRAINT `ilbr_lot_fk` FOREIGN KEY(`lot_id`) REFERENCES `inventory_lots`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
  CONSTRAINT `ilbr_safety_fk` FOREIGN KEY(`safety_event_id`) REFERENCES `inventory_lot_safety_events`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
  CONSTRAINT `ilbr_branch_fk` FOREIGN KEY(`branch_id`) REFERENCES `branches`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
