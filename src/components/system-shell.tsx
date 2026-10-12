@@ -89,6 +89,7 @@ const groups: Array<{ labelEn: string; labelAr: string; items: NavItem[] }> = [
       { href: "/inventory", labelEn: "Inventory", labelAr: "المخزون", icon: "inventory", permission: "inventory.view" },
       { href: "/equipment", labelEn: "Equipment", labelAr: "المعدات", icon: "equipment", permission: "equipment.view" },
       { href: "/qc", labelEn: "Quality Control", labelAr: "ضبط الجودة", icon: "qc", permission: "qc.view" },
+      { href: "/quality/eqa", labelEn: "External Quality / EQA", labelAr: "الكفاءة الخارجية EQA", icon: "qc", permission: "qc.view" },
       { href: "/quality", labelEn: "Quality Management", labelAr: "إدارة الجودة", icon: "quality", permission: "quality.view" },
       { href: "/analytics", labelEn: "Analytics", labelAr: "التحليلات", icon: "analytics", permission: "analytics.view" },
       { href: "/notifications", labelEn: "Notifications", labelAr: "الإشعارات", icon: "notification", permission: "notifications.view" },
