@@ -36,8 +36,8 @@ test("Stage 90 MariaDB: explicit doctor grants, tenant isolation, atomic revocat
    [referrer,org,"S90REF","Stage90 Doctor"]);
   for(const [id,tenant,name] of [[patient,org,"Local"],[foreignPatient,otherOrg,"Foreign"]]){
    await add("patients",id,
-    "INSERT INTO patients(id,organization_id,patient_number,full_name_en,status,updated_at) "+
-    "VALUES(?,?,?,?,'ACTIVE',NOW(3))",[id,tenant,"S90"+id.slice(0,8),name]);
+    "INSERT INTO patients(id,organization_id,patient_number,full_name_en,normalized_name,status,updated_at) "+
+    "VALUES(?,?,?,?,?,'ACTIVE',NOW(3))",[id,tenant,"S90"+id.slice(0,8),name,name.toLowerCase()]);
   }
   const [foreign]=await db.execute<mysql.RowDataPacket[]>(
    "SELECT id FROM patients WHERE id=? AND organization_id=? AND status='ACTIVE' FOR UPDATE",
