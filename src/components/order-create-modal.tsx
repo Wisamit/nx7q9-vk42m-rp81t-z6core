@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { CrudModal } from "@/components/crud-modal";
-import { OrderCreateForm } from "@/components/order-create-form";
+import { OrderCreateForm, type DoctorRequisitionPrefill } from "@/components/order-create-form";
 import { SystemIcon } from "@/components/system-icon";
 
 type PatientOption = { id: string; patientNumber: string; fullNameEn: string; phone: string | null };
@@ -34,9 +34,10 @@ export function OrderCreateModal(props: {
   activeBranchId: string | null;
   discountLimitPercent: number;
   locale: "ar" | "en";
+  initialDoctorRequisition?: DoctorRequisitionPrefill | null;
 }) {
   const tr = <T,>(en: T, ar: T) => props.locale === "ar" ? ar : en;
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(Boolean(props.initialDoctorRequisition));
   const [notice, setNotice] = useState("");
 
   return <>
@@ -50,7 +51,10 @@ export function OrderCreateModal(props: {
       open={open}
       onClose={() => setOpen(false)}
       title={tr("New Laboratory Order", "طلب مختبر جديد")}
-      description={tr("Select patient, tests, source, billing context and any approved discount. The invoice is created from immutable pricing snapshots.", "اختر المريض والفحوصات والمصدر وبيانات الفوترة وأي خصم معتمد. يتم إنشاء الفاتورة من لقطات أسعار تاريخية غير قابلة للتغيير.")}
+      description={props.initialDoctorRequisition ? tr(
+        "Verify physician requisition and complete standard reception pricing, billing, questions and specimen routing.",
+        "راجع إحالة الطبيب وأكمل التسعير والفوترة والأسئلة ومتطلبات العينات عبر إجراءات الاستقبال الاعتيادية."
+      ) : tr("Select patient, tests, source, billing context and any approved discount. The invoice is created from immutable pricing snapshots.", "اختر المريض والفحوصات والمصدر وبيانات الفوترة وأي خصم معتمد. يتم إنشاء الفاتورة من لقطات أسعار تاريخية غير قابلة للتغيير.")}
       size="full"
     >
       <OrderCreateForm {...props} locale={props.locale} onSuccess={message => {
