@@ -74,7 +74,7 @@ export function LegacyMasterConfigurationExport({locale,kinds}:{
       <p><strong>{tr("Organization","المؤسسة")}:</strong> {archive.organizationId}</p>
       <p><strong>{tr("Active rows","السجلات النشطة")}:</strong> {archive.totalRows} ·
         <strong> {tr("CSV parts","أجزاء CSV")}:</strong> {archive.partCount}</p>
-      <p style={{overflowWrap:"anywhere"}}><strong>SHA-256:</strong> <code>{archive.integritySha256}</code></p>
+      <p style={{overflowWrap:"anywhere"}}><strong>{tr("SHA-256 checksum","بصمة SHA-256")}:</strong> <code>{archive.integritySha256}</code></p>
       <button type="button" className="secondary-button" onClick={()=>
         download(JSON.stringify(archive,null,2),
           "family-lab-master-"+archive.kind.toLowerCase()+".json","application/json;charset=utf-8")}>
