@@ -93,6 +93,7 @@ export default async function CommentReviewPage({
     <header className="page-header">
       <div>
         <h1>{tr(locale, "Clinical Comment Approval Queue", "قائمة اعتماد التعليقات السريرية")}</h1>
+        <p><Link className="secondary-link" href="/clinical-comments/revisions">{tr(locale, "Prepare comment revision", "إعداد نسخة جديدة من التعليق")}</Link></p>
         <p className="muted">{tr(locale,
           "Review both languages, clinical target and original creator before a second authorized reviewer activates a draft.",
           "راجع النصين العربي والإنجليزي وربط الفحص والمُنشئ قبل اعتماد المسودة من مراجع مستقل.")}</p>
