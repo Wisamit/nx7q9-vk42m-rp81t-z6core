@@ -19,7 +19,6 @@ export default async function OrderReportInterpretationPage({
     select:{id:true,accessionNumber:true,orderingBranchId:true,
       items:{where:{status:{not:"CANCELLED"}},
         select:{test:{select:{departmentId:true}}}},
-      },
       diagnosticReport:{select:{currentVersion:true}},
     },
   });
