@@ -45,6 +45,7 @@ export default async function CommentReviewPage({
       include: {
         test: { select: { id: true, code: true, nameEn: true, nameAr: true, status: true, organizationId: true } },
         component: { select: { id: true, code: true, nameEn: true, nameAr: true, status: true, testId: true } },
+        supersedesTemplate: { select: { id: true, code: true, status: true, revisionNumber: true } },
       },
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
       take: PAGE_SIZE + 1,
@@ -59,6 +60,7 @@ export default async function CommentReviewPage({
       OR: [
         { entityType: "COMMENT_TEMPLATE", action: "LEGACY_MASTER_RECORD_CREATED" },
         { entityType: "ResultCommentTemplate", action: "RESULT_COMMENT_TEMPLATE_CREATED" },
+        { entityType: "ResultCommentTemplate", action: "RESULT_COMMENT_TEMPLATE_REVISION_CREATED" },
         { entityType: "ResultCommentTemplate", action: "RESULT_COMMENT_TEMPLATE_CLINICALLY_APPROVED" },
         { entityType: "ResultCommentTemplate", action: "RESULT_COMMENT_TEMPLATE_DEACTIVATED" },
       ],
@@ -73,6 +75,7 @@ export default async function CommentReviewPage({
   const latestById = new Map<string, typeof events[number]>();
   for (const event of events) {
     if (event.action === "RESULT_COMMENT_TEMPLATE_CREATED" ||
+      event.action === "RESULT_COMMENT_TEMPLATE_REVISION_CREATED" ||
       event.action === "LEGACY_MASTER_RECORD_CREATED") {
       if (!creatorById.has(event.entityId)) creatorById.set(event.entityId, event);
     } else {
@@ -137,7 +140,10 @@ export default async function CommentReviewPage({
                 : template.scope === "TEST" ? tr(locale, "Test", "فحص") :
                   tr(locale, "Component", "مكوّن");
               return <tr key={template.id}>
-                <td><strong>{template.code}</strong><div>{locale === "ar"
+                <td><strong>{template.code}</strong>
+                  <div><small>{tr(locale, "Revision", "الإصدار")} {template.revisionNumber}</small></div>
+                  {template.supersedesTemplate && <div><small>{tr(locale, "Replaces", "يحل محل")}: {template.supersedesTemplate.code} ({template.supersedesTemplate.status})</small></div>}
+                  <div>{locale === "ar"
                   ? template.nameAr || template.nameEn : template.nameEn}</div>
                   <small>{scopeName}: {template.component
                     ? `${template.test?.code || "?"} / ${template.component.code}`
@@ -153,6 +159,8 @@ export default async function CommentReviewPage({
                   <strong>{creatorName}</strong>
                   <div><small>{creator?.action === "LEGACY_MASTER_RECORD_CREATED"
                     ? tr(locale, "Legacy CSV import", "استيراد من النظام القديم")
+                    : creator?.action === "RESULT_COMMENT_TEMPLATE_REVISION_CREATED"
+                      ? tr(locale, "Revised clinical draft", "مسودة تصحيح سريرية")
                     : creator ? tr(locale, "Manual draft", "مسودة يدوية")
                       : tr(locale, "No creation audit", "لا يوجد سجل إنشاء")}</small></div>
                   <small>{creator?.occurredAt.toISOString().slice(0, 19).replace("T", " ") || "—"} UTC</small>
@@ -163,7 +171,8 @@ export default async function CommentReviewPage({
                   : <CommentTemplateStatusButton
                     id={template.id} status="INACTIVE"
                     fingerprint={commentTemplateReviewFingerprint(template)}
-                    canManage canApprove locale={locale} />}
+                    canManage canApprove locale={locale}
+                    supersedesTemplateId={template.supersedesTemplateId} />}
                 </td>
               </tr>;
             })}
