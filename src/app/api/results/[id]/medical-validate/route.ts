@@ -5,6 +5,7 @@ import { resolveAnalyzerQcGate } from "@/lib/qc-gate";
 import { validationSpecimenCustodyError } from "@/lib/result-validation-custody";
 import { medicalApprovalEvidenceError, type ValidationPolicySnapshot } from "@/lib/result-validation";
 import { Prisma } from "../../../../../../generated/prisma/client";
+import { consumeStaffStepUp, StaffStepUpError } from "@/lib/staff-step-up";
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await requirePermission("results.medical_validate");
@@ -231,6 +232,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         performingBranchId: result.performingBranchId,
       })) throw new Error("RESULT_STATE_CHANGED");
     }
+    const stepUp=await consumeStaffStepUp(tx,{
+      token:request.headers.get("x-staff-step-up-token"),action:"MEDICAL_APPROVAL",
+      resourceKey:result.id,sessionId:session.id,userId:session.user.id,
+      organizationId:session.user.organizationId,branchId:result.performingBranchId,
+      ipAddress:ctx.ipAddress,userAgent:ctx.userAgent,
+    });
     const claimed = await tx.laboratoryResult.updateMany({
       where: {
         id: result.id,
@@ -308,6 +315,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           medicallyValidatedAt: validatedAt,
           verifiedAt: validatedAt,
           validationPolicy: validationSnapshot,
+          stepUpGrantId:stepUp.grantId,stepUpProofMethod:stepUp.proofMethod,
           qcGateStatus: qcGate?.status || null,
           qcGateReasons: qcGate?.reasons || [],
           qcWarningConfirmed: qcGate?.warning ? body.confirmQcWarnings === true : false,
@@ -319,9 +327,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     return { status: "VERIFIED" as const, validationStage: "COMPLETE" as const };
   }, { timeout: 30000 }).catch(error => {
+    if (error instanceof StaffStepUpError) return "STEP_UP_REQUIRED" as const;
     if (error instanceof Error && error.message === "RESULT_STATE_CHANGED") return null;
     throw error;
   });
+  if (validated === "STEP_UP_REQUIRED")
+    return NextResponse.json({error:"fresh_staff_reauthentication_required"},{status:403});
   if (!validated) return NextResponse.json({ error: "result_state_changed_retry" }, { status: 409 });
 
   return NextResponse.json({
