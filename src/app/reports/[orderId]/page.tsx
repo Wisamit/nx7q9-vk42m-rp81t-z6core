@@ -137,6 +137,8 @@ type Snapshot = {
     diagnosis: string | null;
     clinicalNotes: string | null;
   };
+  reportInterpretation?: { id: string; revisionNumber: number; textEn: string;
+    textAr: string; approvedAt: string | null; approvedByUserId: string | null } | null;
   referrer: { nameEn: string; nameAr: string | null } | null;
   results: ReportResult[];
   completeness: { releasedItemCount: number; totalItemCount: number; final: boolean };
@@ -202,6 +204,7 @@ export default async function DiagnosticReportPage({ params }: { params: Promise
     return <main className="catalog-shell">
       <header className="page-header">
         <div><p className="eyebrow">{tr(locale, "Diagnostic Report", "التقرير التشخيصي")}</p><h1>{tr(locale, "No Released Report Yet", "لا يوجد تقرير صادر بعد")}</h1></div>
+        <Link className="secondary-link" href={`/reports/${orderId}/interpretation`}>{tr(locale, "Interpretive comments", "التعليقات التفسيرية")}</Link>
         <Link className="secondary-link" href={`/orders/${orderId}`}>{tr(locale, "Back to Order", "العودة للطلب")}</Link>
       </header>
       <section className="detail-card"><p className="muted">{tr(locale, "A report version is created when a verified result is released.", "يتم إنشاء إصدار تقرير عند إصدار نتيجة تم التحقق منها.")}</p></section>
@@ -513,6 +516,12 @@ export default async function DiagnosticReportPage({ params }: { params: Promise
       {(snapshot.order.diagnosis || snapshot.order.clinicalNotes) && <section className="report-notes">
         {snapshot.order.diagnosis && <p><strong>{reportTr("Clinical indication", "الدلالة السريرية")}:</strong> {snapshot.order.diagnosis}</p>}
         {snapshot.order.clinicalNotes && <p><strong>{reportTr("Clinical notes", "الملاحظات السريرية")}:</strong> {snapshot.order.clinicalNotes}</p>}
+      </section>}
+
+      {snapshot.reportInterpretation && <section className="report-notes">
+        <strong>{reportTr("Approved report interpretation", "التفسير السريري المعتمد")} · v{snapshot.reportInterpretation.revisionNumber}</strong>
+        {showEnglish && <p dir="ltr" style={{ whiteSpace: "pre-wrap" }}>{snapshot.reportInterpretation.textEn}</p>}
+        {showArabic && <p dir="rtl" style={{ whiteSpace: "pre-wrap" }}>{snapshot.reportInterpretation.textAr}</p>}
       </section>}
 
       {(templateConfig.footerEn || templateConfig.footerAr) && <section className="report-template-footer">
