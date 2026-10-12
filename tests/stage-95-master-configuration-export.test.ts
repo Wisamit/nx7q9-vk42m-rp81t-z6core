@@ -42,6 +42,19 @@ test("Stage 95: never mutate unsafe CSV formula cells or silently truncate",()=>
   assert.deepEqual(parts.map(x=>x.rowCount),[200,1]);
   assert.ok(parts[0].csv.startsWith("code,name_en,name_ar,category"));
   assert.equal(parts[0].sha256,createHash("sha256").update(parts[0].csv).digest("hex"));
+  const longClinicalTemplates=Array.from({length:40},(_,i)=>({
+    id:randomUUID(),status:"ACTIVE",
+    values:{code:"COMMENT"+String(i).padStart(3,"0"),name_en:"Comment "+i,
+      name_ar:null,text_en:"A".repeat(4000),text_ar:null,
+      scope:"ORGANIZATION",test_code:null,component_code:null},
+  }));
+  const clinicalParts=masterExportChunks("COMMENT_TEMPLATE",longClinicalTemplates);
+  assert.ok(clinicalParts.length>1,"long clinical text must be split by byte size");
+  assert.equal(clinicalParts.reduce((total,part)=>total+part.rowCount,0),40);
+  for(const part of clinicalParts){
+    assert.ok(Buffer.byteLength(part.csv,"utf8")<=65_536);
+    assert.equal(parseLegacyMasterCsv("COMMENT_TEMPLATE",part.csv).length,part.rowCount);
+  }
   assert.throws(()=>masterExportChunks("SOURCE",
     Array.from({length:LEGACY_EXPORT_MAX_ROWS+1},(_,i)=>row("S"+i))),
     e=>e instanceof LegacyMasterExportError&&e.statusCode===413);
