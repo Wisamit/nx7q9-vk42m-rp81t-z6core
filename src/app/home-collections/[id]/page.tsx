@@ -64,9 +64,9 @@ export default async function HomeCollectionDetails({
     canLink && !visit.orderId ? prisma.labOrder.findMany({
       where: { organizationId: session.user.organizationId,
         orderingBranchId: visit.branchId, patientId: visit.appointment.patientId,
-        status: { in: ["REGISTERED","COLLECTED","IN_PROGRESS"] },
+        status: "REGISTERED",
         homeCollectionVisit: null,
-        specimens: { some: {} }, items: { some: {} } },
+        specimens: { some: {}, every: { status: "PLANNED" } }, items: { some: {} } },
       select: { id: true, accessionNumber: true, orderedAt: true,
         _count: { select: { specimens: true, invoices: true } } },
       orderBy: { orderedAt: "desc" }, take: 100,
