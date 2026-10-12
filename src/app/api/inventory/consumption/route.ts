@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { Prisma } from "../../../../../generated/prisma/client";
 import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import {lockLotsForSafety,assertLotUsable} from "@/lib/inventory-lot-safety";
 
 function text(value: unknown, max = 500) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -62,9 +63,21 @@ export async function POST(request: Request) {
         include: { lot: true },
       });
 
+      // Lock every candidate lot before FEFO allocation. A concurrent recall
+      // cannot commit between eligibility evaluation and stock mutation.
+      const lockedLots=await lockLotsForSafety(tx,session.user.organizationId,
+        lotStocks.map(stock=>stock.lotId));
+      if(requestedLotId&&lotStocks.length===0)
+        throw new Error("REQUESTED_LOT_INSUFFICIENT_OR_EXPIRED");
+      const availableLots=lotStocks.filter(stock=>{
+        const row=lockedLots.get(stock.lotId);
+        if(!row||row.status!=="ACTIVE"||row.safety_status!=="AVAILABLE")return false;
+        assertLotUsable(lockedLots,stock.lotId);
+        return true;
+      });
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-      const eligible = lotStocks
+      const eligible = availableLots
         .filter(stock => {
           if (stock.quantityOnHand.sub(stock.reservedQty).lte(0)) return false;
           if (stock.lot.expiryDate && stock.lot.expiryDate < today) return false;

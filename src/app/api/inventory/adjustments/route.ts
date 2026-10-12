@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { Prisma } from "../../../../../generated/prisma/client";
 import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import {lockLotsForSafety,assertLotUsable} from "@/lib/inventory-lot-safety";
 
 function text(value: unknown, max = 500) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -46,6 +47,10 @@ export async function POST(request: Request) {
 
   try {
     const result = await prisma.$transaction(async tx => {
+      const safeLots=await lockLotsForSafety(tx,session.user.organizationId,[lotId]);
+      // Preserve safe physical disposal of held material, but never allow
+      // it to be quietly returned into operational inventory.
+      if(movementType==="ADJUSTMENT_IN")assertLotUsable(safeLots,lotId);
       const [lotStock, branchStock] = await Promise.all([
         tx.inventoryLotStock.findUnique({ where: { branchId_lotId: { branchId, lotId } } }),
         tx.branchStock.findUnique({ where: { branchId_itemId: { branchId, itemId } } }),

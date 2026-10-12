@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { Prisma } from "../../../../../../../generated/prisma/client";
 import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import {lockLotsForSafety,assertLotUsable} from "@/lib/inventory-lot-safety";
 
 export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await requirePermission("procurement.receive");
@@ -67,6 +68,10 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
           },
         });
 
+        if(lot){
+          const locked=await lockLotsForSafety(tx,session.user.organizationId,[lot.id]);
+          assertLotUsable(locked,lot.id);
+        }
         if (lot) {
           if (lot.supplierId && lot.supplierId !== receipt.supplierId) throw new Error("LOT_SUPPLIER_CONFLICT");
           if (lot.expiryDate && line.expiryDate && lot.expiryDate.getTime() !== line.expiryDate.getTime()) throw new Error("LOT_EXPIRY_CONFLICT");

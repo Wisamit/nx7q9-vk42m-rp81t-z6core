@@ -5005,6 +5005,30 @@ model InventoryItem {
   @@map("inventory_items")
 }
 
+enum InventoryLotSafetyStatus {
+  AVAILABLE
+  QUARANTINED
+  RECALLED
+}
+
+model InventoryLotSafetyEvent {
+  id             String @id @default(uuid()) @db.Char(36)
+  organizationId String @map("organization_id") @db.Char(36)
+  lotId          String @map("lot_id") @db.Char(36)
+  actorUserId    String @map("actor_user_id") @db.Char(36)
+  branchId       String @map("branch_id") @db.Char(36)
+  priorStatus    InventoryLotSafetyStatus @map("prior_status")
+  nextStatus     InventoryLotSafetyStatus @map("next_status")
+  reason         String @db.VarChar(1000)
+  affectedStocks Json @map("affected_stocks")
+  createdAt      DateTime @default(now()) @map("created_at") @db.DateTime(3)
+
+  lot InventoryLot @relation(fields:[lotId],references:[id],onDelete:Restrict)
+  @@index([organizationId,createdAt],map:"ilse_org_created_idx")
+  @@index([lotId,createdAt],map:"ilse_lot_created_idx")
+  @@map("inventory_lot_safety_events")
+}
+
 model InventoryLot {
   id             String       @id @default(uuid()) @db.Char(36)
   organizationId String       @map("organization_id") @db.Char(36)
@@ -5019,6 +5043,7 @@ model InventoryLot {
   unitCost       Decimal?     @map("unit_cost") @db.Decimal(18, 4)
   currency       String?      @db.Char(3)
   status         RecordStatus @default(ACTIVE)
+  safetyStatus   InventoryLotSafetyStatus @default(AVAILABLE) @map("safety_status")
   createdAt      DateTime     @default(now()) @map("created_at") @db.DateTime(3)
   updatedAt      DateTime     @updatedAt @map("updated_at") @db.DateTime(3)
   deactivatedAt  DateTime?    @map("deactivated_at") @db.DateTime(3)
@@ -5031,6 +5056,7 @@ model InventoryLot {
   transferItems InventoryTransferItem[]
   goodsReceiptItems GoodsReceiptItem[]
   qcLots QcLot[]
+  safetyEvents InventoryLotSafetyEvent[]
 
   @@unique([organizationId, itemId, lotNumber])
   @@index([itemId, expiryDate, status])

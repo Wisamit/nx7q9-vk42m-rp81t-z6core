@@ -3,6 +3,7 @@ import { Prisma } from "../../../../../generated/prisma/client";
 import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { evaluateWestgard, normalizeWestgardRules } from "@/lib/qc-westgard";
+import {lockLotsForSafety,assertLotUsable} from "@/lib/inventory-lot-safety";
 
 function text(value: unknown, max = 5000) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -98,6 +99,10 @@ export async function POST(request: Request) {
       if (!currentAnalyzer?.equipment || currentAnalyzer.equipment.branchId !== currentAnalyzer.branchId) {
         throw new Error("ANALYZER_EQUIPMENT_MISMATCH");
       }
+      const linkedInventoryLotIds=targets
+        .map(t=>t.qcLot.inventoryLotId).filter((x):x is string=>!!x);
+      const inventorySafety=await lockLotsForSafety(tx,session.user.organizationId,linkedInventoryLotIds);
+      for(const linkedId of linkedInventoryLotIds)assertLotUsable(inventorySafety,linkedId);
       const currentTargets = await tx.qcTarget.findMany({
         where: {
           id: { in: targetIds },
