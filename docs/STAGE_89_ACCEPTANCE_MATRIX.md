@@ -16,3 +16,6 @@ After owner-confirmed Stage 88 Hostinger deployment, code review found MFA verif
 - Two-connection MariaDB test proves user locks fence a concurrent password change, challenge claims are single-use with no second row affected, exactly one session issued, later password epochs block old challenge, and session revocation remains durable.
 - Full existing CI suite and Next.js production build required on exact feature and merged main SHA before deployment. Branch remains separate from Analyzer Bridge PR #128 which must stay draft/unmerged.
 - Future work still includes device/session management, provisioning, clinical operations and full Master Scope. This stage does not replace security certification or human clinical UAT.
+
+## Merged release verification
+Mainline merge 8f1f0927da63d67124335e208adaa2aa6ba2f95f after feature CI #1098 success; this document-only release note also checks push CI for the same implementation tree.
