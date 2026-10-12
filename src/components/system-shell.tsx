@@ -38,6 +38,7 @@ type NavItem = {
   icon: SystemIconName;
   permission?: string;
   permissionsAny?: string[];
+  permissionsAll?: string[];
 };
 
 const groups: Array<{ labelEn: string; labelAr: string; items: NavItem[] }> = [
@@ -75,6 +76,7 @@ const groups: Array<{ labelEn: string; labelAr: string; items: NavItem[] }> = [
       { href: "/report-templates", labelEn: "Report Templates", labelAr: "قوالب التقارير", icon: "template", permission: "report_templates.view" },
       { href: "/referrers", labelEn: "Referrers & Clients", labelAr: "المحيلون والعملاء", icon: "referrer", permission: "referrers.view" },
       { href: "/clinical-rules", labelEn: "Clinical Rules", labelAr: "القواعد السريرية", icon: "clinical", permission: "clinical_rules.manage" },
+      { href: "/clinical-comments/review", labelEn: "Comment Approvals", labelAr: "اعتماد التعليقات السريرية", icon: "clinical", permissionsAll: ["clinical_rules.approve", "result_comments.manage"] },
       { href: "/analyzers", labelEn: "Analyzers", labelAr: "أجهزة التحليل", icon: "analyzer", permission: "analyzers.view" },
       { href: "/integrations", labelEn: "Integrations", labelAr: "التكاملات", icon: "integration", permission: "integrations.view" },
     ],
@@ -121,6 +123,7 @@ export function SystemShell({ user, appearance, children }: { user: ShellUser; a
     items: group.items.filter(item => {
       if (item.permission && !permissionSet.has(item.permission)) return false;
       if (item.permissionsAny && !item.permissionsAny.some(code => permissionSet.has(code))) return false;
+      if (item.permissionsAll && !item.permissionsAll.every(code => permissionSet.has(code))) return false;
       return true;
     }),
   })).filter(group => group.items.length > 0);

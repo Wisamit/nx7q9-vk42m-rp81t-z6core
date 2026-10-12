@@ -143,7 +143,10 @@ export default async function ClinicalRulesPage() {
         <h1>{tr(locale, "Clinical Rules", "القواعد السريرية")}</h1>
         <p className="muted">{tr(locale, "Calculated results, reflex recommendations, validation holds, autoverification, critical escalation, delta checks and reusable comments are configuration-driven and effective-dated.", "النتائج المحسوبة والتوصيات الانعكاسية وإيقافات التحقق والتحقق الآلي وتصعيد النتائج الحرجة وفحوصات Delta والتعليقات القابلة لإعادة الاستخدام كلها قابلة للتهيئة ومؤرخة بسريانها.")}</p>
       </div>
-      <Link className="secondary-link" href="/dashboard">{tr(locale, "Back to Dashboard", "العودة إلى لوحة التحكم")}</Link>
+      <div>
+        {permissions.has("clinical_rules.approve") && permissions.has("result_comments.manage") && <Link className="secondary-link" href="/clinical-comments/review">{tr(locale, "Review clinical comments", "مراجعة التعليقات السريرية")}</Link>}
+        <Link className="secondary-link" href="/dashboard">{tr(locale, "Back to Dashboard", "العودة إلى لوحة التحكم")}</Link>
+      </div>
     </header>
 
     <ClinicalRulesManager

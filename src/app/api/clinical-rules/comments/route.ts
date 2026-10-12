@@ -4,85 +4,89 @@ import {
   commentTemplateReviewFingerprint, commentTransitionError, type CommentTemplateEvidence,
 } from "@/lib/comment-template-approval";
 import { prisma } from "@/lib/db";
-
-function text(value: unknown, max = 5000) {
-  return typeof value === "string" ? value.trim().slice(0, max) : "";
-}
-function code(value: string) {
-  return value.toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 80);
-}
+import { ClinicalCommentDraftError, parseClinicalCommentDraft } from "@/lib/comment-template-draft";
 
 export async function POST(request: Request) {
   const session = await requirePermission("result_comments.manage");
-  const ctx = await requestContext();
-  const body = await request.json().catch(() => null);
-  if (!body) return NextResponse.json({ error: "invalid_request" }, { status: 400 });
-
-  const scope = ["ORGANIZATION","TEST","COMPONENT"].includes(body.scope) ? body.scope : "ORGANIZATION";
-  const testId = text(body.testId, 36) || null;
-  const componentId = text(body.componentId, 36) || null;
-  const nameEn = text(body.nameEn, 220);
-  const nameAr = text(body.nameAr, 220);
-  const textEn = text(body.textEn, 5000);
-  const textAr = text(body.textAr, 5000);
-  const templateCode = code(text(body.code, 80) || nameEn);
-
-  if (!nameEn || !textEn || !templateCode) return NextResponse.json({ error: "missing_required_fields" }, { status: 400 });
-  if (scope === "TEST" && !testId) return NextResponse.json({ error: "test_required" }, { status: 400 });
-  if (scope === "COMPONENT" && (!testId || !componentId)) return NextResponse.json({ error: "component_required" }, { status: 400 });
-
-  if (testId) {
-    const test = await prisma.labTest.findFirst({
-      where: { id: testId, organizationId: session.user.organizationId },
-      include: { components: true },
-    });
-    if (!test) return NextResponse.json({ error: "test_not_found" }, { status: 404 });
-    if (componentId && !test.components.some(component => component.id === componentId)) {
-      return NextResponse.json({ error: "component_not_belong_to_test" }, { status: 409 });
-    }
+  const organizationId = session.user.organizationId;
+  const branchId = session.activeBranchId;
+  if (!branchId || !session.user.branchScopes.some(scope =>
+    scope.branchId === branchId && scope.branch.status === "ACTIVE" &&
+    scope.branch.organizationId === organizationId)) {
+    return NextResponse.json({ error: "active_branch_scope_required" }, { status: 403 });
   }
-
+  let draft;
+  try { draft = parseClinicalCommentDraft(await request.json().catch(() => null)); }
+  catch (error) {
+    return NextResponse.json({
+      error: error instanceof ClinicalCommentDraftError ? error.reason : "invalid_request",
+    }, { status: 400 });
+  }
+  const ctx = await requestContext();
   try {
-    const template = await prisma.$transaction(async (tx) => {
+    const template = await prisma.$transaction(async tx => {
+      const org = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM organizations WHERE id = ${organizationId} AND status='ACTIVE' FOR UPDATE
+      `;
+      if (org.length !== 1) throw new CommentTransitionConflict("organization_inactive", 403);
+      const branch = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM branches WHERE id = ${branchId}
+        AND organization_id = ${organizationId} AND status='ACTIVE' FOR UPDATE
+      `;
+      const grant = await tx.userBranchScope.findUnique({
+        where: { userId_branchId: { userId: session.user.id, branchId } },
+        select: { branchId: true },
+      });
+      if (branch.length !== 1 || !grant) {
+        throw new CommentTransitionConflict("active_branch_scope_required", 403);
+      }
+      if (draft.scope !== "ORGANIZATION") {
+        const tests = await tx.$queryRaw<Array<{ id: string }>>`
+          SELECT id FROM lab_tests WHERE id = ${draft.testId}
+          AND organization_id = ${organizationId} AND status = 'ACTIVE' FOR UPDATE
+        `;
+        if (tests.length !== 1) throw new CommentTransitionConflict("comment_draft_test_inactive_or_not_found");
+      }
+      if (draft.scope === "COMPONENT") {
+        const components = await tx.$queryRaw<Array<{ id: string }>>`
+          SELECT id FROM test_components WHERE id = ${draft.componentId}
+          AND test_id = ${draft.testId} AND status = 'ACTIVE' FOR UPDATE
+        `;
+        if (components.length !== 1) {
+          throw new CommentTransitionConflict("comment_draft_component_inactive_or_wrong_test");
+        }
+      }
       const created = await tx.resultCommentTemplate.create({
-        data: {
-          organizationId: session.user.organizationId,
-          scope,
-          testId: scope === "ORGANIZATION" ? null : testId,
-          componentId: scope === "COMPONENT" ? componentId : null,
-          code: templateCode,
-          nameEn,
-          nameAr: nameAr || null,
-          textEn,
-          textAr: textAr || null,
-          // Draft by default: new interpretive text is not pre-approved.
+        data: { organizationId, scope: draft.scope,
+          testId: draft.testId, componentId: draft.componentId,
+          code: draft.code, nameEn: draft.nameEn, nameAr: draft.nameAr,
+          textEn: draft.textEn, textAr: draft.textAr,
           status: "INACTIVE", deactivatedAt: new Date(),
         },
       });
-
-      await tx.auditEvent.create({
-        data: {
-          organizationId: session.user.organizationId,
-          branchId: session.activeBranchId,
-          actorUserId: session.user.id,
-          action: "RESULT_COMMENT_TEMPLATE_CREATED",
-          entityType: "ResultCommentTemplate",
-          entityId: created.id,
-          newValues: { code: templateCode, scope, testId, componentId, nameEn,
-            status: "INACTIVE", textFingerprint: commentTemplateReviewFingerprint(created),
-          },
-          ipAddress: ctx.ipAddress,
-          userAgent: ctx.userAgent,
+      await tx.auditEvent.create({ data: {
+        organizationId, branchId, actorUserId: session.user.id,
+        action: "RESULT_COMMENT_TEMPLATE_CREATED",
+        entityType: "ResultCommentTemplate", entityId: created.id,
+        newValues: {
+          code: draft.code, scope: draft.scope, testId: draft.testId,
+          componentId: draft.componentId, nameEn: draft.nameEn, nameAr: draft.nameAr,
+          status: "INACTIVE", textFingerprint: commentTemplateReviewFingerprint(created),
+          reviewRequired: "INDEPENDENT_CLINICAL_APPROVER",
         },
-      });
+        ipAddress: ctx.ipAddress, userAgent: ctx.userAgent,
+      } });
       return created;
-    });
-    return NextResponse.json({ status: "ok", template }, { status: 201 });
-  } catch {
-    return NextResponse.json({ error: "template_code_already_exists" }, { status: 409 });
+    }, { isolationLevel: "Serializable", timeout: 45000 });
+    return NextResponse.json({ status: "ok", template }, { status: 201,
+      headers: { "Cache-Control": "private, no-store" } });
+  } catch (error) {
+    if (error instanceof CommentTransitionConflict) {
+      return NextResponse.json({ error: error.code }, { status: error.statusCode });
+    }
+    return NextResponse.json({ error: "comment_draft_conflict_or_lock_failed" }, { status: 409 });
   }
 }
-
 
 class CommentTransitionConflict extends Error {
   constructor(readonly code: string, readonly statusCode = 409) { super(code); }
