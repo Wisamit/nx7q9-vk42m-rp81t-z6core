@@ -31,7 +31,7 @@ export function SpecimenRetentionManager({
   const [rationale, setRationale] = useState("");
   const [barcode, setBarcode] = useState("");
   const [requestReason, setRequestReason] = useState("");
-  const [evidence, setEvidence] = useState("");
+  const [executionEvidence, setExecutionEvidence] = useState<Record<string, string>>({});
   const [reviewEvidence, setReviewEvidence] = useState("");
 
   async function submit(url: string, method: "POST" | "PATCH", payload: Record<string, unknown>) {
@@ -50,7 +50,7 @@ export function SpecimenRetentionManager({
         ? tr("Action recorded. Refreshing authorized records.", "تم تسجيل العملية وجارٍ تحديث السجلات المصرح بها.")
         : tr("Action was blocked: ", "تم منع الإجراء: ") + (body.error || "unknown_error"));
       if (result.ok) {
-        setEvidence("");
+        setExecutionEvidence({});
         setReviewEvidence("");
         router.refresh();
       }
@@ -174,11 +174,11 @@ export function SpecimenRetentionManager({
             </button>}
           {mayRequest && item.status === "AUTHORIZED" && <div className="catalog-form">
             <label>{tr("Physical disposal evidence / method (30+ characters)", "دليل ووسيلة الإتلاف الفعلي (30 حرفاً على الأقل)")}
-              <textarea rows={3} minLength={30} maxLength={1000} value={evidence}
-                onChange={e => setEvidence(e.target.value)} />
+              <textarea rows={3} minLength={30} maxLength={1000} value={executionEvidence[item.id] || ""}
+                onChange={e => setExecutionEvidence(previous => ({ ...previous, [item.id]: e.target.value }))} />
             </label>
-            <button type="button" className="primary-button" disabled={busy || evidence.trim().length < 30}
-              onClick={() => void submit("/api/specimens/disposal-cases", "PATCH", { id: item.id, action: "EXECUTE", evidence })}>
+            <button type="button" className="primary-button" disabled={busy || (executionEvidence[item.id] || "").trim().length < 30}
+              onClick={() => void submit("/api/specimens/disposal-cases", "PATCH", { id: item.id, action: "EXECUTE", evidence: executionEvidence[item.id] || "" })}>
               {tr("Record physical disposal", "تسجيل الإتلاف الفعلي")}
             </button>
           </div>}
