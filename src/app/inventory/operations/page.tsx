@@ -2,6 +2,7 @@ import Link from "next/link";
 import { permissionSet, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { InventoryOperationsManager } from "@/components/inventory-operations-manager";
+import {InventoryLotSafetyManager} from "@/components/inventory-lot-safety-manager";
 import { getUiLocale, tr } from "@/lib/ui-i18n";
 
 export const dynamic = "force-dynamic";
@@ -34,6 +35,31 @@ export default async function InventoryOperationsPage() {
       take: 200,
     }),
   ]);
+
+  const scopedLotIds=[...new Set(lotStocks
+    .filter(stock=>stock.lot.organizationId===session.user.organizationId)
+    .map(stock=>stock.lotId))];
+  const safetyEvents=await prisma.inventoryLotSafetyEvent.findMany({
+    where:{organizationId:session.user.organizationId,lotId:{in:scopedLotIds}},
+    include:{lot:true},
+    orderBy:[{createdAt:"desc"},{id:"desc"}],take:50,
+  });
+  const safetyActors=await prisma.user.findMany({
+    where:{organizationId:session.user.organizationId,
+      id:{in:[...new Set(safetyEvents.map(event=>event.actorUserId))]}},
+    select:{id:true,displayNameEn:true,displayNameAr:true},
+  });
+  const actorNames=new Map(safetyActors.map(actor=>[
+    actor.id,locale==="ar"?actor.displayNameAr||actor.displayNameEn:actor.displayNameEn,
+  ]));
+  const safetyLots=[...new Map(lotStocks
+    .filter(stock=>stock.lot.organizationId===session.user.organizationId)
+    .map(stock=>[stock.lotId,stock.lot])).values()].map(lot=>({
+      id:lot.id,lotNumber:lot.lotNumber,itemCode:lot.item.code,
+      itemName:locale==="ar"?lot.item.nameAr||lot.item.nameEn:lot.item.nameEn,
+      safetyStatus:lot.safetyStatus,expiryDate:lot.expiryDate?.toISOString().slice(0,10)||null,
+      branches:lotStocks.filter(stock=>stock.lotId===lot.id).map(stock=>stock.branch.code),
+    }));
 
   const localizedName = (item: { nameEn: string; nameAr?: string | null }) => locale === "ar" ? item.nameAr || item.nameEn : item.nameEn;
   const userName = (item: { displayNameEn: string; displayNameAr?: string | null }) => locale === "ar" ? item.displayNameAr || item.displayNameEn : item.displayNameEn;
@@ -69,6 +95,15 @@ export default async function InventoryOperationsPage() {
       canAdjust={permissions.has("inventory.adjust")}
       canConsume={permissions.has("inventory.consume")}
     />
+
+    <InventoryLotSafetyManager locale={locale} lots={safetyLots}
+      canManage={permissions.has("inventory.manage")}
+      history={safetyEvents.map(event=>({
+        id:event.id,lotId:event.lotId,lotNumber:event.lot.lotNumber,
+        priorStatus:event.priorStatus,nextStatus:event.nextStatus,
+        reason:event.reason,at:event.createdAt.toISOString(),
+        actor:actorNames.get(event.actorUserId)||"—",
+      }))}/>
 
     <section className="table-card detail-section">
       <div className="table-toolbar"><h2>{tr(locale, "Stock Movement Ledger", "سجل حركات المخزون")}</h2><span>{movements.length} {tr(locale, "shown", "معروضة")}</span></div>
