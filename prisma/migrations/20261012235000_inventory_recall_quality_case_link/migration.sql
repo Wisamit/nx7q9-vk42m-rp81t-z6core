@@ -1,0 +1,22 @@
+CREATE TABLE `inventory_lot_quality_cases` (
+`id` CHAR(36) NOT NULL,
+`organization_id` CHAR(36) NOT NULL,
+`lot_id` CHAR(36) NOT NULL,
+`branch_id` CHAR(36) NOT NULL,
+`safety_event_id` CHAR(36) NOT NULL,
+`nonconformance_id` CHAR(36) NOT NULL,
+`created_by_user_id` CHAR(36) NOT NULL,
+`created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+PRIMARY KEY (`id`),
+UNIQUE KEY `ilqc_event_branch_unique` (`safety_event_id`,`branch_id`),
+UNIQUE KEY `inventory_lot_quality_cases_nonconformance_id_key` (`nonconformance_id`),
+INDEX `ilqc_branch_history` (`organization_id`,`branch_id`,`created_at`),
+INDEX `ilqc_lot_idx` (`lot_id`),
+INDEX `ilqc_author_idx` (`created_by_user_id`),
+FOREIGN KEY (`organization_id`) REFERENCES `organizations` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
+FOREIGN KEY (`lot_id`) REFERENCES `inventory_lots` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
+FOREIGN KEY (`branch_id`) REFERENCES `branches` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
+FOREIGN KEY (`safety_event_id`) REFERENCES `inventory_lot_safety_events` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
+FOREIGN KEY (`nonconformance_id`) REFERENCES `nonconformances` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
+FOREIGN KEY (`created_by_user_id`) REFERENCES `users` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
