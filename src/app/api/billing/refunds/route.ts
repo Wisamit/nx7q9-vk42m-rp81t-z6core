@@ -130,7 +130,8 @@ export async function POST(request: Request) {
 
     const stepUp=await consumeStaffStepUp(tx,{
       token:request.headers.get("x-staff-step-up-token"),action:"REFUND_POST",
-      resourceKey:paymentId+":"+invoiceId,sessionId:session.id,userId:session.user.id,
+      resourceKey:[paymentId,invoiceId,amountText,paymentMethodId].join(":"),
+      sessionId:session.id,userId:session.user.id,
       organizationId:session.user.organizationId,branchId:currentPayment.branchId,
       ipAddress:ctx.ipAddress,userAgent:ctx.userAgent,
     });
