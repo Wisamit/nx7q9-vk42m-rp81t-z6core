@@ -32,6 +32,14 @@ export async function createLegacyMasterRecords(
       id: row.id, organizationId, code: row.code, nameEn: row.nameEn,
       nameAr: row.nameAr, drugClass: row.drugClass,
     })) });
+  } else if (kind === "CLIENT") {
+    await tx.client.createMany({ data: entries.map(row => ({
+      id: row.id, organizationId, code: row.code, nameEn: row.nameEn,
+      nameAr: row.nameAr, type: row.clientType!, phone: row.phone,
+      email: row.email, addressEn: row.addressEn, addressAr: row.addressAr,
+      paymentTermsDays: row.paymentTermsDays,
+      // Deliberately no contracts, credit policy, pricing or historical AR.
+    })) });
   } else {
     throw new Error("unsupported_master_kind");
   }
