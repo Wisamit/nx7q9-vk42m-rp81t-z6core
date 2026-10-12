@@ -1,6 +1,7 @@
 import Link from "next/link";
 import {notFound} from "next/navigation";
-import {requirePermission} from "@/lib/auth";
+import {requirePermission,permissionSet} from "@/lib/auth";
+import {InventoryLotBranchResponse} from "@/components/inventory-lot-branch-response";
 import {prisma} from "@/lib/db";
 import {getUiLocale,tr} from "@/lib/ui-i18n";
 export const dynamic="force-dynamic";
@@ -63,6 +64,32 @@ export default async function LotImpactPage({params,searchParams}:{
        target:{select:{id:true}}},
      orderBy:[{createdAt:"desc"},{id:"desc"}],skip:(page-1)*PAGE_SIZE,take:PAGE_SIZE}),
  ]);
+ // Only the currently active and authorized branch can append a response.
+ // Previous branch acknowledgements are never exposed to other branches.
+ const activeBranchId=session.activeBranchId;
+ const allowedActive=!!activeBranchId&&allowedBranches.includes(activeBranchId);
+ const canManage=permissionSet(session).has("inventory.manage");
+ const held=lot.safetyStatus==="QUARANTINED"||lot.safetyStatus==="RECALLED";
+ const activeRelated=allowedActive&&held?await Promise.all([
+   prisma.inventoryLotStock.count({where:{lotId,branchId:activeBranchId!}}),
+   prisma.stockMovement.count({where:{lotId,organizationId,branchId:activeBranchId!}}),
+   prisma.inventoryTransferItem.count({where:{lotId,transfer:{organizationId,OR:[
+     {sourceBranchId:activeBranchId!},{destinationBranchId:activeBranchId!},
+   ]}}}),
+   prisma.qcResult.count({where:{target:{qcLot:{inventoryLotId:lotId,organizationId}},
+     run:{organizationId,branchId:activeBranchId!}}}),
+ ]):[0,0,0,0];
+ const canRespond=Boolean(allowedActive&&held&&canManage&&activeRelated.some(x=>x>0));
+ const latestSafetyEvent=lot.safetyEvents[0]?.id||null;
+ const responses=activeBranchId&&allowedActive&&latestSafetyEvent
+   ? await prisma.inventoryLotBranchResponse.findMany({
+     where:{lotId,organizationId,branchId:activeBranchId,safetyEventId:latestSafetyEvent},
+     include:{actor:{select:{displayNameEn:true,displayNameAr:true}}},
+     orderBy:[{createdAt:"desc"},{id:"desc"}],take:20,
+   }):[];
+ const activeBranch=activeBranchId&&allowedActive?await prisma.branch.findFirst({
+   where:{id:activeBranchId,organizationId,status:"ACTIVE"},select:{code:true},
+ }):null;
  const [movementTotal,transferTotal,qcTotal]=counts;
 const maxPages=Math.max(1,Math.ceil(Math.max(...counts)/PAGE_SIZE));
  const effectivePage=Math.min(page,maxPages);
@@ -84,6 +111,12 @@ const maxPages=Math.max(1,Math.ceil(Math.max(...counts)/PAGE_SIZE));
     <p>{tr(locale,"Last safety decision","آخر قرار سلامة")}: {lot.safetyEvents[0]?.nextStatus||"—"} · {lot.safetyEvents[0]?.createdAt.toISOString().slice(0,19)||"—"}</p>
     <p>{tr(locale,"Visible evidence counts","عدد الأدلة الظاهرة")}: {movementTotal} {tr(locale,"movements","حركة")} · {transferTotal} {tr(locale,"transfers","تحويل")} · {qcTotal} QC</p>
   </section>
+  <InventoryLotBranchResponse lotId={lotId} safetyEventId={held?latestSafetyEvent:null}
+    activeBranchCode={activeBranch?.code||null} locale={locale} canRespond={canRespond}
+    records={responses.map(r=>({id:r.id,action:r.action,note:r.note,
+      actorName:locale==="ar"?r.actor.displayNameAr||r.actor.displayNameEn:r.actor.displayNameEn,
+      at:r.createdAt.toISOString(),
+    }))}/>
   <section className="table-card detail-section"><h2>{tr(locale,"Authorized branch balances","الأرصدة ضمن الفروع المصرح بها")}</h2>
    <div className="table-wrap"><table><thead><tr><th>{tr(locale,"Branch","الفرع")}</th><th>{tr(locale,"On hand","المتوفر")}</th><th>{tr(locale,"Reserved","المحجوز")}</th></tr></thead>
    <tbody>{stocks.map(x=><tr key={x.id}><td>{x.branch.code}</td><td>{x.quantityOnHand.toString()}</td><td>{x.reservedQty.toString()}</td></tr>)}</tbody></table></div>
