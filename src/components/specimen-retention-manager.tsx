@@ -27,11 +27,12 @@ export function SpecimenRetentionManager({
   const [message, setMessage] = useState("");
   const [failed, setFailed] = useState(false);
   const [policyType, setPolicyType] = useState(specimenTypes[0]?.id || "");
-  const [days, setDays] = useState("7");
+  const [days, setDays] = useState("");
   const [rationale, setRationale] = useState("");
   const [barcode, setBarcode] = useState("");
   const [requestReason, setRequestReason] = useState("");
   const [evidence, setEvidence] = useState("");
+  const [reviewEvidence, setReviewEvidence] = useState("");
 
   async function submit(url: string, method: "POST" | "PATCH", payload: Record<string, unknown>) {
     if (busy) return;
@@ -50,6 +51,7 @@ export function SpecimenRetentionManager({
         : tr("Action was blocked: ", "تم منع الإجراء: ") + (body.error || "unknown_error"));
       if (result.ok) {
         setEvidence("");
+        setReviewEvidence("");
         router.refresh();
       }
     } catch {
@@ -111,6 +113,13 @@ export function SpecimenRetentionManager({
       </form>
     </section>}
 
+    {mayAuthorize && <section className="detail-card">
+      <h2>{tr("Independent quality-review evidence", "دليل المراجعة المستقلة من الجودة")}</h2>
+      <label>{tr("Document authorization, retirement or cancellation rationale (30+ characters)", "دوّن مبررات الاعتماد أو الإيقاف أو الإلغاء (30 حرفاً على الأقل)")}
+        <textarea rows={3} minLength={30} maxLength={1000} value={reviewEvidence}
+          onChange={e => setReviewEvidence(e.target.value)} />
+      </label>
+    </section>}
     <section className="table-card">
       <div className="table-toolbar"><h2>{tr("Retention policy history", "السجل التاريخي لسياسات الاحتفاظ")}</h2></div>
       <div className="summary-list">
@@ -120,13 +129,13 @@ export function SpecimenRetentionManager({
           <p>{tr("Minimum days", "الحد الأدنى بالأيام")}: {policy.minimumDays} · {policy.status}</p>
           <p>{policy.rationale}</p>
           {mayAuthorize && policy.status === "DRAFT" &&
-            <button className="secondary-link" type="button" disabled={busy}
-              onClick={() => { const reason = prompt(tr("Review justification (20+ characters)", "سبب الاعتماد (20 حرفاً على الأقل)")); if (reason) void submit("/api/specimens/retention-policies", "PATCH", { id: policy.id, action: "APPROVE", reason }); }}>
+            <button className="secondary-link" type="button" disabled={busy || reviewEvidence.trim().length < 30}
+              onClick={() => void submit("/api/specimens/retention-policies", "PATCH", { id: policy.id, action: "APPROVE", reason: reviewEvidence })}>
               {tr("Approve policy independently", "اعتماد السياسة بشكل مستقل")}
             </button>}
           {mayAuthorize && policy.status === "APPROVED" &&
-            <button className="secondary-link" type="button" disabled={busy}
-              onClick={() => { const reason = prompt(tr("Retirement reason (20+ characters)", "سبب إيقاف السياسة (20 حرفاً على الأقل)")); if (reason) void submit("/api/specimens/retention-policies", "PATCH", { id: policy.id, action: "RETIRE", reason }); }}>
+            <button className="secondary-link" type="button" disabled={busy || reviewEvidence.trim().length < 30}
+              onClick={() => void submit("/api/specimens/retention-policies", "PATCH", { id: policy.id, action: "RETIRE", reason: reviewEvidence })}>
               {tr("Retire policy", "إيقاف السياسة")}
             </button>}
         </article>)}
@@ -159,8 +168,8 @@ export function SpecimenRetentionManager({
           <p>{tr("Minimum days", "أيام الاحتفاظ")}: {item.policy.minimumDays} · {tr("Sample state", "حالة العينة")}: {item.specimen.status}</p>
           <p>{item.reason}</p>
           {mayAuthorize && item.status === "REQUESTED" &&
-            <button type="button" className="secondary-link" disabled={busy}
-              onClick={() => { const text = prompt(tr("Authorization evidence (30+ characters)", "دليل التفويض (30 حرفاً على الأقل)")); if (text) void submit("/api/specimens/disposal-cases", "PATCH", { id: item.id, action: "AUTHORIZE", evidence: text }); }}>
+            <button type="button" className="secondary-link" disabled={busy || reviewEvidence.trim().length < 30}
+              onClick={() => void submit("/api/specimens/disposal-cases", "PATCH", { id: item.id, action: "AUTHORIZE", evidence: reviewEvidence })}>
               {tr("Authorize independently", "الموافقة المستقلة")}
             </button>}
           {mayRequest && item.status === "AUTHORIZED" && <div className="catalog-form">
@@ -174,8 +183,8 @@ export function SpecimenRetentionManager({
             </button>
           </div>}
           {(mayRequest || mayAuthorize) && ["REQUESTED", "AUTHORIZED"].includes(item.status) &&
-            <button type="button" className="secondary-link" disabled={busy}
-              onClick={() => { const text = prompt(tr("Cancellation reason (30+ characters)", "سبب الإلغاء (30 حرفاً على الأقل)")); if (text) void submit("/api/specimens/disposal-cases", "PATCH", { id: item.id, action: "CANCEL", evidence: text }); }}>
+            <button type="button" className="secondary-link" disabled={busy || reviewEvidence.trim().length < 30}
+              onClick={() => void submit("/api/specimens/disposal-cases", "PATCH", { id: item.id, action: "CANCEL", evidence: reviewEvidence })}>
               {tr("Cancel request", "إلغاء الطلب")}
             </button>}
         </article>)}
