@@ -229,6 +229,19 @@ enum ClientStatementLineType {
   REFUND
 }
 
+enum EqaRoundStatus {
+  OPEN
+  SUBMITTED
+  ASSESSED
+  CLOSED
+}
+
+enum EqaAssessment {
+  SATISFACTORY
+  UNSATISFACTORY
+  NOT_EVALUATED
+}
+
 enum SpecimenStatus {
   PLANNED
   COLLECTION_FAILED
@@ -1091,6 +1104,7 @@ model Organization {
   analyzerAuthorizations AnalyzerAuthorization[]
   qualityIndicators QualityIndicator[]
   internalAudits InternalAudit[]
+  eqaPrograms EqaProgram[]
 
   portalAccounts PortalAccount[]
   appointments Appointment[]
@@ -1227,6 +1241,7 @@ model Branch {
   competencyAssessments CompetencyAssessment[]
   qualityIndicators QualityIndicator[]
   internalAudits InternalAudit[]
+  eqaPrograms EqaProgram[]
 
   appointments Appointment[]
   homeCollectionVisits HomeCollectionVisit[]
@@ -1488,6 +1503,14 @@ model User {
   retiredQualitativeResultOptions QualitativeResultOption[] @relation("QualitativeResultOptionRetirer")
   submittedReportTemplateVersions ReportTemplateVersion[] @relation("ReportTemplateVersionSubmitter")
   approvedReportTemplateVersions ReportTemplateVersion[] @relation("ReportTemplateVersionApprover")
+
+  eqaProgramsCreated EqaProgram[] @relation("EqaProgramCreator")
+  eqaRoundsCreated EqaRound[] @relation("EqaRoundCreator")
+  eqaRoundsSubmitted EqaRound[] @relation("EqaRoundSubmitter")
+  eqaRoundsReviewed EqaRound[] @relation("EqaRoundReviewer")
+  eqaRoundsClosed EqaRound[] @relation("EqaRoundCloser")
+  eqaObservationsCreated EqaObservation[] @relation("EqaObservationCreator")
+  eqaObservationsAssessed EqaObservation[] @relation("EqaObservationAssessor")
 
   @@unique([organizationId, username])
   @@unique([organizationId, email])
@@ -1867,6 +1890,7 @@ model LabTest {
   resultValidationPolicies ResultValidationPolicy[]
   criticalEscalationPolicies CriticalEscalationPolicy[]
   qcTargets QcTarget[]
+  eqaObservations EqaObservation[]
 
   terminologyMappings TerminologyMapping[]
 
@@ -4550,6 +4574,7 @@ model Analyzer {
   downtimeEvents EquipmentDowntime[]
   qcTargets QcTarget[]
   qcRuns QcRun[]
+  eqaObservations EqaObservation[]
   trainingRecords TrainingRecord[]
   competencyAssessments CompetencyAssessment[]
   authorizations AnalyzerAuthorization[]
@@ -6585,4 +6610,84 @@ model OrderAnswer {
   @@index([organizationId, orderId])
   @@index([questionId, recordedAt])
   @@map("order_answers")
+}
+
+model EqaProgram {
+  id String @id @default(uuid()) @db.Char(36)
+  organizationId String @map("organization_id") @db.Char(36)
+  branchId String @map("branch_id") @db.Char(36)
+  code String @db.VarChar(80)
+  providerName String @map("provider_name") @db.VarChar(220)
+  nameEn String @map("name_en") @db.VarChar(220)
+  nameAr String? @map("name_ar") @db.VarChar(220)
+  status RecordStatus @default(ACTIVE)
+  createdByUserId String @map("created_by_user_id") @db.Char(36)
+  createdAt DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.DateTime(3)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  branch Branch @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  createdBy User @relation("EqaProgramCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  rounds EqaRound[]
+  @@unique([branchId, code])
+  @@index([organizationId, status])
+  @@map("eqa_programs")
+}
+
+model EqaRound {
+  id String @id @default(uuid()) @db.Char(36)
+  programId String @map("program_id") @db.Char(36)
+  roundCode String @map("round_code") @db.VarChar(80)
+  sampleCode String @map("sample_code") @db.VarChar(120)
+  dueAt DateTime? @map("due_at") @db.DateTime(3)
+  status EqaRoundStatus @default(OPEN)
+  createdByUserId String @map("created_by_user_id") @db.Char(36)
+  submittedByUserId String? @map("submitted_by_user_id") @db.Char(36)
+  submittedAt DateTime? @map("submitted_at") @db.DateTime(3)
+  reviewedByUserId String? @map("reviewed_by_user_id") @db.Char(36)
+  reviewedAt DateTime? @map("reviewed_at") @db.DateTime(3)
+  reviewReason String? @map("review_reason") @db.VarChar(1000)
+  closedByUserId String? @map("closed_by_user_id") @db.Char(36)
+  closedAt DateTime? @map("closed_at") @db.DateTime(3)
+  createdAt DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.DateTime(3)
+  program EqaProgram @relation(fields: [programId], references: [id], onDelete: Restrict)
+  createdBy User @relation("EqaRoundCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  submittedBy User? @relation("EqaRoundSubmitter", fields: [submittedByUserId], references: [id], onDelete: Restrict)
+  reviewedBy User? @relation("EqaRoundReviewer", fields: [reviewedByUserId], references: [id], onDelete: Restrict)
+  closedBy User? @relation("EqaRoundCloser", fields: [closedByUserId], references: [id], onDelete: Restrict)
+  observations EqaObservation[]
+  @@unique([programId, roundCode])
+  @@index([status, dueAt])
+  @@map("eqa_rounds")
+}
+
+model EqaObservation {
+  id String @id @default(uuid()) @db.Char(36)
+  roundId String @map("round_id") @db.Char(36)
+  entryCode String @map("entry_code") @db.VarChar(80)
+  componentId String @map("component_id") @db.Char(36)
+  analyzerId String? @map("analyzer_id") @db.Char(36)
+  componentCodeSnapshot String @map("component_code_snapshot") @db.VarChar(80)
+  componentNameEnSnapshot String @map("component_name_en_snapshot") @db.VarChar(200)
+  componentNameArSnapshot String? @map("component_name_ar_snapshot") @db.VarChar(200)
+  unitSnapshot String? @map("unit_snapshot") @db.VarChar(80)
+  analyzerCodeSnapshot String? @map("analyzer_code_snapshot") @db.VarChar(80)
+  observedValue String @map("observed_value") @db.VarChar(300)
+  methodSnapshot String? @map("method_snapshot") @db.VarChar(220)
+  note String? @db.VarChar(1000)
+  providerExpectedValue String? @map("provider_expected_value") @db.VarChar(300)
+  providerFeedback String? @map("provider_feedback") @db.VarChar(1000)
+  assessment EqaAssessment?
+  assessedByUserId String? @map("assessed_by_user_id") @db.Char(36)
+  assessedAt DateTime? @map("assessed_at") @db.DateTime(3)
+  createdByUserId String @map("created_by_user_id") @db.Char(36)
+  createdAt DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  round EqaRound @relation(fields: [roundId], references: [id], onDelete: Restrict)
+  component TestComponent @relation(fields: [componentId], references: [id], onDelete: Restrict)
+  analyzer Analyzer? @relation(fields: [analyzerId], references: [id], onDelete: Restrict)
+  createdBy User @relation("EqaObservationCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  assessedBy User? @relation("EqaObservationAssessor", fields: [assessedByUserId], references: [id], onDelete: Restrict)
+  @@unique([roundId, entryCode])
+  @@index([componentId, createdAt])
+  @@map("eqa_observations")
 }
