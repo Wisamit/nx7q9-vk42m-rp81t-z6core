@@ -1,0 +1,22 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import {readFileSync} from "node:fs";
+const page=readFileSync("src/app/inventory/lot-impact/[lotId]/page.tsx","utf8");
+const manager=readFileSync("src/components/inventory-lot-safety-manager.tsx","utf8");
+test("Stage 98: organization and branch scoped evidence, no implicit all-branch access",()=>{
+ assert.match(page,/requirePermission\("inventory.view"\)/);
+ assert.match(page,/organizationId=session.user.organizationId/);
+ assert.match(page,/s.branch.organizationId===organizationId/);
+ assert.match(page,/s.branch.status==="ACTIVE"/);
+ assert.match(page,/branchId:\{in:allowedBranches\}/);
+ assert.match(page,/prisma.inventoryLot.findFirst/);
+ assert.match(page,/if\(!lot\)notFound\(\)/);
+ assert.match(page,/prisma.stockMovement.count/);
+ assert.match(page,/prisma.inventoryTransferItem.count/);
+ assert.match(page,/prisma.qcResult.count/);
+ assert.match(page,/target:\{qcLot:\{inventoryLotId:lotId,organizationId\}\}/);
+ assert.match(page,/PAGE_SIZE=50/);
+ assert.doesNotMatch(page,/\.update\(|\.create\(|\.delete\(|\.updateMany\(/);
+ assert.doesNotMatch(page,/prisma.patient|prisma.laboratoryResult|patientId/);
+ assert.match(manager,/Investigate impact/);
+});
