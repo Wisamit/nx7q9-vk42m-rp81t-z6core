@@ -113,6 +113,7 @@ export default async function DigitalServicesPage() {
       </div>
       <div className="result-actions">
         <Link className="secondary-link" href="/portal/login">{tr(locale, "Portal sign-in", "تسجيل دخول البوابة")}</Link>
+        {permissions.has("portal_accounts.manage") && <Link className="secondary-link" href="/doctor-portal-access">{tr(locale, "Doctor Patient Access", "تفويض الطبيب للمرضى")}</Link>}
         {branches.slice(0,3).map(branch => <Link key={branch.id} className="secondary-link" href={"/queue-display/" + branch.id}>{branch.code} {tr(locale, "Queue Display", "شاشة الطابور")}</Link>)}
         <Link className="secondary-link" href="/dashboard">{tr(locale, "Back to Dashboard", "العودة إلى لوحة التحكم")}</Link>
       </div>
