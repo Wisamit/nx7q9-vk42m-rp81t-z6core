@@ -13,6 +13,8 @@ export type CommentTemplateEvidence = {
   textAr: string | null;
   status: "ACTIVE" | "INACTIVE";
   updatedAt: Date;
+  revisionNumber?: number;
+  supersedesTemplateId?: string | null;
 };
 
 /** Bind approval to exact tenant, target, both languages and database revision.
@@ -24,6 +26,8 @@ export function commentTemplateReviewFingerprint(value: CommentTemplateEvidence)
     componentId: value.componentId, nameEn: value.nameEn,
     nameAr: value.nameAr, textEn: value.textEn, textAr: value.textAr,
     status: value.status, updatedAt: value.updatedAt.toISOString(),
+    revisionNumber: value.revisionNumber ?? 1,
+    supersedesTemplateId: value.supersedesTemplateId ?? null,
   })).digest("hex");
 }
 
@@ -50,7 +54,10 @@ export function commentTransitionError(
     return "comment_template_reason_required";
   }
   if (input.status === "ACTIVE") {
-    if (input.confirmation !== "APPROVE_EXACT_BILINGUAL_CLINICAL_TEXT") {
+    const requiredConfirmation = template.supersedesTemplateId
+      ? "APPROVE_REVISION_AND_RETIRE_PREDECESSOR"
+      : "APPROVE_EXACT_BILINGUAL_CLINICAL_TEXT";
+    if (input.confirmation !== requiredConfirmation) {
       return "comment_template_explicit_approval_required";
     }
     if (creatorUserId === null) return "comment_template_origin_unverified";

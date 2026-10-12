@@ -3,10 +3,12 @@ import { commentTemplateReviewFingerprint, type CommentTemplateEvidence } from "
 export type ReviewTemplate = CommentTemplateEvidence & {
   test?: { id: string; organizationId: string; status: "ACTIVE" | "INACTIVE" } | null;
   component?: { id: string; testId: string; status: "ACTIVE" | "INACTIVE" } | null;
+  supersedesTemplate?: { id: string; status: "ACTIVE" | "INACTIVE"; revisionNumber: number } | null;
 };
 
 export type ReviewBlocker =
-  | "CREATOR_UNVERIFIED" | "SELF_APPROVAL" | "TARGET_INACTIVE_OR_INVALID" | "CONTENT_MISSING";
+  | "CREATOR_UNVERIFIED" | "SELF_APPROVAL" | "TARGET_INACTIVE_OR_INVALID" | "CONTENT_MISSING"
+  | "PREDECESSOR_INACTIVE";
 
 export function commentReviewBlocker(
   template: ReviewTemplate, creatorId: string | null, reviewerId: string,
@@ -14,6 +16,11 @@ export function commentReviewBlocker(
   if (creatorId === null) return "CREATOR_UNVERIFIED";
   if (creatorId === reviewerId) return "SELF_APPROVAL";
   if (!template.nameEn.trim() || !template.textEn.trim()) return "CONTENT_MISSING";
+  if (template.supersedesTemplateId && (
+    template.supersedesTemplate?.id !== template.supersedesTemplateId ||
+    template.supersedesTemplate.status !== "ACTIVE" ||
+    template.supersedesTemplate.revisionNumber + 1 !== template.revisionNumber
+  )) return "PREDECESSOR_INACTIVE";
   const targetIsActive = template.scope === "ORGANIZATION"
     ? !template.testId && !template.componentId
     : template.scope === "TEST"

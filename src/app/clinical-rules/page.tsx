@@ -145,6 +145,7 @@ export default async function ClinicalRulesPage() {
       </div>
       <div>
         {permissions.has("clinical_rules.approve") && permissions.has("result_comments.manage") && <Link className="secondary-link" href="/clinical-comments/review">{tr(locale, "Review clinical comments", "مراجعة التعليقات السريرية")}</Link>}
+        {permissions.has("result_comments.manage") && <Link className="secondary-link" href="/clinical-comments/revisions">{tr(locale, "Revise approved comments", "تصحيح التعليقات المعتمدة")}</Link>}
         <Link className="secondary-link" href="/dashboard">{tr(locale, "Back to Dashboard", "العودة إلى لوحة التحكم")}</Link>
       </div>
     </header>
@@ -392,6 +393,7 @@ export default async function ClinicalRulesPage() {
               <td>{statusLabel(locale, template.status)}</td>
               <td><CommentTemplateStatusButton id={template.id} status={template.status}
                 fingerprint={commentTemplateReviewFingerprint(template)}
+                supersedesTemplateId={template.supersedesTemplateId}
                 canManage={permissions.has("result_comments.manage")}
                 canApprove={permissions.has("result_comments.manage") && permissions.has("clinical_rules.approve")}
                 locale={locale} /></td>

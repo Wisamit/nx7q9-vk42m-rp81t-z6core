@@ -135,6 +135,19 @@ export async function PATCH(request: Request) {
         select: { branchId: true },
       });
       if (!branch || !grant) throw new CommentTransitionConflict("active_branch_scope_required", 403);
+      // Lock predecessor first for a revision. The organization lock serializes
+      // all comment approvals/revisions against concurrent live transitions.
+      const hint = status === "ACTIVE" ? await tx.resultCommentTemplate.findFirst({
+        where: { id, organizationId }, select: { supersedesTemplateId: true },
+      }) : null;
+      const predecessorId = hint?.supersedesTemplateId ?? null;
+      if (predecessorId) {
+        const parentLock = await tx.$queryRaw<Array<{ id: string }>>`
+          SELECT id FROM result_comment_templates WHERE id = ${predecessorId}
+          AND organization_id = ${organizationId} FOR UPDATE
+        `;
+        if (parentLock.length !== 1) throw new CommentTransitionConflict("comment_revision_predecessor_missing");
+      }
       const lock = await tx.$queryRaw<Array<{ id: string }>>`
         SELECT id FROM result_comment_templates
         WHERE id = ${id} AND organization_id = ${organizationId} FOR UPDATE
@@ -142,12 +155,34 @@ export async function PATCH(request: Request) {
       if (lock.length !== 1) throw new CommentTransitionConflict("comment_template_not_found", 404);
       const template = await tx.resultCommentTemplate.findFirst({ where: { id, organizationId } });
       if (!template) throw new CommentTransitionConflict("comment_template_not_found", 404);
+      if (status === "ACTIVE" && template.supersedesTemplateId !== predecessorId) {
+        throw new CommentTransitionConflict("comment_template_review_stale");
+      }
+      // Approved predecessors cannot be reactivated after a successor exists.
+      if (status === "ACTIVE" && !template.supersedesTemplateId) {
+        const successor = await tx.resultCommentTemplate.findFirst({
+          where: { supersedesTemplateId: id }, select: { id: true },
+        });
+        if (successor) throw new CommentTransitionConflict("comment_revision_predecessor_superseded");
+      }
+      const predecessor = predecessorId
+        ? await tx.resultCommentTemplate.findFirst({
+          where: { id: predecessorId, organizationId },
+        }) : null;
+      if (predecessorId && (!predecessor || predecessor.status !== "ACTIVE" ||
+        predecessor.revisionNumber + 1 !== template.revisionNumber ||
+        predecessor.scope !== template.scope ||
+        predecessor.testId !== template.testId ||
+        predecessor.componentId !== template.componentId)) {
+        throw new CommentTransitionConflict("comment_revision_predecessor_invalid_or_retired");
+      }
 
       const creation = await tx.auditEvent.findFirst({
         where: { organizationId, entityId: id,
           OR: [
             { entityType: "COMMENT_TEMPLATE", action: "LEGACY_MASTER_RECORD_CREATED" },
             { entityType: "ResultCommentTemplate", action: "RESULT_COMMENT_TEMPLATE_CREATED" },
+            { entityType: "ResultCommentTemplate", action: "RESULT_COMMENT_TEMPLATE_REVISION_CREATED" },
           ],
         },
         orderBy: [{ occurredAt: "asc" }, { id: "asc" }],
@@ -178,6 +213,32 @@ export async function PATCH(request: Request) {
         data: { status, deactivatedAt: status === "INACTIVE" ? new Date() : null },
       });
       if (claimed.count !== 1) throw new CommentTransitionConflict("comment_template_state_changed");
+      if (status === "ACTIVE" && predecessor) {
+        const retired = await tx.resultCommentTemplate.updateMany({
+          where: { id: predecessor.id, organizationId,
+            status: "ACTIVE", updatedAt: predecessor.updatedAt },
+          data: { status: "INACTIVE", deactivatedAt: new Date() },
+        });
+        if (retired.count !== 1) {
+          throw new CommentTransitionConflict("comment_revision_predecessor_changed");
+        }
+        await tx.auditEvent.create({ data: {
+          organizationId, branchId, actorUserId: session.user.id,
+          action: "RESULT_COMMENT_TEMPLATE_SUPERSEDED",
+          entityType: "ResultCommentTemplate", entityId: predecessor.id,
+          reason,
+          oldValues: {
+            status: "ACTIVE",
+            textFingerprint: commentTemplateReviewFingerprint(predecessor),
+          },
+          newValues: {
+            status: "INACTIVE", supersededById: template.id,
+            revisionNumber: template.revisionNumber,
+            clinicalScope: "FUTURE_USE_ONLY_HISTORY_UNCHANGED",
+          },
+          ipAddress: ctx.ipAddress, userAgent: ctx.userAgent,
+        } });
+      }
       const latest = await tx.resultCommentTemplate.findUniqueOrThrow({ where: { id } });
       const auditAction = status === "ACTIVE"
         ? "RESULT_COMMENT_TEMPLATE_CLINICALLY_APPROVED"
@@ -191,6 +252,9 @@ export async function PATCH(request: Request) {
           testId: template.testId, componentId: template.componentId,
           approvedBy: status === "ACTIVE" ? session.user.id : null,
           creatorUserId: creation?.actorUserId ?? null,
+          revisionNumber: template.revisionNumber,
+          supersedesTemplateId: template.supersedesTemplateId,
+          predecessorRetiredAtomically: status === "ACTIVE" && Boolean(predecessor),
           textFingerprint: commentTemplateReviewFingerprint(latest),
         },
         reason, ipAddress: ctx.ipAddress, userAgent: ctx.userAgent,
