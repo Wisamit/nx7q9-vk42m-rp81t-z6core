@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { permissionSet, requirePermission } from "@/lib/auth";
 import { LegacyMasterDataImport } from "@/components/legacy-master-data-import";
+import { LegacyMasterConfigurationExport } from "@/components/legacy-master-configuration-export";
 import { tr } from "@/lib/ui-i18n";
 
 export const dynamic = "force-dynamic";
@@ -33,6 +34,7 @@ export default async function LegacyMasterDataPage() {
       </div>
       <Link className="secondary-link" href="/catalog">{tr(locale, "Back to Catalog", "العودة للدليل")}</Link>
     </header>
+    <LegacyMasterConfigurationExport locale={locale} kinds={kinds}/>
     <LegacyMasterDataImport locale={locale} availableKinds={kinds}/>
   </main>;
 }
