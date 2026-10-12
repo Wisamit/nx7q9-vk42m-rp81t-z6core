@@ -1890,7 +1890,6 @@ model LabTest {
   resultValidationPolicies ResultValidationPolicy[]
   criticalEscalationPolicies CriticalEscalationPolicy[]
   qcTargets QcTarget[]
-  eqaObservations EqaObservation[]
 
   terminologyMappings TerminologyMapping[]
 
@@ -2005,6 +2004,7 @@ model TestComponent {
   reflexSourceRules ReflexRule[]
   analyzerMappings AnalyzerTestMapping[]
   qcTargets QcTarget[]
+  eqaObservations EqaObservation[]
 
   terminologyMappings TerminologyMapping[]
 
