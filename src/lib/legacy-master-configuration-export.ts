@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import {
-  LEGACY_MASTER_COLUMNS, LegacyMasterImportError, parseLegacyMasterCsv,
+  LEGACY_MASTER_COLUMNS, LEGACY_MASTER_MAX_BYTES, LegacyMasterImportError, parseLegacyMasterCsv,
   type LegacyMasterKind,
 } from "./legacy-master-data-import.ts";
 
@@ -70,16 +70,32 @@ export function masterExportChunks(kind:LegacyMasterKind, rows:readonly LegacyMa
   if(rows.length>LEGACY_EXPORT_MAX_ROWS)
     throw new LegacyMasterExportError("export_too_many_rows_no_truncation",413);
   const chunks:MasterCsvChunk[]=[];
-  for(let i=0;i<rows.length;i+=LEGACY_EXPORT_CHUNK_SIZE){
-    const batch=rows.slice(i,i+LEGACY_EXPORT_CHUNK_SIZE);
+  const header=LEGACY_MASTER_COLUMNS[kind].join(",")+"\r\n";
+  const headerBytes=Buffer.byteLength(header,"utf8");
+  let batch:LegacyMasterExportRow[]=[];
+  let bytes=headerBytes;
+  const finish=()=>{
+    if(!batch.length)return;
     const csv=buildMasterCsv(kind,batch);
+    if(Buffer.byteLength(csv,"utf8")>LEGACY_MASTER_MAX_BYTES)
+      throw new LegacyMasterExportError("csv_part_exceeds_import_limit",413);
     chunks.push({
       partNumber:chunks.length+1,rowCount:batch.length,
       firstCode:batch[0].values.code||"",lastCode:batch[batch.length-1].values.code||"",
       sha256:createHash("sha256").update(csv,"utf8").digest("hex"),csv,
       sourceRecords:batch.map(r=>({id:r.id,code:r.values.code||"",status:r.status})),
     });
+    batch=[];bytes=headerBytes;
+  };
+  for(const row of rows){
+    const line=LEGACY_MASTER_COLUMNS[kind].map(h=>csvCell(row.values[h])).join(",")+"\r\n";
+    const rowBytes=Buffer.byteLength(line,"utf8");
+    if(rowBytes+headerBytes>LEGACY_MASTER_MAX_BYTES)
+      throw new LegacyMasterExportError("source_row_exceeds_import_limit",413);
+    if(batch.length===LEGACY_EXPORT_CHUNK_SIZE || bytes+rowBytes>LEGACY_MASTER_MAX_BYTES)finish();
+    batch.push(row);bytes+=rowBytes;
   }
+  finish();
   return chunks;
 }
 export function masterExportManifest(organizationId:string,kind:LegacyMasterKind,
