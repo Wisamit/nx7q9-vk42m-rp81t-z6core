@@ -39,6 +39,24 @@ export async function buildDiagnosticReportSnapshot(db: Prisma.TransactionClient
 
   if (!order) throw new Error("ORDER_NOT_FOUND_FOR_REPORT");
 
+  // A current locking read is required here: the release transaction may
+  // already have a REPEATABLE READ snapshot from earlier result/QC queries.
+  // Paired with the order-row lock at release, this prevents stale or
+  // half-approved interpretation text entering a new report version.
+  const approvedInterpretations = await db.$queryRaw<Array<{
+    id: string; revision_number: number; text_en: string; text_ar: string;
+    approved_at: Date | null; approved_by_user_id: string | null;
+  }>>`
+    SELECT id, revision_number, text_en, text_ar, approved_at, approved_by_user_id
+    FROM report_interpretive_comments
+    WHERE organization_id = ${order.organizationId}
+      AND order_id = ${order.id}
+      AND status = 'APPROVED'
+    ORDER BY revision_number DESC
+    LIMIT 1 FOR UPDATE
+  `;
+  const approvedInterpretation = approvedInterpretations[0] || null;
+
   const releasedItems = order.items
     .map((item) => ({ item, result: item.results[0] || null }))
     .filter((entry) => entry.result !== null);
@@ -201,6 +219,15 @@ export async function buildDiagnosticReportSnapshot(db: Prisma.TransactionClient
         diagnosis: order.diagnosis,
         clinicalNotes: order.clinicalNotes,
       },
+      // Frozen at issuance: later approvals never mutate released report versions.
+      reportInterpretation: approvedInterpretation ? {
+        id: approvedInterpretation.id,
+        revisionNumber: approvedInterpretation.revision_number,
+        textEn: approvedInterpretation.text_en,
+        textAr: approvedInterpretation.text_ar,
+        approvedAt: approvedInterpretation.approved_at?.toISOString() ?? null,
+        approvedByUserId: approvedInterpretation.approved_by_user_id,
+      } : null,
       referrer: order.referrer ? {
         id: order.referrer.id,
         code: order.referrer.code,

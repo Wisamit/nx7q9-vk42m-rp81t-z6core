@@ -1106,6 +1106,7 @@ model Organization {
   qualityIndicators QualityIndicator[]
   internalAudits InternalAudit[]
   eqaPrograms EqaProgram[]
+  reportInterpretiveComments ReportInterpretiveComment[]
 
   portalAccounts PortalAccount[]
   appointments Appointment[]
@@ -1391,6 +1392,8 @@ model User {
   cashierShifts CashierShift[] @relation("CashierShiftCashier")
   submittedCashierClosures CashierShiftClosure[] @relation("CashierShiftClosureSubmitter")
   reviewedCashierClosures CashierShiftClosure[] @relation("CashierShiftClosureReviewer")
+  createdReportInterpretations ReportInterpretiveComment[] @relation("InterpretationCreator")
+  approvedReportInterpretations ReportInterpretiveComment[] @relation("InterpretationApprover")
   issuedCreditNotes CreditNote[] @relation("CreditNoteIssuer")
   processedRefunds Refund[] @relation("RefundProcessor")
   createdClientAccountStatements ClientAccountStatement[] @relation("ClientStatementCreator")
@@ -2658,6 +2661,7 @@ model LabOrder {
   statusHistory OrderStatusHistory[]
   specimens     Specimen[]
   diagnosticReport DiagnosticReport?
+  interpretiveComments ReportInterpretiveComment[]
   homeCollectionVisit HomeCollectionVisit? @relation("HomeCollectionOrder")
 
   integrationMessages IntegrationMessage[]
@@ -4156,6 +4160,41 @@ model DeltaReviewEvent {
   @@index([deltaRuleId])
   @@index([acknowledgedByUserId, acknowledgedAt])
   @@map("delta_review_events")
+}
+
+enum ReportInterpretiveCommentStatus {
+  DRAFT
+  APPROVED
+  REJECTED
+  RETIRED
+}
+
+model ReportInterpretiveComment {
+  id                   String   @id @default(uuid()) @db.Char(36)
+  organizationId       String   @map("organization_id") @db.Char(36)
+  orderId              String   @map("order_id") @db.Char(36)
+  revisionNumber       Int      @map("revision_number")
+  status               ReportInterpretiveCommentStatus @default(DRAFT)
+  textEn               String   @map("text_en") @db.Text
+  textAr               String   @map("text_ar") @db.Text
+  supersedesCommentId  String?  @map("supersedes_comment_id") @db.Char(36)
+  createdByUserId      String   @map("created_by_user_id") @db.Char(36)
+  approvedByUserId     String?  @map("approved_by_user_id") @db.Char(36)
+  reviewReason         String?  @map("review_reason") @db.Text
+  createdAt            DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  approvedAt           DateTime? @map("approved_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict, map: "ric_org_fk")
+  order LabOrder @relation(fields: [orderId], references: [id], onDelete: Restrict, map: "ric_order_fk")
+  createdBy User @relation("InterpretationCreator", fields: [createdByUserId], references: [id], onDelete: Restrict, map: "ric_creator_fk")
+  approvedBy User? @relation("InterpretationApprover", fields: [approvedByUserId], references: [id], onDelete: Restrict, map: "ric_approver_fk")
+  supersedes ReportInterpretiveComment? @relation("InterpretationLineage", fields: [supersedesCommentId], references: [id], onDelete: Restrict, map: "ric_parent_fk")
+  nextRevisions ReportInterpretiveComment[] @relation("InterpretationLineage")
+
+  @@unique([orderId, revisionNumber], map: "ric_order_revision_uq")
+  @@index([organizationId, status, createdAt], map: "ric_org_status_created_idx")
+  @@index([orderId, status, revisionNumber], map: "ric_order_status_revision_idx")
+  @@map("report_interpretive_comments")
 }
 
 model ResultCommentTemplate {
