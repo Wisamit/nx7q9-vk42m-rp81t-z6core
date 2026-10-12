@@ -49,6 +49,9 @@ test("Stage 96: server-side grant issuance and consumption are independent and f
  assert.match(issuer,/compare\(input.password/);
  assert.match(issuer,/verifyTotp\(/);
  assert.match(issuer,/currentUser.mfaEnabled/);
+ assert.doesNotMatch(issuer,/consumeRecoveryCode|mfaRecoveryCodes/);
+ assert.match(issuer,/STEP_UP_FAILURE_LIMIT/);
+ assert.match(issuer,/session.activeBranchId!==branchId/);
  assert.match(issuer,/FOR UPDATE/);
  assert.match(issuer,/staffStepUpAttempt.count/);
  assert.match(issuer,/STAFF_STEP_UP_DENIED/);
