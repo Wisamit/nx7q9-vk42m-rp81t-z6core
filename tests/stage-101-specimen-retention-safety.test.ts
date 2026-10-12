@@ -24,7 +24,7 @@ test("Stage 101: no clinical release/retention evidence must fail closed", () =>
     ["child aliquot", {unresolvedChildCount:1}, "child_specimens_present"],
     ["unreleased draft result", {unreleasedResultCount:1}, "unreleased_results"],
     ["quality hold", {activeClinicalHoldCount:1}, "active_quality_hold"],
-  ] as const) {
+  ] as Array<[string, Partial<Parameters<typeof retainedDisposalBlock>[0]>, string]>) {
     assert.equal(retainedDisposalBlock({...base,...update}), expected, name);
   }
   assert.equal(retentionDueAt(base.collectedAt,7).toISOString(),"2026-10-08T12:00:00.000Z");
