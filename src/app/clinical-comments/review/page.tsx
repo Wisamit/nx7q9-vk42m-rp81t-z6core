@@ -144,8 +144,8 @@ export default async function CommentReviewPage({
                     : template.test?.code || tr(locale, "Organization", "المؤسسة")}</small>
                 </td>
                 <td>
-                  <div dir="ltr" style={{ whiteSpace: "pre-wrap" }}><strong>EN:</strong> {template.textEn}</div>
-                  <div dir="rtl" style={{ whiteSpace: "pre-wrap" }}><strong>AR:</strong> {template.textAr ||
+                  <div dir="ltr" style={{ whiteSpace: "pre-wrap" }}><strong>{tr(locale, "English:", "الإنجليزية:")}</strong> {template.textEn}</div>
+                  <div dir="rtl" style={{ whiteSpace: "pre-wrap" }}><strong>{tr(locale, "Arabic:", "العربية:")}</strong> {template.textAr ||
                     tr(locale, "No Arabic text supplied", "لم يُزوّد نص عربي")}</div>
                   <small>{tr(locale, "Names", "الأسماء")}: {template.nameEn} / {template.nameAr || "—"}</small>
                 </td>
