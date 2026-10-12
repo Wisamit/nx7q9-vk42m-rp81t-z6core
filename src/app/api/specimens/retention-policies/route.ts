@@ -105,10 +105,25 @@ export async function PATCH(request: Request) {
         if (policy.status !== "DRAFT" || policy.createdByUserId === ctx.session.user.id)
           throw new Conflict("independent_draft_review_required");
         const now = new Date();
+        const superseded = await tx.specimenRetentionPolicy.findMany({
+          where: { organizationId: ctx.organizationId, branchId: ctx.branchId,
+            specimenTypeId: policy.specimenTypeId, status: "APPROVED" },
+          select: { id: true, minimumDays: true },
+        });
         await tx.specimenRetentionPolicy.updateMany({
           where: { organizationId: ctx.organizationId, branchId: ctx.branchId,
             specimenTypeId: policy.specimenTypeId, status: "APPROVED" },
           data: { status: "RETIRED", retiredAt: now, retiredByUserId: ctx.session.user.id } });
+        for (const previous of superseded) {
+          await tx.auditEvent.create({ data: {
+            organizationId: ctx.organizationId, branchId: ctx.branchId,
+            actorUserId: ctx.session.user.id, action: "SPECIMEN_RETENTION_POLICY_SUPERSEDED",
+            entityType: "SpecimenRetentionPolicy", entityId: previous.id, reason,
+            oldValues: { status: "APPROVED", minimumDays: previous.minimumDays },
+            newValues: { status: "RETIRED", supersededByPolicyId: policy.id },
+            ipAddress: requestCtx.ipAddress, userAgent: requestCtx.userAgent,
+          } });
+        }
         const changed = await tx.specimenRetentionPolicy.updateMany({
           where: { id, status: "DRAFT" },
           data: { status: "APPROVED", approvedByUserId: ctx.session.user.id, approvedAt: now },
