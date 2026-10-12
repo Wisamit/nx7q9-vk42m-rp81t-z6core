@@ -75,6 +75,7 @@ jobs:
       - run: node --experimental-strip-types --test tests/stage-95-master-configuration-export-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-96-high-risk-step-up-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-99-inventory-lot-branch-response-mariadb.integration.test.ts
+      - run: node --experimental-strip-types --test tests/stage-100-lot-quality-case-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-97-inventory-lot-safety-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-22-aliquot-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-23-medical-validation-mariadb.integration.test.ts
