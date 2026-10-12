@@ -1,5 +1,5 @@
 import type { Prisma, PrismaClient } from "../../generated/prisma/client";
-import { LegacyMasterImportError, type LegacyMasterRow } from "./legacy-master-data-import";
+import { LegacyMasterImportError, type LegacyMasterRow } from "./legacy-master-data-import.ts";
 
 type Database = PrismaClient | Prisma.TransactionClient;
 export type CommentTarget = { testId: string | null; componentId: string | null };
