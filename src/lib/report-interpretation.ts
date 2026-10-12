@@ -8,7 +8,13 @@ export type InterpretationEvidence = {
 };
 
 export class InterpretationError extends Error {
-  constructor(readonly code: string, readonly statusCode = 409) { super(code); }
+  readonly code: string;
+  readonly statusCode: number;
+  constructor(code: string, statusCode = 409) {
+    super(code);
+    this.code = code;
+    this.statusCode = statusCode;
+  }
 }
 export function parseInterpretationDraft(raw: unknown) {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new InterpretationError("invalid_request",400);
