@@ -2,6 +2,7 @@ import Link from "next/link";
 import {notFound} from "next/navigation";
 import {requirePermission,permissionSet} from "@/lib/auth";
 import {InventoryLotBranchResponse} from "@/components/inventory-lot-branch-response";
+import {RecallQualityCaseManager} from "@/components/recall-quality-case-manager";
 import {prisma} from "@/lib/db";
 import {getUiLocale,tr} from "@/lib/ui-i18n";
 export const dynamic="force-dynamic";
@@ -87,6 +88,13 @@ export default async function LotImpactPage({params,searchParams}:{
      include:{actor:{select:{displayNameEn:true,displayNameAr:true}}},
      orderBy:[{createdAt:"desc"},{id:"desc"}],take:20,
    }):[];
+ const alreadyLinked=activeBranchId&&allowedActive&&latestSafetyEvent
+   ? await prisma.inventoryLotQualityCase.findFirst({where:{
+       organizationId,lotId,branchId:activeBranchId,safetyEventId:latestSafetyEvent,
+     },include:{nonconformance:{select:{caseNumber:true}}}}):null;
+ const canOpenQualityCase=Boolean(allowedActive&&held&&latestSafetyEvent&&
+   permissionSet(session).has("quality.nonconformance.manage")&&
+   responses.some(r=>r.action==="ESCALATED_TO_QUALITY")&&!alreadyLinked);
  const activeBranch=activeBranchId&&allowedActive?await prisma.branch.findFirst({
    where:{id:activeBranchId,organizationId,status:"ACTIVE"},select:{code:true},
  }):null;
@@ -117,6 +125,9 @@ const maxPages=Math.max(1,Math.ceil(Math.max(...counts)/PAGE_SIZE));
       actorName:locale==="ar"?r.actor.displayNameAr||r.actor.displayNameEn:r.actor.displayNameEn,
       at:r.createdAt.toISOString(),
     }))}/>
+  <RecallQualityCaseManager lotId={lotId} safetyEventId={held?latestSafetyEvent:null}
+    canCreate={canOpenQualityCase} caseNumber={alreadyLinked?.nonconformance.caseNumber||null}
+    locale={locale}/>
   <section className="table-card detail-section"><h2>{tr(locale,"Authorized branch balances","الأرصدة ضمن الفروع المصرح بها")}</h2>
    <div className="table-wrap"><table><thead><tr><th>{tr(locale,"Branch","الفرع")}</th><th>{tr(locale,"On hand","المتوفر")}</th><th>{tr(locale,"Reserved","المحجوز")}</th></tr></thead>
    <tbody>{stocks.map(x=><tr key={x.id}><td>{x.branch.code}</td><td>{x.quantityOnHand.toString()}</td><td>{x.reservedQty.toString()}</td></tr>)}</tbody></table></div>
