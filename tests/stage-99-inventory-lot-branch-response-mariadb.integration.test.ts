@@ -29,7 +29,7 @@ test("Stage 99 MariaDB: immutable scoped branch acknowledgements and unique per-
     "INSERT INTO users(id,organization_id,username,display_name_en,updated_at) VALUES(?,?,?,?,NOW(3))",
     [actor,org,"s99"+prefix,"Safety staff"]);
   await put("inventory_items",item,
-    "INSERT INTO inventory_items(id,organization_id,code,name_en,stock_unit,updated_at) VALUES(?,?,?,?,?,NOW(3))",
+    "INSERT INTO inventory_items(id,organization_id,code,name_en,stock_unit,item_type,updated_at) VALUES(?,?,?,?,?,\'REAGENT\',NOW(3))",
     [item,org,"S99"+prefix,"Reagent","mL"]);
   await put("inventory_lots",lot,
     "INSERT INTO inventory_lots(id,organization_id,item_id,lot_number,safety_status,updated_at) "+
