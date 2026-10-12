@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { Prisma } from "../../../../../../generated/prisma/client";
+import { Prisma } from "../../../../../generated/prisma/client";
 import { getCurrentSession, permissionSet, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { independentAuthorization, retainedDisposalBlock, retentionDueAt } from "@/lib/specimen-retention-safety";
