@@ -1089,6 +1089,7 @@ model Organization {
   inventoryItems InventoryItem[]
   suppliers Supplier[]
   inventoryLots InventoryLot[]
+  inventoryLotBranchResponses InventoryLotBranchResponse[]
   stockMovements StockMovement[]
   purchaseRequests PurchaseRequest[]
   purchaseOrders PurchaseOrder[]
@@ -1232,6 +1233,7 @@ model Branch {
   microbiologyCases MicrobiologyCase[]
   branchStocks BranchStock[]
   inventoryLotStocks InventoryLotStock[]
+  inventoryLotBranchResponses InventoryLotBranchResponse[]
   stockMovements StockMovement[]
   purchaseRequests PurchaseRequest[]
   purchaseOrders PurchaseOrder[]
@@ -1379,7 +1381,8 @@ model User {
   roles            UserRole[]
   branchScopes     UserBranchScope[]
   departmentScopes UserDepartmentScope[]
-  auditEvents      AuditEvent[]          @relation("AuditActor")
+  auditEvents      AuditEvent[]
+  inventoryLotBranchResponses InventoryLotBranchResponse[]          @relation("AuditActor")
   homeCollectionOrderLinks HomeCollectionVisit[] @relation("HomeCollectionOrderLinker")
   sessions         UserSession[]
   mfaChallenges     StaffMfaChallenge[]
@@ -5011,6 +5014,26 @@ enum InventoryLotSafetyStatus {
   RECALLED
 }
 
+model InventoryLotBranchResponse {
+  id            String   @id @default(uuid()) @db.Char(36)
+  organizationId String   @map("organization_id") @db.Char(36)
+  lotId         String   @map("lot_id") @db.Char(36)
+  branchId      String   @map("branch_id") @db.Char(36)
+  safetyEventId String   @map("safety_event_id") @db.Char(36)
+  actorUserId   String   @map("actor_user_id") @db.Char(36)
+  action        String   @db.VarChar(32)
+  note          String   @db.VarChar(1000)
+  createdAt     DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  lot InventoryLot @relation(fields:[lotId],references:[id],onDelete:Restrict)
+  safetyEvent InventoryLotSafetyEvent @relation(fields:[safetyEventId],references:[id],onDelete:Restrict)
+  branch Branch @relation(fields:[branchId],references:[id],onDelete:Restrict)
+  actor User @relation(fields:[actorUserId],references:[id],onDelete:Restrict)
+  @@unique([safetyEventId,branchId,action],map:"ilbr_unique_response_action")
+  @@index([organizationId,branchId,createdAt],map:"ilbr_branch_timeline")
+  @@index([lotId,createdAt],map:"ilbr_lot_timeline")
+  @@map("inventory_lot_branch_responses")
+}
+
 model InventoryLotSafetyEvent {
   id             String @id @default(uuid()) @db.Char(36)
   organizationId String @map("organization_id") @db.Char(36)
@@ -5024,6 +5047,7 @@ model InventoryLotSafetyEvent {
   createdAt      DateTime @default(now()) @map("created_at") @db.DateTime(3)
 
   lot InventoryLot @relation(fields:[lotId],references:[id],onDelete:Restrict)
+  branchResponses InventoryLotBranchResponse[]
   @@index([organizationId,createdAt],map:"ilse_org_created_idx")
   @@index([lotId,createdAt],map:"ilse_lot_created_idx")
   @@map("inventory_lot_safety_events")
@@ -5057,6 +5081,7 @@ model InventoryLot {
   goodsReceiptItems GoodsReceiptItem[]
   qcLots QcLot[]
   safetyEvents InventoryLotSafetyEvent[]
+  branchResponses InventoryLotBranchResponse[]
 
   @@unique([organizationId, itemId, lotNumber])
   @@index([itemId, expiryDate, status])
