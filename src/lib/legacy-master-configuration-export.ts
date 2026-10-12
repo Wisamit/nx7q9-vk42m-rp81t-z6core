@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import {
   LEGACY_MASTER_COLUMNS, LegacyMasterImportError, parseLegacyMasterCsv,
   type LegacyMasterKind,
-} from "@/lib/legacy-master-data-import";
+} from "./legacy-master-data-import.ts";
 
 export const legacyMasterPermissions: Record<LegacyMasterKind,string> = {
   REFERRER:"referrers.manage", SOURCE:"sources.manage",
