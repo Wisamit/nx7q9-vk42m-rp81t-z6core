@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { Prisma } from "../../../../../../../generated/prisma/client";
 import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import {lockLotsForSafety} from "@/lib/inventory-lot-safety";
 
 function nonNegative(value: unknown) {
   const raw = String(value ?? "").trim();
@@ -45,6 +46,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       const currentLines = await tx.inventoryTransferItem.findMany({
         where: { transferId: transfer.id },
       });
+      // Physical custody of an already shipped recalled lot must still be
+      // receivable. Its safety status remains held across every branch.
+      const receivedLotStates=await lockLotsForSafety(tx,session.user.organizationId,
+        currentLines.filter(line=>incoming.has(line.id)).map(line=>line.lotId));
+      if(receivedLotStates.size!==new Set(currentLines.filter(line=>incoming.has(line.id))
+        .map(line=>line.lotId)).size)throw new Error("LOT_SAFETY_NOT_FOUND");
       for (const line of currentLines) {
         if (!incoming.has(line.id)) continue;
         const addQty = nonNegative(incoming.get(line.id));
