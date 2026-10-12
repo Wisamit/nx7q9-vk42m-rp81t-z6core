@@ -1,6 +1,6 @@
 import type { Prisma } from "../../generated/prisma/client";
 import type { LegacyMasterKind, LegacyMasterRow } from "./legacy-master-data-import";
-import { resolveLegacyCommentTargets } from "./legacy-comment-targets";
+import { resolveLegacyCommentTargets } from "./legacy-comment-targets.ts";
 
 export type NewLegacyMasterRow = LegacyMasterRow & { id: string };
 
