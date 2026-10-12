@@ -161,6 +161,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const volumeText = body.volume == null || body.volume === "" ? "" : String(body.volume);
   const volumeUnit = text(body.volumeUnit, 30) || null;
+  const activeOrderId = specimen.orderId;
   async function lockHomeCustody(tx: Prisma.TransactionClient) {
     if (!linkedHomeVisit) return;
     const parent = await tx.$queryRaw<Array<{ id: string }>>`
@@ -169,7 +170,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     `;
     const visit = await tx.$queryRaw<Array<{ id: string }>>`
       SELECT id FROM home_collection_visits WHERE id = ${linkedHomeVisit.id}
-      AND order_id = ${specimen.orderId} AND branch_id = ${branchId}
+      AND order_id = ${activeOrderId} AND branch_id = ${branchId}
       AND assigned_collector_user_id = ${session.user.id}
       AND status = 'COLLECTING' FOR UPDATE
     `;
