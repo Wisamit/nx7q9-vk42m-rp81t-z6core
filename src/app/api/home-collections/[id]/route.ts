@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
+import { canAccessBranch, requireSession, permissionSet, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { homeCollectionCustodyError, homeCollectionStartError } from "@/lib/home-collection-custody";
 
@@ -19,7 +19,13 @@ function text(value: unknown, max = 5000) {
 }
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const session = await requirePermission("home_collection.manage");
+  const session = await requireSession();
+  const permissions = permissionSet(session);
+  const manager = permissions.has("home_collection.manage");
+  const authorizedCollector = permissions.has("specimens.collect");
+  if (!manager && !authorizedCollector) {
+    return NextResponse.json({ error: "home_collection_permission_required" }, { status: 403 });
+  }
   const ctx = await requestContext();
   const { id } = await params;
   const body = await request.json().catch(() => null);
@@ -30,6 +36,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     include: { appointment: true },
   });
   if (!visit) return NextResponse.json({ error: "home_collection_not_found" }, { status: 404 });
+  if (!manager && (visit.assignedCollectorUserId !== session.user.id ||
+    !["EN_ROUTE","ARRIVED","COLLECTING","COLLECTED"].includes(String(body.status)))) {
+    return NextResponse.json({ error: "assigned_collector_required" }, { status: 403 });
+  }
   if (!canAccessBranch(session, visit.branchId)) return NextResponse.json({ error: "branch_forbidden" }, { status: 403 });
 
   const nextStatus = typeof body.status === "string" ? body.status : visit.status;
@@ -79,6 +89,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       const current = await tx.homeCollectionVisit.findUniqueOrThrow({ where: { id } });
       if (parent.mode !== "HOME_COLLECTION" || ["CANCELLED", "NO_SHOW"].includes(parent.status)) {
         throw new Error("APPOINTMENT_NOT_ACTIVE");
+      }
+      if (!manager && current.assignedCollectorUserId !== session.user.id) {
+        throw new Error("ASSIGNED_COLLECTOR_REQUIRED");
       }
       if (current.updatedAt.getTime() !== visit.updatedAt.getTime() ||
           (nextStatus !== current.status && !(transitions[current.status] || []).includes(nextStatus))) {
@@ -170,7 +183,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const reason = error instanceof Error ? error.message : "";
     const codes = [
       "APPOINTMENT_NOT_ACTIVE", "APPOINTMENT_NOT_READY", "SPECIMEN_CUSTODY_ALREADY_STARTED",
-      "HOME_ORDER_LINK_REQUIRED", "HOME_ORDER_CHANGED", "HOME_COLLECTOR_REQUIRED",
+      "ASSIGNED_COLLECTOR_REQUIRED", "HOME_ORDER_LINK_REQUIRED", "HOME_ORDER_CHANGED", "HOME_COLLECTOR_REQUIRED",
       "HOME_SPECIMENS_REQUIRED", "HOME_ISSUED_INVOICE_REQUIRED",
       "HOME_SPECIMEN_COLLECTION_EVIDENCE_MISSING", "HOME_SPECIMEN_NOT_COLLECTED",
       "HOME_SPECIMEN_RECEPTION_EVIDENCE_MISSING",
