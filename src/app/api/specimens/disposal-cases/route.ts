@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { Prisma } from "../../../../../../generated/prisma/client";
 import { getCurrentSession, permissionSet, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { independentAuthorization, retainedDisposalBlock, retentionDueAt } from "@/lib/specimen-retention-safety";
@@ -17,7 +18,7 @@ async function currentContext() {
   )) return null;
   return { session, branchId, organizationId, permissions: permissionSet(session) };
 }
-type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
+type Tx = Prisma.TransactionClient;
 
 // Every state transition checks the live tenant/branch scope, then locks the
 // specimen before checking release, custody, linked material, and result state.
