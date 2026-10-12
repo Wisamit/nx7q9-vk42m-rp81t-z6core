@@ -35,7 +35,7 @@ export function homeCollectionStartError(
   if (!visit.assignedCollectorUserId) return "home_collector_required";
   if (specimenCount < 1) return "home_specimens_required";
   if (!invoices.some(invoice =>
-    !["DRAFT","VOID"].includes(invoice.status) &&
+    ["ISSUED","PARTIALLY_PAID","PAID"].includes(invoice.status) &&
     invoice.currency.length === 3 &&
     Number.isFinite(Number(invoice.total)))) {
     return "home_issued_invoice_required";
@@ -55,7 +55,7 @@ export function homeCollectionCustodyError(
   const physical = specimens.filter(s => s.parentRelationType !== "ALIQUOT" &&
     s.status !== "COLLECTION_FAILED");
   if (!physical.length) return "home_specimens_required";
-  if (!invoices.some(invoice => invoice.status !== "VOID" && invoice.status !== "DRAFT" &&
+  if (!invoices.some(invoice => ["ISSUED","PARTIALLY_PAID","PAID"].includes(invoice.status) &&
     invoice.currency.length === 3 && Number.isFinite(Number(invoice.total)))) {
     return "home_issued_invoice_required";
   }
@@ -88,6 +88,7 @@ export function homeOrderMatch(input: {
   orderStatus: string;
   visitStatus: string;
   hasSpecimens: boolean;
+  specimensAllPlanned: boolean;
   hasOrderItems: boolean;
   alreadyLinked: boolean;
 }): string | null {
@@ -95,11 +96,11 @@ export function homeOrderMatch(input: {
       input.orderPatientId !== input.visitPatientId ||
       input.orderingBranchId !== input.visitBranchId)
     return "home_order_patient_branch_mismatch";
-  if (!["REGISTERED","COLLECTED","IN_PROGRESS"].includes(input.orderStatus))
+  if (input.orderStatus !== "REGISTERED")
     return "home_order_not_active";
   if (!["SCHEDULED","ASSIGNED"].includes(input.visitStatus))
     return "home_visit_too_advanced_to_link";
-  if (!input.hasSpecimens || !input.hasOrderItems)
+  if (!input.hasSpecimens || !input.specimensAllPlanned || !input.hasOrderItems)
     return "home_order_specimens_not_ready";
   if (input.alreadyLinked) return "home_order_already_linked_elsewhere";
   return null;
