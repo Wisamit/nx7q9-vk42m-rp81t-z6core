@@ -133,7 +133,7 @@ test("Stage 89 MariaDB: immutable issued report, bilingual approved interpretati
     await db.execute("UPDATE report_interpretive_comments SET status='RETIRED' WHERE id=? AND status='APPROVED'",[noteId]);
     await db.execute("INSERT INTO report_interpretive_comments(id,organization_id,order_id,revision_number,status,"+
       "text_en,text_ar,supersedes_comment_id,created_by_user_id,approved_by_user_id,approved_at,review_reason) "+
-      "VALUES(?,?,?,2,'APPROVED',?,?,?,?,NOW(3),?)",
+      "VALUES(?,?,?,2,'APPROVED',?,?,?,?,?,NOW(3),?)",
       [otherNoteId,org,orderId,"Updated interpretation","التفسير المحدّث",noteId,author,reviewer,
         "Independent approval of a subsequent updated report comment"]);
     cleanup.unshift({table:"report_interpretive_comments",id:otherNoteId});
