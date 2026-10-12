@@ -111,7 +111,7 @@ export function OrderClinicalHandoverManager({locale,orderId,notes,currentUserId
          </select></label>
        <label>{tr("Content language","لغة الملاحظة")}
          <select value={language} onChange={e=>setLanguage(e.target.value as "en"|"ar")}>
-           <option value="en">English</option><option value="ar">العربية</option>
+           <option value="en">{tr("English","الإنجليزية")}</option><option value="ar">{tr("Arabic","العربية")}</option>
          </select></label>
        <label>{tr("Clinical handover text (2–4000 characters)","نص الملاحظة (2–4000 حرف)")}
          <textarea required minLength={2} maxLength={4000} rows={6} dir={language==="ar"?"rtl":"ltr"}
