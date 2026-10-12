@@ -18,7 +18,7 @@ type Invoice = { id: string; invoiceNumber: string; status: string;
 type OrderChoice = { id: string; label: string };
 export function HomeCollectionWorkstation({
   visitId, status, orderId, collectorUserId, locale, isManager,
-  canCollect, canReceive, collectors, availableOrders, specimens, invoices, accession,
+  canCollect, canReceive, canAdvance, collectors, availableOrders, specimens, invoices, accession,
 }: {
   visitId: string;
   status: string;
@@ -28,6 +28,7 @@ export function HomeCollectionWorkstation({
   isManager: boolean;
   canCollect: boolean;
   canReceive: boolean;
+  canAdvance: boolean;
   collectors: Choice[];
   availableOrders: OrderChoice[];
   specimens: Specimen[];
@@ -147,7 +148,7 @@ export function HomeCollectionWorkstation({
         {tr("Planned departure (optional)", "المغادرة المخططة (اختياري)")}
         <input type="datetime-local" value={departureAt} onChange={e=>setDepartureAt(e.target.value)} />
       </label>}
-      {isManager && ["ASSIGNED","EN_ROUTE","ARRIVED","COLLECTING","COLLECTED"].includes(status) && <>
+      {canAdvance && ["ASSIGNED","EN_ROUTE","ARRIVED","COLLECTING","COLLECTED"].includes(status) && <>
         <label>{tr("Transport / handoff notes", "ملاحظات النقل والتسليم")}
           <textarea rows={3} value={transportNotes} onChange={e=>setTransportNotes(e.target.value)}/>
         </label>
@@ -159,7 +160,7 @@ export function HomeCollectionWorkstation({
           onClick={() => void transition("COLLECTING")}>{tr("Start verified collection", "بدء السحب الموثق")}</button>}
         {status === "COLLECTING" && <button className="secondary-button" disabled={busy || !orderId}
           onClick={() => void transition("COLLECTED")}>{tr("Verify all specimens collected", "التحقق من سحب جميع العينات")}</button>}
-        {status === "COLLECTED" && <button className="primary-button" disabled={busy || !orderId}
+        {isManager && status === "COLLECTED" && <button className="primary-button" disabled={busy || !orderId}
           onClick={() => void transition("DELIVERED")}>{tr("Reconcile laboratory reception & complete", "مطابقة الاستلام بالمختبر وإتمام الزيارة")}</button>}
       </>}
       <p className="muted">{tr(
