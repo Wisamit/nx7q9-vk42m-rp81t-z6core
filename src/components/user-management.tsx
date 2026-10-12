@@ -16,13 +16,18 @@ type UserRow = {
 };
 type Data = { users: UserRow[]; roles: Role[]; branches: Branch[]; departments: Department[] };
 
-export function UserManagement({ locale, canManageDiscountLimits }: { locale: "ar" | "en"; canManageDiscountLimits: boolean }) {
+export function UserManagement({ locale, canManageDiscountLimits, canResetPasswords, currentUserId }: {
+  locale: "ar" | "en"; canManageDiscountLimits: boolean;
+  canResetPasswords: boolean; currentUserId: string;
+}) {
   const [data, setData] = useState<Data>({ users: [], roles: [], branches: [], departments: [] });
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<UserRow | null>(null);
+  const [resetting, setResetting] = useState<UserRow | null>(null);
+  const [resetError, setResetError] = useState("");
   const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
 
   function localizedRoleNames(user: UserRow) {
@@ -126,6 +131,57 @@ export function UserManagement({ locale, canManageDiscountLimits }: { locale: "a
     setBusy(false);
   }
 
+  async function resetStaffPassword(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (busy || !resetting || !canResetPasswords || resetting.id === currentUserId) return;
+    const form = event.currentTarget;
+    const fields = new FormData(form);
+    if (fields.get("newPassword") !== fields.get("confirmPassword")) {
+      setResetError(tr("New passwords do not match.", "كلمتا المرور الجديدتان غير متطابقتين."));
+      return;
+    }
+    if (!confirm(tr(
+      "Reset this staff member's password, revoke ALL of their sessions and require a fresh login? Their MFA remains enabled.",
+      "هل تريد تغيير كلمة مرور هذا الموظف وإنهاء جميع جلساته؟ ستبقى المصادقة متعددة العوامل مفعّلة.",
+    ))) return;
+    setBusy(true); setResetError("");
+    try {
+      const response = await fetch("/api/admin/users/" + resetting.id + "/reset-password", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          actorPassword: fields.get("actorPassword"),
+          newPassword: fields.get("newPassword"),
+          confirmPassword: fields.get("confirmPassword"),
+          reason: fields.get("reason"),
+        }),
+      });
+      const body = await response.json().catch(() => ({})) as { error?: string };
+      if (response.ok) {
+        form.reset();
+        setResetting(null);
+        setMessage(tr(
+          "Staff password reset; prior sessions revoked. Tell the staff member the new password through a secure channel and ask them to change it promptly.",
+          "تم تعيين كلمة المرور وإلغاء الجلسات السابقة. سلّم كلمة المرور للموظف بقناة آمنة واطلب منه تغييرها فورًا.",
+        ));
+        await load();
+      } else {
+        const errors: Record<string,[string,string]> = {
+          actor_password_invalid: ["Your current administrator password is incorrect.", "كلمة مرور المدير الحالية غير صحيحة."],
+          password_policy_failed: ["Password must be at least 12 characters and at most 72 UTF-8 bytes.", "كلمة المرور يجب ألا تقل عن 12 محرفًا أو تتجاوز 72 بايت UTF-8."],
+          recovery_reason_required: ["Enter a 10–1000-character documented reset reason.", "أدخل سببًا موثقًا من 10 إلى 1000 محرف."],
+          target_not_active_or_authorized: ["Target is inactive or not authorized.", "المستخدم غير فعّال أو غير مسموح."],
+          rate_limited: ["Too many reset attempts. Try later.", "تجاوزت عدد المحاولات المسموح، حاول لاحقًا."],
+          system_admin_required: ["System administrator rights are required.", "يجب امتلاك صلاحيات مدير النظام."],
+        };
+        setResetError(errors[body.error || ""]?.[locale === "ar" ? 1 : 0] ||
+          tr("Secure reset failed. Verify status before retrying.", "فشلت إعادة التعيين. تحقق من الحالة قبل إعادة المحاولة."));
+      }
+    } catch {
+      setResetError(tr("Connection failed. Check the user's login state before retrying.",
+        "فشل الاتصال. تحقق من حالة دخول الموظف قبل إعادة المحاولة."));
+    } finally { setBusy(false); }
+  }
+
   async function setStatus(user: UserRow, status: "ACTIVE" | "SUSPENDED") {
     setBusy(true); setMessage("");
     const response = await fetch("/api/admin/users/" + user.id, {
@@ -185,11 +241,40 @@ export function UserManagement({ locale, canManageDiscountLimits }: { locale: "a
       </form>}
     </CrudModal>
 
+    <CrudModal
+      open={Boolean(resetting)}
+      onClose={() => { if (!busy) { setResetting(null); setResetError(""); } }}
+      title={tr("Secure staff password reset", "إعادة تعيين كلمة مرور الموظف بأمان")}
+      description={resetting ? resetting.displayNameEn + " · @" + resetting.username : undefined}
+      size="lg"
+    >
+      {resetting && <form className="settings-grid" onSubmit={e => void resetStaffPassword(e)}>
+        <p className="muted form-span">{tr(
+          "Only an authorized system admin may reset another active staff account. You must re-enter YOUR own password. This revokes all of their sessions and preserves their MFA settings.",
+          "فقط مدير نظام مخوّل يمكنه تغيير كلمة مرور موظف آخر فعّال. أدخل كلمة مرورك أنت للتحقق. ستُلغى جلسات الموظف وتبقى إعدادات MFA محفوظة.",
+        )}</p>
+        <label>{tr("Your administrator password", "كلمة مرور المدير الخاصة بك")}
+          <input type="password" name="actorPassword" required autoComplete="current-password" /></label>
+        <label>{tr("New staff temporary password", "كلمة المرور المؤقتة الجديدة للموظف")}
+          <input type="password" name="newPassword" minLength={12} required autoComplete="new-password" /></label>
+        <label>{tr("Confirm new staff password", "تأكيد كلمة المرور الجديدة")}
+          <input type="password" name="confirmPassword" minLength={12} required autoComplete="new-password" /></label>
+        <label className="form-span">{tr("Audit reason (minimum 10 characters)", "سبب الإجراء للتدقيق (10 محارف على الأقل)")}
+          <textarea name="reason" minLength={10} maxLength={1000} required rows={3} /></label>
+        <button type="submit" className="primary-button form-span" disabled={busy}>
+          {busy ? tr("Verifying and resetting…", "جارٍ التحقق وإعادة التعيين…") :
+            tr("Reset password and revoke sessions", "تغيير كلمة المرور وإلغاء الجلسات")}
+        </button>
+        {resetError && <p className="form-warning form-span" role="alert">{resetError}</p>}
+      </form>}
+    </CrudModal>
+
     <section className="table-card admin-table-card">
       <div className="table-toolbar"><div><h2>{tr("Staff users", "المستخدمون")}</h2><span>{tr("Roles, branches, MFA and account state", "الأدوار والفروع وMFA وحالة الحساب")}</span></div><span>{data.users.length}</span></div>
       <div className="table-wrap">{loading ? <div className="empty-state">{tr("Loading…", "جارٍ التحميل…")}</div> : <table><thead><tr><th>{tr("User", "المستخدم")}</th><th>{tr("Roles", "الأدوار")}</th><th>{tr("Branches", "الفروع")}</th><th>{tr("Departments", "الأقسام")}</th>{canManageDiscountLimits && <th>{tr("Discount limit", "حد الخصم")}</th>}<th>{tr("MFA", "المصادقة متعددة العوامل")}</th><th>{tr("Status", "الحالة")}</th><th>{tr("Actions", "إجراءات")}</th></tr></thead>
       <tbody>{data.users.map(user => <tr key={user.id}><td><strong>{locale === "ar" ? user.displayNameAr || user.displayNameEn : user.displayNameEn}</strong><small className="table-subtext">@{user.username}{user.email ? " · " + user.email : ""}</small></td><td>{localizedRoleNames(user)}</td><td>{localizedBranchNames(user)}</td><td>{localizedDepartmentNames(user)}</td>{canManageDiscountLimits && <td>{Number(user.effectiveDiscountLimitPercent || 0).toFixed(2)}%{user.discountLimitPercent !== null ? <small className="table-subtext">{tr("User override", "تجاوز مستخدم")}</small> : <small className="table-subtext">{tr("Inherited", "موروث")}</small>}</td>}<td><span className={"status-badge " + (user.mfaEnabled ? "status-active" : "status-draft")}>{user.mfaEnabled ? tr("ON", "مفعلة") : tr("OFF", "غير مفعلة")}</span></td><td><span className={"status-badge " + (user.status === "ACTIVE" ? "status-active" : "status-warning")}>{statusLabel(locale, user.status)}</span></td><td><div className="inline-actions">
   <button type="button" className="secondary-button compact-action" disabled={busy} onClick={() => setEditing(user)}>{tr("Edit access", "تعديل الصلاحيات")}</button>
+  {canResetPasswords && user.id !== currentUserId && user.status === "ACTIVE" && <button type="button" className="secondary-button compact-action" disabled={busy} onClick={() => { setResetError(""); setResetting(user); }}>{tr("Reset password", "إعادة تعيين كلمة المرور")}</button>}
   {user.status === "ACTIVE" ? <button type="button" className="secondary-button compact-action" disabled={busy} onClick={() => void setStatus(user, "SUSPENDED")}>{tr("Suspend", "تعليق")}</button> : <button type="button" className="secondary-button compact-action" disabled={busy} onClick={() => void setStatus(user, "ACTIVE")}>{tr("Activate", "تفعيل")}</button>}
 </div></td></tr>)}</tbody></table>}</div>
     </section>
