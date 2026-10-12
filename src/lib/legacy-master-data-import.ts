@@ -17,11 +17,11 @@ export type LegacyMasterRow = {
   addressEn: string | null;
   addressAr: string | null;
   paymentTermsDays: number | null;
-  commentScope: "ORGANIZATION" | "TEST" | "COMPONENT" | null;
-  testCode: string | null;
-  componentCode: string | null;
-  textEn: string | null;
-  textAr: string | null;
+  commentScope?: "ORGANIZATION" | "TEST" | "COMPONENT" | null;
+  testCode?: string | null;
+  componentCode?: string | null;
+  textEn?: string | null;
+  textAr?: string | null;
 };
 
 export class LegacyMasterImportError extends Error {
@@ -197,11 +197,13 @@ export function parseLegacyMasterCsv(kind: LegacyMasterKind, csv: string): Legac
       addressEn: kind === "CLIENT" ? data.address_en || null : null,
       addressAr: kind === "CLIENT" ? data.address_ar || null : null,
       paymentTermsDays: terms === "" ? null : Number(terms),
-      commentScope: commentScope as LegacyMasterRow["commentScope"],
-      testCode: testCode || null,
-      componentCode: componentCode || null,
-      textEn: kind === "COMMENT_TEMPLATE" ? data.text_en : null,
-      textAr: kind === "COMMENT_TEMPLATE" ? data.text_ar || null : null,
+      ...(kind === "COMMENT_TEMPLATE" ? {
+        commentScope: commentScope as LegacyMasterRow["commentScope"],
+        testCode: testCode || null,
+        componentCode: componentCode || null,
+        textEn: data.text_en,
+        textAr: data.text_ar || null,
+      } : {}),
     };
   });
 }
