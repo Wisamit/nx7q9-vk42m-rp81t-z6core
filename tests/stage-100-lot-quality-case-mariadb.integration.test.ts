@@ -42,7 +42,7 @@ test("Stage 100 MariaDB: unique branch/event quality case FK, tenant isolation, 
    "VALUES(?,?,?,?,?,?,'ESCALATED_TO_QUALITY',?)",
    [response,org,lot,branch,event,actor,"The quality office must investigate the returned stock"]);
   await put("nonconformances",nc,
-   "INSERT INTO nonconformances(id,organization_id,branch_id,case_number,title,description,category,severity,reported_by_user_id) "+
+   "INSERT INTO nonconformances(id,organization_id,branch_id,case_number,title,description,category,severity,reported_by_user_id,updated_at) "+
    "VALUES(?,?,?,?,?,?,?,'MAJOR',?,NOW(3))",
    [nc,org,branch,"S100NC-"+prefix,"Manufacturer lot recall investigation",
     "Documented evidence and separate clinical impact review", "INVENTORY_LOT_SAFETY",actor]);
