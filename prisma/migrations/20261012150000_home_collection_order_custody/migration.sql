@@ -15,7 +15,7 @@ ALTER TABLE `home_collection_visits`
 
 ALTER TABLE `specimen_collection_attempts`
   ADD COLUMN `home_collection_visit_id` CHAR(36) NULL AFTER `specimen_id`,
-  ADD INDEX `specimen_collection_attempts_home_collection_visit_id_attempted_at_idx`
+  ADD INDEX `home_attempt_visit_time_idx`
     (`home_collection_visit_id`,`attempted_at`),
   ADD CONSTRAINT `specimen_collection_attempts_home_collection_visit_id_fkey`
     FOREIGN KEY (`home_collection_visit_id`) REFERENCES `home_collection_visits`(`id`)
