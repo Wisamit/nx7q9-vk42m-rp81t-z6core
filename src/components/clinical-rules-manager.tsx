@@ -84,12 +84,15 @@ export function ClinicalRulesManager({
       }),
     });
     if (response.ok) {
-      setMessage(tr("Comment template created.", "تم إنشاء قالب التعليق بنجاح."));
+      setMessage(tr("Inactive comment draft saved. A different authorized reviewer must approve it in Comment Approvals before clinical use.", "تم حفظ قالب التعليق غير مفعّل. يجب اعتماده من مراجع سريري آخر عبر قائمة اعتماد التعليقات قبل استخدامه."));
       event.currentTarget.reset();
       setCommentScope("ORGANIZATION");
       setCommentTestId("");
       router.refresh();
-    } else setMessage(tr("Could not create comment template.", "تعذر إنشاء قالب التعليق."));
+    } else {
+      const detail = await response.json().catch(() => ({})) as { error?: string };
+      setMessage(tr("Could not create comment draft: ", "تعذر إنشاء قالب التعليق: ") + (detail.error || "unknown_error"));
+    }
     setBusy("");
   }
 
