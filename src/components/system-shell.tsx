@@ -77,6 +77,7 @@ const groups: Array<{ labelEn: string; labelAr: string; items: NavItem[] }> = [
       { href: "/referrers", labelEn: "Referrers & Clients", labelAr: "المحيلون والعملاء", icon: "referrer", permission: "referrers.view" },
       { href: "/clinical-rules", labelEn: "Clinical Rules", labelAr: "القواعد السريرية", icon: "clinical", permission: "clinical_rules.manage" },
       { href: "/clinical-comments/review", labelEn: "Comment Approvals", labelAr: "اعتماد التعليقات السريرية", icon: "clinical", permissionsAll: ["clinical_rules.approve", "result_comments.manage"] },
+      { href: "/clinical-comments/revisions", labelEn: "Comment Revisions", labelAr: "تصحيح التعليقات السريرية", icon: "template", permission: "result_comments.manage" },
       { href: "/analyzers", labelEn: "Analyzers", labelAr: "أجهزة التحليل", icon: "analyzer", permission: "analyzers.view" },
       { href: "/integrations", labelEn: "Integrations", labelAr: "التكاملات", icon: "integration", permission: "integrations.view" },
     ],
