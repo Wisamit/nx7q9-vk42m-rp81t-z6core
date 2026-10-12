@@ -4139,6 +4139,10 @@ model ResultCommentTemplate {
   createdAt      DateTime             @default(now()) @map("created_at") @db.DateTime(3)
   updatedAt      DateTime             @updatedAt @map("updated_at") @db.DateTime(3)
   deactivatedAt  DateTime?            @map("deactivated_at") @db.DateTime(3)
+  revisionNumber Int                @default(1) @map("revision_number")
+  supersedesTemplateId String?      @unique @map("supersedes_template_id") @db.Char(36)
+  supersedesTemplate ResultCommentTemplate? @relation("CommentTemplateLineage", fields: [supersedesTemplateId], references: [id], onDelete: Restrict)
+  nextRevision ResultCommentTemplate? @relation("CommentTemplateLineage")
 
   organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   test         LabTest?       @relation(fields: [testId], references: [id], onDelete: Restrict)
