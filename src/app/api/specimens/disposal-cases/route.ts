@@ -160,6 +160,36 @@ export async function PATCH(request: Request) {
   const requestCtx = await requestContext();
   try {
     await prisma.$transaction(async tx => {
+      if (action === "CANCEL") {
+        // Cancellation must remain possible if a specimen moved, became held,
+        // or the retention policy was retired in the meantime.
+        const branch = await tx.branch.findFirst({ where: { id: ctx.branchId,
+          organizationId: ctx.organizationId, status: "ACTIVE" }, select: { id: true } });
+        const liveScope = await tx.userBranchScope.findUnique({ where: { userId_branchId: {
+          userId: ctx.session.user.id, branchId: ctx.branchId,
+        } } });
+        if (!branch || !liveScope) throw new Conflict("branch_scope_changed");
+        const cancelling = await tx.specimenDisposalCase.findFirst({ where: {
+          id, organizationId: ctx.organizationId, branchId: ctx.branchId,
+        }, select: { status: true, specimenId: true, policyId: true } });
+        if (!cancelling || !["REQUESTED", "AUTHORIZED"].includes(cancelling.status))
+          throw new Conflict("case_not_cancellable");
+        const updated = await tx.specimenDisposalCase.updateMany({
+          where: { id, organizationId: ctx.organizationId, branchId: ctx.branchId,
+            status: cancelling.status }, data: { status: "CANCELLED" },
+        });
+        if (updated.count !== 1) throw new Conflict("case_changed");
+        await tx.auditEvent.create({ data: {
+          organizationId: ctx.organizationId, branchId: ctx.branchId,
+          actorUserId: ctx.session.user.id, action: "SPECIMEN_DISPOSAL_CANCELLED",
+          entityType: "SpecimenDisposalCase", entityId: id, reason: evidence,
+          oldValues: { status: cancelling.status },
+          newValues: { status: "CANCELLED", specimenId: cancelling.specimenId,
+            policyId: cancelling.policyId },
+          ipAddress: requestCtx.ipAddress, userAgent: requestCtx.userAgent,
+        } });
+        return;
+      }
       const row = await tx.specimenDisposalCase.findFirst({ where: {
         id, organizationId: ctx.organizationId, branchId: ctx.branchId },
         select: { specimenId: true } });
