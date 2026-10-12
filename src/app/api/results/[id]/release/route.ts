@@ -200,6 +200,17 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
       orderBy: { version: "desc" },
     });
 
+    // Serialize interpretation review with release snapshot construction:
+    // neither a concurrent approval nor a replacement review can change
+    // the approved clinical text halfway through a report version issue.
+    const lockedOrderForInterpretation = await tx.$queryRaw<Array<{ id: string }>>`
+      SELECT id FROM orders
+      WHERE id = ${result.orderItem.orderId}
+        AND organization_id = ${session.user.organizationId}
+      FOR UPDATE
+    `;
+    if (lockedOrderForInterpretation.length !== 1) throw new ReportReleaseStateChanged();
+
     const snapshot = await buildDiagnosticReportSnapshot(tx, result.orderItem.orderId);
     const effectiveTemplate = await resolveEffectiveReportTemplate(tx, {
       organizationId: session.user.organizationId,
