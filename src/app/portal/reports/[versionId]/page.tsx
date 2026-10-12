@@ -1,3 +1,4 @@
+import { doctorAccessWhere } from "@/lib/doctor-portal-access";
 import { Fragment } from "react";
 import { notFound } from "next/navigation";
 import { requirePortalSession } from "@/lib/portal-auth";
@@ -49,7 +50,11 @@ export default async function PortalReportPage({ params }: { params: Promise<{ v
   if (account.type === "PATIENT") {
     allowed = order.patientId === account.patientId;
   } else if (account.type === "DOCTOR") {
-    allowed = order.referrerId === account.referrerId;
+    allowed = Boolean(account.referrerId && await prisma.labOrder.findFirst({
+      where: { id: order.id, ...doctorAccessWhere({ organizationId: account.organizationId,
+        referrerId: account.referrerId, capability: "reports", now: new Date() }) },
+      select: { id: true },
+    }));
   } else if (account.type === "CORPORATE" && order.clientId === account.clientId) {
     const access = await prisma.corporatePortalPatientAccess.findFirst({
       where: {
