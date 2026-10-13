@@ -322,7 +322,14 @@ export function ResultWorkflowActions({
       setShowAmendment(false);
       router.refresh();
     } else {
-      setMessage(body.error || tr("Could not start amendment.", "تعذر بدء التعديل."));
+      const refusal = body.error === "fresh_staff_reauthentication_required" ||
+        body.error === "step_up_already_used_or_expired" ||
+        body.error === "step_up_session_or_branch_changed"
+          ? tr("A fresh approval proof is required for this amendment.", "يلزم تأكيد هوية جديد لهذا التعديل.")
+          : body.error === "newer_result_version_already_exists_or_changed"
+            ? tr("Result changed or another amendment version exists. Refresh and review.", "تغيرت النتيجة أو يوجد إصدار تعديل آخر. حدّث الصفحة وراجع.")
+            : body.error || tr("Could not start amendment.", "تعذر بدء التعديل.");
+      setMessage(refusal);
     }
     setBusy("");
   }
