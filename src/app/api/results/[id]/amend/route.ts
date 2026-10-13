@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import { canAccessBranch, canAccessDepartment, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { amendmentEligibility } from "@/lib/clinical-safety";
+import { consumeStaffStepUp, StaffStepUpError } from "@/lib/staff-step-up";
+
+class AmendmentStateChanged extends Error {}
 
 function text(value: unknown, max = 1000) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -60,6 +63,33 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
 
   const amended = await prisma.$transaction(async (tx) => {
+    // Serialize amendments on the original released row. A second actor
+    // cannot create a sibling version using a stale preflight read.
+    const releasedRows = await tx.$queryRaw<Array<{ id: string; status: string }>>`
+      SELECT id, status FROM laboratory_results
+      WHERE id = ${original.id} AND organization_id = ${session.user.organizationId}
+      FOR UPDATE
+    `;
+    if (releasedRows.length !== 1 || releasedRows[0].status !== "RELEASED") {
+      throw new AmendmentStateChanged();
+    }
+    const newerVersion = await tx.laboratoryResult.findFirst({
+      where: { orderItemId: original.orderItemId, version: { gt: original.version } },
+      select: { id: true },
+    });
+    if (newerVersion) throw new AmendmentStateChanged();
+
+    const stepUp = await consumeStaffStepUp(tx, {
+      token: request.headers.get("x-staff-step-up-token"),
+      action: "RESULT_AMEND",
+      resourceKey: original.id,
+      sessionId: session.id,
+      userId: session.user.id,
+      organizationId: session.user.organizationId,
+      branchId: original.performingBranchId,
+      ipAddress: ctx.ipAddress,
+      userAgent: ctx.userAgent,
+    });
     const nextVersion = original.version + 1;
     const draft = await tx.laboratoryResult.create({
       data: {
@@ -171,6 +201,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           validationStage: "ENTRY",
           validationPolicyCarriedForward: false,
           amendedFromId: original.id,
+          stepUpGrantId: stepUp.grantId,
+          stepUpProofMethod: stepUp.proofMethod,
         },
         reason,
         ipAddress: ctx.ipAddress,
@@ -179,8 +211,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     });
 
     return draft;
-  }, { timeout: 30000 });
+  }, { timeout: 30000 }).catch((error: unknown) => {
+    if (error instanceof StaffStepUpError) {
+      return { error: error.code, httpStatus: error.statusCode } as const;
+    }
+    if (error instanceof AmendmentStateChanged) {
+      return { error: "newer_result_version_already_exists_or_changed", httpStatus: 409 } as const;
+    }
+    throw error;
+  });
 
+  if ("error" in amended) {
+    return NextResponse.json({ error: amended.error }, { status: amended.httpStatus });
+  }
   return NextResponse.json({
     status: "ok",
     amendmentResultId: amended.id,
