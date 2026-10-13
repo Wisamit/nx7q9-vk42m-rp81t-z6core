@@ -65,7 +65,8 @@ export async function POST(request: Request) {
   const body: unknown = await request.json().catch(() => null);
   if (!body || typeof body !== "object" || Array.isArray(body)) return error("invalid_request", 400);
   const fields = branchFields(body as Record<string, unknown>);
-  if (!fields?.code) return error("invalid_branch_fields", 400);
+  const validatedCode = fields?.code;
+  if (!validatedCode) return error("invalid_branch_fields", 400);
   const ctx = await requestContext();
   const org = session.user.organizationId;
   try {
@@ -76,7 +77,7 @@ export async function POST(request: Request) {
           roles: { some: { role: { code: "SYSTEM_ADMIN", isSystem: true, status: "ACTIVE" } } } },
       });
       if (!activeActor) throw Error("admin_revoked");
-      const branch = await tx.branch.create({ data: { organizationId: org, ...fields, code: fields.code } });
+      const branch = await tx.branch.create({ data: { organizationId: org, ...fields, code: validatedCode } });
       await tx.userBranchScope.create({ data: { userId: session.userId, branchId: branch.id } });
       await tx.auditEvent.create({ data: {
         organizationId: org, branchId: branch.id, actorUserId: session.userId,
