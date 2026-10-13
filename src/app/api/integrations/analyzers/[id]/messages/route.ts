@@ -13,16 +13,27 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const credential = await authenticateAnalyzerBridge(request, id);
   if (!credential) return NextResponse.json({ error: "analyzer_bridge_unauthorized" }, { status: 401 });
 
-  const bridgeMessageId = text(request.headers.get("x-bridge-message-id"), 150);
-  if (!bridgeMessageId) return NextResponse.json({ error: "bridge_message_id_required" }, { status: 400 });
+  const messageHeader = request.headers.get("x-bridge-message-id");
+  const bridgeMessageId = typeof messageHeader === "string" ? messageHeader.trim() : "";
+  if (!bridgeMessageId || bridgeMessageId.length > 150) {
+    return NextResponse.json({ error: "invalid_bridge_message_id" }, { status: 400 });
+  }
 
-  const body = await request.json().catch(() => null) as { rawPayload?: unknown; protocol?: string } | null;
-  if (!body) return NextResponse.json({ error: "invalid_request" }, { status: 400 });
-
-  const rawPayload = text(body.rawPayload, 1000000);
-  if (!rawPayload) return NextResponse.json({ error: "raw_payload_required" }, { status: 400 });
-
-  const protocol = body.protocol || credential.analyzer.protocol;
+  const body = await request.json().catch(() => null) as { rawPayload?: unknown; protocol?: unknown } | null;
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return NextResponse.json({ error: "invalid_request" }, { status: 400 });
+  }
+  // Do not trim or truncate raw analyzer payload: CR/LF, spaces and control
+  // characters are part of the ASTM/HL7 frame and its forensic hash.
+  const rawPayload = body.rawPayload;
+  if (typeof rawPayload !== "string" || rawPayload.length === 0) {
+    return NextResponse.json({ error: "raw_payload_required" }, { status: 400 });
+  }
+  const payloadBytes = Buffer.byteLength(rawPayload, "utf8");
+  if (payloadBytes > 1000000) {
+    return NextResponse.json({ error: "raw_payload_too_large" }, { status: 413 });
+  }
+  const protocol = body.protocol ?? credential.analyzer.protocol;
   if (protocol !== credential.analyzer.protocol) {
     return NextResponse.json({
       error: "analyzer_protocol_mismatch",
@@ -41,7 +52,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   });
 
   if (existing) {
-    if (existing.payloadHash !== payloadHash) {
+    if (existing.payloadHash !== payloadHash || existing.protocol !== protocol) {
       return NextResponse.json({
         error: "bridge_message_id_payload_conflict",
         messageId: existing.id,
@@ -56,7 +67,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     });
   }
 
-  const stored = await prisma.$transaction(async tx => {
+  const message = await prisma.$transaction(async tx => {
     const created = await tx.analyzerMessage.create({
       data: {
         analyzerId: credential.analyzer.id,
@@ -84,38 +95,34 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           bridgeMessageId,
           protocol: credential.analyzer.protocol,
           payloadHash,
-          payloadBytes: Buffer.byteLength(rawPayload, "utf8"),
+          payloadBytes,
           credentialId: credential.id,
         },
         reason: "Authenticated Analyzer Bridge ingestion",
       },
     });
 
-    return { message: created, duplicate: false };
+    return created;
   }).catch(async error => {
-    if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;
-    // A concurrent Bridge retry won the unique (analyzer, bridgeMessageId)
-    // race. Return an idempotent response only for byte-identical payloads.
-    const existing = await prisma.analyzerMessage.findUnique({
-      where: {
-        analyzerId_bridgeMessageId: {
-          analyzerId: credential.analyzer.id,
-          bridgeMessageId,
-        },
-      },
-    });
-    return existing ? { message: existing, duplicate: true } : null;
+    if (!(error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002")) throw error;
+    // The unique index is authoritative under concurrent bridge retries.
+    return null;
   });
-  if (!stored) return NextResponse.json({ error: "bridge_message_conflict_retry" }, { status: 409 });
-  const message = stored.message;
-  if (message.payloadHash !== payloadHash) {
-    return NextResponse.json({ error: "bridge_message_id_payload_conflict", messageId: message.id }, { status: 409 });
+  if (!message) {
+    const winner = await prisma.analyzerMessage.findUnique({
+      where: { analyzerId_bridgeMessageId: { analyzerId: credential.analyzer.id, bridgeMessageId } },
+    });
+    if (!winner) return NextResponse.json({ error: "concurrent_message_retry" }, { status: 409 });
+    if (winner.payloadHash !== payloadHash || winner.protocol !== protocol) {
+      return NextResponse.json({ error: "bridge_message_id_payload_conflict", messageId: winner.id }, { status: 409 });
+    }
+    return NextResponse.json({ status: "ok", duplicate: true, messageId: winner.id, messageStatus: winner.status });
   }
-  const duplicate = stored.duplicate;
+
   return NextResponse.json({
     status: "ok",
-    duplicate,
+    duplicate: false,
     messageId: message.id,
     messageStatus: message.status,
-  }, { status: duplicate ? 200 : 202 });
+  }, { status: 202 });
 }

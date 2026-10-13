@@ -133,15 +133,47 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (!mappingByCode.has(mapping.analyzerTestCode)) mappingByCode.set(mapping.analyzerTestCode, mapping);
   }
 
-  const processableItems = normalized.filter(item => {
-    const existing = existingByObservation.get(item.observationId);
-    return !existing || existing.status === "ERROR";
-  });
-  const duplicateObservationCount = normalized.length - processableItems.length;
-  const reprocessedObservationCount = processableItems.filter(item => existingByObservation.has(item.observationId)).length;
-  const newObservationCount = processableItems.length - reprocessedObservationCount;
-
   const staged = await prisma.$transaction(async tx => {
+    // Lock the parent before reading child imports. Concurrent retries for the
+    // same bridge message must be idempotent even when both read "not found".
+    const messageLock = await tx.$queryRaw<Array<{ id: string }>>`
+      SELECT id FROM analyzer_messages
+      WHERE id = ${message.id} AND analyzer_id = ${credential.analyzer.id}
+      FOR UPDATE
+    `;
+    if (messageLock.length !== 1) throw new Error("BRIDGE_MESSAGE_STATE_CHANGED");
+    const freshImports = await tx.analyzerResultImport.findMany({
+      where: { messageId: message.id, bridgeObservationId: { in: observationIds } },
+    });
+    const liveByObservation = new Map(freshImports.map(item => [item.bridgeObservationId, item]));
+    for (const item of normalized) {
+      const previous = liveByObservation.get(item.observationId);
+      if (previous && (
+        previous.barcodeSnapshot !== item.barcode
+        || previous.analyzerTestCode !== item.analyzerTestCode
+        || previous.rawValue !== item.rawValue
+        || (previous.rawUnit || null) !== item.rawUnit
+      )) throw new Error("BRIDGE_OBSERVATION_PAYLOAD_CHANGED");
+    }
+    const processableItems = normalized.filter(item => {
+      const existing = liveByObservation.get(item.observationId);
+      return !existing || existing.status === "ERROR";
+    });
+    const duplicateObservationCount = normalized.length - processableItems.length;
+    const reprocessedObservationCount = processableItems.filter(item => liveByObservation.has(item.observationId)).length;
+    const newObservationCount = processableItems.length - reprocessedObservationCount;
+
+    // Lock actual physical custody before staging. A quarantined or
+    // transferred specimen cannot be silently restored by stale preflight.
+    const lockedCustody = new Map<string, { status: string; current_branch_id: string | null }>();
+    for (const specimenId of [...new Set(specimens.map(item => item.id))].sort()) {
+      const rows = await tx.$queryRaw<Array<{ status: string; current_branch_id: string | null }>>`
+        SELECT status,current_branch_id FROM specimens
+        WHERE id = ${specimenId} AND organization_id = ${credential.analyzer.organizationId}
+        FOR UPDATE
+      `;
+      if (rows.length === 1) lockedCustody.set(specimenId, rows[0]);
+    }
     const output: Array<{ observationId: string; importId: string; status: string; errorCode: string | null }> = [];
     const claimedSpecimenIds = new Set<string>();
     let errorCount = 0;
@@ -166,12 +198,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       } else if (!specimen) {
         errorCode = "SPECIMEN_NOT_FOUND";
         errorText = "No specimen matches the supplied barcode in this organization.";
-      } else if (specimen.currentBranchId !== credential.analyzer.branchId) {
+      } else if (lockedCustody.get(specimen.id)?.current_branch_id !== credential.analyzer.branchId) {
         errorCode = "SPECIMEN_BRANCH_MISMATCH";
         errorText = "Specimen is not currently located at the analyzer branch.";
-      } else if (!["RECEIVED","IN_PROCESS"].includes(specimen.status)) {
+      } else if (!["RECEIVED","IN_PROCESS"].includes(lockedCustody.get(specimen.id)?.status || "")) {
         errorCode = "SPECIMEN_NOT_READY";
         errorText = "Specimen status is not valid for analyzer result staging.";
+      } else if (lockedCustody.get(specimen.id)?.status !== specimen.status) {
+        errorCode = "SPECIMEN_PREANALYTICAL_STATE_CHANGED";
+        errorText = "Specimen custody changed during analyzer normalization.";
       } else if (mapping.analyzerUnitCode && !item.rawUnit) {
         errorCode = "ANALYZER_UNIT_MISSING";
         errorText = "The active mapping expects an analyzer unit code but the observation has no unit.";
@@ -244,7 +279,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       const status = errorCode ? "ERROR" : "MAPPED";
       if (errorCode) errorCount++;
 
-      const existingImport = existingByObservation.get(item.observationId);
+      const existingImport = liveByObservation.get(item.observationId);
       const savedImport = existingImport
         ? await tx.analyzerResultImport.update({
             where: { id: existingImport.id },
@@ -313,16 +348,22 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       },
     });
 
-    return { output, errorCount: totalErrors };
-  }, { timeout: 30000 });
+    return { output, errorCount: totalErrors, newObservationCount, reprocessedObservationCount, duplicateObservationCount };
+  }, { timeout: 30000 }).catch(error => {
+    if (error instanceof Error && ["BRIDGE_MESSAGE_STATE_CHANGED","BRIDGE_OBSERVATION_PAYLOAD_CHANGED"].includes(error.message)) return null;
+    throw error;
+  });
+  if (!staged) {
+    return NextResponse.json({ error: "bridge_observation_state_or_payload_conflict" }, { status: 409 });
+  }
 
   return NextResponse.json({
     status: "ok",
     messageId: message.id,
     observationCount: normalized.length,
-    newObservationCount,
-    reprocessedObservationCount,
-    duplicateObservationCount,
+    newObservationCount: staged.newObservationCount,
+    reprocessedObservationCount: staged.reprocessedObservationCount,
+    duplicateObservationCount: staged.duplicateObservationCount,
     errorCount: staged.errorCount,
     imports: staged.output,
   }, { status: 202 });
