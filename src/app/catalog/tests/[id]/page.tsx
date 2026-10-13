@@ -4,6 +4,7 @@ import { permissionSet, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { OrderQuestionManager } from "@/components/order-question-manager";
 import { ResultLayoutManager } from "@/components/result-layout-manager";
+import { SpecialtyLayoutBatchEditor } from "@/components/specialty-layout-batch-editor";
 import { ReferenceIntervalGovernanceActions } from "@/components/reference-interval-governance-actions";
 import { TatPolicyGovernanceActions } from "@/components/tat-policy-governance-actions";
 import { getUiLocale, statusLabel, tr } from "@/lib/ui-i18n";
@@ -234,6 +235,22 @@ export default async function TestDetailPage({ params }: { params: Promise<{ id:
     {permissions.has("catalog.manage") && <section className="detail-card detail-section">
       <h2>{tr(locale, "Result Entry Layout", "تخطيط إدخال النتائج")}</h2>
       <p className="muted">{tr(locale, "Configure how components are grouped and presented in the result workspace. This does not change the underlying result model.", "هيئ طريقة تجميع وعرض المكوّنات في مساحة النتائج دون تغيير نموذج تخزين النتائج.")}</p>
+      <SpecialtyLayoutBatchEditor
+        testId={test.id}
+        locale={locale}
+        layout={test.resultEntryLayout}
+        sections={test.resultSections.map(section => ({
+          id: section.id, code: section.code, nameEn: section.nameEn, nameAr: section.nameAr,
+          displayOrder: section.displayOrder, columnCount: section.columnCount,
+          hintEn: section.hintEn, hintAr: section.hintAr, status: section.status,
+        }))}
+        components={test.components.map(component => ({
+          id: component.id, code: component.code, nameEn: component.nameEn,
+          nameAr: component.nameAr, resultSectionId: component.resultSectionId,
+          entryWidth: component.entryWidth, entryHintEn: component.entryHintEn,
+          entryHintAr: component.entryHintAr, status: component.status,
+        }))}
+      />
       <ResultLayoutManager
         testId={test.id}
         layout={test.resultEntryLayout}
