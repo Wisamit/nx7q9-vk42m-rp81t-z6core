@@ -72,6 +72,7 @@ export default async function RecallQualityFollowupPage({searchParams}:{
  const url=(n:number)=>"/inventory/recall-quality?state="+state+"&page="+n;
  const stateUrl=(st:"ALL"|"OPEN")=>"/inventory/recall-quality?state="+st+"&page=1";
  const local=(v:{nameEn:string;nameAr:string|null})=>locale==="ar"?v.nameAr||v.nameEn:v.nameEn;
+ const localUser=(v:{displayNameEn:string;displayNameAr:string|null})=>locale==="ar"?v.displayNameAr||v.displayNameEn:v.displayNameEn;
  return <main className="catalog-shell">
   <header className="page-header">
    <div><p className="eyebrow">{tr(locale,"Quality follow-up","متابعة الجودة")}</p>
@@ -145,7 +146,7 @@ export default async function RecallQualityFollowupPage({searchParams}:{
       <td><strong>{row.nonconformance.caseNumber}</strong>
        <div className="table-subtext">{row.nonconformance.title}</div></td>
       <td>{row.nonconformance.severity}</td><td>{row.nonconformance.status}</td>
-      <td>{row.nonconformance.owner?local(row.nonconformance.owner):"—"}</td>
+      <td>{row.nonconformance.owner?localUser(row.nonconformance.owner):"—"}</td>
       <td><Link href={"/inventory/lot-impact/"+row.lotId} className="secondary-link">
        {tr(locale,"Lot evidence","أدلة التشغيلة")}</Link></td>
      </tr>)}</tbody>
