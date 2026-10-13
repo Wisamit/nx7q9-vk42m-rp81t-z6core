@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { StaffStepUpDialog } from "@/components/staff-step-up-dialog";
 
 type MergePatient = {
   id: string;
@@ -18,7 +19,9 @@ export function PatientMergePanel({
   current,
   candidates,
   locale,
+  activeBranchId,
 }: {
+  activeBranchId: string;
   current: MergePatient;
   candidates: MergePatient[];
   locale: "ar" | "en";
@@ -27,6 +30,9 @@ export function PatientMergePanel({
   const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
+  const [pendingMerge, setPendingMerge] = useState<{
+    source: MergePatient; target: MergePatient; reason: string;
+  } | null>(null);
   const evidenceLabel = (code: MergePatient["evidence"][number]) =>
     code === "NAME_DOB"
       ? tr("Same normalized name + date of birth", "نفس الاسم المطبع + تاريخ الميلاد")
@@ -53,11 +59,15 @@ export function PatientMergePanel({
     ));
     if (!confirmation) return;
 
+    setPendingMerge({ source, target, reason: reason.trim() });
+  }
+
+  async function commitMerge(source: MergePatient, target: MergePatient, reason: string, stepUpToken: string) {
     setBusy(source.id + ":" + target.id);
     setMessage("");
     const response = await fetch("/api/patients/" + source.id + "/merge", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "x-staff-step-up-token": stepUpToken },
       body: JSON.stringify({ targetPatientId: target.id, reason }),
     });
     const body = await response.json().catch(() => ({})) as {
@@ -75,6 +85,8 @@ export function PatientMergePanel({
         target_not_canonical: tr("The target patient must be an active canonical record.", "يجب أن يكون سجل المريض الهدف سجلاً أساسياً نشطاً."),
         portal_account_conflict: tr("Both records have portal accounts. Resolve that identity conflict first.", "كلا السجلين مرتبطان بحسابي بوابة. عالج تعارض الهوية أولاً."),
         merge_conflict: tr("The patient changed during the merge. Refresh and review again.", "تغير سجل المريض أثناء الدمج. حدّث الصفحة وراجع السجلين من جديد."),
+        fresh_staff_reauthentication_required: tr("Fresh identity verification required. Start the merge again.", "يلزم تأكيد هوية جديد. أعد بدء الدمج."),
+        step_up_session_or_branch_changed: tr("Active branch or session changed. Sign in to the correct branch and retry.", "تغير الفرع النشط أو الجلسة. ادخل إلى الفرع الصحيح وأعد المحاولة."),
         portal_account_move_conflict: tr("The portal account changed during the merge. Refresh and review again.", "تغير حساب البوابة أثناء الدمج. حدّث الصفحة وراجع من جديد."),
       };
       setMessage(errors[body.error || ""] || tr("Patient merge failed.", "فشل دمج سجل المريض."));
@@ -135,5 +147,14 @@ export function PatientMergePanel({
       })}
     </div>
     {message && <p className="muted">{message}</p>}
+    <StaffStepUpDialog open={pendingMerge !== null} action="PATIENT_MERGE"
+      resourceKey={pendingMerge ? [pendingMerge.source.id, pendingMerge.target.id].join(":") : ""}
+      branchId={activeBranchId} locale={locale}
+      onCancel={() => setPendingMerge(null)}
+      onGranted={token => {
+        const item = pendingMerge;
+        setPendingMerge(null);
+        if (item) void commitMerge(item.source, item.target, item.reason, token);
+      }} />
   </section>;
 }
