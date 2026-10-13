@@ -9,7 +9,8 @@ import { catalogExportTypes, type CatalogExportType } from "@/lib/catalog-config
 export const dynamic = "force-dynamic";
 
 const ordered: CatalogExportType[] = [
-  "TEST", "COMPONENT", "UNIT", "REFERENCE_INTERVAL", "PRICE_LIST", "PRICE_LIST_ITEM",
+  "TEST", "COMPONENT", "UNIT", "PANEL", "PACKAGE",
+  "REFERENCE_INTERVAL", "PRICE_LIST", "PRICE_LIST_ITEM", "PRICE_LIST_PACKAGE_ITEM",
 ];
 
 /**
@@ -83,9 +84,14 @@ export async function GET(request: NextRequest) {
     });
     if (!liveScope) return { error: "export_clinical_scope_changed", httpStatus: 403 } as const;
 
-    // The same repeatable-read snapshot covers all six groups. Subordinate
+    // The same repeatable-read snapshot covers all selected groups. Subordinate
     // masters do not need to participate in the organization locking convention.
     const testScope = { ...clinicalImportTestWhere(liveScope), status: undefined };
+    // A partial or mixed-department composite must never be exported.
+    const fullyVisibleItems = {
+      some: { test: testScope },
+      every: { test: testScope },
+    };
     const branchScope = { OR: [{ branchId: null }, { branchId: { in: branchIds } }] };
     const genericPriceScope = { OR: [
       { scopeType: "ORGANIZATION" as const, branchId: null },
@@ -124,6 +130,32 @@ export async function GET(request: NextRequest) {
         unit: { select: { code: true, symbol: true } },
       },
     });
+  } else if (type === "PANEL") {
+    records = await tx.testPanel.findMany({
+      ...base, where: { organizationId, items: fullyVisibleItems, ...cursorScope },
+      select: {
+        id: true, code: true, nameEn: true, nameAr: true,
+        descriptionEn: true, descriptionAr: true, status: true,
+        createdAt: true, updatedAt: true, deactivatedAt: true,
+        items: { select: {
+          testId: true, displayOrder: true, required: true,
+          test: { select: { code: true } },
+        }, orderBy: [{ displayOrder: "asc" }, { testId: "asc" }] },
+      },
+    });
+  } else if (type === "PACKAGE") {
+    records = await tx.commercialPackage.findMany({
+      ...base, where: { organizationId, items: fullyVisibleItems, ...cursorScope },
+      select: {
+        id: true, code: true, nameEn: true, nameAr: true,
+        descriptionEn: true, descriptionAr: true, status: true,
+        createdAt: true, updatedAt: true, deactivatedAt: true,
+        items: { select: {
+          testId: true, displayOrder: true,
+          test: { select: { code: true } },
+        }, orderBy: [{ displayOrder: "asc" }, { testId: "asc" }] },
+      },
+    });
   } else if (type === "UNIT") {
     records = await tx.unit.findMany({
       ...base, where: { organizationId, ...cursorScope },
@@ -159,6 +191,26 @@ export async function GET(request: NextRequest) {
         contractId: true, currency: true, priority: true, effectiveFrom: true,
         effectiveTo: true, status: true, createdAt: true, updatedAt: true,
         deactivatedAt: true,
+      },
+    });
+  } else if (type === "PRICE_LIST_PACKAGE_ITEM") {
+    records = await tx.priceListPackageItem.findMany({
+      ...base, where: {
+        ...cursorScope,
+        package: { organizationId, items: fullyVisibleItems },
+        priceList: {
+          organizationId, ...genericPriceScope,
+          sourceId: null, clientId: null, contractId: null, referrerId: null,
+        },
+      },
+      select: {
+        id: true, priceListId: true, packageId: true,
+        unitPrice: true, effectiveFrom: true, effectiveTo: true, status: true,
+        createdAt: true, updatedAt: true, deactivatedAt: true,
+        package: { select: { code: true } },
+        priceList: { select: {
+          code: true, currency: true, scopeType: true, branchId: true,
+        } },
       },
     });
   } else if (type === "PRICE_LIST_ITEM") {
