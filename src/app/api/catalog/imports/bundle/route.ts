@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
-import type { Prisma } from "../../../../../../generated/prisma/client";
+import { Prisma } from "../../../../../../generated/prisma/client";
+import { sameCompositeMembership, type CompositeMember } from "@/lib/catalog-composite-bundle";
 import { permissionSet, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import {
@@ -135,6 +136,7 @@ export async function POST(request: Request) {
   const testWhere = { ...clinicalImportTestWhere(liveScope), status: undefined };
   const testIds = [...new Set([
     ...parsed.ids.tests,
+    ...parsed.ids.memberTests,
     ...references.filter(x => x.entityType === "COMPONENT" || x.entityType === "PRICE_LIST_ITEM")
       .map(x => x.original.testId as string),
   ])];
@@ -150,9 +152,13 @@ export async function POST(request: Request) {
   ])];
   const priceListIds = [...new Set([
     ...parsed.ids.priceLists,
+    ...parsed.ids.compositePriceLists,
     ...references.filter(x => x.entityType === "PRICE_LIST_ITEM")
       .map(x => x.original.priceListId as string),
   ])];
+  const panelIds = [...new Set(parsed.ids.panels)];
+  const packageIds = [...new Set([...parsed.ids.packages, ...parsed.ids.pricedPackages])];
+  const packagePriceIds = [...new Set(parsed.ids.packagePrices)];
   const permittedPriceList = {
     organizationId: scope.organizationId,
     OR: [
@@ -160,7 +166,7 @@ export async function POST(request: Request) {
       { scopeType: "BRANCH" as const, branchId: { in: [...activeBranches] } },
     ],
   };
-  const [tests, units, components, intervals, lists, prices] = await Promise.all([
+  const [tests, units, components, intervals, lists, prices, panels, packages, packagePrices] = await Promise.all([
     tx.labTest.findMany({ where: { ...testWhere, id: { in: testIds } },
       select: { id: true, code: true, departmentId: true } }),
     tx.unit.findMany({ where: { organizationId: scope.organizationId, id: { in: unitIds } },
@@ -180,12 +186,15 @@ export async function POST(request: Request) {
   ]);
   if (tests.length !== testIds.length || units.length !== unitIds.length ||
       components.length !== componentIds.length || intervals.length !== parsed.ids.intervals.length ||
-      lists.length !== priceListIds.length || prices.length !== parsed.ids.prices.length) {
+      lists.length !== priceListIds.length || prices.length !== parsed.ids.prices.length ||
+      panels.length !== panelIds.length || packages.length !== packageIds.length ||
+      packagePrices.length !== packagePriceIds.length) {
     return { error: "bundle_master_identity_or_scope_changed", httpStatus: 403 } as const;
   }
   const byId = <T extends { id: string }>(rows: T[]) => new Map(rows.map(x => [x.id, x]));
   const testMap = byId(tests), unitMap = byId(units), componentMap = byId(components);
   const intervalMap = byId(intervals), listMap = byId(lists), priceMap = byId(prices);
+  const panelMap = byId(panels), packageMap = byId(packages), packagePriceMap = byId(packagePrices);
   for (const row of references) {
     const n = row.normalized, original = row.original;
     let consistent = true;
