@@ -21,8 +21,6 @@ test("Stage 113 MariaDB: real current-report version, urgency, cancellation and 
     cleanup.unshift({sql:"DELETE FROM "+table+" WHERE id=?",id});
   }
   const now=new Date("2026-10-13T12:00:00.000Z");
-  const local={overdue:"2026-10-13T08:00",soon:"2026-10-13T16:00",
-    future:"2026-10-15T12:00"};
   const ids:Record<string,string>={};
   try{
     for(const [id,c]of [[org,"O"],[foreignOrg,"F"]])
