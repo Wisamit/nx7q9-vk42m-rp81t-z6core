@@ -115,8 +115,15 @@ export function OrganizationStructureManager({locale,canManage}:{locale:"ar"|"en
         {id:stationId,operation:"update",nameEn:stationDraft.nameEn,nameAr:stationDraft.nameAr,
           departmentId:stationDraft.departmentId||null});
   }
-  function setWindow(day:string,field:"open"|"close",value:string){
-    setHours(prev=>({...prev,days:{...prev.days,[day]:[{...(prev.days[day]?.[0]||{open:"09:00",close:"17:00"}),[field]:value}]}}));
+  function setWindow(day:string,index:number,field:"open"|"close",value:string){
+    setHours(prev=>({...prev,days:{...prev.days,[day]:(prev.days[day]||[]).map((window,i)=>
+      i===index?{...window,[field]:value}:window)}}));
+  }
+  function addWindow(day:string){
+    setHours(prev=>({...prev,days:{...prev.days,[day]:[...(prev.days[day]||[]),{open:"17:00",close:"18:00"}]}}));
+  }
+  function removeWindow(day:string,index:number){
+    setHours(prev=>({...prev,days:{...prev.days,[day]:(prev.days[day]||[]).filter((_,i)=>i!==index)}}));
   }
   const chosenBranch=branches.find(b=>b.id===branchId);
   const chosenDepartment=departments.find(d=>d.id===departmentId);
@@ -191,12 +198,19 @@ export function OrganizationStructureManager({locale,canManage}:{locale:"ar"|"en
               disabled={!canManage||chosenBranch.status!=="ACTIVE"}
               onChange={e=>setHours(h=>({...h,days:{...h.days,[day]:e.target.checked?[{open:"09:00",close:"17:00"}]:[]}}))}/>
               {tr(en,ar)}</label>
-            {(hours.days[day]||[]).length>0&&<>
-              <input aria-label={tr("Opening time","وقت الفتح")+" "+tr(en,ar)} type="time" value={hours.days[day][0].open}
-                disabled={!canManage} onChange={e=>setWindow(day,"open",e.target.value)}/>
-              <input aria-label={tr("Closing time","وقت الإغلاق")+" "+tr(en,ar)} type="time" value={hours.days[day][0].close}
-                disabled={!canManage} onChange={e=>setWindow(day,"close",e.target.value)}/>
-            </>}
+            {(hours.days[day]||[]).map((window,index)=><div className="inline-actions" key={index}>
+              <input aria-label={tr("Opening time","وقت الفتح")+" "+tr(en,ar)+" "+(index+1)}
+                type="time" value={window.open} disabled={!canManage}
+                onChange={e=>setWindow(day,index,"open",e.target.value)}/>
+              <input aria-label={tr("Closing time","وقت الإغلاق")+" "+tr(en,ar)+" "+(index+1)}
+                type="time" value={window.close} disabled={!canManage}
+                onChange={e=>setWindow(day,index,"close",e.target.value)}/>
+              {canManage&&<button type="button" className="secondary-button" onClick={()=>removeWindow(day,index)}>
+                {tr("Remove period","حذف الفترة")}</button>}
+            </div>)}
+            {canManage&&(hours.days[day]||[]).length>0&&(hours.days[day]||[]).length<4&&
+              <button type="button" className="secondary-button" onClick={()=>addWindow(day)}>
+                {tr("Add period","إضافة فترة")}</button>}
           </div>)}
           {canManage&&chosenBranch.status==="ACTIVE"&&<button type="button" className="secondary-button" disabled={busy}
             onClick={()=>void mutate("branches","PATCH",{id:chosenBranch.id,operation:"hours",workingHours:hours})}>
