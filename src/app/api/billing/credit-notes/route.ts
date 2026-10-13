@@ -7,6 +7,8 @@ import { prisma } from "@/lib/db";
 import { taxCreditReversal } from "@/lib/tax-policy";
 import { consumeStaffStepUp, StaffStepUpError } from "@/lib/staff-step-up";
 
+class CreditNoteStateChanged extends Error {}
+
 function text(value: unknown, max = 1000) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
 }
@@ -153,7 +155,7 @@ export async function POST(request: Request) {
         status: state.status,
       },
     });
-    if (updated.count !== 1) return { error: "invoice_changed", httpStatus: 409 } as const;
+    if (updated.count !== 1) throw new CreditNoteStateChanged();
 
     const creditNote = await tx.creditNote.create({
       data: {
@@ -226,6 +228,9 @@ export async function POST(request: Request) {
   }, { timeout: 30000 }).catch((error: unknown) => {
     if (error instanceof StaffStepUpError) {
       return { error: error.code, httpStatus: error.statusCode } as const;
+    }
+    if (error instanceof CreditNoteStateChanged) {
+      return { error: "invoice_changed", httpStatus: 409 } as const;
     }
     throw error;
   });
