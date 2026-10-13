@@ -124,6 +124,7 @@ export function ResultWorkflowActions({
   const [showAmendment, setShowAmendment] = useState(false);
   const [showMedicalReturn, setShowMedicalReturn] = useState(false);
   const [stepUpPending,setStepUpPending]=useState<StepUpPurpose|null>(null);
+  const [pendingAmendmentReason,setPendingAmendmentReason]=useState("");
 
   const snapshot = validationPolicySnapshot && typeof validationPolicySnapshot === "object"
     ? validationPolicySnapshot as ValidationSnapshot
@@ -301,12 +302,17 @@ export function ResultWorkflowActions({
 
     if (!confirm(tr("Start an amendment? The released result will remain preserved while a new version is prepared.", "بدء تعديل؟ ستبقى النتيجة الصادرة محفوظة بينما يتم إعداد إصدار جديد."))) return;
 
+    setPendingAmendmentReason(reason);
+    setStepUpPending("RESULT_AMEND");
+  }
+
+  async function commitAmendment(reason: string, stepUpToken: string) {
     setBusy("amend");
     setMessage("");
 
     const response = await fetch("/api/results/" + resultId + "/amend", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "x-staff-step-up-token": stepUpToken },
       body: JSON.stringify({ reason }),
     });
     const body = await response.json().catch(() => ({}));
@@ -316,7 +322,14 @@ export function ResultWorkflowActions({
       setShowAmendment(false);
       router.refresh();
     } else {
-      setMessage(body.error || tr("Could not start amendment.", "تعذر بدء التعديل."));
+      const refusal = body.error === "fresh_staff_reauthentication_required" ||
+        body.error === "step_up_already_used_or_expired" ||
+        body.error === "step_up_session_or_branch_changed"
+          ? tr("A fresh approval proof is required for this amendment.", "يلزم تأكيد هوية جديد لهذا التعديل.")
+          : body.error === "newer_result_version_already_exists_or_changed"
+            ? tr("Result changed or another amendment version exists. Refresh and review.", "تغيرت النتيجة أو يوجد إصدار تعديل آخر. حدّث الصفحة وراجع.")
+            : body.error || tr("Could not start amendment.", "تعذر بدء التعديل.");
+      setMessage(refusal);
     }
     setBusy("");
   }
@@ -330,11 +343,16 @@ export function ResultWorkflowActions({
     <StaffStepUpDialog open={stepUpPending!==null}
       action={stepUpPending||"MEDICAL_APPROVAL"} resourceKey={resultId}
       branchId={performingBranchId} locale={locale}
-      onCancel={()=>setStepUpPending(null)}
+      onCancel={()=>{setStepUpPending(null);setPendingAmendmentReason("");}}
       onGranted={token=>{
         const action=stepUpPending;setStepUpPending(null);
         if(action==="MEDICAL_APPROVAL")void approveMedicalValidation(token);
         if(action==="RESULT_RELEASE")void releaseResult(token);
+        if(action==="RESULT_AMEND"){
+          const reason=pendingAmendmentReason;
+          setPendingAmendmentReason("");
+          if(reason)void commitAmendment(reason,token);
+        }
       }}/>
     <div className="result-workflow-status">
       <div><span>{tr("Result status", "حالة النتيجة")}</span><strong>{sharedStatusLabel(locale, resultStatus)}</strong></div>

@@ -6,6 +6,9 @@ export const stepUpPermissions = {
   RESULT_RELEASE: "results.release",
   DISCOUNT_APPROVAL: "billing.discount.approve",
   REFUND_POST: "billing.manage",
+  PATIENT_MERGE: "patients.merge",
+  RESULT_AMEND: "results.amend",
+  CREDIT_NOTE_ISSUE: "billing.manage",
 } as const;
 export type StaffStepUpAction=keyof typeof stepUpPermissions;
 export const STEP_UP_TTL_MS=2*60_000;
@@ -24,9 +27,15 @@ export function validStepUpAction(value:unknown):value is StaffStepUpAction{
 export function validStepUpResource(action:StaffStepUpAction,value:unknown):value is string{
   const uuid="[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
   if(typeof value!=="string"||value.length>150)return false;
-  const refund = `^${uuid}:${uuid}:[0-9]+(?:\\.[0-9]{1,4})?:${uuid}$`;
-  return new RegExp(action==="REFUND_POST" ? refund : `^${uuid}$`,"i").test(value);
+  const refund = `^${uuid}:${uuid}:[0-9]+(?:[.][0-9]{1,4})?:${uuid}$`;
+  const merge = `^${uuid}:${uuid}$`;
+  const credit = `^${uuid}:[0-9]+(?:[.][0-9]{1,4})?$`;
+  const pattern=action==="REFUND_POST" ? refund
+    : action==="PATIENT_MERGE" ? merge
+    : action==="CREDIT_NOTE_ISSUE" ? credit : `^${uuid}$`;
+  return new RegExp(pattern,"i").test(value);
 }
+
 export async function consumeStaffStepUp(
   tx:Prisma.TransactionClient,
   args:{token:unknown;action:StaffStepUpAction;resourceKey:string;

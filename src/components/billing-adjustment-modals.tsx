@@ -8,6 +8,7 @@ import {StaffStepUpDialog} from "@/components/staff-step-up-dialog";
 
 type CreditInvoiceOption = {
   id: string;
+  branchId: string;
   invoiceNumber: string;
   currency: string;
   remainingCredit: string;
@@ -39,6 +40,9 @@ function errorMessage(locale: "ar" | "en", code: string) {
   const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
   const messages: Record<string, string> = {
     invalid_fields: tr("Complete all required fields.", "أكمل جميع الحقول المطلوبة."),
+    fresh_staff_reauthentication_required: tr("This financial adjustment requires fresh identity verification.", "تتطلب التسوية المالية تأكيداً جديداً للهوية."),
+    step_up_session_or_branch_changed: tr("Your session or active branch changed; verify again.", "تغيرت الجلسة أو الفرع النشط؛ أعد تأكيد الهوية."),
+    step_up_already_used_or_expired: tr("The approval proof is already used or expired; verify again.", "انتهت صلاحية إثبات الموافقة أو سبق استخدامه؛ أعد التأكيد."),
     invalid_amount: tr("Enter a valid amount.", "أدخل مبلغًا صحيحًا."),
     invoice_not_creditable: tr("This invoice cannot receive a credit note.", "لا يمكن إصدار إشعار دائن لهذه الفاتورة."),
     invoice_fully_credited: tr("The invoice is already fully credited.", "تمت تسوية كامل قيمة الفاتورة بإشعارات دائنة."),
@@ -77,6 +81,11 @@ export function CreditNoteCreateModal({
   const [message, setMessage] = useState("");
   const [selectedInvoiceId, setSelectedInvoiceId] = useState("");
   const [lineAmounts, setLineAmounts] = useState<Record<string, string>>({});
+  const [pendingCredit, setPendingCredit] = useState<{
+    invoiceId: string; branchId: string; amount: string; reason: string;
+    lines: Array<{ invoiceLineId: string; amount: string }>;
+  } | null>(null);
+  const creditFormRef = useRef<HTMLFormElement>(null);
   const selectedInvoice = invoices.find(item => item.id === selectedInvoiceId);
   const taxed = Boolean(selectedInvoice && Number(selectedInvoice.taxTotal) > 0);
   const selectedLineCredits = (selectedInvoice?.lines || [])
@@ -91,17 +100,32 @@ export function CreditNoteCreateModal({
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
+    const invoice = invoices.find(item => item.id === String(form.get("invoiceId") || ""));
+    if (!invoice) {
+      setMessage(tr("Select an active invoice.", "اختر فاتورة صالحة."));
+      return;
+    }
+    setPendingCredit({
+      invoiceId: invoice.id,
+      branchId: invoice.branchId,
+      amount: String(form.get("amount") || ""),
+      reason: String(form.get("reason") || ""),
+      lines: taxed ? selectedLineCredits : [],
+    });
+  }
+
+  async function postCredit(payload: NonNullable<typeof pendingCredit>, stepUpToken: string) {
     setBusy(true);
     setMessage("");
 
     const response = await fetch("/api/billing/credit-notes", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "x-staff-step-up-token": stepUpToken },
       body: JSON.stringify({
-        invoiceId: form.get("invoiceId"),
-        amount: form.get("amount"),
-        reason: form.get("reason"),
-        ...(taxed ? { lines: selectedLineCredits } : {}),
+        invoiceId: payload.invoiceId,
+        amount: payload.amount,
+        reason: payload.reason,
+        ...(payload.lines.length ? { lines: payload.lines } : {}),
       }),
     });
     const body = await response.json().catch(() => ({}));
@@ -112,7 +136,7 @@ export function CreditNoteCreateModal({
       setOpen(false);
       setSelectedInvoiceId("");
       setLineAmounts({});
-      event.currentTarget.reset();
+      creditFormRef.current?.reset();
       router.refresh();
     } else {
       setMessage(errorMessage(locale, body.error || ""));
@@ -134,7 +158,7 @@ export function CreditNoteCreateModal({
       description={tr("Create a traceable financial adjustment without changing the original invoice amount.", "أنشئ تسوية مالية قابلة للتتبع دون تغيير القيمة الأصلية للفاتورة.")}
       size="md"
     >
-      <form className="catalog-form" onSubmit={submit}>
+      <form ref={creditFormRef} className="catalog-form" onSubmit={submit}>
         <label className="form-span">{tr("Invoice", "الفاتورة")}
           <select name="invoiceId" required value={selectedInvoiceId} onChange={event => { setSelectedInvoiceId(event.target.value); setLineAmounts({}); }}>
             <option value="">{tr("Select invoice…", "اختر الفاتورة…")}</option>
@@ -163,6 +187,15 @@ export function CreditNoteCreateModal({
         {message && <div className="form-error form-span">{message}</div>}
       </form>
     </CrudModal>
+    <StaffStepUpDialog open={pendingCredit !== null} action="CREDIT_NOTE_ISSUE"
+      resourceKey={pendingCredit ? [pendingCredit.invoiceId, pendingCredit.amount].join(":") : ""}
+      branchId={pendingCredit?.branchId || ""} locale={locale}
+      onCancel={() => setPendingCredit(null)}
+      onGranted={token => {
+        const payload = pendingCredit;
+        setPendingCredit(null);
+        if (payload) void postCredit(payload, token);
+      }} />
   </>;
 }
 

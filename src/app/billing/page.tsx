@@ -117,6 +117,7 @@ export default async function BillingPage() {
     .filter(invoice => ["ISSUED", "PARTIALLY_PAID", "PAID"].includes(invoice.status) && invoice.creditedAmount.lt(invoice.total))
     .map(invoice => ({
       id: invoice.id,
+      branchId: invoice.branchId,
       invoiceNumber: invoice.invoiceNumber,
       currency: invoice.currency,
       remainingCredit: invoice.total.sub(invoice.creditedAmount).toFixed(4),
