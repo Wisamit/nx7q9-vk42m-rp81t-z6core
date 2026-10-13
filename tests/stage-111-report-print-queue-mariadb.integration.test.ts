@@ -4,7 +4,6 @@ import {randomUUID} from "node:crypto";
 import mysql from "mysql2/promise";
 import {
   buildReportQueueQueries,parseReportQueueFilters,
-  type ReportQueueFilters,
 } from "../src/lib/report-print-queue.ts";
 
 test("Stage 111 real MariaDB: current-version print evidence excludes old versions, retractions and unauthorized branches",{
