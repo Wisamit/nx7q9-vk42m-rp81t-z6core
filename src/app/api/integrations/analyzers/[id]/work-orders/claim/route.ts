@@ -18,6 +18,26 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "analyzer_bridge_unauthorized" }, { status: 401 });
   }
 
+  // Legacy callers may omit a body. Outbound file handoff requests one lease
+  // at a time so every claimed command can be journaled before the next one.
+  const bodyText = await request.text();
+  let limit = 20;
+  if (bodyText.trim()) {
+    let parsed: unknown;
+    try { parsed = JSON.parse(bodyText); } catch {
+      return NextResponse.json({ error: "invalid_claim_request" }, { status: 400 });
+    }
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return NextResponse.json({ error: "invalid_claim_request" }, { status: 400 });
+    }
+    const requested = (parsed as { limit?: unknown }).limit;
+    if (requested !== undefined) {
+      if (!Number.isInteger(requested) || Number(requested) < 1 || Number(requested) > 20) {
+        return NextResponse.json({ error: "invalid_claim_limit" }, { status: 400 });
+      }
+      limit = Number(requested);
+    }
+  }
   const now = new Date();
   const candidates = await prisma.analyzerWorkOrder.findMany({
     where: {
@@ -31,12 +51,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       ],
     },
     orderBy: { createdAt: "asc" },
-    take: 20,
+    take: limit,
   });
 
   const commands: Array<{
     workOrderId: string;
     leaseToken: string;
+    leaseExpiresAt: string;
     attempt: number;
     bridgeDeviceKey: string;
     accessionNumber: string;
@@ -208,6 +229,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       return {
         workOrderId: candidate.id,
         leaseToken,
+        leaseExpiresAt: expires.toISOString(),
         attempt: candidate.attemptCount + 1,
         bridgeDeviceKey: candidate.bridgeDeviceKeySnapshot,
         accessionNumber: candidate.accessionNumberSnapshot,

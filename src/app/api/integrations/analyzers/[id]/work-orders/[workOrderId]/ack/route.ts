@@ -33,14 +33,19 @@ export async function POST(
   // An accepted device transmission must retain the exact ASTM/HL7/etc.
   // bytes-as-text sent over the Bridge transport. A bare "sent" flag is
   // insufficient evidence for a clinical analyzer interface.
-  if (code === "ACCEPTED" && (typeof rawPayload !== "string" || rawPayload.length === 0 || rawPayload.length > 1_000_000)) {
+  if (code === "ACCEPTED" && (typeof rawPayload !== "string" || Buffer.byteLength(rawPayload, "utf8") === 0 || Buffer.byteLength(rawPayload, "utf8") > 1_000_000)) {
     return NextResponse.json({ error: "outbound_raw_payload_required" }, { status: 400 });
   }
-  if (rawPayload !== undefined && (typeof rawPayload !== "string" || rawPayload.length > 1_000_000)) {
+  if (rawPayload !== undefined && (typeof rawPayload !== "string" || Buffer.byteLength(rawPayload, "utf8") > 1_000_000)) {
     return NextResponse.json({ error: "invalid_outbound_raw_payload" }, { status: 400 });
   }
   const claimTokenHash = createHash("sha256").update(leaseToken).digest("hex");
   const note = typeof message === "string" ? message.trim() : "";
+  // Replay fingerprint binds the acknowledgement disposition and exact
+  // outbound wire evidence, without exposing the token in an audit row.
+  const acknowledgementFingerprint = createHash("sha256")
+    .update(JSON.stringify([code, note, typeof rawPayload === "string" ? rawPayload : null]))
+    .digest("hex");
   const now = new Date();
 
   const outcome = await prisma.$transaction(async tx => {
@@ -54,6 +59,33 @@ export async function POST(
     });
     if (!current) return "NOT_FOUND" as const;
     if (current.status !== "CLAIMED" || current.claimTokenHash !== claimTokenHash) {
+      // A crash after a successful LIS response but before fsyncing the
+      // bridge receipt must not force a duplicate analyzer transmission.
+      // Never replay an old acknowledgement for a freshly CLAIMED attempt.
+      if (current.status !== "CLAIMED"
+        && current.lastAckTokenHash === claimTokenHash
+        && current.lastAckFingerprint === acknowledgementFingerprint
+        && ["ACKNOWLEDGED", "RETRY_WAIT", "DEAD_LETTER"].includes(current.status)) {
+        const priorWire = code === "ACCEPTED"
+          ? await tx.analyzerMessage.findUnique({
+              where: {
+                analyzerId_bridgeMessageId: {
+                  analyzerId: credential.analyzer.id,
+                  bridgeMessageId: `${current.id}:${current.attemptCount}`,
+                },
+              },
+              select: { id: true },
+            })
+          : null;
+        return {
+          status: current.status, nextAttemptAt: current.nextAttemptAt,
+          workOrderId: current.id, outboundAnalyzerMessageId: priorWire?.id ?? null,
+          replayed: true,
+        };
+      }
+      return "STALE_CLAIM" as const;
+    }
+    if (!current.leaseExpiresAt || current.leaseExpiresAt <= now) {
       return "STALE_CLAIM" as const;
     }
 
@@ -70,12 +102,15 @@ export async function POST(
         analyzerId: credential.analyzer.id,
         status: "CLAIMED",
         claimTokenHash,
+        leaseExpiresAt: { gt: now },
         attemptCount: current.attemptCount,
         updatedAt: current.updatedAt,
       },
       data: {
         status: nextStatus,
         claimTokenHash: null,
+        lastAckTokenHash: claimTokenHash,
+        lastAckFingerprint: acknowledgementFingerprint,
         leaseExpiresAt: null,
         nextAttemptAt,
         acknowledgedAt: accepted ? now : null,
@@ -134,5 +169,5 @@ export async function POST(
   if (outcome === "STALE_CLAIM") {
     return NextResponse.json({ error: "work_order_lease_changed" }, { status: 409 });
   }
-  return NextResponse.json({ status: "ok", workOrderStatus: outcome.status, nextAttemptAt: outcome.nextAttemptAt, workOrderId: outcome.workOrderId, outboundAnalyzerMessageId: outcome.outboundAnalyzerMessageId });
+  return NextResponse.json({ status: "ok", workOrderStatus: outcome.status, nextAttemptAt: outcome.nextAttemptAt, workOrderId: outcome.workOrderId, outboundAnalyzerMessageId: outcome.outboundAnalyzerMessageId, replayed: "replayed" in outcome && outcome.replayed === true });
 }

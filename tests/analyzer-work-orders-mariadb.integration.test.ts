@@ -67,14 +67,42 @@ test("MariaDB analyzer work order claims are CAS-idempotent and old leases canno
       "UPDATE analyzer_work_orders SET status='ACKNOWLEDGED' WHERE id=? AND status='CLAIMED' AND claim_token_hash=?",[workOrder,hashOne]);
     assert.equal(staleAck.affectedRows,0);
 
+    const wire="MSH|^~\\\\&|CI|LAB|DEVICE|LAB|20261013||OML^O21|TEST|P|2.5\\r";
+    const fingerprint=createHash("sha256").update(JSON.stringify(["ACCEPTED","",wire])).digest("hex");
     const [accepted]=await b.execute<mysql.ResultSetHeader>(
-      "UPDATE analyzer_work_orders SET status='ACKNOWLEDGED',claim_token_hash=NULL,lease_expires_at=NULL,acknowledged_at=NOW(3) WHERE id=? AND status='CLAIMED' AND claim_token_hash=?",[workOrder,hashTwo]);
+      "UPDATE analyzer_work_orders SET status='ACKNOWLEDGED',claim_token_hash=NULL,lease_expires_at=NULL,last_ack_token_hash=?,last_ack_fingerprint=?,acknowledged_at=NOW(3) WHERE id=? AND status='CLAIMED' AND claim_token_hash=?",
+      [hashTwo,fingerprint,workOrder,hashTwo]);
     assert.equal(accepted.affectedRows,1);
-    const [final]=await db.execute<mysql.RowDataPacket[]>("SELECT status,attempt_count,claim_token_hash,acknowledged_at FROM analyzer_work_orders WHERE id=?",[workOrder]);
+    const [final]=await db.execute<mysql.RowDataPacket[]>("SELECT status,attempt_count,claim_token_hash,acknowledged_at,last_ack_token_hash,last_ack_fingerprint FROM analyzer_work_orders WHERE id=?",[workOrder]);
     assert.equal(final[0]?.status,"ACKNOWLEDGED");
     assert.equal(final[0]?.attempt_count,2);
     assert.equal(final[0]?.claim_token_hash,null);
     assert.ok(final[0]?.acknowledged_at);
+    assert.equal(final[0]?.last_ack_token_hash,hashTwo);
+    assert.equal(final[0]?.last_ack_fingerprint,fingerprint);
+    const [identicalReplay]=await db.execute<mysql.RowDataPacket[]>(
+      "SELECT id FROM analyzer_work_orders WHERE id=? AND status='ACKNOWLEDGED' AND last_ack_token_hash=? AND last_ack_fingerprint=?",
+      [workOrder,hashTwo,fingerprint]);
+    assert.equal(identicalReplay.length,1);
+    for(const [tokenHash,payloadHash] of [
+      [hashOne,fingerprint],
+      [hashTwo,createHash("sha256").update(JSON.stringify(["ACCEPTED","","different-wire"])).digest("hex")],
+      [hashTwo,createHash("sha256").update(JSON.stringify(["REJECTED","",wire])).digest("hex")],
+    ]){
+      const [rejected]=await db.execute<mysql.RowDataPacket[]>(
+        "SELECT id FROM analyzer_work_orders WHERE id=? AND last_ack_token_hash=? AND last_ack_fingerprint=?",
+        [workOrder,tokenHash,payloadHash]);
+      assert.equal(rejected.length,0);
+    }
+    // After a newer claim, the old fingerprint alone must never authorize a
+    // replay. Any acknowledgement on an expired new lease is also rejected.
+    const leaseThree=randomBytes(32).toString("hex"),hashThree=createHash("sha256").update(leaseThree).digest("hex");
+    await db.execute("UPDATE analyzer_work_orders SET status='CLAIMED',claim_token_hash=?,lease_expires_at=DATE_SUB(NOW(3),INTERVAL 1 SECOND) WHERE id=?",
+      [hashThree,workOrder]);
+    const [expired]=await db.execute<mysql.ResultSetHeader>(
+      "UPDATE analyzer_work_orders SET status='ACKNOWLEDGED' WHERE id=? AND status='CLAIMED' AND claim_token_hash=? AND lease_expires_at>NOW(3)",
+      [workOrder,hashThree]);
+    assert.equal(expired.affectedRows,0);
   } finally {
     await Promise.all([a.rollback().catch(()=>{}),b.rollback().catch(()=>{})]);
     for(const row of cleanup) await db.execute(row.sql,row.params);

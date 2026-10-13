@@ -4857,6 +4857,8 @@ model AnalyzerWorkOrder {
   attemptCount               Int                     @default(0) @map("attempt_count")
   maxAttempts                Int                     @default(5) @map("max_attempts")
   claimTokenHash             String?                 @map("claim_token_hash") @db.Char(64)
+  lastAckTokenHash           String?                 @map("last_ack_token_hash") @db.Char(64)
+  lastAckFingerprint         String?                 @map("last_ack_fingerprint") @db.Char(64)
   claimedAt                  DateTime?               @map("claimed_at") @db.DateTime(3)
   leaseExpiresAt             DateTime?               @map("lease_expires_at") @db.DateTime(3)
   nextAttemptAt              DateTime?               @map("next_attempt_at") @db.DateTime(3)
