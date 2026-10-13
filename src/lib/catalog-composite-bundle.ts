@@ -23,7 +23,8 @@ export type CompositeBundleNormalized = {
 };
 
 export class CompositeBundleError extends Error {
-  constructor(readonly code: string) { super(code); }
+  readonly code: string;
+  constructor(code: string) { super(code); this.code = code; }
 }
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const asObject = (value: unknown): Record<string, unknown> => {
