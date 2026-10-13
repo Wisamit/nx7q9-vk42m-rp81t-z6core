@@ -26,8 +26,8 @@ test("Stage 116: all three export kinds registered without an import/mutation si
 test("Stage 116: both export paths reject partially visible panels and packages",()=>{
   for(const route of [paged,bundle]){
     assert.match(route,/const fullyVisibleItems = \{/);
-    assert.match(route,/some: \{ test: testScope \}/);
-    assert.match(route,/every: \{ test: testScope \}/);
+    assert.match(route,/some: \\{ test: (?:testScope|compositeTestScope) \\}/);
+    assert.match(route,/every: \\{ test: (?:testScope|compositeTestScope) \\}/);
     assert.match(route,/testPanel.findMany/);
     assert.match(route,/commercialPackage.findMany/);
     assert.match(route,/where: \{ organizationId, items: fullyVisibleItems, \.\.\.cursorScope \}/);
