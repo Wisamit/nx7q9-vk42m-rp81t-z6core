@@ -77,12 +77,29 @@ export default async function ImportBatchPage({
     const ids = new Set<string>();
     const components = new Set<string>();
     const lists = new Set<string>();
+    const panels = new Set<string>();
+    const packages = new Set<string>();
     for (const candidate of candidates) {
       const d = candidate.normalizedData;
       if (!d || typeof d !== "object" || Array.isArray(d)) notFound();
       const branchId = typeof d.branchId === "string" ? d.branchId : null;
       if (branchId && !authorBranches.has(branchId)) notFound();
       if (candidate.entityType === "TEST") ids.add(String(d.id));
+      if (candidate.entityType === "PANEL" || candidate.entityType === "PACKAGE") {
+        if (!Array.isArray(d.items) || !d.items.length) notFound();
+        for (const member of d.items) {
+          if (!member || typeof member !== "object" || Array.isArray(member) ||
+              typeof member.testId !== "string") notFound();
+          ids.add(member.testId);
+        }
+        if (candidate.entityType === "PANEL") panels.add(String(d.id));
+        else packages.add(String(d.id));
+      }
+      if (candidate.entityType === "PRICE_LIST_PACKAGE_ITEM") {
+        if (typeof d.priceListId !== "string" || typeof d.packageId !== "string") notFound();
+        lists.add(d.priceListId);
+        packages.add(d.packageId);
+      }
       if (candidate.entityType === "COMPONENT" || candidate.entityType === "PRICE_LIST_ITEM") {
         ids.add(String(d.testId));
       }
@@ -96,6 +113,20 @@ export default async function ImportBatchPage({
     if (ids.size) {
       const allowed = await prisma.labTest.count({ where: { ...testWhere, id: { in: [...ids] } } });
       if (allowed !== ids.size) notFound();
+    }
+    if (panels.size) {
+      const allowed = await prisma.testPanel.count({
+        where: { id: { in: [...panels] }, organizationId: session.user.organizationId,
+          items: { some: { test: testWhere }, every: { test: testWhere } } },
+      });
+      if (allowed !== panels.size) notFound();
+    }
+    if (packages.size) {
+      const allowed = await prisma.commercialPackage.count({
+        where: { id: { in: [...packages] }, organizationId: session.user.organizationId,
+          items: { some: { test: testWhere }, every: { test: testWhere } } },
+      });
+      if (allowed !== packages.size) notFound();
     }
     if (components.size) {
       const allowed = await prisma.testComponent.count({
