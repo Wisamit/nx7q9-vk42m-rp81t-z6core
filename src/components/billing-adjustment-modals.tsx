@@ -40,6 +40,9 @@ function errorMessage(locale: "ar" | "en", code: string) {
   const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
   const messages: Record<string, string> = {
     invalid_fields: tr("Complete all required fields.", "أكمل جميع الحقول المطلوبة."),
+    fresh_staff_reauthentication_required: tr("This financial adjustment requires fresh identity verification.", "تتطلب التسوية المالية تأكيداً جديداً للهوية."),
+    step_up_session_or_branch_changed: tr("Your session or active branch changed; verify again.", "تغيرت الجلسة أو الفرع النشط؛ أعد تأكيد الهوية."),
+    step_up_already_used_or_expired: tr("The approval proof is already used or expired; verify again.", "انتهت صلاحية إثبات الموافقة أو سبق استخدامه؛ أعد التأكيد."),
     invalid_amount: tr("Enter a valid amount.", "أدخل مبلغًا صحيحًا."),
     invoice_not_creditable: tr("This invoice cannot receive a credit note.", "لا يمكن إصدار إشعار دائن لهذه الفاتورة."),
     invoice_fully_credited: tr("The invoice is already fully credited.", "تمت تسوية كامل قيمة الفاتورة بإشعارات دائنة."),
