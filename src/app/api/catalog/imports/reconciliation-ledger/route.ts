@@ -16,6 +16,7 @@ export async function GET(request:NextRequest) {
   const cursor=request.nextUrl.searchParams.get("cursor");
   if(cursor&&!UUID.test(cursor))return fail("invalid_cursor",400);
   const organizationId=session.user.organizationId;
+  const grants=permissionSet(session);
   const branchId=session.activeBranchId;
   if(!branchId||!session.user.branchScopes.some(x=>x.branchId===branchId&&
     x.branch.organizationId===organizationId&&x.branch.status==="ACTIVE"))return fail("active_branch_scope_required",403);
@@ -30,7 +31,14 @@ export async function GET(request:NextRequest) {
   if(!live)return fail("live_import_read_authority_revoked",403);
   const limit=25;
   const batches=await prisma.catalogImportBatch.findMany({
-    where:{organizationId},
+    where:{
+      organizationId,
+      AND:[
+        {OR:[{sourceType:{notIn:["CSV_REVIEW","CONFIG_BUNDLE_REVIEW"]}},{createdByUserId:session.userId}]},
+        ...(grants.has("pricing.manage")?[]:[{rows:{none:{entityType:{in:["PRICE_LIST","PRICE_LIST_ITEM"]}}}}]),
+        ...(grants.has("catalog.reference_ranges.manage")?[]:[{rows:{none:{entityType:"REFERENCE_INTERVAL"}}}]),
+      ],
+    },
     select:{id:true,sourceType:true,sourceName:true,sourceChecksum:true,status:true,
       createdAt:true,validatedAt:true,importedAt:true},
     orderBy:[{createdAt:"desc"},{id:"desc"}],
