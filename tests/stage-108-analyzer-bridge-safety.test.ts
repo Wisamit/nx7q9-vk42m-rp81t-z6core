@@ -10,7 +10,7 @@ test("Stage 108 preserves authentic raw HL7/ASTM bytes, verifies idempotent mess
   assert.match(route,/Buffer\.byteLength\(rawPayload, "utf8"\)/);
   assert.doesNotMatch(route,/text\(body\.rawPayload/);
   assert.match(route,/winner\.payloadHash !== payloadHash/);
-  assert.match(route,/error\.code === "P2002"/);
+  assert.match(route,/error\.code !== "P2002"/);
   assert.match(route,/ANALYZER_MESSAGE_RECEIVED/);
 });
 

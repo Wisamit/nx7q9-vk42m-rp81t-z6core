@@ -104,7 +104,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     return created;
   }).catch(async error => {
-    if (!(error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002")) throw error;
+    if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;
     // The unique index is authoritative under concurrent bridge retries.
     return null;
   });
