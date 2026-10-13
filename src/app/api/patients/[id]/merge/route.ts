@@ -4,6 +4,7 @@ import { requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { patientMergeEligibility } from "@/lib/patient-merge";
 import { patientDuplicateEvidence } from "@/lib/patient-duplicate-review";
+import { consumeStaffStepUp, StaffStepUpError } from "@/lib/staff-step-up";
 
 function text(value: unknown, max = 1000) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -121,6 +122,20 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       const eligibility = patientMergeEligibility(source, target);
       if (!eligibility.ok) throw new PatientMergeError(eligibility.error);
 
+      // A merge changes canonical identity. Revalidate the one-time proof
+      // after both tenant-scoped records pass eligibility and before writes.
+      const stepUp = await consumeStaffStepUp(tx, {
+        token: request.headers.get("x-staff-step-up-token"),
+        action: "PATIENT_MERGE",
+        resourceKey: [sourcePatientId, targetPatientId].join(":"),
+        sessionId: session.id,
+        userId: session.user.id,
+        organizationId: session.user.organizationId,
+        branchId: session.activeBranchId || "",
+        ipAddress: ctx.ipAddress,
+        userAgent: ctx.userAgent,
+      });
+
       const mergedAt = new Date();
       const sourceIdentitySnapshot = mergeIdentitySnapshot(source);
       const targetIdentitySnapshot = mergeIdentitySnapshot(target);
@@ -198,7 +213,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
               patientMergeEventId: event.id,
               reparentedAliasCount: reparentedAliases.count,
               portalAccountMoved,
+              stepUpGrantId: stepUp.grantId,
+              stepUpProofMethod: stepUp.proofMethod,
               duplicateEvidenceSnapshot,
+              stepUpGrantId: stepUp.grantId,
+              stepUpProofMethod: stepUp.proofMethod,
             },
             reason,
             ipAddress: ctx.ipAddress,
@@ -242,6 +261,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     return NextResponse.json({ status: "merged", ...merged }, { status: 201 });
   } catch (error) {
+    if (error instanceof StaffStepUpError) {
+      return NextResponse.json({ error: error.code }, { status: error.statusCode });
+    }
     if (error instanceof PatientMergeError) {
       const status = error.code === "patient_not_found" ? 404 : 409;
       return NextResponse.json({ error: error.code }, { status });
