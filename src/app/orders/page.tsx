@@ -165,6 +165,8 @@ export default async function OrdersPage({ searchParams }: {
           discountLimitPercent={discountLimitPercent}
           locale={locale}
         />
+        <Link className="secondary-link" href="/orders/delivery-queue">{tr(locale,
+          "Promised delivery follow-up","متابعة مواعيد التسليم")}</Link>
         <Link className="secondary-link" href="/doctor-requisitions">
           {tr(locale,"Physician Requisitions","إحالات الأطباء")}</Link>
         <Link className="secondary-link" href="/pricing"><SystemIcon name="pricing" size={15} />{tr(locale, "Pricing", "الأسعار")}</Link>
