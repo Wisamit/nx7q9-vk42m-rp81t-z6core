@@ -91,7 +91,7 @@ test("Stage 114: report UI and history distinguish staff attestation from indepe
   assert.match(ui,/attestedInPerson:true/);
   assert.match(ui,/identity check/i);
   assert.match(ui,/independently verified proof of receipt/i);
-  assert.match(ui,/requestId.current?.payload!==payload/);
+  assert.ok(ui.includes("requestId.current?.payload!==payload"));
   assert.match(ui,/crypto.randomUUID\(\)/);
   assert.match(ui,/router.refresh\(\)/);
 });
