@@ -146,3 +146,22 @@ export function reportQueueHref(
   query.set("page", String(page));
   return "/reports?" + query.toString();
 }
+
+/** An immutable report snapshot, never a mutable central patient record. */
+export function reportQueuePatientIdentity(snapshot: unknown, locale: "ar" | "en") {
+  if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot))
+    return { patientNumber: "—", patientName: "—" };
+  const identity = (snapshot as Record<string, unknown>).patient;
+  if (!identity || typeof identity !== "object" || Array.isArray(identity))
+    return { patientNumber: "—", patientName: "—" };
+  const record = identity as Record<string, unknown>;
+  const field = (key: string) => {
+    const value = record[key];
+    return typeof value === "string" && value.trim() ? value.trim() : null;
+  };
+  return {
+    patientNumber: field("patientNumber") || "—",
+    patientName: (locale === "ar" ? field("fullNameAr") : null) ||
+      field("fullNameEn") || "—",
+  };
+}
