@@ -19,7 +19,7 @@ test("diagnostic report discovery scopes BOTH count and data by organization and
   const org=randomUUID(),branch=randomUUID();
   const parsed=parseReportQueueFilters({},[branch]);
   assert.equal(parsed.ok,true);
-  if(!parsed.ok)throw Error(parsed.error);
+  if(!parsed.ok)throw Error('Report queue filter parse failed');
   const clauses=buildReportQueueQueries({
     organizationId:org,authorizedBranchIds:[branch],filters:parsed.value,
   });
@@ -34,7 +34,7 @@ test("report discovery retains a bounded, stable multi-page view and valid deep 
   assert.equal(REPORT_QUEUE_PAGE_SIZE,50);
   const branch=randomUUID(),parsed=parseReportQueueFilters({page:"3",print:"NO_RECORD"},[branch]);
   assert.equal(parsed.ok,true);
-  if(!parsed.ok)throw Error(parsed.error);
+  if(!parsed.ok)throw Error('Report queue filter parse failed');
   const query=buildReportQueueQueries({
     organizationId:randomUUID(),authorizedBranchIds:[branch],filters:parsed.value,
   });
