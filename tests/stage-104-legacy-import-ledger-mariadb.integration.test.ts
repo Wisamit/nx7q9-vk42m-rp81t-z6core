@@ -26,8 +26,8 @@ test("Stage 104 real MariaDB: tenant-scoped batch status aggregation and paginat
         "INSERT INTO branches(id,organization_id,code,name_en,timezone,default_currency,updated_at) VALUES(?,?,?,?,?,?,NOW(3))",
         [branch,org,"S104BR"+k,"Import workspace","Asia/Dubai","AED"]);
       await add("users",user,
-        "INSERT INTO users(id,organization_id,username,email,password_hash,status,updated_at) VALUES(?,?,?,?,?,'ACTIVE',NOW(3))",
-        [user,org,"stage104"+k,"stage104"+k+"@example.test","never-a-login-hash"]);
+        "INSERT INTO users(id,organization_id,username,email,password_hash,display_name_en,status,updated_at) VALUES(?,?,?,?,?,?,'ACTIVE',NOW(3))",
+        [user,org,"stage104"+k,"stage104"+k+"@example.test","never-a-login-hash","Stage 104 Fixture"]);
       await add("catalog_import_batches",batch,
         "INSERT INTO catalog_import_batches(id,organization_id,source_type,source_name,status,created_by_user_id,updated_at) VALUES(?,?,?,?,?,?,NOW(3))",
         [batch,org,"MDB","family-stage-104","VALIDATED",user]);
