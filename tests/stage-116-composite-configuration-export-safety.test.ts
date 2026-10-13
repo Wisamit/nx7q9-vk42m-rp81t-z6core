@@ -15,8 +15,8 @@ test("Stage 116: all three export kinds registered without an import/mutation si
     assert.ok(bundle.includes('"'+kind+'"'),kind);
     assert.ok(ui.includes('"'+kind+'"'),kind);
   }
-  assert.equal(catalogExportTypes.has("PATIENT"),false);
-  assert.equal(catalogExportTypes.has("CASHIER_SHIFT"),false);
+  assert.equal(catalogExportTypes.has("PATIENT" as never),false);
+  assert.equal(catalogExportTypes.has("CASHIER_SHIFT" as never),false);
   assert.deepEqual(catalogExportNavigation("not-an-uuid"),{ok:false});
   assert.match(paged,/export async function GET/);
   assert.match(bundle,/export async function GET/);
