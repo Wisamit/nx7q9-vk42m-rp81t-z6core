@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { OrderQuestionManager } from "@/components/order-question-manager";
 import { ResultLayoutManager } from "@/components/result-layout-manager";
 import { SpecialtyLayoutBatchEditor } from "@/components/specialty-layout-batch-editor";
+import { LegacySpecialtyEvidenceReview } from "@/components/legacy-specialty-evidence-review";
 import { ReferenceIntervalGovernanceActions } from "@/components/reference-interval-governance-actions";
 import { TatPolicyGovernanceActions } from "@/components/tat-policy-governance-actions";
 import { getUiLocale, statusLabel, tr } from "@/lib/ui-i18n";
@@ -251,6 +252,7 @@ export default async function TestDetailPage({ params }: { params: Promise<{ id:
           entryHintAr: component.entryHintAr, status: component.status,
         }))}
       />
+      <LegacySpecialtyEvidenceReview testId={test.id} locale={locale} />
       <ResultLayoutManager
         testId={test.id}
         layout={test.resultEntryLayout}
