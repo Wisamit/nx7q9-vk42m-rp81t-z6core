@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { Prisma } from "../../../../../generated/prisma/client";
 import { getCurrentSession, permissionSet, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { authorizedBranchIds, canManageBranch, inputText, validCode } from "@/lib/branch-administration";
+import { authorizedBranchIds, canManageBranch, inputText, organizationBranchAdmin, validCode } from "@/lib/branch-administration";
 
 const error=(message:string,status:number)=>NextResponse.json({error:message},{status});
 
@@ -18,7 +18,7 @@ export async function GET() {
   if(!permissionSet(session).has("branches.view")&&!permissionSet(session).has("branches.manage")) return error("forbidden",403);
   const org=session.user.organizationId, allowed=authorizedBranchIds(session);
   const workstations=await prisma.workstation.findMany({
-    where:{branch:{organizationId:org},branchId:{in:allowed}},
+    where:{branch:{organizationId:org},...(organizationBranchAdmin(session)?{}:{branchId:{in:allowed}})},
     select:{id:true,code:true,nameEn:true,nameAr:true,status:true,branchId:true,departmentId:true,updatedAt:true},
     orderBy:[{branchId:"asc"},{code:"asc"}],take:1000,
   });
