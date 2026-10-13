@@ -53,32 +53,40 @@ export function parseSpecialtyEvidence(payload:unknown):SpecialtyEvidence {
   const sources = doc.tables as unknown[];
   const seenTables=new Set<string>();
   let globalObservations=0;
-  for(const raw of sources){
-    if(!object(raw)||!allowedName(raw.tableName)||!trustedTables.has(raw.tableName.toLowerCase())
+  for(const sourceTable of sources){
+    if(!object(sourceTable)) invalid("invalid_or_unapproved_specialty_table");
+    const raw = sourceTable as Record<string, unknown>;
+    if(!allowedName(raw.tableName)||!trustedTables.has(raw.tableName.toLowerCase())
       ||seenTables.has(raw.tableName.toLowerCase())
       ||typeof raw.pairingComplete!=="boolean"
       ||!Array.isArray(raw.warnings)||raw.warnings.length>10||raw.warnings.some(x=>typeof x!=="string"||x.length>500)
       ||!Array.isArray(raw.candidatePairs)||raw.candidatePairs.length>200) {
       invalid("invalid_or_unapproved_specialty_table");
     }
-    seenTables.add(raw.tableName.toLowerCase());
+    const tableName = raw.tableName as string;
+    seenTables.add(tableName.toLowerCase());
     if(raw.pairingComplete!==(raw.candidatePairs.length>0))
       invalid("inconsistent_specialty_pairing_status");
     const pairs:SpecialtyEvidencePair[]=[];
     const seenPrefix=new Set<string>();
-    for(const rawPair of raw.candidatePairs){
-      if(!object(rawPair)||!allowedName(rawPair.sourcePrefix)||!allowedName(rawPair.lowColumn)
+    for(const pairInput of raw.candidatePairs as unknown[]){
+      if(!object(pairInput)) invalid("invalid_or_duplicate_specialty_pair");
+      const rawPair = pairInput as Record<string, unknown>;
+      if(!allowedName(rawPair.sourcePrefix)||!allowedName(rawPair.lowColumn)
         ||!allowedName(rawPair.highColumn)
         ||seenPrefix.has(rawPair.sourcePrefix.toUpperCase())
         ||rawPair.lowColumn.toLowerCase()===rawPair.highColumn.toLowerCase()
         ||!Array.isArray(rawPair.observations)||rawPair.observations.length>20000) {
         invalid("invalid_or_duplicate_specialty_pair");
       }
-      seenPrefix.add(rawPair.sourcePrefix.toUpperCase());
+      const sourcePrefix = rawPair.sourcePrefix as string;
+      seenPrefix.add(sourcePrefix.toUpperCase());
       const rows:SpecialtyEvidenceObservation[]=[];
       let previousRow=0;
-      for(const row of rawPair.observations){
-        if(!object(row)||typeof row.rowNumber!=="number"||!Number.isInteger(row.rowNumber)
+      for(const input of rawPair.observations as unknown[]){
+        if(!object(input)) invalid("invalid_or_non_numeric_specialty_observation");
+        const row = input as Record<string, unknown>;
+        if(typeof row.rowNumber!=="number"||!Number.isInteger(row.rowNumber)
           ||row.rowNumber<=previousRow||row.rowNumber>20000
           ||!optionalDecimal(row.low)||!optionalDecimal(row.high)
           ||(row.low===null&&row.high===null)
@@ -86,19 +94,21 @@ export function parseSpecialtyEvidence(payload:unknown):SpecialtyEvidence {
           ||!optionalText(row.ageTo)||!optionalText(row.ageUnit)) {
           invalid("invalid_or_non_numeric_specialty_observation");
         }
-        previousRow=row.rowNumber;
+        const rowNumber = row.rowNumber as number;
+        previousRow=rowNumber;
         globalObservations++;
         if(globalObservations>50000) invalid("specialty_evidence_exceeds_review_limit");
         rows.push({
-          rowNumber:row.rowNumber,low:row.low,high:row.high,sex:row.sex,
-          ageFrom:row.ageFrom,ageTo:row.ageTo,ageUnit:row.ageUnit,
+          rowNumber,low:row.low as string|null,high:row.high as string|null,
+          sex:row.sex as string|null,ageFrom:row.ageFrom as string|null,
+          ageTo:row.ageTo as string|null,ageUnit:row.ageUnit as string|null,
         });
       }
-      pairs.push({sourcePrefix:rawPair.sourcePrefix,lowColumn:rawPair.lowColumn,
-        highColumn:rawPair.highColumn,observations:rows});
+      pairs.push({sourcePrefix,lowColumn:rawPair.lowColumn as string,
+        highColumn:rawPair.highColumn as string,observations:rows});
     }
-    tables.push({tableName:raw.tableName,candidatePairs:pairs,
-      pairingComplete:raw.pairingComplete,warnings:raw.warnings});
+    tables.push({tableName,candidatePairs:pairs,
+      pairingComplete:raw.pairingComplete as boolean,warnings:raw.warnings as string[]});
   }
   return {schemaVersion:1,evidenceType:LEGACY_SPECIALTY_EVIDENCE_TYPE,
     sourceName:doc.sourceName as string,sourceSha256:doc.sourceSha256 as string,
