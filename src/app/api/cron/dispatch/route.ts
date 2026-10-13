@@ -42,7 +42,14 @@ export async function POST(request: Request) {
   }
 
   const authorized = authorizeCronRequest(request.headers.get("authorization"),
-    organizationId, process.env);
+    organizationId, {
+      FAMILY_LAB_CRON_ENABLED: process.env.FAMILY_LAB_CRON_ENABLED,
+      FAMILY_LAB_CRON_SECRET: process.env.FAMILY_LAB_CRON_SECRET,
+      FAMILY_LAB_CRON_ORGANIZATION_IDS: process.env.FAMILY_LAB_CRON_ORGANIZATION_IDS,
+      FAMILY_LAB_CRON_TAT_ENABLED: process.env.FAMILY_LAB_CRON_TAT_ENABLED,
+      FAMILY_LAB_CRON_NOTIFICATIONS_ENABLED: process.env.FAMILY_LAB_CRON_NOTIFICATIONS_ENABLED,
+      FAMILY_LAB_CRON_WEBHOOKS_ENABLED: process.env.FAMILY_LAB_CRON_WEBHOOKS_ENABLED,
+    });
   if (!authorized.ok) return json({ error: "scheduled_dispatch_not_authorized" }, 401);
   if ((operation === "TAT" && !authorized.plan.tat)
       || (operation === "NOTIFICATIONS" && !authorized.plan.notifications)
