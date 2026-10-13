@@ -86,7 +86,9 @@ test("Stage 113 MariaDB: real current-report version, urgency, cancellation and 
     const overdue=await run("OVERDUE");
     assert.equal(overdue.count,2);
     assert.deepEqual(new Set(overdue.ids),new Set([ids.overdue,ids.oldFinalRetracted]));
-    assert.equal(overdue.rows.find(x=>x.orderId===ids.oldFinalRetracted).currentReportStatus,"RETRACTED");
+    const retractedRow=overdue.rows.find(x=>x.orderId===ids.oldFinalRetracted);
+    assert.ok(retractedRow,"withdrawn current version should remain overdue");
+    assert.equal(retractedRow.currentReportStatus,"RETRACTED");
     const soon=await run("DUE_SOON");
     assert.equal(soon.count,2);
     assert.deepEqual(new Set(soon.ids),new Set([ids.soonPartial,ids.branchB]));
