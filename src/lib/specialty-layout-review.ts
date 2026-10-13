@@ -20,7 +20,8 @@ export type SpecialtySnapshot = {
     reportNameEn:string|null;reportNameAr:string|null;reportVisible:boolean;reportDisplayOrder:number|null}>;
 };
 export class SpecialtyPlanError extends Error {
-  constructor(public readonly code:string){super(code);}
+  readonly code:string;
+  constructor(code:string){super(code);this.code=code;}
 }
 const layouts = new Set(["STANDARD","SECTIONED","COMPACT_GRID"]);
 const widths = new Set(["AUTO","NARROW","STANDARD","WIDE","FULL"]);
