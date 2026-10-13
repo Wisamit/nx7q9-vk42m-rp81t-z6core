@@ -87,6 +87,7 @@ export function PatientMergePanel({
         merge_conflict: tr("The patient changed during the merge. Refresh and review again.", "تغير سجل المريض أثناء الدمج. حدّث الصفحة وراجع السجلين من جديد."),
         fresh_staff_reauthentication_required: tr("Fresh identity verification required. Start the merge again.", "يلزم تأكيد هوية جديد. أعد بدء الدمج."),
         step_up_session_or_branch_changed: tr("Active branch or session changed. Sign in to the correct branch and retry.", "تغير الفرع النشط أو الجلسة. ادخل إلى الفرع الصحيح وأعد المحاولة."),
+        step_up_already_used_or_expired: tr("Identity proof expired or was already used. Review the merge again.", "انتهت صلاحية إثبات الهوية أو سبق استخدامه. راجع الدمج من جديد."),
         portal_account_move_conflict: tr("The portal account changed during the merge. Refresh and review again.", "تغير حساب البوابة أثناء الدمج. حدّث الصفحة وراجع من جديد."),
       };
       setMessage(errors[body.error || ""] || tr("Patient merge failed.", "فشل دمج سجل المريض."));
