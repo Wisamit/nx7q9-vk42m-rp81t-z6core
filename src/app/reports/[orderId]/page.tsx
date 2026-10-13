@@ -565,7 +565,8 @@ export default async function DiagnosticReportPage({ params }: { params: Promise
       canVerifyContacts={permissions.has("portal_accounts.manage")}
     />}
 
-    {permissions.has("reports.deliver") && ["FINAL","AMENDED"].includes(latest.status) &&
+    {permissions.has("reports.deliver") && latest.version===report.currentVersion &&
+      ["FINAL","AMENDED"].includes(latest.status) &&
       <StaffReportHandover reportVersionId={latest.id} locale={locale} />}
 
     {latest.deliveries.length > 0 && <section className="table-card report-history no-print">
