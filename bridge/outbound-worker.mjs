@@ -5,8 +5,8 @@
  * disposition in a receipt. This worker only relays that attestation to LIS.
  */
 import { createHash, randomUUID } from "node:crypto";
-import { open, mkdir, readdir, readFile, rename, lstat, rm } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { open, mkdir, readdir, readFile, rename, lstat, rmdir, link, unlink } from "node:fs/promises";
+import { join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { validateBridgeSettings } from "./file-worker.mjs";
 
@@ -51,7 +51,7 @@ export function validateOutboundSettings(input) {
   if (new Set(allDirs).size !== allDirs.length) fail("OUTBOUND_DIRECTORIES_OVERLAP");
   // Never nest one writable spool under another. A renamed claim must not
   // accidentally become an inbound .ready message or a public static asset.
-  if (allDirs.some((dir,i) => allDirs.some((other,j) => i !== j && dir.startsWith(other + "/")))) {
+  if (allDirs.some((dir,i) => allDirs.some((other,j) => i !== j && dir.startsWith(other + sep)))) {
     fail("OUTBOUND_DIRECTORIES_NESTED");
   }
   return { ...common, deviceKey: target.deviceKey, ...Object.fromEntries(entries) };
@@ -63,7 +63,10 @@ async function atomicWrite(dir, name, data) {
     await fd.writeFile(data, "utf8");
     await fd.sync();
   } finally { await fd.close(); }
-  await rename(temp, join(dir, name));
+  // Hard-link creation refuses an existing destination. POSIX rename alone
+  // would overwrite a pending lease or device evidence on a repeated run.
+  try { await link(temp, join(dir, name)); }
+  finally { await unlink(temp).catch(() => {}); }
   try {
     const folder = await open(dir,"r");
     try { await folder.sync(); } finally { await folder.close(); }
@@ -210,7 +213,7 @@ export async function pollOutbound(settings, token, sender=fetch, now=Date.now()
   try { await mkdir(lock); }
   catch(error) { if (error?.code === "EEXIST") fail("OUTBOUND_WORKER_ALREADY_ACTIVE_OR_STALE_LOCK"); throw error; }
   try { return await pollExclusive(settings,token,sender,now); }
-  finally { await rm(lock,{recursive:false,force:true}); }
+  finally { await rmdir(lock); }
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   if (process.env.ANALYZER_BRIDGE_OUTBOUND_ENABLED !== "true") fail("OUTBOUND_OPT_IN_ENV_REQUIRED");
