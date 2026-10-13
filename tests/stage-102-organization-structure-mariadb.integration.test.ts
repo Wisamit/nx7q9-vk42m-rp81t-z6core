@@ -66,7 +66,8 @@ test("Stage 102 MariaDB: branch hierarchy isolation, schedule uniqueness and loc
     const [settingsRows]=await db.execute<mysql.RowDataPacket[]>(
       "SELECT value FROM branch_settings WHERE branch_id=? AND \`key\`='working_hours_v1'",[branch]);
     assert.equal(settingsRows.length,1);
-    assert.equal(JSON.parse(settingsRows[0].value).days.mon[0].open,"08:00");
+    const parsedHours=typeof settingsRows[0].value==="string"?JSON.parse(settingsRows[0].value):settingsRows[0].value;
+    assert.equal(parsedHours.days.mon[0].open,"08:00");
     await db.beginTransaction();
     await db.execute("SELECT id FROM branches WHERE id=? FOR UPDATE",[branch]);
     await db2.execute("SET SESSION innodb_lock_wait_timeout = 1");
