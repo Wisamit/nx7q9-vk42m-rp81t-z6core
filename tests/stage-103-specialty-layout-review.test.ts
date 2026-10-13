@@ -48,6 +48,13 @@ test("stage 103: reject missing, repeated, unknown, or inactive clinical compone
   inactive.components[1].status="INACTIVE";
   assert.throws(()=>parseSpecialtyLayoutPlan(valid(),inactive),/every_active_component/);
 });
+test("stage 103: mixed-case immutable catalog component codes retain exact identity",()=>{
+  const snapshotMixed=structuredClone(snapshot);snapshotMixed.components[0].code="HbA1c";
+  const planMixed=valid();planMixed.components[0].code="HbA1c";
+  assert.equal(parseSpecialtyLayoutPlan(planMixed,snapshotMixed).components[0].code,"HbA1c");
+  planMixed.components[0].code="HBA1C";
+  assert.throws(()=>parseSpecialtyLayoutPlan(planMixed,snapshotMixed),/invalid_or_duplicate_component/);
+});
 test("stage 103: section collisions, absent assignments and invalid grid configurations fail closed",()=>{
   const repeated=valid();repeated.sections.push({...repeated.sections[0]});
   assert.throws(()=>parseSpecialtyLayoutPlan(repeated,snapshot),/invalid_or_duplicate_section/);
