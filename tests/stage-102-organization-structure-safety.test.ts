@@ -47,7 +47,7 @@ test("Stage 102: weekly-hours validation is per-day, no overlap and no unapprove
   assert.match(s,/Object\.keys\(days\)\.length !== 7/);
   assert.match(s,/windows\.length > 4/);
   assert.match(s,/start >= end/);
-  assert.match(s,/start\) return null/);
+  assert.match(s,/start === 1440/);
   const ui=read("src/components/organization-structure-manager.tsx");
   assert.match(ui,/الأقسام/);
   assert.match(ui,/محطات العمل/);
