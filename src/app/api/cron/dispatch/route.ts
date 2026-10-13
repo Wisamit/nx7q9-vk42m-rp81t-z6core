@@ -17,7 +17,7 @@ const json = (body: Record<string, unknown>, status = 200) =>
  * organization selection. Every scheduled invocation must name an explicitly
  * allowlisted, active organization and present the dedicated host secret.
  *
- * All three existing dispatchers own their delivery CAS/lease and retry policy.
+ * Each invocation serves one job type, bounding web request duration.\n * Existing dispatchers own their delivery CAS/lease and retry policy.
  * The scheduler never touches actual lab results, reports, prices or inventory.
  */
 export async function POST(request: Request) {
@@ -33,12 +33,22 @@ export async function POST(request: Request) {
   if (Buffer.byteLength(raw, "utf8") > 2048) return json({ error: "invalid_scheduler_request" }, 413);
   let body: unknown;
   try { body = JSON.parse(raw); } catch { return json({ error: "invalid_scheduler_request" }, 400); }
-  const organizationId = body && typeof body === "object" && !Array.isArray(body)
-    ? (body as Record<string, unknown>).organizationId : undefined;
+  const values = body && typeof body === "object" && !Array.isArray(body)
+    ? body as Record<string, unknown> : {};
+  const organizationId = values.organizationId;
+  const operation = values.operation;
+  if (operation !== "TAT" && operation !== "NOTIFICATIONS" && operation !== "WEBHOOKS") {
+    return json({ error: "scheduler_operation_required" }, 400);
+  }
 
   const authorized = authorizeCronRequest(request.headers.get("authorization"),
     organizationId, process.env);
   if (!authorized.ok) return json({ error: "scheduled_dispatch_not_authorized" }, 401);
+  if ((operation === "TAT" && !authorized.plan.tat)
+      || (operation === "NOTIFICATIONS" && !authorized.plan.notifications)
+      || (operation === "WEBHOOKS" && !authorized.plan.webhooks)) {
+    return json({ error: "scheduler_operation_disabled" }, 403);
+  }
 
   const organization = await prisma.organization.findFirst({
     where: { id: authorized.organizationId, status: "ACTIVE" },
@@ -57,7 +67,7 @@ export async function POST(request: Request) {
   let webhookFailed = 0;
 
   // Each part is independent: failure of one queue must not prevent the others.
-  if (authorized.plan.tat) {
+  if (operation === "TAT") {
     try {
       const escalations = await processTatEscalations(prisma, organization.id, now, 40);
       tatEscalations = escalations.length;
@@ -65,9 +75,9 @@ export async function POST(request: Request) {
       failedSteps.push("tat");
     }
   }
-  if (authorized.plan.notifications) {
+  if (operation === "NOTIFICATIONS") {
     try {
-      const sent = await dispatchPendingNotifications(prisma, organization.id, 20);
+      const sent = await dispatchPendingNotifications(prisma, organization.id, 8);
       notificationsAttempted = sent.length;
       notificationsFailed = sent.filter(item =>
         item.status === "FAILED" || item.status === "DEAD_LETTER").length;
@@ -76,12 +86,12 @@ export async function POST(request: Request) {
       failedSteps.push("notifications");
     }
   }
-  if (authorized.plan.webhooks) {
+  if (operation === "WEBHOOKS") {
     try {
       const deliveries = await prisma.webhookDelivery.findMany({
         where: dueWebhookFilter(organization.id, now),
         orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-        take: 15,
+        take: 3,
         select: { id: true },
       });
       for (const delivery of deliveries) {
@@ -102,7 +112,7 @@ export async function POST(request: Request) {
   }
   // Never persist tokens, destinations, patient-identifiable payloads or provider errors.
   const outcome = {
-    mode: "SCHEDULED", startedAt: now.toISOString(),
+    mode: "SCHEDULED", operation, startedAt: now.toISOString(),
     enabled: { tat: authorized.plan.tat,
       notifications: authorized.plan.notifications, webhooks: authorized.plan.webhooks },
     tatEscalations,
