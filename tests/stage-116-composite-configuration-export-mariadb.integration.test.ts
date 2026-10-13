@@ -54,7 +54,7 @@ test("Stage 116 MariaDB: complete membership, branch isolation and exact package
         [pkg,tid],"package_id");
     for(const [id,c,scope,branch]of [[la,"A","ORGANIZATION",null],
       [lb,"B","BRANCH",b],[lc,"C","CLIENT",null]])
-      await add("price_lists",id,
+      await add("price_lists",id!,
         "INSERT INTO price_lists(id,organization_id,code,name_en,scope_type,branch_id,currency,effective_from,updated_at) VALUES(?,?,?,?,?,?,'AED','2025-01-01',NOW(3))",
         [id,org,"S116"+suffix+c,"Synthetic price list",scope,branch]);
     for(const [id,list,pkg,amount]of [[priceA,la,ka,"123.4567"],
