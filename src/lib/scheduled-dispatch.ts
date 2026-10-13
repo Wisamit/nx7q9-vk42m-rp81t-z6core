@@ -56,7 +56,7 @@ export function authorizeCronRequest(
   if (!plan.organizationIds.includes(selected)) return { ok: false };
   // Reject different auth schemes, whitespace and unbounded tokens before constant-time comparison.
   const match = bearer?.match(/^Bearer ([A-Za-z0-9_~+\/=.:-]{32,256})$/);
-  if (!match) return { ok: false };
+  if (!match || match[0] !== bearer) return { ok: false };
   const received = createHash("sha256").update(match[1]).digest();
   const expected = createHash("sha256").update(env.FAMILY_LAB_CRON_SECRET!).digest();
   if (!timingSafeEqual(received, expected)) return { ok: false };
