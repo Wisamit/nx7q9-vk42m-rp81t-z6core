@@ -81,6 +81,22 @@ export async function POST(request: Request) {
     if (organizationLock.length !== 1) {
       return { error: "bundle_organization_inactive", httpStatus: 403 } as const;
     }
+  const liveUser = await tx.user.findFirst({
+    where: { id: session.user.id, organizationId: scope.organizationId, status: "ACTIVE" },
+    include: { roles: { include: { role: { include: {
+      permissions: { include: { permission: true } },
+    } } } } },
+  });
+  const livePermissions = new Set((liveUser?.roles || [])
+    .filter(r => r.role.status === "ACTIVE" && r.role.organizationId === scope.organizationId)
+    .flatMap(r => r.role.permissions.map(grant => grant.permission.code)));
+  if (!livePermissions.has("catalog.manage") ||
+      (references.some(r => r.entityType.startsWith("PRICE_")) &&
+        !livePermissions.has("pricing.manage")) ||
+      (references.some(r => r.entityType === "REFERENCE_INTERVAL") &&
+        !livePermissions.has("catalog.reference_ranges.manage"))) {
+    return { error: "bundle_import_permission_changed", httpStatus: 403 } as const;
+  }
   // Session scopes can be stale. Revalidate actual grants after the
   // organization lock, before reading master identities or writing review data.
   const liveBranch = await tx.branch.findFirst({
@@ -183,6 +199,32 @@ export async function POST(request: Request) {
     tx.priceListItem.findMany({ where: {
       id: { in: parsed.ids.prices }, priceList: permittedPriceList, test: testWhere,
     }, select: { id: true, priceListId: true, testId: true } }),
+    tx.testPanel.findMany({ where: {
+      id: { in: panelIds }, organizationId: scope.organizationId,
+      items: { some: { test: testWhere }, every: { test: testWhere } },
+    }, select: {
+      id: true, code: true, status: true,
+      items: { select: {
+        testId: true, displayOrder: true, required: true, test: { select: { code: true } },
+      } },
+    } }),
+    tx.commercialPackage.findMany({ where: {
+      id: { in: packageIds }, organizationId: scope.organizationId,
+      items: { some: { test: testWhere }, every: { test: testWhere } },
+    }, select: {
+      id: true, code: true, status: true,
+      items: { select: { testId: true, displayOrder: true, test: { select: { code: true } } } },
+    } }),
+    tx.priceListPackageItem.findMany({ where: {
+      id: { in: packagePriceIds },
+      priceList: { ...permittedPriceList, sourceId: null, referrerId: null,
+        clientId: null, contractId: null },
+      package: { organizationId: scope.organizationId,
+        items: { some: { test: testWhere }, every: { test: testWhere } } },
+    }, select: {
+      id: true, priceListId: true, packageId: true, unitPrice: true,
+      effectiveFrom: true, effectiveTo: true, status: true,
+    } }),
   ]);
   if (tests.length !== testIds.length || units.length !== unitIds.length ||
       components.length !== componentIds.length || intervals.length !== parsed.ids.intervals.length ||
