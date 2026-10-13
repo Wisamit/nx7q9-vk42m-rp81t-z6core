@@ -10,6 +10,8 @@ import { compareCurrentReportWithPrevious, type ReportComparisonEvidence } from 
 import { resolvePatientLineage } from "@/lib/patient-identity-lineage";
 import { ReportCumulativeComparison } from "@/components/report-cumulative-comparison";
 import { PrintReportButton } from "@/components/print-report-button";
+import { StaffReportHandover } from "@/components/staff-report-handover";
+import { isStaffHandoverEvent } from "@/lib/report-handover";
 import { ReportPdfButton } from "@/components/report-pdf-button";
 import { ReportOutboundDelivery } from "@/components/report-outbound-delivery";
 import { maskedDestination, resolveVerifiedPortalDestination, type ReportOutboundChannel } from "@/lib/report-outbound";
@@ -563,9 +565,15 @@ export default async function DiagnosticReportPage({ params }: { params: Promise
       canVerifyContacts={permissions.has("portal_accounts.manage")}
     />}
 
+    {permissions.has("reports.deliver") && ["FINAL","AMENDED"].includes(latest.status) &&
+      <StaffReportHandover reportVersionId={latest.id} locale={locale} />}
+
     {latest.deliveries.length > 0 && <section className="table-card report-history no-print">
       <div className="table-toolbar"><h2>{tr(locale, "Delivery History", "سجل التسليم")}</h2><span>{latest.deliveries.length} {tr(locale, "event(s)", "حدث")}</span></div>
-      <div className="table-wrap"><table><thead><tr><th>{tr(locale, "Time", "الوقت")}</th><th>{tr(locale, "Channel", "القناة")}</th><th>{tr(locale, "Status", "الحالة")}</th><th>{tr(locale, "Recipient", "المستلم")}</th><th>{tr(locale, "User", "المستخدم")}</th></tr></thead><tbody>{latest.deliveries.map(event => <tr key={event.id}><td>{event.occurredAt.toISOString().replace("T"," ").slice(0,19)}</td><td>{event.channel}</td><td>{event.status}</td><td>{event.recipient && ["EMAIL","SMS","WHATSAPP"].includes(event.channel)
+      <div className="table-wrap"><table><thead><tr><th>{tr(locale, "Time", "الوقت")}</th><th>{tr(locale, "Channel", "القناة")}</th><th>{tr(locale, "Status", "الحالة")}</th><th>{tr(locale, "Recipient", "المستلم")}</th><th>{tr(locale, "User", "المستخدم")}</th></tr></thead><tbody>{latest.deliveries.map(event => <tr key={event.id}><td>{event.occurredAt.toISOString().replace("T"," ").slice(0,19)}</td><td>{isStaffHandoverEvent(event.details)
+    ? tr(locale, "IN-PERSON / STAFF ATTESTED", "تسليم حضوري / إقرار موظف") : event.channel}</td><td>{isStaffHandoverEvent(event.details)
+    ? tr(locale, "STAFF ATTESTATION RECORDED (not independently acknowledged)",
+      "إقرار موظف مسجل (دون تأكيد مستقل من المريض)") : event.status}</td><td>{event.recipient && ["EMAIL","SMS","WHATSAPP"].includes(event.channel)
   ? maskedDestination(event.channel as ReportOutboundChannel, event.recipient)
   : event.recipient || "—"}</td><td>{event.performedBy?.displayNameEn || tr(locale, "System", "النظام")}</td></tr>)}</tbody></table></div>
     </section>}
