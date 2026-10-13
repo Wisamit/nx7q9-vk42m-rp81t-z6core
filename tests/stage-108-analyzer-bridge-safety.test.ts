@@ -43,3 +43,20 @@ test("Stage 108 bridge never auto-releases results and requires vendor-specific 
     assert.doesNotMatch(code,/(?:diagnosticReport|resultRelease|releaseClinicalResult)\.(?:create|update|delete)\(/);
   }
 });
+
+test("Stage 108 clinical import locks custody and observation claims before modifying any result",()=>{
+  const route=read("../src/app/api/analyzers/imports/commit/route.ts");
+  const tx=route.indexOf("const saved = await prisma.$transaction");
+  const custody=route.indexOf("FROM specimens",tx);
+  const linkage=route.indexOf("tx.specimenOrderItem.count",custody);
+  const claim=route.indexOf("FROM analyzer_result_imports",linkage);
+  const resultUpdate=route.indexOf("tx.laboratoryResult.updateMany",claim);
+  const valueMutation=route.indexOf("tx.laboratoryResultValue.",resultUpdate);
+  assert.ok(tx>=0 && custody>tx && linkage>custody && claim>linkage && resultUpdate>claim && valueMutation>resultUpdate);
+  assert.match(route.slice(custody,linkage),/FOR UPDATE/);
+  assert.match(route.slice(claim,resultUpdate),/FOR UPDATE/);
+  assert.match(route.slice(resultUpdate,valueMutation),/updatedAt: existing.updatedAt/);
+  assert.match(route.slice(resultUpdate,valueMutation),/source: "ANALYZER"/);
+  assert.match(route,/consumed.count !== importIds.length/);
+  assert.match(route,/ANALYZER_RESULT_STATE_CHANGED/);
+});

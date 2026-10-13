@@ -13,9 +13,10 @@
 
 1. Isolated `bridge/` Node service with conservative HL7 ORU^R01 and ASTM E1394 record parsing, ASTM E1381 frame checksum/sequence validation (no unsupported serial handshake), durable local MLLP ACK spool, file retries/quarantine, and HTTPS authenticated LIS transport.
 2. Raw message API retains exact CR/LF, spacing and bytes represented by valid UTF-8; rejects oversize and contradictory (analyzer,messageId,payload) retries; concurrent duplicate handling is DB-index based and audited.
-3. Normalized result API re-reads per-message imports under row lock and locks specimen custody to prevent duplicate observation claims and stale transferred/rejected specimen staging; existing independent authorized clinical validation/release workflow remains unchanged.
-4. Worker rejects invalid UTF-8 outright rather than normalizing replacement characters into apparently authentic raw data.
-5. Bridge protocol/spool tests + MariaDB multi-connection idempotency/clinical row-lock test + Safety, TypeScript, lint, i18n/theme and production build via CI.
+3. Normalized result API re-reads per-message imports under row lock and locks specimen custody to prevent duplicate observation claims and stale transferred/rejected specimen staging.
+4. Clinical import commit now locks custody and mapping claims before writing values; applies exact optimistic revision and editable-status guards; confirms every staged import was atomically consumed. Existing independently configured clinical validation/QC policy remains authoritative.
+5. Worker rejects invalid UTF-8 outright rather than normalizing replacement characters into apparently authentic raw data.
+6. Bridge protocol/spool tests + MariaDB multi-connection idempotency/clinical row-lock test + Safety, TypeScript, lint, i18n/theme and production build via CI.
 
 ## Security and policy boundary
 
