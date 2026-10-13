@@ -135,6 +135,7 @@ jobs:
       - run: node --experimental-strip-types --test tests/resilience-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-101-specimen-retention-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-102-organization-structure-mariadb.integration.test.ts
+      - run: node --experimental-strip-types --test tests/stage-103-specialty-layout-mariadb.integration.test.ts
       - run: npx tsc --noEmit
       - run: npm run lint
       - run: npm run test:ui-theme
