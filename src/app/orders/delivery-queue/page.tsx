@@ -15,6 +15,7 @@ type QueueRow={
   orderId:string;accessionNumber:string;orderingBranchId:string;
   orderStatus:string;promisedUtc:Date;promisedLocal:string|null;
   promisedTimezone:string|null;currentReportStatus:string|null;reportIssuedAt:Date|null;
+  currentStaffAttested:number;
 };
 
 const labels:Record<DeliveryFollowupStatus,{en:string;ar:string}>={
@@ -23,6 +24,8 @@ const labels:Record<DeliveryFollowupStatus,{en:string;ar:string}>={
   DUE_SOON:{en:"Due within 24 hours",ar:"خلال 24 ساعة"},
   FUTURE:{en:"Due later",ar:"موعد لاحق"},
   CURRENT_ISSUED:{en:"Current final/amended report issued",ar:"صدر التقرير النهائي/المعدل الحالي"},
+  CURRENT_ISSUED_WITH_STAFF_ATTESTATION:{en:"Issued — staff handover attestation recorded",ar:"تقرير صادر — إقرار تسليم موظف مسجل"},
+  CURRENT_ISSUED_NO_STAFF_ATTESTATION:{en:"Issued — no staff handover attestation",ar:"تقرير صادر — لا يوجد إقرار تسليم موظف"},
   ALL:{en:"All recorded promises",ar:"جميع المواعيد المسجلة"},
 };
 export default async function DeliveryQueuePage({searchParams}:{searchParams:SearchParams}){
@@ -77,8 +80,8 @@ export default async function DeliveryQueuePage({searchParams}:{searchParams:Sea
         <p className="eyebrow">{tr(locale,"Orders / Patient commitments","الطلبات / المواعيد المتفق عليها")}</p>
         <h1>{tr(locale,"Promised report delivery follow-up","متابعة مواعيد تسليم التقارير")}</h1>
         <p className="muted">{tr(locale,
-          "Only staff-recorded promises are shown. Overdue means no CURRENT final/amended report has been issued by the promised instant. Issued does not mean printed, sent, received or acknowledged by the patient.",
-          "تُعرض المواعيد التي سجلها الموظف فقط. التأخر يعني عدم وجود إصدار نهائي/معدل حالي حتى الموعد المتفق عليه. صدور التقرير لا يعني طباعته أو إرساله أو استلام المريض له أو إقراره.")}</p>
+          "Only staff-recorded promises are shown. Overdue means no CURRENT final/amended report has been issued by the promised instant. Issued does not mean printed, sent, received or acknowledged by the patient. Staff handover evidence is only a staff attestation for the current report version, not independent patient receipt.",
+          "تُعرض المواعيد التي سجلها الموظف فقط. التأخر يعني عدم وجود إصدار نهائي/معدل حالي حتى الموعد المتفق عليه. صدور التقرير لا يعني طباعته أو إرساله أو استلام المريض له أو إقراره. سجل التسليم الحضوري هو إقرار موظف للإصدار الحالي، وليس إثبات استلام مستقل من المريض.")}</p>
       </div>
       <Link className="secondary-link" href="/orders">{tr(locale,"Back to orders","العودة للطلبات")}</Link>
     </header>
@@ -120,9 +123,10 @@ export default async function DeliveryQueuePage({searchParams}:{searchParams:Sea
           <th>{tr(locale,"Promise (UTC)","الموعد (UTC)")}</th>
           <th>{tr(locale,"Follow-up","المتابعة")}</th>
           <th>{tr(locale,"Latest report","آخر تقرير")}</th>
+          <th>{tr(locale,"Current-version in-person handover audit","سجل التسليم الحضوري للإصدار الحالي")}</th>
           <th>{tr(locale,"Action","الإجراء")}</th>
         </tr></thead>
-        <tbody>{rows.length===0?<tr><td colSpan={7} className="empty-state">
+        <tbody>{rows.length===0?<tr><td colSpan={8} className="empty-state">
           {tr(locale,"No orders match the selected delivery follow-up.","لا توجد طلبات تطابق متابعة المواعيد المختارة.")}
         </td></tr>:rows.map(row=>{
           const follow=classifyDeliveryPromise({
@@ -139,6 +143,14 @@ export default async function DeliveryQueuePage({searchParams}:{searchParams:Sea
             <td>{row.currentReportStatus?
               statusLabel(locale,row.currentReportStatus):
               tr(locale,"No report issued","لم يصدر تقرير")}</td>
+            <td>{["FINAL","AMENDED"].includes(row.currentReportStatus||"")
+              ? Number(row.currentStaffAttested)===1
+                ? tr(locale,"Staff attestation recorded; patient receipt not independently verified",
+                    "إقرار موظف مسجل؛ استلام المريض غير مؤكد بشكل مستقل")
+                : tr(locale,"No in-person staff attestation for current report version",
+                    "لا يوجد إقرار موظف للتسليم الحضوري للإصدار الحالي")
+              : tr(locale,"Not applicable — no current final/amended report",
+                  "غير منطبق — لا يوجد إصدار نهائي/معدل حالي")}</td>
             <td><Link className="secondary-link" href={"/orders/"+row.orderId}>
               {tr(locale,"Review order","مراجعة الطلب")}</Link>
               {row.currentReportStatus&&["FINAL","AMENDED"].includes(row.currentReportStatus)&&
