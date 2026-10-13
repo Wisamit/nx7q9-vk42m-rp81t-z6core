@@ -5,6 +5,7 @@ import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
 import { creditNoteError, invoiceAdjustmentState } from "@/lib/billing-adjustments";
 import { prisma } from "@/lib/db";
 import { taxCreditReversal } from "@/lib/tax-policy";
+import { consumeStaffStepUp, StaffStepUpError } from "@/lib/staff-step-up";
 
 function text(value: unknown, max = 1000) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -127,6 +128,17 @@ export async function POST(request: Request) {
     });
     if (!state) return { error: "invalid_financial_state", httpStatus: 409 } as const;
 
+    const stepUp = await consumeStaffStepUp(tx, {
+      token: request.headers.get("x-staff-step-up-token"),
+      action: "CREDIT_NOTE_ISSUE",
+      resourceKey: [invoiceId, amountText].join(":"),
+      sessionId: session.id,
+      userId: session.user.id,
+      organizationId: session.user.organizationId,
+      branchId: current.branchId,
+      ipAddress: ctx.ipAddress,
+      userAgent: ctx.userAgent,
+    });
     const updated = await tx.invoice.updateMany({
       where: {
         id: current.id,
@@ -193,6 +205,8 @@ export async function POST(request: Request) {
           balanceBefore: current.balanceAmount.toFixed(4),
           balanceAfter: state.balance,
           invoiceStatus: state.status,
+          stepUpGrantId: stepUp.grantId,
+          stepUpProofMethod: stepUp.proofMethod,
         },
         ipAddress: ctx.ipAddress,
         userAgent: ctx.userAgent,
@@ -209,7 +223,12 @@ export async function POST(request: Request) {
       balanceAmount: state.balance,
       invoiceStatus: state.status,
     } as const;
-  }, { timeout: 30000 });
+  }, { timeout: 30000 }).catch((error: unknown) => {
+    if (error instanceof StaffStepUpError) {
+      return { error: error.code, httpStatus: error.statusCode } as const;
+    }
+    throw error;
+  });
 
   if ("error" in result) return NextResponse.json({ error: result.error }, { status: result.httpStatus });
   return NextResponse.json(result, { status: 201 });
