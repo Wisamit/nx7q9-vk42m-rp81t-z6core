@@ -34,7 +34,25 @@ export function LegacyImportReconciliationLedger({locale}:{locale:"ar"|"en"}){
       (e instanceof Error?e.message:"unknown"));}
     finally{setLoading(false);}
   }
-  useEffect(()=>{void load(null,true);},[]); // one initial read; details are fetched on demand by clicking load more
+  useEffect(()=>{
+    let live=true;
+    fetch("/api/catalog/imports/reconciliation-ledger",{cache:"no-store"})
+      .then(async response=>{
+        const result=await response.json() as Reply;
+        if(!response.ok)throw Error(result.error||"request_failed");
+        return result;
+      })
+      .then(result=>{
+        if(!live)return;
+        setItems(result.items||[]);
+        setCursor(result.nextCursor||null);
+        setStarted(true);
+      })
+      .catch(error=>{
+        if(live)setMessage((error instanceof Error?error.message:"request_failed"));
+      });
+    return()=>{live=false;};
+  },[]);
   const total=items.reduce((n,x)=>n+x.total,0);
   const pending=items.reduce((n,x)=>n+x.unresolved,0);
   const imported=items.reduce((n,x)=>n+x.imported,0);
