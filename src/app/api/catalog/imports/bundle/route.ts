@@ -249,6 +249,37 @@ export async function POST(request: Request) {
       const existing = componentMap.get(row.identity);
       consistent = !!existing && existing.testId === n.testId && existing.code === n.code &&
         existing.unitId === n.unitId && testMap.get(existing.testId)?.code === n.testCode;
+    } else if (row.entityType === "PANEL") {
+      const live = panelMap.get(row.identity);
+      const members = (live?.items || []).map(item => ({
+        testId: item.testId, testCode: item.test.code,
+        displayOrder: item.displayOrder, required: item.required,
+      }));
+      consistent = !!live && live.code === n.code && live.status === n.status &&
+        Array.isArray(n.items) && sameCompositeMembership(
+          n.items as CompositeMember[], members, "PANEL");
+    } else if (row.entityType === "PACKAGE") {
+      const live = packageMap.get(row.identity);
+      const members = (live?.items || []).map(item => ({
+        testId: item.testId, testCode: item.test.code,
+        displayOrder: item.displayOrder,
+      }));
+      consistent = !!live && live.code === n.code && live.status === n.status &&
+        Array.isArray(n.items) && sameCompositeMembership(
+          n.items as CompositeMember[], members, "PACKAGE");
+    } else if (row.entityType === "PRICE_LIST_PACKAGE_ITEM") {
+      const price = packagePriceMap.get(row.identity);
+      const list = listMap.get(n.priceListId as string);
+      const linkedPackage = packageMap.get(n.packageId as string);
+      consistent = !!price && !!list && !!linkedPackage &&
+        price.priceListId === n.priceListId && price.packageId === n.packageId &&
+        list.code === n.priceListCode && linkedPackage.code === n.packageCode &&
+        list.scopeType === n.scopeType && list.branchId === n.branchId &&
+        list.currency === n.currency && price.status === n.status &&
+        price.effectiveFrom.getTime() === new Date(n.effectiveFrom as string).getTime() &&
+        (price.effectiveTo?.getTime() ?? null) ===
+          (n.effectiveTo ? new Date(n.effectiveTo as string).getTime() : null) &&
+        new Prisma.Decimal(n.unitPrice as string).equals(price.unitPrice);
     } else if (row.entityType === "REFERENCE_INTERVAL") {
       const existing = intervalMap.get(row.identity);
       const component = componentMap.get(n.componentId as string);
