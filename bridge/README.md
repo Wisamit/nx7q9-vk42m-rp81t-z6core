@@ -73,6 +73,63 @@ approved or physically printed. `quarantine` stores rejected raw files
 for authorized investigation; never make these directories web-accessible.
 Apply filesystem ACLs, disk encryption, retention policy and backup.
 
+## Outbound work-order file handoff (Stage 109; opt-in, NO device transmission)
+
+The LIS already creates branch-scoped, immutable analyzer work orders. The
+independently deployable `bridge/outbound-worker.mjs` can securely claim at most
+one of these orders at a time and **fsync a local claim envelope**. It never
+formats guessed vendor commands or connects to a device itself.
+
+This workflow is disabled unless BOTH the process environment contains
+`ANALYZER_BRIDGE_OUTBOUND_ENABLED=true` and a vendor-confirmed configuration
+supplies `outbound.enabled=true`, `vendorApproved=true`,
+`mode="FILE_HANDOFF"`, a matching `deviceKey` and isolated paths:
+
+```json
+{
+  "outbound": {
+    "enabled": true,
+    "vendorApproved": true,
+    "mode": "FILE_HANDOFF",
+    "deviceKey": "ACTUAL_APPROVED_DEVICE_KEY",
+    "pendingDir": "C:/family-lab-bridge/outbound-pending",
+    "receiptDir": "C:/family-lab-bridge/outbound-receipts",
+    "completedDir": "C:/family-lab-bridge/outbound-completed",
+    "quarantineDir": "C:/family-lab-bridge/outbound-quarantine"
+  }
+}
+```
+
+The excerpt is **not a deployable device configuration**: use it only inside
+the original Bridge config with its independently approved analyzer UUID,
+HTTPS LIS URL, credential, protocol and inbound folders. Keep all paths off
+any web server, encrypted/ACL-restricted, and backed up. The claim envelope
+contains a sensitive short-lived lease token and specimen barcode.
+
+A trusted, separately authorized vendor-specific transport adapter may consume
+a `<workOrderId>.<attempt>.claim.json` file and atomically write
+`<workOrderId>.<attempt>.receipt.json` in the receipts directory, containing
+`workOrderId`, `attempt`, `code` (`ACCEPTED`, `RETRY`, or `REJECTED`),
+an optional short `message`, and the original exact `rawPayload` actually
+sent to the instrument for `ACCEPTED`. The adapter must NOT claim acceptance
+merely because it read a file or opened a socket.
+
+```powershell
+$env:ANALYZER_BRIDGE_OUTBOUND_ENABLED = "true"
+$env:ANALYZER_BRIDGE_TOKEN = "<device-bound confidential credential>"
+node bridge/outbound-worker.mjs C:\config\family-lab-bridge.json
+```
+
+The worker posts the signed-lease acknowledgement and raw wire evidence back
+to LIS only while the claim is valid. It writes durable `.done.json` evidence
+and archives the claim/receipt. Identical API acknowledgement replays are
+idempotent; changed payloads or expired/replaced lease tokens are rejected.
+Multiple workers, unexpected receipts, previously completed work orders, lease
+expiry or uncertain device sending require **human/vendor reconciliation**,
+never a blind automatic repeat that could run a patient sample twice.
+A local claim means *queued*, not sent; an adapter's `ACCEPTED` receipt is
+device-transport evidence, not clinical validation. Physical UAT is deferred.
+
 ## Integration/clinical acceptance still required
 
 The following cannot be marked passed without the real instrument and
