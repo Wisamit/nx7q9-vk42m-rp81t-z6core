@@ -10,7 +10,7 @@ import {
 const branchA=randomUUID(),branchB=randomUUID(),org=randomUUID();
 function ok(value:ReturnType<typeof parseReportQueueFilters>){
   assert.equal(value.ok,true);
-  if(!value.ok)throw Error(value.error);
+  if(!value.ok)throw Error('Report queue filter parse failed');
   return value.value;
 }
 test("Stage 111: reject unauthorized branch, duplicate parameters, invalid dates and pathologic pages without widening",()=>{
