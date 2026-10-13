@@ -11,8 +11,9 @@
 2. Default disabled; explicit per-operation opt-in. Dedicated strong bearer credential verified using constant-time SHA-256 digest comparison and exact-header parsing. Tenant allowlist is mandatory; inactive organizations are rejected.
 3. Bounded batches (TAT 40, outgoing notifications 8, webhooks 3), no automatic unbounded all-tenant scan and no assumption that a session branch belongs to a machine actor. Active endpoint/branch/subscription and organization isolation are checked before webhook dispatch. Existing claim/lease CAS controls concurrent workers.
 4. `scripts/operations/run-scheduled-dispatch.mjs`: optional HTTPS-only Node runner with environment-only secrets and nonzero exit for failures, suited to hosting schedulers; no sensitive details printed.
-5. System-actor `AuditEvent` for each invocation: tenant, operation, enabled flags, counts, completion/failure only. No patient messages, raw destinations or provider secrets in the audit summary.
-6. Outbound notification gateway hardened using the pre-existing `safeOutboundUrl`: public HTTPS, no credentialed URLs, no literal/private IP endpoints, redirects denied and a 12-second fetch timeout. DNS-based rebinding protection still requires host/network egress enforcement.
+5. Before sending queued `diagnostic_report.released` or `diagnostic_report.amended` webhooks, re-read their linked report version after claiming the delivery, fail closed if it is retracted, missing or superseded, and mark the obsolete event as terminal rather than retrying it. This applies to staff-triggered and scheduled dispatchers alike.
+6. System-actor `AuditEvent` for each invocation: tenant, operation, enabled flags, counts, completion/failure only. No patient messages, raw destinations or provider secrets in the audit summary.
+7. Outbound notification gateway hardened using the pre-existing `safeOutboundUrl`: public HTTPS, no credentialed URLs, no literal/private IP endpoints, redirects denied and a 12-second fetch timeout. DNS-based rebinding protection still requires host/network egress enforcement.
 
 ## Hostinger environment configuration (disabled by default)
 
