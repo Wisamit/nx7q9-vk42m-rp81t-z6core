@@ -21,7 +21,7 @@ type PackageOption = { id: string; code: string; nameEn: string; testIds: string
 type SimpleOption = { id: string; code: string; nameEn: string };
 type ReferrerOption = SimpleOption & { clientId: string | null };
 type SourceOption = SimpleOption & { category: string };
-type BranchOption = SimpleOption;
+type BranchOption = SimpleOption & { timezone: string };
 
 export function OrderCreateModal(props: {
   patients: PatientOption[];
