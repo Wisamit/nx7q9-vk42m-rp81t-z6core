@@ -92,7 +92,7 @@ export default async function OrdersPage({ searchParams }: {
         organizationId: session.user.organizationId,
         status: "ACTIVE",
       },
-      select: { id: true, code: true, nameEn: true },
+      select: { id: true, code: true, nameEn: true, timezone: true },
       orderBy: { nameEn: "asc" },
     }),
     prisma.labOrder.findMany({

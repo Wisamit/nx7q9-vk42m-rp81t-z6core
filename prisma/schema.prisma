@@ -2702,6 +2702,10 @@ model LabOrder {
   priority         OrderPriority @default(ROUTINE)
   status           OrderStatus   @default(REGISTERED)
   clinicalNotes    String?       @map("clinical_notes") @db.Text
+  // Immutable promise captured at registration, distinct from test-specific TAT.
+  promisedReportDeliveryAtUtc DateTime? @map("promised_report_delivery_at_utc") @db.DateTime(3)
+  promisedReportDeliveryLocal String? @map("promised_report_delivery_local") @db.VarChar(16)
+  promisedReportDeliveryTimezone String? @map("promised_report_delivery_timezone") @db.VarChar(64)
   diagnosis        String?       @db.VarChar(500)
   fasting          Boolean?      
   pregnancyInfo          String?          @map("pregnancy_info") @db.VarChar(500)

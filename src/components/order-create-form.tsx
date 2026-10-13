@@ -24,7 +24,7 @@ type PackageOption = { id: string; code: string; nameEn: string; testIds: string
 type SimpleOption = { id: string; code: string; nameEn: string };
 type ReferrerOption = SimpleOption & { clientId: string | null };
 type SourceOption = SimpleOption & { category: string };
-type BranchOption = SimpleOption;
+type BranchOption = SimpleOption & { timezone: string };
 export type DoctorRequisitionPrefill = {
   id:string;patientId:string;branchId:string;referrerId:string;
   priority:"ROUTINE"|"URGENT"|"STAT";testIds:string[];
@@ -156,6 +156,7 @@ export function OrderCreateForm({
         referrerId: form.get("referrerId"),
         clientId: form.get("clientId"),
         priority: form.get("priority"),
+        promisedReportDeliveryLocal: form.get("promisedReportDeliveryLocal"),
         fasting,
         diagnosis: form.get("diagnosis"),
         clinicalNotes: form.get("clinicalNotes"),
@@ -252,11 +253,17 @@ export function OrderCreateForm({
       <label>{tr("Ordering branch", "فرع الطلب")}
         <select name="branchId" required defaultValue={initialDoctorRequisition?.branchId || activeBranchId || ""}>
           <option value="">{tr("Select branch…", "اختر الفرع…")}</option>
-          {branches.map(branch => <option key={branch.id} value={branch.id}>{branch.code} — {branch.nameEn}</option>)}
+          {branches.map(branch => <option key={branch.id} value={branch.id}>{branch.code} — {branch.nameEn} ({branch.timezone})</option>)}
         </select>
       </label>
       <label>{tr("Priority", "الأولوية")}
         <select name="priority" defaultValue={initialDoctorRequisition?.priority || "ROUTINE"}><option value="ROUTINE">{tr("Routine", "عادي")}</option><option value="URGENT">{tr("Urgent", "عاجل")}</option><option value="STAT">{tr("STAT", "فوري")}</option></select>
+      </label>
+
+      <label>{tr("Promised report delivery (optional, ordering branch local time)", "موعد تسليم التقرير المتفق عليه (اختياري، بتوقيت فرع الطلب)")}
+        <input name="promisedReportDeliveryLocal" type="datetime-local" step="60" />
+        <small>{tr("Staff-entered patient commitment, distinct from laboratory TAT. The branch timezone is saved with the order.",
+          "موعد متفق عليه مع المريض يدخله الموظف، وهو مستقل عن زمن إنجاز الفحوصات TAT. يُحفَظ توقيت الفرع مع الطلب.")}</small>
       </label>
 
       <label className="form-span">{tr("Patient", "المريض")}

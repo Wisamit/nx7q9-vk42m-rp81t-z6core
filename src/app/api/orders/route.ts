@@ -13,6 +13,7 @@ import { localCalendarDate } from "@/lib/accounts-receivable-aging";
 import { resolveTaxRule, taxLineAmounts, type EffectiveTaxRule } from "@/lib/tax-policy";
 import { buildOrderItemTatSnapshot, resolveTatPolicy, type TatPriority } from "@/lib/tat";
 import { localDateTimeToUtc, normalizeOrderQuestionOptions } from "@/lib/order-questions";
+import { parsePromisedReportDelivery } from "@/lib/order-promised-delivery";
 import {
   buildSpecimenPlans,
   specimenRequirementEventDetails,
@@ -198,6 +199,15 @@ export async function POST(request: Request) {
   if (referrerId && !referrer) return NextResponse.json({ error: "referrer_not_found" }, { status: 404 });
   if (clientId && !client) return NextResponse.json({ error: "client_not_found" }, { status: 404 });
   if (!orderingBranch) return NextResponse.json({ error: "branch_not_found" }, { status: 404 });
+  const promisedDelivery = parsePromisedReportDelivery(
+    body.promisedReportDeliveryLocal, orderingBranch.timezone,
+  );
+  if (!promisedDelivery.ok) {
+    return NextResponse.json({ error: promisedDelivery.error }, {
+      status: promisedDelivery.error === "invalid_ordering_branch_timezone" ? 409 : 400,
+    });
+  }
+  const promisedDeliverySnapshot = promisedDelivery.snapshot;
 
   const answerInput: unknown[] = Array.isArray(body.answers) ? body.answers : [];
   const rawAnswers = answerInput.filter((entry): entry is { questionId: string; value: unknown } =>
@@ -755,6 +765,9 @@ export async function POST(request: Request) {
           organizationId: session.user.organizationId,
           status: "ACTIVE",
           taxConfigVersion: orderingBranch.taxConfigVersion,
+          // A timezone edit during registration must not change the meaning
+          // of the staff-entered local promise without notice.
+          timezone: orderingBranch.timezone,
         },
         data: { taxConfigVersion: { increment: 1 } },
       });
@@ -781,6 +794,9 @@ export async function POST(request: Request) {
           sourceId,
           priority,
           clinicalNotes: clinicalNotes || null,
+          promisedReportDeliveryAtUtc: promisedDeliverySnapshot?.promisedReportDeliveryAtUtc ?? null,
+          promisedReportDeliveryLocal: promisedDeliverySnapshot?.promisedReportDeliveryLocal ?? null,
+          promisedReportDeliveryTimezone: promisedDeliverySnapshot?.promisedReportDeliveryTimezone ?? null,
           diagnosis: diagnosis || null,
           fasting,
           pregnancyInfo: pregnancyInfo || null,
@@ -1229,6 +1245,12 @@ export async function POST(request: Request) {
             referrerId,
             clientId: effectiveClientId,
             priority,
+            promisedReportDelivery: promisedDeliverySnapshot ? {
+              utc: promisedDeliverySnapshot.promisedReportDeliveryAtUtc.toISOString(),
+              local: promisedDeliverySnapshot.promisedReportDeliveryLocal,
+              timeZone: promisedDeliverySnapshot.promisedReportDeliveryTimezone,
+              origin: "STAFF_ENTERED_AT_REGISTRATION",
+            } : null,
             directTestIds,
             packageIds,
             expandedTestIds: allTestIds,
@@ -1307,6 +1329,11 @@ export async function POST(request: Request) {
       status: "ok",
       orderId: result.order.id,
       accessionNumber: result.order.accessionNumber,
+      promisedReportDelivery: promisedDeliverySnapshot ? {
+        utc: promisedDeliverySnapshot.promisedReportDeliveryAtUtc.toISOString(),
+        local: promisedDeliverySnapshot.promisedReportDeliveryLocal,
+        timeZone: promisedDeliverySnapshot.promisedReportDeliveryTimezone,
+      } : null,
       invoiceId: result.invoice.id,
       invoiceNumber: result.invoice.invoiceNumber,
       currency,

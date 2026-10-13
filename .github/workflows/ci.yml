@@ -142,6 +142,7 @@ jobs:
       - run: node --experimental-strip-types --test tests/stage-107-recall-quality-worklist-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-110-high-risk-electronic-approval-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-111-report-print-queue-mariadb.integration.test.ts
+      - run: node --experimental-strip-types --test tests/stage-112-promised-report-delivery-mariadb.integration.test.ts
       - run: node --test tests/analyzer-bridge-outbound.test.mjs
       - run: node --test tests/analyzer-bridge.test.mjs
       - run: node --experimental-strip-types --test tests/analyzer-bridge-mariadb.integration.test.ts
