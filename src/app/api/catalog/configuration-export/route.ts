@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentSession, permissionSet, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { clinicalImportTestWhere, resolveClinicalImportScope } from "@/lib/catalog-clinical-import-scope";
 import {
   catalogExportNavigation, catalogExportTypes, type CatalogExportType,
 } from "@/lib/catalog-configuration-export";
@@ -39,11 +40,24 @@ export async function GET(request: NextRequest) {
     organizationId,
     ...(departmentIds.length ? { departmentId: { in: departmentIds } } : {}),
   };
+  const isComposite = type === "PANEL" || type === "PACKAGE" ||
+    type === "PRICE_LIST_PACKAGE_ITEM";
+  const clinicalScope = isComposite ? resolveClinicalImportScope({
+    organizationId, activeBranchId: session.activeBranchId,
+    activeBranch: session.activeBranch,
+    branchScopes: session.user.branchScopes,
+    departmentScopes: session.user.departmentScopes,
+  }) : null;
+  if (isComposite && !clinicalScope)
+    return NextResponse.json({ error: "active_clinical_export_scope_required" }, { status: 403 });
+  const compositeTestScope = clinicalScope
+    ? { ...clinicalImportTestWhere(clinicalScope), status: undefined }
+    : testScope;
   // Composite records are exported only if *every* member is accessible,
   // avoiding partial panels/packages that silently lose clinical tests.
   const fullyVisibleItems = {
-    some: { test: testScope },
-    every: { test: testScope },
+    some: { test: compositeTestScope },
+    every: { test: compositeTestScope },
   };
   const branchScope = { OR: [{ branchId: null }, { branchId: { in: branchIds } }] };
   // Generic exports cannot disclose client/contract/source/referrer prices.
