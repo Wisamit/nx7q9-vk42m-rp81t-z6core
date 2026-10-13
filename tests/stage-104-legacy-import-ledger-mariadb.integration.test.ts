@@ -14,7 +14,7 @@ test("Stage 104 real MariaDB: tenant-scoped batch status aggregation and paginat
       batch=randomUUID(),otherBatch=randomUUID(),row1=randomUUID(),row2=randomUUID(),row3=randomUUID();
     const k=org.slice(0,8);
     const cleanup:Array<{table:string;id:string}>=[];
-    async function add(table:string,id:string,sql:string,args:unknown[]){
+    async function add(table:string,id:string,sql:string,args:(string|null)[]){
       await db.execute(sql,args);cleanup.unshift({table,id});
     }
     try{
