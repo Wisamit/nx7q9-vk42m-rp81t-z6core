@@ -88,6 +88,8 @@ test("Stage 105: no live medical, billing, historical, or catalog write path in 
   assert.match(exporter,/\$knownSpecialties/);
   assert.match(exporter,/GetSchema\("Columns"/);
   assert.match(exporter,/Get-FileHash/);
+  assert.match(exporter,/postExtractionHash/);
+  assert.match(exporter,/source bytes changed during extraction/);
   assert.match(exporter,/clinicalUseApproved = \$false/);
   assert.doesNotMatch(exporter,/SELECT \*/i);
   assert.doesNotMatch(exporter,/Read-Table "ID"/i);
