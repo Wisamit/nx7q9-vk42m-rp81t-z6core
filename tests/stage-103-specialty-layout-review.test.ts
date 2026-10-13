@@ -80,7 +80,7 @@ test("stage 103: same plan and same snapshot produce stable tokens, concurrent c
 });
 test("stage 103: omitted existing sections are preserved and non-apply fields remain untouched",()=>{
   const planNoSections=valid();planNoSections.layout="STANDARD";planNoSections.sections=[];
-  planNoSections.components.forEach(c=>{c.sectionCode=null;});
+  planNoSections.components.forEach(c=>{(c as {sectionCode:string|null}).sectionCode=null;});
   const normalized=parseSpecialtyLayoutPlan(planNoSections,snapshot);
   const preview=specialtyPlanPreview(snapshot,normalized);
   assert.deepEqual(preview.unchangedActiveSections,["A"]);
