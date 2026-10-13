@@ -94,6 +94,13 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
           <dt>{tr(locale, "Status", "الحالة")}</dt><dd>{statusLabel(locale, order.status)}</dd>
           <dt>{tr(locale, "Priority", "الأولوية")}</dt><dd>{priorityLabel(locale, order.priority)}</dd>
           <dt>{tr(locale, "Ordered", "تاريخ الطلب")}</dt><dd>{order.orderedAt.toISOString().replace("T"," ").slice(0,19)}</dd>
+          <dt>{tr(locale, "Promised report delivery (recorded at registration)", "موعد تسليم التقرير المتفق عليه (محفوظ عند التسجيل)")}</dt>
+          <dd>{order.promisedReportDeliveryLocal && order.promisedReportDeliveryTimezone
+            ? order.promisedReportDeliveryLocal.replace("T"," ") + " (" + order.promisedReportDeliveryTimezone + ")"
+            : tr(locale, "Not specified", "غير محدد")}</dd>
+          <dt>{tr(locale, "Delivery commitment (UTC)", "موعد التسليم (UTC)")}</dt>
+          <dd>{order.promisedReportDeliveryAtUtc?.toISOString().replace("T"," ").slice(0,19) || "—"}</dd>
+          <dt>{tr(locale, "Promised date is separate from laboratory TAT", "الموعد المتفق عليه مستقل عن مدة الإنجاز المخبري TAT")}</dt><dd>—</dd>
           <dt>{tr(locale, "Referrer", "المحيل")}</dt><dd>{order.referrer?.nameEn || "—"}</dd>
           <dt>{tr(locale, "Client", "العميل")}</dt><dd>{order.client?.nameEn || tr(locale, "Patient / walk-in", "مريض / حضور مباشر")}</dd>
           <dt>{tr(locale, "Fasting", "صائم")}</dt><dd>{order.fasting === null ? tr(locale, "Unknown", "غير معروف") : order.fasting ? tr(locale, "Yes", "نعم") : tr(locale, "No", "لا")}</dd>
