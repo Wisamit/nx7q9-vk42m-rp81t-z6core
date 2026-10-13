@@ -87,4 +87,14 @@ test("Stage 106: endpoint has no cookie fallback, reads tenant only after auth, 
   assert.match(outbound, /AbortSignal\.timeout\(12_000\)/);
   assert.match(outbound, /redirect: "error"/);
   assert.match(outbound, /Idempotency-Key/);
+  const webhook = readFileSync("src/lib/webhook-delivery.ts", "utf8");
+  const claimed = webhook.indexOf("const claim = await prisma.webhookDelivery.updateMany");
+  const version = webhook.indexOf("const reportVersion = await prisma.diagnosticReportVersion.findFirst", claimed);
+  const network = webhook.indexOf("const response = await fetch(url", claimed);
+  assert.ok(claimed > 0 && version > claimed && network > version);
+  const checked = webhook.slice(version, network);
+  assert.match(checked, /reportVersion.status === "RETRACTED"/);
+  assert.match(checked, /reportVersion.version !== reportVersion.report.currentVersion/);
+  assert.match(checked, /report_version_superseded_or_retracted/);
+  assert.match(checked, /status: "DEAD_LETTER"/);
 });
