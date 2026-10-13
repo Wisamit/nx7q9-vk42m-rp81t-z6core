@@ -76,7 +76,7 @@ export async function POST(request: Request) {
           roles: { some: { role: { code: "SYSTEM_ADMIN", isSystem: true, status: "ACTIVE" } } } },
       });
       if (!activeActor) throw Error("admin_revoked");
-      const branch = await tx.branch.create({ data: { organizationId: org, ...fields } });
+      const branch = await tx.branch.create({ data: { organizationId: org, ...fields, code: fields.code } });
       await tx.userBranchScope.create({ data: { userId: session.userId, branchId: branch.id } });
       await tx.auditEvent.create({ data: {
         organizationId: org, branchId: branch.id, actorUserId: session.userId,
