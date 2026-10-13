@@ -1,8 +1,10 @@
 export type CatalogExportType =
-  "TEST" | "COMPONENT" | "UNIT" | "REFERENCE_INTERVAL" | "PRICE_LIST" | "PRICE_LIST_ITEM";
+  "TEST" | "COMPONENT" | "UNIT" | "REFERENCE_INTERVAL" | "PRICE_LIST" | "PRICE_LIST_ITEM" |
+  "PANEL" | "PACKAGE" | "PRICE_LIST_PACKAGE_ITEM";
 
 export const catalogExportTypes = new Set<CatalogExportType>([
-  "TEST", "COMPONENT", "UNIT", "REFERENCE_INTERVAL", "PRICE_LIST", "PRICE_LIST_ITEM",
+  "TEST", "COMPONENT", "UNIT", "PANEL", "PACKAGE",
+  "REFERENCE_INTERVAL", "PRICE_LIST", "PRICE_LIST_ITEM", "PRICE_LIST_PACKAGE_ITEM",
 ]);
 
 /** Cursor is only a sortable UUID key, never a record lookup or a trust token. */
