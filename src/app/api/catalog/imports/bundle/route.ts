@@ -182,7 +182,7 @@ export async function POST(request: Request) {
       { scopeType: "BRANCH" as const, branchId: { in: [...activeBranches] } },
     ],
   };
-  const [tests, units, components, intervals, lists, prices, panels, packages, packagePrices] = await Promise.all([
+  const [tests, units, components, intervals, lists, prices] = await Promise.all([
     tx.labTest.findMany({ where: { ...testWhere, id: { in: testIds } },
       select: { id: true, code: true, departmentId: true } }),
     tx.unit.findMany({ where: { organizationId: scope.organizationId, id: { in: unitIds } },
@@ -199,6 +199,8 @@ export async function POST(request: Request) {
     tx.priceListItem.findMany({ where: {
       id: { in: parsed.ids.prices }, priceList: permittedPriceList, test: testWhere,
     }, select: { id: true, priceListId: true, testId: true } }),
+  ]);
+  const [panels, packages, packagePrices] = await Promise.all([
     tx.testPanel.findMany({ where: {
       id: { in: panelIds }, organizationId: scope.organizationId,
       items: { some: { test: testWhere }, every: { test: testWhere } },
