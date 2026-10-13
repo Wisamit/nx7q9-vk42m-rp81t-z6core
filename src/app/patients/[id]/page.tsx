@@ -248,6 +248,7 @@ export default async function PatientDetailPage({ params }: { params: Promise<{ 
     </section>}
 
     {canMerge && patient.status === "ACTIVE" && !patient.mergedIntoPatientId && <PatientMergePanel
+      activeBranchId={session.activeBranchId || ""}
       current={{
         id: patient.id,
         patientNumber: patient.patientNumber,
