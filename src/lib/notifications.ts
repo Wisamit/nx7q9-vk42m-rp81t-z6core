@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { safeOutboundUrl } from "@/lib/webhook-delivery";
 import {
   NotificationChannel,
   NotificationDeliveryStatus,
@@ -329,8 +330,10 @@ export async function dispatchPendingNotifications(db: PrismaClient, organizatio
     // MUST honor that key for provider-side deduplication after a crash.
     const idempotencyKey = "familylab-notification:" + delivery.id;
     try {
-      const response = await fetch(config.url, {
+      const response = await fetch(safeOutboundUrl(config.url), {
         method: "POST",
+        redirect: "error",
+        signal: AbortSignal.timeout(12_000),
         headers: {
           "Content-Type": "application/json",
           "Idempotency-Key": idempotencyKey,

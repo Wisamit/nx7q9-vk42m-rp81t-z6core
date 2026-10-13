@@ -17,7 +17,7 @@ test("Stage 80: only one currently unleased, due, tenant-owned notification can 
   const start=source.indexOf("export async function dispatchPendingNotifications");
   const claim=source.indexOf("const claim = await db.notificationDelivery.updateMany",start);
   const report=source.indexOf("const version = await db.diagnosticReportVersion.findFirst",claim);
-  const send=source.indexOf("await fetch(config.url",report);
+  const send=source.indexOf("await fetch(safeOutboundUrl(config.url)",report);
   assert.ok(start>=0 && claim>start && report>claim && send>report);
   const before=source.slice(start,report);
   assert.match(before,/notification: \{ organizationId \}/);

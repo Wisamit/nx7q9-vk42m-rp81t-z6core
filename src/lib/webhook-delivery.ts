@@ -127,6 +127,24 @@ export async function dispatchWebhookDelivery(id: string) {
     return prisma.webhookDelivery.findUnique({ where: { id } });
   }
 
+  // A queued clinical-report event can become obsolete before scheduled dispatch.
+  // Never transmit an outdated/retracted report version after an amendment.
+  if (delivery.reportVersionId &&
+      (delivery.eventType === "diagnostic_report.released" ||
+       delivery.eventType === "diagnostic_report.amended")) {
+    const reportVersion = await prisma.diagnosticReportVersion.findFirst({
+      where: { id: delivery.reportVersionId, report: { organizationId: deliveryOrganizationId } },
+      select: { status: true, version: true, report: { select: { currentVersion: true } } },
+    });
+    if (!reportVersion || reportVersion.status === "RETRACTED" ||
+        reportVersion.version !== reportVersion.report.currentVersion) {
+      return finish({
+        status: "DEAD_LETTER", nextAttemptAt: null,
+        lastError: "report_version_superseded_or_retracted",
+      });
+    }
+  }
+
   try {
     const response = await fetch(url, {
       method: "POST", headers, body,
