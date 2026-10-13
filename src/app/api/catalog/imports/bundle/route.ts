@@ -195,7 +195,7 @@ export async function POST(request: Request) {
       OR: [{ branchId: null }, { branchId: { in: [...activeBranches] } }],
     }, select: { id: true, componentId: true, branchId: true } }),
     tx.priceList.findMany({ where: { ...permittedPriceList, id: { in: priceListIds } },
-      select: { id: true, code: true, scopeType: true, branchId: true } }),
+      select: { id: true, code: true, currency: true, scopeType: true, branchId: true } }),
     tx.priceListItem.findMany({ where: {
       id: { in: parsed.ids.prices }, priceList: permittedPriceList, test: testWhere,
     }, select: { id: true, priceListId: true, testId: true } }),
