@@ -1,4 +1,5 @@
 import { catalogExportTypes, type CatalogExportType } from "./catalog-configuration-export.ts";
+import { CompositeBundleError, parseCompositeBundleRow } from "./catalog-composite-bundle.ts";
 
 export const BUNDLE_REVIEW_SOURCE = "CONFIG_BUNDLE_REVIEW";
 export const BUNDLE_REVIEW_MAX_BYTES = 4 * 1024 * 1024;
@@ -37,6 +38,12 @@ export type BundleReview = {
     intervals: string[];
     priceLists: string[];
     prices: string[];
+    panels: string[];
+    packages: string[];
+    packagePrices: string[];
+    memberTests: string[];
+    compositePriceLists: string[];
+    pricedPackages: string[];
   };
 };
 
@@ -74,7 +81,7 @@ function iso(value: unknown): string {
 }
 
 /**
- * Review-only projection of the six-class JSON format exported by our LIS.
+ * Review-only projection of the nine-class JSON format exported by our LIS.
  * Original source values remain intact. UUIDs identify *current* masters for
  * tenant/branch authorization, never migration targets or commit authority.
  */
@@ -92,7 +99,7 @@ export function parseCatalogBundleForReview(
     throw new CatalogBundleReviewError("bundle_foreign_organization", 403);
   }
   const exportedAt = iso(bundle.exportedAt);
-  if (!Array.isArray(bundle.groups) || bundle.groups.length < 1 || bundle.groups.length > 6) {
+  if (!Array.isArray(bundle.groups) || bundle.groups.length < 1 || bundle.groups.length > 9) {
     throw new CatalogBundleReviewError("bundle_invalid_groups");
   }
   const seenGroups = new Set<string>();
@@ -100,7 +107,9 @@ export function parseCatalogBundleForReview(
   const rows: BundleReviewRow[] = [];
   const counts: Record<string, number> = {};
   const ids = { tests: [] as string[], units: [] as string[], components: [] as string[],
-    intervals: [] as string[], priceLists: [] as string[], prices: [] as string[] };
+    intervals: [] as string[], priceLists: [] as string[], prices: [] as string[],
+    panels: [] as string[], packages: [] as string[], packagePrices: [] as string[],
+    memberTests: [] as string[], compositePriceLists: [] as string[], pricedPackages: [] as string[] };
 
   for (const rawGroup of bundle.groups) {
     const group = record(rawGroup);
@@ -110,7 +119,8 @@ export function parseCatalogBundleForReview(
       throw new CatalogBundleReviewError("bundle_invalid_group");
     }
     seenGroups.add(entityType);
-    if ((entityType === "PRICE_LIST" || entityType === "PRICE_LIST_ITEM") && !permissions.pricing) {
+    if ((entityType === "PRICE_LIST" || entityType === "PRICE_LIST_ITEM" ||
+         entityType === "PRICE_LIST_PACKAGE_ITEM") && !permissions.pricing) {
       throw new CatalogBundleReviewError("pricing_manage_required", 403);
     }
     if (entityType === "REFERENCE_INTERVAL" && !permissions.ranges) {
@@ -142,6 +152,24 @@ export function parseCatalogBundleForReview(
           testCode: linkedCode(source.test),
           code: string(source.code, 80), nameEn: string(source.nameEn, 200),
           unitId: optionalId(source.unitId), status: source.status };
+      } else if (entityType === "PANEL" || entityType === "PACKAGE" ||
+                 entityType === "PRICE_LIST_PACKAGE_ITEM") {
+        try {
+          const composite = parseCompositeBundleRow(entityType, source);
+          normalized = composite as Record<string, unknown>;
+          if (entityType === "PANEL") ids.panels.push(id);
+          if (entityType === "PACKAGE") ids.packages.push(id);
+          if (composite.items) ids.memberTests.push(...composite.items.map(item => item.testId));
+          if (entityType === "PRICE_LIST_PACKAGE_ITEM") {
+            ids.packagePrices.push(id);
+            ids.compositePriceLists.push(composite.priceListId!);
+            ids.pricedPackages.push(composite.packageId!);
+          }
+        } catch (error) {
+          if (error instanceof CompositeBundleError)
+            throw new CatalogBundleReviewError(error.code);
+          throw error;
+        }
       } else if (entityType === "REFERENCE_INTERVAL") {
         ids.intervals.push(id);
         normalized = { id, componentId: requiredId(source.componentId),
