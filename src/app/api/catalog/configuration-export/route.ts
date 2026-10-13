@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentSession, permissionSet, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { clinicalImportTestWhere, resolveClinicalImportScope } from "@/lib/catalog-clinical-import-scope";
 import {
   catalogExportNavigation, catalogExportTypes, type CatalogExportType,
 } from "@/lib/catalog-configuration-export";
@@ -21,7 +22,7 @@ export async function GET(request: NextRequest) {
   if (type === "REFERENCE_INTERVAL" && !permissions.has("catalog.reference_ranges.manage")) {
     return NextResponse.json({ error: "reference_ranges_manage_required" }, { status: 403 });
   }
-  if ((type === "PRICE_LIST" || type === "PRICE_LIST_ITEM") && !permissions.has("pricing.manage")) {
+  if ((type === "PRICE_LIST" || (type === "PRICE_LIST_ITEM" || type === "PRICE_LIST_PACKAGE_ITEM")) && !permissions.has("pricing.manage")) {
     return NextResponse.json({ error: "pricing_export_forbidden" }, { status: 403 });
   }
   const parsed = catalogExportNavigation(parameters.get("cursor"));
@@ -38,6 +39,25 @@ export async function GET(request: NextRequest) {
   const testScope = {
     organizationId,
     ...(departmentIds.length ? { departmentId: { in: departmentIds } } : {}),
+  };
+  const isComposite = type === "PANEL" || type === "PACKAGE" ||
+    type === "PRICE_LIST_PACKAGE_ITEM";
+  const clinicalScope = isComposite ? resolveClinicalImportScope({
+    organizationId, activeBranchId: session.activeBranchId,
+    activeBranch: session.activeBranch,
+    branchScopes: session.user.branchScopes,
+    departmentScopes: session.user.departmentScopes,
+  }) : null;
+  if (isComposite && !clinicalScope)
+    return NextResponse.json({ error: "active_clinical_export_scope_required" }, { status: 403 });
+  const compositeTestScope = clinicalScope
+    ? { ...clinicalImportTestWhere(clinicalScope), status: undefined }
+    : testScope;
+  // Composite records are exported only if *every* member is accessible,
+  // avoiding partial panels/packages that silently lose clinical tests.
+  const fullyVisibleItems = {
+    some: { test: compositeTestScope },
+    every: { test: compositeTestScope },
   };
   const branchScope = { OR: [{ branchId: null }, { branchId: { in: branchIds } }] };
   // Generic exports cannot disclose client/contract/source/referrer prices.
@@ -78,6 +98,32 @@ export async function GET(request: NextRequest) {
         unit: { select: { code: true, symbol: true } },
       },
     });
+  } else if (type === "PANEL") {
+    records = await prisma.testPanel.findMany({
+      ...base, where: { organizationId, items: fullyVisibleItems, ...cursorScope },
+      select: {
+        id: true, code: true, nameEn: true, nameAr: true,
+        descriptionEn: true, descriptionAr: true, status: true,
+        createdAt: true, updatedAt: true, deactivatedAt: true,
+        items: { select: {
+          testId: true, displayOrder: true, required: true,
+          test: { select: { code: true } },
+        }, orderBy: [{ displayOrder: "asc" }, { testId: "asc" }] },
+      },
+    });
+  } else if (type === "PACKAGE") {
+    records = await prisma.commercialPackage.findMany({
+      ...base, where: { organizationId, items: fullyVisibleItems, ...cursorScope },
+      select: {
+        id: true, code: true, nameEn: true, nameAr: true,
+        descriptionEn: true, descriptionAr: true, status: true,
+        createdAt: true, updatedAt: true, deactivatedAt: true,
+        items: { select: {
+          testId: true, displayOrder: true,
+          test: { select: { code: true } },
+        }, orderBy: [{ displayOrder: "asc" }, { testId: "asc" }] },
+      },
+    });
   } else if (type === "UNIT") {
     records = await prisma.unit.findMany({
       ...base, where: { organizationId, ...cursorScope },
@@ -113,6 +159,26 @@ export async function GET(request: NextRequest) {
         contractId: true, currency: true, priority: true, effectiveFrom: true,
         effectiveTo: true, status: true, createdAt: true, updatedAt: true,
         deactivatedAt: true,
+      },
+    });
+  } else if (type === "PRICE_LIST_PACKAGE_ITEM") {
+    records = await prisma.priceListPackageItem.findMany({
+      ...base, where: {
+        ...cursorScope,
+        package: { organizationId, items: fullyVisibleItems },
+        priceList: {
+          organizationId, ...genericPriceScope,
+          sourceId: null, clientId: null, contractId: null, referrerId: null,
+        },
+      },
+      select: {
+        id: true, priceListId: true, packageId: true,
+        unitPrice: true, effectiveFrom: true, effectiveTo: true, status: true,
+        createdAt: true, updatedAt: true, deactivatedAt: true,
+        package: { select: { code: true } },
+        priceList: { select: {
+          code: true, currency: true, scopeType: true, branchId: true,
+        } },
       },
     });
   } else if (type === "PRICE_LIST_ITEM") {
