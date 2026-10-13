@@ -156,7 +156,7 @@ export function parseCatalogBundleForReview(
                  entityType === "PRICE_LIST_PACKAGE_ITEM") {
         try {
           const composite = parseCompositeBundleRow(entityType, source);
-          normalized = composite as Record<string, unknown>;
+          normalized = composite as unknown as Record<string, unknown>;
           if (entityType === "PANEL") ids.panels.push(id);
           if (entityType === "PACKAGE") ids.packages.push(id);
           if (composite.items) ids.memberTests.push(...composite.items.map(item => item.testId));
