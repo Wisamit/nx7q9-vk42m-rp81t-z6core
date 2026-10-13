@@ -156,6 +156,7 @@ export function OrderCreateForm({
         referrerId: form.get("referrerId"),
         clientId: form.get("clientId"),
         priority: form.get("priority"),
+        promisedReportDeliveryLocal: form.get("promisedReportDeliveryLocal"),
         fasting,
         diagnosis: form.get("diagnosis"),
         clinicalNotes: form.get("clinicalNotes"),
@@ -257,6 +258,12 @@ export function OrderCreateForm({
       </label>
       <label>{tr("Priority", "الأولوية")}
         <select name="priority" defaultValue={initialDoctorRequisition?.priority || "ROUTINE"}><option value="ROUTINE">{tr("Routine", "عادي")}</option><option value="URGENT">{tr("Urgent", "عاجل")}</option><option value="STAT">{tr("STAT", "فوري")}</option></select>
+      </label>
+
+      <label>{tr("Promised report delivery (optional, ordering branch local time)", "موعد تسليم التقرير المتفق عليه (اختياري، بتوقيت فرع الطلب)")}
+        <input name="promisedReportDeliveryLocal" type="datetime-local" step="60" />
+        <small>{tr("Staff-entered patient commitment, distinct from laboratory TAT. The branch timezone is saved with the order.",
+          "موعد متفق عليه مع المريض يدخله الموظف، وهو مستقل عن زمن إنجاز الفحوصات TAT. يُحفَظ توقيت الفرع مع الطلب.")}</small>
       </label>
 
       <label className="form-span">{tr("Patient", "المريض")}
