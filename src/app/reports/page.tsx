@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { getUiLocale, statusLabel, tr } from "@/lib/ui-i18n";
 import {
   buildReportQueueQueries,
+  reportQueuePatientIdentity,
   parseReportQueueFilters,
   reportQueueHref,
   REPORT_QUEUE_PAGE_SIZE,
@@ -84,7 +85,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Sear
           orderingBranchId: { in: authorizedBranchIds } },
       },
       include: {
-        order: { include: { patient: true, orderingBranch: true } },
+        order: { include: { orderingBranch: true } },
         versions: {
           where: { id: { in: pointers.map(row => row.versionId) } },
           take: 1,
@@ -188,8 +189,8 @@ export default async function ReportsPage({ searchParams }: { searchParams: Sear
               {tr(locale, "No reports match the selected filters.", "لا توجد تقارير تطابق معايير البحث.")}
             </td></tr> : shown.map(({report,version}) => <tr key={version.id}>
               <td><strong>{report.order.accessionNumber}</strong></td>
-              <td>{report.order.patient.patientNumber}<small className="table-subtext">
-                {locale === "ar" ? report.order.patient.fullNameAr || report.order.patient.fullNameEn : report.order.patient.fullNameEn}
+              <td>{reportQueuePatientIdentity(version.contentSnapshot, locale).patientNumber}<small className="table-subtext">
+                {reportQueuePatientIdentity(version.contentSnapshot, locale).patientName}
               </small></td>
               <td>{locale === "ar" ? report.order.orderingBranch.nameAr ||
                 report.order.orderingBranch.nameEn : report.order.orderingBranch.nameEn}</td>
