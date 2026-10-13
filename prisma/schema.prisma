@@ -4372,6 +4372,8 @@ model ReportDeliveryEvent {
   status         ReportDeliveryStatus @default(RECORDED)
   recipient      String?              @db.VarChar(255)
   externalRef    String?              @map("external_ref") @db.VarChar(255)
+  // Dedicated optional unique replay key for staff-attested paper handovers.
+  handoverRequestId String? @unique @map("handover_request_id") @db.Char(36)
   details        Json?
   performedByUserId String?           @map("performed_by_user_id") @db.Char(36)
   occurredAt     DateTime             @default(now()) @map("occurred_at") @db.DateTime(3)
