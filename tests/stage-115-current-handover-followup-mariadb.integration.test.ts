@@ -21,7 +21,7 @@ test("Stage 115 real MariaDB: only latest report version with audited staff atte
   const cleanup:Array<{table:string;id:string}>=[];
   const ids:Record<string,string>={},versions:Record<string,string[]>={};
   const nowUtc=new Date("2026-10-13T12:00:00.000Z");
-  async function add(table:string,sql:string,args:(string|number)[],id:string){
+  async function add(table:string,sql:string,args:(string|number|null)[],id:string){
     await db.execute(sql,args);
     cleanup.unshift({table,id});
   }
@@ -69,10 +69,10 @@ test("Stage 115 real MariaDB: only latest report version with audited staff atte
         [orderId,row.tenant,"S115-"+suffix+"-"+i,row.branch,row.patient,row.actor,row.status,
           row.promise?"2026-10-13 14:00:00.000":null,
           row.promise?"2026-10-13T14:00":null,
-          row.promise?"Etc/UTC":null],"orders",orderId);
+          row.promise?"Etc/UTC":null],orderId);
       await add("diagnostic_reports",
         "INSERT INTO diagnostic_reports(id,organization_id,order_id,current_version,updated_at) VALUES(?,?,?,?,NOW(3))",
-        [reportId,row.tenant,orderId,row.versions.length],"diagnostic_reports",reportId);
+        [reportId,row.tenant,orderId,row.versions.length],reportId);
       versions[row.key]=[];
       for(const [v,status]of row.versions.entries()){
         const versionId=randomUUID();
@@ -81,7 +81,7 @@ test("Stage 115 real MariaDB: only latest report version with audited staff atte
           "INSERT INTO diagnostic_report_versions(id,report_id,version,status,branch_id,content_snapshot,result_version_snapshot,verification_token,issued_by_user_id,issued_at) VALUES(?,?,?,?,?,'{}','[]',?,?,NOW(3))",
           [versionId,reportId,v+1,status,row.branch,
             "s115"+randomUUID().replaceAll("-",""),row.actor],
-          "diagnostic_report_versions",versionId);
+          versionId);
       }
     }
     async function event(key:string,which:number,kind:"HANDOVER"|"PRINT"|"UNKEYED"){
@@ -93,7 +93,7 @@ test("Stage 115 real MariaDB: only latest report version with audited staff atte
       await add("report_delivery_events",
         "INSERT INTO report_delivery_events(id,report_version_id,channel,status,recipient,performed_by_user_id,handover_request_id,details,occurred_at) VALUES (?,?,?,'RECORDED',?,?,?, ?,NOW(3))",
         [id,versions[key][which],kind==="PRINT"?"PRINT":"OTHER",kind==="PRINT"?null:"PATIENT",
-          row.actor,request,JSON.stringify(evidence)],"report_delivery_events",id);
+          row.actor,request,JSON.stringify(evidence)],id);
     }
     await event("finalWithStaff",0,"HANDOVER");
     await event("amendedOldOnly",0,"HANDOVER");
