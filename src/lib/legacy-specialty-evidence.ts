@@ -39,18 +39,21 @@ const optionalDecimal=(v:unknown):v is string|null=>v===null||(typeof v==="strin
 const trustedTables=new Set<string>(LEGACY_SPECIALTY_EVIDENCE_TABLES.map(x=>x.toLowerCase()));
 
 export function parseSpecialtyEvidence(payload:unknown):SpecialtyEvidence {
-  if(!object(payload)||payload.schemaVersion!==1||payload.evidenceType!==LEGACY_SPECIALTY_EVIDENCE_TYPE
-    ||payload.clinicalUseApproved!==false||!boundedText(payload.sourceName,255)
-    ||/[\/\\]/.test(payload.sourceName)||!/^.+\.(mdb|accdb)$/i.test(payload.sourceName)
-    ||typeof payload.sourceSha256!=="string"||!/^[a-f0-9]{64}$/.test(payload.sourceSha256)
-    ||typeof payload.exportedAtUtc!=="string"||!/\d{4}-\d\d-\d\dT\d\d:\d\d/.test(payload.exportedAtUtc)
-    ||!Array.isArray(payload.tables)||payload.tables.length<1||payload.tables.length>10) {
+  if(!object(payload)) invalid("invalid_specialty_evidence_header");
+  const doc = payload as Record<string, unknown>;
+  if(doc.schemaVersion!==1||doc.evidenceType!==LEGACY_SPECIALTY_EVIDENCE_TYPE
+    ||doc.clinicalUseApproved!==false||!boundedText(doc.sourceName,255)
+    ||/[\/\\]/.test(doc.sourceName)||!/^.+\.(mdb|accdb)$/i.test(doc.sourceName)
+    ||typeof doc.sourceSha256!=="string"||!/^[a-f0-9]{64}$/.test(doc.sourceSha256)
+    ||typeof doc.exportedAtUtc!=="string"||!/\d{4}-\d\d-\d\dT\d\d:\d\d/.test(doc.exportedAtUtc)
+    ||!Array.isArray(doc.tables)||doc.tables.length<1||doc.tables.length>10) {
     invalid("invalid_specialty_evidence_header");
   }
   const tables:SpecialtyEvidenceTable[]=[];
+  const sources = doc.tables as unknown[];
   const seenTables=new Set<string>();
   let globalObservations=0;
-  for(const raw of payload.tables){
+  for(const raw of sources){
     if(!object(raw)||!allowedName(raw.tableName)||!trustedTables.has(raw.tableName.toLowerCase())
       ||seenTables.has(raw.tableName.toLowerCase())
       ||typeof raw.pairingComplete!=="boolean"
@@ -98,8 +101,8 @@ export function parseSpecialtyEvidence(payload:unknown):SpecialtyEvidence {
       pairingComplete:raw.pairingComplete,warnings:raw.warnings});
   }
   return {schemaVersion:1,evidenceType:LEGACY_SPECIALTY_EVIDENCE_TYPE,
-    sourceName:payload.sourceName as string,sourceSha256:payload.sourceSha256 as string,
-    exportedAtUtc:payload.exportedAtUtc as string,clinicalUseApproved:false,tables};
+    sourceName:doc.sourceName as string,sourceSha256:doc.sourceSha256 as string,
+    exportedAtUtc:doc.exportedAtUtc as string,clinicalUseApproved:false,tables};
 }
 
 export type MatchingComponent = {id:string;code:string;nameEn:string;nameAr:string|null};
