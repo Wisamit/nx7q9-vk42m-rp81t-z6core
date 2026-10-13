@@ -107,6 +107,10 @@ export function buildReportQueueQueries(args: {
     where.push("v.issued_at < ?");
     params.push(nextUtcDay(f.to));
   }
+  if (f.print === "NO_RECORD") {
+    // Retracted current versions must never appear as outstanding print work.
+    where.push("v.status <> 'RETRACTED'");
+  }
   if (f.print !== "ALL") {
     const hasPrintEvidence = "EXISTS (SELECT 1 FROM report_delivery_events d " +
       "WHERE d.report_version_id = v.id AND d.channel = 'PRINT' " +
