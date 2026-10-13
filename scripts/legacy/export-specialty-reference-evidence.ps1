@@ -151,7 +151,7 @@ try {
   if ($report.tables.Count -eq 0) {
     throw "No known specialty range tables found. Review the MDB schema; no evidence file written."
   }
-  $targetDir = [IO.Path]::GetDirectoryName($forbiddenOutput)
+  # A provider can hold an open read handle while another process changes the MDB.\n  # A source version is valid only if its bytes are unchanged throughout extraction.\n  $postExtractionHash = (Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash.ToLowerInvariant()\n  if ($postExtractionHash -ne $report.sourceSha256) {\n    throw "MDB source bytes changed during extraction. No evidence file was saved; re-run from an immutable backup."\n  }\n  $targetDir = [IO.Path]::GetDirectoryName($forbiddenOutput)
   if (!(Test-Path -LiteralPath $targetDir)) { New-Item -ItemType Directory -Path $targetDir -Force | Out-Null }
   $json = ConvertTo-Json -InputObject $report -Depth 14
   # Write atomically so failed exports cannot masquerade as complete evidence.
