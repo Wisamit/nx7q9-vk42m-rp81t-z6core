@@ -100,7 +100,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
             : tr(locale, "Not specified", "غير محدد")}</dd>
           <dt>{tr(locale, "Delivery commitment (UTC)", "موعد التسليم (UTC)")}</dt>
           <dd>{order.promisedReportDeliveryAtUtc?.toISOString().replace("T"," ").slice(0,19) || "—"}</dd>
-          <dt>{tr(locale, "Promised date is separate from laboratory TAT", "الموعد المتفق عليه مستقل عن مدة الإنجاز المخبري TAT")}</dt><dd>—</dd>
+
           <dt>{tr(locale, "Referrer", "المحيل")}</dt><dd>{order.referrer?.nameEn || "—"}</dd>
           <dt>{tr(locale, "Client", "العميل")}</dt><dd>{order.client?.nameEn || tr(locale, "Patient / walk-in", "مريض / حضور مباشر")}</dd>
           <dt>{tr(locale, "Fasting", "صائم")}</dt><dd>{order.fasting === null ? tr(locale, "Unknown", "غير معروف") : order.fasting ? tr(locale, "Yes", "نعم") : tr(locale, "No", "لا")}</dd>
