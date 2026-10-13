@@ -79,7 +79,7 @@ test("Stage 111 real MariaDB: current-version print evidence excludes old versio
     const run=async(input:Record<string,string>,scope:string[]=[branchA,branchB])=>{
       const parsed=parseReportQueueFilters(input,scope);
       assert.equal(parsed.ok,true);
-      if(!parsed.ok)throw Error(parsed.error);
+      if(!parsed.ok)throw Error('Report queue filter parse failed');
       const q=buildReportQueueQueries({organizationId:org,authorizedBranchIds:scope,filters:parsed.value});
       const [count]=await db.execute<mysql.RowDataPacket[]>(q.count.sql,q.count.params);
       const [rows]=await db.execute<mysql.RowDataPacket[]>(q.ids.sql,q.ids.params);
