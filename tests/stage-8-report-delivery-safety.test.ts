@@ -97,7 +97,7 @@ test("queued report notifications are not dispatched after amendment or retracti
   const claim = dispatcher.indexOf("const claim = await db.notificationDelivery.updateMany",start);
   const report = dispatcher.indexOf("const version = await db.diagnosticReportVersion.findFirst",claim);
   const stop = dispatcher.indexOf("const config = gatewayConfig",report);
-  const post = dispatcher.indexOf("await fetch(config.url",stop);
+  const post = dispatcher.indexOf("await fetch(safeOutboundUrl(config.url)",stop);
   assert.ok(claim>start && report>claim && stop>report && post>stop);
   const gated=dispatcher.slice(report,stop);
   assert.ok(gated.includes('version.status === "RETRACTED"'));
