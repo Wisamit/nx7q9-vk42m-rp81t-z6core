@@ -124,6 +124,7 @@ export function ResultWorkflowActions({
   const [showAmendment, setShowAmendment] = useState(false);
   const [showMedicalReturn, setShowMedicalReturn] = useState(false);
   const [stepUpPending,setStepUpPending]=useState<StepUpPurpose|null>(null);
+  const [pendingAmendmentReason,setPendingAmendmentReason]=useState("");
 
   const snapshot = validationPolicySnapshot && typeof validationPolicySnapshot === "object"
     ? validationPolicySnapshot as ValidationSnapshot
@@ -301,12 +302,17 @@ export function ResultWorkflowActions({
 
     if (!confirm(tr("Start an amendment? The released result will remain preserved while a new version is prepared.", "بدء تعديل؟ ستبقى النتيجة الصادرة محفوظة بينما يتم إعداد إصدار جديد."))) return;
 
+    setPendingAmendmentReason(reason);
+    setStepUpPending("RESULT_AMEND");
+  }
+
+  async function commitAmendment(reason: string, stepUpToken: string) {
     setBusy("amend");
     setMessage("");
 
     const response = await fetch("/api/results/" + resultId + "/amend", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "x-staff-step-up-token": stepUpToken },
       body: JSON.stringify({ reason }),
     });
     const body = await response.json().catch(() => ({}));
@@ -330,11 +336,16 @@ export function ResultWorkflowActions({
     <StaffStepUpDialog open={stepUpPending!==null}
       action={stepUpPending||"MEDICAL_APPROVAL"} resourceKey={resultId}
       branchId={performingBranchId} locale={locale}
-      onCancel={()=>setStepUpPending(null)}
+      onCancel={()=>{setStepUpPending(null);setPendingAmendmentReason("");}}
       onGranted={token=>{
         const action=stepUpPending;setStepUpPending(null);
         if(action==="MEDICAL_APPROVAL")void approveMedicalValidation(token);
         if(action==="RESULT_RELEASE")void releaseResult(token);
+        if(action==="RESULT_AMEND"){
+          const reason=pendingAmendmentReason;
+          setPendingAmendmentReason("");
+          if(reason)void commitAmendment(reason,token);
+        }
       }}/>
     <div className="result-workflow-status">
       <div><span>{tr("Result status", "حالة النتيجة")}</span><strong>{sharedStatusLabel(locale, resultStatus)}</strong></div>
