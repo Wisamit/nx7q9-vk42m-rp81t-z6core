@@ -6,13 +6,16 @@
  */
 export const DELIVERY_QUEUE_PAGE_SIZE=50;
 export type DeliveryFollowupStatus =
-  "PENDING"|"OVERDUE"|"DUE_SOON"|"FUTURE"|"CURRENT_ISSUED"|"ALL";
+  "PENDING"|"OVERDUE"|"DUE_SOON"|"FUTURE"|"CURRENT_ISSUED"|
+  "CURRENT_ISSUED_WITH_STAFF_ATTESTATION"|"CURRENT_ISSUED_NO_STAFF_ATTESTATION"|"ALL";
 export type DeliveryFollowupFilters={
   branchId:string; accession:string; status:DeliveryFollowupStatus; page:number;
 };
 type SqlQuery={sql:string;params:Array<string|number>};
 const STATUSES=new Set<DeliveryFollowupStatus>([
-  "PENDING","OVERDUE","DUE_SOON","FUTURE","CURRENT_ISSUED","ALL",
+  "PENDING","OVERDUE","DUE_SOON","FUTURE","CURRENT_ISSUED",
+  "CURRENT_ISSUED_WITH_STAFF_ATTESTATION",
+  "CURRENT_ISSUED_NO_STAFF_ATTESTATION","ALL",
 ]);
 function scalar(x:string|string[]|undefined){
   return x===undefined||typeof x==="string"?x:null;
@@ -68,6 +71,16 @@ export function buildDeliveryFollowupQueries(input:{
   if(f.accession){where.push("o.accession_number = ?");args.push(f.accession)}
   const currentIssued="v.status IN ('FINAL','AMENDED')";
   const pending="(v.id IS NULL OR v.status NOT IN ('FINAL','AMENDED'))";
+  // Evidence must originate from the Stage 114 auditable, server-side staff
+  // attestation on the CURRENT report version. Earlier version attestations,
+  // ordinary OTHER, PRINT and provider delivery events never qualify.
+  const staffAttested="EXISTS (SELECT 1 FROM report_delivery_events d "+
+    "WHERE d.report_version_id=v.id "+
+    "AND d.channel='OTHER' AND d.status='RECORDED' "+
+    "AND d.recipient='PATIENT' AND d.performed_by_user_id IS NOT NULL "+
+    "AND d.handover_request_id IS NOT NULL "+
+    "AND JSON_UNQUOTE(JSON_EXTRACT(d.details,'$.evidenceType')) = "+
+      "'STAFF_ATTESTED_IN_PERSON_HANDOVER_V1')";
   const nowMs=input.nowUtc.getTime();
   if(!Number.isFinite(nowMs))throw Error("INVALID_DELIVERY_QUEUE_CLOCK");
   const now=asDatabaseUtc(input.nowUtc);
@@ -75,6 +88,10 @@ export function buildDeliveryFollowupQueries(input:{
   switch(f.status){
     case "ALL":break;
     case "CURRENT_ISSUED":where.push(currentIssued);break;
+    case "CURRENT_ISSUED_WITH_STAFF_ATTESTATION":
+      where.push(currentIssued,staffAttested);break;
+    case "CURRENT_ISSUED_NO_STAFF_ATTESTATION":
+      where.push(currentIssued,"NOT "+staffAttested);break;
     case "PENDING":where.push(pending);break;
     case "OVERDUE":
       where.push(pending,"o.promised_report_delivery_at_utc < ?");
@@ -96,7 +113,8 @@ export function buildDeliveryFollowupQueries(input:{
         "o.promised_report_delivery_at_utc AS promisedUtc, "+
         "o.promised_report_delivery_local AS promisedLocal, "+
         "o.promised_report_delivery_timezone AS promisedTimezone, "+
-        "v.status AS currentReportStatus, v.issued_at AS reportIssuedAt"+suffix+
+        "v.status AS currentReportStatus, v.issued_at AS reportIssuedAt, "+
+        staffAttested+" AS currentStaffAttested"+suffix+
         " ORDER BY o.promised_report_delivery_at_utc ASC,o.id ASC LIMIT ? OFFSET ?",
       params:[...args,DELIVERY_QUEUE_PAGE_SIZE,(f.page-1)*DELIVERY_QUEUE_PAGE_SIZE],
     },
