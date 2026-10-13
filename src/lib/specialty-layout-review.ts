@@ -68,11 +68,11 @@ export function parseSpecialtyLayoutPlan(raw:unknown, snapshot:SpecialtySnapshot
   const actualCodes=new Set(activeComponents.map(c=>c.code));
   const components:SpecialtyComponent[]=raw.components.map((candidate:unknown)=>{
     if(!isRecord(candidate)) throw new SpecialtyPlanError("invalid_component");
-    const identifier=code(candidate.code);
+    const identifier=clean(candidate.code,80,true);
     const sectionCode=candidate.sectionCode===null?null:code(candidate.sectionCode);
     const width=candidate.entryWidth;
     const hintEn=clean(candidate.entryHintEn,500),hintAr=clean(candidate.entryHintAr,500);
-    if(!identifier||!actualCodes.has(identifier)||seenComponents.has(identifier)
+    if(!identifier||!/^[A-Za-z0-9._-]{1,80}$/.test(identifier)||!actualCodes.has(identifier)||seenComponents.has(identifier)
       ||(candidate.sectionCode!==null&&(!sectionCode||!seenSections.has(sectionCode)))
       ||!widths.has(String(width))||hintEn===null||hintAr===null)
       throw new SpecialtyPlanError("invalid_or_duplicate_component_assignment");
