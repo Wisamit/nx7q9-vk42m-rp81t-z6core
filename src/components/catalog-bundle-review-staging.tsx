@@ -46,8 +46,8 @@ export function CatalogBundleReviewStaging({ locale }: { locale: "ar" | "en" }) 
   return <section className="detail-card detail-section">
     <h2>{tr("Review a previously exported catalog JSON bundle", "مراجعة ملف JSON مُصدَّر من إعدادات المختبر")}</h2>
     <p className="muted">{tr(
-      "Upload the native six-class JSON bundle downloaded above. Source identifiers, branch/department access, permissions and original decimal values are checked. All rows stay DRAFT / review-only: this does not restore, activate or overwrite any clinical or financial configuration.",
-      "ارفع ملف JSON الأصلي الذي تم تصديره من الأعلى. يتم التحقق من هوية المصدر وصلاحيات الفروع والأقسام والأسعار والقيم العشرية الأصلية. تبقى جميع الصفوف مسودة للمراجعة فقط، ولا يتم تفعيل أو استعادة أو تعديل أي إعداد سريري أو مالي.",
+      "Upload the native nine-class JSON bundle downloaded above, including complete panels, commercial packages and package tariffs. Source identifiers, branch/department access, permissions and original decimal values are checked. All rows stay DRAFT / review-only: this does not restore, activate or overwrite any clinical or financial configuration.",
+      "ارفع ملف JSON الأصلي بتسع فئات، بما فيها عضويات الفحوص والباقات وأسعار الباقات. يتم التحقق من هوية المصدر وصلاحيات الفروع والأقسام والأسعار والقيم العشرية الأصلية. تبقى جميع الصفوف مسودة للمراجعة فقط، ولا يتم تفعيل أو استعادة أو تعديل أي إعداد سريري أو مالي.",
     )}</p>
     <input ref={input} type="file" hidden accept=".json,application/json"
       onChange={event => { const file = event.target.files?.[0]; if (file) void stage(file); }} />
