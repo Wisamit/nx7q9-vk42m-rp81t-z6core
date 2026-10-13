@@ -34,7 +34,7 @@ test("Stage 104 real MariaDB: tenant-scoped batch status aggregation and paginat
       await add("catalog_import_batches",otherBatch,
         "INSERT INTO catalog_import_batches(id,organization_id,source_type,source_name,status,created_by_user_id,updated_at) VALUES(?,?,?,?,?,?,NOW(3))",
         [otherBatch,other,"MDB","foreign-stage-104","VALIDATED",user]);
-      const insert="INSERT INTO catalog_import_rows(id,batch_id,row_number,entity_type,status,source_data,updated_at) VALUES(?,?,?,?,?,?,NOW(3))";
+      const insert="INSERT INTO catalog_import_rows(id,batch_id,\`row_number\`,entity_type,status,source_data,updated_at) VALUES(?,?,?,?,?,?,NOW(3))";
       await add("catalog_import_rows",row1,insert,[row1,batch,1,"TEST","IMPORTED","{}"]);
       await add("catalog_import_rows",row2,insert,[row2,batch,2,"REFERENCE_INTERVAL","WARNING","{}"]);
       await add("catalog_import_rows",row3,insert,[row3,batch,3,"PRICE_LIST_ITEM","SKIPPED","{}"]);
