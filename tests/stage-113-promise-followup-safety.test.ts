@@ -99,7 +99,7 @@ test("Stage 113: UI prevents cross-branch leakage and never claims printing or p
   assert.match(page,/row.promisedLocal/);
   assert.match(page,/row.promisedTimezone/);
   assert.match(page,/row.promisedUtc.toISOString/);
-  assert.match(page,/report does not mean printed, sent, received or acknowledged/i);
+  assert.match(page,/Issued does not mean printed, sent, received or acknowledged/i);
   assert.match(page,/page<pages/);
   assert.match(orders,/href="\/orders\/delivery-queue"/);
 });
