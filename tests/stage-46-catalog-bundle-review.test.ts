@@ -61,7 +61,8 @@ test("Stage 46: reject cross-organization, malformed, duplicate or ambiguous sou
   reject({...bundle(),consistency:"transactional"},"bundle_unsupported_format");
   reject({...bundle(),exportedAt:"tomorrow"},"bundle_invalid_export_date");
   reject(bundle([]),"bundle_invalid_groups");
-  reject(bundle([...example,example[0]]),"bundle_invalid_groups");
+  reject(bundle([...example,example[0]]),"bundle_invalid_group");
+  reject(bundle([...example,example[0],example[1],example[2],example[3]]),"bundle_invalid_groups");
   reject(bundle([{entityType:"TEST",records:[...example[0].records,...example[0].records]}]),"bundle_duplicate_master");
   reject(bundle([{entityType:"TEST",records:[]}]),"bundle_empty");
   reject(bundle([{entityType:"CONTAINER",records:[{id:ids[0]}]}]),"bundle_invalid_group");

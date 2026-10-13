@@ -66,7 +66,8 @@ export default async function CatalogPage() {
       ...(permissions.has("catalog.manage") ? {
         OR: [
           { AND: [{ rows: { none: { entityType: "PRICE_LIST_ITEM" } } },
-            { rows: { none: { entityType: "PRICE_LIST" } } }] },
+            { rows: { none: { entityType: "PRICE_LIST" } } },
+            { rows: { none: { entityType: "PRICE_LIST_PACKAGE_ITEM" } } }] },
           ...(permissions.has("pricing.manage") ? [{ createdByUserId: session.user.id }] : []),
         ],
       } : { id: "00000000-0000-0000-0000-000000000000" }),

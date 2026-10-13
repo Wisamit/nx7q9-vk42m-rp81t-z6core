@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
-import type { Prisma } from "../../../../../../generated/prisma/client";
+import { Prisma } from "../../../../../../generated/prisma/client";
+import { sameCompositeMembership, type CompositeMember } from "@/lib/catalog-composite-bundle";
 import { permissionSet, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import {
@@ -80,6 +81,22 @@ export async function POST(request: Request) {
     if (organizationLock.length !== 1) {
       return { error: "bundle_organization_inactive", httpStatus: 403 } as const;
     }
+  const liveUser = await tx.user.findFirst({
+    where: { id: session.user.id, organizationId: scope.organizationId, status: "ACTIVE" },
+    include: { roles: { include: { role: { include: {
+      permissions: { include: { permission: true } },
+    } } } } },
+  });
+  const livePermissions = new Set((liveUser?.roles || [])
+    .filter(r => r.role.status === "ACTIVE" && r.role.organizationId === scope.organizationId)
+    .flatMap(r => r.role.permissions.map(grant => grant.permission.code)));
+  if (!livePermissions.has("catalog.manage") ||
+      (references.some(r => r.entityType.startsWith("PRICE_")) &&
+        !livePermissions.has("pricing.manage")) ||
+      (references.some(r => r.entityType === "REFERENCE_INTERVAL") &&
+        !livePermissions.has("catalog.reference_ranges.manage"))) {
+    return { error: "bundle_import_permission_changed", httpStatus: 403 } as const;
+  }
   // Session scopes can be stale. Revalidate actual grants after the
   // organization lock, before reading master identities or writing review data.
   const liveBranch = await tx.branch.findFirst({
@@ -135,6 +152,7 @@ export async function POST(request: Request) {
   const testWhere = { ...clinicalImportTestWhere(liveScope), status: undefined };
   const testIds = [...new Set([
     ...parsed.ids.tests,
+    ...parsed.ids.memberTests,
     ...references.filter(x => x.entityType === "COMPONENT" || x.entityType === "PRICE_LIST_ITEM")
       .map(x => x.original.testId as string),
   ])];
@@ -150,9 +168,13 @@ export async function POST(request: Request) {
   ])];
   const priceListIds = [...new Set([
     ...parsed.ids.priceLists,
+    ...parsed.ids.compositePriceLists,
     ...references.filter(x => x.entityType === "PRICE_LIST_ITEM")
       .map(x => x.original.priceListId as string),
   ])];
+  const panelIds = [...new Set(parsed.ids.panels)];
+  const packageIds = [...new Set([...parsed.ids.packages, ...parsed.ids.pricedPackages])];
+  const packagePriceIds = [...new Set(parsed.ids.packagePrices)];
   const permittedPriceList = {
     organizationId: scope.organizationId,
     OR: [
@@ -173,19 +195,50 @@ export async function POST(request: Request) {
       OR: [{ branchId: null }, { branchId: { in: [...activeBranches] } }],
     }, select: { id: true, componentId: true, branchId: true } }),
     tx.priceList.findMany({ where: { ...permittedPriceList, id: { in: priceListIds } },
-      select: { id: true, code: true, scopeType: true, branchId: true } }),
+      select: { id: true, code: true, currency: true, scopeType: true, branchId: true } }),
     tx.priceListItem.findMany({ where: {
       id: { in: parsed.ids.prices }, priceList: permittedPriceList, test: testWhere,
     }, select: { id: true, priceListId: true, testId: true } }),
   ]);
+  const [panels, packages, packagePrices] = await Promise.all([
+    tx.testPanel.findMany({ where: {
+      id: { in: panelIds }, organizationId: scope.organizationId,
+      items: { some: { test: testWhere }, every: { test: testWhere } },
+    }, select: {
+      id: true, code: true, status: true,
+      items: { select: {
+        testId: true, displayOrder: true, required: true, test: { select: { code: true } },
+      } },
+    } }),
+    tx.commercialPackage.findMany({ where: {
+      id: { in: packageIds }, organizationId: scope.organizationId,
+      items: { some: { test: testWhere }, every: { test: testWhere } },
+    }, select: {
+      id: true, code: true, status: true,
+      items: { select: { testId: true, displayOrder: true, test: { select: { code: true } } } },
+    } }),
+    tx.priceListPackageItem.findMany({ where: {
+      id: { in: packagePriceIds },
+      priceList: { ...permittedPriceList, sourceId: null, referrerId: null,
+        clientId: null, contractId: null },
+      package: { organizationId: scope.organizationId,
+        items: { some: { test: testWhere }, every: { test: testWhere } } },
+    }, select: {
+      id: true, priceListId: true, packageId: true, unitPrice: true,
+      effectiveFrom: true, effectiveTo: true, status: true,
+    } }),
+  ]);
   if (tests.length !== testIds.length || units.length !== unitIds.length ||
       components.length !== componentIds.length || intervals.length !== parsed.ids.intervals.length ||
-      lists.length !== priceListIds.length || prices.length !== parsed.ids.prices.length) {
+      lists.length !== priceListIds.length || prices.length !== parsed.ids.prices.length ||
+      panels.length !== panelIds.length || packages.length !== packageIds.length ||
+      packagePrices.length !== packagePriceIds.length) {
     return { error: "bundle_master_identity_or_scope_changed", httpStatus: 403 } as const;
   }
   const byId = <T extends { id: string }>(rows: T[]) => new Map(rows.map(x => [x.id, x]));
   const testMap = byId(tests), unitMap = byId(units), componentMap = byId(components);
   const intervalMap = byId(intervals), listMap = byId(lists), priceMap = byId(prices);
+  const panelMap = byId(panels), packageMap = byId(packages), packagePriceMap = byId(packagePrices);
   for (const row of references) {
     const n = row.normalized, original = row.original;
     let consistent = true;
@@ -198,6 +251,37 @@ export async function POST(request: Request) {
       const existing = componentMap.get(row.identity);
       consistent = !!existing && existing.testId === n.testId && existing.code === n.code &&
         existing.unitId === n.unitId && testMap.get(existing.testId)?.code === n.testCode;
+    } else if (row.entityType === "PANEL") {
+      const live = panelMap.get(row.identity);
+      const members = (live?.items || []).map(item => ({
+        testId: item.testId, testCode: item.test.code,
+        displayOrder: item.displayOrder, required: item.required,
+      }));
+      consistent = !!live && live.code === n.code && live.status === n.status &&
+        Array.isArray(n.items) && sameCompositeMembership(
+          n.items as CompositeMember[], members, "PANEL");
+    } else if (row.entityType === "PACKAGE") {
+      const live = packageMap.get(row.identity);
+      const members = (live?.items || []).map(item => ({
+        testId: item.testId, testCode: item.test.code,
+        displayOrder: item.displayOrder,
+      }));
+      consistent = !!live && live.code === n.code && live.status === n.status &&
+        Array.isArray(n.items) && sameCompositeMembership(
+          n.items as CompositeMember[], members, "PACKAGE");
+    } else if (row.entityType === "PRICE_LIST_PACKAGE_ITEM") {
+      const price = packagePriceMap.get(row.identity);
+      const list = listMap.get(n.priceListId as string);
+      const linkedPackage = packageMap.get(n.packageId as string);
+      consistent = !!price && !!list && !!linkedPackage &&
+        price.priceListId === n.priceListId && price.packageId === n.packageId &&
+        list.code === n.priceListCode && linkedPackage.code === n.packageCode &&
+        list.scopeType === n.scopeType && list.branchId === n.branchId &&
+        list.currency === n.currency && price.status === n.status &&
+        price.effectiveFrom.getTime() === new Date(n.effectiveFrom as string).getTime() &&
+        (price.effectiveTo?.getTime() ?? null) ===
+          (n.effectiveTo ? new Date(n.effectiveTo as string).getTime() : null) &&
+        new Prisma.Decimal(n.unitPrice as string).equals(price.unitPrice);
     } else if (row.entityType === "REFERENCE_INTERVAL") {
       const existing = intervalMap.get(row.identity);
       const component = componentMap.get(n.componentId as string);
