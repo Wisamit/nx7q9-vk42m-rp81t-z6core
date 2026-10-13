@@ -91,7 +91,12 @@ export function buildDeliveryFollowupQueries(input:{
   return {
     count:{sql:"SELECT COUNT(*) AS total"+suffix,params:[...args]},
     ids:{
-      sql:"SELECT o.id AS orderId"+suffix+
+      sql:"SELECT o.id AS orderId, o.accession_number AS accessionNumber, "+
+        "o.ordering_branch_id AS orderingBranchId, o.status AS orderStatus, "+
+        "o.promised_report_delivery_at_utc AS promisedUtc, "+
+        "o.promised_report_delivery_local AS promisedLocal, "+
+        "o.promised_report_delivery_timezone AS promisedTimezone, "+
+        "v.status AS currentReportStatus, v.issued_at AS reportIssuedAt"+suffix+
         " ORDER BY o.promised_report_delivery_at_utc ASC,o.id ASC LIMIT ? OFFSET ?",
       params:[...args,DELIVERY_QUEUE_PAGE_SIZE,(f.page-1)*DELIVERY_QUEUE_PAGE_SIZE],
     },
