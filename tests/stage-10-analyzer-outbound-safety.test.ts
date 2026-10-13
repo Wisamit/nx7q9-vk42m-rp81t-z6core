@@ -81,9 +81,13 @@ test("inbound analyzer raw-message ingestion handles concurrent bridge retries w
   const api=source("../src/app/api/integrations/analyzers/[id]/messages/route.ts");
   assert.ok(api.includes('error.code !== "P2002"'));
   assert.ok(api.includes("analyzerId_bridgeMessageId"));
-  assert.ok(api.includes("stored.message"));
-  assert.ok(api.includes("stored.duplicate"));
-  assert.ok(api.includes("message.payloadHash !== payloadHash"));
+  // The unique analyzer/message constraint plus P2002 winner lookup is the
+  // invariant; local variable names are not a clinical safety property.
+  assert.ok(api.includes("const winner = await prisma.analyzerMessage.findUnique"));
+  assert.ok(api.includes("winner.payloadHash !== payloadHash"));
+  assert.ok(api.includes("winner.protocol !== protocol"));
+  assert.ok(api.includes("duplicate: true"));
+  assert.ok(api.includes("ANALYZER_MESSAGE_RECEIVED"));
 });
 
 test("analyzer outbound model retains immutable clinical code/barcode snapshots and assignment idempotency", () => {
