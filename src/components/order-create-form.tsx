@@ -24,7 +24,7 @@ type PackageOption = { id: string; code: string; nameEn: string; testIds: string
 type SimpleOption = { id: string; code: string; nameEn: string };
 type ReferrerOption = SimpleOption & { clientId: string | null };
 type SourceOption = SimpleOption & { category: string };
-type BranchOption = SimpleOption;
+type BranchOption = SimpleOption & { timezone: string };
 export type DoctorRequisitionPrefill = {
   id:string;patientId:string;branchId:string;referrerId:string;
   priority:"ROUTINE"|"URGENT"|"STAT";testIds:string[];
@@ -253,7 +253,7 @@ export function OrderCreateForm({
       <label>{tr("Ordering branch", "فرع الطلب")}
         <select name="branchId" required defaultValue={initialDoctorRequisition?.branchId || activeBranchId || ""}>
           <option value="">{tr("Select branch…", "اختر الفرع…")}</option>
-          {branches.map(branch => <option key={branch.id} value={branch.id}>{branch.code} — {branch.nameEn}</option>)}
+          {branches.map(branch => <option key={branch.id} value={branch.id}>{branch.code} — {branch.nameEn} ({branch.timezone})</option>)}
         </select>
       </label>
       <label>{tr("Priority", "الأولوية")}
