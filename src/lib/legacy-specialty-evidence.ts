@@ -31,11 +31,11 @@ const invalid=(code:string):never=>{throw new LegacySpecialtyEvidenceError(code)
 const object=(v:unknown):v is Record<string,unknown>=>!!v&&typeof v==="object"&&!Array.isArray(v);
 const boundedText=(v:unknown,max=100):v is string=>typeof v==="string"&&v.length>0&&v.length<=max
   &&!/[\u0000-\u001f\u007f]/.test(v);
-const allowedName=(v:unknown)=>boundedText(v,100)&&!/[\/\\]/.test(v);
-const optionalText=(v:unknown,max=32)=>v===null||(typeof v==="string"&&v.length<=max
+const allowedName=(v:unknown):v is string=>boundedText(v,100)&&!/[\/\\]/.test(v);
+const optionalText=(v:unknown,max=32):v is string|null=>v===null||(typeof v==="string"&&v.length<=max
   &&!/[\u0000-\u001f\u007f]/.test(v));
 const dec=/^-?(?:0|[1-9]\d{0,11})(?:\.\d{1,8})?$/;
-const optionalDecimal=(v:unknown)=>v===null||(typeof v==="string"&&v.length<=24&&dec.test(v));
+const optionalDecimal=(v:unknown):v is string|null=>v===null||(typeof v==="string"&&v.length<=24&&dec.test(v));
 const trustedTables=new Set<string>(LEGACY_SPECIALTY_EVIDENCE_TABLES.map(x=>x.toLowerCase()));
 
 export function parseSpecialtyEvidence(payload:unknown):SpecialtyEvidence {
