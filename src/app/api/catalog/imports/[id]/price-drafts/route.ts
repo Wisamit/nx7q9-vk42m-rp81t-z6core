@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { Prisma } from "../../../../../../generated/prisma/client";
+import { Prisma } from "../../../../../../../generated/prisma/client";
 import { permissionSet, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { CompositeWriteError, withScopedCompositeCreation } from "@/lib/catalog-composite-write";
