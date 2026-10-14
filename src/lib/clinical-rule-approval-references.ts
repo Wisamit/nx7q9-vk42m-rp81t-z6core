@@ -84,7 +84,8 @@ export async function validateClinicalRuleApprovalReferences(
     (!row.department.branch || (row.department.branch.organizationId === input.organizationId &&
       row.department.branch.status === "ACTIVE"))
   ).map(row => row.departmentId);
-  if (priorRestriction && !permitted.length) return blocked("clinical_rule_department_scope_revoked");
+  if ((priorRestriction || liveDepartments.length > 0) && !permitted.length)
+    return blocked("clinical_rule_department_scope_revoked");
   const scope: Scope = {
     organizationId: input.organizationId, activeBranchId: input.activeBranchId,
     permittedDepartmentIds: permitted,
@@ -130,8 +131,8 @@ export async function validateClinicalRuleApprovalReferences(
       if (!source || !target || source.id === target.id)
         return blocked("clinical_rule_test_inactive_or_forbidden");
       const component = activeComponent(source,rule.sourceComponentId);
-      if (rule.sourceComponentId && !component ||
-          (source.components.some(c => c.status === "ACTIVE") && !component))
+      if ((rule.sourceComponentId && !component) ||
+          (source.components.length > 0 && !component))
         return blocked("clinical_rule_source_component_inactive_or_mismatched");
       const resultType = component?.resultType ?? source.resultType;
       const numeric = ["LT","LTE","GT","GTE"].includes(rule.operator) ||
