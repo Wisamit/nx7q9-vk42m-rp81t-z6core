@@ -42,6 +42,7 @@ jobs:
       - run: npx prisma generate
       - run: npm run test:safety
       - run: node --experimental-strip-types --test tests/stage-126-legacy-row-lineage-mariadb.integration.test.ts
+      - run: node --experimental-strip-types --test tests/stage-126-package-price-draft-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/specimen-storage-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/specimen-transfer-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/result-validation-mariadb.integration.test.ts
