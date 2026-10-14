@@ -26,7 +26,7 @@ test("Stage 126: membership input refuses implicit code/label mapping, duplicate
   const helper = readFileSync("src/lib/catalog-composite-write.ts", "utf8");
   assert.match(helper, /composite_multiple_membership_sources/);
   assert.match(helper, /composite_duplicate_member/);
-  assert.match(helper, /member\.required/);
+  assert.match(helper, /typeof required !== "boolean"/);
   assert.match(helper, /displayOrder/);
   assert.match(helper, /raw\.length > 300/);
   assert.match(helper, /seenTest/);
