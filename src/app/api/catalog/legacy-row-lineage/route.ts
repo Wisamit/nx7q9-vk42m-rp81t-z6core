@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 const jsonHeaders = { "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" };
 const fail = (error: string, status: number) =>
   NextResponse.json({ error }, { status, headers: jsonHeaders });
-const required = ["catalog.manage", "pricing.manage", "catalog.reference_ranges.manage"] as const;
+const required = ["catalog.manage"] as const;
 
 function authorized(session: NonNullable<Awaited<ReturnType<typeof getCurrentSession>>>) {
   const perms = permissionSet(session);
@@ -49,7 +49,7 @@ async function readJson(request: Request, maxBytes: number): Promise<unknown> {
 /** Read-only hashed Access master-row evidence, never a migration/cutover certificate. */
 async function inTenantTransaction<T>(
   session: NonNullable<Awaited<ReturnType<typeof getCurrentSession>>>,
-  action: (tx: Prisma.TransactionClient) => Promise<T>,
+  action: (tx: Prisma.TransactionClient, livePermissions: Set<string>) => Promise<T>,
 ): Promise<T> {
   // The inferred overloaded Prisma transaction argument is deliberately kept
   // transaction-bound; the organization row lock serializes all decisions.
@@ -81,7 +81,7 @@ async function inTenantTransaction<T>(
     if (!required.every(p => live.has(p)) || !branch || !activeGrant ||
         departments !== 0 || grants !== activeBranches)
       throw new LegacyLineageError("lineage_scope_or_permissions_revoked", 403);
-    return action(tx);
+    return action(tx, live);
   }, { timeout: 30000 });
 }
 
@@ -173,7 +173,7 @@ export async function PATCH(request: Request) {
   try {
     const decision = parseLegacyRowDecision(await readJson(request, 4096));
     const org = session.user.organizationId, ctx = await requestContext();
-    const result = await inTenantTransaction(session, async tx => {
+    const result = await inTenantTransaction(session, async (tx, livePermissions) => {
       const existing = await tx.legacyCatalogRowLineage.findFirst({
         where: { id: decision.id, organizationId: org },
       });
@@ -196,6 +196,9 @@ export async function PATCH(request: Request) {
         throw new LegacyLineageError("source_row_author_required", 403);
       }
       const targetType = decision.targetType || existing.targetType;
+      if ((decision.classification === "MAPPED" || decision.classification === "APPROVED_MAPPING") &&
+          (!targetType || !livePermissions.has(legacyLineageDomainPermission(targetType))))
+        throw new LegacyLineageError("lineage_domain_permission_required", 403);
       const targetId = decision.targetId || existing.targetId;
       if ((decision.classification === "MAPPED" || decision.classification === "APPROVED_MAPPING")) {
         if (!targetType || !targetId ||
