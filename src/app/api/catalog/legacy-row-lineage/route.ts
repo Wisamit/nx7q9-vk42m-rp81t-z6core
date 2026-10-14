@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import type { Prisma } from "../../../../../../generated/prisma/client";
+import type { Prisma } from "../../../../../generated/prisma/client";
 import { getCurrentSession, permissionSet, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import {
@@ -130,14 +130,16 @@ export async function POST(request: Request) {
     const outcome = await inTenantTransaction(session, async tx => {
       const previous = await tx.legacyCatalogRowLineage.findFirst({
         where: { organizationId: org, sourceSha256: manifest.sourceSha256, sourceTable: manifest.tableName },
-        select: { sourceSchemaSha256: true },
+        select: { sourceSchemaSha256: true, digestKeyId: true },
       });
-      if (previous && previous.sourceSchemaSha256 !== manifest.schemaSha256)
+      if (previous && (previous.sourceSchemaSha256 !== manifest.schemaSha256 ||
+          previous.digestKeyId !== manifest.digestKeyId))
         throw new LegacyLineageError("lineage_source_schema_conflict", 409);
       const created = manifest.rows.length ? await tx.legacyCatalogRowLineage.createMany({
         data: manifest.rows.map(row => ({
           organizationId: org, sourceSha256: manifest.sourceSha256,
-          sourceSchemaSha256: manifest.schemaSha256, sourceTable: manifest.tableName,
+          sourceSchemaSha256: manifest.schemaSha256, digestKeyId: manifest.digestKeyId,
+          sourceTable: manifest.tableName,
           rowDigest: row.rowDigest, occurrence: row.occurrence,
           createdByUserId: session.user.id,
         })), skipDuplicates: true,
@@ -256,25 +258,26 @@ export async function GET(request: Request) {
   if (!authorized(session)) return fail("lineage_organization_review_permission_required", 403);
   const q = new URL(request.url).searchParams;
   const source = q.get("sourceSha256"), table = q.get("tableName");
+  const key = q.get("digestKeyId");
   const after = q.get("after") || "0";
-  if ([...q.keys()].some(k => !["sourceSha256", "tableName", "after"].includes(k)) ||
-      !source || !legacyRowHex.test(source) || !table ||
+  if ([...q.keys()].some(k => !["sourceSha256", "tableName", "digestKeyId", "after"].includes(k)) ||
+      !source || !legacyRowHex.test(source) || !table || !key || !legacyRowHex.test(key) ||
       !/^(?:0|[1-9][0-9]{0,8})$/.test(after))
     return fail("lineage_query_invalid", 400);
   try {
     const results = await inTenantTransaction(session, async tx => {
       const rows = await tx.legacyCatalogRowLineage.findMany({
         where: { organizationId: session.user.organizationId, sourceSha256: source,
-          sourceTable: table }, orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+          sourceTable: table, digestKeyId: key }, orderBy: [{ createdAt: "asc" }, { id: "asc" }],
         take: 101, skip: Number(after),
         select: { id: true, sourceTable: true, sourceSha256: true,
-          sourceSchemaSha256: true, rowDigest: true, occurrence: true,
+          sourceSchemaSha256: true, digestKeyId: true, rowDigest: true, occurrence: true,
           classification: true, targetType: true, targetId: true, batchId: true,
           importRowId: true, revision: true, reason: true, reviewedAt: true },
       });
       const stats = await tx.legacyCatalogRowLineage.groupBy({
         by: ["classification"], where: { organizationId: session.user.organizationId,
-          sourceSha256: source, sourceTable: table }, _count: { _all: true },
+          sourceSha256: source, sourceTable: table, digestKeyId: key }, _count: { _all: true },
       });
       return { rows: rows.slice(0, 100), nextAfter: rows.length > 100 ? Number(after) + 100 : null,
         counts: stats.map(s => ({ classification: s.classification, count: s._count._all })) };
