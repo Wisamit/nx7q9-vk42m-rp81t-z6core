@@ -55,7 +55,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       !Number.isSafeInteger(body.rowNumber) || (body.rowNumber as number) < 1 ||
       (body.rowNumber as number) > 20000)
     return fail("invalid_import_row", 400);
-  const { id } = await params;
+  const rowNumber = body.rowNumber as number;\n  const { id } = await params;
   if (!UUID.test(id)) return fail("batch_not_found", 404);
   const org = session.user.organizationId, ctx = await requestContext();
   try {
@@ -71,7 +71,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         r.role.permissions.some(p => p.permission.code === "pricing.manage")))
         throw new CompositeWriteError("pricing_permission_revoked", 403);
       const row = await tx.catalogImportRow.findFirst({
-        where: { batchId: id, rowNumber: body.rowNumber as number,
+        where: { batchId: id, rowNumber,
           entityType: "PRICE_LIST_PACKAGE_ITEM", status: { in: ["WARNING", "VALID"] },
           importedEntityId: null, batch: { organizationId: org, sourceType: "LEGACY_MDB_EXPORT" } },
         select: { id: true, status: true, normalizedData: true },
@@ -115,7 +115,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       if (listFrom === null || start! < listFrom ||
           (listTo !== null && (end === null || end > listTo)))
         throw new CompositeWriteError("package_tariff_outside_price_list_window", 409);
-      if (staged.some(entry => entry.rowNumber !== body.rowNumber &&
+      if (staged.some(entry => entry.rowNumber !== rowNumber &&
           candidate(entry.normalizedData).priceListCode === c.priceListCode &&
           candidate(entry.normalizedData).packageCode === c.packageCode &&
           overlaps(c.effectiveFrom, c.effectiveTo || null,
@@ -148,7 +148,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         organizationId: org, branchId: scope.branchId, actorUserId: session.user.id,
         action: "LEGACY_PACKAGE_TARIFF_DRAFT_IMPORTED",
         entityType: "PriceListPackageItem", entityId: draft.id,
-        newValues: { batchId: id, importRowId: row.id, rowNumber: body.rowNumber,
+        newValues: { batchId: id, importRowId: row.id, rowNumber,
           packageId: pack.id, priceListId: list.id, currency: list.currency,
           price: c.unitPrice, effectiveFrom: c.effectiveFrom,
           effectiveTo: c.effectiveTo || null, status: "INACTIVE",
