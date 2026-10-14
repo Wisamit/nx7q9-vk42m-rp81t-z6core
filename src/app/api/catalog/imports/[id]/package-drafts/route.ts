@@ -36,13 +36,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (Object.keys(obj).join(",") !== "rowNumber" || !Number.isSafeInteger(obj.rowNumber) ||
       (obj.rowNumber as number) < 1 || (obj.rowNumber as number) > 20000)
     return fail("invalid_row_number", 400);
-  const { id } = await params;
+  const rowNumber = obj.rowNumber as number;\n  const { id } = await params;
   if (!UUID.test(id)) return fail("batch_not_found", 404);
   const org = session.user.organizationId, ctx = await requestContext();
   try {
     const created = await withScopedCompositeCreation(session, [], async (tx, scope) => {
       const row = await tx.catalogImportRow.findFirst({ where: {
-        batchId: id, rowNumber: obj.rowNumber as number, entityType: "PACKAGE",
+        batchId: id, rowNumber, entityType: "PACKAGE",
         status: { in: ["VALID", "WARNING"] }, importedEntityId: null,
         batch: { organizationId: org, sourceType: "LEGACY_MDB_EXPORT",
           createdByUserId: session.user.id, status: { in: ["VALIDATED", "IMPORTED"] } },
@@ -89,7 +89,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         organizationId: org, branchId: scope.branchId, actorUserId: session.user.id,
         action: "LEGACY_PACKAGE_DRAFT_IMPORTED",
         entityType: "CommercialPackage", entityId: pkg.id,
-        newValues: { batchId: id, importRowId: row.id, rowNumber: obj.rowNumber,
+        newValues: { batchId: id, importRowId: row.id, rowNumber,
           code, members, inactive: true, clinicalApproved: false,
           financialApproved: false, activated: false },
         ipAddress: ctx.ipAddress, userAgent: ctx.userAgent,
