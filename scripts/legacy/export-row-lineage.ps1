@@ -43,7 +43,7 @@ function Hash-Text([string]$value) {
   } finally { $algorithm.Dispose() }
 }
 function Hmac-Text([byte[]]$bytes,[string]$value) {
-  $algo = New-Object Security.Cryptography.HMACSHA256(,$bytes)
+  $algo = [System.Security.Cryptography.HMACSHA256]::new($bytes)
   try {
     return ([BitConverter]::ToString($algo.ComputeHash(
       [Text.Encoding]::UTF8.GetBytes($value)))).Replace("-","").ToLowerInvariant()
