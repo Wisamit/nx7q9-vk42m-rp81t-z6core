@@ -251,11 +251,16 @@ async function validateCalculatedApproval(db: ClinicalRuleDb, id: string, organi
     return { ok: false as const, error: "invalid_formula" };
   }
 
+  const target = rule.test.components.find(component => component.id === rule.targetComponentId);
+  if (rule.test.status !== "ACTIVE" || !target || target.resultType !== "NUMERIC")
+    return {ok:false as const,error:"clinical_rule_calculated_target_inactive_or_invalid"};
   const componentsByCode = new Map(rule.test.components.map(component => [component.code.toUpperCase(), component]));
   const activeCalculatedTargets = new Set(rule.test.calculatedRules.map(active => active.targetComponentId));
   for (const variable of variables) {
     const component = componentsByCode.get(variable);
     if (!component) return { ok: false as const, error: "formula_component_not_found", componentCode: variable };
+    if (component.resultType !== "NUMERIC" || component.id === target.id)
+      return {ok:false as const,error:"clinical_rule_calculated_source_inactive_or_invalid",componentCode:variable};
     if (activeCalculatedTargets.has(component.id)) {
       return { ok: false as const, error: "calculated_formula_chaining_not_supported", componentCode: variable };
     }
