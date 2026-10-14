@@ -16,7 +16,7 @@ export function deltaHistoricalValueWhere(input: {
   testId: string;
   componentId: string | null;
   componentCode: string;
-  methodId: string | null | undefined;
+  methodId?: string | null;
   unitId: string | null;
   unitSnapshot: string | null;
   lookbackStart: Date;
