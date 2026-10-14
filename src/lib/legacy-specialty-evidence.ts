@@ -160,3 +160,57 @@ export function buildSpecialtyEvidenceReview(evidence:SpecialtyEvidence,componen
     tables,
   };
 }
+
+
+/**
+ * Stage 119: select one legacy range table explicitly for a single configured
+ * test. This is NOT a medical table-to-test mapping or a layout update.
+ * Older Stage 105 whole-file structural review remains available to callers.
+ */
+export function buildSelectedSpecialtyEvidenceReview(
+  evidence: SpecialtyEvidence,
+  components: MatchingComponent[],
+  selectedTableName: string,
+) {
+  const canonical = LEGACY_SPECIALTY_EVIDENCE_TABLES.find(
+    table => table.toLowerCase() === selectedTableName.toLowerCase(),
+  );
+  if (!canonical || selectedTableName !== canonical)
+    throw new LegacySpecialtyEvidenceError("unsupported_selected_specialty_table");
+  const selected = evidence.tables.find(table => table.tableName.toLowerCase() === canonical.toLowerCase());
+  if (!selected)
+    throw new LegacySpecialtyEvidenceError("selected_specialty_table_not_in_evidence");
+
+  // Select only the explicitly reviewed source table. Never count pairs from
+  // CBC against Thyroid or use a guessed mapping from display text or codes.
+  const base = buildSpecialtyEvidenceReview({...evidence, tables:[selected]}, components);
+  const sourceCodes = new Set(selected.candidatePairs.map(p => p.sourcePrefix.trim().toUpperCase()));
+  const activeByCode = new Map<string, MatchingComponent[]>();
+  for (const component of components) {
+    const code = component.code.trim().toUpperCase();
+    activeByCode.set(code,[...(activeByCode.get(code)||[]),component]);
+  }
+  // "Not represented in paired low/high source columns" is NOT a missing
+  // clinical result component; some components are qualitative or text-only.
+  const notRepresented = components.filter(component => !sourceCodes.has(component.code.trim().toUpperCase()));
+  const ambiguousConfiguredCodes = [...activeByCode.entries()]
+    .filter(([,matches]) => matches.length > 1).map(([code]) => code).sort();
+  const invalidBounds = base.tables[0].pairs.reduce(
+    (sum,pair) => sum + pair.incompleteBounds + pair.invertedBounds + pair.unknownSelectors, 0);
+  return {
+    ...base,
+    selectedTable:canonical,
+    sourceTablesInUpload:evidence.tables.length,
+    excludedOtherSourceTables:evidence.tables.length-1,
+    configuredComponentCount:components.length,
+    notRepresentedBySourceRangePairs:notRepresented.map(component => component.code).sort(),
+    ambiguousConfiguredCodes,
+    sourceEvidenceWarnings:invalidBounds,
+    exactCodePairCount:base.totalCandidatePairs-base.unmatchedPairs,
+    clinicalMappingConfirmed:false as const,
+    sourceSnapshotVerified:false as const,
+    layoutApplied:false as const,
+    referenceIntervalsImported:false as const,
+    clinicalUseApproved:false as const,
+  };
+}

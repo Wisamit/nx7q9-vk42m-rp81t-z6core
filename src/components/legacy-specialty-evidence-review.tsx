@@ -14,17 +14,28 @@ type Review={
   status:"review_only";sourceName:string;sourceSha256:string;fileFingerprint:string;
   tableCount:number;totalCandidatePairs:number;unmatchedPairs:number;
   testCode:string;warnings:string[];tables:TableReview[];
+  selectedTable:string;sourceTablesInUpload:number;excludedOtherSourceTables:number;
+  configuredComponentCount:number;notRepresentedBySourceRangePairs:string[];
+  ambiguousConfiguredCodes:string[];sourceEvidenceWarnings:number;
+  clinicalMappingConfirmed:false;sourceSnapshotVerified:false;layoutApplied:false;
+  referenceIntervalsImported:false;
 };
 const MAX_BYTES=6*1024*1024;
+// Source table names recovered from the legacy Access reference analysis,
+// not guesses mapping these tables to configured tests.
+const LEGACY_TABLES=["cbcn","coagn","fertn","Glycosen","kidnyn","lipidn","livern",
+  "Thyroidn","TORCHn","Tumern"] as const;
 export function LegacySpecialtyEvidenceReview({testId,locale}:{testId:string;locale:"ar"|"en"}){
   const input=useRef<HTMLInputElement>(null);
   const [busy,setBusy]=useState(false);
+  const [selectedTable,setSelectedTable]=useState("");
   const [error,setError]=useState("");
   const [review,setReview]=useState<Review|null>(null);
   const tr=(en:string,ar:string)=>locale==="ar"?ar:en;
   async function load(event:ChangeEvent<HTMLInputElement>){
     const file=event.target.files?.[0];
     if(!file)return;
+    if(!selectedTable){setError(tr("Select the source table first.","اختر جدول المصدر أولاً."));return;}
     setReview(null);setError("");
     if(!file.name.toLowerCase().endsWith(".json")||file.size===0||file.size>MAX_BYTES){
       setError(tr("Choose a JSON evidence export up to 6 MB.","اختر ملف أدلة JSON بحجم لا يزيد عن 6 ميغابايت."));
@@ -35,7 +46,7 @@ export function LegacySpecialtyEvidenceReview({testId,locale}:{testId:string;loc
       const evidence:unknown=JSON.parse(await file.text());
       const response=await fetch("/api/catalog/legacy-specialty-evidence",{
         method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({testId,evidence}),cache:"no-store",
+        body:JSON.stringify({testId,evidence,selectedTable}),cache:"no-store",
       });
       const result=await response.json() as Review & {error?:string};
       if(!response.ok||result.status!=="review_only")
@@ -54,8 +65,20 @@ export function LegacySpecialtyEvidenceReview({testId,locale}:{testId:string;loc
       "The local extractor requires Microsoft Access Database Engine (ACE). The review performs no import and never approves or saves clinical reference values.",
       "تحتاج أداة الاستخراج المحلية إلى Microsoft Access Database Engine (ACE). المعاينة لا تستورد ولا تعتمد أو تحفظ أي قيمة مرجعية طبية."
     )}</p>
+    <label>{tr("Which Access specialty reference table are you reviewing for this test?",
+      "أي جدول مديات تخصصية من Access تريد مراجعته مع هذا الفحص؟")}
+      <select value={selectedTable} disabled={busy}
+        onChange={event=>{setSelectedTable(event.target.value);setReview(null);setError("");}}>
+        <option value="">{tr("Select one legacy table — no automatic mapping","اختر جدولاً قديماً — بدون ربط تلقائي")}</option>
+        {LEGACY_TABLES.map(name=><option key={name} value={name}>{name}</option>)}
+      </select>
+    </label>
+    <p className="muted">{tr(
+      "This explicit table choice only limits structural comparison. It is not a clinically approved relationship between this test and an Access table.",
+      "اختيار الجدول يحدد نطاق المقارنة البنيوية فقط، ولا يعني اعتماد ربط طبي بين الفحص وجدول Access."
+    )}</p>
     <label>{tr("Specialty evidence JSON","ملف أدلة التخصصات JSON")}
-      <input ref={input} type="file" accept=".json,application/json" disabled={busy}
+      <input ref={input} type="file" accept=".json,application/json" disabled={busy||!selectedTable}
         onChange={e=>void load(e)}/>
     </label>
     {busy&&<p role="status">{tr("Validating source evidence…","جارٍ التحقق من أدلة المصدر…")}</p>}
@@ -63,7 +86,20 @@ export function LegacySpecialtyEvidenceReview({testId,locale}:{testId:string;loc
     {review&&<div className="detail-section">
       <p role="status"><strong>{tr("Read-only review completed","اكتملت المراجعة دون حفظ بيانات")}</strong></p>
       <p>{tr("Source: ","المصدر: ")}<strong>{review.sourceName}</strong> · {tr("Current test: ","الفحص الحالي: ")}{review.testCode}</p>
-      <p>{tr("Tables: ","الجداول: ")}{review.tableCount} · {tr("Candidate range pairs: ","أزواج المديات المرشحة: ")}
+      <p>{tr("Selected source table: ","جدول المصدر المختار: ")}<strong>{review.selectedTable}</strong> ·
+        {tr("Other tables excluded from this test comparison: ","جداول أخرى مستبعدة من مقارنة هذا الفحص: ")}
+        {review.excludedOtherSourceTables}</p>
+      <p>{tr("Configured active components: ","المكونات النشطة المهيأة: ")}{review.configuredComponentCount} ·
+        {tr("Paired source columns not matching an active component: ","أزواج أعمدة المصدر التي لم تطابق مكوناً نشطاً: ")}
+        {review.unmatchedPairs}</p>
+      {review.notRepresentedBySourceRangePairs.length>0&&<p className="muted">{tr(
+        "Configured components not represented in the selected table's paired low/high columns (may be text or qualitative; not automatically missing): ",
+        "مكونات مهيأة لا تقابلها أعمدة حد أدنى/أعلى في الجدول المختار (قد تكون نصية أو نوعية، ولا تعتبر تلقائياً مفقودة): "
+      )}{review.notRepresentedBySourceRangePairs.join(", ")}</p>}
+      {review.ambiguousConfiguredCodes.length>0&&<p className="form-warning">{tr(
+        "Ambiguous duplicate component codes: ","رموز مكونات متكررة وملتبسة: "
+      )}{review.ambiguousConfiguredCodes.join(", ")}</p>}
+      <p>{tr("Tables reviewed: ","الجداول التي خضعت للمراجعة: ")}{review.tableCount} · {tr("Candidate range pairs: ","أزواج المديات المرشحة: ")}
         {review.totalCandidatePairs} · {tr("Unmatched or ambiguous: ","غير المتطابقة أو الملتبسة: ")}{review.unmatchedPairs}</p>
       <p className="muted">{tr("Exporter-reported source SHA256: ","بصمة SHA256 كما وردت من أداة التصدير: ")}
         <code>{review.sourceSha256}</code></p>
