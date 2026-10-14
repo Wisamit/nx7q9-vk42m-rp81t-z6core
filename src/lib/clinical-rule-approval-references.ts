@@ -10,6 +10,7 @@ type Scope = {
   activeBranchId: string;
   permittedDepartmentIds: readonly string[];
   departmentRestricted: boolean;
+  organizationWide: boolean;
 };
 const blocked = (error: string): Failure => ({ ok: false, error });
 
@@ -21,7 +22,7 @@ async function findActiveTest(tx: Db, testId: string, scope: Scope) {
       id: true, resultType: true, departmentId: true,
       department: { select: {
         organizationId: true, status: true,
-        branch: { select: { organizationId: true, status: true } },
+        branch: { select: { id: true, organizationId: true, status: true } },
       } },
       components: { select: { id: true, code: true, status: true, resultType: true } },
     },
@@ -31,7 +32,8 @@ async function findActiveTest(tx: Db, testId: string, scope: Scope) {
     !test.department || test.department.organizationId !== scope.organizationId ||
     test.department.status !== "ACTIVE" ||
     (test.department.branch && (test.department.branch.status !== "ACTIVE" ||
-      test.department.branch.organizationId !== scope.organizationId))
+      test.department.branch.organizationId !== scope.organizationId ||
+      (!scope.organizationWide && test.department.branch.id !== scope.activeBranchId)))
   )) return null;
   if (scope.departmentRestricted &&
       (!test.departmentId || !scope.permittedDepartmentIds.includes(test.departmentId))) return null;
@@ -65,13 +67,15 @@ export async function validateClinicalRuleApprovalReferences(
     activeBranchId: string;
     userId: string;
     sessionDepartmentIds: readonly string[];
+    /** False for rules whose effective branch is explicitly scoped. */
+    organizationWide?: boolean;
   },
 ): Promise<Result> {
   const liveDepartments = await tx.userDepartmentScope.findMany({
     where: { userId: input.userId },
     select: { departmentId: true, department: { select: {
       organizationId: true, status: true,
-      branch: { select: { organizationId: true, status: true } },
+      branch: { select: { id: true, organizationId: true, status: true } },
     } } },
   });
   const priorRestriction = input.sessionDepartmentIds.length > 0;
@@ -81,7 +85,8 @@ export async function validateClinicalRuleApprovalReferences(
     row.department.status === "ACTIVE" &&
     row.department.organizationId === input.organizationId &&
     (!row.department.branch || (row.department.branch.organizationId === input.organizationId &&
-      row.department.branch.status === "ACTIVE"))
+      row.department.branch.status === "ACTIVE" &&
+      (input.organizationWide !== false || row.department.branch.id === input.activeBranchId)))
   ).map(row => row.departmentId);
   if ((priorRestriction || liveDepartments.length > 0) && !permitted.length)
     return blocked("clinical_rule_department_scope_revoked");
@@ -89,6 +94,7 @@ export async function validateClinicalRuleApprovalReferences(
     organizationId: input.organizationId, activeBranchId: input.activeBranchId,
     permittedDepartmentIds: permitted,
     departmentRestricted: priorRestriction || liveDepartments.length > 0,
+    organizationWide: input.organizationWide !== false,
   };
   const test = (id: string) => findActiveTest(tx,id,scope);
   const branch = (id: string | null) => validBranch(tx,id,scope);
