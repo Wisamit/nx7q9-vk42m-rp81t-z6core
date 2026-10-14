@@ -1,27 +1,51 @@
-import { NextRequest, NextResponse } from "next/server";
-import { getCurrentSession, permissionSet } from "@/lib/auth";
-import { prisma } from "@/lib/db";
+import { NextResponse } from "next/server";
+import { requirePermission, requestContext } from "@/lib/auth";
+import { CompositeWriteError, parseCompositeMembers, withScopedCompositeCreation } from "@/lib/catalog-composite-write";
 
-export async function POST(request: NextRequest) {
-  const session = await getCurrentSession();
-  if (!session) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  if (!permissionSet(session).has("catalog.manage")) return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  const body = await request.json().catch(() => null);
-  const code = typeof body?.code === "string" ? body.code.trim().toUpperCase() : "";
-  const nameEn = typeof body?.nameEn === "string" ? body.nameEn.trim() : "";
-  const testIds = Array.isArray(body?.testIds) ? [...new Set(body.testIds.filter((x: unknown) => typeof x === "string"))] as string[] : [];
-  if (!code || !nameEn || testIds.length === 0 || !/^[A-Z0-9._-]{1,80}$/.test(code)) return NextResponse.json({ error: "invalid_fields" }, { status: 400 });
-
-  const validTests = await prisma.labTest.count({ where: { organizationId: session.user.organizationId, id: { in: testIds } } });
-  if (validTests !== testIds.length) return NextResponse.json({ error: "invalid_tests" }, { status: 400 });
-
+export async function POST(request: Request) {
+  const session = await requirePermission("catalog.manage");
+  const ctx = await requestContext();
+  const body = await request.json().catch(() => null) as Record<string, unknown> | null;
+  if (!body || Array.isArray(body) || typeof body !== "object")
+    return NextResponse.json({ error: "invalid_request" }, { status: 400 });
+  const code = typeof body.code === "string" ? body.code.trim().toUpperCase() : "";
+  const nameEn = typeof body.nameEn === "string" ? body.nameEn.trim() : "";
+  const nameAr = typeof body.nameAr === "string" ? body.nameAr.trim() || null : null;
+  if (!/^[A-Z0-9._-]{1,80}$/.test(code) || !nameEn || nameEn.length > 200 ||
+      (nameAr !== null && nameAr.length > 200))
+    return NextResponse.json({ error: "invalid_fields" }, { status: 400 });
   try {
-    const panel = await prisma.$transaction(async (tx) => {
-      const created = await tx.testPanel.create({ data: { organizationId: session.user.organizationId, code, nameEn, nameAr: typeof body.nameAr === "string" ? body.nameAr.trim() || null : null } });
-      await tx.testPanelItem.createMany({ data: testIds.map((testId, index) => ({ panelId: created.id, testId, displayOrder: index, required: true })) });
-      await tx.auditEvent.create({ data: { organizationId: session.user.organizationId, branchId: session.activeBranchId, actorUserId: session.userId, action: "CATALOG_PANEL_CREATED", entityType: "TestPanel", entityId: created.id, newValues: { code, nameEn, testIds } } });
+    const members = parseCompositeMembers(body, "PANEL");
+    const panel = await withScopedCompositeCreation(session, members.map(m => m.testId), async tx => {
+      const duplicate = await tx.testPanel.findUnique({
+        where: { organizationId_code: { organizationId: session.user.organizationId, code } },
+        select: { id: true },
+      });
+      if (duplicate) throw new CompositeWriteError("panel_code_exists", 409);
+      const created = await tx.testPanel.create({ data: {
+        organizationId: session.user.organizationId, code, nameEn, nameAr,
+      } });
+      await tx.testPanelItem.createMany({ data: members.map(member => ({
+        panelId: created.id, testId: member.testId,
+        displayOrder: member.displayOrder, required: member.required,
+      })) });
+      await tx.auditEvent.create({ data: {
+        organizationId: session.user.organizationId, branchId: session.activeBranchId,
+        actorUserId: session.user.id, action: "CATALOG_PANEL_CREATED",
+        entityType: "TestPanel", entityId: created.id,
+        newValues: { code, nameEn, members,
+          authorizedBranchId: session.activeBranchId, scopedMembership: true },
+        ipAddress: ctx.ipAddress, userAgent: ctx.userAgent,
+      } });
       return created;
     });
     return NextResponse.json({ panel }, { status: 201 });
-  } catch { return NextResponse.json({ error: "create_failed" }, { status: 409 }); }
+  } catch (error) {
+    if (error instanceof CompositeWriteError)
+      return NextResponse.json({ error: error.code }, { status: error.status });
+    if (error && typeof error === "object" && "code" in error &&
+        error.code === "P2002")
+      return NextResponse.json({ error: "panel_code_exists" }, { status: 409 });
+    throw error;
+  }
 }
