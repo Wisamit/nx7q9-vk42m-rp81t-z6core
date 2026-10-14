@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
+import type { Prisma } from "../../../../../../generated/prisma/client";
 import { getCurrentSession, permissionSet, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import {
-  LEGACY_ROW_LINEAGE_MAX_BYTES, legacyRowHex, legacyRowUuid,
+  LEGACY_ROW_LINEAGE_MAX_BYTES, legacyRowHex,
   legacyLineageDomainPermission, legacyLineageMappingAllowed,
   parseLegacyRowDecision, parseLegacyRowManifest, LegacyLineageError,
 } from "@/lib/catalog-legacy-row-lineage";
@@ -48,7 +49,7 @@ async function readJson(request: Request, maxBytes: number): Promise<unknown> {
 /** Read-only hashed Access master-row evidence, never a migration/cutover certificate. */
 async function inTenantTransaction<T>(
   session: NonNullable<Awaited<ReturnType<typeof getCurrentSession>>>,
-  action: (tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0]) => Promise<T>,
+  action: (tx: Prisma.TransactionClient) => Promise<T>,
 ): Promise<T> {
   // The inferred overloaded Prisma transaction argument is deliberately kept
   // transaction-bound; the organization row lock serializes all decisions.
@@ -84,7 +85,7 @@ async function inTenantTransaction<T>(
   }, { timeout: 30000 });
 }
 
-type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
+type Tx = Prisma.TransactionClient;
 async function validTarget(tx: Tx, org: string, branchId: string, type: string, id: string) {
   switch (type) {
     case "TEST": return !!await tx.labTest.findFirst({ where: { id, organizationId: org, status: "ACTIVE" }, select: { id: true } });
