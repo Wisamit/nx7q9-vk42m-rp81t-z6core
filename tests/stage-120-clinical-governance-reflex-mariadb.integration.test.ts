@@ -45,24 +45,25 @@ test("Stage 120 MariaDB: typed clinical proofs are one-time and competing reflex
         "INSERT INTO staff_step_up_grants(id,user_id,session_id,organization_id,branch_id,action,resource_key,token_hash,proof_method,expires_at) VALUES(?,?,?,?,?,?,?,?,?,DATE_ADD(NOW(3),INTERVAL 2 MINUTE))",
         [id,user,session,org,branch,action,resource,digest,"PASSWORD_TOTP"]);
       const q="SELECT id FROM staff_step_up_grants WHERE token_hash=? AND session_id=? AND user_id=? AND organization_id=? AND branch_id=? AND action=? AND resource_key=? AND consumed_at IS NULL";
-      const original=[digest,session,user,org,branch,action,resource];
-      const [yes]=await db.execute<mysql.RowDataPacket[]>(q,original);
-      assert.equal(yes.length,1);
-      for(const args of [
+      const original: string[]=[digest,session,user,org,branch,action,resource];
+      const yesResult: [mysql.RowDataPacket[],mysql.FieldPacket[]]=await db.execute<mysql.RowDataPacket[]>(q,original);
+      assert.equal(yesResult[0].length,1);
+      const alternativeAttempts: string[][]=[
         [digest,session,user,otherOrg,branch,action,resource],
         [digest,session,user,org,otherBranch,action,resource],
         [digest,session,user,org,branch,action==="CLINICAL_RULE_APPROVE"?"CLINICAL_RULE_RETIRE":"CLINICAL_RULE_APPROVE",resource],
         [digest,session,user,org,branch,action,clinicalRuleProofResource("DELTA_RULE",rule)!],
         [digest,session,user,org,branch,action,clinicalRuleProofResource("REFLEX_RULE",randomUUID())!],
-      ]){
-        const [no]=await db.execute<mysql.RowDataPacket[]>(q,args);
-        assert.equal(no.length,0,"proof may not be borrowed for another scope/action/type");
+      ];
+      for(const args of alternativeAttempts){
+        const noResult: [mysql.RowDataPacket[],mysql.FieldPacket[]]=await db.execute<mysql.RowDataPacket[]>(q,args);
+        assert.equal(noResult[0].length,0,"proof may not be borrowed for another scope/action/type");
       }
       await db.beginTransaction();
-      const [claimed]=await db.execute<mysql.ResultSetHeader>(
+      const claimResult: [mysql.ResultSetHeader,mysql.FieldPacket[]]=await db.execute<mysql.ResultSetHeader>(
         "UPDATE staff_step_up_grants SET consumed_at=NOW(3) WHERE id=? AND action=? AND resource_key=? AND token_hash=? AND consumed_at IS NULL AND expires_at>NOW(3)",
         [id,action,resource,digest]);
-      assert.equal(claimed.affectedRows,1);
+      assert.equal(claimResult[0].affectedRows,1);
       await db.commit();
       const [replay]=await rival.execute<mysql.ResultSetHeader>(
         "UPDATE staff_step_up_grants SET consumed_at=NOW(3) WHERE id=? AND consumed_at IS NULL",[id]);
