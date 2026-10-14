@@ -2,8 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {randomUUID} from "node:crypto";
 import mysql from "mysql2/promise";
-import {Prisma} from "../generated/prisma/client.ts";
-import {prisma} from "../src/lib/db.ts";
+import {Prisma,PrismaClient} from "../generated/prisma/client.ts";
+import {PrismaMariaDb} from "@prisma/adapter-mariadb";
 import {evaluateDelta} from "../src/lib/delta-check.ts";
 
 test("Stage 124 MariaDB: never compare a historical value with a different legacy code, method, or unit",
@@ -14,6 +14,7 @@ test("Stage 124 MariaDB: never compare a historical value with a different legac
       user:decodeURIComponent(u.username),password:decodeURIComponent(u.password),
       database:u.pathname.slice(1)};
     const [writer,rival]=await Promise.all([mysql.createConnection(cfg),mysql.createConnection(cfg)]);
+    const prisma=new PrismaClient({adapter:new PrismaMariaDb({...cfg,connectionLimit:3})});
     const org=randomUUID(),branch=randomUUID(),user=randomUUID(),patient=randomUUID(),
       testId=randomUUID(),methodA=randomUUID(),methodB=randomUUID(),unitA=randomUUID(),
       unitB=randomUUID(),ruleId=randomUUID(),suffix=org.slice(0,8);
@@ -113,6 +114,6 @@ test("Stage 124 MariaDB: never compare a historical value with a different legac
       await Promise.all([writer.rollback().catch(()=>{}),rival.rollback().catch(()=>{})]);
       for(const {table,id}of undo)await writer.execute(
         "DELETE FROM "+table+" WHERE id=?",[id]).catch(()=>{});
-      await Promise.all([writer.end(),rival.end()]);
+      await Promise.all([writer.end(),rival.end(),prisma.$disconnect()]);
     }
   });
