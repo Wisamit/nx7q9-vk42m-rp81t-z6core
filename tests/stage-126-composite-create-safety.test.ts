@@ -58,3 +58,20 @@ test("Stage 126: legacy clinical import does not mutate active unit or activate 
   assert.match(api, /newComponentsInactive: true/);
   assert.doesNotMatch(api, /tx\.labTest\.update\(/);
 });
+
+test("Stage 126: financial source prices are created as inactive exact-decimal drafts only", () => {
+  const code = readFileSync("src/app/api/catalog/imports/[id]/price-drafts/route.ts", "utf8");
+  assert.match(code, /requirePermission\("pricing\.manage"\)/);
+  assert.match(code, /withScopedCompositeCreation/);
+  assert.match(code, /sourceType: "LEGACY_MDB_EXPORT"/);
+  assert.match(code, /reconcilePriceCandidate/);
+  assert.match(code, /stagedPriceOverlapIndex/);
+  assert.match(code, /clinicalImportTestWhere/);
+  assert.match(code, /unitPrice: new Prisma\.Decimal\(candidate\.unitPrice\)/);
+  assert.match(code, /status: "INACTIVE", deactivatedAt: new Date\(\)/);
+  assert.match(code, /financialApproved: false/);
+  assert.match(code, /activated: false/);
+  assert.doesNotMatch(code, /tx\.priceListItem\.update/);
+  assert.doesNotMatch(code, /tx\.invoiceLine\.update/);
+  assert.doesNotMatch(code, /tx\.priceListPackageItem\.update/);
+});
