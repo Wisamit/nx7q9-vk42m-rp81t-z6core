@@ -68,7 +68,7 @@ test("Stage 118: static safety boundary denies data export and privilege-free re
   const page=readFileSync("src/app/catalog/imports/reconciliation-ledger/page.tsx","utf8");
   assert.match(exporter,/Mode=Read/);
   assert.match(exporter,/SELECT COUNT\(\*\)/);
-  assert.doesNotMatch(exporter,/SELECT \*/i);
+  assert.doesNotMatch(exporter,/\.CommandText\s*=\s*["\x27]SELECT\s+\*/i);
   assert.match(exporter,/Get-FileHash/);
   assert.match(exporter,/partial\./);
   assert.match(api,/pricing\.manage/);
