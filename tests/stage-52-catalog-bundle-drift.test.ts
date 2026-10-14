@@ -39,12 +39,12 @@ test("Stage 52: missing, additional, nested and capped changes are never hidden 
   assert.throws(() => catalogBundleDrift({}, {}, 0));
 });
 
-test("Stage 52: full-batch grants, six scoped projections, and no clinical or financial mutation", () => {
+test("Stage 52: full-batch grants, nine scoped projections, and no clinical or financial mutation", () => {
   const lock = route.indexOf("const orgLock = await tx.$queryRaw");
   const roles = route.indexOf("const activeUser = await tx.user.findFirst");
   const grants = route.indexOf("const branchGrants = await tx.userBranchScope.findMany");
   const rows = route.indexOf("const staged = await tx.catalogImportRow.findMany");
-  const scopeTests = route.indexOf("const [mappedTests, mappedUnits, mappedComponents, mappedLists]");
+  const scopeTests = route.indexOf("const [mappedTests, mappedUnits, mappedComponents, mappedLists, mappedPackages]");
   const selects = route.indexOf('if (type === "TEST")');
   const audit = route.indexOf('action: "CATALOG_BUNDLE_DRIFT_REVIEWED"');
   assert.ok(lock > 0 && roles > lock && grants > roles && rows > grants &&
