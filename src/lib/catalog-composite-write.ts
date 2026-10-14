@@ -103,6 +103,10 @@ export async function withScopedCompositeCreation<T>(
         (initialDepartments.size > 0 && liveDepartments.length === 0))
       throw new CompositeWriteError("composite_department_scope_changed");
     const departmentScopes = liveDepartments.filter(item => initialDepartments.has(item.departmentId));
+    // An empty intersection must NEVER turn originally restricted staff into
+    // unrestricted catalog authors when new department grants replace old ones.
+    if (initialDepartments.size > 0 && departmentScopes.length === 0)
+      throw new CompositeWriteError("composite_department_scope_revoked");
     const scope = resolveClinicalImportScope({
       organizationId, activeBranchId: originalScope.branchId, activeBranch: branch,
       branchScopes, departmentScopes,
