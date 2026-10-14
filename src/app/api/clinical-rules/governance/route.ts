@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import type { Prisma } from "../../../../../generated/prisma/client";
 import { NextResponse } from "next/server";
 import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
@@ -291,9 +292,8 @@ export async function POST(request: Request) {
       (existing.authorizationBranchId && existing.authorizationBranchId !== activeBranchId)) {
     return NextResponse.json({error:"clinical_rule_active_branch_required"},{status:403});
   }
-  const proofAction = action === "APPROVE" ? "CLINICAL_RULE_APPROVE" : "CLINICAL_RULE_RETIRE";
   const proofToken = request.headers.get("x-staff-step-up-token");
-  const ensureCurrentAuthority = async (tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0]) => {
+  const ensureCurrentAuthority = async (tx: Prisma.TransactionClient) => {
     const actor = await tx.user.findFirst({where:{
       id:session.user.id,organizationId,status:"ACTIVE",
       roles:{some:{role:{organizationId,status:"ACTIVE",
