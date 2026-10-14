@@ -2,7 +2,7 @@
 import {FormEvent,useState} from "react";
 import {CrudModal} from "@/components/crud-modal";
 
-export type StepUpPurpose="MEDICAL_APPROVAL"|"RESULT_RELEASE"|"DISCOUNT_APPROVAL"|"REFUND_POST"|"PATIENT_MERGE"|"RESULT_AMEND"|"CREDIT_NOTE_ISSUE";
+export type StepUpPurpose="MEDICAL_APPROVAL"|"RESULT_RELEASE"|"DISCOUNT_APPROVAL"|"REFUND_POST"|"PATIENT_MERGE"|"RESULT_AMEND"|"CREDIT_NOTE_ISSUE"|"CLINICAL_RULE_APPROVE"|"CLINICAL_RULE_RETIRE";
 export function StaffStepUpDialog({open,action,resourceKey,branchId,locale,onCancel,onGranted}:{
   open:boolean;action:StepUpPurpose;resourceKey:string;branchId:string;
   locale:"ar"|"en";onCancel:()=>void;onGranted:(token:string)=>void;

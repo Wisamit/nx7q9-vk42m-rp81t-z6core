@@ -1,7 +1,10 @@
 import { createHash } from "node:crypto";
+import type { Prisma } from "../../../../../generated/prisma/client";
 import { NextResponse } from "next/server";
 import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { clinicalRuleProofResource } from "@/lib/clinical-rule-step-up";
+import { consumeStaffStepUp, StaffStepUpError } from "@/lib/staff-step-up";
 import {
   clinicalRuleLifecycleState,
   planClinicalRuleApproval,
@@ -281,6 +284,33 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "branch_forbidden" }, { status: 403 });
   }
 
+  const proofResource = clinicalRuleProofResource(type,id);
+  const activeBranchId = session.activeBranchId;
+  // Approval is an active-branch, one-time signed operation, not a
+  // background tenant-wide mutation originating from another branch.
+  if (!proofResource || !activeBranchId ||
+      (existing.authorizationBranchId && existing.authorizationBranchId !== activeBranchId)) {
+    return NextResponse.json({error:"clinical_rule_active_branch_required"},{status:403});
+  }
+  const proofToken = request.headers.get("x-staff-step-up-token");
+  const ensureCurrentAuthority = async (tx: Prisma.TransactionClient) => {
+    const actor = await tx.user.findFirst({where:{
+      id:session.user.id,organizationId,status:"ACTIVE",
+      roles:{some:{role:{organizationId,status:"ACTIVE",
+        permissions:{some:{permission:{code:"clinical_rules.approve"}}}}}},
+      branchScopes:{some:{branchId:activeBranchId,branch:{
+        organizationId,status:"ACTIVE",
+      }}},
+    },select:{id:true}});
+    if (!actor) return false;
+    const liveSession = await tx.userSession.findFirst({
+      where:{id:session.id,userId:session.user.id,
+        activeBranchId,revokedAt:null,expiresAt:{gt:new Date()}},
+      select:{id:true},
+    });
+    return !!liveSession;
+  };
+  try {
   if (action === "APPROVE") {
     const identityHash = createHash("sha256").update(existing.identityKey).digest("hex");
     const outcome = await prisma.$transaction(async tx => {
@@ -319,6 +349,14 @@ export async function POST(request: Request) {
           conflictingRuleIds: plan.conflicts,
         };
       }
+      if (!await ensureCurrentAuthority(tx)) {
+        return {error:"clinical_rule_approver_scope_revoked" as const};
+      }
+      const stepUp = await consumeStaffStepUp(tx,{
+        token:proofToken,action:"CLINICAL_RULE_APPROVE",resourceKey:proofResource,
+        sessionId:session.id,userId:session.user.id,organizationId,
+        branchId:activeBranchId,ipAddress:ctx.ipAddress,userAgent:ctx.userAgent,
+      });
 
       const approvedAt = new Date();
       const predecessorEffectiveTo = new Date(lockedExisting.effectiveFrom.getTime() - 1);
@@ -407,6 +445,8 @@ export async function POST(request: Request) {
             approvedAt,
             ruleType: type,
             predecessorsClosed: plan.predecessorsToClose,
+            stepUpGrantId:stepUp.grantId,
+            stepUpProofMethod:stepUp.proofMethod,
           },
           reason: reason || null,
           ipAddress: ctx.ipAddress,
@@ -457,6 +497,14 @@ export async function POST(request: Request) {
       return { error: "only_approved_clinical_rule_can_be_retired" as const };
     }
 
+    if (!await ensureCurrentAuthority(tx)) {
+      return {error:"clinical_rule_approver_scope_revoked" as const};
+    }
+    const stepUp = await consumeStaffStepUp(tx,{
+      token:proofToken,action:"CLINICAL_RULE_RETIRE",resourceKey:proofResource,
+      sessionId:session.id,userId:session.user.id,organizationId,
+      branchId:activeBranchId,ipAddress:ctx.ipAddress,userAgent:ctx.userAgent,
+    });
     const retiredAt = new Date();
     const effectiveTo = lockedExisting.effectiveFrom <= retiredAt
       && (lockedExisting.effectiveTo === null || lockedExisting.effectiveTo > retiredAt)
@@ -507,6 +555,8 @@ export async function POST(request: Request) {
           effectiveTo,
           retiredAt,
           ruleType: type,
+          stepUpGrantId:stepUp.grantId,
+          stepUpProofMethod:stepUp.proofMethod,
         },
         reason,
         ipAddress: ctx.ipAddress,
@@ -524,4 +574,11 @@ export async function POST(request: Request) {
     return NextResponse.json(outcome, { status });
   }
   return NextResponse.json(outcome);
+  } catch (error) {
+    if (error instanceof StaffStepUpError) {
+      return NextResponse.json({error:error.code},
+        {status:error.statusCode,headers:{"Cache-Control":"private, no-store"}});
+    }
+    throw error;
+  }
 }

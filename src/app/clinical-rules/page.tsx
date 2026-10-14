@@ -184,6 +184,7 @@ export default async function ClinicalRulesPage() {
     />
 
     <ResultValidationPolicyManager
+      activeBranchId={session.activeBranchId || ""}
       locale={locale}
       canApprove={permissions.has("clinical_rules.approve")}
       branches={branches}
@@ -284,7 +285,7 @@ export default async function ClinicalRulesPage() {
           <td>{policy.maxEscalationLevel}</td>
           <td>{policy.requireReadBack ? tr(locale, "Required", "مطلوبة") : tr(locale, "Optional", "اختيارية")}</td>
           <td>{policy.effectiveFrom.toISOString().slice(0,10)} → {policy.effectiveTo?.toISOString().slice(0,10) || openLabel}</td>
-          <td><ClinicalRuleGovernanceButton id={policy.id} ruleType="CRITICAL_ESCALATION_POLICY" status={policy.status} deactivatedAt={policy.deactivatedAt?.toISOString() || null} canApprove={permissions.has("clinical_rules.approve")} locale={locale} /></td>
+          <td><ClinicalRuleGovernanceButton branchId={session.activeBranchId || ""} id={policy.id} ruleType="CRITICAL_ESCALATION_POLICY" status={policy.status} deactivatedAt={policy.deactivatedAt?.toISOString() || null} canApprove={permissions.has("clinical_rules.approve")} locale={locale} /></td>
         </tr>)}</tbody>
       </table></div>
     </section>
@@ -305,7 +306,7 @@ export default async function ClinicalRulesPage() {
             ].filter(Boolean).join(", ") || tr(locale, "None", "لا شيء")}</td>
             <td>{policy.requireAllFlagsNormal ? tr(locale, "All flags normal", "كل الإشارات طبيعية") : tr(locale, "Mandatory safety gates only", "بوابات السلامة الإلزامية فقط")}</td>
             <td>{policy.effectiveFrom.toISOString().slice(0,10)} → {policy.effectiveTo?.toISOString().slice(0,10) || openLabel}</td>
-            <td><ClinicalRuleGovernanceButton id={policy.id} ruleType="AUTOVERIFICATION_POLICY" status={policy.status} deactivatedAt={policy.deactivatedAt?.toISOString() || null} canApprove={permissions.has("clinical_rules.approve")} locale={locale} /></td>
+            <td><ClinicalRuleGovernanceButton branchId={session.activeBranchId || ""} id={policy.id} ruleType="AUTOVERIFICATION_POLICY" status={policy.status} deactivatedAt={policy.deactivatedAt?.toISOString() || null} canApprove={permissions.has("clinical_rules.approve")} locale={locale} /></td>
           </tr>)}</tbody>
         </table></div>
       </article>
@@ -321,7 +322,7 @@ export default async function ClinicalRulesPage() {
             <td>{severityLabel(rule.severity)}</td>
             <td>{locale === "ar" ? rule.reasonAr || rule.reasonEn : rule.reasonEn}{rule.reasonAr && locale !== "ar" ? <><br/><small dir="rtl">{rule.reasonAr}</small></> : null}</td>
             <td>{rule.effectiveFrom.toISOString().slice(0,10)} → {rule.effectiveTo?.toISOString().slice(0,10) || openLabel}</td>
-            <td><ClinicalRuleGovernanceButton id={rule.id} ruleType="VALIDATION_HOLD_RULE" status={rule.status} deactivatedAt={rule.deactivatedAt?.toISOString() || null} canApprove={permissions.has("clinical_rules.approve")} locale={locale} /></td>
+            <td><ClinicalRuleGovernanceButton branchId={session.activeBranchId || ""} id={rule.id} ruleType="VALIDATION_HOLD_RULE" status={rule.status} deactivatedAt={rule.deactivatedAt?.toISOString() || null} canApprove={permissions.has("clinical_rules.approve")} locale={locale} /></td>
           </tr>)}</tbody>
         </table></div>
       </article>
@@ -338,7 +339,7 @@ export default async function ClinicalRulesPage() {
             <td><code>{rule.expression}</code></td>
             <td>{rule.decimalPrecision ?? tr(locale, "Component default", "افتراضي المكوّن")}</td>
             <td>{rule.effectiveFrom.toISOString().slice(0,10)} → {rule.effectiveTo?.toISOString().slice(0,10) || openLabel}</td>
-            <td><ClinicalRuleGovernanceButton id={rule.id} ruleType="CALCULATED_RESULT_RULE" status={rule.status} deactivatedAt={rule.deactivatedAt?.toISOString() || null} canApprove={permissions.has("clinical_rules.approve")} locale={locale} /></td>
+            <td><ClinicalRuleGovernanceButton branchId={session.activeBranchId || ""} id={rule.id} ruleType="CALCULATED_RESULT_RULE" status={rule.status} deactivatedAt={rule.deactivatedAt?.toISOString() || null} canApprove={permissions.has("clinical_rules.approve")} locale={locale} /></td>
           </tr>)}</tbody>
         </table></div>
       </article>
@@ -353,7 +354,7 @@ export default async function ClinicalRulesPage() {
             <td>{rule.targetTest.code} — {localizedName(rule.targetTest)}</td>
             <td>{branchLabel(rule.branch)}</td>
             <td>{rule.effectiveFrom.toISOString().slice(0,10)} → {rule.effectiveTo?.toISOString().slice(0,10) || openLabel}</td>
-            <td><ClinicalRuleGovernanceButton id={rule.id} ruleType="REFLEX_RULE" status={rule.status} deactivatedAt={rule.deactivatedAt?.toISOString() || null} canApprove={permissions.has("clinical_rules.approve")} locale={locale} /></td>
+            <td><ClinicalRuleGovernanceButton branchId={session.activeBranchId || ""} id={rule.id} ruleType="REFLEX_RULE" status={rule.status} deactivatedAt={rule.deactivatedAt?.toISOString() || null} canApprove={permissions.has("clinical_rules.approve")} locale={locale} /></td>
           </tr>)}</tbody>
         </table></div>
       </article>
@@ -373,7 +374,7 @@ export default async function ClinicalRulesPage() {
               <td>{rule.percentLimit ? rule.percentLimit.toString() + "%" : "—"}</td>
               <td>{rule.lookbackDays} {tr(locale, "days", "يوم")}</td>
               <td>{rule.effectiveFrom.toISOString().slice(0,10) + " → " + (rule.effectiveTo?.toISOString().slice(0,10) || openLabel)}</td>
-              <td><ClinicalRuleGovernanceButton id={rule.id} ruleType="DELTA_RULE" status={rule.status} deactivatedAt={rule.deactivatedAt?.toISOString() || null} canApprove={permissions.has("clinical_rules.approve")} locale={locale} /></td>
+              <td><ClinicalRuleGovernanceButton branchId={session.activeBranchId || ""} id={rule.id} ruleType="DELTA_RULE" status={rule.status} deactivatedAt={rule.deactivatedAt?.toISOString() || null} canApprove={permissions.has("clinical_rules.approve")} locale={locale} /></td>
             </tr>)}</tbody>
           </table>
         </div>

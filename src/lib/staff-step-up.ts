@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import type { Prisma } from "../../generated/prisma/client";
+import { validClinicalRuleProofResource } from "./clinical-rule-step-up.ts";
 
 export const stepUpPermissions = {
   MEDICAL_APPROVAL: "results.medical_validate",
@@ -9,6 +10,8 @@ export const stepUpPermissions = {
   PATIENT_MERGE: "patients.merge",
   RESULT_AMEND: "results.amend",
   CREDIT_NOTE_ISSUE: "billing.manage",
+  CLINICAL_RULE_APPROVE: "clinical_rules.approve",
+  CLINICAL_RULE_RETIRE: "clinical_rules.approve",
 } as const;
 export type StaffStepUpAction=keyof typeof stepUpPermissions;
 export const STEP_UP_TTL_MS=2*60_000;
@@ -27,6 +30,8 @@ export function validStepUpAction(value:unknown):value is StaffStepUpAction{
 export function validStepUpResource(action:StaffStepUpAction,value:unknown):value is string{
   const uuid="[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
   if(typeof value!=="string"||value.length>150)return false;
+  if(action==="CLINICAL_RULE_APPROVE"||action==="CLINICAL_RULE_RETIRE")
+    return validClinicalRuleProofResource(value);
   const refund = `^${uuid}:${uuid}:[0-9]+(?:[.][0-9]{1,4})?:${uuid}$`;
   const merge = `^${uuid}:${uuid}$`;
   const credit = `^${uuid}:[0-9]+(?:[.][0-9]{1,4})?$`;

@@ -33,6 +33,7 @@ export function ResultValidationPolicyManager({
   tests,
   policies,
   canApprove,
+  activeBranchId,
 }: {
   locale: "ar" | "en";
   branches: Option[];
@@ -40,6 +41,7 @@ export function ResultValidationPolicyManager({
   tests: Option[];
   policies: Policy[];
   canApprove: boolean;
+  activeBranchId: string;
 }) {
   const router = useRouter();
   const [scope, setScope] = useState<Scope>("ORGANIZATION");
@@ -143,7 +145,7 @@ export function ResultValidationPolicyManager({
           <td>{policy.requiresMedicalValidation ? tr("Technical → Medical", "فني ← طبي") : tr("Technical only", "فني فقط")}</td>
           <td>{policy.requiresMedicalValidation ? (policy.allowSameReviewer ? tr("Same user allowed", "نفس المستخدم مسموح") : tr("Different users required", "يلزم مستخدمان مختلفان")) : "—"}</td>
           <td>{policy.effectiveFrom + " → " + (policy.effectiveTo || tr("Open", "مفتوح"))}</td>
-          <td><ClinicalRuleGovernanceButton id={policy.id} ruleType="RESULT_VALIDATION_POLICY" status={policy.status} deactivatedAt={policy.deactivatedAt} canApprove={canApprove} locale={locale} /></td>
+          <td><ClinicalRuleGovernanceButton branchId={activeBranchId} id={policy.id} ruleType="RESULT_VALIDATION_POLICY" status={policy.status} deactivatedAt={policy.deactivatedAt} canApprove={canApprove} locale={locale} /></td>
         </tr>)}
       </tbody>
     </table></div>
