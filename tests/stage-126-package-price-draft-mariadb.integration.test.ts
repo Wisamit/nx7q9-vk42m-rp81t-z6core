@@ -65,7 +65,7 @@ test("Stage 126 MariaDB: package draft survives independent claim race and prese
         "VALUES(?,?, 'LEGACY_MDB_EXPORT','synthetic.mdb','VALIDATED',?,NOW(3))",
         [batch,org,randomUUID()]);
       await add("catalog_import_rows",staged,
-        "INSERT INTO catalog_import_rows(id,batch_id,row_number,entity_type,status,source_data,normalized_data,updated_at) " +
+        "INSERT INTO catalog_import_rows(id,batch_id,`row_number`,entity_type,status,source_data,normalized_data,updated_at) " +
         "VALUES(?,?,1,'PRICE_LIST_PACKAGE_ITEM','WARNING','{}',?,NOW(3))",
         [staged,batch,JSON.stringify({
           priceListCode:"S126LIST"+suffix+"ORGANIZATION",
