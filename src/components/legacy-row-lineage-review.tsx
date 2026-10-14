@@ -38,6 +38,11 @@ export function LegacyRowLineageReview({ locale }: { locale: "ar" | "en" }) {
   const [batchId, setBatchId] = useState("");
   const [importRowId, setImportRowId] = useState("");
   const [reason, setReason] = useState("");
+  const [tariffPackageId, setTariffPackageId] = useState("");
+  const [tariffListId, setTariffListId] = useState("");
+  const [tariffAmount, setTariffAmount] = useState("");
+  const [tariffFrom, setTariffFrom] = useState("");
+  const [tariffTo, setTariffTo] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   async function load(source: SourceKey, after: number) {
@@ -109,6 +114,30 @@ export function LegacyRowLineageReview({ locale }: { locale: "ar" | "en" }) {
     } catch (failure) {
       setError(tr("Mapping decision failed: ", "فشل قرار المطابقة: ") +
         (failure instanceof Error ? failure.message : "lineage_decision_failed"));
+    } finally { setBusy(false); }
+  }
+  async function createTariffDraft() {
+    if (!selected || !key || busy) return;
+    setBusy(true); setError("");
+    try {
+      const response = await fetch("/api/catalog/legacy-row-lineage/package-tariff-draft", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          lineageId: selected.id, expectedRevision: selected.revision,
+          packageId: tariffPackageId, priceListId: tariffListId,
+          unitPrice: tariffAmount, effectiveFrom: tariffFrom,
+          effectiveTo: tariffTo || null, reason,
+        }), cache: "no-store",
+      });
+      const out = await response.json() as { status?: string; error?: string };
+      if (!response.ok || out.status !== "INACTIVE_DRAFT")
+        throw Error(out.error || "tariff_draft_failed");
+      await load(key, cursor);
+      setReason(""); setTariffAmount(""); setTariffPackageId("");
+      setTariffListId(""); setTariffFrom(""); setTariffTo("");
+    } catch (failure) {
+      setError(tr("Package tariff draft rejected: ", "تم رفض مسودة سعر الباقة: ") +
+        (failure instanceof Error ? failure.message : "tariff_draft_failed"));
     } finally { setBusy(false); }
   }
   return <section className="detail-section" dir={locale === "ar" ? "rtl" : "ltr"}>
@@ -189,6 +218,36 @@ export function LegacyRowLineageReview({ locale }: { locale: "ar" | "en" }) {
             minLength={12} maxLength={1000} required/></label>
         <button disabled={busy} type="submit" className="secondary-button">
           {tr("Save audited mapping review", "حفظ مراجعة المطابقة وتدقيقها")}
+        </button>
+      </form>}
+      {selected && selected.sourceTable === "price" &&
+        selected.classification === "UNRESOLVED" && <form
+        onSubmit={event => { event.preventDefault(); void createTariffDraft(); }}
+        className="detail-section">
+        <h4>{tr("Create inactive package tariff draft", "إنشاء مسودة غير نشطة لسعر باقة")}</h4>
+        <p className="muted">{tr(
+          "Only an inactive draft is created from this source fingerprint. Independent mapping review and separate financial price activation are still mandatory.",
+          "يتم إنشاء مسودة غير نشطة فقط مرتبطة ببصمة المصدر. تبقى مراجعة المطابقة واعتماد تفعيل السعر مالياً إجراءين إلزاميين منفصلين."
+        )}</p>
+        <label>{tr("Existing package UUID", "معرف الباقة القائمة")}
+          <input value={tariffPackageId} onChange={e => setTariffPackageId(e.target.value)}
+            required/></label>
+        <label>{tr("Authorized price list UUID", "معرف قائمة الأسعار المسموح بها")}
+          <input value={tariffListId} onChange={e => setTariffListId(e.target.value)}
+            required/></label>
+        <label>{tr("Exact package price (up to 4 decimals)", "سعر الباقة الدقيق (حتى 4 منازل)")}
+          <input type="text" inputMode="decimal" value={tariffAmount}
+            onChange={e => setTariffAmount(e.target.value)} required/></label>
+        <label>{tr("Effective from (UTC date)", "صالح اعتباراً من (تاريخ UTC)")}
+          <input type="date" value={tariffFrom} onChange={e => setTariffFrom(e.target.value)}
+            required/></label>
+        <label>{tr("Effective to (optional)", "صالح حتى (اختياري)")}
+          <input type="date" value={tariffTo} onChange={e => setTariffTo(e.target.value)}/></label>
+        <label>{tr("Source mapping and pricing rationale", "مبرر مطابقة المصدر والتسعير")}
+          <textarea value={reason} onChange={e => setReason(e.target.value)}
+            minLength={12} maxLength={1000} required/></label>
+        <button disabled={busy} type="submit" className="secondary-button">
+          {tr("Create inactive tariff draft only", "إنشاء مسودة السعر غير النشطة فقط")}
         </button>
       </form>}
     </div>}
