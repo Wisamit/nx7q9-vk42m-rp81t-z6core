@@ -3,6 +3,7 @@ import { requirePermission } from "@/lib/auth";
 import { tr } from "@/lib/ui-i18n";
 import { LegacyImportReconciliationLedger } from "@/components/legacy-import-reconciliation-ledger";
 import { LegacySourceCoverageReview } from "@/components/legacy-source-coverage-review";
+import { LegacyRowLineageReview } from "@/components/legacy-row-lineage-review";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +22,7 @@ export default async function LegacyReconciliationPage() {
       <Link href="/catalog" className="secondary-link">{tr(locale,"Back to catalog","العودة إلى الدليل")}</Link>
     </header>
     <LegacySourceCoverageReview locale={locale}/>
+    <LegacyRowLineageReview locale={locale}/>
     <LegacyImportReconciliationLedger locale={locale}/>
   </main>;
 }
