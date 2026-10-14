@@ -5,6 +5,7 @@ import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { clinicalRuleProofResource } from "@/lib/clinical-rule-step-up";
 import { validateClinicalRuleApprovalReferences } from "@/lib/clinical-rule-approval-references";
+import {assessClinicalGovernanceScope} from "@/lib/clinical-rule-governance-scope";
 import { consumeStaffStepUp, StaffStepUpError } from "@/lib/staff-step-up";
 import {
   clinicalRuleLifecycleState,
@@ -299,7 +300,8 @@ export async function POST(request: Request) {
     return NextResponse.json({error:"clinical_rule_active_branch_required"},{status:403});
   }
   const proofToken = request.headers.get("x-staff-step-up-token");
-  const ensureCurrentAuthority = async (tx: Prisma.TransactionClient) => {
+  const ensureCurrentAuthority = async (tx: Prisma.TransactionClient,
+    authorizationBranchId: string | null) => {
     const actor = await tx.user.findFirst({where:{
       id:session.user.id,organizationId,status:"ACTIVE",
       roles:{some:{role:{organizationId,status:"ACTIVE",
@@ -308,13 +310,20 @@ export async function POST(request: Request) {
         organizationId,status:"ACTIVE",
       }}},
     },select:{id:true}});
-    if (!actor) return false;
+    if (!actor) return {ok:false as const,error:"clinical_rule_approver_scope_revoked" as const};
     const liveSession = await tx.userSession.findFirst({
       where:{id:session.id,userId:session.user.id,
         activeBranchId,revokedAt:null,expiresAt:{gt:new Date()}},
       select:{id:true},
     });
-    return !!liveSession;
+    if(!liveSession)
+      return {ok:false as const,error:"clinical_rule_approver_scope_revoked" as const};
+    return assessClinicalGovernanceScope(tx,{
+      organizationId,userId:session.user.id,activeBranchId,
+      authorizationBranchId,
+      sessionBranchIds:session.user.branchScopes.map(scope=>scope.branchId),
+      sessionDepartmentIds:session.user.departmentScopes.map(scope=>scope.departmentId),
+    });
   };
   try {
   if (action === "APPROVE") {
@@ -348,6 +357,7 @@ export async function POST(request: Request) {
       const linkValidation = await validateClinicalRuleApprovalReferences(tx, {
         type, id, organizationId, activeBranchId, userId: session.user.id,
         sessionDepartmentIds: session.user.departmentScopes.map(s => s.departmentId),
+        organizationWide: lockedExisting.authorizationBranchId === null,
       });
       if (!linkValidation.ok) return {error:linkValidation.error};
 
@@ -364,9 +374,8 @@ export async function POST(request: Request) {
           conflictingRuleIds: plan.conflicts,
         };
       }
-      if (!await ensureCurrentAuthority(tx)) {
-        return {error:"clinical_rule_approver_scope_revoked" as const};
-      }
+      const liveAuthority=await ensureCurrentAuthority(tx,lockedExisting.authorizationBranchId ?? null);
+      if(!liveAuthority.ok)return {error:liveAuthority.error};
       const stepUp = await consumeStaffStepUp(tx,{
         token:proofToken,action:"CLINICAL_RULE_APPROVE",resourceKey:proofResource,
         sessionId:session.id,userId:session.user.id,organizationId,
@@ -461,6 +470,9 @@ export async function POST(request: Request) {
             ruleType: type,
             predecessorsClosed: plan.predecessorsToClose,
             approvalReferencesRevalidated: true,
+            governanceScope:liveAuthority.organizationWide?"ORGANIZATION":"BRANCH",
+            authorizedBranchCount:liveAuthority.activeBranchCount,
+            authorizedDepartmentCount:liveAuthority.activeDepartmentCount,
             stepUpGrantId:stepUp.grantId,
             stepUpProofMethod:stepUp.proofMethod,
           },
@@ -480,8 +492,11 @@ export async function POST(request: Request) {
 
     if ("error" in outcome) {
       const status = outcome.error === "clinical_rule_not_found" ? 404
-        : outcome.error === "branch_forbidden" ? 403
-          : 409;
+        : outcome.error === "branch_forbidden" ||
+          outcome.error.startsWith("clinical_rule_organization_wide_") ||
+          outcome.error === "clinical_rule_branch_scope_revoked" ||
+          outcome.error === "clinical_rule_branch_scope_mismatch" ||
+          outcome.error === "clinical_rule_approver_scope_revoked" ? 403 : 409;
       return NextResponse.json(outcome, { status });
     }
     return NextResponse.json(outcome);
@@ -513,9 +528,8 @@ export async function POST(request: Request) {
       return { error: "only_approved_clinical_rule_can_be_retired" as const };
     }
 
-    if (!await ensureCurrentAuthority(tx)) {
-      return {error:"clinical_rule_approver_scope_revoked" as const};
-    }
+    const liveAuthority=await ensureCurrentAuthority(tx,lockedExisting.authorizationBranchId ?? null);
+    if(!liveAuthority.ok)return {error:liveAuthority.error};
     const stepUp = await consumeStaffStepUp(tx,{
       token:proofToken,action:"CLINICAL_RULE_RETIRE",resourceKey:proofResource,
       sessionId:session.id,userId:session.user.id,organizationId,
@@ -573,6 +587,9 @@ export async function POST(request: Request) {
           ruleType: type,
           stepUpGrantId:stepUp.grantId,
           stepUpProofMethod:stepUp.proofMethod,
+          governanceScope:liveAuthority.organizationWide?"ORGANIZATION":"BRANCH",
+          authorizedBranchCount:liveAuthority.activeBranchCount,
+          authorizedDepartmentCount:liveAuthority.activeDepartmentCount,
         },
         reason,
         ipAddress: ctx.ipAddress,
@@ -585,8 +602,11 @@ export async function POST(request: Request) {
 
   if ("error" in outcome) {
     const status = outcome.error === "clinical_rule_not_found" ? 404
-      : outcome.error === "branch_forbidden" ? 403
-        : 409;
+      : outcome.error === "branch_forbidden" ||
+        outcome.error.startsWith("clinical_rule_organization_wide_") ||
+        outcome.error === "clinical_rule_branch_scope_revoked" ||
+        outcome.error === "clinical_rule_branch_scope_mismatch" ||
+        outcome.error === "clinical_rule_approver_scope_revoked" ? 403 : 409;
     return NextResponse.json(outcome, { status });
   }
   return NextResponse.json(outcome);
