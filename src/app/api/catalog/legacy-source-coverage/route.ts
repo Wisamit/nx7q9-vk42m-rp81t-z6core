@@ -112,7 +112,7 @@ export async function POST(request: Request) {
     await tx.auditEvent.create({data:{
       organizationId:orgId,branchId:activeBranchId,
       actorUserId:session.user.id,action:"LEGACY_SOURCE_COVERAGE_REVIEWED",
-      entityType:"LegacySourceCoverage",entityId:fingerprint.slice(0,36),
+      entityType:"LegacySourceCoverage",entityId:randomUUID(),
       newValues:{sourceSha256:manifest.sourceSha256,
         manifestFingerprint:fingerprint,sourceTableCount:coverage.length,
         presentTables:coverage.filter(c=>c.present).length,
