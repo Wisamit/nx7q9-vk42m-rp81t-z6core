@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { clinicalRuleProofResource } from "@/lib/clinical-rule-step-up";
+import { validateClinicalRuleApprovalReferences } from "@/lib/clinical-rule-approval-references";
 import { consumeStaffStepUp, StaffStepUpError } from "@/lib/staff-step-up";
 import {
   clinicalRuleLifecycleState,
@@ -336,6 +337,15 @@ export async function POST(request: Request) {
         return { error: "clinical_rule_not_draft" as const };
       }
 
+      // Previously valid draft references may have been deactivated or moved
+      // to another tenant/department after creation. Resolve every live link
+      // under the governance lock before consuming the one-time approval proof.
+      const linkValidation = await validateClinicalRuleApprovalReferences(tx, {
+        type, id, organizationId, activeBranchId, userId: session.user.id,
+        sessionDepartmentIds: session.user.departmentScopes.map(s => s.departmentId),
+      });
+      if (!linkValidation.ok) return {error:linkValidation.error};
+
       if (type === "CALCULATED_RESULT_RULE") {
         const formulaValidation = await validateCalculatedApproval(tx, id, organizationId);
         if (!formulaValidation.ok) return formulaValidation;
@@ -445,6 +455,7 @@ export async function POST(request: Request) {
             approvedAt,
             ruleType: type,
             predecessorsClosed: plan.predecessorsToClose,
+            approvalReferencesRevalidated: true,
             stepUpGrantId:stepUp.grantId,
             stepUpProofMethod:stepUp.proofMethod,
           },
@@ -460,7 +471,7 @@ export async function POST(request: Request) {
         approvedAt,
         predecessorsClosed: plan.predecessorsToClose,
       };
-    }, { timeout: 30000 });
+    }, { timeout: 30000, isolationLevel: "Serializable" });
 
     if ("error" in outcome) {
       const status = outcome.error === "clinical_rule_not_found" ? 404
