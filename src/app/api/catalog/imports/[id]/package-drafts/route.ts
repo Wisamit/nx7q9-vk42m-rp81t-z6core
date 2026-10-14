@@ -69,7 +69,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       });
       if (tests.length !== members.length)
         throw new CompositeWriteError("package_membership_not_wholly_authorized", 403);
-      const byCode = new Map(tests.map(t => [t.code, t.id]));
+      const byCode = new Map(tests.map(t => [t.code.toUpperCase(), t.id]));
       const claim = await tx.catalogImportRow.updateMany({ where: {
         id: row.id, batchId: id, status: row.status, importedEntityId: null,
       }, data: { status: "IMPORTED" } });
