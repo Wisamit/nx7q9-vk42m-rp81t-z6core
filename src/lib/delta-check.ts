@@ -1,6 +1,48 @@
-import { Prisma, type PrismaClient } from "../../generated/prisma/client";
+import { Prisma, type PrismaClient } from "../../generated/prisma/client.ts";
 
 type DbClient = PrismaClient | Prisma.TransactionClient;
+
+/**
+ * A clinical delta must compare like-for-like historical observations.
+ * A null componentId identifies a legacy/single-result test only together
+ * with its stable snapshotted test-component code. Non-null component IDs
+ * remain the durable identity even if a display code later changes.
+ * Method and original unit snapshots must agree; never dynamically convert
+ * historical observations or reuse a newer catalog unit label.
+ */
+export function deltaHistoricalValueWhere(input: {
+  organizationId: string;
+  patientId: string;
+  testId: string;
+  componentId: string | null;
+  componentCode: string;
+  methodId?: string | null;
+  unitId: string | null;
+  unitSnapshot: string | null;
+  lookbackStart: Date;
+  at: Date;
+}): Prisma.LaboratoryResultValueWhereInput {
+  return {
+    result: {
+      organizationId: input.organizationId,
+      methodId: input.methodId ?? null,
+      status: "RELEASED",
+      releasedAt: { gte: input.lookbackStart, lt: input.at },
+      orderItem: {
+        testId: input.testId,
+        order: {patientId: input.patientId},
+      },
+    },
+    ...(input.componentId !== null
+      ? { componentId: input.componentId }
+      : { componentId: null, componentCodeSnapshot: input.componentCode.trim() }),
+    unitId: input.unitId,
+    unitSnapshot: input.unitSnapshot,
+    resultTypeSnapshot: "NUMERIC",
+    valueNumeric: {not: null},
+  };
+}
+
 
 export async function evaluateDelta(
   db: DbClient,
@@ -9,6 +51,9 @@ export async function evaluateDelta(
     patientId: string;
     testId: string;
     componentId: string | null;
+    componentCode: string;
+    unitId: string | null;
+    unitSnapshot: string | null;
     performingBranchId: string;
     methodId?: string | null;
     currentValue: Prisma.Decimal;
@@ -59,21 +104,11 @@ export async function evaluateDelta(
   const lookbackStart = new Date(at.getTime() - rule.lookbackDays * 86_400_000);
 
   const previous = await db.laboratoryResultValue.findFirst({
-    where: {
-      result: {
-        organizationId: input.organizationId,
-        status: "RELEASED",
-        releasedAt: { gte: lookbackStart, lt: at },
-        orderItem: {
-          testId: input.testId,
-          order: { patientId: input.patientId },
-        },
-      },
-      ...(input.componentId
-        ? { componentId: input.componentId }
-        : { componentId: null, componentCodeSnapshot: { not: "" } }),
-      valueNumeric: { not: null },
-    },
+    where: deltaHistoricalValueWhere({
+      ...input,
+      lookbackStart,
+      at,
+    }),
     include: { result: true },
     orderBy: { result: { releasedAt: "desc" } },
   });
