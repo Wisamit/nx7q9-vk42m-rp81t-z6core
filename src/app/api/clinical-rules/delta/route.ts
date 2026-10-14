@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import {ClinicalDecimalError,parseClinicalRuleDecimal} from "@/lib/clinical-rule-decimal";
 
 function text(value: unknown, max = 220) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -16,8 +17,18 @@ export async function POST(request: Request) {
   const componentId = text(body.componentId, 36) || null;
   const branchId = text(body.branchId, 36) || null;
   const methodId = text(body.methodId, 36) || null;
-  const absoluteLimit = body.absoluteLimit === "" || body.absoluteLimit == null ? null : Number(body.absoluteLimit);
-  const percentLimit = body.percentLimit === "" || body.percentLimit == null ? null : Number(body.percentLimit);
+  let absoluteLimit: string | null;
+  let percentLimit: string | null;
+  try {
+    absoluteLimit = parseClinicalRuleDecimal(body.absoluteLimit,
+      {precision:24,scale:8,nonNegative:true});
+    percentLimit = parseClinicalRuleDecimal(body.percentLimit,
+      {precision:18,scale:6,nonNegative:true});
+  } catch (error) {
+    if (error instanceof ClinicalDecimalError)
+      return NextResponse.json({error:error.code},{status:400});
+    throw error;
+  }
   const lookbackDays = Number(body.lookbackDays || 365);
   const effectiveFrom = new Date(String(body.effectiveFrom || ""));
   const effectiveTo = body.effectiveTo ? new Date(String(body.effectiveTo)) : null;
@@ -25,9 +36,6 @@ export async function POST(request: Request) {
   if (!testId || Number.isNaN(effectiveFrom.getTime())) return NextResponse.json({ error: "missing_required_fields" }, { status: 400 });
   if (effectiveTo && (Number.isNaN(effectiveTo.getTime()) || effectiveTo < effectiveFrom)) return NextResponse.json({ error: "invalid_effective_dates" }, { status: 400 });
   if (absoluteLimit === null && percentLimit === null) return NextResponse.json({ error: "delta_limit_required" }, { status: 400 });
-  if ((absoluteLimit !== null && (!Number.isFinite(absoluteLimit) || absoluteLimit < 0)) || (percentLimit !== null && (!Number.isFinite(percentLimit) || percentLimit < 0))) {
-    return NextResponse.json({ error: "invalid_delta_limits" }, { status: 400 });
-  }
   if (!Number.isInteger(lookbackDays) || lookbackDays < 1 || lookbackDays > 3650) return NextResponse.json({ error: "invalid_lookback" }, { status: 400 });
 
   const [test, branchRecord, methodRecord] = await Promise.all([
@@ -58,8 +66,8 @@ export async function POST(request: Request) {
         componentId,
         branchId,
         methodId,
-        absoluteLimit: absoluteLimit === null ? null : absoluteLimit.toFixed(8),
-        percentLimit: percentLimit === null ? null : percentLimit.toFixed(6),
+        absoluteLimit,
+        percentLimit,
         lookbackDays,
         effectiveFrom,
         effectiveTo,
