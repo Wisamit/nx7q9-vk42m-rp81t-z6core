@@ -12,7 +12,8 @@ test("Stage 126: safe composite creation rechecks live clinical branch and depar
   assert.match(helper, /clinicalImportTestWhere/);
   assert.match(helper, /userDepartmentScope\.findMany/);
   assert.match(helper, /userBranchScope\.findMany/);
-  assert.match(helper, /composite_department_scope_changed/);
+  assert.match(helper, /intersectCompositeDepartments/);
+  assert.match(helper, /composite_department_scope_revoked/);
   for (const source of [panel, pkg]) {
     assert.match(source, /withScopedCompositeCreation/);
     assert.match(source, /parseCompositeMembers/);
