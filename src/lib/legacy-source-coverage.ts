@@ -60,6 +60,12 @@ const known = new Map<string, (typeof LEGACY_COVERAGE_SOURCES)[number]>(
 );
 
 export function parseLegacySourceCoverage(input: unknown): LegacySourceCoverage {
+  // Refuse unexpected properties so patient/result/master row payloads cannot
+  // masquerade as metadata-only evidence (even if the known fields are valid).
+  const allowedHeader = new Set(["schemaVersion","evidenceType","sourceName",
+    "sourceSha256","sourceBytes","exportedAtUtc","includesPatientData","tables"]);
+  if (!obj(input) || Object.keys(input).some(k => !allowedHeader.has(k)))
+    return fail("invalid_legacy_source_manifest");
   if (!obj(input) || input.schemaVersion !== 1 || input.evidenceType !== LEGACY_COVERAGE_TYPE ||
       input.includesPatientData !== false ||
       typeof input.sourceName !== "string" || input.sourceName.length > 255 ||
@@ -76,7 +82,9 @@ export function parseLegacySourceCoverage(input: unknown): LegacySourceCoverage 
   const rows: SourceEvidenceTable[] = [];
   const seen = new Set<string>();
   for (const t of input.tables) {
-    if (!obj(t) || typeof t.tableName !== "string") return fail("invalid_legacy_source_table");
+    if (!obj(t) || typeof t.tableName !== "string" || Object.keys(t).some(k =>
+      !["tableName","present","rowCount","columnCount","schemaSha256"].includes(k)))
+      return fail("invalid_legacy_source_table");
     const key = t.tableName.toLowerCase();
     const allowed = known.get(key);
     if (!allowed || seen.has(key) || t.tableName !== allowed.tableName) {
