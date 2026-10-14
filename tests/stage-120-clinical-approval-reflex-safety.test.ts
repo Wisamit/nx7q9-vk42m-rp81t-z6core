@@ -35,7 +35,7 @@ test("Stage 120: both clinical approval and retirement reauthenticate before rul
   assert.match(route,/requirePermission\("clinical_rules\.approve"\)/);
   assert.match(route,/clinicalRuleProofResource\(type,id\)/);
   assert.match(route,/clinical_rule_active_branch_required/);
-  assert.match(route,/ensureCurrentAuthority\(tx\)/);
+  assert.match(route,/ensureCurrentAuthority\\(tx,lockedExisting\\.authorizationBranchId/);
   assert.match(route,/permissions:\{some:\{permission:\{code:"clinical_rules\.approve"/);
   assert.match(route,/userSession\.findFirst/);
   assert.match(route,/await consumeStaffStepUp\(tx/);
