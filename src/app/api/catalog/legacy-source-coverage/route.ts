@@ -132,6 +132,7 @@ export async function POST(request: Request) {
       coverage,findings,
     };
   }, { isolationLevel:"Serializable",timeout:30_000 });
-  if ("error" in result) return fail(result.error,result.status);
+  if ("error" in result && typeof result.error === "string" &&
+      typeof result.status === "number") return fail(result.error,result.status);
   return NextResponse.json(result,{headers});
 }
