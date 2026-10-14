@@ -10,7 +10,24 @@ export class CompositeWriteError extends Error {
   constructor(code: string, status = 403) { super(code); this.code = code; this.status = status; }
 }
 
-const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+export const compositeUuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+/**
+ * Never interpret revoked initial department grants as organization-wide
+ * access: the existing scope resolver treats an empty grant list as global.
+ */
+export function intersectCompositeDepartments<T extends { departmentId: string }>(
+  initiallyGranted: readonly string[], liveGrants: readonly T[],
+): T[] {
+  const initial = new Set(initiallyGranted);
+  if (initial.size === 0) {
+    if (liveGrants.length > 0) throw new CompositeWriteError("composite_department_scope_changed");
+    return [];
+  }
+  const common = liveGrants.filter(item => initial.has(item.departmentId));
+  if (common.length === 0) throw new CompositeWriteError("composite_department_scope_revoked");
+  return common;
+}
+
 export type ProposedCompositeMember = { testId: string; displayOrder: number; required: boolean };
 
 /** Fail closed for repeat, reordered or unbounded source member lists. */
@@ -35,7 +52,7 @@ export function parseCompositeMembers(
     const id = objects ? fields?.testId : entry;
     const order = objects ? fields?.displayOrder : i;
     const required = objects && type === "PANEL" ? fields?.required : true;
-    if (typeof id !== "string" || !uuid.test(id) ||
+    if (typeof id !== "string" || !compositeUuid.test(id) ||
         !Number.isSafeInteger(order) || (order as number) < 0 || (order as number) > 9999 ||
         typeof required !== "boolean" ||
         (objects && type === "PACKAGE" && fields?.required !== undefined))
@@ -98,15 +115,9 @@ export async function withScopedCompositeCreation<T>(
       throw new CompositeWriteError("composite_permission_revoked");
     const initialBranches = new Set(session.user.branchScopes.map(item => item.branchId));
     const branchScopes = liveBranches.filter(item => initialBranches.has(item.branchId));
-    const initialDepartments = new Set(session.user.departmentScopes.map(item => item.departmentId));
-    if ((initialDepartments.size === 0 && liveDepartments.length > 0) ||
-        (initialDepartments.size > 0 && liveDepartments.length === 0))
-      throw new CompositeWriteError("composite_department_scope_changed");
-    const departmentScopes = liveDepartments.filter(item => initialDepartments.has(item.departmentId));
-    // An empty intersection must NEVER turn originally restricted staff into
-    // unrestricted catalog authors when new department grants replace old ones.
-    if (initialDepartments.size > 0 && departmentScopes.length === 0)
-      throw new CompositeWriteError("composite_department_scope_revoked");
+    const departmentScopes = intersectCompositeDepartments(
+      session.user.departmentScopes.map(item => item.departmentId), liveDepartments,
+    );
     const scope = resolveClinicalImportScope({
       organizationId, activeBranchId: originalScope.branchId, activeBranch: branch,
       branchScopes, departmentScopes,
