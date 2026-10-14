@@ -2,30 +2,13 @@ import type { Prisma } from "../../generated/prisma/client";
 import { getCurrentSession, permissionSet } from "./auth";
 import { prisma } from "./db";
 import { clinicalImportTestWhere, resolveClinicalImportScope, type ClinicalImportScope } from "./catalog-clinical-import-scope";
+import { compositeUuid, intersectCompositeDepartments } from "./catalog-composite-scope.ts";
 
 type Session = NonNullable<Awaited<ReturnType<typeof getCurrentSession>>>;
 export class CompositeWriteError extends Error {
   readonly code: string;
   readonly status: number;
   constructor(code: string, status = 403) { super(code); this.code = code; this.status = status; }
-}
-
-export const compositeUuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
-/**
- * Never interpret revoked initial department grants as organization-wide
- * access: the existing scope resolver treats an empty grant list as global.
- */
-export function intersectCompositeDepartments<T extends { departmentId: string }>(
-  initiallyGranted: readonly string[], liveGrants: readonly T[],
-): T[] {
-  const initial = new Set(initiallyGranted);
-  if (initial.size === 0) {
-    if (liveGrants.length > 0) throw new CompositeWriteError("composite_department_scope_changed");
-    return [];
-  }
-  const common = liveGrants.filter(item => initial.has(item.departmentId));
-  if (common.length === 0) throw new CompositeWriteError("composite_department_scope_revoked");
-  return common;
 }
 
 export type ProposedCompositeMember = { testId: string; displayOrder: number; required: boolean };
@@ -118,6 +101,8 @@ export async function withScopedCompositeCreation<T>(
     const departmentScopes = intersectCompositeDepartments(
       session.user.departmentScopes.map(item => item.departmentId), liveDepartments,
     );
+    if (departmentScopes === null)
+      throw new CompositeWriteError("composite_department_scope_revoked");
     const scope = resolveClinicalImportScope({
       organizationId, activeBranchId: originalScope.branchId, activeBranch: branch,
       branchScopes, departmentScopes,
