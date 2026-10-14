@@ -54,9 +54,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   try {
     body = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(chunks)));
   } catch { return fail("invalid_json", 400); }
-  if (!body || typeof body !== "object" || Array.isArray(body) ||
+  const rowNumber = body?.rowNumber;\n  if (!body || typeof body !== "object" || Array.isArray(body) ||
       Object.keys(body).sort().join(",") !== "rowNumber" ||
-      !Number.isSafeInteger(body.rowNumber) || body.rowNumber < 1 || body.rowNumber > 20000)
+      typeof rowNumber !== "number" || !Number.isSafeInteger(rowNumber) || rowNumber < 1 || rowNumber > 20000)
     return fail("invalid_import_row", 400);
   const { id } = await params;
   const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
@@ -81,7 +81,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       });
       if (!batch) throw new CompositeWriteError("legacy_batch_not_found", 404);
       const row = await tx.catalogImportRow.findFirst({
-        where: { batchId: batch.id, rowNumber: body.rowNumber,
+        where: { batchId: batch.id, rowNumber,
           entityType: "PRICE_LIST_ITEM", status: { in: ["VALID", "WARNING"] },
           importedEntityId: null },
         select: { id: true, status: true, normalizedData: true },
@@ -97,7 +97,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         take: 20001,
       });
       if (all.length > 20000) throw new CompositeWriteError("price_batch_too_large", 409);
-      if (stagedPriceOverlapIndex(all).has(body.rowNumber))
+      if (stagedPriceOverlapIndex(all).has(rowNumber))
         throw new CompositeWriteError("overlapping_staged_prices", 409);
       const [list, test] = await Promise.all([
         tx.priceList.findFirst({ where: { organizationId: org,
@@ -152,7 +152,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       await tx.auditEvent.create({ data: {
         organizationId: org, branchId: scope.branchId, actorUserId: session.user.id,
         action: "LEGACY_PRICE_DRAFT_IMPORTED", entityType: "PriceListItem", entityId: price.id,
-        newValues: { batchId: batch.id, rowNumber: body.rowNumber, importRowId: row.id,
+        newValues: { batchId: batch.id, rowNumber, importRowId: row.id,
           priceListId: check.resolvedPriceListId, testId: check.resolvedTestId,
           currency: check.currency, unitPrice: candidate.unitPrice,
           effectiveFrom: candidate.effectiveFrom, effectiveTo: candidate.effectiveTo || null,
