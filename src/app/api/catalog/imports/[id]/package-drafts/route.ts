@@ -36,7 +36,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (Object.keys(obj).join(",") !== "rowNumber" || !Number.isSafeInteger(obj.rowNumber) ||
       (obj.rowNumber as number) < 1 || (obj.rowNumber as number) > 20000)
     return fail("invalid_row_number", 400);
-  const rowNumber = obj.rowNumber as number;\n  const { id } = await params;
+  const rowNumber = obj.rowNumber as number;
+  const { id } = await params;
   if (!UUID.test(id)) return fail("batch_not_found", 404);
   const org = session.user.organizationId, ctx = await requestContext();
   try {
