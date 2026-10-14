@@ -1005,6 +1005,7 @@ enum EdgeQueueStatus {
 }
 
 model Organization {
+  legacyCatalogLineage LegacyCatalogRowLineage[]
   specimenRetentionPolicies SpecimenRetentionPolicy[]
   specimenDisposalCases SpecimenDisposalCase[]
   doctorPortalAccess DoctorPortalPatientAccess[]
@@ -1801,6 +1802,14 @@ enum ImportBatchStatus {
   FAILED
 }
 
+enum LegacyLineageClassification {
+  UNRESOLVED
+  AMBIGUOUS
+  NOT_IMPORTED
+  MAPPED
+  APPROVED_MAPPING
+}
+
 enum ImportRowStatus {
   PENDING
   VALID
@@ -2299,6 +2308,7 @@ model CommercialPackageItem {
 }
 
 model CatalogImportBatch {
+  legacyCatalogLineage LegacyCatalogRowLineage[]
   id             String            @id @default(uuid()) @db.Char(36)
   organizationId String            @map("organization_id") @db.Char(36)
   sourceType     String            @map("source_type") @db.VarChar(40)
@@ -2320,6 +2330,7 @@ model CatalogImportBatch {
 }
 
 model CatalogImportRow {
+  legacyCatalogLineage LegacyCatalogRowLineage?
   id              String          @id @default(uuid()) @db.Char(36)
   batchId         String          @map("batch_id") @db.Char(36)
   rowNumber       Int             @map("row_number")
@@ -7104,4 +7115,41 @@ model SpecimenDisposalCase {
   @@index([organizationId,branchId,status,createdAt],map:"sdc_branch_queue_idx")
   @@index([specimenId,status],map:"sdc_specimen_status_idx")
   @@map("specimen_disposal_cases")
+}
+
+
+// Immutable source identity and CAS-controlled reconciliation; never an activation ledger.
+// A reviewed MAPPING is not approval of a clinical interval or a price.
+model LegacyCatalogRowLineage {
+  id                  String @id @default(uuid()) @db.Char(36)
+  organizationId      String @map("organization_id") @db.Char(36)
+  sourceSha256        String @map("source_sha256") @db.Char(64)
+  sourceTable         String @map("source_table") @db.VarChar(60)
+  sourceSchemaSha256  String @map("source_schema_sha256") @db.Char(64)
+  digestKeyId         String @map("digest_key_id") @db.Char(64)
+  rowDigest           String @map("row_digest") @db.Char(64)
+  occurrence          Int
+  batchId             String? @map("batch_id") @db.Char(36)
+  importRowId         String? @unique(map: "legacy_lineage_import_row_uq") @map("import_row_id") @db.Char(36)
+  classification      LegacyLineageClassification @default(UNRESOLVED)
+  targetType          String? @map("target_type") @db.VarChar(40)
+  targetId            String? @map("target_id") @db.Char(36)
+  revision            Int @default(0)
+  reason              String? @db.VarChar(1000)
+  createdByUserId     String @map("created_by_user_id") @db.Char(36)
+  mappedByUserId      String? @map("mapped_by_user_id") @db.Char(36)
+  reviewedByUserId    String? @map("reviewed_by_user_id") @db.Char(36)
+  reviewedAt          DateTime? @map("reviewed_at") @db.DateTime(3)
+  createdAt           DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt           DateTime @updatedAt @map("updated_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  batch CatalogImportBatch? @relation(fields: [batchId], references: [id], onDelete: Restrict)
+  importRow CatalogImportRow? @relation(fields: [importRowId], references: [id], onDelete: Restrict)
+
+  @@unique([organizationId, sourceSha256, sourceTable, digestKeyId, rowDigest, occurrence], map: "legacy_lineage_source_unique")
+  @@index([organizationId, sourceSha256, sourceTable, classification], map: "legacy_lineage_coverage_idx")
+  @@index([batchId, importRowId], map: "legacy_lineage_staging_idx")
+  @@index([targetType, targetId], map: "legacy_lineage_target_idx")
+  @@map("legacy_catalog_row_lineage")
 }

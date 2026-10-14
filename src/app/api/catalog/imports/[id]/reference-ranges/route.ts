@@ -358,10 +358,8 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
         data: { status: "IMPORTED" },
       });
       if (claim.count !== 1) continue;
-      if (!currentTest.defaultUnitId && item.mappedUnit.id) {
-        await tx.labTest.update({ where: { id: currentTest.id }, data: { defaultUnitId: item.mappedUnit.id } });
-      }
-
+      // Source-imported ranges and unit suggestions never change the active
+      // test default unit. That choice requires separate clinical governance.
       let component = componentByTestId.get(item.test.id);
       if (!component) {
         component = await tx.testComponent.create({
@@ -374,6 +372,8 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
             resultType: item.test.resultType,
             decimalPrecision: item.test.decimalPrecision,
             displayOrder: 0,
+            status: "INACTIVE",
+            deactivatedAt: new Date(),
           },
           include: { unit: true },
         });
@@ -413,7 +413,9 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
         action: "LEGACY_REFERENCE_INTERVALS_IMPORTED",
         entityType: "CatalogImportBatch",
         entityId: batch.id,
-        newValues: { total: analysis.total, imported, reviewRequired: analysis.review.length, reasons: analysis.reasons },
+        newValues: { total: analysis.total, imported, reviewRequired: analysis.review.length,
+          reasons: analysis.reasons, clinicalIntervalsDraftOnly: true,
+          newComponentsInactive: true, defaultTestUnitsUnchanged: true },
         ipAddress: ctx.ipAddress,
         userAgent: ctx.userAgent,
       },

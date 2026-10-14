@@ -28,7 +28,8 @@ export const dynamic = "force-dynamic";
 const PAGE_SIZE = 100;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ordered: CatalogExportType[] = [
-  "TEST", "COMPONENT", "UNIT", "REFERENCE_INTERVAL", "PRICE_LIST", "PRICE_LIST_ITEM",
+  "TEST", "COMPONENT", "UNIT", "PANEL", "PACKAGE",
+  "REFERENCE_INTERVAL", "PRICE_LIST", "PRICE_LIST_ITEM", "PRICE_LIST_PACKAGE_ITEM",
 ];
 function record(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -301,6 +302,7 @@ async function inspectBundleDrift(
     const idsByType = new Map<CatalogExportType, string[]>();
     const testRefs = new Set<string>(), unitRefs = new Set<string>();
     const componentRefs = new Set<string>(), priceListRefs = new Set<string>();
+    const packageRefs = new Set<string>();
     const activeBranchIds = new Set(branchIds);
     for (const row of staged) {
       const n = record(row.normalizedData), source = record(row.sourceData);
@@ -314,6 +316,23 @@ async function inspectBundleDrift(
         return { error: "reconciliation_duplicate_identity", httpStatus: 409 } as const;
       values.push(id);
       idsByType.set(type, values);
+      if (type === "PANEL" || type === "PACKAGE") {
+        // Clinical membership is whole-list identity, including inactive and
+        // off-branch test ids, never only those visible on the current page.
+        if (!Array.isArray(n.items) || n.items.length === 0)
+          return { error: "reconciliation_composite_membership_missing", httpStatus: 409 } as const;
+        for (const item of n.items) {
+          const member = record(item);
+          if (!member || typeof member.testId !== "string" || !UUID.test(member.testId))
+            return { error: "reconciliation_composite_member_invalid", httpStatus: 409 } as const;
+          testRefs.add(member.testId);
+        }
+      }
+      if (type === "PRICE_LIST_PACKAGE_ITEM") {
+        if (typeof n.packageId !== "string" || !UUID.test(n.packageId))
+          return { error: "reconciliation_package_identity_invalid", httpStatus: 409 } as const;
+        packageRefs.add(n.packageId);
+      }
       for (const [field, set] of [
         ["testId", testRefs], ["unitId", unitRefs],
         ["componentId", componentRefs], ["priceListId", priceListRefs],
@@ -337,17 +356,26 @@ async function inspectBundleDrift(
       { scopeType: "ORGANIZATION" as const, branchId: null },
       { scopeType: "BRANCH" as const, branchId: { in: branchIds } },
     ] };
-    const [mappedTests, mappedUnits, mappedComponents, mappedLists] = await Promise.all([
+    const fullyVisibleItems = {
+      some: {},
+      every: { test: testScope },
+    };
+    const [mappedTests, mappedUnits, mappedComponents, mappedLists, mappedPackages] = await Promise.all([
       tx.labTest.count({ where: { ...testScope, id: { in: [...testRefs] } } }),
       tx.unit.count({ where: { organizationId, id: { in: [...unitRefs] } } }),
       tx.testComponent.count({ where: { id: { in: [...componentRefs] }, test: testScope } }),
       tx.priceList.count({ where: { organizationId, ...genericPriceScope, id: { in: [...priceListRefs] } } }),
+      tx.commercialPackage.count({ where: {
+        organizationId, id: { in: [...packageRefs] }, items: fullyVisibleItems,
+      } }),
     ]);
     if (mappedTests !== testRefs.size || mappedUnits !== unitRefs.size ||
-        mappedComponents !== componentRefs.size || mappedLists !== priceListRefs.size)
+        mappedComponents !== componentRefs.size || mappedLists !== priceListRefs.size ||
+        mappedPackages !== packageRefs.size)
       return { error: "reconciliation_parent_scope_changed", httpStatus: 403 } as const;
 
-    // Exact same six native export selects; comparison uses serialized JSON.
+    // All nine native export classes are reviewed with full authorized
+    // membership, exact price precision and current tenant/branch scope.
     const live = new Map<string, unknown>();
     for (const type of ordered) {
       const ids = idsByType.get(type) || [];
@@ -380,6 +408,32 @@ async function inspectBundleDrift(
         status: true, createdAt: true, updatedAt: true, deactivatedAt: true,
         test: { select: { code: true } },
         unit: { select: { code: true, symbol: true } },
+      },
+    });
+  } else if (type === "PANEL") {
+    records = await tx.testPanel.findMany({
+      ...base, where: { organizationId, items: fullyVisibleItems, ...cursorScope },
+      select: {
+        id: true, code: true, nameEn: true, nameAr: true,
+        descriptionEn: true, descriptionAr: true, status: true,
+        createdAt: true, updatedAt: true, deactivatedAt: true,
+        items: { select: {
+          testId: true, displayOrder: true, required: true,
+          test: { select: { code: true } },
+        }, orderBy: [{ displayOrder: "asc" }, { testId: "asc" }] },
+      },
+    });
+  } else if (type === "PACKAGE") {
+    records = await tx.commercialPackage.findMany({
+      ...base, where: { organizationId, items: fullyVisibleItems, ...cursorScope },
+      select: {
+        id: true, code: true, nameEn: true, nameAr: true,
+        descriptionEn: true, descriptionAr: true, status: true,
+        createdAt: true, updatedAt: true, deactivatedAt: true,
+        items: { select: {
+          testId: true, displayOrder: true,
+          test: { select: { code: true } },
+        }, orderBy: [{ displayOrder: "asc" }, { testId: "asc" }] },
       },
     });
   } else if (type === "UNIT") {
@@ -417,6 +471,24 @@ async function inspectBundleDrift(
         contractId: true, currency: true, priority: true, effectiveFrom: true,
         effectiveTo: true, status: true, createdAt: true, updatedAt: true,
         deactivatedAt: true,
+      },
+    });
+  } else if (type === "PRICE_LIST_PACKAGE_ITEM") {
+    records = await tx.priceListPackageItem.findMany({
+      ...base, where: {
+        ...cursorScope,
+        package: { organizationId, items: fullyVisibleItems },
+        priceList: { organizationId, ...genericPriceScope,
+          sourceId: null, referrerId: null, clientId: null, contractId: null },
+      },
+      select: {
+        id: true, priceListId: true, packageId: true, unitPrice: true,
+        effectiveFrom: true, effectiveTo: true, status: true,
+        createdAt: true, updatedAt: true, deactivatedAt: true,
+        package: { select: { code: true } },
+        priceList: { select: {
+          code: true, currency: true, scopeType: true, branchId: true,
+        } },
       },
     });
   } else if (type === "PRICE_LIST_ITEM") {

@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "evidenceType": "FAMILY_LAB_LEGACY_MDB_ROW_HASHES_REVIEW_ONLY",
+  "sourceName": "SYNTHETIC_NOT_FROM_REAL_MDB.mdb",
+  "sourceSha256": "1111111111111111111111111111111111111111111111111111111111111111",
+  "sourceBytes": 100,
+  "tableName": "price",
+  "schemaSha256": "2222222222222222222222222222222222222222222222222222222222222222",
+  "digestKeyId": "3333333333333333333333333333333333333333333333333333333333333333",
+  "sourceRowCount": 1,
+  "chunkIndex": 0,
+  "chunkCount": 1,
+  "exportedAtUtc": "2026-10-14T10:00:00.000Z",
+  "includesPatientData": false,
+  "rows": [
+    {
+      "rowDigest": "4444444444444444444444444444444444444444444444444444444444444444",
+      "occurrence": 1
+    }
+  ]
+}

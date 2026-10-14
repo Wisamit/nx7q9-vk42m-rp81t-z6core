@@ -1,9 +1,9 @@
 import type { Prisma } from "../../generated/prisma/client";
 
-export type ImportEntity = "TEST" | "PANEL" | "UNIT" | "CONTAINER" | "REFERENCE_INTERVAL" | "COMPONENT" | "PRICE_LIST_ITEM";
+export type ImportEntity = "TEST" | "PANEL" | "PACKAGE" | "UNIT" | "CONTAINER" | "REFERENCE_INTERVAL" | "COMPONENT" | "PRICE_LIST_ITEM" | "PRICE_LIST_PACKAGE_ITEM";
 export type ImportInputRow = { entityType: ImportEntity; legacyKey?: string; data: Prisma.InputJsonObject };
 
-export const allowedImportEntities = new Set<ImportEntity>(["TEST", "PANEL", "UNIT", "CONTAINER", "REFERENCE_INTERVAL", "COMPONENT", "PRICE_LIST_ITEM"]);
+export const allowedImportEntities = new Set<ImportEntity>(["TEST", "PANEL", "PACKAGE", "UNIT", "CONTAINER", "REFERENCE_INTERVAL", "COMPONENT", "PRICE_LIST_ITEM", "PRICE_LIST_PACKAGE_ITEM"]);
 
 function text(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
@@ -42,6 +42,14 @@ export function normalizeImportRow(row: ImportInputRow): Prisma.InputJsonObject 
     const nameEn = text(d.nameEn || d.profilname);
     return { code: text(d.code || d.profilname).replace(/\s+/g, "_").toUpperCase(), nameEn };
   }
+  if (row.entityType === "PACKAGE") {
+    const code = text(d.code).toUpperCase();
+    const nameEn = text(d.nameEn);
+    const members = Array.isArray(d.memberTestCodes)
+      ? d.memberTestCodes.map(code => text(code).toUpperCase()) : [];
+    return { code, nameEn, nameAr: text(d.nameAr),
+      memberTestCodes: members };
+  }
   if (row.entityType === "CONTAINER") {
     const nameEn = text(d.nameEn || d.name);
     return { code: text(d.code || d.name).replace(/\s+/g, "_").toUpperCase(), nameEn };
@@ -54,6 +62,15 @@ export function normalizeImportRow(row: ImportInputRow): Prisma.InputJsonObject 
       nameAr: text(d.nameAr),
       unitCode: text(d.unitCode || d.unit).toUpperCase(),
       resultType: text(d.resultType).toUpperCase(),
+    };
+  }
+  if (row.entityType === "PRICE_LIST_PACKAGE_ITEM") {
+    return {
+      priceListCode: text(d.priceListCode).toUpperCase(),
+      packageCode: text(d.packageCode).toUpperCase(),
+      unitPrice: text(d.unitPrice),
+      effectiveFrom: text(d.effectiveFrom),
+      effectiveTo: text(d.effectiveTo),
     };
   }
   if (row.entityType === "PRICE_LIST_ITEM") {
@@ -96,6 +113,23 @@ export function validateImportRow(entityType: ImportEntity, normalized: Prisma.I
     out.push({ severity: "ERROR", code: "MISSING_MASTER_IDENTITY", message: "Code/name could not be normalized." });
   }
 
+  if (entityType === "PACKAGE") {
+    const members = normalized.memberTestCodes;
+    if (typeof normalized.code !== "string" ||
+        !/^[A-Z0-9._-]{1,80}$/.test(normalized.code) ||
+        typeof normalized.nameEn !== "string" ||
+        !normalized.nameEn.trim() || normalized.nameEn.length > 220 ||
+        (typeof normalized.nameAr === "string" && normalized.nameAr.length > 220) ||
+        !Array.isArray(members) || !members.length || members.length > 300 ||
+        members.some(code => typeof code !== "string" ||
+          !/^[A-Z0-9._-]{1,80}$/.test(code)) ||
+        new Set(members).size !== members.length) {
+      out.push({ severity: "ERROR", code: "PACKAGE_MEMBERSHIP_REQUIRED",
+        message: "Package requires unique explicit existing test codes and identity." });
+    }
+    out.push({ severity: "WARNING", code: "PACKAGE_DRAFT_APPROVAL_REQUIRED",
+      message: "Imported commercial packages are INACTIVE until separate approval." });
+  }
   if (entityType === "REFERENCE_INTERVAL" && !normalized.testName) {
     out.push({ severity: "ERROR", code: "MISSING_RANGE_TEST", message: "Reference interval has no test name." });
   }
@@ -109,6 +143,28 @@ export function validateImportRow(entityType: ImportEntity, normalized: Prisma.I
       out.push({ severity: "ERROR", code: "MISSING_COMPONENT_IDENTITY", message: "Parent test code, component code and English name are required." });
     }
     out.push({ severity: "WARNING", code: "COMPONENT_MAPPING_APPROVAL_REQUIRED", message: "Component staged for review only; no live create or update is permitted." });
+  }
+  if (entityType === "PRICE_LIST_PACKAGE_ITEM") {
+    if (!normalized.priceListCode || !normalized.packageCode) {
+      out.push({ severity: "ERROR", code: "MISSING_PACKAGE_PRICE_MAPPING",
+        message: "Both public price list and package codes are required." });
+    }
+    if (typeof normalized.unitPrice !== "string" ||
+        !/^(?:0|[1-9]\d{0,13})(?:\.\d{1,4})?$/.test(normalized.unitPrice)) {
+      out.push({ severity: "ERROR", code: "INVALID_PACKAGE_DECIMAL_PRICE",
+        message: "Package prices require an exact non-negative DECIMAL(18,4)." });
+    }
+    if (typeof normalized.effectiveFrom !== "string" ||
+        !/^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z)?$/.test(normalized.effectiveFrom) ||
+        !Number.isFinite(Date.parse(normalized.effectiveFrom)) ||
+        (normalized.effectiveTo && (typeof normalized.effectiveTo !== "string" ||
+          !Number.isFinite(Date.parse(normalized.effectiveTo)) ||
+          Date.parse(normalized.effectiveTo) < Date.parse(normalized.effectiveFrom as string)))) {
+      out.push({ severity: "ERROR", code: "INVALID_PACKAGE_PRICE_WINDOW",
+        message: "Package tariff dates must be exact effective calendar dates." });
+    }
+    out.push({ severity: "WARNING", code: "PACKAGE_TARIFF_APPROVAL_REQUIRED",
+      message: "Review only until separately authorized; draft must remain INACTIVE." });
   }
   if (entityType === "PRICE_LIST_ITEM") {
     if (!normalized.priceListCode || !normalized.testCode) {

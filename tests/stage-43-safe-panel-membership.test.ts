@@ -73,7 +73,8 @@ test("Stage 43 commit uses source-row identity, never untrusted test-name-based 
   assert.match(s,/testBySourceRowId\.set\(row\.id, created\.id\)/);
   // Stage 44 strengthens the existing-name check to a full clinical definition comparison.
   assert.match(s,/sameSafeMasterTestDefinition\(existing,/);
-  assert.match(s,/sameImportTestIdentity\(existingPanel\.nameEn, nameEn\)/);
+  assert.match(s,/if \(!existingPanel && fitsSafeMasterIdentity/);
+  assert.match(s,/status: "INACTIVE", deactivatedAt: new Date\(\)/);
   assert.match(s,/resolvedPanelMemberships\(safeRows, testBySourceRowId, panelMap\)/);
   assert.match(s,/registerPanelAlias\(panelMap, nameEn, panel\.id\)/);
   assert.doesNotMatch(s,/testByLegacyName|row\.importedEntityId \|\| testByLegacyName/);
