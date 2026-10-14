@@ -16,14 +16,19 @@ test("Stage 124: null-component legacy observation selects only its exact source
   assert.equal(where.componentCodeSnapshot,"TSH");
   assert.equal(where.unitId,"UNIT_A");
   assert.equal(where.unitSnapshot,"mIU/L");
-  assert.equal(where.result?.methodId,"METHOD_A");
-  assert.equal(where.result?.organizationId,"ORG_A");
-  assert.equal(where.result?.status,"RELEASED");
-  assert.equal(where.result?.orderItem?.testId,"TEST_A");
-  assert.equal(where.result?.orderItem?.order?.patientId,"PATIENT_A");
+  const historical=where.result as {
+    methodId:string|null;organizationId:string;status:string;
+    orderItem:{testId:string;order:{patientId:string}};
+    releasedAt:{gte:Date;lt:Date};
+  };
+  assert.equal(historical.methodId,"METHOD_A");
+  assert.equal(historical.organizationId,"ORG_A");
+  assert.equal(historical.status,"RELEASED");
+  assert.equal(historical.orderItem.testId,"TEST_A");
+  assert.equal(historical.orderItem.order.patientId,"PATIENT_A");
   assert.equal(where.resultTypeSnapshot,"NUMERIC");
   assert.deepEqual(where.valueNumeric,{not:null});
-  assert.deepEqual(where.result?.releasedAt,{gte:base.lookbackStart,lt:base.at});
+  assert.deepEqual(historical.releasedAt,{gte:base.lookbackStart,lt:base.at});
 });
 test("Stage 124: immutable component ID is the identity even if its display code changed",()=>{
   const where=deltaHistoricalValueWhere({...base,componentId:"COMP_ID",componentCode:"RENAMED"});
@@ -32,7 +37,7 @@ test("Stage 124: immutable component ID is the identity even if its display code
 });
 test("Stage 124: absence of analytical method or unit matches ONLY equally absent historical context",()=>{
   const where=deltaHistoricalValueWhere({...base,methodId:null,unitId:null,unitSnapshot:null});
-  assert.equal(where.result?.methodId,null);
+  assert.equal((where.result as {methodId:string|null}).methodId,null);
   assert.equal(where.unitId,null);
   assert.equal(where.unitSnapshot,null);
 });
