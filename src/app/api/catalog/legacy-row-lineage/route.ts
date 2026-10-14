@@ -115,6 +115,17 @@ async function validTarget(tx: Tx, org: string, branchId: string, type: string, 
     case "ORGANISM": return !!await tx.organism.findFirst({ where: { id, organizationId: org }, select: { id: true } });
     case "ANTIBIOTIC": return !!await tx.antibiotic.findFirst({ where: { id, organizationId: org }, select: { id: true } });
     case "REFERRER": return !!await tx.referrer.findFirst({ where: { id, organizationId: org }, select: { id: true } });
+    case "CLIENT": return !!await tx.client.findFirst({ where: { id, organizationId: org }, select: { id: true } });
+    case "CONTRACT": return !!await tx.contract.findFirst({ where: {
+      id, organizationId: org, client: { organizationId: org },
+    }, select: { id: true } });
+    case "PRICE_LIST": return !!await tx.priceList.findFirst({ where: {
+      id, organizationId: org, OR: [
+        { scopeType: "ORGANIZATION", branchId: null },
+        { scopeType: "BRANCH", branchId },
+        { scopeType: "CLIENT" }, { scopeType: "CONTRACT" },
+      ],
+    }, select: { id: true } });
     case "SOURCE": return !!await tx.orderSource.findFirst({ where: { id, organizationId: org }, select: { id: true } });
     default: return false;
   }
