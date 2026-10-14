@@ -75,3 +75,28 @@ test("Stage 126: financial source prices are created as inactive exact-decimal d
   assert.doesNotMatch(code, /tx\.invoiceLine\.update/);
   assert.doesNotMatch(code, /tx\.priceListPackageItem\.update/);
 });
+
+test("Stage 126: package tariff draft binds one Access fingerprint with CAS and cannot activate", () => {
+  const code = readFileSync(
+    "src/app/api/catalog/legacy-row-lineage/package-tariff-draft/route.ts", "utf8");
+  const ui = readFileSync("src/components/legacy-row-lineage-review.tsx", "utf8");
+  assert.match(code, /withScopedCompositeCreation/);
+  assert.match(code, /requirePermission\("pricing\.manage"\)/);
+  assert.match(code, /createdByUserId: session\.user\.id/);
+  assert.match(code, /sourceTable: "price"/);
+  assert.match(code, /classification: "UNRESOLVED"/);
+  assert.match(code, /clinicalImportTestWhere/);
+  assert.match(code, /items: \{ some: \{\}, every:/);
+  assert.match(code, /package_price_window_collision/);
+  assert.match(code, /new Prisma\.Decimal\(proposed\.unitPrice\)/);
+  assert.match(code, /status: "INACTIVE", deactivatedAt: new Date\(\)/);
+  assert.match(code, /tx\.legacyCatalogRowLineage\.updateMany/);
+  assert.match(code, /legacy_lineage_claim_conflict/);
+  assert.match(code, /independentMappingReviewRequired: true/);
+  assert.match(code, /financialApproved: false/);
+  assert.match(code, /activated: false/);
+  assert.match(ui, /Create inactive package tariff draft/);
+  assert.match(ui, /إنشاء مسودة غير نشطة لسعر باقة/);
+  assert.doesNotMatch(code, /tx\.(priceListPackageItem|priceListItem)\.update\(/);
+  assert.doesNotMatch(code, /tx\.invoiceLine\.(create|update|delete)/);
+});
