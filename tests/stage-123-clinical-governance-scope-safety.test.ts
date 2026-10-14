@@ -15,8 +15,8 @@ const defaults:Settings={
 };
 function fake(overrides:Partial<Settings>={}){
   const s={...defaults,...overrides};
-  const activeBranches=[A,...s.branchBActive?[B]:[]];
-  const departments=[DEPT_A,DEPT_B];
+  const activeBranches=[A,...(s.branchBActive?[B]:[])];
+  const departments=[DEPT_A,...(s.branchBActive?[DEPT_B]:[])];
   const db={
     branch:{
       findMany:async()=>activeBranches.map(id=>({id})),
@@ -73,7 +73,7 @@ test("Stage 123: only active branch coverage from BOTH current DB and session au
   // An inactive branch does not need active-branch coverage.
   assert.deepEqual(await assessClinicalGovernanceScope(fake({branchBActive:false}),input({
     branchBActive:false,
-  })),{ok:true,organizationWide:true,activeBranchCount:1,activeDepartmentCount:2});
+  })),{ok:true,organizationWide:true,activeBranchCount:1,activeDepartmentCount:1});
 });
 test("Stage 123: departmental restriction cannot be escalated to organization-wide approval",async()=>{
   const branches={grantBranches:[A,B],sessionBranches:[A,B]};
