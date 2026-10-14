@@ -7,7 +7,7 @@ export type ImportLedgerBatch = {
 export type ImportLedgerFinding = { code: string; count: number; severity: "BLOCK" | "REVIEW" | "INFO" };
 const finished = new Set(["IMPORTED", "SKIPPED"]);
 const sourceOnly = new Set(["CONFIG_BUNDLE_REVIEW", "CSV_REVIEW"]);
-const targetTypes = new Set(["TEST","PANEL","UNIT","CONTAINER","COMPONENT","REFERENCE_INTERVAL","PRICE_LIST_ITEM"]);
+const targetTypes = new Set(["TEST","PANEL","UNIT","CONTAINER","COMPONENT","REFERENCE_INTERVAL","PRICE_LIST_ITEM","PRICE_LIST_PACKAGE_ITEM","PACKAGE"]);
 export function summarizeImportLedger(batch: ImportLedgerBatch) {
   let total = 0, imported = 0, deferred = 0, unresolved = 0, skipped = 0, errors = 0;
   const countsByType = new Map<string, { total: number; imported: number; unresolved: number; skipped: number }>();
