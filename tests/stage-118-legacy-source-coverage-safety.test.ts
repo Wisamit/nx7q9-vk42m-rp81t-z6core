@@ -35,6 +35,11 @@ test("Stage 118: forbid unknown, repeated, missing and inconsistent source metad
   assert.throws(()=>parseLegacySourceCoverage({...bad,
     tables:bad.tables.map((x,i)=>i===0?{...x,present:false}:x)}),
     /invalid_legacy_source_table_evidence/);
+  assert.throws(()=>parseLegacySourceCoverage({...bad,unknownExtra:"not_allowed"}),
+    /invalid_legacy_source_manifest/);
+  assert.throws(()=>parseLegacySourceCoverage({...bad,
+    tables:bad.tables.map((x,i)=>i===0?{...x,unknownExtra:"not_allowed"}:x)}),
+    /invalid_legacy_source_table/);
   assert.throws(()=>parseLegacySourceCoverage({...bad,includesPatientData:true}),
     /invalid_legacy_source_manifest/);
   assert.throws(()=>parseLegacySourceCoverage({...bad,sourceName:"/tmp/source.mdb"}),
