@@ -184,6 +184,7 @@ export default async function ClinicalRulesPage() {
     />
 
     <ResultValidationPolicyManager
+      activeBranchId={session.activeBranchId || ""}
       locale={locale}
       canApprove={permissions.has("clinical_rules.approve")}
       branches={branches}
