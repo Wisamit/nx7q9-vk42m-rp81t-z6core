@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { ClinicalDecimalError, parseClinicalRuleDecimal } from "@/lib/clinical-rule-decimal";
 
 function text(value: unknown, max = 500) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -17,7 +18,14 @@ export async function POST(request: Request) {
   const branchId = text(body.branchId, 36) || null;
   const targetTestId = text(body.targetTestId, 36);
   const operator = ["LT","LTE","GT","GTE","EQ","NE","CONTAINS"].includes(body.operator) ? body.operator : null;
-  const numericThreshold = body.numericThreshold === "" || body.numericThreshold == null ? null : Number(body.numericThreshold);
+  let numericThreshold: string | null;
+  try {
+    numericThreshold = parseClinicalRuleDecimal(body.numericThreshold, {precision:24,scale:8});
+  } catch (error) {
+    if (error instanceof ClinicalDecimalError)
+      return NextResponse.json({error:error.code},{status:400});
+    throw error;
+  }
   const textThreshold = text(body.textThreshold, 500) || null;
   const noteEn = text(body.noteEn, 500) || null;
   const noteAr = text(body.noteAr, 500) || null;
@@ -59,7 +67,7 @@ export async function POST(request: Request) {
 
   if (numericOperator) {
     if (resultType !== "NUMERIC") return NextResponse.json({ error: "numeric_operator_requires_numeric_source" }, { status: 409 });
-    if (numericThreshold === null || !Number.isFinite(numericThreshold)) return NextResponse.json({ error: "numeric_threshold_required" }, { status: 400 });
+    if (numericThreshold === null) return NextResponse.json({ error: "numeric_threshold_required" }, { status: 400 });
   } else {
     if (!textThreshold) return NextResponse.json({ error: "text_threshold_required" }, { status: 400 });
   }
@@ -72,7 +80,7 @@ export async function POST(request: Request) {
         sourceComponentId,
         branchId,
         operator,
-        numericThreshold: numericOperator && numericThreshold !== null ? numericThreshold.toFixed(8) : null,
+        numericThreshold: numericOperator ? numericThreshold : null,
         textThreshold: numericOperator ? null : textThreshold,
         targetTestId,
         noteEn,
@@ -96,8 +104,8 @@ export async function POST(request: Request) {
           sourceComponentId,
           branchId,
           operator,
-          numericThreshold,
-          textThreshold,
+          numericThreshold: numericOperator ? numericThreshold : null,
+          textThreshold: numericOperator ? null : textThreshold,
           targetTestId,
           effectiveFrom,
           effectiveTo,
