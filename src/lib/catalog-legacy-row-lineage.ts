@@ -15,7 +15,7 @@ export const legacyRowTargets: Readonly<Record<string, readonly string[]>> = {
   test: ["TEST"],
   profile: ["PANEL", "PACKAGE"],
   normal: ["REFERENCE_INTERVAL"],
-  price: ["PRICE_LIST_ITEM", "PRICE_LIST_PACKAGE_ITEM"],
+  price: ["PRICE_LIST_ITEM", "PRICE_LIST_PACKAGE_ITEM", "PRICE_LIST", "CONTRACT"],
   Unites: ["UNIT"],
   Tube: ["CONTAINER"],
   Tubes: ["CONTAINER"],
@@ -23,8 +23,8 @@ export const legacyRowTargets: Readonly<Record<string, readonly string[]>> = {
   ORGANISM: ["ORGANISM"],
   Antibiotic: ["ANTIBIOTIC"],
   Fungi: ["ORGANISM"],
-  Referdby: ["REFERRER"],
-  Source: ["SOURCE"],
+  Referdby: ["REFERRER", "CLIENT"],
+  Source: ["SOURCE", "CLIENT"],
   Gropes: ["PANEL", "PACKAGE"],
 };
 
@@ -134,7 +134,7 @@ export function parseLegacyRowDecision(value: unknown): LegacyRowDecision {
   return { ...v, reason: v.reason.trim() } as LegacyRowDecision;
 }
 export function legacyLineageDomainPermission(targetType: string): string {
-  if (targetType === "PRICE_LIST_ITEM" || targetType === "PRICE_LIST_PACKAGE_ITEM")
+  if (["PRICE_LIST_ITEM", "PRICE_LIST_PACKAGE_ITEM", "PRICE_LIST", "CONTRACT"].includes(targetType))
     return "pricing.manage";
   if (targetType === "REFERENCE_INTERVAL" || targetType === "COMPONENT" ||
       targetType === "COMMENT_TEMPLATE") return "catalog.reference_ranges.manage";
