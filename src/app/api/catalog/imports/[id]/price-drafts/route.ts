@@ -54,7 +54,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   try {
     body = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(chunks)));
   } catch { return fail("invalid_json", 400); }
-  const rowNumber = body?.rowNumber;\n  if (!body || typeof body !== "object" || Array.isArray(body) ||
+  const rowNumber = body?.rowNumber;
+  if (!body || typeof body !== "object" || Array.isArray(body) ||
       Object.keys(body).sort().join(",") !== "rowNumber" ||
       typeof rowNumber !== "number" || !Number.isSafeInteger(rowNumber) || rowNumber < 1 || rowNumber > 20000)
     return fail("invalid_import_row", 400);
