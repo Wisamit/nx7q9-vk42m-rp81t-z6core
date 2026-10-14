@@ -49,3 +49,12 @@ test("Stage 126: bundle drift includes all nine classes with full related scope"
   assert.match(drift, /sourceId: null, referrerId: null, clientId: null, contractId: null/);
   assert.match(drift, /unitPrice: true/);
 });
+
+test("Stage 126: legacy clinical import does not mutate active unit or activate generated component", () => {
+  const api = readFileSync("src/app/api/catalog/imports/[id]/reference-ranges/route.ts", "utf8");
+  assert.match(api, /approvalStatus: "DRAFT"/);
+  assert.match(api, /status: "INACTIVE"/);
+  assert.match(api, /defaultTestUnitsUnchanged: true/);
+  assert.match(api, /newComponentsInactive: true/);
+  assert.doesNotMatch(api, /tx\.labTest\.update\(/);
+});
