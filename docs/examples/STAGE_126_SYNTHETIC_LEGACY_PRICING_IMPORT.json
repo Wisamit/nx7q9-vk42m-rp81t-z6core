@@ -1,0 +1,27 @@
+{
+  "sourceName": "SYNTHETIC_NOT_FROM_REAL_MDB.mdb",
+  "rows": [
+    {
+      "entityType": "PRICE_LIST_ITEM",
+      "legacyKey": "SYNTHETIC-PRICE-001",
+      "data": {
+        "priceListCode": "DEMO_PUBLIC",
+        "testCode": "DEMO_ASSAY_01",
+        "unitPrice": "123.4567",
+        "effectiveFrom": "2027-01-01",
+        "effectiveTo": "2027-12-31"
+      }
+    },
+    {
+      "entityType": "PRICE_LIST_PACKAGE_ITEM",
+      "legacyKey": "SYNTHETIC-PACKAGE-PRICE-001",
+      "data": {
+        "priceListCode": "DEMO_PUBLIC",
+        "packageCode": "DEMO_PACKAGE_01",
+        "unitPrice": "456.7890",
+        "effectiveFrom": "2027-01-01",
+        "effectiveTo": "2027-12-31"
+      }
+    }
+  ]
+}
