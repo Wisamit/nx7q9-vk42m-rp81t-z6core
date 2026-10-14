@@ -38,7 +38,7 @@ export type LegacyRowHash = { rowDigest: string; occurrence: number };
 export type LegacyRowManifest = {
   schemaVersion: 1; evidenceType: typeof LEGACY_ROW_LINEAGE_TYPE;
   sourceName: string; sourceSha256: string; sourceBytes: number;
-  tableName: string; schemaSha256: string; sourceRowCount: number;
+  tableName: string; schemaSha256: string; digestKeyId: string; sourceRowCount: number;
   chunkIndex: number; chunkCount: number;
   exportedAtUtc: string; includesPatientData: false;
   rows: LegacyRowHash[];
@@ -60,7 +60,7 @@ export function parseLegacyRowManifest(value: unknown): LegacyRowManifest {
   const input = object(value);
   if (!exactKeys(input, [
     "schemaVersion", "evidenceType", "sourceName", "sourceSha256", "sourceBytes",
-    "tableName", "schemaSha256", "sourceRowCount", "chunkIndex", "chunkCount",
+    "tableName", "schemaSha256", "digestKeyId", "sourceRowCount", "chunkIndex", "chunkCount",
     "exportedAtUtc", "includesPatientData", "rows",
   ]) || input.schemaVersion !== 1 || input.evidenceType !== LEGACY_ROW_LINEAGE_TYPE ||
       input.includesPatientData !== false ||
@@ -70,6 +70,7 @@ export function parseLegacyRowManifest(value: unknown): LegacyRowManifest {
       typeof input.tableName !== "string" ||
       !LEGACY_COVERAGE_SOURCES.some(source => source.tableName === input.tableName) ||
       typeof input.schemaSha256 !== "string" || !legacyRowHex.test(input.schemaSha256) ||
+      typeof input.digestKeyId !== "string" || !legacyRowHex.test(input.digestKeyId) ||
       !integer(input.sourceRowCount, 0, 10_000_000) ||
       !integer(input.chunkCount, 1, 20_000) ||
       !integer(input.chunkIndex, 0, (input.chunkCount as number) - 1) ||
