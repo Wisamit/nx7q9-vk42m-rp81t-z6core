@@ -34,3 +34,12 @@ powershell -ExecutionPolicy Bypass -File .\scripts\legacy\export-row-lineage.ps1
   -OutputDirectory "C:\private\family-lab-row-evidence"
 ```
 Keep MDB, key and evidence folder private. Upload only deidentified JSON through the scoped LIS interface **after software completion**, following organizational policy; never commit such files to GitHub.
+
+## Additional software hardening in this stage
+- Existing `POST /api/catalog/packages` and `POST /api/catalog/panels` now share serialized tenant/branch/department permission checks inside the creation transaction. Member lists have immutable test identities, bounded membership counts, explicit display order/required flags and duplicate rejection.
+- Existing signed nine-class bundle drift now re-reads full in-scope PANEL/PACKAGE membership and PRICE_LIST_PACKAGE_ITEM tariff snapshots (exact DECIMAL), and fails closed when full membership, price scope or parent identity is no longer authorized. The signed bundle remains review-only.
+- Legacy `normal` reference import was hardened: it **does not change active test default units** and creates new components INACTIVE; imported intervals remain DRAFT+INACTIVE pending clinical sign-off.
+- `POST /api/catalog/imports/[id]/price-drafts` creates **only inactive** legacy per-test tariffs, with current financial permission, organization branch scope, exact price-list/test resolution, precise decimals, effective-date and batch overlap protection, transactional row claim and audit. No price activation, client/contract mapping, or historical invoice recalculation.
+
+### Remaining software finish gate (must not misreport as closed)
+- Governed commit pathways for **new package-specific tariffs**, legacy contracts and all composite bundle classes remain review-only or require independently authorized acceptance before activation. This PR stays Draft until the required software controls are complete or explicitly classified with reproducible external authority dependency; an unsigned source value never becomes a live clinical/financial master merely because it has been imported.
