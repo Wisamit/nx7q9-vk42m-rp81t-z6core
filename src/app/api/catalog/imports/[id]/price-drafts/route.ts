@@ -36,7 +36,24 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (request.headers.get("sec-fetch-site") === "cross-site") return fail("cross_site_denied", 403);
   const length = Number(request.headers.get("content-length") || "0");
   if (!Number.isFinite(length) || length < 0 || length > 1024) return fail("request_too_large", 413);
-  const body = await request.json().catch(() => null);
+  const stream = request.body?.getReader();
+  if (!stream) return fail("missing_json_body", 400);
+  let total = 0;
+  const chunks: Uint8Array[] = [];
+  for (;;) {
+    const part = await stream.read();
+    if (part.done) break;
+    total += part.value.byteLength;
+    if (total > 1024) {
+      await stream.cancel("request_too_large");
+      return fail("request_too_large", 413);
+    }
+    chunks.push(part.value);
+  }
+  let body: Record<string, unknown> | null = null;
+  try {
+    body = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(chunks)));
+  } catch { return fail("invalid_json", 400); }
   if (!body || typeof body !== "object" || Array.isArray(body) ||
       Object.keys(body).sort().join(",") !== "rowNumber" ||
       !Number.isSafeInteger(body.rowNumber) || body.rowNumber < 1 || body.rowNumber > 20000)
