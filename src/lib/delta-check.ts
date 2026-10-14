@@ -1,4 +1,4 @@
-import { Prisma, type PrismaClient } from "../../generated/prisma/client";
+import { Prisma, type PrismaClient } from "../../generated/prisma/client.ts";
 
 type DbClient = PrismaClient | Prisma.TransactionClient;
 
