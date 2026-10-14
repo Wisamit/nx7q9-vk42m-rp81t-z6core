@@ -29,8 +29,12 @@ export const legacyRowTargets: Readonly<Record<string, readonly string[]>> = {
 };
 
 export class LegacyLineageError extends Error {
-  constructor(public readonly code: string, public readonly status = 400) {
+  readonly code: string;
+  readonly status: number;
+  constructor(code: string, status = 400) {
     super(code);
+    this.code = code;
+    this.status = status;
   }
 }
 
