@@ -150,12 +150,12 @@ export function validateImportRow(entityType: ImportEntity, normalized: Prisma.I
         message: "Both public price list and package codes are required." });
     }
     if (typeof normalized.unitPrice !== "string" ||
-        !/^(?:0|[1-9]\\d{0,13})(?:\\.\\d{1,4})?$/.test(normalized.unitPrice)) {
+        !/^(?:0|[1-9]\d{0,13})(?:\.\d{1,4})?$/.test(normalized.unitPrice)) {
       out.push({ severity: "ERROR", code: "INVALID_PACKAGE_DECIMAL_PRICE",
         message: "Package prices require an exact non-negative DECIMAL(18,4)." });
     }
     if (typeof normalized.effectiveFrom !== "string" ||
-        !/^\\d{4}-\\d{2}-\\d{2}(?:T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,3})?Z)?$/.test(normalized.effectiveFrom) ||
+        !/^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z)?$/.test(normalized.effectiveFrom) ||
         !Number.isFinite(Date.parse(normalized.effectiveFrom)) ||
         (normalized.effectiveTo && (typeof normalized.effectiveTo !== "string" ||
           !Number.isFinite(Date.parse(normalized.effectiveTo)) ||
