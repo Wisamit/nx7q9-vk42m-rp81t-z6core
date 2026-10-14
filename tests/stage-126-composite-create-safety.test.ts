@@ -32,3 +32,20 @@ test("Stage 126: membership input refuses implicit code/label mapping, duplicate
   assert.match(helper, /seenTest/);
   assert.match(helper, /seenOrder/);
 });
+
+test("Stage 126: bundle drift includes all nine classes with full related scope", () => {
+  const drift = readFileSync("src/app/api/catalog/imports/[id]/bundle-drift/route.ts", "utf8");
+  const source = readFileSync("src/app/api/catalog/configuration-export/bundle/route.ts", "utf8");
+  for (const entity of ["PANEL","PACKAGE","PRICE_LIST_PACKAGE_ITEM"]) {
+    assert.ok(drift.includes('type === "' + entity + '"'));
+    assert.ok(source.includes('type === "' + entity + '"'));
+  }
+  assert.match(drift, /items: fullyVisibleItems/);
+  assert.match(drift, /every: \{ test: testScope \}/);
+  assert.match(drift, /reconciliation_composite_membership_missing/);
+  assert.match(drift, /reconciliation_composite_member_invalid/);
+  assert.match(drift, /mappedPackages !== packageRefs\.size/);
+  assert.match(drift, /tx\.priceListPackageItem\.findMany/);
+  assert.match(drift, /sourceId: null, referrerId: null, clientId: null, contractId: null/);
+  assert.match(drift, /unitPrice: true/);
+});
