@@ -150,7 +150,7 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
       // An unapproved MDB profile cannot modify an active panel's clinical
       // membership, even if its code and name happen to match. Only create
       // new INACTIVE definitions pending independent profile sign-off.
-      let panel = null as Awaited<ReturnType<typeof tx.testPanel.create>> | null;
+      let panel: { id: string } | null = null;
       if (!existingPanel && fitsSafeMasterIdentity(code, nameEn, 80, 200)) {
         panel = await tx.testPanel.create({ data: {
           organizationId: session.user.organizationId, code: code.slice(0, 80),
