@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import {
-  isSafeMasterTestRow, registerPanelAlias, resolvedPanelMemberships, sameImportTestIdentity,
+  isSafeMasterTestRow, registerPanelAlias, resolvedPanelMemberships,
 } from "@/lib/catalog-panel-membership";
 import { fitsSafeMasterIdentity, registerSafeMasterUnitAlias, resolveSafeMasterUnitAlias, sameSafeMasterTestDefinition } from "@/lib/catalog-safe-master-units";
 import { manualUnitIdentityError } from "@/lib/catalog-manual-unit-governance";
@@ -147,19 +147,19 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
       const existingPanel = code ? await tx.testPanel.findUnique({
         where: { organizationId_code: { organizationId: session.user.organizationId, code } },
       }) : null;
-      // A legacy panel code with a different current identity must not change
-      // that panel's membership through an unapproved import.
-      let panel = existingPanel && fitsSafeMasterIdentity(code, nameEn, 80, 200) &&
-        existingPanel.status === "ACTIVE" && sameImportTestIdentity(existingPanel.nameEn, nameEn)
-        ? existingPanel : null;
+      // An unapproved MDB profile cannot modify an active panel's clinical
+      // membership, even if its code and name happen to match. Only create
+      // new INACTIVE definitions pending independent profile sign-off.
+      let panel = null as Awaited<ReturnType<typeof tx.testPanel.create>> | null;
       if (!existingPanel && fitsSafeMasterIdentity(code, nameEn, 80, 200)) {
         panel = await tx.testPanel.create({ data: {
           organizationId: session.user.organizationId, code: code.slice(0, 80),
           nameEn: nameEn.slice(0, 200),
+          status: "INACTIVE", deactivatedAt: new Date(),
         } });
       }
       if (!panel) {
-        await tx.catalogImportRow.update({ where: { id: row.id }, data: { status: "SKIPPED", validationIssues: [{ severity: "WARNING", code: "INVALID_PANEL", message: "Panel could not be imported safely." }] } }); results.skipped++; continue;
+        await tx.catalogImportRow.update({ where: { id: row.id }, data: { status: "SKIPPED", validationIssues: [{ severity: "WARNING", code: "EXISTING_OR_INVALID_PANEL_PENDING_REVIEW", message: "Legacy panel cannot be activated or used to change existing membership without independent review." }] } }); results.skipped++; continue;
       }
       registerPanelAlias(panelMap, nameEn, panel.id);
       registerPanelAlias(panelMap, code, panel.id);
