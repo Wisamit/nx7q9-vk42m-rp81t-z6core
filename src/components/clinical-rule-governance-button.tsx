@@ -80,7 +80,17 @@ export function ClinicalRuleGovernanceButton({
       });
       const body = await response.json().catch(() => ({})) as { error?: string };
       if (!response.ok) {
-        const friendly = body.error === "clinical_rule_effective_range_overlap"
+        const friendly = body.error === "clinical_rule_organization_wide_branch_coverage_required"
+          ? tr("Organization-wide rules require approval access to every active branch. Request appropriate organization-level access.",
+            "اعتماد قاعدة على مستوى المؤسسة يتطلب صلاحية اعتماد لجميع الفروع النشطة. اطلب صلاحية معتمدة على مستوى المؤسسة.")
+          : body.error === "clinical_rule_organization_wide_department_coverage_required"
+            ? tr("Organization-wide rules also require coverage of every active department when department access is restricted.",
+              "اعتماد قاعدة على مستوى المؤسسة يتطلب تغطية جميع الأقسام النشطة إذا كانت صلاحيات الأقسام مقيّدة.")
+          : body.error === "clinical_rule_branch_scope_mismatch" ||
+            body.error === "clinical_rule_branch_scope_revoked"
+            ? tr("The selected branch is not authorized for this clinical rule. Check the branch and access grants.",
+              "الفرع المختار غير مصرح له بهذه القاعدة. تحقق من الفرع والصلاحيات.")
+          : body.error === "clinical_rule_effective_range_overlap"
           ? tr("Approval blocked: an active rule with this identity overlaps the proposed period.",
             "تعذر الاعتماد: يوجد تداخل زمني مع قاعدة معتمدة بنفس الهوية.")
           : body.error?.startsWith("clinical_rule_") &&
