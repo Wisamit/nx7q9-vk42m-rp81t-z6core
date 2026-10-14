@@ -83,6 +83,10 @@ export function ClinicalRuleGovernanceButton({
         const friendly = body.error === "clinical_rule_effective_range_overlap"
           ? tr("Approval blocked: an active rule with this identity overlaps the proposed period.",
             "تعذر الاعتماد: يوجد تداخل زمني مع قاعدة معتمدة بنفس الهوية.")
+          : body.error?.startsWith("clinical_rule_") &&
+            /inactive|forbidden|scope|mismatch|source|target|method|threshold|numeric|validation/.test(body.error)
+            ? tr("Approval blocked: a referenced test, component, department, method, branch or configuration is no longer eligible. Review the draft and create a corrected version.",
+              "تعذر الاعتماد: أحد الفحوص أو المكونات أو الأقسام أو الطرق أو الفروع أو إعدادات القاعدة لم يعد صالحاً. راجع المسودة وأنشئ نسخة مصححة.")
           : body.error === "clinical_rule_not_draft"
             ? tr("Only a draft can be approved.", "يمكن اعتماد المسودة فقط.")
             : body.error === "only_approved_clinical_rule_can_be_retired"

@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { clinicalRuleProofResource } from "@/lib/clinical-rule-step-up";
+import { validateClinicalRuleApprovalReferences } from "@/lib/clinical-rule-approval-references";
 import { consumeStaffStepUp, StaffStepUpError } from "@/lib/staff-step-up";
 import {
   clinicalRuleLifecycleState,
@@ -250,11 +251,16 @@ async function validateCalculatedApproval(db: ClinicalRuleDb, id: string, organi
     return { ok: false as const, error: "invalid_formula" };
   }
 
+  const target = rule.test.components.find(component => component.id === rule.targetComponentId);
+  if (rule.test.status !== "ACTIVE" || !target || target.resultType !== "NUMERIC")
+    return {ok:false as const,error:"clinical_rule_calculated_target_inactive_or_invalid"};
   const componentsByCode = new Map(rule.test.components.map(component => [component.code.toUpperCase(), component]));
   const activeCalculatedTargets = new Set(rule.test.calculatedRules.map(active => active.targetComponentId));
   for (const variable of variables) {
     const component = componentsByCode.get(variable);
     if (!component) return { ok: false as const, error: "formula_component_not_found", componentCode: variable };
+    if (component.resultType !== "NUMERIC" || component.id === target.id)
+      return {ok:false as const,error:"clinical_rule_calculated_source_inactive_or_invalid",componentCode:variable};
     if (activeCalculatedTargets.has(component.id)) {
       return { ok: false as const, error: "calculated_formula_chaining_not_supported", componentCode: variable };
     }
@@ -335,6 +341,15 @@ export async function POST(request: Request) {
       if (clinicalRuleLifecycleState(lockedExisting) !== "DRAFT") {
         return { error: "clinical_rule_not_draft" as const };
       }
+
+      // Previously valid draft references may have been deactivated or moved
+      // to another tenant/department after creation. Resolve every live link
+      // under the governance lock before consuming the one-time approval proof.
+      const linkValidation = await validateClinicalRuleApprovalReferences(tx, {
+        type, id, organizationId, activeBranchId, userId: session.user.id,
+        sessionDepartmentIds: session.user.departmentScopes.map(s => s.departmentId),
+      });
+      if (!linkValidation.ok) return {error:linkValidation.error};
 
       if (type === "CALCULATED_RESULT_RULE") {
         const formulaValidation = await validateCalculatedApproval(tx, id, organizationId);
@@ -445,6 +460,7 @@ export async function POST(request: Request) {
             approvedAt,
             ruleType: type,
             predecessorsClosed: plan.predecessorsToClose,
+            approvalReferencesRevalidated: true,
             stepUpGrantId:stepUp.grantId,
             stepUpProofMethod:stepUp.proofMethod,
           },
@@ -460,7 +476,7 @@ export async function POST(request: Request) {
         approvedAt,
         predecessorsClosed: plan.predecessorsToClose,
       };
-    }, { timeout: 30000 });
+    }, { timeout: 30000, isolationLevel: "Serializable" });
 
     if ("error" in outcome) {
       const status = outcome.error === "clinical_rule_not_found" ? 404
