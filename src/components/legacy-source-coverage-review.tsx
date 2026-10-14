@@ -111,7 +111,7 @@ export function LegacySourceCoverageReview({locale}:{locale:"ar"|"en"}) {
             <td>{item.present?item.sourceRows:"—"}</td>
             <td>{item.stagedCandidates??"—"}</td>
             <td>{item.stagedImported===null?"—":item.stagedImported+" / "+item.stagedUnresolved}</td>
-            <td>{tr(...(messages[item.finding]||[item.finding,item.finding]))}</td>
+            <td>{tr(messages[item.finding]?.[0]||item.finding,messages[item.finding]?.[1]||item.finding)}</td>
           </tr>)}</tbody>
         </table>
       </div>
