@@ -1,9 +1,9 @@
 import type { Prisma } from "../../generated/prisma/client";
 
-export type ImportEntity = "TEST" | "PANEL" | "UNIT" | "CONTAINER" | "REFERENCE_INTERVAL" | "COMPONENT" | "PRICE_LIST_ITEM" | "PRICE_LIST_PACKAGE_ITEM";
+export type ImportEntity = "TEST" | "PANEL" | "PACKAGE" | "UNIT" | "CONTAINER" | "REFERENCE_INTERVAL" | "COMPONENT" | "PRICE_LIST_ITEM" | "PRICE_LIST_PACKAGE_ITEM";
 export type ImportInputRow = { entityType: ImportEntity; legacyKey?: string; data: Prisma.InputJsonObject };
 
-export const allowedImportEntities = new Set<ImportEntity>(["TEST", "PANEL", "UNIT", "CONTAINER", "REFERENCE_INTERVAL", "COMPONENT", "PRICE_LIST_ITEM", "PRICE_LIST_PACKAGE_ITEM"]);
+export const allowedImportEntities = new Set<ImportEntity>(["TEST", "PANEL", "PACKAGE", "UNIT", "CONTAINER", "REFERENCE_INTERVAL", "COMPONENT", "PRICE_LIST_ITEM", "PRICE_LIST_PACKAGE_ITEM"]);
 
 function text(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
@@ -41,6 +41,14 @@ export function normalizeImportRow(row: ImportInputRow): Prisma.InputJsonObject 
   if (row.entityType === "PANEL") {
     const nameEn = text(d.nameEn || d.profilname);
     return { code: text(d.code || d.profilname).replace(/\s+/g, "_").toUpperCase(), nameEn };
+  }
+  if (row.entityType === "PACKAGE") {
+    const code = text(d.code).toUpperCase();
+    const nameEn = text(d.nameEn);
+    const members = Array.isArray(d.memberTestCodes)
+      ? d.memberTestCodes.map(code => text(code).toUpperCase()) : [];
+    return { code, nameEn, nameAr: text(d.nameAr),
+      memberTestCodes: members };
   }
   if (row.entityType === "CONTAINER") {
     const nameEn = text(d.nameEn || d.name);
@@ -105,6 +113,23 @@ export function validateImportRow(entityType: ImportEntity, normalized: Prisma.I
     out.push({ severity: "ERROR", code: "MISSING_MASTER_IDENTITY", message: "Code/name could not be normalized." });
   }
 
+  if (entityType === "PACKAGE") {
+    const members = normalized.memberTestCodes;
+    if (typeof normalized.code !== "string" ||
+        !/^[A-Z0-9._-]{1,80}$/.test(normalized.code) ||
+        typeof normalized.nameEn !== "string" ||
+        !normalized.nameEn.trim() || normalized.nameEn.length > 220 ||
+        (typeof normalized.nameAr === "string" && normalized.nameAr.length > 220) ||
+        !Array.isArray(members) || !members.length || members.length > 300 ||
+        members.some(code => typeof code !== "string" ||
+          !/^[A-Z0-9._-]{1,80}$/.test(code)) ||
+        new Set(members).size !== members.length) {
+      out.push({ severity: "ERROR", code: "PACKAGE_MEMBERSHIP_REQUIRED",
+        message: "Package requires unique explicit existing test codes and identity." });
+    }
+    out.push({ severity: "WARNING", code: "PACKAGE_DRAFT_APPROVAL_REQUIRED",
+      message: "Imported commercial packages are INACTIVE until separate approval." });
+  }
   if (entityType === "REFERENCE_INTERVAL" && !normalized.testName) {
     out.push({ severity: "ERROR", code: "MISSING_RANGE_TEST", message: "Reference interval has no test name." });
   }
