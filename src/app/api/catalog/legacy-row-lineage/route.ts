@@ -189,8 +189,7 @@ export async function PATCH(request: Request) {
             existing.createdByUserId === session.user.id ||
             existing.mappedByUserId === session.user.id)
           throw new LegacyLineageError("independent_mapping_reviewer_required", 403);
-      } else if (decision.classification === "MAPPED" &&
-                 existing.createdByUserId !== session.user.id) {
+      } else if (existing.createdByUserId !== session.user.id) {
         // Staged hashes are not interchangeable: author retains control of
         // unresolved evidence, reviewer only confirms a mapped identity.
         throw new LegacyLineageError("source_row_author_required", 403);
