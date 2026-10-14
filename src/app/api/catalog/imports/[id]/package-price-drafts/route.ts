@@ -55,7 +55,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       !Number.isSafeInteger(body.rowNumber) || (body.rowNumber as number) < 1 ||
       (body.rowNumber as number) > 20000)
     return fail("invalid_import_row", 400);
-  const rowNumber = body.rowNumber as number;\n  const { id } = await params;
+  const rowNumber = body.rowNumber as number;
+  const { id } = await params;
   if (!UUID.test(id)) return fail("batch_not_found", 404);
   const org = session.user.organizationId, ctx = await requestContext();
   try {
