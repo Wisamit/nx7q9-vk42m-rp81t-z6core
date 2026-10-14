@@ -7,7 +7,7 @@ import { clinicalImportTestWhere } from "@/lib/catalog-clinical-import-scope";
 import { calendarInstant, validPriceDecimal, overlaps } from "@/lib/price-import-reconciliation";
 
 export const dynamic = "force-dynamic";
-const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}$/i;
+const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const fail = (error: string, status: number) =>
   NextResponse.json({ error }, { status, headers: { "Cache-Control": "private, no-store" } });
 const asRecord = (value: unknown): Record<string, unknown> =>
