@@ -36,17 +36,43 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const reviewedAt = new Date();
   const note = text(body?.note);
 
-  await prisma.$transaction(async tx => {
-    await tx.reflexRuleEvent.update({
-      where: { id: event.id },
+  const outcome = await prisma.$transaction(async tx => {
+    // The event status and permissions MUST be rechecked inside the mutation
+    // transaction. The initial snapshot is only a UX preflight.
+    const liveActor=await tx.user.findFirst({where:{
+      id:session.user.id,organizationId:session.user.organizationId,status:"ACTIVE",
+      roles:{some:{role:{organizationId:session.user.organizationId,status:"ACTIVE",
+        permissions:{some:{permission:{code:"reflex.review"}}}}}},
+      branchScopes:{some:{branchId:event.result.performingBranchId,branch:{
+        organizationId:session.user.organizationId,status:"ACTIVE",
+      }}},
+    },select:{id:true}});
+    if(!liveActor) return {error:"reflex_authority_revoked",httpStatus:403} as const;
+    const liveDepartmentGrants=await tx.userDepartmentScope.findMany({
+      where:{userId:session.user.id},select:{departmentId:true},
+    });
+    const departmentId=event.result.orderItem.test.departmentId;
+    const liveDepartmentIds=liveDepartmentGrants.map(grant=>grant.departmentId);
+    if(departmentId && liveDepartmentIds.length>0 &&
+       !liveDepartmentIds.includes(departmentId))
+      return {error:"reflex_department_scope_changed",httpStatus:403} as const;
+    if(session.user.departmentScopes.length>0 && departmentId &&
+       !liveDepartmentIds.includes(departmentId))
+      return {error:"reflex_department_scope_revoked",httpStatus:403} as const;
+
+    // Conditional one-winner claim prevents two simultaneous reviewers
+    // from overwriting the action, reviewer or audit history.
+    const claimed = await tx.reflexRuleEvent.updateMany({
+      where: {id:event.id,resultId:id,status:"PENDING",
+        result:{organizationId:session.user.organizationId,
+          performingBranchId:event.result.performingBranchId}},
       data: {
-        status: action,
-        reviewedByUserId: session.user.id,
-        reviewedAt,
-        reviewNote: note || null,
+        status:action,reviewedByUserId:session.user.id,
+        reviewedAt,reviewNote:note||null,
       },
     });
-
+    if(claimed.count!==1)
+      return {error:"reflex_event_changed_since_review",httpStatus:409} as const;
     await tx.auditEvent.create({
       data: {
         organizationId: session.user.organizationId,
@@ -55,7 +81,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         action: action === "ACKNOWLEDGED" ? "REFLEX_RECOMMENDATION_ACKNOWLEDGED" : "REFLEX_RECOMMENDATION_DISMISSED",
         entityType: "ReflexRuleEvent",
         entityId: event.id,
-        oldValues: { status: event.status },
+        oldValues: { status: "PENDING" },
         newValues: {
           status: action,
           resultId: event.resultId,
@@ -68,7 +94,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         userAgent: ctx.userAgent,
       },
     });
-  });
+    return {status:"ok" as const,reflexStatus:action};
+  },{isolationLevel:"ReadCommitted",timeout:30000});
+  if("error" in outcome && typeof outcome.error==="string")
+    return NextResponse.json({error:outcome.error},
+      {status:outcome.httpStatus,headers:{"Cache-Control":"private, no-store"}});
+  return NextResponse.json(outcome,{headers:{"Cache-Control":"private, no-store"}});
 
-  return NextResponse.json({ status: "ok", reflexStatus: action });
 }
