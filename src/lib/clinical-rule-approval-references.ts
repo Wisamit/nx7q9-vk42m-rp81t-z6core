@@ -1,5 +1,4 @@
 import type { Prisma } from "../../generated/prisma/client";
-import { formulaVariables } from "./formula-engine.ts";
 import type { GovernedClinicalRuleType } from "./clinical-rule-step-up.ts";
 
 type Db = Prisma.TransactionClient;
@@ -98,7 +97,7 @@ export async function validateClinicalRuleApprovalReferences(
     case "CALCULATED_RESULT_RULE": {
       const rule = await tx.calculatedResultRule.findFirst({
         where: { id: input.id, organizationId: input.organizationId },
-        select: { testId: true, targetComponentId: true, expression: true },
+        select: { testId: true, targetComponentId: true },
       });
       if (!rule) return blocked("clinical_rule_not_found");
       const source = await test(rule.testId);
@@ -106,17 +105,6 @@ export async function validateClinicalRuleApprovalReferences(
       const target = activeComponent(source,rule.targetComponentId);
       if (!target || target.resultType !== "NUMERIC")
         return blocked("clinical_rule_calculated_target_inactive_or_invalid");
-      let variables: string[];
-      try { variables = formulaVariables(rule.expression); }
-      catch { return blocked("invalid_formula"); }
-      if (!variables.length) return blocked("formula_requires_component_variables");
-      const codes = new Map(source.components.filter(c => c.status === "ACTIVE")
-        .map(c => [c.code.toUpperCase(), c]));
-      for (const variable of variables) {
-        const component = codes.get(variable.toUpperCase());
-        if (!component || component.resultType !== "NUMERIC" ||
-            component.id === target.id) return blocked("clinical_rule_calculated_source_inactive_or_invalid");
-      }
       return {ok:true};
     }
     case "REFLEX_RULE": {
