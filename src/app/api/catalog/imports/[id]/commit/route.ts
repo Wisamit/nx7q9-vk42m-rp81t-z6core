@@ -31,7 +31,7 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
   if (safeRows.length === 0) {
     return NextResponse.json({ error: "no_pending_safe_master_rows" }, { status: 409 });
   }
-  const results = { imported: 0, skipped: 0, deferred: batch.rows.filter(row => ["REFERENCE_INTERVAL", "COMPONENT", "PRICE_LIST_ITEM"].includes(row.entityType)).length };
+  const results = { imported: 0, skipped: 0, deferred: batch.rows.filter(row => ["REFERENCE_INTERVAL", "COMPONENT", "PRICE_LIST_ITEM", "PRICE_LIST_PACKAGE_ITEM", "PACKAGE"].includes(row.entityType)).length };
 
   try {
   await prisma.$transaction(async tx => {
