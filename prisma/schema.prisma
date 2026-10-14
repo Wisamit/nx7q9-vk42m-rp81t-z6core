@@ -2330,7 +2330,7 @@ model CatalogImportBatch {
 }
 
 model CatalogImportRow {
-  legacyCatalogLineage LegacyCatalogRowLineage[]
+  legacyCatalogLineage LegacyCatalogRowLineage?
   id              String          @id @default(uuid()) @db.Char(36)
   batchId         String          @map("batch_id") @db.Char(36)
   rowNumber       Int             @map("row_number")
@@ -7130,7 +7130,7 @@ model LegacyCatalogRowLineage {
   rowDigest           String @map("row_digest") @db.Char(64)
   occurrence          Int
   batchId             String? @map("batch_id") @db.Char(36)
-  importRowId         String? @map("import_row_id") @db.Char(36)
+  importRowId         String? @unique(map: "legacy_lineage_import_row_uq") @map("import_row_id") @db.Char(36)
   classification      LegacyLineageClassification @default(UNRESOLVED)
   targetType          String? @map("target_type") @db.VarChar(40)
   targetId            String? @map("target_id") @db.Char(36)
