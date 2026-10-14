@@ -50,7 +50,16 @@ export function evaluateAutoverification(input: {
 
     if (!sourceAllowed) reasons.push("RESULT_SOURCE_NOT_ALLOWED");
     if (input.values.some(value => value.isCritical)) reasons.push("CRITICAL_VALUE_PRESENT");
-    if (input.values.some(value => value.deltaEvaluation === "EXCEEDED")) reasons.push("DELTA_LIMIT_EXCEEDED");
+    // A configured Delta rule without a comparable prior observation is NOT
+    // evidence that the current value is within the approved limit.
+    // Preserve the strict EXCEEDED block even if a legacy policy lacks the
+    // corresponding flag. Unconfigured Delta (NOT_CONFIGURED) is not a failed
+    // comparison and remains separately governed by rule configuration.
+    if (input.values.some(value => value.deltaEvaluation === "EXCEEDED"))
+      reasons.push("DELTA_LIMIT_EXCEEDED");
+    if (policy.requireDeltaWithinLimit &&
+        input.values.some(value => value.deltaEvaluation === "NO_PREVIOUS_RESULT"))
+      reasons.push("DELTA_COMPARABLE_BASELINE_REQUIRED");
     if (input.pendingReflexCount > 0) reasons.push("PENDING_REFLEX_RECOMMENDATION");
     if (input.blockingHoldCount > 0) reasons.push("BLOCKING_VALIDATION_HOLD");
     if (input.source === "ANALYZER") {
