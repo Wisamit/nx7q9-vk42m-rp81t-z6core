@@ -490,7 +490,7 @@ export async function POST(request: Request) {
       };
     }, { timeout: 30000, isolationLevel: "Serializable" });
 
-    if ("error" in outcome) {
+    if ("error" in outcome && typeof outcome.error === "string") {
       const status = outcome.error === "clinical_rule_not_found" ? 404
         : outcome.error === "branch_forbidden" ||
           outcome.error.startsWith("clinical_rule_organization_wide_") ||
@@ -600,7 +600,7 @@ export async function POST(request: Request) {
     return { status: "ok" as const, lifecycle: "RETIRED" as const, retiredAt };
   }, { timeout: 30000 });
 
-  if ("error" in outcome) {
+  if ("error" in outcome && typeof outcome.error === "string") {
     const status = outcome.error === "clinical_rule_not_found" ? 404
       : outcome.error === "branch_forbidden" ||
         outcome.error.startsWith("clinical_rule_organization_wide_") ||
