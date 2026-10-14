@@ -62,6 +62,12 @@ test("Stage 126: mapping requires literal source/target and independent review t
   assert.ok(!legacyLineageMappingAllowed("normal", "PRICE_LIST_PACKAGE_ITEM"));
   assert.equal(legacyLineageDomainPermission("PRICE_LIST_PACKAGE_ITEM"), "pricing.manage");
   assert.equal(legacyLineageDomainPermission("REFERENCE_INTERVAL"), "catalog.reference_ranges.manage");
+  assert.ok(legacyLineageMappingAllowed("Source", "CLIENT"));
+  assert.ok(legacyLineageMappingAllowed("Referdby", "CLIENT"));
+  assert.ok(legacyLineageMappingAllowed("price", "CONTRACT"));
+  assert.ok(legacyLineageMappingAllowed("price", "PRICE_LIST"));
+  assert.equal(legacyLineageDomainPermission("CONTRACT"), "pricing.manage");
+  assert.ok(!legacyLineageMappingAllowed("normal", "CONTRACT"));
 });
 test("Stage 126: source fingerprint and mapping can never activate financial or clinical content", () => {
   const api = readFileSync("src/app/api/catalog/legacy-row-lineage/route.ts", "utf8");
