@@ -61,7 +61,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       const existing = await tx.commercialPackage.findUnique({ where: {
         organizationId_code: { organizationId: org, code } },
         select: { id: true },
-      } });
+      });
       if (existing) throw new CompositeWriteError("existing_package_requires_separate_review", 409);
       const tests = await tx.labTest.findMany({
         where: { ...clinicalImportTestWhere(scope), code: { in: members as string[] } },
