@@ -87,6 +87,25 @@ function linkedCode(source: Record<string, unknown>, relation: string): string {
   return string(object(source[relation]), "code");
 }
 
+function safePriceListCode(source: Record<string, unknown>): string {
+  const priceList = object(source.priceList);
+  // The nested scope must be complete, not merely a public price-list code.
+  // A client/contract tariff is never projected as a generic price-list row.
+  for (const key of ["sourceId", "referrerId", "clientId", "contractId"]) {
+    if (!Object.prototype.hasOwnProperty.call(priceList, key) || priceList[key] !== null) {
+      throw new CanonicalSpreadsheetReviewError("canonical_price_list_context_unsupported");
+    }
+  }
+  if (priceList.status !== "ACTIVE" ||
+      !["ORGANIZATION", "BRANCH"].includes(String(priceList.scopeType)) ||
+      (priceList.scopeType === "ORGANIZATION" && priceList.branchId !== null) ||
+      (priceList.scopeType === "BRANCH" &&
+        (typeof priceList.branchId !== "string" || !priceList.branchId))) {
+    throw new CanonicalSpreadsheetReviewError("canonical_price_list_context_unsupported");
+  }
+  return string(priceList, "code");
+}
+
 function members(source: Record<string, unknown>): string {
   if (!Array.isArray(source.items) || !source.items.length ||
       source.items.length > 300) {
@@ -128,13 +147,13 @@ function project(type: CanonicalSpreadsheetReviewType, source: Record<string, un
         effectiveFrom: priceListDay(source, "effectiveFrom"),
         effectiveTo: priceListDay(source, "effectiveTo") };
     case "PRICE_LIST_ITEM":
-      return { priceListCode: linkedCode(source, "priceList"),
+      return { priceListCode: safePriceListCode(source),
         testCode: linkedCode(source, "test"),
         unitPrice: exactNumber(source, "unitPrice"),
         effectiveFrom: dateTime(source, "effectiveFrom"),
         effectiveTo: dateTime(source, "effectiveTo") };
     case "PRICE_LIST_PACKAGE_ITEM":
-      return { priceListCode: linkedCode(source, "priceList"),
+      return { priceListCode: safePriceListCode(source),
         packageCode: linkedCode(source, "package"),
         unitPrice: exactNumber(source, "unitPrice"),
         effectiveFrom: dateTime(source, "effectiveFrom"),
