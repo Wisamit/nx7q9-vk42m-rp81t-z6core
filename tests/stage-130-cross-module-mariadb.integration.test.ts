@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import mysql from "mysql2/promise";
 import { paymentPostingFingerprint } from "../src/lib/payment-posting-idempotency.ts";
+import { validationSpecimenCustodyError } from "../src/lib/result-validation-custody.ts";
 
 test("Stage 130 MariaDB: shared patient, branch custody, frozen report and invoice, fenced exactly-once settlement", 
   { timeout: 90000 }, async () => {
@@ -155,6 +156,35 @@ test("Stage 130 MariaDB: shared patient, branch custody, frozen report and invoi
     const content=typeof frozen[0].content_snapshot==="string"
       ? JSON.parse(frozen[0].content_snapshot):frozen[0].content_snapshot;
     assert.deepEqual(content,JSON.parse(originalSnapshot));
+
+    // Report release must not rely on a custody state captured by earlier
+    // technical or medical review; the source may move before final issue.
+    assert.equal(validationSpecimenCustodyError({
+      status:"RECEIVED",currentBranchId:ids.b,performingBranchId:ids.b,
+    }),null);
+    await first.beginTransaction();
+    const [moved] = await first.execute<mysql.ResultSetHeader>(
+      "UPDATE specimens SET status='IN_TRANSIT',current_branch_id=?,preanalytical_version=preanalytical_version+1 WHERE id=? AND current_branch_id=? AND status='RECEIVED'",
+      [ids.a,ids.specimen,ids.b]);
+    assert.equal(moved.affectedRows,1);
+    await competing.beginTransaction();
+    await assert.rejects(
+      competing.execute("SELECT id,status,current_branch_id FROM specimens WHERE id=? FOR UPDATE",[ids.specimen]),
+      (e:unknown)=>Boolean(e && typeof e==="object" && "code" in e && e.code==="ER_LOCK_WAIT_TIMEOUT"));
+    await competing.rollback();
+    await first.commit();
+    const [live] = await db.execute<mysql.RowDataPacket[]>(
+      "SELECT status,current_branch_id FROM specimens WHERE id=? AND organization_id=?",[ids.specimen,ids.org]);
+    assert.equal(validationSpecimenCustodyError({
+      status:live[0].status,currentBranchId:live[0].current_branch_id,
+      performingBranchId:ids.b,
+    }),"specimen_not_ready_for_validation");
+    const [frozenAgain] = await db.execute<mysql.RowDataPacket[]>(
+      "SELECT content_snapshot FROM diagnostic_report_versions WHERE id=?",[ids.version]);
+    const prior=typeof frozenAgain[0].content_snapshot==="string"
+      ? JSON.parse(frozenAgain[0].content_snapshot):frozenAgain[0].content_snapshot;
+    assert.deepEqual(prior,JSON.parse(originalSnapshot),"released version remains unchanged by later custody");
+
   } finally {
     await Promise.all([first.rollback().catch(()=>{}),competing.rollback().catch(()=>{})]);
     for(const c of cleanup) await db.execute(c.sql,c.params).catch(()=>{});

@@ -11,6 +11,10 @@
 - Transaction CAS and unique-key failures roll back invoice, payment and audit together; replay after a winner commits is looked up under current tenant+actor+request fingerprint. Never convert/cross-sum currencies.
 - Migration `20261015163000_payment_posting_idempotency` is additive; existing historic payments keep NULL and no records are rewritten.
 
+## Clinical report-release custody race closed
+
+Technical and medical review already locked/rechecked their source specimen, but a transfer/rejection after those reviews and before report release could invalidate custody. Stage 130 now uses the same existing live `validationSpecimenCustodyError` policy **inside the report-release transaction**, after locking the source specimen and before claiming result/releasing a report version. Missing, transferred, rejected, disposed or wrong-performing-branch source specimens block issuing a *new* report version; existing historical versions are untouched. Quarantine of other linked specimens remains a separate existing hold. AR/EN operator error is explicit. `tests/stage-130-clinical-release-safety.test.ts` and the new custody race portion of the integrated MariaDB suite validate this invariant.
+
 ## New real MariaDB end-to-end evidence
 
 `tests/stage-130-cross-module-mariadb.integration.test.ts`: synthetic two tenants, two physical branches under first tenant, organization-wide patient referenced by two orders, test→order line→immutable invoice, specimen barcode→received destination manifest→performed-branch laboratory result→versioned diagnostic report; payer with shift/method, competing independent DB connection, rollback/unique payment key, audit exactly once, historical test label/price/report snapshot preserved after catalog edit. Tenant- and branch-scoped negative SQL assertions. This suite is **not** a physical clinical validation nor does direct SQL fixture setup substitute for API permission review.
