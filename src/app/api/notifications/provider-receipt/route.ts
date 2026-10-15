@@ -20,7 +20,24 @@ export async function POST(request: Request) {
     if (declared && (!/^\d{1,5}$/.test(declared) || Number(declared) > 8192)) {
       return json({ error: "receipt_too_large" }, 413);
     }
-    const raw = await request.text();
+    // Stream with an actual byte cap; do not buffer untrusted chunked bodies first.
+    if (!request.body) return json({ error: "invalid_receipt" }, 400);
+    const reader = request.body.getReader();
+    const parts: Uint8Array[] = [];
+    let bytes = 0;
+    while (true) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      bytes += chunk.value.byteLength;
+      if (bytes > 8192) {
+        await reader.cancel().catch(() => {});
+        return json({ error: "receipt_too_large" }, 413);
+      }
+      parts.push(chunk.value);
+    }
+    let raw: string;
+    try { raw = new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(parts)); }
+    catch { return json({ error: "invalid_receipt_utf8" }, 400); }
     const receipt = parseProviderReceipt(raw);
     verifyProviderReceiptSignature(raw, receipt, request.headers.get("x-family-lab-timestamp"),
       request.headers.get("x-family-lab-signature"), process.env.NOTIFICATION_RECEIPT_MASTER_SECRET);
@@ -48,12 +65,14 @@ export async function POST(request: Request) {
           !(delivery.status === NotificationDeliveryStatus.DELIVERED && receipt.status === "DELIVERED")) {
         return { code: 409, outcome: "receipt_not_pending" };
       }
-      if (receipt.status === "DELIVERED" && delivery.reportDeliveryEvent) {
+      if (delivery.reportDeliveryEvent) {
         const version = await tx.diagnosticReportVersion.findFirst({
           where: { id: delivery.reportDeliveryEvent.reportVersionId, report: { organizationId: receipt.organizationId } },
           select: { status: true, version: true, report: { select: { currentVersion: true } } },
         });
-        if (!version || version.status === "RETRACTED" || version.version !== version.report.currentVersion) {
+        if (!version) return { code: 409, outcome: "report_version_tenant_mismatch" };
+        if (receipt.status === "DELIVERED" &&
+            (version.status === "RETRACTED" || version.version !== version.report.currentVersion)) {
           return { code: 409, outcome: "report_version_superseded_or_retracted" };
         }
       }
@@ -97,7 +116,6 @@ export async function POST(request: Request) {
           entityId: delivery.id,
           newValues: {
             channel: receipt.channel, status: receipt.status, receiptFingerprint: fingerprint,
-            providerMessageId: receipt.providerMessageId,
           },
           reason: "Authenticated gateway disposition; no patient data in audit",
         },
