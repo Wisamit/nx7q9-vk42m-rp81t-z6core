@@ -6,6 +6,8 @@ import { catalogReviewXlsx } from "@/lib/catalog-review-xlsx";
 
 const template = "entityType,legacyKey,testCode,code,nameEn,nameAr,unitCode,resultType,priceListCode,unitPrice,effectiveFrom,effectiveTo\r\n";
 const rangeTemplate = "entityType,legacyKey,testName,unit,sex,ageFrom,ageTo,ageUnit,low,high,normalTextEn\r\n";
+const masterTemplate = "entityType,legacyKey,code,nameEn,nameAr,symbol,memberTestCodes\r\n";
+const packagePriceTemplate = "entityType,legacyKey,priceListCode,packageCode,unitPrice,effectiveFrom,effectiveTo\r\n";
 
 export function CatalogCsvReviewStaging({ locale, canStagePricing, canStageRanges }: { locale: "ar" | "en"; canStagePricing: boolean; canStageRanges: boolean }) {
   const router = useRouter();
@@ -14,8 +16,9 @@ export function CatalogCsvReviewStaging({ locale, canStagePricing, canStageRange
   const [error, setError] = useState("");
   const tr = (en: string, ar: string) => locale === "ar" ? ar : en;
 
-  function saveTemplate(kind: "component-price" | "range", format: "csv" | "xlsx" = "csv") {
-    const text = "\uFEFF" + (kind === "range" ? rangeTemplate : template);
+  function saveTemplate(kind: "component-price" | "range" | "master" | "package-price", format: "csv" | "xlsx" = "csv") {
+    const text = "\uFEFF" + (kind === "range" ? rangeTemplate : kind === "master"
+      ? masterTemplate : kind === "package-price" ? packagePriceTemplate : template);
     const data = format === "xlsx" ? catalogReviewXlsx(text) : text;
     const part: BlobPart = typeof data === "string" ? data :
       data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
@@ -24,7 +27,9 @@ export function CatalogCsvReviewStaging({ locale, canStagePricing, canStageRange
     try {
       const a = document.createElement("a");
       a.href = url;
-      a.download = (kind === "range" ? "family-lab-reference-range-review-template." : "family-lab-component-price-review-template.") + format;
+      a.download = "family-lab-" + (kind === "range" ? "reference-range" :
+        kind === "master" ? "masters-membership" : kind === "package-price" ? "package-price" : "component-price")
+        + "-review-template." + format;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -67,8 +72,8 @@ export function CatalogCsvReviewStaging({ locale, canStagePricing, canStageRange
   return <section className="detail-card detail-section">
     <h2>{tr("CSV/Excel clinical and price review staging", "تجهيز CSV/Excel لمراجعة الإعدادات السريرية والأسعار")}</h2>
     <p className="muted">{tr(
-      "Upload canonical CSV or one-sheet XLSX templates for COMPONENT, PRICE_LIST_ITEM or REFERENCE_INTERVAL. All stay DRAFT (review only); no clinical configuration or prices are applied. Configuration export workbooks are not direct imports.",
-      "ارفع CSV أو قالب Excel XLSX بورقة واحدة للمكونات أو الأسعار أو المديات المرجعية. تبقى الدفعة مسودة للمراجعة فقط دون تطبيق إعدادات أو أسعار. ملفات التصدير ليست للاستيراد المباشر.",
+      "Upload canonical CSV / one-sheet XLSX templates for tests, units, containers, panels, packages, components, ranges and prices. All remain review-only DRAFT; original export workbooks are not direct imports.",
+      "ارفع CSV أو XLSX بورقة واحدة لتجهيز الفحوصات والوحدات والمجموعات والباقات والمكونات والمديات والأسعار للمراجعة. تبقى جميعها مسودة فقط دون تفعيل مباشر.",
     )}</p>
     <p className="muted">{tr(
       "COMPONENT needs testCode, code, nameEn, unitCode and resultType. PRICE_LIST_ITEM needs priceListCode, testCode, unitPrice and effectiveFrom. Financial rows require pricing.manage.",
@@ -78,9 +83,13 @@ export function CatalogCsvReviewStaging({ locale, canStagePricing, canStageRange
       "REFERENCE_INTERVAL requires testName, unit, sex, ageFrom/ageTo with ageUnit when applicable, and low/high or normalTextEn. Only explicit DAY/WEEK/MONTH/YEAR and ANY/MALE/FEMALE values are accepted. Clinical approval is always required.",
       "تحتاج المديات المرجعية إلى testName وunit وsex وحدود العمر مع ageUnit عند وجودها، وlow/high أو normalTextEn. وحدات العمر DAY/WEEK/MONTH/YEAR والجنس ANY/MALE/FEMALE فقط. الاعتماد السريري إلزامي.",
     )}</p>}
+    <p className="muted">{tr(
+      'For panels/packages supply memberTestCodes as a JSON array of existing test codes, e.g. ["CBC","TSH"]. Missing membership is an error; no members are guessed.',
+      'للمجموعات والباقات يجب إدخال memberTestCodes كمصفوفة JSON لرموز فحوصات موجودة مثل ["CBC","TSH"]. عدم تحديد العضوية خطأ؛ لا تُستنتج تلقائياً.',
+    )}</p>
     {!canStagePricing && <p className="muted">{tr(
-      "Your current permissions allow component review staging only, not prices.",
-      "تسمح صلاحياتك الحالية بتجهيز المكونات للمراجعة فقط، دون الأسعار.",
+      "Pricing templates require the pricing.manage permission; other review-only templates remain available.",
+      "قوالب الأسعار تتطلب صلاحية pricing.manage، والقوالب الأخرى للمراجعة فقط.",
     )}</p>}
     <input ref={fileInput} type="file" hidden accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
       onChange={event => { const f = event.target.files?.[0]; if (f) void stage(f); }} />
@@ -89,6 +98,22 @@ export function CatalogCsvReviewStaging({ locale, canStagePricing, canStageRange
         onClick={() => fileInput.current?.click()}>
         {busy ? tr("Validating…", "جارٍ التحقق…") : tr("Stage CSV / XLSX for review", "تجهيز CSV / XLSX للمراجعة")}
       </button>
+      <button type="button" className="secondary-button" disabled={busy}
+        onClick={() => saveTemplate("master", "xlsx")}>
+        {tr("Download Excel tests / units / panels / packages template", "تنزيل قالب Excel للفحوصات والوحدات والمجموعات والباقات")}
+      </button>
+      <button type="button" className="secondary-button" disabled={busy}
+        onClick={() => saveTemplate("master")}>
+        {tr("Download CSV master catalog template", "تنزيل قالب CSV لدليل الفحوصات")}
+      </button>
+      {canStagePricing && <button type="button" className="secondary-button" disabled={busy}
+        onClick={() => saveTemplate("package-price", "xlsx")}>
+        {tr("Download Excel package-price template", "تنزيل قالب Excel لأسعار الباقات")}
+      </button>}
+      {canStagePricing && <button type="button" className="secondary-button" disabled={busy}
+        onClick={() => saveTemplate("package-price")}>
+        {tr("Download CSV package-price template", "تنزيل قالب CSV لأسعار الباقات")}
+      </button>}
       <button type="button" className="secondary-button" disabled={busy} onClick={() => saveTemplate("component-price")}>
         {tr("Download component / price template", "تنزيل قالب المكونات والأسعار")}
       </button>
