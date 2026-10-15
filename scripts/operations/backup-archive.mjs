@@ -91,3 +91,23 @@ export async function durablePublish(from, to) {
   try { await folder.sync(); } catch (error) { if (process.platform !== "win32") throw error; }
   finally { await folder.close(); }
 }
+
+
+/** Stream an authenticated archive into a private *isolated* restore consumer.
+ * Caller must first verify complete archive, then ensure the destination is a
+ * new empty recovery database. The final GCM check runs during this read too.
+ */
+export async function decryptBackupToSink(file, key, output) {
+  await verifyEncryptedBackup(file,key);
+  const info = await stat(file);
+  const fd = await open(file,"r");
+  const header = Buffer.alloc(HEADER_LENGTH), tag = Buffer.alloc(TAG_LENGTH);
+  try {
+    await fd.read(header,0,HEADER_LENGTH,0);
+    await fd.read(tag,0,TAG_LENGTH,info.size-TAG_LENGTH);
+  } finally { await fd.close(); }
+  const cipher=createDecipheriv("aes-256-gcm",key,header.subarray(MAGIC.length));
+  cipher.setAAD(header);cipher.setAuthTag(tag);
+  await pipeline(createReadStream(file,{start:HEADER_LENGTH,end:info.size-TAG_LENGTH-1}),
+    cipher,createGunzip(),output);
+}
