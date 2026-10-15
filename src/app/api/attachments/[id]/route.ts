@@ -1,3 +1,4 @@
+import { createHash, timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { requirePermission, requestContext } from "@/lib/auth";
 import { resolveAttachmentTarget } from "@/lib/attachment-target";
@@ -21,6 +22,35 @@ export async function GET(_: Request, context: { params: Promise<{ id: string }>
   const target = await resolveAttachmentTarget(session, attachment.targetType, attachment.targetId);
   if (!target) return NextResponse.json({ error: "attachment_not_found" }, { status: 404 });
 
+  // Never serve a corrupted or incorrectly linked clinical/quality attachment.
+  // The checksum belongs to the immutable attachment row and is checked over
+  // the exact persisted bytes, not a client-supplied name or MIME type.
+  const bytes = Buffer.from(attachment.content.data);
+  const storedHash = attachment.sha256;
+  const storedDigest = /^[0-9a-f]{64}$/i.test(storedHash) ? Buffer.from(storedHash, "hex") : null;
+  const actualDigest = createHash("sha256").update(bytes).digest();
+  if (bytes.length !== attachment.sizeBytes || !storedDigest ||
+      !timingSafeEqual(actualDigest, storedDigest)) {
+    await prisma.auditEvent.create({
+      data: {
+        organizationId: session.user.organizationId,
+        branchId: target.branchId,
+        actorUserId: session.user.id,
+        action: "ATTACHMENT_INTEGRITY_FAILURE",
+        entityType: attachment.targetType,
+        entityId: attachment.targetId,
+        newValues: { attachmentId: attachment.id, sizeExpected: attachment.sizeBytes, integrity: "FAILED" },
+        reason: "Protected attachment bytes differ from immutable SHA-256/length metadata",
+        ipAddress: ctx.ipAddress,
+        userAgent: ctx.userAgent,
+      },
+    });
+    return NextResponse.json({ error: "attachment_integrity_failure" }, {
+      status: 409,
+      headers: { "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" },
+    });
+  }
+
   await prisma.auditEvent.create({
     data: {
       organizationId: session.user.organizationId,
@@ -35,7 +65,7 @@ export async function GET(_: Request, context: { params: Promise<{ id: string }>
     },
   });
 
-  return new NextResponse(new Uint8Array(attachment.content.data), {
+  return new NextResponse(new Uint8Array(bytes), {
     headers: {
       "Content-Type": attachment.contentType,
       "Content-Length": String(attachment.sizeBytes),
