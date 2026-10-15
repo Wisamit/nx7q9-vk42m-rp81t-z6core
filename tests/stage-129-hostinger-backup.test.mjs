@@ -39,7 +39,7 @@ test("Stage 129: database credentials never enter argv, and remote host requires
   assert.equal(dsn.password,'p@ss"test');
   const cnf=dumpDefaultsFile(dsn);
   assert.ok(cnf.includes("password="));
-  assert.ok(cnf.includes('\\\\\\"'));
+  assert.equal(cnf.split("\n").find(line=>line.startsWith("password=")), 'password="p@ss\\\"test"');
   assert.throws(()=>parseBackupDatabaseUrl("mysql://backup:test@db.example.org:3306/production"),/BACKUP_REMOTE_DATABASE_CA_REQUIRED/);
   assert.throws(()=>parseBackupDatabaseUrl("mysql://backup:test@127.0.0.1:3306/x;DROP"),/BACKUP_DATABASE_URL_INVALID/);
   assert.throws(()=>parseBackupDatabaseUrl("mysql://backup:bad%0Ahost@127.0.0.1:3306/clinical"),/BACKUP_DATABASE_CREDENTIAL_INVALID/);
