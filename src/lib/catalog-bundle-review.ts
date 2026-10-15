@@ -34,6 +34,7 @@ export type BundleReview = {
   ids: {
     tests: string[];
     units: string[];
+    containers: string[];
     components: string[];
     intervals: string[];
     priceLists: string[];
@@ -81,7 +82,7 @@ function iso(value: unknown): string {
 }
 
 /**
- * Review-only projection of the nine-class JSON format exported by our LIS.
+ * Review-only projection of the ten-class JSON format exported by our LIS.
  * Original source values remain intact. UUIDs identify *current* masters for
  * tenant/branch authorization, never migration targets or commit authority.
  */
