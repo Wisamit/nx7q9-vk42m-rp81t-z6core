@@ -94,7 +94,7 @@ test("Stage142 MariaDB: reviewer role and branch are live, same-identity approva
     await second.execute("UPDATE roles SET status='INACTIVE',updated_at=NOW(3) WHERE id=?",[role]);
     assert.equal(await authorized(branch,org),false,"revoked reviewer role must be rejected");
     await second.execute("UPDATE roles SET status='ACTIVE',updated_at=NOW(3) WHERE id=?",[role]);
-    await second.execute("UPDATE users SET status='INACTIVE',updated_at=NOW(3) WHERE id=?",[reviewer]);
+    await second.execute("UPDATE users SET status='SUSPENDED',updated_at=NOW(3) WHERE id=?",[reviewer]);
     assert.equal(await authorized(branch,org),false,"deactivated user cannot review");
     await second.execute("UPDATE users SET status='ACTIVE',updated_at=NOW(3) WHERE id=?",[reviewer]);
     await second.execute("UPDATE branches SET status='INACTIVE',updated_at=NOW(3) WHERE id=?",[branch]);
