@@ -5,7 +5,7 @@ import { prisma } from "@/lib/db";
 import type { Prisma } from "../../../../../../generated/prisma/client";
 import { normalizeImportRow, rowValidationStatus, validateImportRow } from "@/lib/catalog-import";
 import { CsvStagingError, CSV_STAGE_MAX_BYTES, parseCsvReviewFile } from "@/lib/catalog-review-csv-import";
-import { xlsxReviewToCsv, XLSX_STAGE_MAX_BYTES } from "@/lib/catalog-review-xlsx-import";
+import { xlsxReviewToCsv, XlsxStagingError, XLSX_STAGE_MAX_BYTES } from "@/lib/catalog-review-xlsx-import";
 import { validateRangeCsvReview } from "@/lib/catalog-range-csv-review";
 import { resolveClinicalImportScope } from "@/lib/catalog-clinical-import-scope";
 
@@ -44,7 +44,7 @@ export async function POST(request: Request) {
     const next = await reader.read();
     if (next.done) break;
     bytes += next.value.byteLength;
-    if (bytes > uploadLimit) {
+    if (bytes > CSV_STAGE_MAX_BYTES || bytes > uploadLimit) {
       await reader.cancel("csv_file_too_large");
       return NextResponse.json({ error: "csv_file_too_large" }, { status: 413 });
     }
@@ -56,7 +56,7 @@ export async function POST(request: Request) {
     csvText = isXlsx ? xlsxReviewToCsv(rawUpload) :
       new TextDecoder("utf-8", { fatal: true }).decode(rawUpload);
   } catch (error) {
-    if (error instanceof CsvStagingError) {
+    if (error instanceof CsvStagingError || error instanceof XlsxStagingError) {
       return NextResponse.json({ error: error.reason }, { status: 400 });
     }
     return NextResponse.json({ error: isXlsx ? "xlsx_invalid_workbook" : "csv_invalid_utf8" }, { status: 400 });
@@ -65,7 +65,7 @@ export async function POST(request: Request) {
   try {
     inputs = parseCsvReviewFile(csvText);
   } catch (error) {
-    if (error instanceof CsvStagingError) {
+    if (error instanceof CsvStagingError || error instanceof XlsxStagingError) {
       return NextResponse.json({ error: error.reason }, { status: 400 });
     }
     throw error;

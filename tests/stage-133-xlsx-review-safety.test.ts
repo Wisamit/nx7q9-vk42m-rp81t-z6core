@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { catalogReviewXlsx, parseReviewCsvCells, XlsxReviewError } from "../src/lib/catalog-review-xlsx.ts";
-import { xlsxReviewToCsv } from "../src/lib/catalog-review-xlsx-import.ts";
+import { xlsxReviewToCsv, XlsxStagingError } from "../src/lib/catalog-review-xlsx-import.ts";
 import { parseCsvReviewFile, CsvStagingError } from "../src/lib/catalog-review-csv-import.ts";
 
 const fields="entityType,legacyKey,testCode,code,nameEn,nameAr,unitCode,resultType,priceListCode,unitPrice,effectiveFrom,effectiveTo";
@@ -61,15 +61,15 @@ test("Stage 133: formulas never execute, escaped entities decode and spreadsheet
   assert.equal(rows[0].data.nameEn,"=HYPERLINK(1)");
   assert.equal(rows[0].data.nameAr,"A&B");
   const poisoned=mutateStoredSheet(catalogReviewXlsx(example),'<t xml:space="preserve">','<f xml:space="preserve">');
-  assert.throws(()=>xlsxReviewToCsv(poisoned),(e:unknown)=>e instanceof CsvStagingError&&e.reason==="xlsx_formulas_or_merged_cells_forbidden");
+  assert.throws(()=>xlsxReviewToCsv(poisoned),(e:unknown)=>e instanceof XlsxStagingError&&e.reason==="xlsx_formulas_or_merged_cells_forbidden");
 });
 test("Stage 133: file CRC, wrong payload, oversized upload and malformed CSV fail closed",()=>{
   const bytes=catalogReviewXlsx(example);
   const corrupt=new Uint8Array(bytes);
   corrupt[corrupt.length-40]^=0xff;
-  assert.throws(()=>xlsxReviewToCsv(corrupt),CsvStagingError);
-  assert.throws(()=>xlsxReviewToCsv(new Uint8Array(20)),CsvStagingError);
-  assert.throws(()=>xlsxReviewToCsv(new Uint8Array(2*1024*1024+1)),CsvStagingError);
+  assert.throws(()=>xlsxReviewToCsv(corrupt),XlsxStagingError);
+  assert.throws(()=>xlsxReviewToCsv(new Uint8Array(20)),XlsxStagingError);
+  assert.throws(()=>xlsxReviewToCsv(new Uint8Array(2*1024*1024+1)),XlsxStagingError);
   assert.throws(()=>parseReviewCsvCells('entityType,legacyKey\r\n"COMPONENT,Broken'),XlsxReviewError);
 });
 test("Stage 133: end-point and UI keep the approved CSV_REVIEW DRAFT gate, unchanged finance/clinical grants",()=>{
