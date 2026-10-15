@@ -79,7 +79,7 @@ test("Stage 134: XLSX/CSV import stays DRAFT author-bound, finance grants includ
   const ui=readFileSync("src/components/catalog-csv-review-staging.tsx","utf8");
   const commit=readFileSync("src/app/api/catalog/imports/[id]/commit/route.ts","utf8");
   const revalidate=readFileSync("src/app/api/catalog/imports/[id]/revalidate/route.ts","utf8");
-  assert.match(route,/row.entityType === "PRICE_LIST_PACKAGE_ITEM"/);
+  assert.match(route,/row.entityType.startsWith\("PRICE_"\)/);
   assert.match(route,/permissions.has\("pricing.manage"\)/);
   assert.match(route,/resolveClinicalImportScope/);
   assert.match(route,/sourceType: "CSV_REVIEW"/);
