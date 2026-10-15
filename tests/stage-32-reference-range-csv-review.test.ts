@@ -49,9 +49,11 @@ test("range stage requires mapped clinical context, valid sex, age and exact non
   }
   assert.equal(rowValidationStatus(validateRangeCsvReview(candidate({low:"-0.000001",high:"0.000000"}))),"WARNING");
 });
-test("review-only CSV cannot smuggle a TEST row, formulas are never interpreted",()=>{
-  const invalid=header+"\nTEST,t-1,TSH,mIU/L,ANY,0,10,YEAR,1,4,";
+test("review-only CSV allows draft tests but rejects unsupported price-list masters; formulas stay literal",()=>{
+  const invalid=header+"\nPRICE_LIST,t-1,TSH,mIU/L,ANY,0,10,YEAR,1,4,";
   assert.throws(()=>parseCsvReviewFile(invalid),/csv_entity_review_only/);
+  const draftTests=parseCsvReviewFile("entityType,legacyKey,code,nameEn\\nTEST,t1,TSH,Thyroid test".replace("\\n","\n"));
+  assert.equal(draftTests[0].entityType,"TEST");
   const source=row('REFERENCE_INTERVAL,range-2,TSH,mIU/L,ANY,0,10,YEAR,1,4,"=SUM(A1:A2)"');
   assert.equal(source.data.normalTextEn,"=SUM(A1:A2)");
   assert.equal(rowValidationStatus(validateRangeCsvReview(source)),"WARNING");
@@ -76,6 +78,7 @@ test("CSV range route demands independent clinical role/scope, author-only discl
   assert.match(index,/canReviewCsvRanges/);
   assert.match(index,/rows: \{ none: \{ entityType: "REFERENCE_INTERVAL" \} \}/);
   assert.match(button,/canStageRanges/);
-  assert.match(button,/reference-range-review-template/);
+  assert.match(button,/saveTemplate\("range", "xlsx"\)/);
+  assert.match(button,/"-review-template\."/);
   for(const writer of [commit,revalidate,rangePost])assert.match(writer,/batch\.sourceType === "CSV_REVIEW"/);
 });
