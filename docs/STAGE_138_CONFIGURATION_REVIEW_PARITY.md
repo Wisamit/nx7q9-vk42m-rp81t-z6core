@@ -18,3 +18,5 @@ Source spreadsheet exports contain provenance and flattened fields, and **are NO
 Financial master CSV/XLSX preview now requires `pricing.manage`, author identity and live authorized branch scope; invalid currency, scope, priority and non-calendar dates are flagged. No price-list or tax activation is provided. Source export workbooks still do not directly match canonical staging headers.
 
 Two-connection MariaDB regression now verifies source container organization isolation, read-snapshot consistency, and that branch tariffs are excluded from another branch's generic review scope. The CI workflow invokes this test explicitly.
+
+Regression test contracts formerly hardcoded nine export kinds and rejected all PRICE_LIST review rows. They now assert ten export kinds, invalid PRICE_LIST row failures, unchanged draft-only behavior, and the original tenant lock → live scope → master-read → staging order. No negative authorization checks were dropped.

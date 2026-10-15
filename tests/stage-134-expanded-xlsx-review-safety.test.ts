@@ -68,7 +68,7 @@ test("Stage 134: missing/duplicate/invalid panel/package memberships are errors,
       assert.equal(rowValidationStatus(issues),"ERROR",entityType+":"+membership);
     }
   }
-  const list=parseCsvReviewFile('entityType,code\\nPRICE_LIST,TOP_SECRET\\n')[0];
+  const list=parseCsvReviewFile(["entityType,code","PRICE_LIST,TOP_SECRET",""].join("\n"))[0];
   assert.equal(list.entityType,'PRICE_LIST');
   assert.equal(rowValidationStatus(validateImportRow(list.entityType,normalizeImportRow(list))),'ERROR');
 });

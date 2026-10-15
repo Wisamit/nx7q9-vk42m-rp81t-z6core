@@ -10,7 +10,7 @@ test("Stage 49: tenant lock precedes live grants, scoped master queries and DRAF
   const branchGrant=source.indexOf("const liveBranchGrants = await tx.userBranchScope.findMany");
   const departmentGrant=source.indexOf("const liveDepartmentGrants = await tx.userDepartmentScope.findMany");
   const liveScope=source.indexOf("const liveScope = resolveClinicalImportScope");
-  const master=source.indexOf("const [tests, units, components, intervals, lists, prices]");
+  const master=source.indexOf("const [tests, units, containers, components, intervals, lists, prices]");
   const persist=source.indexOf("const created = await tx.catalogImportBatch.create");
   assert.ok(lock>0&&branchGrant>lock&&departmentGrant>lock&&liveScope>departmentGrant);
   assert.ok(master>liveScope&&persist>master);

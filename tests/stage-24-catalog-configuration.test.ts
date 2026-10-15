@@ -10,7 +10,7 @@ import {
 
 test("export entity allowlist and UUID keyset cursor reject unsupported and injected queries", () => {
   assert.deepEqual([...catalogExportTypes], [
-    "TEST", "COMPONENT", "UNIT", "PANEL", "PACKAGE",
+    "TEST", "COMPONENT", "UNIT", "CONTAINER", "PANEL", "PACKAGE",
     "REFERENCE_INTERVAL", "PRICE_LIST", "PRICE_LIST_ITEM", "PRICE_LIST_PACKAGE_ITEM",
   ]);
   assert.deepEqual(catalogExportNavigation(null), { ok: true, cursor: null });
