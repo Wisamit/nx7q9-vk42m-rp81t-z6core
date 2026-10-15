@@ -142,8 +142,7 @@ export function CatalogConfigurationExport({
           "تم تصدير " + total + " صف إلى Excel للمراجعة البشرية فقط. جميع الخلايا نصية، والتصدير ليس نسخة ثابتة أو استيراداً قابلًا للتفعيل مباشرة.")
         : tr("Exported " + total + " rows for review only. CSV protects against spreadsheet formulas but is not a lossless restore file. Use JSON for structured values. This export is not an atomic backup.",
           "تم تصدير " + total + " صف للمراجعة فقط. CSV يحدّ من صيغ الجداول الضارة لكنه ليس ملف استعادة مطابقاً للأصل. استخدم JSON للبيانات المهيكلة. التصدير ليس نسخة احتياطية ثابتة.")
-        : tr("Exported " + total + " configuration records. This is a paged live export, not an atomic point-in-time backup. Import requires separate staged validation.",
-          "تم تصدير " + total + " سجل إعدادات. هذا تصدير متسلسل للبيانات الحالية، وليس نسخة احتياطية ثابتة للحظة واحدة. إعادة الاستيراد تتطلب مراجعة مستقلة."));
+        );
     } catch (error) {
       setMessage(tr("Export stopped; no partial file was saved: ", "توقف التصدير ولم يُحفظ ملف جزئي: ")
         + (error instanceof Error ? error.message : "unknown_error"));
