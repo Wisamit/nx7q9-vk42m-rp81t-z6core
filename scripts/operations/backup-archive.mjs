@@ -8,6 +8,7 @@ import { createReadStream, createWriteStream } from "node:fs";
 import { open, rename, rm, stat } from "node:fs/promises";
 import { PassThrough, Writable } from "node:stream";
 import { pipeline } from "node:stream/promises";
+import { dirname } from "node:path";
 import { createGzip, createGunzip } from "node:zlib";
 
 const MAGIC = Buffer.from("FLBK1291", "ascii");
@@ -86,7 +87,7 @@ export async function verifyEncryptedBackup(file, key, metadata = null) {
 
 export async function durablePublish(from, to) {
   await rename(from, to);
-  const folder = await open(new URL(".", "file://" + to).pathname, "r");
+  const folder = await open(dirname(to), "r");
   try { await folder.sync(); } catch (error) { if (process.platform !== "win32") throw error; }
   finally { await folder.close(); }
 }
