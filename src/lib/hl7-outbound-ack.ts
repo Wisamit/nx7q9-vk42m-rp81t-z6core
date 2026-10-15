@@ -1,6 +1,9 @@
 import { createHash } from "node:crypto";
 export type OutboundAck = { code: "AA" | "AE" | "AR"; attempt: number; payload: string | null; error: string | null };
-export class OutboundAckError extends Error { constructor(public readonly code: string) { super(code); } }
+export class OutboundAckError extends Error {
+  readonly code: string;
+  constructor(code: string) { super(code); this.code = code; }
+}
 export function parseOutboundAck(input: unknown, controlId: string | null): OutboundAck {
   const v = input && typeof input === "object" && !Array.isArray(input)
     ? input as Record<string, unknown> : {};

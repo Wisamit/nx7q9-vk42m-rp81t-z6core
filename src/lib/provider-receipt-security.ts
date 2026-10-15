@@ -11,7 +11,9 @@ export type ProviderReceipt = {
   status: "DELIVERED" | "FAILED";
 };
 export class ProviderReceiptError extends Error {
-  constructor(public readonly code: string, public readonly httpStatus = 400) { super(code); }
+  readonly code: string;
+  readonly httpStatus: number;
+  constructor(code: string, httpStatus = 400) { super(code); this.code = code; this.httpStatus = httpStatus; }
 }
 function textId(input: unknown, max: number) {
   return typeof input === "string" && input.length >= 1 && input.length <= max &&
