@@ -4,7 +4,8 @@
  * spreadsheet formulas, no browser dependencies and no clinical writes.
  */
 export class XlsxReviewError extends Error {
-  constructor(readonly code: string) { super(code); }
+  readonly code: string;
+  constructor(code: string) { super(code); this.code = code; }
 }
 const encoder = new TextEncoder();
 const MAX_SHEET_BYTES = 4 * 1024 * 1024;
