@@ -27,10 +27,8 @@ import { expertDispositionAllowed, validExpertDisposition, type ExpertDispositio
 export const dynamic = "force-dynamic";
 const PAGE_SIZE = 100;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const ordered: CatalogExportType[] = [
-  "TEST", "COMPONENT", "UNIT", "PANEL", "PACKAGE",
-  "REFERENCE_INTERVAL", "PRICE_LIST", "PRICE_LIST_ITEM", "PRICE_LIST_PACKAGE_ITEM",
-];
+// Drift must inspect all exportable signed-bundle groups.
+const ordered: CatalogExportType[] = [...catalogExportTypes];
 function record(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown> : null;
@@ -374,8 +372,10 @@ async function inspectBundleDrift(
         mappedPackages !== packageRefs.size)
       return { error: "reconciliation_parent_scope_changed", httpStatus: 403 } as const;
 
-    // All nine native export classes are reviewed with full authorized
-    // membership, exact price precision and current tenant/branch scope.
+    // Unknown groups must fail closed before generating observations.
+    if ([...idsByType.keys()].some(type => !ordered.includes(type))) {
+      return { error: "reconciliation_unsupported_source_group", httpStatus: 409 } as const;
+    }
     const live = new Map<string, unknown>();
     for (const type of ordered) {
       const ids = idsByType.get(type) || [];
@@ -445,6 +445,15 @@ async function inspectBundleDrift(
         createdAt: true, updatedAt: true, deactivatedAt: true,
       },
     });
+  } else if (type === "CONTAINER") {
+    records = await tx.container.findMany({
+      ...base, where: { organizationId, ...cursorScope },
+      select: {
+        id: true, code: true, nameEn: true, nameAr: true,
+        tubeColor: true, additive: true, status: true,
+        createdAt: true, updatedAt: true, deactivatedAt: true,
+      },
+    });
   } else if (type === "REFERENCE_INTERVAL") {
     records = await tx.referenceInterval.findMany({
       ...base, where: { component: { test: testScope }, ...branchScope, ...cursorScope },
@@ -488,6 +497,7 @@ async function inspectBundleDrift(
         package: { select: { code: true } },
         priceList: { select: {
           code: true, currency: true, scopeType: true, branchId: true,
+          status: true, sourceId: true, referrerId: true, clientId: true, contractId: true,
         } },
       },
     });
@@ -500,7 +510,10 @@ async function inspectBundleDrift(
         effectiveFrom: true, effectiveTo: true, status: true,
         createdAt: true, updatedAt: true, deactivatedAt: true,
         test: { select: { code: true } },
-        priceList: { select: { code: true, currency: true, scopeType: true, branchId: true } },
+        priceList: { select: {
+          code: true, currency: true, scopeType: true, branchId: true,
+          status: true, sourceId: true, referrerId: true, clientId: true, contractId: true,
+        } },
       },
     });
   }
@@ -515,6 +528,9 @@ async function inspectBundleDrift(
     const page = governance
       ? staged : staged.filter(row => row.rowNumber > pageAfter).slice(0, PAGE_SIZE + 1);
     const shown = governance ? page : page.slice(0, PAGE_SIZE);
+    if (shown.some(row => !live.has(row.entityType + ":" + String(record(row.normalizedData)?.id || "")))) {
+      return { error: "reconciliation_live_master_scope_changed", httpStatus: 403 } as const;
+    }
     const rows = shown.map(row => {
       const id = String(record(row.normalizedData)?.id || "");
       const value = live.get(row.entityType + ":" + id);
