@@ -12,7 +12,10 @@
     "db:migrate:status": "prisma migrate status",
     "test:safety": "node --experimental-strip-types --test tests/*.test.ts",
     "test:ui-theme": "node scripts/check-ui-theme.mjs",
-    "test:ui-i18n": "node scripts/check-ui-i18n.mjs"
+    "test:ui-i18n": "node scripts/check-ui-i18n.mjs",
+    "ops:backup": "node scripts/operations/create-encrypted-backup.mjs create",
+    "ops:backup:verify": "node scripts/operations/create-encrypted-backup.mjs verify",
+    "ops:restore-isolated": "node scripts/operations/restore-isolated-backup.mjs restore-isolated"
   },
   "dependencies": {
     "@prisma/client": "7.10.0",

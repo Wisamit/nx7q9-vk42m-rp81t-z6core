@@ -48,3 +48,16 @@ test("Stage 129: backup tool cannot claim DR verified or expose raw SQL to web",
  assert.match(crypto,/createGunzip/);
  assert.doesNotMatch(runner,/CREATE DATABASE|DROP DATABASE|INSERT INTO patient/);
 });
+
+test("Stage 129: recovery program cannot import over live DB or call backup VERIFIED",()=>{
+ const script=source("scripts/operations/restore-isolated-backup.mjs");
+ assert.match(script,/RESTORE_DATABASE_NOT_ISOLATED/);
+ assert.match(script,/ISOLATED_DATABASE_ONLY/);
+ assert.match(script,/SELECT SCHEMA_NAME FROM information_schema.SCHEMATA/);
+ assert.match(script,/RESTORE_TARGET_ALREADY_EXISTS/);
+ assert.match(script,/await verifyBackupArchive\(archive,env\)/);
+ assert.match(script,/createConnection/);
+ assert.match(script,/DROP DATABASE/);
+ assert.match(script,/verifiedClinicalHistory:false/);
+ assert.doesNotMatch(script,/backupVerification.create|disasterRecoveryDrill.create/);
+});

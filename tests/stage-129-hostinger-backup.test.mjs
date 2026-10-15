@@ -4,9 +4,10 @@ import { randomBytes, createHash } from "node:crypto";
 import { mkdtemp, readFile, readdir, writeFile, chmod, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Readable } from "node:stream";
-import { backupEncryptionKey, encryptBackupStream, verifyEncryptedBackup } from "../scripts/operations/backup-archive.mjs";
+import { Readable, Writable } from "node:stream";
+import { backupEncryptionKey, encryptBackupStream, verifyEncryptedBackup, decryptBackupToSink } from "../scripts/operations/backup-archive.mjs";
 import { parseBackupDatabaseUrl, dumpDefaultsFile, backupOffsiteLocation, createBackup, verifyBackupArchive } from "../scripts/operations/create-encrypted-backup.mjs";
+import { recoveryDatabaseName } from "../scripts/operations/restore-isolated-backup.mjs";
 
 const KEY = randomBytes(32).toString("hex");
 test("Stage 129: encrypted SQL archive authenticates metadata, contents, and rejects any bit flip", async t => {
@@ -17,6 +18,11 @@ test("Stage 129: encrypted SQL archive authenticates metadata, contents, and rej
   const meta=await encryptBackupStream(Readable.from([sql]),target,backupEncryptionKey(KEY));
   assert.ok(meta.sizeBytes>32);
   assert.equal((await verifyEncryptedBackup(target,backupEncryptionKey(KEY),meta)).plainBytes,sql.length);
+  const collected=[];
+  await decryptBackupToSink(target,backupEncryptionKey(KEY),new Writable({
+    write(chunk,_encoding,done){collected.push(Buffer.from(chunk));done();}
+  }));
+  assert.deepEqual(Buffer.concat(collected),sql);
   const ciphertext=await readFile(target);
   assert.equal(ciphertext.includes(Buffer.from("restore_probe")),false);
   await assert.rejects(verifyEncryptedBackup(target,backupEncryptionKey(randomBytes(32).toString("hex")),meta));
@@ -66,4 +72,13 @@ test("Stage 129: local-only encrypted backup requires explicit opt-in, verifiabl
   if(process.platform!=="win32")assert.equal((await stat(archive)).mode&0o777,0o600);
   const file=await readFile(archive);
   assert.equal(file.includes(Buffer.from("synthetic_only")),false);
+});
+
+test("Stage 129: isolated restore target is always a NEW named scratch database",()=>{
+  assert.equal(recoveryDatabaseName("family_lab_restore_20261015_a","family_lab_lis"),
+    "family_lab_restore_20261015_a");
+  for(const value of ["family_lab_lis","family_lab_restore_a","family_lab_restore_../prod",
+    "family_lab_restore_20261015;DROP","production"]){
+    assert.throws(()=>recoveryDatabaseName(value,"family_lab_lis"),/RESTORE_DATABASE_NOT_ISOLATED/);
+  }
 });
