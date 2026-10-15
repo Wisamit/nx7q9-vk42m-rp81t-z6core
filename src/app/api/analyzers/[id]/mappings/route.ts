@@ -291,7 +291,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if ("error" in outcome) {
     const status = outcome.error === "analyzer_mapping_not_found" ? 404
       : ["branch_forbidden", "analyzer_mapping_live_permission_revoked",
-        "analyzer_mapping_self_approval_forbidden"].includes(outcome.error) ? 403 : 409;
+        "analyzer_mapping_self_approval_forbidden"].includes(outcome.error ?? "") ? 403 : 409;
     return NextResponse.json(outcome, { status });
   }
   return NextResponse.json(outcome);
