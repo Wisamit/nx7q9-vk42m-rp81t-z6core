@@ -154,6 +154,42 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
   if (!item || !canAccessDepartment(session, item.test.departmentId)) notFound();
 
   const latestResult = item.results[0] || null;
+  const reflexTargetIds = [...new Set((latestResult?.reflexEvents || [])
+    .filter(event => event.status === "PENDING")
+    .map(event => event.rule.targetTestId))];
+  const canConfirmReflexOrder = permissions.has("reflex.review") && permissions.has("orders.create")
+    && branchIds.includes(item.order.orderingBranchId);
+  const reflexCandidates = canConfirmReflexOrder && reflexTargetIds.length > 0
+    ? await prisma.orderItem.findMany({
+      where: { testId: { in: reflexTargetIds }, status: { not: "CANCELLED" },
+        order: { organizationId: session.user.organizationId, patientId: item.order.patientId,
+          orderingBranchId: item.order.orderingBranchId, status: { not: "CANCELLED" } } },
+      include: { order: { select: { id: true, accessionNumber: true } },
+        test: { select: { departmentId: true, specimenTypeId: true } },
+        invoiceLines: { include: { invoice: true } },
+        specimenLinks: { where: { status: "ACTIVE" }, include: { specimen: true } } },
+      orderBy: { createdAt: "desc" }, take: 100,
+    }) : [];
+  const billedReflexCandidates = reflexCandidates
+    .filter(candidate => canAccessDepartment(session, candidate.test.departmentId))
+    .flatMap(candidate => candidate.invoiceLines
+      .filter(line => ["ISSUED","PARTIALLY_PAID","PAID"].includes(line.invoice.status)
+        && line.invoice.orderId === candidate.orderId
+        && line.invoice.organizationId === session.user.organizationId
+        && line.invoice.currency === candidate.currency
+        && line.quantity.toFixed(3) === "1.000"
+        && line.lineTotal.equals(candidate.finalPriceSnapshot)
+        && (!candidate.test.specimenTypeId || candidate.specimenLinks.some(link =>
+          link.specimen.organizationId === session.user.organizationId
+            && link.specimen.orderId === candidate.orderId
+            && link.specimen.specimenTypeId === candidate.test.specimenTypeId
+            && ["PLANNED","COLLECTED","RECEIVED","IN_PROCESS"].includes(link.specimen.status))))
+      .map(line => ({
+        orderItemId: candidate.id, orderId: candidate.orderId, invoiceLineId: line.id, testId: candidate.testId,
+        orderedAt: candidate.createdAt.toISOString(), accessionNumber: candidate.order.accessionNumber,
+        testCode: candidate.testCodeSnapshot, invoiceNumber: line.invoice.invoiceNumber,
+        lineTotal: line.lineTotal.toFixed(4), currency: candidate.currency,
+      })));
   const commentTemplates = await prisma.resultCommentTemplate.findMany({
     where: {
       organizationId: session.user.organizationId,
@@ -379,9 +415,15 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
       {latestResult && <ReflexReviewPanel
         resultId={latestResult.id}
         canReview={permissions.has("reflex.review")}
+        canConfirmOrder={canConfirmReflexOrder}
+        billedCandidates={billedReflexCandidates}
         locale={locale}
         events={latestResult.reflexEvents.map(event => ({
           id: event.id,
+          targetTestId: event.rule.targetTestId,
+          sourceOrderId: item.orderId,
+          createdAt: event.createdAt.toISOString(),
+          confirmedOrderItemId: event.confirmedOrderItemId,
           status: event.status,
           triggerValue: event.triggerValueSnapshot,
           targetTestCode: event.targetTestCodeSnapshot,

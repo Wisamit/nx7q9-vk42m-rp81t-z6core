@@ -652,6 +652,31 @@ export async function POST(request: Request) {
         },
       );
 
+      // A revised source result invalidates prior clinical decisions, but
+      // the previous reviewer, reason and billing proof remain in audit.
+      const priorReflex = await tx.reflexRuleEvent.findUnique({
+        where: { resultId_ruleId: { resultId: result.id, ruleId: rule.id } },
+      });
+      if (priorReflex && priorReflex.status !== "SUPERSEDED" &&
+        (priorReflex.status !== "PENDING" || !matched)) {
+        await tx.auditEvent.create({data:{
+          organizationId:session.user.organizationId,branchId:performingBranchId,
+          actorUserId:session.user.id,
+          action:"REFLEX_DECISION_INVALIDATED_BY_RESULT_REVISION",
+          entityType:"ReflexRuleEvent",entityId:priorReflex.id,
+          oldValues:{
+            status:priorReflex.status,triggerValueSnapshot:priorReflex.triggerValueSnapshot,
+            reviewedByUserId:priorReflex.reviewedByUserId,reviewedAt:priorReflex.reviewedAt,
+            reviewNote:priorReflex.reviewNote,confirmedOrderItemId:priorReflex.confirmedOrderItemId,
+            billingEvidenceSnapshot:priorReflex.billingEvidenceSnapshot,
+          },
+          newValues:{status:matched?"PENDING":"SUPERSEDED",
+            currentTriggerValue:matched?source.parsed.displayValue:null,
+            resultId:result.id,ruleId:rule.id},
+          reason:"Source result revised; prior Reflex decision is no longer current",
+          ipAddress:ctx.ipAddress,userAgent:ctx.userAgent,
+        }});
+      }
       if (matched) {
         await tx.reflexRuleEvent.upsert({
           where: { resultId_ruleId: { resultId: result.id, ruleId: rule.id } },
@@ -664,6 +689,8 @@ export async function POST(request: Request) {
             reviewedByUserId: null,
             reviewedAt: null,
             reviewNote: null,
+            confirmedOrderItemId: null,
+            billingEvidenceSnapshot: Prisma.DbNull,
           },
           create: {
             resultId: result.id,
@@ -676,7 +703,7 @@ export async function POST(request: Request) {
         });
       } else {
         await tx.reflexRuleEvent.updateMany({
-          where: { resultId: result.id, ruleId: rule.id, status: "PENDING" },
+          where: { resultId: result.id, ruleId: rule.id, status: {in:["PENDING","ACKNOWLEDGED","DISMISSED"]} },
           data: { status: "SUPERSEDED" },
         });
       }
