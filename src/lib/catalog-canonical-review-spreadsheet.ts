@@ -174,7 +174,7 @@ export function canonicalStagingCsvFromAtomicGroup(
   });
   const csv = "\uFEFF" + [header, ...rows]
     .map(row => row.map(csvLiteral).join(",")).join("\r\n") + "\r\n";
-  if (Buffer.byteLength(csv, "utf8") > 2 * 1024 * 1024) {
+  if (new TextEncoder().encode(csv).byteLength > 2 * 1024 * 1024) {
     throw new CanonicalSpreadsheetReviewError("canonical_review_file_exceeds_staging_limit");
   }
   // The generated file MUST pass the exact intake parser and validators now.
