@@ -10,7 +10,7 @@ import { xlsxReviewToCsv } from "../src/lib/catalog-review-xlsx-import.ts";
 import { normalizeImportRow, validateImportRow, rowValidationStatus } from "../src/lib/catalog-import.ts";
 import { validateExpandedCsvReviewRow } from "../src/lib/catalog-expanded-csv-review.ts";
 
-function csvRow(headers: readonly string[], input: Record<string, string>): string {
+function csvRow(headers: readonly string[], input: Record<string, string | undefined>): string {
   return headers.map(h => '"' + (input[h] || "").replace(/"/g, '""') + '"').join(",");
 }
 const master = CSV_STAGE_MASTER_TEMPLATE_HEADERS;
