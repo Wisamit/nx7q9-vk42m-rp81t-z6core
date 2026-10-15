@@ -48,6 +48,14 @@ export async function POST(request: Request) {
       ? NextResponse.json(previous.response, { status: 200 })
       : NextResponse.json({ error: "posting_key_reused" }, { status: 409 });
   }
+  // Recheck current branch scope before returning even an old successful replay.
+  // A cashier whose branch grant was revoked must not rediscover past invoices.
+  const replayInvoice = await prisma.invoice.findFirst({
+    where: { id: invoiceId, organizationId: session.user.organizationId },
+    select: { branchId: true },
+  });
+  if (!replayInvoice) return NextResponse.json({ error: "invoice_not_found" }, { status: 404 });
+  if (!canAccessBranch(session, replayInvoice.branchId)) return NextResponse.json({ error: "branch_forbidden" }, { status: 403 });
   const previous = await replay();
   if (previous) return previous;
 
