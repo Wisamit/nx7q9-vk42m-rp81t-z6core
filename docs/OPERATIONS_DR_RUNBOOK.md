@@ -159,3 +159,29 @@ Verify:
 - integration/edge queues do not contain unexpected duplicate processing.
 
 Document the recovery outcome and any required CAPA/nonconformance record.
+
+## Stage 129 — Hostinger encrypted SQL backup and isolated restore commands
+
+This is OS-level tooling and is NOT started automatically by deploying Next.js. It requires a Hostinger plan with private shell, MariaDB client, `rclone`, an OS scheduler and permissions for consistent full SQL dump. On shared hosting without these, use a provider-supported encrypted backup solution and independently prove restore.
+
+Provision secrets only in a protected OS-managed environment file (0600), never Git or a public directory:
+
+- `DATABASE_URL`: full MariaDB connection URI. The dedicated backup account must be permitted to read all tables, audit, routines, triggers and attachment_contents BLOB data.
+- `FAMILY_LAB_BACKUP_KEY`: high-entropy 32-byte hex key (64 hex chars); escrow this key separately. Without it, recovery is impossible.
+- `FAMILY_LAB_BACKUP_DIR`: private absolute directory outside the repository and webroot, owned by the job user (0700).
+- `FAMILY_LAB_BACKUP_RCLONE_REMOTE`: private remote like `labremote:familylab/encrypted`, separately configured and authorized. Backup tool sends encrypted file first and manifest last, with immutable copy.
+- `FAMILY_LAB_BACKUP_DB_TLS_CA`: absolute trusted CA PEM required when connecting to a non-loopback database host.
+- Optional `FAMILY_LAB_DUMP_BINARY`, `FAMILY_LAB_RCLONE_BINARY` and `FAMILY_LAB_RESTORE_BINARY` for trusted client executable paths.
+- Never configure `FAMILY_LAB_BACKUP_ALLOW_LOCAL_ONLY=true` in production; this is for development/test only.
+
+Run `npm run ops:backup` under a protected recurring systemd/cron job. The result `OFFSITE_TRANSFER_COMMAND_SUCCEEDED` means only the remote copy command succeeded. Schedule daily/more often according to an OWNER-APPROVED RPO. Monitor job exit codes and transport alerts without logging credentials, clinical contents or raw SQL. Retention of daily/weekly/monthly encrypted offsite generations should be enforced by the provider's immutable lifecycle policy; the LIS intentionally does not auto-delete protected history/backups.
+
+Use `npm run ops:backup:verify -- /private/path/family-lab-<generated>.flbak` to authenticate a local or re-downloaded archive with its sidecar manifest. This is NOT a restored DB.
+
+On a **separate isolated recovery host**, re-download the encrypted backup, set a new `FAMILY_LAB_BACKUP_RESTORE_DATABASE` matching `family_lab_restore_[a-z0-9_]{8,40}` and `FAMILY_LAB_RESTORE_EXPLICIT_ACK=ISOLATED_DATABASE_ONLY`, then run `npm run ops:restore-isolated -- /private/path/family-lab-<generated>.flbak`. The tool refuses an existing schema and will not name/replace the production database. It verifies the full archive before piping decryption directly into the MariaDB client; no plaintext SQL file is created. On failure it tries to drop only its newly created scratch schema. A successful import leaves the isolated schema for examination but does not count as a verified clinical DR drill.
+
+After import the authorized operator must independently check migrations, original report and result revisions, specimen tracking, audit events, patient organization identity, financial currency/amount snapshots, and every sampled attachment-content SHA256. Measure actual RPO and RTO, document findings, record independently reviewed restoration evidence in the Resilience workspace, and only then seek APPROVED/PASSED status as appropriate.
+
+Proposed RPO/RTO decision (NOT approved): nightly backups can lose up to approximately 24h of changes before offsite delay; an initial candidate is RPO <=24h and RTO <=8h. A tighter candidate, RPO <=1h and RTO <=2h, needs correspondingly frequent backups, capacity, staffing and a demonstrated restore plan. The owner must approve a target and actual Stage 132 drill evidence before operational GO.
+
+Never restore directly to production, expose recovered attachments publicly, treat an archive checksum as a DR test, or claim that an Analyzer Bridge's local spool is part of the MariaDB SQL dump.
