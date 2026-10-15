@@ -6508,6 +6508,7 @@ model IntegrationMessage {
   nextAttemptAt  DateTime?                   @map("next_attempt_at") @db.DateTime(3)
   acknowledgementCode String?                @map("acknowledgement_code") @db.VarChar(40)
   acknowledgementPayload String?             @map("acknowledgement_payload") @db.Text
+  ackFingerprint String?                      @map("ack_fingerprint") @db.Char(64)
   lastError      String?                     @map("last_error") @db.Text
   receivedAt     DateTime?                   @map("received_at") @db.DateTime(3)
   processedAt    DateTime?                   @map("processed_at") @db.DateTime(3)
@@ -6749,6 +6750,7 @@ enum NotificationSeverity {
 enum NotificationDeliveryStatus {
   PENDING
   SENT
+  DELIVERED
   FAILED
   DEAD_LETTER
   SKIPPED
@@ -6838,6 +6840,8 @@ model NotificationDelivery {
   dispatchLeaseUntil DateTime?                  @map("dispatch_lease_until") @db.DateTime(3)
   sentAt            DateTime?                  @map("sent_at") @db.DateTime(3)
   providerMessageId String?                    @map("provider_message_id") @db.VarChar(255)
+  deliveredAt       DateTime?                  @map("delivered_at") @db.DateTime(3)
+  receiptFingerprint String?                   @map("receipt_fingerprint") @db.Char(64)
   lastError         String?                    @map("last_error") @db.Text
   createdAt         DateTime                   @default(now()) @map("created_at") @db.DateTime(3)
   updatedAt         DateTime                   @updatedAt @map("updated_at") @db.DateTime(3)

@@ -39,7 +39,10 @@ test("outbound HL7 claims stop at max attempts and ACKs match current revision",
   assert.ok(claim.includes("attemptCount: { lt: auth.endpoint.maxAttempts }"));
   assert.ok(claim.includes('status: "DEAD_LETTER"'));
   assert.ok(claim.includes("attemptCount: candidate.attemptCount"));
-  assert.ok(ack.includes("expectedAttempt = Number(body?.attempt)"));
+  assert.ok(ack.includes("parseOutboundAck(body, message.controlId)"));
+  assert.ok(ack.includes("outboundAckFingerprint(acknowledgement)"));
+  assert.ok(ack.includes("message.ackFingerprint === fingerprint"));
+  assert.ok(ack.includes("ackFingerprint: fingerprint"));
   assert.ok(ack.includes('message.status !== "SENT" || message.attemptCount !== expectedAttempt'));
   assert.ok(ack.includes('status: "SENT"'));
   assert.ok(ack.includes("tx.integrationMessage.updateMany"));
