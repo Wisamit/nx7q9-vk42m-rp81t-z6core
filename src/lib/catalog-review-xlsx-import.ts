@@ -180,7 +180,7 @@ function decodeXlsxReview(upload: Uint8Array): string {
       const ref = /^([A-Z]{1,3})(\d{1,6})$/.exec(location ?? "");
       if (!ref || Number(ref[2]) !== position) throw new XlsxStagingError("xlsx_invalid_cell_reference");
       const column = colIndex(ref[1]);
-      if (column < 0 || column >= 24 || cells[column] !== undefined)
+      if (column < 0 || column >= 32 || cells[column] !== undefined)
         throw new XlsxStagingError("xlsx_duplicate_or_too_many_columns");
       const t = attr(cell[1], "t") ?? "n";
       let content = "";
@@ -206,7 +206,7 @@ function decodeXlsxReview(upload: Uint8Array): string {
   if (table.length < 2 || !table[0].includes("entityType"))
     throw new XlsxStagingError("xlsx_missing_review_headers_or_rows");
   const width = table[0].length;
-  if (width > 24 || width === 0 || table.some(row => row.slice(width).some(x => x !== "")))
+  if (width > 32 || width === 0 || table.some(row => row.slice(width).some(x => x !== "")))
     throw new XlsxStagingError("xlsx_column_count_mismatch");
   // Canonical quoted CSV leaves decimals and dates as exact lexemes. Existing
   // parseCsvReviewFile strictly rejects unknown column names/entity types.

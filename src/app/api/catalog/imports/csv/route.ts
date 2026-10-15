@@ -7,6 +7,7 @@ import { normalizeImportRow, rowValidationStatus, validateImportRow } from "@/li
 import { CsvStagingError, CSV_STAGE_MAX_BYTES, parseCsvReviewFile } from "@/lib/catalog-review-csv-import";
 import { xlsxReviewToCsv, XlsxStagingError, XLSX_STAGE_MAX_BYTES } from "@/lib/catalog-review-xlsx-import";
 import { validateRangeCsvReview } from "@/lib/catalog-range-csv-review";
+import { validateExpandedCsvReviewRow } from "@/lib/catalog-expanded-csv-review";
 import { resolveClinicalImportScope } from "@/lib/catalog-clinical-import-scope";
 
 export async function POST(request: Request) {
@@ -70,13 +71,15 @@ export async function POST(request: Request) {
     }
     throw error;
   }
-  if (inputs.some(row => row.entityType === "PRICE_LIST_ITEM") && !permissions.has("pricing.manage")) {
+  if (inputs.some(row => row.entityType === "PRICE_LIST_ITEM" ||
+      row.entityType === "PRICE_LIST_PACKAGE_ITEM") && !permissions.has("pricing.manage")) {
     return NextResponse.json({ error: "pricing_manage_required" }, { status: 403 });
   }
-  if (inputs.some(row => row.entityType === "REFERENCE_INTERVAL")) {
-    if (!permissions.has("catalog.reference_ranges.manage")) {
-      return NextResponse.json({ error: "reference_ranges_manage_required" }, { status: 403 });
-    }
+  if (inputs.some(row => row.entityType === "REFERENCE_INTERVAL") &&
+      !permissions.has("catalog.reference_ranges.manage")) {
+    return NextResponse.json({ error: "reference_ranges_manage_required" }, { status: 403 });
+  }
+  if (inputs.some(row => !["UNIT", "CONTAINER"].includes(row.entityType))) {
     const clinicalScope = resolveClinicalImportScope({
       organizationId: session.user.organizationId,
       activeBranchId: session.activeBranchId, activeBranch: session.activeBranch,
@@ -91,6 +94,7 @@ export async function POST(request: Request) {
     const normalized = normalizeImportRow(row);
     const issues = [
       ...validateImportRow(row.entityType, normalized),
+      ...validateExpandedCsvReviewRow(row.entityType, normalized),
       ...validateRangeCsvReview(row),
     ];
     return { row, rowNumber: index + 1, normalized, issues, status: rowValidationStatus(issues) };

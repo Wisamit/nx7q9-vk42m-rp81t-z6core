@@ -28,7 +28,7 @@ export function normalizeImportRow(row: ImportInputRow): Prisma.InputJsonObject 
     return {
       code: sourceCode || generatedTestCode(nameEn),
       generatedCode: !sourceCode && !!nameEn,
-      nameEn,
+      nameEn, nameAr: text(d.nameAr),
       unit: text(d.unit),
       assay: text(d.Assay),
       collection: text(d.Collection),
@@ -36,11 +36,15 @@ export function normalizeImportRow(row: ImportInputRow): Prisma.InputJsonObject 
     };
   }
   if (row.entityType === "UNIT") {
-    return { code: text(d.code || d.unit || d.Unit), symbol: text(d.symbol || d.unit || d.Unit) };
+    return { code: text(d.code || d.unit || d.Unit), symbol: text(d.symbol || d.unit || d.Unit),
+      nameEn: text(d.nameEn), nameAr: text(d.nameAr) };
   }
   if (row.entityType === "PANEL") {
     const nameEn = text(d.nameEn || d.profilname);
-    return { code: text(d.code || d.profilname).replace(/\s+/g, "_").toUpperCase(), nameEn };
+    const members = Array.isArray(d.memberTestCodes)
+      ? d.memberTestCodes.map(code => text(code).toUpperCase()) : [];
+    return { code: text(d.code || d.profilname).replace(/\s+/g, "_").toUpperCase(),
+      nameEn, nameAr: text(d.nameAr), memberTestCodes: members };
   }
   if (row.entityType === "PACKAGE") {
     const code = text(d.code).toUpperCase();

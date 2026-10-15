@@ -149,14 +149,21 @@ export default async function ImportBatchPage({
   // CSV clinical source context must not be disclosed to catalog-only users.
   // Authorize BEFORE any staged source/normalized/validation content is loaded.
   if (batch.sourceType === "CSV_REVIEW") {
-    const [stagedRanges, stagedComponents] = await Promise.all([
+    // Untrusted workbook/CSV rows contain author-provided commercial and clinical data.
+    // Always bind preview to its author and check finance grants before disclosure.
+    if (batch.createdByUserId !== session.user.id) notFound();
+    const [stagedRanges, stagedComponents, stagedOtherPrices] = await Promise.all([
       prisma.catalogImportRow.count({
         where: { batchId: batch.id, entityType: "REFERENCE_INTERVAL" },
       }),
       prisma.catalogImportRow.count({
         where: { batchId: batch.id, entityType: "COMPONENT" },
       }),
+      prisma.catalogImportRow.count({
+        where: { batchId: batch.id, entityType: "PRICE_LIST_PACKAGE_ITEM" },
+      }),
     ]);
+    if (stagedOtherPrices > 0 && !permissions.has("pricing.manage")) notFound();
     if (stagedRanges > 0 || stagedComponents > 0) {
       // Clinical CSV source lacks a branch-bound reviewer assignment.
       // Both component and range previews are author-bound; reference ranges

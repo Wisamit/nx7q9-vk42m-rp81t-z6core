@@ -26,7 +26,7 @@ test("CSV parser rejects wrong formats, duplicates, broken quoting, gaps and ext
   const invalid = [
     "exportFormat,schemaVersion,entityType\r\nfamily-lab-catalog-review-csv,1,COMPONENT",
     "entityType,entityType\nCOMPONENT,COMPONENT",
-    header + "\n" + component.replace("COMPONENT,", "TEST,"),
+    header + "\n" + component.replace("COMPONENT,", "PRICE_LIST,"),
     header + "\n" + component.replace('Free, ""T3""', 'Free, "T3"'),
     header + "\n" + component + ",",
     header + "\n" + 'COMPONENT,old,TSH,"unterminated',

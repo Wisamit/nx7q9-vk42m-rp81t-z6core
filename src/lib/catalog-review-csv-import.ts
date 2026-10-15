@@ -1,18 +1,29 @@
-import type { ImportInputRow } from "./catalog-import";
+import type { ImportEntity, ImportInputRow } from "./catalog-import";
 
 export const CSV_STAGE_MAX_BYTES = 2 * 1024 * 1024;
 export const CSV_STAGE_MAX_ROWS = 20000;
-const MAX_COLUMNS = 24;
+const MAX_COLUMNS = 32;
 const MAX_FIELD_LENGTH = 8192;
 const HEADERS = new Set([
   "entityType", "legacyKey", "testCode", "code", "nameEn", "nameAr",
   "unitCode", "resultType", "priceListCode", "unitPrice", "effectiveFrom", "effectiveTo",
   "testName", "unit", "sex", "ageFrom", "ageTo", "ageUnit", "low", "high", "normalTextEn",
+  "symbol", "memberTestCodes", "packageCode",
 ]);
 export const CSV_STAGE_TEMPLATE_HEADERS = [
   "entityType", "legacyKey", "testCode", "code", "nameEn", "nameAr",
   "unitCode", "resultType", "priceListCode", "unitPrice", "effectiveFrom", "effectiveTo",
 ] as const;
+export const CSV_STAGE_MASTER_TEMPLATE_HEADERS = [
+  "entityType", "legacyKey", "code", "nameEn", "nameAr", "symbol", "memberTestCodes",
+] as const;
+export const CSV_STAGE_PACKAGE_PRICE_TEMPLATE_HEADERS = [
+  "entityType", "legacyKey", "priceListCode", "packageCode", "unitPrice", "effectiveFrom", "effectiveTo",
+] as const;
+export const CSV_REVIEW_ENTITY_TYPES = new Set([
+  "TEST", "UNIT", "PANEL", "PACKAGE", "CONTAINER", "COMPONENT",
+  "REFERENCE_INTERVAL", "PRICE_LIST_ITEM", "PRICE_LIST_PACKAGE_ITEM",
+] as const);
 export const CSV_STAGE_RANGE_TEMPLATE_HEADERS = [
   "entityType", "legacyKey", "testName", "unit", "sex",
   "ageFrom", "ageTo", "ageUnit", "low", "high", "normalTextEn",
@@ -91,15 +102,24 @@ export function parseCsvReviewFile(source: string): ImportInputRow[] {
     if (fields.length !== headers.length) throw new CsvStagingError("csv_column_count_mismatch");
     const columns = Object.fromEntries(headers.map((key, index) => [key, fields[index]])) as Record<string, string>;
     const entityType = columns.entityType?.trim();
-    if (entityType !== "COMPONENT" && entityType !== "PRICE_LIST_ITEM" && entityType !== "REFERENCE_INTERVAL") {
+    if (!CSV_REVIEW_ENTITY_TYPES.has(entityType as ImportEntity)) {
       throw new CsvStagingError("csv_entity_review_only");
     }
-    const data: Record<string, string> = {};
+    const data: Record<string, string | string[]> = {};
     for (const key of headers) {
       if (key !== "entityType" && key !== "legacyKey") data[key] = columns[key];
     }
     if ((columns.legacyKey || "").length > 255) throw new CsvStagingError("csv_legacy_key_too_long");
-    rows.push({ entityType, legacyKey: columns.legacyKey || undefined, data });
+    if (entityType === "PANEL" || entityType === "PACKAGE") {
+      // User-entered membership must be a JSON array of explicit test codes.
+      // Malformed input is kept verbatim in the staged source but must fail validation.
+      try {
+        const members = JSON.parse(columns.memberTestCodes ?? "");
+        if (Array.isArray(members) && members.length <= 300 &&
+            members.every(value => typeof value === "string")) data.memberTestCodes = members;
+      } catch { /* Normalizer will reject missing/invalid membership. */ }
+    }
+    rows.push({ entityType: entityType as ImportEntity, legacyKey: columns.legacyKey || undefined, data });
   }
   return rows;
 }
