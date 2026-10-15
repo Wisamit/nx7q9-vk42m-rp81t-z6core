@@ -93,7 +93,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       const targetDept=event.rule.targetTest.departmentId;
       if(targetDept && (liveDepartmentIds.length>0 || session.user.departmentScopes.length>0)
         && (!liveDepartmentIds.includes(targetDept)
-          ||(session.user.departmentScopes.length>0&&!session.user.departmentScopes.includes(targetDept))))
+          ||(session.user.departmentScopes.length>0&&!session.user.departmentScopes.some(scope=>scope.departmentId===targetDept))))
         return {error:"reflex_target_department_scope_revoked",httpStatus:403} as const;
       const candidate=await tx.orderItem.findFirst({
         where:{id:body?.targetOrderItemId,order:{organizationId:session.user.organizationId}},

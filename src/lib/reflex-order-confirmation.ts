@@ -50,7 +50,7 @@ export type ReflexOrderEvidenceError =
 const money = (input: string): bigint | null => {
   if (!/^(0|[1-9]\d{0,13})(?:\.(\d{1,4}))?$/.test(input)) return null;
   const [whole, fraction = ""] = input.split(".");
-  return BigInt(whole) * 10000n + BigInt(fraction.padEnd(4, "0"));
+  return BigInt(whole) * BigInt(10000) + BigInt(fraction.padEnd(4, "0"));
 };
 
 export function reflexOrderEvidenceError(e: ReflexOrderEvidence): ReflexOrderEvidenceError | null {
