@@ -103,7 +103,10 @@ test("Stage143: reject reordered digests, duplicate occurrence gap and data hidd
   const alternate="0".repeat(64);
   denied(()=>verify({...f,pages:f.pages.map((p,i)=>i===0?{...p,rows:[
     {rowDigest:alternate,occurrence:1},...p.rows.slice(1)]}:p)}),
-    "legacy_evidence_duplicate_occurrence_gap");
+    "legacy_evidence_digest_sort_order");
+  denied(()=>verify({...f,pages:f.pages.map((p,i)=>i===0?{...p,rows:[
+    p.rows[0],{rowDigest:alternate,occurrence:1},...p.rows.slice(2)]}:p)}),
+    "legacy_evidence_digest_sort_order");
   denied(()=>verify({...f,pages:f.pages.map((p,i)=>i===1?{...p,rows:[
     {rowDigest:repeatedHash,occurrence:503}]}:p)}),
     "legacy_evidence_duplicate_occurrence_gap");
