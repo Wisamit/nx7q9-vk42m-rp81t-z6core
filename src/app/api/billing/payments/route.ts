@@ -1,4 +1,7 @@
+import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
+import { lookupPaymentPosting, paymentPostingFingerprint, paymentPostingKey } from "@/lib/payment-posting-idempotency";
+
 import { Prisma } from "../../../../../generated/prisma/client";
 import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
 import { invoiceAdjustmentState } from "@/lib/billing-adjustments";
@@ -30,6 +33,23 @@ export async function POST(request: Request) {
   if (!invoiceId || (!paymentMethodId && !legacyMethod) || !/^\d+(\.\d{1,4})?$/.test(amountText)) {
     return NextResponse.json({ error: "invalid_fields" }, { status: 400 });
   }
+
+  const postingKey = paymentPostingKey(body.postingKey);
+  if (!postingKey) return NextResponse.json({ error: "posting_key_required" }, { status: 400 });
+  const fingerprint = paymentPostingFingerprint({
+    kind: "INVOICE", organizationId: session.user.organizationId, actorUserId: session.user.id,
+    paymentMethodId, legacyMethod, reference, amount: amountText,
+    allocations: [{ invoiceId, amount: amountText }],
+  });
+  async function replay() {
+    const previous = await lookupPaymentPosting(prisma, session.user.organizationId, postingKey, fingerprint);
+    if (!previous) return null;
+    return previous.kind === "replay"
+      ? NextResponse.json(previous.response, { status: 200 })
+      : NextResponse.json({ error: "posting_key_reused" }, { status: 409 });
+  }
+  const previous = await replay();
+  if (previous) return previous;
 
   const amount = new Prisma.Decimal(amountText);
   if (amount.lte(0)) return NextResponse.json({ error: "invalid_amount" }, { status: 400 });
@@ -115,10 +135,21 @@ export async function POST(request: Request) {
     });
     if (shiftUpdated.count !== 1) throw new PostingConflict("cashier_shift_changed");
 
+    const paymentId = randomUUID();
+    const responseSnapshot = {
+      status: "ok" as const,
+      paymentId,
+      invoiceNumber: current.invoiceNumber,
+      paidAmount: newPaid.toString(),
+      balanceAmount: state.balance,
+      invoiceStatus: state.status,
+    };
     const payment = await tx.payment.create({
       data: {
+        id: paymentId,
         organizationId: session.user.organizationId,
         branchId: current.branchId,
+        postingKey, postingFingerprint: fingerprint, postingResponseSnapshot: responseSnapshot,
         amount,
         currency: current.currency,
         ...paymentMethodSnapshot(paymentMethod),
@@ -164,18 +195,16 @@ export async function POST(request: Request) {
       },
     });
 
-    return {
-      status: "ok",
-      paymentId: payment.id,
-      invoiceNumber: current.invoiceNumber,
-      paidAmount: newPaid.toString(),
-      balanceAmount: state.balance,
-      invoiceStatus: state.status,
-    } as const;
+    return responseSnapshot;
     }, { timeout: 30000 });
   } catch (error) {
-    if (error instanceof PostingConflict) {
-      return NextResponse.json({ error: error.code }, { status: 409 });
+    if (error instanceof PostingConflict || (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      ["P2002", "P2034"].includes(error.code)
+    )) {
+      const previous = await replay();
+      if (previous) return previous;
+      return NextResponse.json({ error: error instanceof PostingConflict ? error.code : "payment_posting_conflict" }, { status: 409 });
     }
     throw error;
   }
