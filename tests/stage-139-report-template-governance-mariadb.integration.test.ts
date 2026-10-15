@@ -44,7 +44,8 @@ test("Stage 139 MariaDB: tenant isolation, independently approved CAS, two-conne
     await put("report_template_versions",previous,
       "INSERT INTO report_template_versions(id,template_id,version,status,configuration,change_summary,submitted_by_user_id,approved_by_user_id,approved_at,effective_from) "+
       "VALUES(?, ?,1,'EFFECTIVE',?,?,?,?,?,?)",
-      [previous,template,json,"Original approved layout",author,reviewer,before.toISOString(),before.toISOString()]);
+      [previous,template,json,"Original approved layout",author,reviewer,
+        before.toISOString().slice(0,23).replace("T"," "), before.toISOString().slice(0,23).replace("T"," ")]);
     await put("report_template_versions",draft,
       "INSERT INTO report_template_versions(id,template_id,version,status,configuration,change_summary,submitted_by_user_id) "+
       "VALUES(?, ?,2,'DRAFT',?,?,?)",
