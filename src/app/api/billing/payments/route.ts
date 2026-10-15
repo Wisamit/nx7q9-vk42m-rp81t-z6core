@@ -45,9 +45,11 @@ export async function POST(request: Request) {
   async function replay() {
     const previous = await lookupPaymentPosting(prisma, session.user.organizationId, stablePostingKey, fingerprint);
     if (!previous) return null;
-    return previous.kind === "replay"
-      ? NextResponse.json(previous.response, { status: 200 })
-      : NextResponse.json({ error: "posting_key_reused" }, { status: 409 });
+    if (previous.kind === "replay") return NextResponse.json(previous.response, { status: 200 });
+    if (previous.kind === "changed") {
+      return NextResponse.json({ error: "payment_posting_state_changed" }, { status: 409 });
+    }
+    return NextResponse.json({ error: "posting_key_reused" }, { status: 409 });
   }
   // Recheck current branch scope before returning even an old successful replay.
   // A cashier whose branch grant was revoked must not rediscover past invoices.

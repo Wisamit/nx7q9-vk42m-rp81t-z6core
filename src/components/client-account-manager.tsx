@@ -63,6 +63,7 @@ function errorText(locale: "ar" | "en", code: string) {
   const map: Record<string, string> = {
     invalid_fields: tr("Complete all required fields.", "أكمل جميع الحقول المطلوبة."),
     posting_key_reused: tr("Payment attempt key was reused for changed details. Review the posting before retrying.", "تم استخدام مفتاح عملية سابق لبيانات مختلفة. راجع القيد قبل إعادة المحاولة."),
+    payment_posting_state_changed: tr("This prior payment was later refunded or voided. Review its current history before posting again.", "هذه الدفعة السابقة استُردّت أو أُلغيت لاحقاً. راجع سجلها الحالي قبل إعادة التسجيل."),
     posting_key_required: tr("Payment request key is missing. Refresh and try again.", "مفتاح عملية الدفع مفقود. حدّث الصفحة وأعد المحاولة."),
     client_not_found: tr("Client account was not found.", "لم يتم العثور على حساب العميل."),
     branch_forbidden: tr("You do not have access to this branch.", "ليس لديك صلاحية الوصول إلى هذا الفرع."),
