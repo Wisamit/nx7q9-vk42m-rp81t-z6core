@@ -58,7 +58,7 @@ function optionalString(source: Record<string, unknown>, name: string): string {
 function exactNumber(source: Record<string, unknown>, name: string): string {
   const value = source[name];
   if (typeof value === "number" && Number.isSafeInteger(value)) return String(value);
-  if (typeof value === "string" && /^(?:0|[1-9]\\d*)(?:\\.\\d{1,4})?$/.test(value)) return value;
+  if (typeof value === "string" && /^(?:0|[1-9]\d*)(?:\.\d{1,4})?$/.test(value)) return value;
   throw new CanonicalSpreadsheetReviewError("canonical_non_exact_number:" + name);
 }
 
@@ -67,7 +67,7 @@ function dateTime(source: Record<string, unknown>, name: string): string {
   if (value === null && name === "effectiveTo") return "";
   // Prisma dates in signed JSON are explicit UTC ISO strings, never local display dates.
   if (typeof value !== "string" ||
-      !/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$/.test(value) ||
+      !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value) ||
       Number.isNaN(Date.parse(value)) || new Date(value).toISOString() !== value) {
     throw new CanonicalSpreadsheetReviewError("canonical_source_date_ambiguous:" + name);
   }
@@ -164,8 +164,8 @@ function project(type: CanonicalSpreadsheetReviewType, source: Record<string, un
 function csvLiteral(value: string): string {
   // A leading spreadsheet formula escape apostrophe changes data on CSV re-import.
   // Reject rather than alter a real master name, code, unit, or other value.
-  if (/^[\\s\\uFEFF\\u200B-\\u200D]*[=+\\-@]/u.test(value) &&
-      !/^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$/.test(value)) {
+  if (/^[\s\uFEFF\u200B-\u200D]*[=+\-@]/u.test(value) &&
+      !/^-?(?:0|[1-9]\d*)(?:\.\d+)?$/.test(value)) {
     throw new CanonicalSpreadsheetReviewError("canonical_spreadsheet_formula_like_value");
   }
   return safeSpreadsheetCell(value);
