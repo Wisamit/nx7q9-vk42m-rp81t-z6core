@@ -1,8 +1,8 @@
-import { createHash, timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { requirePermission, requestContext } from "@/lib/auth";
 import { resolveAttachmentTarget } from "@/lib/attachment-target";
 import { prisma } from "@/lib/db";
+import { verifiedAttachmentBytes } from "@/lib/attachment-integrity";
 
 function quotedFilename(value: string) {
   return value.replace(/[\r\n"]/g, "_");
@@ -25,12 +25,8 @@ export async function GET(_: Request, context: { params: Promise<{ id: string }>
   // Never serve a corrupted or incorrectly linked clinical/quality attachment.
   // The checksum belongs to the immutable attachment row and is checked over
   // the exact persisted bytes, not a client-supplied name or MIME type.
-  const bytes = Buffer.from(attachment.content.data);
-  const storedHash = attachment.sha256;
-  const storedDigest = /^[0-9a-f]{64}$/i.test(storedHash) ? Buffer.from(storedHash, "hex") : null;
-  const actualDigest = createHash("sha256").update(bytes).digest();
-  if (bytes.length !== attachment.sizeBytes || !storedDigest ||
-      !timingSafeEqual(actualDigest, storedDigest)) {
+  const bytes = verifiedAttachmentBytes(attachment.content.data, attachment.sizeBytes, attachment.sha256);
+  if (!bytes) {
     await prisma.auditEvent.create({
       data: {
         organizationId: session.user.organizationId,
