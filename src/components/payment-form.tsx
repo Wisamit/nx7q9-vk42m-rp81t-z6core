@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 type InvoiceOption = {
@@ -35,6 +35,7 @@ export function PaymentForm({
   const [busy, setBusy] = useState(false);
   const [paymentMethodId, setPaymentMethodId] = useState(paymentMethods[0]?.id || "");
   const selectedMethod = paymentMethods.find(method => method.id === paymentMethodId);
+  const postingAttempt = useRef<{ payload: string; key: string } | null>(null);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -42,19 +43,25 @@ export function PaymentForm({
     setBusy(true);
     setMessage("");
 
-    const response = await fetch("/api/billing/payments", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        invoiceId: form.get("invoiceId"),
-        amount: form.get("amount"),
-        paymentMethodId,
-        reference: form.get("reference"),
-      }),
+    const payload = JSON.stringify({
+      invoiceId: form.get("invoiceId"),
+      amount: form.get("amount"),
+      paymentMethodId,
+      reference: form.get("reference"),
     });
-    const body = await response.json().catch(() => ({}));
+    if (!postingAttempt.current || postingAttempt.current.payload !== payload) {
+      postingAttempt.current = { payload, key: crypto.randomUUID() };
+    }
+    try {
+      const response = await fetch("/api/billing/payments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...JSON.parse(payload), postingKey: postingAttempt.current.key }),
+      });
+      const body = await response.json().catch(() => ({}));
 
     if (response.ok) {
+      postingAttempt.current = null;
       const success = `${tr("Payment posted", "تم تسجيل الدفعة")}. ${tr("Invoice", "الفاتورة")} ${body.invoiceNumber} · ${tr("Balance", "الرصيد")}: ${body.balanceAmount}`;
       setMessage(success);
       event.currentTarget.reset();
@@ -71,10 +78,16 @@ export function PaymentForm({
       setMessage(tr("The selected payment method is no longer available.", "طريقة الدفع المحددة لم تعد متاحة."));
     } else if (body.error === "payment_method_reference_required") {
       setMessage(tr("This payment method requires a transaction/reference number.", "طريقة الدفع هذه تتطلب رقم مرجع أو عملية."));
+    } else if (body.error === "posting_key_reused") {
+      setMessage(tr("Payment request was changed. Review the values before submitting a new attempt.", "تم تغيير طلب الدفعة. راجع البيانات قبل إنشاء محاولة جديدة."));
     } else {
       setMessage(body.error || tr("Payment could not be posted.", "تعذر تسجيل الدفعة."));
     }
-    setBusy(false);
+    } catch {
+      setMessage(tr("Connection interrupted. Check the posting status; submitting the unchanged form will safely retry the same request.", "انقطع الاتصال. تحقق من حالة الدفعة؛ إعادة إرسال نفس البيانات تستخدم رقم المحاولة نفسه دون تكرار القيد."));
+    } finally {
+      setBusy(false);
+    }
   }
 
   return <form className="catalog-form" onSubmit={submit}>
