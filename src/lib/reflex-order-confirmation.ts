@@ -10,6 +10,7 @@ export type ReflexOrderEvidence = {
   targetOrderingBranchId: string;
   sourceOrderId: string;
   targetOrderId: string;
+  targetItemId: string;
   targetTestId: string;
   ruleTargetTestId: string;
   targetItemStatus: string;
@@ -66,7 +67,7 @@ export function reflexOrderEvidenceError(e: ReflexOrderEvidence): ReflexOrderEvi
   if (!["ISSUED", "PARTIALLY_PAID", "PAID"].includes(e.invoiceStatus))
     return "reflex_target_invoice_not_issued";
   if (!e.invoiceLineOrderItemId || !e.invoiceOrderId || e.invoiceOrderId !== e.targetOrderId
-    || e.invoiceLineOrderItemId === "" || e.invoiceLineQuantity !== "1.000")
+    || e.invoiceLineOrderItemId !== e.targetItemId || e.invoiceLineQuantity !== "1.000")
     return "reflex_target_invoice_line_mismatch";
   const billed = money(e.invoiceLineTotal), item = money(e.targetItemFinalPrice);
   if (!/^[A-Z]{3}$/.test(e.invoiceCurrency)
