@@ -46,7 +46,7 @@ test("Stage142 MariaDB: reviewer role and branch are live, same-identity approva
         [id,org,"S142"+suffix+tag,"Synthetic Branch"],"DELETE FROM branches WHERE id=?",[id]);
     }
     for(const [id,tag] of [[author,"A"],[reviewer,"R"]]){
-      await put("INSERT INTO users(id,organization_id,username,display_name_en,updated_at) VALUES(?,?,?,?,NOW(3))",
+      await put("INSERT INTO users(id,organization_id,username,display_name_en,status,updated_at) VALUES(?,?,?,?,'ACTIVE',NOW(3))",
         [id,org,"s142"+suffix+tag,"Synthetic Reviewer"],"DELETE FROM users WHERE id=?",[id]);
     }
     await put("INSERT INTO roles(id,organization_id,code,name_en,updated_at) VALUES(?,?,?,?,NOW(3))",
