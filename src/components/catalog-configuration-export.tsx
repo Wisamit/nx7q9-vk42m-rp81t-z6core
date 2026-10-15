@@ -60,7 +60,7 @@ export function CatalogConfigurationExport({
       if (source.format !== "family-lab-catalog-bundle" || source.schemaVersion !== 1 ||
           source.consistency !== "transactional-consistent-read" ||
           !source.organizationId || !source.exportedAt ||
-          source.groups?.length !== 1 || source.groups[0].entityType !== entityType ||
+          !Array.isArray(source.groups) || source.groups.length !== 1 || source.groups[0].entityType !== entityType ||
           !Array.isArray(source.groups[0].records)) throw new Error("atomic_source_invalid");
       const csv = canonicalStagingCsvFromAtomicGroup(source.groups[0]);
       const data = format === "xlsx" ? catalogReviewXlsx(csv) : csv;
