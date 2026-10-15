@@ -88,9 +88,13 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       process.stdout.write(JSON.stringify(result, null, 2) + "\n");
     } catch (error) {
       // Deliberately don't print the source path, HMAC key or row content.
-      process.stderr.write("Evidence package rejected: " +
-        (error instanceof Error ? error.message.replace(/[^a-z0-9_]/gi, "_").slice(0,70) : "unknown") +
-        "\n");
+      const nativeCode = error && typeof error === "object" && "code" in error
+        ? String(error.code) : "";
+      const safeCode = /^(?:legacy_|invalid_|unexpected_)[a-z0-9_]+$/.test(nativeCode)
+        ? nativeCode
+        : error instanceof Error && /^(?:mdb_|evidence_|unexpected_)[a-z0-9_]+$/.test(error.message)
+          ? error.message : "legacy_evidence_rejected";
+      process.stderr.write("Evidence package rejected: " + safeCode + "\n");
       process.exitCode = 1;
     }
   }
