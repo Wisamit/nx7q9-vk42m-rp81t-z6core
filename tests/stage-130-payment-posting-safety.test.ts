@@ -26,7 +26,9 @@ test("Stage 130: payment fingerprints preserve request identity, order-independe
 
 test("Stage 130: existing posting can only replay an exact completed financial snapshot",async()=>{
   const key=randomUUID(),org=randomUUID(),fingerprint="a".repeat(64);
-  const fake={payment:{findFirst:async()=>({postingFingerprint:fingerprint,postingResponseSnapshot:{
+  const fake={payment:{findFirst:async()=>({
+    id:"immutable-id",status:"POSTED",refundedAmount:{toString:()=> "0"},
+    postingFingerprint:fingerprint,postingResponseSnapshot:{
     status:"ok",paymentId:"immutable-id",balanceAmount:"7.0000",
   }})}} as unknown as Parameters<typeof lookupPaymentPosting>[0];
   const valid=await lookupPaymentPosting(fake,org,key,fingerprint);

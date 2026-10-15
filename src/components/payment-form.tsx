@@ -78,6 +78,8 @@ export function PaymentForm({
       setMessage(tr("The selected payment method is no longer available.", "طريقة الدفع المحددة لم تعد متاحة."));
     } else if (body.error === "payment_method_reference_required") {
       setMessage(tr("This payment method requires a transaction/reference number.", "طريقة الدفع هذه تتطلب رقم مرجع أو عملية."));
+    } else if (body.error === "payment_posting_state_changed") {
+      setMessage(tr("This payment was subsequently refunded or voided. Review current invoice and payment history before initiating a new transaction.", "تم استرداد هذه الدفعة أو إلغاؤها لاحقاً. راجع سجل الدفعات والفاتورة قبل إنشاء عملية جديدة."));
     } else if (body.error === "posting_key_reused") {
       setMessage(tr("Payment request was changed. Review the values before submitting a new attempt.", "تم تغيير طلب الدفعة. راجع البيانات قبل إنشاء محاولة جديدة."));
     } else {

@@ -48,13 +48,19 @@ export async function lookupPaymentPosting(db: DbClient, organizationId: string,
   postingKey: string, fingerprint: string) {
   const existing = await db.payment.findFirst({
     where: { organizationId, postingKey },
-    select: { postingFingerprint: true, postingResponseSnapshot: true },
+    select: { id: true, status: true, refundedAmount: true, postingFingerprint: true, postingResponseSnapshot: true },
   });
   if (!existing) return null;
+  if (existing.postingFingerprint !== fingerprint) return { kind: "conflict" as const };
+  // An original successful posting may later be refunded or voided. Never
+  // replay its obsolete "paid" snapshot as though that payment remained posted.
+  if (existing.status !== "POSTED" || money4ToMinor(existing.refundedAmount.toString()) !== BigInt(0)) {
+    return { kind: "changed" as const };
+  }
   const response = existing.postingResponseSnapshot;
-  if (existing.postingFingerprint !== fingerprint || !response || 
-      typeof response !== "object" || Array.isArray(response) ||
-      (response as { status?: unknown }).status !== "ok") {
+  if (!response || typeof response !== "object" || Array.isArray(response) ||
+      (response as { status?: unknown }).status !== "ok" ||
+      (response as { paymentId?: unknown }).paymentId !== existing.id) {
     return { kind: "conflict" as const };
   }
   return { kind: "replay" as const, response };
