@@ -252,7 +252,8 @@ export default async function AnalyzersPage() {
               <td>{mapping.effectiveFrom.toISOString().slice(0,10)} → {mapping.effectiveTo?.toISOString().slice(0,10) || tr(locale, "Open", "مفتوح")}</td>
               <td><strong>{mapping.approvalStatus === "APPROVED" ? tr(locale, "Approved", "معتمد") : mapping.approvalStatus === "RETIRED" ? tr(locale, "Retired", "موقوف") : tr(locale, "Draft", "مسودة")}</strong><br/><small>{statusLabel(locale, mapping.status)}</small></td>
               <td><small>{tr(locale, "Created by", "أنشأه")}: {creator}{mapping.approvedAt ? <><br/>{tr(locale, "Approved by", "اعتمده")}: {approver || "—"} · {mapping.approvedAt.toISOString().replace("T"," ").slice(0,19)}</> : null}{mapping.retiredAt ? <><br/>{tr(locale, "Retired by", "أوقفه")}: {retirer || "—"} · {mapping.retiredAt.toISOString().replace("T"," ").slice(0,19)}{mapping.retirementReason ? " · " + mapping.retirementReason : ""}</> : null}</small></td>
-              <td><AnalyzerMappingGovernanceButton analyzerId={item.id} id={mapping.id} approvalStatus={mapping.approvalStatus} canApprove={permissions.has("analyzers.mappings.approve")} locale={locale} /></td>
+              <td><AnalyzerMappingGovernanceButton analyzerId={item.id} id={mapping.id} approvalStatus={mapping.approvalStatus} canApprove={permissions.has("analyzers.mappings.approve")}
+                authorId={mapping.createdByUserId} actorId={session.user.id} locale={locale} /></td>
             </tr>;
           })}</tbody>
         </table></div>

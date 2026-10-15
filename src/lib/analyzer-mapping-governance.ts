@@ -1,3 +1,5 @@
+import type { Prisma } from "../../generated/prisma/client";
+
 export type AnalyzerMappingGovernanceLike = {
   id: string;
   analyzerId: string;
@@ -103,4 +105,68 @@ export function analyzerMappingTargetUnitStillMatches(
     && snapshot.lisUnitCodeSnapshot === (currentUnit?.code || null)
     && snapshot.lisUnitSymbolSnapshot === (currentUnit?.symbol || null)
     && snapshot.lisUnitUcumCodeSnapshot === (currentUnit?.ucumCode || null);
+}
+
+/**
+ * Clinical analyzer routing needs provenance from two distinct people.
+ * Old mappings with no creator cannot be approved by inferring an author.
+ */
+export function analyzerMappingIndependentApprovalError(input: {
+  createdByUserId: string | null;
+  approvalStatus: string;
+  status: string;
+  approvedByUserId: string | null;
+  approvedAt: Date | null;
+  retiredAt: Date | null;
+  retiredByUserId: string | null;
+}, actorUserId: string): string | null {
+  if (input.approvalStatus !== "DRAFT" || input.status !== "INACTIVE" ||
+      input.approvedByUserId !== null || input.approvedAt !== null ||
+      input.retiredAt !== null || input.retiredByUserId !== null) {
+    return "analyzer_mapping_not_draft";
+  }
+  if (!input.createdByUserId) return "analyzer_mapping_creator_unknown";
+  if (input.createdByUserId === actorUserId) return "analyzer_mapping_self_approval_forbidden";
+  return null;
+}
+
+export type AnalyzerMappingReviewScope = {
+  organizationId: string;
+  branchId: string;
+  userId: string;
+  sessionBranchIds: readonly string[];
+};
+
+/**
+ * Called AFTER acquiring the per-mapping-identity transaction lock.
+ * Revoked approval permissions, revoked branch scopes or deactivated users
+ * must not be honored merely because a session was valid before the lock.
+ */
+export async function analyzerMappingReviewerIsLive(
+  tx: Prisma.TransactionClient,
+  scope: AnalyzerMappingReviewScope,
+): Promise<boolean> {
+  if (!scope.sessionBranchIds.includes(scope.branchId)) return false;
+  const organization = await tx.organization.findFirst({
+    where: { id: scope.organizationId, status: "ACTIVE" }, select: { id: true },
+  });
+  if (!organization) return false;
+  const user = await tx.user.findFirst({
+    where: { id: scope.userId, organizationId: scope.organizationId, status: "ACTIVE" },
+    select: { roles: { select: { role: {
+      select: { status: true, organizationId: true,
+        permissions: { select: { permission: { select: { code: true } } } } },
+    } } } },
+  });
+  const approved = (user?.roles ?? []).some(grant =>
+    grant.role.status === "ACTIVE" && grant.role.organizationId === scope.organizationId &&
+    grant.role.permissions.some(p => p.permission.code === "analyzers.mappings.approve"));
+  if (!approved) return false;
+  const branch = await tx.userBranchScope.findFirst({
+    where: {
+      userId: scope.userId, branchId: scope.branchId,
+      branch: { organizationId: scope.organizationId, status: "ACTIVE" },
+    }, select: { branchId: true },
+  });
+  return !!branch;
 }

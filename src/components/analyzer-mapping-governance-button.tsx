@@ -8,15 +8,20 @@ export function AnalyzerMappingGovernanceButton({
   id,
   approvalStatus,
   canApprove,
+  authorId,
+  actorId,
   locale,
 }: {
   analyzerId: string;
   id: string;
   approvalStatus: "DRAFT" | "APPROVED" | "RETIRED";
   canApprove: boolean;
+  authorId: string | null;
+  actorId: string;
   locale: "ar" | "en";
 }) {
   const router = useRouter();
+  const independent = !!authorId && authorId !== actorId;
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
@@ -50,7 +55,13 @@ export function AnalyzerMappingGovernanceButton({
     });
     const body = await response.json().catch(() => ({})) as { error?: string };
     if (!response.ok) {
-      const friendly = body.error === "approved_analyzer_mapping_overlap"
+      const friendly = body.error === "analyzer_mapping_self_approval_forbidden"
+        ? tr("The draft author cannot approve their own clinical analyzer mapping.", "لا يستطيع منشئ مسودة ربط الجهاز اعتمادها للاستخدام السريري بنفسه.")
+        : body.error === "analyzer_mapping_creator_unknown"
+          ? tr("Clinical approval requires traceable draft authorship. This legacy draft needs governed reconciliation.", "يتطلب الاعتماد السريري معرفة منشئ المسودة؛ هذه المسودة القديمة بحاجة إلى تسوية موثقة.")
+          : body.error === "analyzer_mapping_live_permission_revoked"
+            ? tr("Your approval permission or branch access is no longer active.", "صلاحية الاعتماد أو الوصول إلى الفرع لم تعد فعالة.")
+            : body.error === "approved_analyzer_mapping_overlap"
         ? tr("Approval blocked because another approved mapping for the same analyzer code overlaps this effective period.", "تعذر الاعتماد لأن ربطاً معتمداً آخر لنفس رمز الجهاز يتداخل مع فترة السريان.")
         : body.error === "analyzer_unit_code_required_for_unit_target"
           ? tr("Approval blocked: this LIS target has a unit, so the exact analyzer unit code is required.", "تعذر الاعتماد: هدف LIS له وحدة، لذلك يجب تحديد رمز وحدة الجهاز بدقة.")
@@ -70,7 +81,10 @@ export function AnalyzerMappingGovernanceButton({
   }
 
   return <div>
-    {canApprove && approvalStatus === "DRAFT" ? <button type="button" className="secondary-button" disabled={busy} onClick={() => void act("APPROVE")}>{busy ? tr("Saving…", "جارٍ الحفظ…") : tr("Approve", "اعتماد")}</button> : null}
+    {canApprove && independent && approvalStatus === "DRAFT" ? <button type="button" className="secondary-button" disabled={busy} onClick={() => void act("APPROVE")}>{busy ? tr("Saving…", "جارٍ الحفظ…") : tr("Approve", "اعتماد")}</button> : null}
+    {canApprove && approvalStatus === "DRAFT" && !independent ? <small>{authorId
+      ? tr("Independent reviewer required.", "يجب أن يعتمد الربط شخص آخر.")
+      : tr("Unverified draft author — governed review required.", "منشئ المسودة غير معروف — يلزم تدقيق موثق.")}</small> : null}
     {canApprove && approvalStatus === "APPROVED" ? <button type="button" className="secondary-button" disabled={busy} onClick={() => void act("RETIRE")}>{busy ? tr("Saving…", "جارٍ الحفظ…") : tr("Retire", "إيقاف")}</button> : null}
     {message ? <><br/><small>{message}</small></> : null}
   </div>;

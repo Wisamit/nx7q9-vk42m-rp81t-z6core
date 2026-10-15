@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
 import {
   analyzerMappingIdentityKey,
+  analyzerMappingIndependentApprovalError, analyzerMappingReviewerIsLive,
   analyzerMappingUnitConfigurationError,
   planAnalyzerMappingApproval,
   snapshotAnalyzerMappingTargetUnit,
@@ -156,11 +157,22 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     });
     if (!locked) return { error: "analyzer_mapping_not_found" as const };
     if (!canAccessBranch(session, locked.analyzer.branchId)) return { error: "branch_forbidden" as const };
+    // Re-read live permissions and branch membership under the identity lock.
+    // getCurrentSession() was evaluated BEFORE this transaction began.
+    const reviewerIsLive = await analyzerMappingReviewerIsLive(tx, {
+      organizationId: session.user.organizationId,
+      branchId: locked.analyzer.branchId,
+      userId: session.user.id,
+      sessionBranchIds: session.user.branchScopes
+        .filter(scope => scope.branch.organizationId === session.user.organizationId &&
+          scope.branch.status === "ACTIVE")
+        .map(scope => scope.branchId),
+    });
+    if (!reviewerIsLive) return { error: "analyzer_mapping_live_permission_revoked" as const };
 
     if (action === "APPROVE") {
-      if (locked.approvalStatus !== "DRAFT" || locked.status !== "INACTIVE" || locked.approvedAt) {
-        return { error: "analyzer_mapping_not_draft" as const };
-      }
+      const approvalError = analyzerMappingIndependentApprovalError(locked, session.user.id);
+      if (approvalError) return { error: approvalError };
       if (locked.analyzer.status !== "ACTIVE" || locked.test.status !== "ACTIVE") {
         return { error: "analyzer_mapping_target_not_active" as const };
       }
@@ -277,7 +289,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }, { timeout: 30000, isolationLevel: "Serializable" });
 
   if ("error" in outcome) {
-    const status = outcome.error === "analyzer_mapping_not_found" ? 404 : outcome.error === "branch_forbidden" ? 403 : 409;
+    const status = outcome.error === "analyzer_mapping_not_found" ? 404
+      : ["branch_forbidden", "analyzer_mapping_live_permission_revoked",
+        "analyzer_mapping_self_approval_forbidden"].includes(outcome.error ?? "") ? 403 : 409;
     return NextResponse.json(outcome, { status });
   }
   return NextResponse.json(outcome);
