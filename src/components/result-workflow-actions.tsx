@@ -288,6 +288,8 @@ export function ResultWorkflowActions({
       router.refresh();
     } else if (body.error === "critical_acknowledgement_required") {
       setMessage(tr("Release blocked: the critical result must be communicated and acknowledged first.", "الإصدار محظور: يجب أولًا التواصل بشأن النتيجة الحرجة وتوثيق الإقرار بها."));
+    } else if (body.error === "specimen_custody_changed_blocks_release") {
+      setMessage(tr("Release blocked: the source specimen was moved, rejected, disposed or no longer belongs to the performing branch. Recheck custody and clinical review.", "الإصدار محظور: تغيّر موقع أو وضع العينة الأصلية، أو لم تعد في فرع التنفيذ. راجع تتبع العينة واعتماد النتيجة."));
     } else {
       setMessage(body.error || tr("Result release failed.", "فشل إصدار النتيجة."));
     }

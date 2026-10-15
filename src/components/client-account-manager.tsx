@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { CrudModal } from "@/components/crud-modal";
@@ -62,6 +62,8 @@ function errorText(locale: "ar" | "en", code: string) {
   const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
   const map: Record<string, string> = {
     invalid_fields: tr("Complete all required fields.", "أكمل جميع الحقول المطلوبة."),
+    posting_key_reused: tr("Payment attempt key was reused for changed details. Review the posting before retrying.", "تم استخدام مفتاح عملية سابق لبيانات مختلفة. راجع القيد قبل إعادة المحاولة."),
+    posting_key_required: tr("Payment request key is missing. Refresh and try again.", "مفتاح عملية الدفع مفقود. حدّث الصفحة وأعد المحاولة."),
     client_not_found: tr("Client account was not found.", "لم يتم العثور على حساب العميل."),
     branch_forbidden: tr("You do not have access to this branch.", "ليس لديك صلاحية الوصول إلى هذا الفرع."),
     organization_scope_incomplete: tr("Organization-wide statements require access to every active branch.", "كشف الحساب على مستوى المؤسسة يتطلب صلاحية الوصول إلى جميع الفروع النشطة."),
@@ -112,6 +114,7 @@ export function ClientAccountManager({
   const [paymentCurrency, setPaymentCurrency] = useState("");
   const [paymentMethodId, setPaymentMethodId] = useState(paymentMethods[0]?.id || "");
   const [allocations, setAllocations] = useState<Record<string, string>>({});
+  const postingAttempt = useRef<{ payload: string; key: string } | null>(null);
 
   const paymentInvoices = useMemo(() => invoices.filter(invoice =>
     invoice.clientId === paymentClientId
@@ -167,27 +170,37 @@ export function ClientAccountManager({
       .filter(item => Number(item.amount) > 0);
     setBusy(true);
     setMessage("");
-    const response = await fetch("/api/billing/client-payments", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        clientId: paymentClientId,
-        branchId: paymentBranchId,
-        currency: paymentCurrency,
-        amount: form.get("amount"),
-        paymentMethodId,
-        reference: form.get("reference"),
-        allocations: selectedAllocations,
-      }),
+    const payload = JSON.stringify({
+      clientId: paymentClientId,
+      branchId: paymentBranchId,
+      currency: paymentCurrency,
+      amount: form.get("amount"),
+      paymentMethodId,
+      reference: form.get("reference"),
+      allocations: selectedAllocations,
     });
-    const body = await response.json().catch(() => ({}));
+    if (!postingAttempt.current || postingAttempt.current.payload !== payload) {
+      postingAttempt.current = { payload, key: crypto.randomUUID() };
+    }
+    try {
+      const response = await fetch("/api/billing/client-payments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...JSON.parse(payload), postingKey: postingAttempt.current.key }),
+      });
+      const body = await response.json().catch(() => ({}));
     if (response.ok) {
+      postingAttempt.current = null;
       setMessage(`${tr("Client payment posted", "تم تسجيل دفعة العميل")} · ${body.amount} ${paymentCurrency} · ${body.allocationCount} ${tr("invoice(s)", "فاتورة")}`);
       setPaymentOpen(false);
       resetPaymentContext();
       router.refresh();
     } else setMessage(errorText(locale, body.error || ""));
-    setBusy(false);
+    } catch {
+      setMessage(tr("Connection interrupted. Check the posting status; retrying the unchanged form reuses its protected request key.", "انقطع الاتصال. تحقق من حالة الدفعة؛ إعادة إرسال نفس البيانات تستخدم مفتاح العملية الآمن."));
+    } finally {
+      setBusy(false);
+    }
   }
 
   return <div className="admin-grid">

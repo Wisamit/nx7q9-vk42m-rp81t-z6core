@@ -48,6 +48,7 @@ jobs:
       - run: node --experimental-strip-types --test tests/stage-127-reflex-confirmation-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-128-provider-receipts-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-129-security-integrity-mariadb.integration.test.ts
+      - run: node --experimental-strip-types --test tests/stage-130-cross-module-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/specimen-storage-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/specimen-transfer-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/result-validation-mariadb.integration.test.ts

@@ -3121,6 +3121,9 @@ model Payment {
   receivedAt     DateTime      @default(now()) @map("received_at") @db.DateTime(3)
   cashierUserId  String        @map("cashier_user_id") @db.Char(36)
   cashierShiftId String?       @map("cashier_shift_id") @db.Char(36)
+  postingKey String? @map("posting_key") @db.Char(36)
+  postingFingerprint String? @map("posting_fingerprint") @db.Char(64)
+  postingResponseSnapshot Json? @map("posting_response_snapshot")
   createdAt      DateTime      @default(now()) @map("created_at") @db.DateTime(3)
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
@@ -3135,6 +3138,7 @@ model Payment {
   @@index([cashierUserId, receivedAt])
   @@index([cashierShiftId, receivedAt])
   @@index([paymentMethodConfigId, receivedAt])
+  @@unique([organizationId, postingKey])
   @@map("payments")
 }
 
