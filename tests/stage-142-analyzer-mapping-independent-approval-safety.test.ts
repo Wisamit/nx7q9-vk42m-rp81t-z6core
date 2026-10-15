@@ -78,7 +78,7 @@ test("Stage142: route uses independent and persisted live checks AFTER serializa
     "live re-authorization and author separation must precede any approval/supersession write");
   assert.match(patch,/if \(!reviewerIsLive\) return \{ error: "analyzer_mapping_live_permission_revoked"/);
   assert.match(patch,/if \(approvalError\) return \{ error: approvalError \}/);
-  assert.match(patch,/"analyzer_mapping_self_approval_forbidden"\]\.includes\(outcome.error\)/);
+  assert.match(patch,/"analyzer_mapping_self_approval_forbidden"\]\.includes\(outcome.error \?\? ""\)/);
   assert.match(patch,/isolationLevel: "Serializable"/);
   assert.match(patch,/ANALYZER_TEST_MAPPING_APPROVED/);
   assert.match(patch,/ANALYZER_TEST_MAPPING_RETIRED/);
