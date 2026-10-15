@@ -2839,6 +2839,7 @@ model OrderItem {
   specimenUsageEvents SpecimenUsageEvent[]
   results          LaboratoryResult[]
   resultRepeatEvents ResultRepeatEvent[]
+  reflexConfirmations ReflexRuleEvent[] @relation("ReflexOrderConfirmation")
   analyzerResultImports AnalyzerResultImport[]
   analyzerWorkOrders AnalyzerWorkOrder[]
   analyzerRoutes OrderItemAnalyzerRoute[]
@@ -4467,14 +4468,18 @@ model ReflexRuleEvent {
   reviewedByUserId        String?           @map("reviewed_by_user_id") @db.Char(36)
   reviewedAt              DateTime?         @map("reviewed_at") @db.DateTime(3)
   reviewNote              String?           @map("review_note") @db.VarChar(1000)
+  confirmedOrderItemId    String?           @map("confirmed_order_item_id") @db.Char(36)
+  billingEvidenceSnapshot Json?             @map("billing_evidence_snapshot")
   createdAt               DateTime          @default(now()) @map("created_at") @db.DateTime(3)
   updatedAt               DateTime          @updatedAt @map("updated_at") @db.DateTime(3)
 
   result     LaboratoryResult @relation(fields: [resultId], references: [id], onDelete: Restrict)
   rule       ReflexRule       @relation(fields: [ruleId], references: [id], onDelete: Restrict)
   reviewedBy User?            @relation(fields: [reviewedByUserId], references: [id], onDelete: Restrict)
+  confirmedOrderItem OrderItem? @relation("ReflexOrderConfirmation", fields: [confirmedOrderItemId], references: [id], onDelete: Restrict)
 
   @@unique([resultId, ruleId])
+  @@index([confirmedOrderItemId])
   @@index([status, createdAt])
   @@index([reviewedByUserId, reviewedAt])
   @@map("reflex_rule_events")
