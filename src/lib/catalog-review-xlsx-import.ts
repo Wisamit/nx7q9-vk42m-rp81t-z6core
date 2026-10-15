@@ -164,18 +164,34 @@ function decodeXlsxReview(upload: Uint8Array): string {
     }
   }
   const sheet = files.get("xl/worksheets/sheet1.xml")!;
-  if (/<f(?:\s|>)|<mergeCells\b|<sheetProtection\b/i.test(sheet))
+  if (/<f(?:\s|>)|<mergeCells\b|<sheetProtection\b/i.test(sheet) ||
+      /<col\b[^>]*\bhidden\s*=\s*"(?:1|true)"/i.test(sheet))
     throw new XlsxStagingError("xlsx_formulas_or_merged_cells_forbidden");
+  // Reject unrecognized worksheet markup *inside the table*, rather than
+  // dropping its values while claiming that staging succeeded. Missing or
+  // duplicate sheetData, rows, cells or hidden rows are not review evidence.
+  const dataSections = [...sheet.matchAll(/<sheetData(?:\s[^>]*)?>([\s\S]*?)<\/sheetData>/g)];
+  if (dataSections.length !== 1 ||
+      [...sheet.matchAll(/<sheetData\b/g)].length !== 1 ||
+      !/<worksheet\b/.test(sheet))
+    throw new XlsxStagingError("xlsx_invalid_sheet_data");
+  const dataXml = dataSections[0][1];
+  const rowPattern = /<row\b([^>]*)>([\s\S]*?)<\/row>/g;
+  if (dataXml.replace(rowPattern, "").trim() !== "")
+    throw new XlsxStagingError("xlsx_unparsed_sheet_row");
   const table: string[][] = [];
   let rowNumber = 0;
-  for (const match of sheet.matchAll(/<row\b([^>]*)>([\s\S]*?)<\/row>/g)) {
+  for (const match of dataXml.matchAll(rowPattern)) {
     const position = Number(attr(match[1], "r"));
     if (!Number.isInteger(position) || position !== rowNumber + 1 ||
-        position > 20001 || attr(match[1], "hidden") === "1")
+        position > 20001 || ["1", "true"].includes(attr(match[1], "hidden") ?? ""))
       throw new XlsxStagingError("xlsx_invalid_row_number_or_hidden");
     rowNumber = position;
     const cells: string[] = [];
-    for (const cell of match[2].matchAll(/<c\b([^>]*)>([\s\S]*?)<\/c>/g)) {
+    const cellPattern = /<c\b([^>]*)>([\s\S]*?)<\/c>/g;
+    if (match[2].replace(cellPattern, "").trim() !== "")
+      throw new XlsxStagingError("xlsx_unparsed_sheet_cell");
+    for (const cell of match[2].matchAll(cellPattern)) {
       const location = attr(cell[1], "r");
       const ref = /^([A-Z]{1,3})(\d{1,6})$/.exec(location ?? "");
       if (!ref || Number(ref[2]) !== position) throw new XlsxStagingError("xlsx_invalid_cell_reference");
@@ -185,12 +201,23 @@ function decodeXlsxReview(upload: Uint8Array): string {
       const t = attr(cell[1], "t") ?? "n";
       let content = "";
       if (t === "inlineStr") {
-        const inline = /<is\b[^>]*>([\s\S]*?)<\/is>/.exec(cell[2]);
-        if (!inline) throw new XlsxStagingError("xlsx_invalid_inline_string");
-        content = texts(inline[1]);
+        const inlinePattern = /<is\b[^>]*>([\s\S]*?)<\/is>/g;
+        const inline = [...cell[2].matchAll(inlinePattern)];
+        if (inline.length !== 1 || cell[2].replace(inlinePattern, "").trim() !== "")
+          throw new XlsxStagingError("xlsx_invalid_inline_string");
+        const stringBody = inline[0][1];
+        // Basic rich-text run containers are accepted, but unsupported
+        // embedded elements must never be silently omitted from values.
+        const leftover = stringBody.replace(/<t(?:\s[^>]*)?>[\s\S]*?<\/t>/g, "")
+          .replace(/<\/?r(?:\s[^>]*)?>/g, "").trim();
+        if (leftover) throw new XlsxStagingError("xlsx_unparsed_cell_text");
+        content = texts(stringBody);
       } else if (t === "s" || t === "str" || t === "n") {
-        const value = /<v>([\s\S]*?)<\/v>/.exec(cell[2]);
-        content = value ? xmlDecode(value[1]) : "";
+        const valuePattern = /<v>([\s\S]*?)<\/v>/g;
+        const values = [...cell[2].matchAll(valuePattern)];
+        if (values.length > 1 || cell[2].replace(valuePattern, "").trim() !== "")
+          throw new XlsxStagingError("xlsx_unparsed_cell_value");
+        content = values[0] ? xmlDecode(values[0][1]) : "";
         if (t === "s") {
           if (!/^(?:0|[1-9]\d*)$/.test(content) || Number(content) >= strings.length)
             throw new XlsxStagingError("xlsx_invalid_shared_string");
