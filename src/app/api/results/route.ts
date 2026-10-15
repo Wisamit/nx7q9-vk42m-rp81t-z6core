@@ -664,6 +664,8 @@ export async function POST(request: Request) {
             reviewedByUserId: null,
             reviewedAt: null,
             reviewNote: null,
+            confirmedOrderItemId: null,
+            billingEvidenceSnapshot: Prisma.DbNull,
           },
           create: {
             resultId: result.id,

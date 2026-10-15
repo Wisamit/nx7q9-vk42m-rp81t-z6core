@@ -200,6 +200,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     if (claim.count !== 1) throw new Error("RESULT_STATE_CHANGED");
 
+    // Result writers and Reflex reviewers serialize on this result record.
+    // Pending decisions or new BLOCK holds arriving after UX preflight must
+    // never be bypassed by the technical review transaction.
+    const [liveReflexCount,liveBlockingHolds,liveValueCount]=await Promise.all([
+      tx.reflexRuleEvent.count({where:{resultId:result.id,status:"PENDING"}}),
+      tx.validationHoldEvent.count({where:{resultId:result.id,status:"ACTIVE",severitySnapshot:"BLOCK"}}),
+      tx.laboratoryResultValue.count({where:{resultId:result.id}}),
+    ]);
+    if(liveReflexCount>0||liveBlockingHolds>0||liveValueCount!==expectedCount)
+      throw new Error("RESULT_STATE_CHANGED");
+
     await tx.resultValidationReview.create({
       data: {
         resultId: result.id,

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { canAccessBranch, canAccessDepartment, requirePermission, requestContext } from "@/lib/auth";
+import { canAccessBranch, canAccessDepartment, permissionSet, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { Prisma } from "../../../../../../../generated/prisma/client";
 import { isClinicalUuid } from "@/lib/order-clinical-handover";
@@ -20,6 +20,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!action) return NextResponse.json({ error: "invalid_action" }, { status: 400 });
 
   if (typeof body?.note !== "string" || body.note.trim().length < 10 || body.note.trim().length > 1000) return NextResponse.json({error:"reflex_clinical_reason_required"},{status:400});
+  if (confirming && !permissionSet(session).has("orders.create")) return NextResponse.json({error:"reflex_order_authority_required"},{status:403});
   if (confirming && (!isClinicalUuid(body?.targetOrderItemId) || !isClinicalUuid(body?.invoiceLineId) || body?.billingAcknowledged !== true)) return NextResponse.json({error:"reflex_order_invoice_confirmation_required"},{status:400});
   if (!confirming && (body?.targetOrderItemId !== undefined || body?.invoiceLineId !== undefined || body?.billingAcknowledged !== undefined)) return NextResponse.json({error:"unexpected_reflex_order_evidence"},{status:400});
 
@@ -81,6 +82,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     let linkedItemId:string|null=null;
     let billingEvidence:Prisma.InputJsonValue|undefined;
     if(confirming){
+      const liveOrderingAuthority=await tx.user.findFirst({where:{id:session.user.id,organizationId:session.user.organizationId,status:"ACTIVE",roles:{some:{role:{organizationId:session.user.organizationId,status:"ACTIVE",permissions:{some:{permission:{code:"orders.create"}}}}}}},select:{id:true}});
+      if(!liveOrderingAuthority)return {error:"reflex_order_authority_revoked",httpStatus:403} as const;
       const branchGrant=await tx.userBranchScope.findUnique({where:{
         userId_branchId:{userId:session.user.id,branchId:orderingBranchId}
       },select:{branch:{select:{status:true,organizationId:true}}}});
