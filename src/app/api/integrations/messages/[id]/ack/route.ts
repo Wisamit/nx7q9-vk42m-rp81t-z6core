@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { IntegrationAuthError, requireIntegrationApiKey } from "@/lib/integration-auth";
 import { prisma } from "@/lib/db";
+import { parseOutboundAck, outboundAckFingerprint, OutboundAckError } from "@/lib/hl7-outbound-ack";
 
 function retryAt(attempt: number) {
   const seconds = Math.min(3600, 30 * 2 ** Math.max(0, attempt - 1));
@@ -11,14 +12,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   try {
     const auth = await requireIntegrationApiKey(request, "messages.ack");
     const { id } = await params;
-    const body = await request.json().catch(() => null) as { code?: unknown; attempt?: unknown; payload?: unknown; error?: unknown } | null;
-    const code = ["AA","AE","AR"].includes(String(body?.code || "")) ? String(body?.code) : null;
-    const expectedAttempt = Number(body?.attempt);
-    const acknowledgementPayload = typeof body?.payload === "string" ? body.payload.slice(0, 65535) : null;
-    const lastError = typeof body?.error === "string" ? body.error.slice(0, 2000) : null;
-    if (!code || !Number.isSafeInteger(expectedAttempt) || expectedAttempt < 1) {
-      return NextResponse.json({ error: "acknowledgement_code_and_attempt_required" }, { status: 400 });
-    }
+    const body = await request.json().catch(() => null);
     if (auth.endpoint.endpointType !== "HL7_V2" ||
         !["OUTBOUND", "BIDIRECTIONAL"].includes(auth.endpoint.direction)) {
       return NextResponse.json({ error: "endpoint_not_outbound_hl7" }, { status: 403 });
@@ -33,7 +27,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       },
     });
     if (!message) return NextResponse.json({ error: "message_not_found" }, { status: 404 });
+    const acknowledgement = parseOutboundAck(body, message.controlId);
+    const { code, attempt: expectedAttempt, payload: acknowledgementPayload, error: lastError } = acknowledgement;
+    const fingerprint = outboundAckFingerprint(acknowledgement);
     if (message.status !== "SENT" || message.attemptCount !== expectedAttempt) {
+      if (message.attemptCount === expectedAttempt && message.ackFingerprint === fingerprint &&
+          ["ACKNOWLEDGED","FAILED","DEAD_LETTER"].includes(message.status)) {
+        return NextResponse.json({ status: "ok", messageStatus: message.status, replayed: true });
+      }
       return NextResponse.json({ error: "stale_or_unclaimed_acknowledgement" }, { status: 409 });
     }
 
@@ -52,6 +53,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           status: nextStatus,
           acknowledgementCode: code,
           acknowledgementPayload,
+          ackFingerprint: fingerprint,
           processedAt: code === "AA" ? new Date() : null,
           nextAttemptAt,
           lastError: code === "AA" ? null : lastError || `HL7 acknowledgement ${code}`,
@@ -66,15 +68,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           action: "HL7_OUTBOUND_ACKNOWLEDGEMENT",
           entityType: "IntegrationMessage",
           entityId: id,
-          newValues: { endpointId: auth.endpoint.id, code, attempt: expectedAttempt, nextStatus },
+          newValues: { endpointId: auth.endpoint.id, code, attempt: expectedAttempt, nextStatus, ackFingerprint: fingerprint, wireAckPresent: Boolean(acknowledgementPayload) },
           reason: "Acknowledgement matched current outbound delivery attempt",
         },
       });
       return true;
     }, { isolationLevel: "Serializable" });
     if (!updated) return NextResponse.json({ error: "stale_or_unclaimed_acknowledgement" }, { status: 409 });
-    return NextResponse.json({ status: "ok", messageStatus: nextStatus, nextAttemptAt });
+    return NextResponse.json({ status: "ok", messageStatus: nextStatus, nextAttemptAt, replayed: false });
   } catch (error) {
+    if (error instanceof OutboundAckError) return NextResponse.json({ error: error.code }, { status: 400 });
     if (error instanceof IntegrationAuthError) {
       return NextResponse.json({ error: error.code }, { status: error.status });
     }

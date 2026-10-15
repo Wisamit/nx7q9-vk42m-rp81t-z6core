@@ -361,15 +361,16 @@ export async function dispatchPendingNotifications(db: PrismaClient, organizatio
         (typeof payload.status === "string" && payload.status.toUpperCase() === "DELIVERED");
 
       const settled = await finalizeNotificationClaim(db, delivery, organizationId, token, attempt, {
-        status: NotificationDeliveryStatus.SENT,
+        status: providerDelivered && providerMessageId ? NotificationDeliveryStatus.DELIVERED : NotificationDeliveryStatus.SENT,
         attemptCount: attempt,
         sentAt: new Date(),
+        deliveredAt: providerDelivered && providerMessageId ? new Date() : null,
         provider: config.provider,
         providerMessageId,
         lastError: null,
         nextAttemptAt: null,
       }, { status: providerDelivered ? "DELIVERED" : "SENT", externalRef: providerMessageId });
-      if (settled) results.push({ id: delivery.id, status: NotificationDeliveryStatus.SENT });
+      if (settled) results.push({ id: delivery.id, status: providerDelivered && providerMessageId ? NotificationDeliveryStatus.DELIVERED : NotificationDeliveryStatus.SENT });
     } catch (error) {
       const dead = attempt >= delivery.maxAttempts;
       const status = dead ? NotificationDeliveryStatus.DEAD_LETTER : NotificationDeliveryStatus.FAILED;
