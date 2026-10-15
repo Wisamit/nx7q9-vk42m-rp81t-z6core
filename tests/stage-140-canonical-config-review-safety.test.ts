@@ -14,6 +14,8 @@ import { normalizeImportRow, validateImportRow, allowedImportEntities, rowValida
 const id=randomUUID(),branch=randomUUID(),day="2026-10-15T00:00:00.000Z";
 const sourceBase={id,status:"ACTIVE",code:"TEST_A",nameEn:"Complete blood count",nameAr:"تعداد الدم"};
 const money={id,status:"ACTIVE",unitPrice:"1234.0123",effectiveFrom:day,effectiveTo:null};
+const priceScope={code:"AED_A",status:"ACTIVE",scopeType:"BRANCH",branchId:branch,
+  sourceId:null,referrerId:null,clientId:null,contractId:null};
 const rows={
   TEST:sourceBase,
   UNIT:{id,status:"ACTIVE",code:"MG",nameEn:"milligram",nameAr:"ملغ",symbol:"mg"},
@@ -24,8 +26,8 @@ const rows={
   PRICE_LIST:{...sourceBase,code:"AED_A",scopeType:"BRANCH",branchId:branch,
     currency:"AED",priority:5,effectiveFrom:day,effectiveTo:null,
     sourceId:null,referrerId:null,clientId:null,contractId:null},
-  PRICE_LIST_ITEM:{...money,priceList:{code:"AED_A"},test:{code:"CBC"}},
-  PRICE_LIST_PACKAGE_ITEM:{...money,priceList:{code:"AED_A"},package:{code:"PACKAGE_A"}},
+  PRICE_LIST_ITEM:{...money,priceList:priceScope,test:{code:"CBC"}},
+  PRICE_LIST_PACKAGE_ITEM:{...money,priceList:priceScope,package:{code:"PACKAGE_A"}},
 } as const;
 
 test("Stage 140: nine canonical groups are re-importable as review-only CSV and XLSX without inferred values",()=>{
@@ -69,6 +71,8 @@ test("Stage 140: refuse ambiguous clinical/financial exports; do not silently lo
     ["PRICE_LIST",{...rows.PRICE_LIST,scopeType:"CLIENT"},"canonical_contract_price_list_not_supported"],
     ["PRICE_LIST",{...rows.PRICE_LIST,effectiveFrom:"2026-10-15T08:30:00.000Z"},"canonical_price_list_local_date_ambiguous"],
     ["PRICE_LIST_ITEM",{...rows.PRICE_LIST_ITEM,unitPrice:18.001234},"canonical_non_exact_number:unitPrice"],
+    ["PRICE_LIST_ITEM",{...rows.PRICE_LIST_ITEM,priceList:{...priceScope,contractId:randomUUID()}},"canonical_price_list_context_unsupported"],
+    ["PRICE_LIST_PACKAGE_ITEM",{...rows.PRICE_LIST_PACKAGE_ITEM,priceList:{code:"AED_A"}},"canonical_price_list_context_unsupported"],
     ["PRICE_LIST_ITEM",{...rows.PRICE_LIST_ITEM,effectiveFrom:"10/15/2026"},"canonical_source_date_ambiguous:effectiveFrom"],
     ["UNIT",{...rows.UNIT,symbol:""},"canonical_source_requires_manual_mapping:UNIT_SYMBOL_REQUIRED"],
   ];
@@ -92,6 +96,11 @@ test("Stage 140: UI obtains current scoped atomic bundle, has separate review-re
   assert.match(ui,/download\("json"\)/);
   assert.match(ui,/download\("csv"\)/);
   assert.match(ui,/download\("xlsx"\)/);
+  for(const path of ["src/app/api/catalog/configuration-export/route.ts",
+    "src/app/api/catalog/configuration-export/bundle/route.ts"]){
+    const source=readFileSync(path,"utf8");
+    assert.equal((source.match(/sourceId: true, referrerId: true, clientId: true, contractId: true/g)||[]).length>=2,true);
+  }
   const stage=readFileSync("src/app/api/catalog/imports/csv/route.ts","utf8");
   assert.match(stage,/status: "DRAFT", validatedAt: null/);
   for(const route of ["src/app/api/catalog/imports/[id]/commit/route.ts",
