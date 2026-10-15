@@ -50,13 +50,14 @@ export async function POST(request: Request) {
   if (!canAccessBranch(session, branchId)) return NextResponse.json({ error: "branch_forbidden" }, { status: 403 });
   const postingKey = paymentPostingKey(body.postingKey);
   if (!postingKey) return NextResponse.json({ error: "posting_key_required" }, { status: 400 });
+  const stablePostingKey: string = postingKey;
   const fingerprint = paymentPostingFingerprint({
     kind: "CLIENT_ACCOUNT", organizationId: session.user.organizationId, actorUserId: session.user.id,
     branchId, clientId, currency, paymentMethodId, legacyMethod, reference, amount: amountText,
     allocations,
   });
   async function replay() {
-    const previous = await lookupPaymentPosting(prisma, session.user.organizationId, postingKey, fingerprint);
+    const previous = await lookupPaymentPosting(prisma, session.user.organizationId, stablePostingKey, fingerprint);
     if (!previous) return null;
     return previous.kind === "replay"
       ? NextResponse.json(previous.response, { status: 200 })

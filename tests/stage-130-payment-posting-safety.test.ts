@@ -31,7 +31,7 @@ test("Stage 130: existing posting can only replay an exact completed financial s
   }})}} as unknown as Parameters<typeof lookupPaymentPosting>[0];
   const valid=await lookupPaymentPosting(fake,org,key,fingerprint);
   assert.equal(valid?.kind,"replay");
-  assert.equal((valid as {response:{paymentId:string}}).response.paymentId,"immutable-id");
+  if (valid?.kind === "replay") assert.equal(valid.response.paymentId,"immutable-id");
   assert.equal((await lookupPaymentPosting(fake,org,key,"b".repeat(64)))?.kind,"conflict");
 });
 

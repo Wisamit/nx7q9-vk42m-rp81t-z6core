@@ -36,13 +36,14 @@ export async function POST(request: Request) {
 
   const postingKey = paymentPostingKey(body.postingKey);
   if (!postingKey) return NextResponse.json({ error: "posting_key_required" }, { status: 400 });
+  const stablePostingKey: string = postingKey;
   const fingerprint = paymentPostingFingerprint({
     kind: "INVOICE", organizationId: session.user.organizationId, actorUserId: session.user.id,
     paymentMethodId, legacyMethod, reference, amount: amountText,
     allocations: [{ invoiceId, amount: amountText }],
   });
   async function replay() {
-    const previous = await lookupPaymentPosting(prisma, session.user.organizationId, postingKey, fingerprint);
+    const previous = await lookupPaymentPosting(prisma, session.user.organizationId, stablePostingKey, fingerprint);
     if (!previous) return null;
     return previous.kind === "replay"
       ? NextResponse.json(previous.response, { status: 200 })
