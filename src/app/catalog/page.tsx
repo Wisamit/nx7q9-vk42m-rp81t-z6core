@@ -10,6 +10,7 @@ import { CatalogBundleReviewStaging } from "@/components/catalog-bundle-review-s
 import { CommercialPackageManager } from "@/components/commercial-package-manager";
 import { statusLabel, tr } from "@/lib/ui-i18n";
 import { resolveClinicalImportScope } from "@/lib/catalog-clinical-import-scope";
+import { privateSpreadsheetBatchScope } from "@/lib/catalog-import-list-privacy";
 
 export const dynamic = "force-dynamic";
 
@@ -59,10 +60,12 @@ export default async function CatalogPage() {
           { rows: { none: { entityType: "REFERENCE_INTERVAL" } } },
           ...(canReviewCsvRanges ? [{ createdByUserId: session.user.id }] : []),
         ],
-      }, { OR: [
-        { sourceType: { not: "CONFIG_BUNDLE_REVIEW" } },
-        { createdByUserId: session.user.id },
-      ] }],
+      }, {
+        // A CSV/XLSX or signed-bundle review batch is private to its author.
+        // Its filename, row count and even existence are not a team-wide
+        // catalog index; the detail page already applies the same author lock.
+        ...privateSpreadsheetBatchScope(session.user.id),
+      }],
       ...(permissions.has("catalog.manage") ? {
         OR: [
           { AND: [{ rows: { none: { entityType: "PRICE_LIST_ITEM" } } },
