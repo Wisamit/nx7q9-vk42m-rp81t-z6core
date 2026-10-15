@@ -17,9 +17,18 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
     return NextResponse.json({ error: "message_not_replayable", status: message.status }, { status: 409 });
   }
 
-  const updated = await prisma.$transaction(async tx => {
-    const replayed = await tx.analyzerMessage.update({
-      where: { id: message.id },
+  // The row was read before this transaction. A concurrent worker may have
+  // retried, recovered or quarantined it in the meantime. Claim only its exact
+  // failed revision; never reset a newer RECEIVED/PROCESSED message to RECEIVED.
+  const outcome = await prisma.$transaction(async tx => {
+    const claimed = await tx.analyzerMessage.updateMany({
+      where: {
+        id: message.id,
+        status: { in: ["ERROR", "DEAD_LETTER"] },
+        updatedAt: message.updatedAt,
+        attempts: message.attempts,
+        analyzer: { organizationId: session.user.organizationId, branchId: message.branchId },
+      },
       data: {
         status: "RECEIVED",
         attempts: { increment: 1 },
@@ -28,7 +37,8 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
         processedAt: null,
       },
     });
-
+    if (claimed.count !== 1) return { conflict: true as const };
+    const nextAttempts = message.attempts + 1;
     await tx.auditEvent.create({
       data: {
         organizationId: session.user.organizationId,
@@ -38,13 +48,18 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
         entityType: "AnalyzerMessage",
         entityId: message.id,
         oldValues: { status: message.status, attempts: message.attempts, errorCode: message.errorCode },
-        newValues: { status: "RECEIVED", attempts: replayed.attempts },
+        newValues: { status: "RECEIVED", attempts: nextAttempts },
         ipAddress: ctx.ipAddress,
         userAgent: ctx.userAgent,
       },
     });
-    return replayed;
+    return { conflict: false as const, attempts: nextAttempts };
   });
 
-  return NextResponse.json({ status: "ok", messageId: updated.id, messageStatus: updated.status, attempts: updated.attempts });
+  if (outcome.conflict) {
+    return NextResponse.json({ error: "analyzer_message_replay_state_changed" }, { status: 409 });
+  }
+  return NextResponse.json({
+    status: "ok", messageId: message.id, messageStatus: "RECEIVED", attempts: outcome.attempts,
+  });
 }
