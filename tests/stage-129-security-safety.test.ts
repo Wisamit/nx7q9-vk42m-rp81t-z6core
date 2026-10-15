@@ -1,0 +1,63 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { createHash, randomBytes } from "node:crypto";
+import { verifiedAttachmentBytes } from "../src/lib/attachment-integrity.ts";
+const source=(path:string)=>readFileSync(path,"utf8");
+test("Stage 129: only immutable matching clinical attachment BLOBs may be served",()=>{
+  const bytes=randomBytes(4096);
+  const sha=createHash("sha256").update(bytes).digest("hex");
+  assert.deepEqual(Buffer.from(verifiedAttachmentBytes(bytes,bytes.length,sha)!),bytes);
+  const tampered=Buffer.from(bytes);tampered[8]^=1;
+  assert.equal(verifiedAttachmentBytes(tampered,bytes.length,sha),null);
+  assert.equal(verifiedAttachmentBytes(bytes,bytes.length+1,sha),null);
+  assert.equal(verifiedAttachmentBytes(bytes,bytes.length,"x".repeat(64)),null);
+  const route=source("src/app/api/attachments/[id]/route.ts");
+  assert.match(route,/organizationId: session.user.organizationId/);
+  assert.match(route,/resolveAttachmentTarget/);
+  assert.match(route,/verifiedAttachmentBytes/);
+  assert.match(route,/ATTACHMENT_INTEGRITY_FAILURE/);
+  assert.match(route,/X-Content-Type-Options/);
+  assert.ok(route.indexOf("verifiedAttachmentBytes")<route.indexOf("ATTACHMENT_DOWNLOADED"));
+});
+test("Stage 129: authenticated integration keys are re-checked after hash match and before access",()=>{
+  const auth=source("src/lib/integration-auth.ts");
+  assert.match(auth,/timingSafeEqual/);
+  assert.match(auth,/integrationApiKey.updateMany/);
+  assert.match(auth,/revokedAt: null/);
+  assert.match(auth,/expiresAt: \{ gt: now \}/);
+  assert.match(auth,/endpoint: \{ organizationId: apiKey.organizationId, status: "ACTIVE" \}/);
+  assert.match(auth,/activeClaim.count !== 1/);
+});
+test("Stage 129: backup tool cannot claim DR verified or expose raw SQL to web",()=>{
+ const runner=source("scripts/operations/create-encrypted-backup.mjs");
+ const crypto=source("scripts/operations/backup-archive.mjs");
+ assert.match(runner,/BACKUP_OFFSITE_REQUIRED/);
+ assert.match(runner,/BACKUP_REMOTE_DATABASE_CA_REQUIRED/);
+ assert.match(runner,/stdio:\["ignore","pipe","pipe"\]/);
+ assert.match(runner,/--single-transaction/);
+ assert.match(runner,/--routines/);
+ assert.match(runner,/--triggers/);
+ assert.match(runner,/--hex-blob/);
+ assert.match(runner,/--immutable/);
+ assert.match(runner,/restoreVerified:false/);
+ assert.match(crypto,/createCipheriv\("aes-256-gcm"/);
+ assert.match(crypto,/createDecipheriv\("aes-256-gcm"/);
+ assert.match(crypto,/decipher.setAuthTag\(tag\)/);
+ assert.match(crypto,/createGzip/);
+ assert.match(crypto,/createGunzip/);
+ assert.doesNotMatch(runner,/CREATE DATABASE|DROP DATABASE|INSERT INTO patient/);
+});
+
+test("Stage 129: recovery program cannot import over live DB or call backup VERIFIED",()=>{
+ const script=source("scripts/operations/restore-isolated-backup.mjs");
+ assert.match(script,/RESTORE_DATABASE_NOT_ISOLATED/);
+ assert.match(script,/ISOLATED_DATABASE_ONLY/);
+ assert.match(script,/SELECT SCHEMA_NAME FROM information_schema.SCHEMATA/);
+ assert.match(script,/RESTORE_TARGET_ALREADY_EXISTS/);
+ assert.match(script,/await verifyBackupArchive\(archive,env\)/);
+ assert.match(script,/createConnection/);
+ assert.match(script,/DROP DATABASE/);
+ assert.match(script,/verifiedClinicalHistory:false/);
+ assert.doesNotMatch(script,/backupVerification.create|disasterRecoveryDrill.create/);
+});
