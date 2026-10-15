@@ -138,7 +138,7 @@ function attr(input: string, key: string) {
  * Produces canonical CSV consumed by existing strict staged-import validator.
  * Never coerces date/price/unit values, executes links or activates configuration.
  */
-export function xlsxReviewToCsv(upload: Uint8Array): string {
+function decodeXlsxReview(upload: Uint8Array): string {
   const files = extractTextFiles(upload);
   const book = files.get("xl/workbook.xml")!;
   const workbookRels = files.get("xl/_rels/workbook.xml.rels");
@@ -215,4 +215,13 @@ export function xlsxReviewToCsv(upload: Uint8Array): string {
   if (Buffer.byteLength(csv, "utf8") > 2 * 1024 * 1024)
     throw new XlsxStagingError("csv_file_too_large");
   return csv;
+}
+
+/** Convert all parser/UTF-8 failures to one safe, non-leaking staging error family. */
+export function xlsxReviewToCsv(upload: Uint8Array): string {
+  try { return decodeXlsxReview(upload); }
+  catch (error) {
+    if (error instanceof XlsxStagingError) throw error;
+    throw new XlsxStagingError("xlsx_malformed_or_invalid_utf8");
+  }
 }
