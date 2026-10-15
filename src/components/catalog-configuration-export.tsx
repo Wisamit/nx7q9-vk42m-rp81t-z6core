@@ -4,6 +4,9 @@ import { useState } from "react";
 import { catalogReviewCsv } from "@/lib/catalog-review-csv";
 import { catalogReviewXlsx } from "@/lib/catalog-review-xlsx";
 import {
+  canonicalStagingCsvFromAtomicGroup, supportsCanonicalSpreadsheetReview,
+} from "@/lib/catalog-canonical-review-spreadsheet";
+import {
   catalogExportTypes, exportBundle, type CatalogExportType,
 } from "@/lib/catalog-configuration-export";
 
@@ -35,6 +38,59 @@ export function CatalogConfigurationExport({
     PRICE_LIST_ITEM: tr("Prices and effective dates", "الأسعار وتواريخ السريان"),
     PRICE_LIST_PACKAGE_ITEM: tr("Package prices and effective dates", "أسعار الباقات وتواريخ السريان"),
   }[t]);
+
+  async function downloadStaging(format: "csv" | "xlsx") {
+    if (busy || selected.length !== 1 || !supportsCanonicalSpreadsheetReview(selected[0])) return;
+    setBusy(true); setMessage("");
+    try {
+      // The tenant-scoped, signed transactional source is fetched afresh.
+      // Paged review exports are never used as the basis of this projection.
+      const entityType = selected[0];
+      const response = await fetch("/api/catalog/configuration-export/bundle?types=" +
+        encodeURIComponent(entityType), { credentials: "same-origin", cache: "no-store" });
+      if (!response.ok) {
+        const problem = await response.json() as { error?: string };
+        throw new Error(problem.error || "atomic_export_failed_" + response.status);
+      }
+      const source = await response.json() as {
+        format?: string; schemaVersion?: number; organizationId?: string;
+        exportedAt?: string; consistency?: string;
+        groups?: Array<{entityType: CatalogExportType; records: unknown[]}>;
+      };
+      if (source.format !== "family-lab-catalog-bundle" || source.schemaVersion !== 1 ||
+          source.consistency !== "transactional-consistent-read" ||
+          !source.organizationId || !source.exportedAt ||
+          !Array.isArray(source.groups) || source.groups.length !== 1 || source.groups[0].entityType !== entityType ||
+          !Array.isArray(source.groups[0].records)) throw new Error("atomic_source_invalid");
+      const csv = canonicalStagingCsvFromAtomicGroup(source.groups[0]);
+      const data = format === "xlsx" ? catalogReviewXlsx(csv) : csv;
+      if ((typeof data === "string" ? new TextEncoder().encode(data).byteLength : data.byteLength)
+          > 2 * 1024 * 1024) throw new Error("canonical_review_upload_size_limit");
+      const part: BlobPart = typeof data === "string" ? data :
+        data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
+      const url = URL.createObjectURL(new Blob([part], {
+        type: format === "xlsx" ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+          : "text/csv;charset=utf-8",
+      }));
+      try {
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = "family-lab-" + entityType.toLowerCase() +
+          "-draft-review-" + source.exportedAt.slice(0,10) + "." + format;
+        document.body.appendChild(link); link.click(); link.remove();
+      } finally { URL.revokeObjectURL(url); }
+      setMessage(tr(
+        "Created " + source.groups[0].records.length +
+        " canonical DRAFT review rows from one consistent snapshot. Re-upload via CSV/XLSX staging: never live, never an exact restore. Full source fields remain in the separately downloaded signed JSON.",
+        "تم إعداد " + source.groups[0].records.length +
+        " صف مراجعة DRAFT من لقطة بيانات متسقة. يمكن رفعها في مرحلة CSV/XLSX للمراجعة فقط، لا للتفعيل أو الاستعادة المطابقة. تبقى التفاصيل الكاملة في ملف JSON الموقّع المنفصل.",
+      ));
+    } catch (error) {
+      setMessage(tr("Review-ready export refused; no partial file saved: ",
+        "تم رفض التصدير المتوافق مع المراجعة ولم يُحفظ ملف جزئي: ") +
+        (error instanceof Error ? error.message : "unknown_error"));
+    } finally { setBusy(false); }
+  }
 
   async function download(format: "json" | "csv" | "xlsx") {
     if (busy || selected.length === 0 || (format !== "json" && selected.length !== 1)) return;
@@ -175,6 +231,16 @@ export function CatalogConfigurationExport({
         onClick={() => void download("json")}>
         {busy ? tr("Exporting…", "جارٍ التصدير…") : tr("Download selected configuration (JSON)", "تنزيل الإعدادات المختارة (JSON)")}
       </button>
+      <button type="button" className="secondary-button"
+        disabled={busy || selected.length !== 1 || !supportsCanonicalSpreadsheetReview(selected[0])}
+        onClick={() => void downloadStaging("xlsx")}>
+        {tr("Download review-ready DRAFT XLSX", "تنزيل XLSX متوافق مع مراجعة DRAFT")}
+      </button>
+      <button type="button" className="secondary-button"
+        disabled={busy || selected.length !== 1 || !supportsCanonicalSpreadsheetReview(selected[0])}
+        onClick={() => void downloadStaging("csv")}>
+        {tr("Download review-ready DRAFT CSV", "تنزيل CSV متوافق مع مراجعة DRAFT")}
+      </button>
       <button type="button" className="secondary-button" disabled={busy || selected.length !== 1}
         onClick={() => void download("xlsx")}>
         {tr("Download selected entity (Excel XLSX review)", "تنزيل العنصر المختار (Excel XLSX للمراجعة)")}
@@ -185,8 +251,8 @@ export function CatalogConfigurationExport({
       </button>
     </div>
     <p className="muted">{tr(
-      "For CSV or Excel XLSX select one category. Both are human-review exports, not direct imports or database restore files; signed JSON preserves structured values.",
-      "لتنزيل CSV أو Excel XLSX اختر نوعاً واحداً فقط. كلاهما للمراجعة البشرية وليس للاستعادة أو التفعيل المباشر؛ JSON الموقّع يحفظ البيانات الأصلية المهيكلة.",
+      "Choose one group: source review CSV/XLSX preserves flattened evidence; NEW review-ready DRAFT CSV/XLSX uses strictly mapped fields from a consistent signed JSON source and can be re-uploaded for staged review only. Reference intervals and complex contracts require manual professional mapping. None is a lossless restore or live activation.",
+      "اختر مجموعة واحدة: ملفات CSV/XLSX الأصلية تعرض الأدلة؛ أما ملفات DRAFT الجديدة فتُحوّل الحقول المدعومة من JSON متسق وموقّع، ويمكن إعادة رفعها للمراجعة فقط. المجالات المرجعية والعقود المعقدة تحتاج مطابقة مهنية يدوية. لا توجد استعادة مطابقة أو تفعيل مباشر.",
     )}</p>
     {message && <p role="status" className="muted">{message}</p>}
   </section>;

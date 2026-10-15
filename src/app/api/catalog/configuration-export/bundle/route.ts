@@ -219,6 +219,7 @@ export async function GET(request: NextRequest) {
         package: { select: { code: true } },
         priceList: { select: {
           code: true, currency: true, scopeType: true, branchId: true,
+          status: true, sourceId: true, referrerId: true, clientId: true, contractId: true,
         } },
       },
     });
@@ -231,7 +232,8 @@ export async function GET(request: NextRequest) {
         effectiveFrom: true, effectiveTo: true, status: true,
         createdAt: true, updatedAt: true, deactivatedAt: true,
         test: { select: { code: true } },
-        priceList: { select: { code: true, currency: true, scopeType: true, branchId: true } },
+        priceList: { select: { code: true, currency: true, scopeType: true, branchId: true,
+          status: true, sourceId: true, referrerId: true, clientId: true, contractId: true } },
       },
     });
   }
