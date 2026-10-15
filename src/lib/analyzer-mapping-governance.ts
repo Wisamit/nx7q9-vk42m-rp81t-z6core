@@ -1,3 +1,5 @@
+import type { Prisma } from "../../generated/prisma/client";
+
 export type AnalyzerMappingGovernanceLike = {
   id: string;
   analyzerId: string;
@@ -141,14 +143,7 @@ export type AnalyzerMappingReviewScope = {
  * must not be honored merely because a session was valid before the lock.
  */
 export async function analyzerMappingReviewerIsLive(
-  tx: {
-    user: { findFirst: (args: unknown) => Promise<{
-      roles: Array<{ role: { status: string; organizationId: string;
-        permissions: Array<{ permission: { code: string } }> } }> 
-    } | null> };
-    userBranchScope: { findFirst: (args: unknown) => Promise<{ branchId: string } | null> };
-    organization: { findFirst: (args: unknown) => Promise<{ id: string } | null> };
-  },
+  tx: Prisma.TransactionClient,
   scope: AnalyzerMappingReviewScope,
 ): Promise<boolean> {
   if (!scope.sessionBranchIds.includes(scope.branchId)) return false;
