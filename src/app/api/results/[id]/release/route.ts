@@ -7,9 +7,11 @@ import { resolveAnalyzerQcGate } from "@/lib/qc-gate";
 import { queueReportIntegrations } from "@/lib/integration-outbox";
 import { resolveEffectiveReportTemplate } from "@/lib/report-template";
 import { releaseEligibility } from "@/lib/clinical-safety";
+import { validationSpecimenCustodyError } from "@/lib/result-validation-custody";
 import { consumeStaffStepUp, StaffStepUpError } from "@/lib/staff-step-up";
 
 class SpecimenClinicalHold extends Error {}
+class SpecimenCustodyChanged extends Error {}
 class ReportReleaseStateChanged extends Error {}
 class AnalyzerQcClinicalHold extends Error {}
 
@@ -94,8 +96,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     // Lock related specimens before releasing. A failed reception may place
     // material into quarantine; release must fail closed even for a result
     // that was verified before the reception exception was recorded.
-    const associatedSpecimens = await tx.$queryRaw<Array<{ id: string; status: string }>>`
-      SELECT DISTINCT s.id, s.status FROM specimens s
+    const associatedSpecimens = await tx.$queryRaw<Array<{ id: string; status: string; current_branch_id: string | null }>>`
+      SELECT DISTINCT s.id, s.status, s.current_branch_id FROM specimens s
       LEFT JOIN specimen_order_items soi ON soi.specimen_id = s.id
       WHERE s.organization_id = ${session.user.organizationId}
         AND (
@@ -106,6 +108,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     `;
     if (associatedSpecimens.some(specimen => specimen.status === "QUARANTINED")) {
       throw new SpecimenClinicalHold();
+    }
+    // Technical/medical approval can predate a subsequent transfer, rejection,
+    // disposal or custody change. Recheck the result's actual source specimen
+    // under the same lock before issuing a new immutable report version.
+    if (result.specimenId) {
+      const source = associatedSpecimens.find(specimen => specimen.id === result.specimenId);
+      if (!source || validationSpecimenCustodyError({
+        status: source.status,
+        currentBranchId: source.current_branch_id,
+        performingBranchId: result.performingBranchId,
+      })) throw new SpecimenCustodyChanged();
     }
     if (result.source === "ANALYZER" && result.analyzerId) {
       // Share the analyzer lock with QC run/target writes and the equipment lock
@@ -312,6 +325,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }, { timeout: 30000 }).catch(error => {
     if (error instanceof StaffStepUpError) return "STEP_UP_REQUIRED" as const;
     if (error instanceof SpecimenClinicalHold) return "CLINICAL_HOLD" as const;
+    if (error instanceof SpecimenCustodyChanged) return "CUSTODY_CHANGED" as const;
     if (error instanceof ReportReleaseStateChanged) return "RELEASE_STATE_CHANGED" as const;
     if (error instanceof AnalyzerQcClinicalHold) return "QC_HOLD" as const;
     throw error;
@@ -320,6 +334,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({error:"fresh_staff_reauthentication_required"},{status:403});
   if (released === "CLINICAL_HOLD") {
     return NextResponse.json({ error: "specimen_clinical_quarantine_blocks_release" }, { status: 409 });
+  }
+  if (released === "CUSTODY_CHANGED") {
+    return NextResponse.json({ error: "specimen_custody_changed_blocks_release" }, { status: 409 });
   }
   if (released === "RELEASE_STATE_CHANGED") {
     return NextResponse.json({ error: "result_already_released_or_state_changed" }, { status: 409 });
