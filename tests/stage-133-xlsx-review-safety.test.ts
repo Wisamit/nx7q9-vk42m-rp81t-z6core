@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { catalogReviewXlsx, parseReviewCsvCells, XlsxReviewError } from "../src/lib/catalog-review-xlsx.ts";
 import { xlsxReviewToCsv, XlsxStagingError } from "../src/lib/catalog-review-xlsx-import.ts";
-import { parseCsvReviewFile, CsvStagingError } from "../src/lib/catalog-review-csv-import.ts";
+import { parseCsvReviewFile } from "../src/lib/catalog-review-csv-import.ts";
 
 const fields="entityType,legacyKey,testCode,code,nameEn,nameAr,unitCode,resultType,priceListCode,unitPrice,effectiveFrom,effectiveTo";
 const example=[
