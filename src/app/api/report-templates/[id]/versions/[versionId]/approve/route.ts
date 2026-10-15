@@ -18,6 +18,10 @@ export async function POST(request: Request, { params }: {
     return NextResponse.json({ error: "template_explicit_approval_reason_required" }, { status: 400 });
   }
   const organizationId = session.user.organizationId;
+  const activeBranchId = session.activeBranchId;
+  if (!activeBranchId) {
+    return NextResponse.json({ error: "active_branch_required" }, { status: 403 });
+  }
   const outcome = await prisma.$transaction(async tx => {
     const locked = await tx.$queryRaw<Array<{ id: string }>>`
       SELECT id FROM report_templates
@@ -33,7 +37,7 @@ export async function POST(request: Request, { params }: {
       return { error: "branch_forbidden", status: 403 } as const;
     if (!(await reportTemplateEditorIsLive(tx, {
       organizationId, userId: session.user.id, branchId: template.branchId,
-      activeBranchId: session.activeBranchId,
+      activeBranchId,
       sessionBranchIds: session.user.branchScopes.filter(b =>
         b.branch.status === "ACTIVE" && b.branch.organizationId === organizationId
       ).map(b => b.branchId),
