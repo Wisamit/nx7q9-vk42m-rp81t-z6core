@@ -22,7 +22,7 @@ async function safeJson(path, maxBytes) {
 }
 
 export async function checkPrivateLegacyEvidencePackage(mdbPath, coveragePath, pageDirectory) {
-  if (!/\\.mdb$/i.test(basename(mdbPath))) throw new Error("mdb_extension_invalid");
+  if (!/\.mdb$/i.test(basename(mdbPath))) throw new Error("mdb_extension_invalid");
   const start = await lstat(mdbPath);
   if (!start.isFile() || start.isSymbolicLink() || start.size < 4096 ||
       start.size > 1_000_000_000) throw new Error("mdb_file_invalid");
@@ -56,7 +56,7 @@ export async function checkPrivateLegacyEvidencePackage(mdbPath, coveragePath, p
     throw new Error("evidence_directory_invalid");
   const names = await readdir(pageDirectory);
   if (names.length < 1 || names.length > 6000 ||
-      names.some(name => !/^legacy-row-hashes-[A-Za-z0-9_]+-[0-9]{5}\\.json$/.test(name)))
+      names.some(name => !/^legacy-row-hashes-[A-Za-z0-9_]+-[0-9]{5}\.json$/.test(name)))
     throw new Error("unexpected_evidence_page_name");
   const lineage = [];
   for (const name of names) {
@@ -80,17 +80,17 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const args = process.argv.slice(2);
   if (args.length !== 6 || args[0] !== "--mdb" || args[2] !== "--coverage" ||
       args[4] !== "--lineage-dir") {
-    process.stderr.write("Usage: node --experimental-strip-types scripts/legacy/verify-evidence-package.mjs --mdb SOURCE.mdb --coverage COVERAGE.json --lineage-dir PRIVATE_DIRECTORY\\n");
+    process.stderr.write("Usage: node --experimental-strip-types scripts/legacy/verify-evidence-package.mjs --mdb SOURCE.mdb --coverage COVERAGE.json --lineage-dir PRIVATE_DIRECTORY\n");
     process.exitCode = 2;
   } else {
     try {
       const result = await checkPrivateLegacyEvidencePackage(args[1], args[3], args[5]);
-      process.stdout.write(JSON.stringify(result, null, 2) + "\\n");
+      process.stdout.write(JSON.stringify(result, null, 2) + "\n");
     } catch (error) {
       // Deliberately don't print the source path, HMAC key or row content.
       process.stderr.write("Evidence package rejected: " +
         (error instanceof Error ? error.message.replace(/[^a-z0-9_]/gi, "_").slice(0,70) : "unknown") +
-        "\\n");
+        "\n");
       process.exitCode = 1;
     }
   }
