@@ -36,7 +36,7 @@ function fixtures() {
         columnCount:present?2:0,schemaSha256:present?schemaHash:null};
     }),
   };
-  function page(tableName, rows, index, chunks, count) {
+  function page(tableName: string, rows: Array<{rowDigest: string; occurrence: number}>, index: number, chunks: number, count: number) {
     return {
       schemaVersion:1,evidenceType:LEGACY_ROW_LINEAGE_TYPE,...source,
       tableName,schemaSha256:schemaHash,digestKeyId:keyId,sourceRowCount:count,
@@ -53,14 +53,14 @@ function fixtures() {
   ];
   return {file,source,coverage,pages};
 }
-function verify(fixture) {
+function verify(fixture: ReturnType<typeof fixtures>) {
   return verifyLegacyEvidenceManifestPackage({
     source:fixture.source,
     coverage:parseLegacySourceCoverage(fixture.coverage),
     lineage:fixture.pages.map(parseLegacyRowManifest),
   });
 }
-function denied(work,code) {
+function denied(work: () => unknown, code: string) {
   assert.throws(work,(err)=>err instanceof LegacyEvidencePackageError&&err.code===code,code);
 }
 
