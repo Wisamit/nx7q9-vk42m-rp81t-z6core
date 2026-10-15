@@ -11,7 +11,8 @@ import { validateRangeCsvReview } from "./catalog-range-csv-review.ts";
  * The original signed JSON bundle is the full structured evidence.
  */
 export class CanonicalSpreadsheetReviewError extends Error {
-  constructor(readonly code: string) { super(code); }
+  readonly code: string;
+  constructor(code: string) { super(code); this.code = code; }
 }
 
 const columns = {
