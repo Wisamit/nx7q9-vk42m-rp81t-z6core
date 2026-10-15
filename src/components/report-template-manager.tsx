@@ -7,9 +7,9 @@ import { SystemIcon } from "@/components/system-icon";
 import { statusLabel } from "@/lib/ui-i18n";
 
 type Branch = { id:string; code:string; nameEn:string; nameAr:string|null };
-type Template = { id:string; code:string; nameEn:string; nameAr:string|null; branchId:string|null; latestVersion:number|null; latestStatus:string|null; latestVersionId:string|null };
+type Template = { id:string; code:string; nameEn:string; nameAr:string|null; branchId:string|null; latestVersion:number|null; latestStatus:string|null; latestVersionId:string|null; latestSubmittedByUserId:string|null };
 
-export function ReportTemplateManager({ branches, templates, locale }: { branches:Branch[]; templates:Template[]; locale:"ar"|"en" }) {
+export function ReportTemplateManager({ branches, templates, locale, currentUserId, canManage }: { branches:Branch[]; templates:Template[]; locale:"ar"|"en"; currentUserId:string; canManage:boolean }) {
   const router=useRouter();
   const [busy,setBusy]=useState("");
   const [message,setMessage]=useState("");
@@ -58,7 +58,28 @@ export function ReportTemplateManager({ branches, templates, locale }: { branche
     if(response.ok){event.currentTarget.reset();router.refresh();setOpen("");}
   }
 
+  async function approve(templateId:string,versionId:string){
+    if(busy || !canManage) return;
+    const reason=window.prompt(tr(
+      "Independent reviewer: describe your review of language, columns, signature, QR and branding (at least 12 characters).",
+      "للمراجع المستقل: صف مراجعة اللغة والأعمدة والتوقيع ورمز QR والهوية (12 حرفاً على الأقل).",
+    ));
+    if(!reason || reason.trim().length < 12) return;
+    setBusy("approve:"+versionId);setMessage("");
+    try {
+      const response=await fetch(`/api/report-templates/${templateId}/versions/${versionId}/approve`,{
+        method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({reason:reason.trim(),confirmation:"APPROVE_EXACT_REPORT_LAYOUT_VERSION"}),
+      });
+      const data=await response.json() as {error?:string};
+      setMessage(response.ok?tr("Version independently approved.","تم اعتماد النسخة من مراجع مستقل."):
+        tr("Approval rejected: ","رُفض الاعتماد: ")+(data.error||response.status));
+      if(response.ok)router.refresh();
+    } finally {setBusy("");}
+  }
+
   async function activate(templateId:string,versionId:string){
+    if(busy || !canManage) return;
     setBusy("activate:"+versionId);setMessage("");
     const response=await fetch(`/api/report-templates/${templateId}/versions/${versionId}/activate`,{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});
     setBusy("");setMessage(response.ok?tr("Template version is now effective.","أصبحت نسخة القالب سارية الآن."):tr("Activation failed.","فشل التفعيل."));
@@ -69,8 +90,8 @@ export function ReportTemplateManager({ branches, templates, locale }: { branche
     <div className="crud-action-bar">
       <div>{message&&<span className="crud-success-toast">{message}</span>}</div>
       <div className="crud-action-buttons">
-        <button type="button" className="primary-button" onClick={()=>{setMessage("");setOpen("template")}}><SystemIcon name="plus" size={16}/>{tr("New Template","قالب جديد")}</button>
-        <button type="button" className="secondary-button" onClick={()=>{setMessage("");setOpen("version")}}><SystemIcon name="plus" size={16}/>{tr("New Version","نسخة جديدة")}</button>
+        <button type="button" className="primary-button" disabled={!canManage || !!busy} onClick={()=>{setMessage("");setOpen("template")}}><SystemIcon name="plus" size={16}/>{tr("New Template","قالب جديد")}</button>
+        <button type="button" className="secondary-button" disabled={!canManage || !!busy} onClick={()=>{setMessage("");setOpen("version")}}><SystemIcon name="plus" size={16}/>{tr("New Version","نسخة جديدة")}</button>
       </div>
     </div>
 
@@ -107,8 +128,17 @@ export function ReportTemplateManager({ branches, templates, locale }: { branche
 
     <article className="table-card">
       <div className="table-toolbar"><h2>{tr("Template Versions","نسخ القوالب")}</h2><span>{templates.length} {tr("templates","قوالب")}</span></div>
+      <p className="muted">{tr("A different authorized user must approve a draft before immediate activation. Past released reports and retired template intervals remain unchanged.", "يجب أن يعتمد المسودة مستخدم مخوّل آخر قبل تفعيلها فوراً. تبقى التقارير الصادرة وفترات القوالب السابقة محفوظة.")}</p>
       <div className="table-wrap"><table><thead><tr><th>{tr("Template","القالب")}</th><th>{tr("Scope","النطاق")}</th><th>{tr("Latest","الأحدث")}</th><th>{tr("Status","الحالة")}</th><th></th></tr></thead><tbody>
-        {templates.map(t=><tr key={t.id}><td><strong>{t.code}</strong><br/><small>{templateName(t)}</small></td><td>{t.branchId?tr("Branch","فرع"):tr("Organization","المؤسسة")}</td><td>{t.latestVersion??"—"}</td><td>{t.latestStatus?statusLabel(locale,t.latestStatus):tr("No version","لا توجد نسخة")}</td><td>{t.latestVersion&&["DRAFT","APPROVED"].includes(t.latestStatus||"")?<button className="secondary-button" type="button" disabled={busy.startsWith("activate:")} onClick={()=>{const version=t.latestVersionId;if(version)void activate(t.id,version)}}>{tr("Activate","تفعيل")}</button>:"—"}</td></tr>)}
+        {templates.map(t=><tr key={t.id}><td><strong>{t.code}</strong><br/><small>{templateName(t)}</small></td><td>{t.branchId?tr("Branch","فرع"):tr("Organization","المؤسسة")}</td><td>{t.latestVersion??"—"}</td><td>{t.latestStatus?statusLabel(locale,t.latestStatus):tr("No version","لا توجد نسخة")}</td><td>{canManage&&t.latestVersion&&t.latestStatus==="DRAFT"&&t.latestSubmittedByUserId!==currentUserId?
+          <button className="secondary-button" type="button" disabled={!!busy}
+            onClick={()=>{const version=t.latestVersionId;if(version)void approve(t.id,version)}}>
+            {tr("Approve independently","اعتماد مستقل")}
+          </button>:canManage&&t.latestVersion&&t.latestStatus==="APPROVED"?
+          <button className="secondary-button" type="button" disabled={!!busy}
+            onClick={()=>{const version=t.latestVersionId;if(version)void activate(t.id,version)}}>
+            {tr("Activate now","تفعيل الآن")}
+          </button>:"—"}</td></tr>)}
       </tbody></table></div>
     </article>
   </>;

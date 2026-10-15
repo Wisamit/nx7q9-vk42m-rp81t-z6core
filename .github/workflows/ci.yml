@@ -172,6 +172,7 @@ jobs:
       - run: node --experimental-strip-types --test tests/stage-135-import-batch-list-privacy-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-137-analyzer-replay-cas-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-138-config-review-mariadb.integration.test.ts
+      - run: node --experimental-strip-types --test tests/stage-139-report-template-governance-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/analyzer-bridge-mariadb.integration.test.ts
       - run: npm run test:ui-theme
       - run: npm run test:ui-i18n
