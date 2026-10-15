@@ -120,7 +120,7 @@ export function ReflexReviewPanel({
             <select id={"reflex-candidate-" + event.id} value={selected[event.id] || ""}
               onChange={e => setSelected(current => ({...current, [event.id]:e.target.value}))}>
               <option value="">{tr("Choose a billed follow-up item", "اختر فحص متابعة مفوترًا")}</option>
-              {billedCandidates.filter(candidate => candidate.testId === event.targetTestId && (candidate.orderId === event.sourceOrderId || candidate.orderedAt >= event.createdAt)
+              {billedCandidates.filter(candidate => candidate.testId === event.targetTestId && (candidate.orderId === event.sourceOrderId || candidate.orderedAt >= event.createdAt))
                 .map(candidate => <option key={candidate.orderItemId + candidate.invoiceLineId}
                   value={candidate.orderItemId + "|" + candidate.invoiceLineId}>
                   {candidate.accessionNumber} · {candidate.testCode} · {candidate.invoiceNumber} · {candidate.lineTotal} {candidate.currency}
