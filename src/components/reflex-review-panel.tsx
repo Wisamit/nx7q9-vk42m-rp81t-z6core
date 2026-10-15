@@ -8,6 +8,7 @@ type ReflexEvent = {
   id: string;
   status: string;
   targetTestId: string;
+  sourceOrderId: string;
   createdAt: string;
   confirmedOrderItemId: string | null;
   triggerValue: string;
@@ -21,6 +22,7 @@ type ReflexEvent = {
 
 type BilledCandidate = {
   orderItemId: string;
+  orderId: string;
   invoiceLineId: string;
   testId: string;
   orderedAt: string;
@@ -64,7 +66,7 @@ export function ReflexReviewPanel({
     }
     const candidate = action === "CONFIRM_ORDERED"
       ? billedCandidates.find(x => x.orderItemId + "|" + x.invoiceLineId === selected[event.id]
-        && x.testId === event.targetTestId && x.orderedAt >= event.createdAt)
+        && x.testId === event.targetTestId && (x.orderId === event.sourceOrderId || x.orderedAt >= event.createdAt))
       : null;
     if (action === "CONFIRM_ORDERED" && !candidate) {
       setMessage(tr("Select a valid billed follow-up test.", "اختر فحص متابعة مفوترًا وصالحًا."));
@@ -118,7 +120,7 @@ export function ReflexReviewPanel({
             <select id={"reflex-candidate-" + event.id} value={selected[event.id] || ""}
               onChange={e => setSelected(current => ({...current, [event.id]:e.target.value}))}>
               <option value="">{tr("Choose a billed follow-up item", "اختر فحص متابعة مفوترًا")}</option>
-              {billedCandidates.filter(candidate => candidate.testId === event.targetTestId && candidate.orderedAt >= event.createdAt)
+              {billedCandidates.filter(candidate => candidate.testId === event.targetTestId && (candidate.orderId === event.sourceOrderId || candidate.orderedAt >= event.createdAt)
                 .map(candidate => <option key={candidate.orderItemId + candidate.invoiceLineId}
                   value={candidate.orderItemId + "|" + candidate.invoiceLineId}>
                   {candidate.accessionNumber} · {candidate.testCode} · {candidate.invoiceNumber} · {candidate.lineTotal} {candidate.currency}

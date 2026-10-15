@@ -185,7 +185,7 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
             && link.specimen.specimenTypeId === candidate.test.specimenTypeId
             && ["PLANNED","COLLECTED","RECEIVED","IN_PROCESS"].includes(link.specimen.status))))
       .map(line => ({
-        orderItemId: candidate.id, invoiceLineId: line.id, testId: candidate.testId,
+        orderItemId: candidate.id, orderId: candidate.orderId, invoiceLineId: line.id, testId: candidate.testId,
         orderedAt: candidate.createdAt.toISOString(), accessionNumber: candidate.order.accessionNumber,
         testCode: candidate.testCodeSnapshot, invoiceNumber: line.invoice.invoiceNumber,
         lineTotal: line.lineTotal.toFixed(4), currency: candidate.currency,
@@ -421,6 +421,7 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
         events={latestResult.reflexEvents.map(event => ({
           id: event.id,
           targetTestId: event.rule.targetTestId,
+          sourceOrderId: item.orderId,
           createdAt: event.createdAt.toISOString(),
           confirmedOrderItemId: event.confirmedOrderItemId,
           status: event.status,
