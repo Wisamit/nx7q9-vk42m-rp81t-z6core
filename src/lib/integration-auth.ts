@@ -53,10 +53,24 @@ export async function requireIntegrationApiKey(request: Request, requiredScope: 
     throw new IntegrationAuthError("integration_scope_forbidden", 403);
   }
 
-  await prisma.integrationApiKey.update({
-    where: { id: apiKey.id },
-    data: { lastUsedAt: new Date() },
+  // A token revoked, expired or disabled during authentication must fail
+  // BEFORE we hand an endpoint capability to a route handler.
+  const now = new Date();
+  const activeClaim = await prisma.integrationApiKey.updateMany({
+    where: {
+      id: apiKey.id,
+      organizationId: apiKey.organizationId,
+      endpointId: apiKey.endpoint.id,
+      keyHash: apiKey.keyHash,
+      revokedAt: null,
+      OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+      endpoint: { organizationId: apiKey.organizationId, status: "ACTIVE" },
+    },
+    data: { lastUsedAt: now },
   });
+  if (activeClaim.count !== 1) {
+    throw new IntegrationAuthError("integration_api_key_revoked_or_endpoint_inactive");
+  }
 
   return {
     apiKeyId: apiKey.id,
