@@ -8,7 +8,7 @@ import {
 } from "@/lib/catalog-configuration-export";
 
 const ordered: CatalogExportType[] = [
-  "TEST", "COMPONENT", "UNIT", "PANEL", "PACKAGE",
+  "TEST", "COMPONENT", "UNIT", "CONTAINER", "PANEL", "PACKAGE",
   "REFERENCE_INTERVAL", "PRICE_LIST", "PRICE_LIST_ITEM", "PRICE_LIST_PACKAGE_ITEM",
 ];
 
@@ -17,7 +17,7 @@ export function CatalogConfigurationExport({
 }: { locale: "ar" | "en"; canExportPricing: boolean; canExportRanges: boolean }) {
   const tr = (en: string, ar: string) => locale === "ar" ? ar : en;
   const [selected, setSelected] = useState<CatalogExportType[]>([
-    "TEST", "COMPONENT", "UNIT", "PANEL", "PACKAGE",
+    "TEST", "COMPONENT", "UNIT", "CONTAINER", "PANEL", "PACKAGE",
     ...(canExportRanges ? ["REFERENCE_INTERVAL" as const] : []),
     ...(canExportPricing ? ["PRICE_LIST" as const, "PRICE_LIST_ITEM" as const, "PRICE_LIST_PACKAGE_ITEM" as const] : []),
   ]);
@@ -27,6 +27,7 @@ export function CatalogConfigurationExport({
     TEST: tr("Tests", "الفحوصات"),
     COMPONENT: tr("Result components", "مكوّنات النتائج"),
     UNIT: tr("Units (UCUM)", "الوحدات"),
+    CONTAINER: tr("Specimen containers and tube properties", "حاويات العينات وخصائص الأنابيب"),
     PANEL: tr("Test panels and full membership", "مجموعات الفحوصات وكامل عضويتها"),
     PACKAGE: tr("Commercial packages and their tests", "الباقات التجارية والفحوصات التابعة لها"),
     REFERENCE_INTERVAL: tr("Reference intervals and critical limits", "المجالات المرجعية والحدود الحرجة"),

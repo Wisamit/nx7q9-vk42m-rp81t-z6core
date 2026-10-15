@@ -9,7 +9,7 @@ import { catalogExportTypes, type CatalogExportType } from "@/lib/catalog-config
 export const dynamic = "force-dynamic";
 
 const ordered: CatalogExportType[] = [
-  "TEST", "COMPONENT", "UNIT", "PANEL", "PACKAGE",
+  "TEST", "COMPONENT", "UNIT", "CONTAINER", "PANEL", "PACKAGE",
   "REFERENCE_INTERVAL", "PRICE_LIST", "PRICE_LIST_ITEM", "PRICE_LIST_PACKAGE_ITEM",
 ];
 
@@ -162,6 +162,15 @@ export async function GET(request: NextRequest) {
       select: {
         id: true, code: true, symbol: true, nameEn: true, nameAr: true,
         ucumCode: true, status: true,
+        createdAt: true, updatedAt: true, deactivatedAt: true,
+      },
+    });
+  } else if (type === "CONTAINER") {
+    records = await tx.container.findMany({
+      ...base, where: { organizationId, ...cursorScope },
+      select: {
+        id: true, code: true, nameEn: true, nameAr: true,
+        tubeColor: true, additive: true, status: true,
         createdAt: true, updatedAt: true, deactivatedAt: true,
       },
     });

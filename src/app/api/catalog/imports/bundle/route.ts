@@ -182,11 +182,15 @@ export async function POST(request: Request) {
       { scopeType: "BRANCH" as const, branchId: { in: [...activeBranches] } },
     ],
   };
-  const [tests, units, components, intervals, lists, prices] = await Promise.all([
+  const [tests, units, containers, components, intervals, lists, prices] = await Promise.all([
     tx.labTest.findMany({ where: { ...testWhere, id: { in: testIds } },
       select: { id: true, code: true, departmentId: true } }),
     tx.unit.findMany({ where: { organizationId: scope.organizationId, id: { in: unitIds } },
       select: { id: true, code: true } }),
+    tx.container.findMany({ where: { organizationId: scope.organizationId,
+      id: { in: parsed.ids.containers } },
+      select: { id: true, code: true, nameEn: true, nameAr: true,
+        tubeColor: true, additive: true, status: true } }),
     tx.testComponent.findMany({ where: { id: { in: componentIds }, test: testWhere },
       select: { id: true, code: true, testId: true, unitId: true } }),
     tx.referenceInterval.findMany({ where: {
@@ -229,6 +233,7 @@ export async function POST(request: Request) {
     } }),
   ]);
   if (tests.length !== testIds.length || units.length !== unitIds.length ||
+      containers.length !== parsed.ids.containers.length ||
       components.length !== componentIds.length || intervals.length !== parsed.ids.intervals.length ||
       lists.length !== priceListIds.length || prices.length !== parsed.ids.prices.length ||
       panels.length !== panelIds.length || packages.length !== packageIds.length ||
@@ -236,7 +241,7 @@ export async function POST(request: Request) {
     return { error: "bundle_master_identity_or_scope_changed", httpStatus: 403 } as const;
   }
   const byId = <T extends { id: string }>(rows: T[]) => new Map(rows.map(x => [x.id, x]));
-  const testMap = byId(tests), unitMap = byId(units), componentMap = byId(components);
+  const testMap = byId(tests), unitMap = byId(units), containerMap = byId(containers), componentMap = byId(components);
   const intervalMap = byId(intervals), listMap = byId(lists), priceMap = byId(prices);
   const panelMap = byId(panels), packageMap = byId(packages), packagePriceMap = byId(packagePrices);
   for (const row of references) {
@@ -247,6 +252,11 @@ export async function POST(request: Request) {
       consistent = !!existing && existing.code === n.code && existing.departmentId === n.departmentId;
     } else if (row.entityType === "UNIT") {
       consistent = unitMap.get(row.identity)?.code === n.code;
+    } else if (row.entityType === "CONTAINER") {
+      const existing = containerMap.get(row.identity);
+      consistent = !!existing && existing.code === n.code && existing.nameEn === n.nameEn &&
+        existing.nameAr === n.nameAr && existing.tubeColor === n.tubeColor &&
+        existing.additive === n.additive && existing.status === n.status;
     } else if (row.entityType === "COMPONENT") {
       const existing = componentMap.get(row.identity);
       consistent = !!existing && existing.testId === n.testId && existing.code === n.code &&

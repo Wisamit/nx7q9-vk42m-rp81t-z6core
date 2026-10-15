@@ -133,6 +133,15 @@ export async function GET(request: NextRequest) {
         createdAt: true, updatedAt: true, deactivatedAt: true,
       },
     });
+  } else if (type === "CONTAINER") {
+    records = await prisma.container.findMany({
+      ...base, where: { organizationId, ...cursorScope },
+      select: {
+        id: true, code: true, nameEn: true, nameAr: true,
+        tubeColor: true, additive: true, status: true,
+        createdAt: true, updatedAt: true, deactivatedAt: true,
+      },
+    });
   } else if (type === "REFERENCE_INTERVAL") {
     records = await prisma.referenceInterval.findMany({
       ...base, where: { component: { test: testScope }, ...branchScope, ...cursorScope },

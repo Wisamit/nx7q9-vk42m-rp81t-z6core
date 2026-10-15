@@ -99,14 +99,14 @@ export function parseCatalogBundleForReview(
     throw new CatalogBundleReviewError("bundle_foreign_organization", 403);
   }
   const exportedAt = iso(bundle.exportedAt);
-  if (!Array.isArray(bundle.groups) || bundle.groups.length < 1 || bundle.groups.length > 9) {
+  if (!Array.isArray(bundle.groups) || bundle.groups.length < 1 || bundle.groups.length > 10) {
     throw new CatalogBundleReviewError("bundle_invalid_groups");
   }
   const seenGroups = new Set<string>();
   const seenIds = new Set<string>();
   const rows: BundleReviewRow[] = [];
   const counts: Record<string, number> = {};
-  const ids = { tests: [] as string[], units: [] as string[], components: [] as string[],
+  const ids = { tests: [] as string[], units: [] as string[], containers: [] as string[], components: [] as string[],
     intervals: [] as string[], priceLists: [] as string[], prices: [] as string[],
     panels: [] as string[], packages: [] as string[], packagePrices: [] as string[],
     memberTests: [] as string[], compositePriceLists: [] as string[], pricedPackages: [] as string[] };
@@ -146,6 +146,11 @@ export function parseCatalogBundleForReview(
         ids.units.push(id);
         normalized = { id, code: string(source.code, 50), symbol: string(source.symbol, 50),
           status: source.status };
+      } else if (entityType === "CONTAINER") {
+        ids.containers.push(id);
+        normalized = { id, code: string(source.code, 50), nameEn: string(source.nameEn, 150),
+          nameAr: source.nameAr ?? null, tubeColor: source.tubeColor ?? null,
+          additive: source.additive ?? null, status: source.status };
       } else if (entityType === "COMPONENT") {
         ids.components.push(id);
         normalized = { id, testId: requiredId(source.testId),
