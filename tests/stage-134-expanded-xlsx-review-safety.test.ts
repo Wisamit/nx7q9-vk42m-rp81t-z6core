@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
-  parseCsvReviewFile, CsvStagingError, CSV_STAGE_MASTER_TEMPLATE_HEADERS,
+  parseCsvReviewFile, CSV_STAGE_MASTER_TEMPLATE_HEADERS,
   CSV_STAGE_PACKAGE_PRICE_TEMPLATE_HEADERS, CSV_REVIEW_ENTITY_TYPES,
 } from "../src/lib/catalog-review-csv-import.ts";
 import { catalogReviewXlsx } from "../src/lib/catalog-review-xlsx.ts";
