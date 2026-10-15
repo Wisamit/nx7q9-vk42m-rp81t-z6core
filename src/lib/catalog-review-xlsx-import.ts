@@ -138,9 +138,20 @@ function attr(input: string, key: string) {
 export function xlsxReviewToCsv(upload: Uint8Array): string {
   const files = extractTextFiles(upload);
   const book = files.get("xl/workbook.xml")!;
+  const workbookRels = files.get("xl/_rels/workbook.xml.rels");
+  if (!workbookRels || /TargetMode\s*=\s*"External"/i.test(workbookRels) ||
+      [...files.entries()].some(([name, xml]) => name.endsWith(".rels") &&
+        /TargetMode\s*=\s*"External"/i.test(xml)))
+    throw new CsvStagingError("xlsx_external_relationship_forbidden");
   const sheets = [...book.matchAll(/<sheet\b([^>]*)\/?>/g)];
   if (sheets.length !== 1 || /state="hidden"|state="veryHidden"/i.test(sheets[0][1]))
     throw new CsvStagingError("xlsx_visible_single_sheet_required");
+  const relationshipId = attr(sheets[0][1], "r:id");
+  const links = [...workbookRels.matchAll(/<Relationship\b([^>]*)\/?\s*>/g)];
+  if (!relationshipId || !links.some(link => attr(link[1], "Id") === relationshipId &&
+      attr(link[1], "Target") === "worksheets/sheet1.xml" &&
+      attr(link[1], "Type")?.endsWith("/worksheet")))
+    throw new CsvStagingError("xlsx_sheet_relationship_mismatch");
   const shared = files.get("xl/sharedStrings.xml");
   const strings: string[] = [];
   if (shared) {
