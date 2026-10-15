@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
-  parseCsvReviewFile, CsvStagingError, CSV_STAGE_MASTER_TEMPLATE_HEADERS,
+  parseCsvReviewFile, CSV_STAGE_MASTER_TEMPLATE_HEADERS,
   CSV_STAGE_PACKAGE_PRICE_TEMPLATE_HEADERS, CSV_REVIEW_ENTITY_TYPES,
 } from "../src/lib/catalog-review-csv-import.ts";
 import { catalogReviewXlsx } from "../src/lib/catalog-review-xlsx.ts";
@@ -68,7 +68,9 @@ test("Stage 134: missing/duplicate/invalid panel/package memberships are errors,
       assert.equal(rowValidationStatus(issues),"ERROR",entityType+":"+membership);
     }
   }
-  assert.throws(()=>parseCsvReviewFile('entityType,code\nPRICE_LIST,TOP_SECRET\n'),CsvStagingError);
+  const list=parseCsvReviewFile(["entityType,code","PRICE_LIST,TOP_SECRET",""].join("\n"))[0];
+  assert.equal(list.entityType,'PRICE_LIST');
+  assert.equal(rowValidationStatus(validateImportRow(list.entityType,normalizeImportRow(list))),'ERROR');
 });
 
 test("Stage 134: XLSX/CSV import stays DRAFT author-bound, finance grants include package prices",()=>{
@@ -77,7 +79,7 @@ test("Stage 134: XLSX/CSV import stays DRAFT author-bound, finance grants includ
   const ui=readFileSync("src/components/catalog-csv-review-staging.tsx","utf8");
   const commit=readFileSync("src/app/api/catalog/imports/[id]/commit/route.ts","utf8");
   const revalidate=readFileSync("src/app/api/catalog/imports/[id]/revalidate/route.ts","utf8");
-  assert.match(route,/row.entityType === "PRICE_LIST_PACKAGE_ITEM"/);
+  assert.match(route,/row.entityType.startsWith\("PRICE_"\)/);
   assert.match(route,/permissions.has\("pricing.manage"\)/);
   assert.match(route,/resolveClinicalImportScope/);
   assert.match(route,/sourceType: "CSV_REVIEW"/);

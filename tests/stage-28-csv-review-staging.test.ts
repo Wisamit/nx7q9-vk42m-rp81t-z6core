@@ -26,7 +26,7 @@ test("CSV parser rejects wrong formats, duplicates, broken quoting, gaps and ext
   const invalid = [
     "exportFormat,schemaVersion,entityType\r\nfamily-lab-catalog-review-csv,1,COMPONENT",
     "entityType,entityType\nCOMPONENT,COMPONENT",
-    header + "\n" + component.replace("COMPONENT,", "PRICE_LIST,"),
+
     header + "\n" + component.replace('Free, ""T3""', 'Free, "T3"'),
     header + "\n" + component + ",",
     header + "\n" + 'COMPONENT,old,TSH,"unterminated',
@@ -34,6 +34,10 @@ test("CSV parser rejects wrong formats, duplicates, broken quoting, gaps and ext
     header + "\r" + component,
   ];
   for (const csv of invalid) assert.throws(() => parseCsvReviewFile(csv), CsvStagingError, csv.slice(0,60));
+  const financial=parseCsvReviewFile(header + "\n" + component.replace("COMPONENT,", "PRICE_LIST,"))[0];
+  assert.equal(financial.entityType,"PRICE_LIST");
+  assert.equal(rowValidationStatus(validateImportRow(financial.entityType,normalizeImportRow(financial))),"ERROR",
+    "price-list master can now be reviewed but a component-shaped row is invalid");
 });
 test("CSV import bounds file bytes, rows and fields with no silent identity truncation", () => {
   assert.throws(() => parseCsvReviewFile(header + "\n" + component + "a".repeat(9000)), /csv_field_too_long/);

@@ -8,6 +8,7 @@ const template = "entityType,legacyKey,testCode,code,nameEn,nameAr,unitCode,resu
 const rangeTemplate = "entityType,legacyKey,testName,unit,sex,ageFrom,ageTo,ageUnit,low,high,normalTextEn\r\n";
 const masterTemplate = "entityType,legacyKey,code,nameEn,nameAr,symbol,memberTestCodes\r\n";
 const packagePriceTemplate = "entityType,legacyKey,priceListCode,packageCode,unitPrice,effectiveFrom,effectiveTo\r\n";
+const priceListTemplate = "entityType,legacyKey,code,nameEn,nameAr,scopeType,branchId,currency,priority,effectiveFrom,effectiveTo\r\n";
 
 export function CatalogCsvReviewStaging({ locale, canStagePricing, canStageRanges }: { locale: "ar" | "en"; canStagePricing: boolean; canStageRanges: boolean }) {
   const router = useRouter();
@@ -16,9 +17,9 @@ export function CatalogCsvReviewStaging({ locale, canStagePricing, canStageRange
   const [error, setError] = useState("");
   const tr = (en: string, ar: string) => locale === "ar" ? ar : en;
 
-  function saveTemplate(kind: "component-price" | "range" | "master" | "package-price", format: "csv" | "xlsx" = "csv") {
+  function saveTemplate(kind: "component-price" | "range" | "master" | "package-price" | "price-list", format: "csv" | "xlsx" = "csv") {
     const text = "\uFEFF" + (kind === "range" ? rangeTemplate : kind === "master"
-      ? masterTemplate : kind === "package-price" ? packagePriceTemplate : template);
+      ? masterTemplate : kind === "package-price" ? packagePriceTemplate : kind === "price-list" ? priceListTemplate : template);
     const data = format === "xlsx" ? catalogReviewXlsx(text) : text;
     const part: BlobPart = typeof data === "string" ? data :
       data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
@@ -28,7 +29,7 @@ export function CatalogCsvReviewStaging({ locale, canStagePricing, canStageRange
       const a = document.createElement("a");
       a.href = url;
       a.download = "family-lab-" + (kind === "range" ? "reference-range" :
-        kind === "master" ? "masters-membership" : kind === "package-price" ? "package-price" : "component-price")
+        kind === "master" ? "masters-membership" : kind === "package-price" ? "package-price" : kind === "price-list" ? "price-list" : "component-price")
         + "-review-template." + format;
       document.body.appendChild(a);
       a.click();
@@ -106,6 +107,14 @@ export function CatalogCsvReviewStaging({ locale, canStagePricing, canStageRange
         onClick={() => saveTemplate("master")}>
         {tr("Download CSV master catalog template", "تنزيل قالب CSV لدليل الفحوصات")}
       </button>
+      {canStagePricing && <button type="button" className="secondary-button" disabled={busy}
+        onClick={() => saveTemplate("price-list", "xlsx")}>
+        {tr("Excel price-list master review template", "قالب Excel لمراجعة قوائم الأسعار")}
+      </button>}
+      {canStagePricing && <button type="button" className="secondary-button" disabled={busy}
+        onClick={() => saveTemplate("price-list")}>
+        {tr("CSV price-list master review template", "قالب CSV لمراجعة قوائم الأسعار")}
+      </button>}
       {canStagePricing && <button type="button" className="secondary-button" disabled={busy}
         onClick={() => saveTemplate("package-price", "xlsx")}>
         {tr("Download Excel package-price template", "تنزيل قالب Excel لأسعار الباقات")}

@@ -34,6 +34,7 @@ export type BundleReview = {
   ids: {
     tests: string[];
     units: string[];
+    containers: string[];
     components: string[];
     intervals: string[];
     priceLists: string[];
@@ -69,6 +70,13 @@ function string(value: unknown, max: number): string {
   }
   return value;
 }
+function optionalText(value: unknown, max: number): string | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== "string" || value.length > max) {
+    throw new CatalogBundleReviewError("bundle_invalid_optional_metadata");
+  }
+  return value;
+}
 function linkedCode(value: unknown): string {
   return string(record(value).code, 80);
 }
@@ -81,7 +89,7 @@ function iso(value: unknown): string {
 }
 
 /**
- * Review-only projection of the nine-class JSON format exported by our LIS.
+ * Review-only projection of the ten-class JSON format exported by our LIS.
  * Original source values remain intact. UUIDs identify *current* masters for
  * tenant/branch authorization, never migration targets or commit authority.
  */
@@ -99,14 +107,14 @@ export function parseCatalogBundleForReview(
     throw new CatalogBundleReviewError("bundle_foreign_organization", 403);
   }
   const exportedAt = iso(bundle.exportedAt);
-  if (!Array.isArray(bundle.groups) || bundle.groups.length < 1 || bundle.groups.length > 9) {
+  if (!Array.isArray(bundle.groups) || bundle.groups.length < 1 || bundle.groups.length > 10) {
     throw new CatalogBundleReviewError("bundle_invalid_groups");
   }
   const seenGroups = new Set<string>();
   const seenIds = new Set<string>();
   const rows: BundleReviewRow[] = [];
   const counts: Record<string, number> = {};
-  const ids = { tests: [] as string[], units: [] as string[], components: [] as string[],
+  const ids = { tests: [] as string[], units: [] as string[], containers: [] as string[], components: [] as string[],
     intervals: [] as string[], priceLists: [] as string[], prices: [] as string[],
     panels: [] as string[], packages: [] as string[], packagePrices: [] as string[],
     memberTests: [] as string[], compositePriceLists: [] as string[], pricedPackages: [] as string[] };
@@ -146,6 +154,14 @@ export function parseCatalogBundleForReview(
         ids.units.push(id);
         normalized = { id, code: string(source.code, 50), symbol: string(source.symbol, 50),
           status: source.status };
+      } else if (entityType === "CONTAINER") {
+        ids.containers.push(id);
+        normalized = { id, code: string(source.code, 50), nameEn: string(source.nameEn, 150),
+          nameAr: optionalText(source.nameAr, 150), tubeColor: optionalText(source.tubeColor, 80),
+          additive: optionalText(source.additive, 150), status: source.status };
+        if (source.status !== "ACTIVE" && source.status !== "INACTIVE") {
+          throw new CatalogBundleReviewError("bundle_invalid_container_status");
+        }
       } else if (entityType === "COMPONENT") {
         ids.components.push(id);
         normalized = { id, testId: requiredId(source.testId),

@@ -71,8 +71,7 @@ export async function POST(request: Request) {
     }
     throw error;
   }
-  if (inputs.some(row => row.entityType === "PRICE_LIST_ITEM" ||
-      row.entityType === "PRICE_LIST_PACKAGE_ITEM") && !permissions.has("pricing.manage")) {
+  if (inputs.some(row => row.entityType.startsWith("PRICE_")) && !permissions.has("pricing.manage")) {
     return NextResponse.json({ error: "pricing_manage_required" }, { status: 403 });
   }
   if (inputs.some(row => row.entityType === "REFERENCE_INTERVAL") &&
@@ -89,6 +88,25 @@ export async function POST(request: Request) {
     if (!clinicalScope) {
       return NextResponse.json({ error: "active_clinical_import_scope_required" }, { status: 403 });
     }
+  }
+  // Review-only finance sources still require a currently authorized active
+  // branch; otherwise even an uncommitted draft can expose foreign metadata.
+  const priceLists = inputs.filter(row => row.entityType === "PRICE_LIST");
+  if (priceLists.length) {
+    const live = await prisma.branch.findMany({
+      where: { organizationId: session.user.organizationId, status: "ACTIVE",
+        id: { in: session.user.branchScopes.filter(scope =>
+          scope.branch.organizationId === session.user.organizationId &&
+          scope.branch.status === "ACTIVE"
+        ).map(scope => scope.branchId) } },
+      select: { id: true },
+    });
+    const authorizedIds = new Set(live.map(row => row.id));
+    if (priceLists.some(row => {
+      const normalized = normalizeImportRow(row);
+      return normalized.scopeType === "BRANCH" &&
+        (typeof normalized.branchId !== "string" || !authorizedIds.has(normalized.branchId));
+    })) return NextResponse.json({ error: "price_list_branch_scope_forbidden" }, { status: 403 });
   }
   const prepared = inputs.map((row, index) => {
     const normalized = normalizeImportRow(row);

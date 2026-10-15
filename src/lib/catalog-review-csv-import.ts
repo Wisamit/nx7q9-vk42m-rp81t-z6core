@@ -9,6 +9,7 @@ const HEADERS = new Set([
   "unitCode", "resultType", "priceListCode", "unitPrice", "effectiveFrom", "effectiveTo",
   "testName", "unit", "sex", "ageFrom", "ageTo", "ageUnit", "low", "high", "normalTextEn",
   "symbol", "memberTestCodes", "packageCode",
+  "scopeType", "branchId", "currency", "priority",
 ]);
 export const CSV_STAGE_TEMPLATE_HEADERS = [
   "entityType", "legacyKey", "testCode", "code", "nameEn", "nameAr",
@@ -17,12 +18,16 @@ export const CSV_STAGE_TEMPLATE_HEADERS = [
 export const CSV_STAGE_MASTER_TEMPLATE_HEADERS = [
   "entityType", "legacyKey", "code", "nameEn", "nameAr", "symbol", "memberTestCodes",
 ] as const;
+export const CSV_STAGE_PRICE_LIST_TEMPLATE_HEADERS = [
+  "entityType", "legacyKey", "code", "nameEn", "nameAr", "scopeType",
+  "branchId", "currency", "priority", "effectiveFrom", "effectiveTo",
+] as const;
 export const CSV_STAGE_PACKAGE_PRICE_TEMPLATE_HEADERS = [
   "entityType", "legacyKey", "priceListCode", "packageCode", "unitPrice", "effectiveFrom", "effectiveTo",
 ] as const;
 export const CSV_REVIEW_ENTITY_TYPES = new Set([
   "TEST", "UNIT", "PANEL", "PACKAGE", "CONTAINER", "COMPONENT",
-  "REFERENCE_INTERVAL", "PRICE_LIST_ITEM", "PRICE_LIST_PACKAGE_ITEM",
+  "REFERENCE_INTERVAL", "PRICE_LIST", "PRICE_LIST_ITEM", "PRICE_LIST_PACKAGE_ITEM",
 ] as const);
 export const CSV_STAGE_RANGE_TEMPLATE_HEADERS = [
   "entityType", "legacyKey", "testName", "unit", "sex",

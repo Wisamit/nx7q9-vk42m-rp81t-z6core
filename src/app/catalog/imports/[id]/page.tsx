@@ -160,10 +160,33 @@ export default async function ImportBatchPage({
         where: { batchId: batch.id, entityType: "COMPONENT" },
       }),
       prisma.catalogImportRow.count({
-        where: { batchId: batch.id, entityType: "PRICE_LIST_PACKAGE_ITEM" },
+        where: { batchId: batch.id, entityType: { in: ["PRICE_LIST", "PRICE_LIST_PACKAGE_ITEM"] } },
       }),
     ]);
     if (stagedOtherPrices > 0 && !permissions.has("pricing.manage")) notFound();
+    const stagedPriceLists = await prisma.catalogImportRow.findMany({
+      where: { batchId: batch.id, entityType: "PRICE_LIST" },
+      select: { normalizedData: true },
+    });
+    if (stagedPriceLists.length) {
+      const activeBranchIds = new Set(session.user.branchScopes.filter(scope =>
+        scope.branch.status === "ACTIVE" &&
+        scope.branch.organizationId === session.user.organizationId
+      ).map(scope => scope.branchId));
+      const ids = [...activeBranchIds];
+      const live = await prisma.branch.findMany({
+        where: { organizationId: session.user.organizationId, status: "ACTIVE",
+          id: { in: ids } }, select: { id: true },
+      });
+      const allowedIds = new Set(live.map(branch => branch.id));
+      if (stagedPriceLists.some(row => {
+        const value = row.normalizedData;
+        if (!value || typeof value !== "object" || Array.isArray(value)) return true;
+        const data = value as Record<string, unknown>;
+        return data.scopeType === "BRANCH" &&
+          (typeof data.branchId !== "string" || !allowedIds.has(data.branchId));
+      })) notFound();
+    }
     if (stagedRanges > 0 || stagedComponents > 0) {
       // Clinical CSV source lacks a branch-bound reviewer assignment.
       // Both component and range previews are author-bound; reference ranges
@@ -268,6 +291,7 @@ export default async function ImportBatchPage({
     PANEL: tr(locale, "Panel", "باقة فحوصات"),
     REFERENCE_INTERVAL: tr(locale, "Reference interval" + (batch.sourceType === "CSV_REVIEW" ? " (review only)" : ""), "مدى مرجعي" + (batch.sourceType === "CSV_REVIEW" ? " (للمراجعة فقط)" : "")),
     COMPONENT: tr(locale, "Result component (review only)", "مكوّن نتائج (للمراجعة فقط)"),
+    PRICE_LIST: tr(locale, "Price list (review only)", "قائمة أسعار (للمراجعة فقط)"),
     PRICE_LIST_ITEM: tr(locale, "Price (review only)", "سعر (للمراجعة فقط)"),
   }[value] || value);
 
