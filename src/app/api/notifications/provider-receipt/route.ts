@@ -3,7 +3,7 @@ import { prisma } from "@/lib/db";
 import {
   parseProviderReceipt, verifyProviderReceiptSignature, providerReceiptFingerprint, ProviderReceiptError,
 } from "@/lib/provider-receipt-security";
-import { NotificationDeliveryStatus } from "../../../../generated/prisma/client";
+import { NotificationDeliveryStatus } from "../../../../../generated/prisma/client";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

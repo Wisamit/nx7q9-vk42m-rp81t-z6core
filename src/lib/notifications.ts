@@ -369,7 +369,7 @@ export async function dispatchPendingNotifications(db: PrismaClient, organizatio
         providerMessageId,
         lastError: null,
         nextAttemptAt: null,
-      }, { status: providerDelivered ? "DELIVERED" : "SENT", externalRef: providerMessageId });
+      }, { status: providerDelivered && providerMessageId ? "DELIVERED" : "SENT", externalRef: providerMessageId });
       if (settled) results.push({ id: delivery.id, status: providerDelivered && providerMessageId ? NotificationDeliveryStatus.DELIVERED : NotificationDeliveryStatus.SENT });
     } catch (error) {
       const dead = attempt >= delivery.maxAttempts;
