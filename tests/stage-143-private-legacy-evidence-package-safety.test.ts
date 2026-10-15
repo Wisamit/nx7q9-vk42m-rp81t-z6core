@@ -13,9 +13,7 @@ import {
 import {
   LegacyEvidencePackageError, verifyLegacyEvidenceManifestPackage,
 } from "../src/lib/legacy-evidence-package-review.ts";
-import {
-  checkPrivateLegacyEvidencePackage,
-} from "../scripts/legacy/verify-evidence-package.mjs";
+import { execFileSync } from "node:child_process";
 
 const schemaHash="a".repeat(64), keyId="b".repeat(64),
   repeatedHash="c".repeat(64), priceHash="d".repeat(64), when="2026-10-15T12:00:00.000Z";
@@ -127,17 +125,19 @@ test("Stage143: real local file hash and header anchor; stale or unexpected sour
         "-"+String(page.chunkIndex).padStart(5,"0")+".json";
       await writeFile(join(lineage,name),JSON.stringify(page));
     }
-    const review=await checkPrivateLegacyEvidencePackage(mdb,coverage,lineage);
+    const run=()=>JSON.parse(execFileSync(process.execPath,[
+      "--experimental-strip-types","scripts/legacy/verify-evidence-package.mjs",
+      "--mdb",mdb,"--coverage",coverage,"--lineage-dir",lineage,
+    ],{encoding:"utf8"}));
+    const review=run();
     assert.equal(review.localMdbBytesHashMatched,true);
     assert.equal(review.sourceRowsIndependentlyRecomputedFromMdb,false);
     assert.equal(review.masterRows,503);
     await writeFile(join(lineage,"surprise-patient.json"),"{}");
-    await assert.rejects(checkPrivateLegacyEvidencePackage(mdb,coverage,lineage),
-      /unexpected_evidence_page_name/);
+    assert.throws(run,/unexpected_evidence_page_name/);
     await unlink(join(lineage,"surprise-patient.json"));
     const modified=Buffer.from(f.file);modified[100]=1;
     await writeFile(mdb,modified);
-    await assert.rejects(checkPrivateLegacyEvidencePackage(mdb,coverage,lineage),
-      /legacy_evidence_source_mismatch/);
+    assert.throws(run,/legacy_evidence_source_mismatch/);
   } finally { await rm(d,{recursive:true,force:true}); }
 });
