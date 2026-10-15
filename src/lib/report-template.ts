@@ -46,6 +46,7 @@ export function normalizeReportTemplateConfiguration(value: unknown): ReportTemp
   };
 }
 
+/** Retired versions remain readable within their historical effective intervals. */
 export async function resolveEffectiveReportTemplate(db: DbClient, input: {
   organizationId: string;
   branchId: string;
@@ -61,7 +62,7 @@ export async function resolveEffectiveReportTemplate(db: DbClient, input: {
     include: {
       versions: {
         where: {
-          status: "EFFECTIVE",
+          status: { in: ["EFFECTIVE", "RETIRED"] },
           effectiveFrom: { lte: input.asOf },
           AND: [{ OR: [{ effectiveTo: null }, { effectiveTo: { gt: input.asOf } }] }],
         },

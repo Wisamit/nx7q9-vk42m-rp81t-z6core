@@ -1,4 +1,4 @@
-import { requirePermission } from "@/lib/auth";
+import { permissionSet, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { ReportTemplateManager } from "@/components/report-template-manager";
 import { tr } from "@/lib/ui-i18n";
@@ -32,8 +32,10 @@ export default async function ReportTemplatesPage(){
     </header>
     <ReportTemplateManager
       locale={locale}
+      currentUserId={session.user.id}
+      canManage={permissionSet(session).has("report_templates.manage")}
       branches={branches.map(b=>({id:b.id,code:b.code,nameEn:b.nameEn,nameAr:b.nameAr}))}
-      templates={templates.map(t=>({id:t.id,code:t.code,nameEn:t.nameEn,nameAr:t.nameAr,branchId:t.branchId,latestVersion:t.versions[0]?.version||null,latestStatus:t.versions[0]?.status||null,latestVersionId:t.versions[0]?.id||null}))}
+      templates={templates.map(t=>({id:t.id,code:t.code,nameEn:t.nameEn,nameAr:t.nameAr,branchId:t.branchId,latestVersion:t.versions[0]?.version||null,latestStatus:t.versions[0]?.status||null,latestVersionId:t.versions[0]?.id||null,latestSubmittedByUserId:t.versions[0]?.submittedByUserId||null}))}
     />
   </main>;
 }
