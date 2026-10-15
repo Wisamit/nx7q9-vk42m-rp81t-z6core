@@ -124,25 +124,25 @@ function project(type: CanonicalSpreadsheetReviewType, source: Record<string, un
     // An inactive historic source must not silently become an activatable new master.
     throw new CanonicalSpreadsheetReviewError("canonical_inactive_source_requires_manual_review");
   }
-  const basic = { code: string(source, "code"), nameEn: string(source, "nameEn"),
-    nameAr: optionalString(source, "nameAr") };
+  const basic = () => ({ code: string(source, "code"), nameEn: string(source, "nameEn"),
+    nameAr: optionalString(source, "nameAr") });
   switch (type) {
-    case "TEST": return basic;
-    case "CONTAINER": return basic; // tubeColor/additive are only in original JSON.
-    case "UNIT": return { ...basic, symbol: string(source, "symbol") };
+    case "TEST": return basic();
+    case "CONTAINER": return basic(); // tubeColor/additive are only in original JSON.
+    case "UNIT": return { ...basic(), symbol: string(source, "symbol") };
     case "COMPONENT": return {
-      testCode: linkedCode(source, "test"), ...basic,
+      testCode: linkedCode(source, "test"), ...basic(),
       unitCode: source.unit == null ? "" : linkedCode(source, "unit"),
       resultType: string(source, "resultType"),
     };
     case "PANEL":
-    case "PACKAGE": return { ...basic, memberTestCodes: members(source) };
+    case "PACKAGE": return { ...basic(), memberTestCodes: members(source) };
     case "PRICE_LIST":
       if (["sourceId", "referrerId", "clientId", "contractId"].some(k => source[k] != null) ||
           !["ORGANIZATION", "BRANCH"].includes(String(source.scopeType))) {
         throw new CanonicalSpreadsheetReviewError("canonical_contract_price_list_not_supported");
       }
-      return { ...basic, scopeType: string(source, "scopeType"),
+      return { ...basic(), scopeType: string(source, "scopeType"),
         branchId: optionalString(source, "branchId"), currency: string(source, "currency"),
         priority: source.priority == null ? "" : String(source.priority),
         effectiveFrom: priceListDay(source, "effectiveFrom"),
