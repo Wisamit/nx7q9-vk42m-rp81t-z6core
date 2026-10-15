@@ -1,6 +1,6 @@
 import type { Prisma } from "../../generated/prisma/client";
 
-export type ImportEntity = "TEST" | "PANEL" | "PACKAGE" | "UNIT" | "CONTAINER" | "REFERENCE_INTERVAL" | "COMPONENT" | "PRICE_LIST_ITEM" | "PRICE_LIST_PACKAGE_ITEM";
+export type ImportEntity = "TEST" | "PANEL" | "PACKAGE" | "UNIT" | "CONTAINER" | "REFERENCE_INTERVAL" | "COMPONENT" | "PRICE_LIST_ITEM" | "PRICE_LIST_PACKAGE_ITEM" | "PRICE_LIST";
 export type ImportInputRow = { entityType: ImportEntity; legacyKey?: string; data: Prisma.InputJsonObject };
 
 export const allowedImportEntities = new Set<ImportEntity>(["TEST", "PANEL", "PACKAGE", "UNIT", "CONTAINER", "REFERENCE_INTERVAL", "COMPONENT", "PRICE_LIST_ITEM", "PRICE_LIST_PACKAGE_ITEM"]);
@@ -66,6 +66,14 @@ export function normalizeImportRow(row: ImportInputRow): Prisma.InputJsonObject 
       nameAr: text(d.nameAr),
       unitCode: text(d.unitCode || d.unit).toUpperCase(),
       resultType: text(d.resultType).toUpperCase(),
+    };
+  }
+  if (row.entityType === "PRICE_LIST") {
+    return {
+      code: text(d.code).toUpperCase(), nameEn: text(d.nameEn), nameAr: text(d.nameAr),
+      scopeType: text(d.scopeType).toUpperCase(), branchId: text(d.branchId),
+      currency: text(d.currency).toUpperCase(), priority: text(d.priority),
+      effectiveFrom: text(d.effectiveFrom), effectiveTo: text(d.effectiveTo),
     };
   }
   if (row.entityType === "PRICE_LIST_PACKAGE_ITEM") {
@@ -147,6 +155,42 @@ export function validateImportRow(entityType: ImportEntity, normalized: Prisma.I
       out.push({ severity: "ERROR", code: "MISSING_COMPONENT_IDENTITY", message: "Parent test code, component code and English name are required." });
     }
     out.push({ severity: "WARNING", code: "COMPONENT_MAPPING_APPROVAL_REQUIRED", message: "Component staged for review only; no live create or update is permitted." });
+  }
+  if (entityType === "PRICE_LIST") {
+    const code = normalized.code, nameEn = normalized.nameEn, nameAr = normalized.nameAr;
+    const scopeType = normalized.scopeType, branchId = normalized.branchId;
+    const currency = normalized.currency, priority = normalized.priority;
+    const validDay = (value: unknown) => typeof value === "string" &&
+      /^\d{4}-\d{2}-\d{2}$/.test(value) &&
+      !Number.isNaN(Date.parse(value + "T00:00:00Z")) &&
+      new Date(value + "T00:00:00Z").toISOString().slice(0, 10) === value;
+    if (typeof code !== "string" || !/^[A-Z0-9._-]{1,60}$/.test(code) ||
+        typeof nameEn !== "string" || !nameEn || nameEn.length > 220 ||
+        typeof nameAr !== "string" || nameAr.length > 220) {
+      out.push({ severity: "ERROR", code: "INVALID_PRICE_LIST_IDENTITY",
+        message: "Price-list identity requires a valid code and English name." });
+    }
+    if ((scopeType !== "ORGANIZATION" && scopeType !== "BRANCH") ||
+        typeof branchId !== "string" ||
+        (scopeType === "ORGANIZATION" && branchId !== "") ||
+        (scopeType === "BRANCH" && !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(branchId))) {
+      out.push({ severity: "ERROR", code: "UNSUPPORTED_PRICE_LIST_SCOPE",
+        message: "Only organization and explicitly scoped branch price lists can be reviewed." });
+    }
+    if (typeof currency !== "string" || !/^[A-Z]{3}$/.test(currency) ||
+        typeof priority !== "string" || (priority !== "" && !/^-?(?:0|[1-9]\d{0,5})$/.test(priority))) {
+      out.push({ severity: "ERROR", code: "INVALID_PRICE_LIST_FINANCIAL_CONTEXT",
+        message: "Currency and priority must be explicit valid strings; no tax treatment is inferred." });
+    }
+    if (!validDay(normalized.effectiveFrom) ||
+        (normalized.effectiveTo !== "" && !validDay(normalized.effectiveTo)) ||
+        (validDay(normalized.effectiveFrom) && validDay(normalized.effectiveTo) &&
+         String(normalized.effectiveTo) < String(normalized.effectiveFrom))) {
+      out.push({ severity: "ERROR", code: "INVALID_PRICE_LIST_EFFECTIVE_WINDOW",
+        message: "Price-list effective dates must be real ISO calendar dates in order." });
+    }
+    out.push({ severity: "WARNING", code: "PRICE_LIST_GOVERNED_REVIEW_ONLY",
+      message: "This row is review-only and cannot activate, change pricing, or apply tax policy." });
   }
   if (entityType === "PRICE_LIST_PACKAGE_ITEM") {
     if (!normalized.priceListCode || !normalized.packageCode) {

@@ -68,7 +68,9 @@ test("Stage 134: missing/duplicate/invalid panel/package memberships are errors,
       assert.equal(rowValidationStatus(issues),"ERROR",entityType+":"+membership);
     }
   }
-  assert.throws(()=>parseCsvReviewFile('entityType,code\nPRICE_LIST,TOP_SECRET\n'),CsvStagingError);
+  const list=parseCsvReviewFile('entityType,code\\nPRICE_LIST,TOP_SECRET\\n')[0];
+  assert.equal(list.entityType,'PRICE_LIST');
+  assert.equal(rowValidationStatus(validateImportRow(list.entityType,normalizeImportRow(list))),'ERROR');
 });
 
 test("Stage 134: XLSX/CSV import stays DRAFT author-bound, finance grants include package prices",()=>{
