@@ -315,7 +315,7 @@ export function SpecimenAliquotManager({
 
     {canManage && usable && <details className="specimen-history">
       <summary>{tr("Update Physical Storage", "تحديث موقع التخزين الفعلي")}</summary>
-      {canManageStorageSettings && <button type="button" className="secondary-button"
+      {canManageStorageSettings && <><button type="button" className="secondary-button"
     disabled={busy || storageBusy} onClick={() => { setMessage(""); setActionModal("status"); }}>
     {tr("Change Storage Position Status", "تعديل حالة موقع التخزين")}
   </button>
@@ -338,8 +338,8 @@ export function SpecimenAliquotManager({
         <button className="secondary-button form-span" disabled={storageBusy || busy}>{tr("Save status", "حفظ الحالة")}</button>
       </form>}
     {actionModal === "status" && message && <p className="form-error" role="alert">{message}</p>}
-  </CrudModal>}
-      {canManageStorageSettings && <button type="button" className="secondary-button"
+  </CrudModal></>}
+      {canManageStorageSettings && <><button type="button" className="secondary-button"
     disabled={busy || storageBusy} onClick={() => { setMessage(""); setActionModal("register"); }}>
     {tr("Register Physical Storage Position", "تعريف موقع تخزين فعلي")}
   </button>
@@ -356,7 +356,7 @@ export function SpecimenAliquotManager({
         <button className="secondary-button form-span" disabled={busy}>{tr("Register position", "تعريف الموقع")}</button>
       </form>}
     {actionModal === "register" && message && <p className="form-error" role="alert">{message}</p>}
-  </CrudModal>}
+  </CrudModal></>}
       <button type="button" className="secondary-button"
     disabled={busy || storageBusy} onClick={() => { setMessage(""); setActionModal("relocate"); }}>
     {tr("Relocate Stored Specimen", "نقل موقع تخزين العينة")}
