@@ -44,6 +44,6 @@ test("Issue #265: historical clinical report layout snapshots and section status
   assert.ok(result.includes("if (!response.ok)"));
   assert.ok(result.includes("} catch {"));
   assert.ok(result.includes("} finally {"));
-  assert.ok(server.includes("permission"));
+  assert.ok(server.includes('requirePermission("catalog.manage")'));
   assert.ok(server.includes("auditEvent"));
 });
