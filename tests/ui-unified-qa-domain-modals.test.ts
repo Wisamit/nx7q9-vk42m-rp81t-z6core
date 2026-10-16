@@ -19,7 +19,11 @@ test("UI #265: protected procurement, QC, quality, notification, retention and s
     assert.ok(source.includes('import { CrudModal } from "@/components/crud-modal"'),
       moduleName + " must import shared modal");
     assert.equal((source.match(/<CrudModal\b/g) || []).length,
-      names.length + (moduleName === "quality-management-console" ? 1 : 0), moduleName);
+      names.length + (["quality-management-console", "qc-manager"].includes(moduleName) ? 1 : 0), moduleName);
+    if (moduleName === "qc-manager") {
+      assert.ok(source.includes('open={resolutionId!==null}'),
+        "QC violation resolution has its own audited compact review dialog");
+    }
     if (moduleName === "quality-management-console") {
       assert.ok(source.includes('open={pendingReview!==null}'),
         "Specialty QMS governance modal is separate from the eight create editors");
