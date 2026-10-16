@@ -43,7 +43,7 @@ test("UI #265: analyzer replay asks for deliberate review and never mutates raw 
   assert.ok(ui.includes("catch {"));
   assert.doesNotMatch(ui, /(?:window\.)?(?:prompt|confirm)\s*\(/);
 
-  const api = read("src/app/api/analyzers/messages/[messageId]/replay/route.ts");
+  const api = read("src/app/api/analyzers/messages/[id]/replay/route.ts");
   assert.ok(api.includes("analyzer_message_replay_state_changed"));
   assert.ok(api.includes('requirePermission("analyzers.replay")'));
 });
