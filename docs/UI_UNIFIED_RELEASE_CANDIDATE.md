@@ -63,18 +63,59 @@ preferences, branch RBAC and keyboard/screen reader use as `NOT_EXECUTED`.
 - Dedicated CI regression for changed workflows, all 81 source pages,
   nested component coverage and honest real-browser evidence status.
 
-### Unresolved action-level UI debt
-- Quality management contains many native high-impact workflows (closure,
-  CAPA review/action, audit findings, document approval, analyzer
-  authorization). They must be redesigned as reasoned validated dialogs
-  **without weakening** the existing clinical/quality authorization.
-- EQA has 9 source forms including assessment/finalization that are not
-  ordinary CRUD; preserve reviewer separation and protected escalation.
-- Historical specialty result entry, clinical report print, specimen custody,
-  invoice refund/reversal, doctor portal, password step-up and other
-  noncompact dialogs need intentional viewport/role/keyboard assessment.
-- The source audit exposes every candidate; these remain NOT_ACCEPTED until
-  actual interactive browser evidence is produced.
+### Additional work completed on this still-unmerged release branch
+
+- EQA: nine audited program, external sample measurement, submission,
+  independent assessment, finalization, closure and retirement actions
+  now have explicit modal controls. Reviewer/submitter separation and
+  synthetic/nonpatient status remain unchanged at the server layer.
+- Quality-management lifecycle: eleven previous native `prompt` /
+  `confirm` workflows for CAPA effectiveness/action, nonconformance
+  closure, controlled document workflow/version, analyzer authorization,
+  quality indicator measurement and audit finding/closure/completion now
+  have explicitly typed bilingual review forms. Critical audit findings
+  must select an existing open CAPA; a free-text CAPA identifier is no
+  longer silently accepted. Evidence and version history remain server
+  authoritative; UI tests guard these decisions.
+- Central patient identifier management: a separate compact create
+  dialog and reason-required deactivation review replacing native
+  browser prompting. Full patient-history/audit controls remain intact.
+- Test catalog and clinical catalog: replace hand-built
+  `modal-backdrop` overlays with shared compact dialogs for test/master
+  data, components, panels/profiles, TAT drafts and reference-interval
+  drafts. Clinic-sensitive `effectiveFrom` no longer silently chooses
+  today's **UTC** date: a qualified user explicitly enters the intended
+  effective date for new TAT/range drafts.
+- Commercial packages: member-test choice survives failed submissions;
+  the package is still a financial grouping and not one merged clinical
+  result. One-third dialog width is scrollable on small screens.
+- Payment methods: create and auditable activation/deactivation now have
+  separate compact dialogs; no prompt and no mutation of historical
+  payment/refund snapshots.
+- Report templates: creation/version drafts and independently reviewed
+  approval/activation use guarded dialogs. Existing 12-character review
+  explanation, exact version confirmation, independent reviewer checks
+  and immutable prior report snapshots are preserved. Network errors
+  retain form fields.
+- Inventory interbranch stock transfers: create, approve/reserve,
+  dispatch, partial receive and finalize receive now use two guarded
+  modal workflows; the exact selected lot quantities are snapshotted
+  for review. Transfer custody/branch checks and discrepancy accounting
+  remain server enforced; network failure never pretends a stock
+  transaction succeeded.
+
+### Still unresolved — not a screen-completion claim
+
+- Source audit and CI do **not** establish actual rendered screen layout,
+  screenshot comparison, keyboard navigation, user role permissions,
+  responsive behavior, RTL date formatting or owner acceptance.
+- The remaining 81-route inventory includes clinical results, billing
+  invoice/refund workflows, specimen custody, analyzer controls,
+  microbiology and special report/print interfaces. Every inline-form
+  candidate must be classified by use case, and safety-specific layouts
+  must be reviewed rather than mechanically put into small dialogs.
+- External analyzer, real MDR/MDB data and Stage132 UAT are independent
+  clinical-governance gates (#250). No GO is implied by green CI.
 
 ## Must happen **before** one final deployment
 
