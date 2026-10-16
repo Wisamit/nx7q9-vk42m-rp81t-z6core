@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { CrudModal } from "@/components/crud-modal";
 
 type SelectOption = {id:string;label:string};
 type Grant = {id:string;doctor:string;patient:string;orders:boolean;reports:boolean;requestOrders:boolean;
@@ -16,9 +17,11 @@ export function DoctorPortalAccessManager({
  const [requestOrders,setRequestOrders]=useState(false);
  const [from,setFrom]=useState(""),[to,setTo]=useState(""),[reason,setReason]=useState("");
  const [after,setAfter]=useState("");
+ const [grantOpen,setGrantOpen]=useState(false);
+ const [revokeId,setRevokeId]=useState<string|null>(null);
+ const [revokeReason,setRevokeReason]=useState("");
  async function grant(e:React.FormEvent<HTMLFormElement>) {
    e.preventDefault();if(busy||!doctor||!patient)return;
-   if(!confirm(t("Grant access to this doctor for this specific patient?","هل تريد منح هذا الطبيب صلاحية الوصول لهذا المريض تحديدًا؟")))return;
    setBusy(true);setMessage("");
    try {
     const r=await fetch("/api/doctor-portal-access",{method:"POST",headers:{"Content-Type":"application/json"},
@@ -28,23 +31,23 @@ export function DoctorPortalAccessManager({
        effectiveTo:to?new Date(to).toISOString():undefined,reason})});
     const data=await r.json().catch(()=>({})) as {error?:string};
     if(!r.ok)setMessage(t("Grant failed: ","فشل منح الصلاحية: ")+(data.error??"unknown"));
-    else{setMessage(t("Access granted and audited.","تم منح الصلاحية وتوثيقها."));setReason("");router.refresh();}
+    else{setMessage(t("Access granted and audited.","تم منح الصلاحية وتوثيقها."));setReason("");setGrantOpen(false);router.refresh();}
    }catch{setMessage(t("Connection failed; verify state before retry.","فشل الاتصال، تحقق من حالة الصلاحية قبل الإعادة."));}
    finally{setBusy(false);}
  }
- async function revoke(id:string) {
-   const r=prompt(t("Why is this access being revoked? (10–1000 characters)","سبب إلغاء الصلاحية (10–1000 محرف)"));
-   if(r===null)return;
-   if(r.trim().length<10||r.trim().length>1000){setMessage(t("A detailed reason is required.","سبب واضح إلزامي."));return;}
-   if(!confirm(t("Immediately revoke this doctor's access to this patient?","هل تريد إلغاء وصول الطبيب لهذا المريض فورًا؟")))return;
+ async function revoke(e:React.FormEvent<HTMLFormElement>) {
+   e.preventDefault();
+   if(busy||!revokeId)return;
+   const r=revokeReason.trim();
+   if(r.length<10||r.length>1000){setMessage(t("A detailed reason is required.","سبب واضح إلزامي."));return;}
    setBusy(true);setMessage("");
    try {
     const response=await fetch("/api/doctor-portal-access",{method:"PATCH",headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({id,reason:r})});
+      body:JSON.stringify({id:revokeId,reason:r})});
     const body=await response.json().catch(()=>({})) as {error?:string};
     setMessage(response.ok?t("Access revoked and audited.","تم إلغاء الصلاحية وتوثيقها."):
      t("Revocation failed: ","فشل الإلغاء: ")+(body.error??"unknown"));
-    if(response.ok)router.refresh();
+    if(response.ok){setRevokeId(null);setRevokeReason("");router.refresh();}
    }catch{setMessage(t("Connection failed; check before retrying.","فشل الاتصال، تحقق قبل إعادة المحاولة."));}
    finally{setBusy(false);}
  }
@@ -55,7 +58,16 @@ export function DoctorPortalAccessManager({
     <p className="muted">{t(
      "A referral alone does not authorize access. Link a doctor to each patient explicitly. Reports need a separate authorization.",
      "الإحالة وحدها لا تسمح بالوصول. اربط الطبيب بكل مريض صراحةً، مع صلاحية مستقلة لعرض التقارير.")}</p>
-    <form className="form-stack" onSubmit={e=>void grant(e)}>
+    <button type="button" className="primary-button" disabled={busy}
+      onClick={()=>{setMessage("");setGrantOpen(true);}}>
+      {t("Grant doctor access","منح الطبيب صلاحية")}
+    </button>
+    <CrudModal open={grantOpen} onClose={()=>{if(!busy)setGrantOpen(false);}}
+      size="compact"
+      title={t("Grant scoped clinical access","منح صلاحية الوصول الطبي")}
+      description={t("Confirm this exact doctor/patient authorization. Released reports need explicit permission and server audit.",
+        "أكّد تفويض هذا الطبيب لهذا المريض تحديداً. يتطلب عرض التقارير الصادرة إذناً صريحاً وتدقيقاً من السيرفر.")}>
+    {grantOpen&&<form className="form-stack" onSubmit={e=>void grant(e)}>
       <label>{t("Doctor portal account","حساب بوابة الطبيب")}
        <select required value={doctor} onChange={e=>setDoctor(e.target.value)}>
         {doctors.map(d=><option key={d.id} value={d.id}>{d.label}</option>)}
@@ -77,7 +89,9 @@ export function DoctorPortalAccessManager({
       <button className="primary-button" disabled={busy||!doctor||!patient||(!orders&&!reports&&!requestOrders)}>
        {busy?t("Saving…","جارٍ الحفظ…"):t("Grant doctor access","منح الطبيب الصلاحية")}
       </button>
-    </form>
+      {message&&<p role="status" className="form-warning">{message}</p>}
+    </form>}
+    </CrudModal>
   </article>
   <article className="detail-card">
    <h2>{t("Authorization register","سجل تفويض الأطباء")}</h2>
@@ -93,10 +107,27 @@ export function DoctorPortalAccessManager({
      <td>{g.status}<small className="table-subtext">{g.from} — {g.to||"∞"}</small>
       {g.revokeReason&&<small className="table-subtext">{g.revokeReason}</small>}</td>
      <td>{g.status==="ACTIVE"&&<button className="secondary-button" type="button"
-       disabled={busy} onClick={()=>void revoke(g.id)}>{t("Revoke","إلغاء")}</button>}</td>
+       disabled={busy} onClick={()=>{setMessage("");setRevokeReason("");setRevokeId(g.id);}}>{t("Revoke","إلغاء")}</button>}</td>
     </tr>)}</tbody></table></div>
    {grants.length>50&&visible.length===50&&<button type="button" className="secondary-button"
      onClick={()=>setAfter(visible[49].id)}>{t("Next page","الصفحة التالية")}</button>}
   </article>
+  <CrudModal open={revokeId!==null} onClose={()=>{if(!busy)setRevokeId(null);}}
+    size="compact"
+    title={t("Revoke Doctor Patient Access","إلغاء وصول الطبيب إلى المريض")}
+    description={t("This immediately removes the specific doctor's access to the selected patient. Existing audit history is preserved.",
+      "يلغي هذا الإجراء فوراً وصول الطبيب إلى المريض المحدد، مع الحفاظ على تاريخ التدقيق.")}>
+    {revokeId&&<form className="form-stack" onSubmit={e=>void revoke(e)}>
+      <p>{t("Revoke this doctor's authorization for this patient?", "إلغاء تفويض هذا الطبيب للوصول إلى هذا المريض؟")}</p>
+      <label>{t("Revocation reason (10–1000 characters)", "سبب الإلغاء (10–1000 محرف)")}
+        <textarea required minLength={10} maxLength={1000} rows={3} value={revokeReason}
+          onChange={e=>setRevokeReason(e.target.value)}/>
+      </label>
+      {message&&<p className="form-warning" role="status">{message}</p>}
+      <button className="primary-button" type="submit" disabled={busy||revokeReason.trim().length<10}>
+        {t("Confirm immediate revocation", "تأكيد إلغاء الوصول فوراً")}
+      </button>
+    </form>}
+  </CrudModal>
  </div>;
 }
