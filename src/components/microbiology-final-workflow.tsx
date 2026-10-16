@@ -149,14 +149,30 @@ export function MicrobiologyFinalWorkflow({
     <h2>{tr("Final Microbiology Result", "نتيجة الأحياء الدقيقة النهائية")}</h2>
     <p className="muted">{tr("Submitting creates or updates a versioned LaboratoryResult. Verification and release remain separate controlled steps.", "يؤدي الإرسال إلى إنشاء أو تحديث LaboratoryResult ذي إصدار محفوظ، بينما يبقى التحقق والإصدار خطوتين مستقلتين ومضبوطتين.")}</p>
 
-    {canEnter && specimenReadyForProcessing && (!resultStatus || ["DRAFT","ENTERED"].includes(resultStatus)) && <form className="catalog-form" onSubmit={submitFinal}>
+    {canEnter && specimenReadyForProcessing && (!resultStatus || ["DRAFT","ENTERED"].includes(resultStatus)) && <>
+      <button type="button" className="primary-button" disabled={Boolean(busy)}
+        onClick={()=>{setMessage("");setEditorOpen(true);}}>
+        {resultId ? tr("Update Final Submission","تحديث الإرسال النهائي")
+          : tr("Submit for Verification","إرسال للتحقق")}
+      </button>
+      <CrudModal open={editorOpen} onClose={()=>{if(!busy)setEditorOpen(false);}}
+        size="compact"
+        title={tr("Review Final Microbiology Content","مراجعة المحتوى النهائي للأحياء الدقيقة")}
+        description={tr(
+          "Submit a versioned result draft for independent verification. Confirm organism, susceptibility, specimen identification and case observations first.",
+          "قدّم مسودة نتيجة بإصدار مستقل للتحقق. راجع الكائنات الدقيقة والحساسية وهوية العينة وملاحظات الزرع أولاً.",
+        )}>
+        {editorOpen&&<form className="catalog-form" onSubmit={submitFinal}>
       <label className="form-span">{tr("Final interpretive comment", "التعليق التفسيري النهائي")}
         <textarea name="finalComment" rows={4} required defaultValue={finalComment} />
       </label>
       <button className="primary-button form-span" disabled={busy !== ""}>
         {busy === "submit" ? tr("Submitting…", "جارٍ الإرسال…") : resultId ? tr("Update Final Submission", "تحديث الإرسال النهائي") : tr("Submit for Verification", "إرسال للتحقق")}
       </button>
-    </form>}
+        {message&&<p className="form-warning form-span" role="alert">{message}</p>}
+      </form>}
+      </CrudModal>
+    </>}
 
     <div className="result-workflow-status">
       <div><span>{tr("Laboratory result", "نتيجة المختبر")}</span><strong>{resultStatus || tr("NOT SUBMITTED", "غير مرسلة")}</strong></div>
@@ -164,21 +180,52 @@ export function MicrobiologyFinalWorkflow({
 
     <div className="result-actions">
       {resultId && resultStatus === "ENTERED" && canEnter &&
-        <button className="secondary-button" type="button" disabled={busy !== ""} onClick={() => void withdraw()}>
+        <button className="secondary-button" type="button" disabled={busy !== ""} onClick={() => {setMessage("");setReviewAction("WITHDRAW");}}>
           {busy === "withdraw" ? tr("Withdrawing…", "جارٍ السحب…") : tr("Withdraw for Correction", "سحب للتصحيح")}
         </button>}
       {resultId && resultStatus === "ENTERED" && canVerify && specimenReadyForProcessing &&
-        <button className="secondary-button" type="button" disabled={busy !== ""} onClick={() => void verify()}>
+        <button className="secondary-button" type="button" disabled={busy !== ""} onClick={() => {setMessage("");setReviewAction("VERIFY");}}>
           {busy === "verify" ? tr("Verifying…", "جارٍ التحقق…") : tr("Verify Microbiology Result", "التحقق من نتيجة الأحياء الدقيقة")}
         </button>}
       {resultId && resultStatus === "VERIFIED" && canRelease && specimenReadyForProcessing &&
-        <button className="primary-button" type="button" disabled={busy !== ""} onClick={() => void release()}>
+        <button className="primary-button" type="button" disabled={busy !== ""} onClick={() => {setMessage("");setReviewAction("RELEASE");}}>
           {busy === "release" ? tr("Releasing…", "جارٍ الإصدار…") : tr("Release Microbiology Result", "إصدار نتيجة الأحياء الدقيقة")}
         </button>}
       {resultStatus === "RELEASED" &&
         <a className="secondary-link" href={`/reports/${orderId}`}>{tr("Open Diagnostic Report", "فتح التقرير التشخيصي")}</a>}
     </div>
 
-    {message && <p className="form-success">{message}</p>}
+    <CrudModal open={reviewAction!==null}
+      onClose={()=>{if(!busy)setReviewAction(null);}}
+      size="compact"
+      title={reviewAction==="WITHDRAW"
+        ? tr("Withdraw Unverified Microbiology Result","سحب نتيجة أحياء دقيقة لم تُعتمد")
+        : reviewAction==="VERIFY"
+          ? tr("Verify Microbiology Result","التحقق من نتيجة الأحياء الدقيقة")
+          : tr("Release Verified Microbiology Result","إصدار نتيجة الأحياء الدقيقة المتحقق منها")}
+      description={tr(
+        "This is a clinically significant, audited status transition. Verify exact patient/specimen context and current result version. Server validation and release gates remain mandatory.",
+        "هذا تغيير حالة سريرية مهم وموثق. تحقق من المريض والعينة وإصدار النتيجة الحالي. تبقى قيود التحقق والإصدار على السيرفر إلزامية.",
+      )}>
+      {reviewAction&&<div className="catalog-form">
+        <p className="form-span"><strong>{tr("Current result state","حالة النتيجة الحالية")}: {resultStatus||"—"}</strong></p>
+        <p className="form-span">{reviewAction==="WITHDRAW"
+          ? tr("Withdrawal preserves the earlier submitted result as CANCELLED; a corrected result creates a new version.",
+            "يحفظ السحب النتيجة المرسلة السابقة بحالة ملغاة؛ التصحيح ينشئ إصداراً جديداً.")
+          : reviewAction==="VERIFY"
+            ? tr("Verification is blocked by unresolved QC, critical flags, reflex or validation holds according to server policy.",
+              "يُحظر التحقق عند وجود قيود ضبط جودة أو إشارات حرجة أو توصيات انعكاسية أو حجوزات تحقق لم تُحل.")
+            : tr("Release creates an immutable diagnostic report version. Published clinical history cannot be edited destructively.",
+              "يُنشئ الإصدار نسخة تقرير تشخيصي ثابتة؛ لا يمكن تعديل التاريخ السريري المنشور بالحذف أو الاستبدال.")}</p>
+        {message&&<p className="form-warning form-span" role="alert">{message}</p>}
+        <button type="button" className="primary-button form-span" disabled={Boolean(busy)}
+          onClick={()=>{if(reviewAction==="WITHDRAW")void withdraw();
+            else if(reviewAction==="VERIFY")void verify();
+            else if(reviewAction==="RELEASE")void release();}}>
+          {busy?tr("Processing…","جارٍ التنفيذ…"):tr("Confirm Clinical Action","تأكيد الإجراء السريري")}
+        </button>
+      </div>}
+    </CrudModal>
+    {message && <p role="status" className="form-warning">{message}</p>}
   </section>;
 }
