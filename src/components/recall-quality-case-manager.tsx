@@ -48,7 +48,7 @@ export function RecallQualityCaseManager({lotId,safetyEventId,canCreate,
     size="compact"
     title={tr("Open Recall Quality Investigation","فتح تحقيق جودة بسبب سحب دفعة")}
     description={tr(
-     "Open a branch-specific nonconformance from the documented recall escalation. This is not proof of patient exposure and never releases the held lot.",
+     "Open a branch-specific nonconformance from the documented recall escalation. This is not evidence of patient exposure and never releases the held lot.",
      "افتح عدم مطابقة ضمن الفرع استناداً إلى تصعيد السحب الموثق؛ لا يُعد إثباتاً لتعرض المرضى ولا يلغي حجز التشغيلة.",
     )}>
     {open&&<form className="catalog-form" onSubmit={e=>void submit(e)}>
