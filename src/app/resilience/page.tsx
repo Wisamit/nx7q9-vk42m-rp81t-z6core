@@ -1,3 +1,4 @@
+import { SystemDateText } from "@/components/system-date-text";
 import { permissionSet, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { ResilienceManager } from "@/components/resilience-manager";
@@ -197,12 +198,12 @@ export default async function ResiliencePage() {
       <div className="table-wrap"><table>
         <thead><tr><th>{tr(locale, "Backup time", "وقت النسخ الاحتياطي")}</th><th>{tr(locale, "Scope", "النطاق")}</th><th>{tr(locale, "Provider", "المزود")}</th><th>{tr(locale, "Reference", "المرجع")}</th><th>{tr(locale, "Status", "الحالة")}</th><th>{tr(locale, "Restore test", "اختبار الاستعادة")}</th><th>{tr(locale, "Recorded by", "سجله")}</th></tr></thead>
         <tbody>{backups.length===0?<tr><td colSpan={7} className="empty-state">{tr(locale, "No backup evidence recorded yet.", "لا توجد أدلة نسخ احتياطي مسجلة بعد.")}</td></tr>:backups.map(item=><tr key={item.id}>
-          <td>{item.backupCreatedAt.toISOString().replace("T"," ").slice(0,19)}</td>
+          <td>{<SystemDateText value={item.backupCreatedAt.toISOString()} />}</td>
           <td>{item.branch ? item.branch.code + " — " + localizedBranchName(item.branch) : tr(locale, "Organization", "المؤسسة")}</td>
           <td>{item.provider}</td>
           <td>{item.backupReference}</td>
           <td><span className={"status-badge status-"+item.status.toLowerCase()}>{resilienceStatusLabel(item.status)}</span></td>
-          <td>{item.restoreTestedAt ? item.restoreTestedAt.toISOString().slice(0,10)+(item.restoreDurationMinutes!==null?" · "+item.restoreDurationMinutes+" "+tr(locale, "min", "دقيقة"):"") : "—"}</td>
+          <td>{item.restoreTestedAt ? <><SystemDateText value={item.restoreTestedAt.toISOString()} kind="instant-date" />{item.restoreDurationMinutes!==null?" · "+item.restoreDurationMinutes+" "+tr(locale, "min", "دقيقة"):""}</> : "—"}</td>
           <td>{item.recordedBy.displayNameEn}</td>
         </tr>)}</tbody>
       </table></div>
@@ -216,7 +217,7 @@ export default async function ResiliencePage() {
           <td><strong>{item.title}</strong></td>
           <td>{item.branch ? item.branch.code + " — " + localizedBranchName(item.branch) : tr(locale, "Organization", "المؤسسة")}</td>
           <td><span className={"status-badge status-"+item.status.toLowerCase().replaceAll("_","-")}>{resilienceStatusLabel(item.status)}</span></td>
-          <td>{item.scheduledAt.toISOString().replace("T"," ").slice(0,16)}</td>
+          <td>{<SystemDateText value={item.scheduledAt.toISOString()} />}</td>
           <td>{item.targetRpoMinutes} / {item.targetRtoMinutes} {tr(locale, "min", "دقيقة")}</td>
           <td>{item.actualRpoMinutes!==null&&item.actualRtoMinutes!==null?item.actualRpoMinutes+" / "+item.actualRtoMinutes+" "+tr(locale, "min", "دقيقة"):"—"}</td>
           <td>{item.owner.displayNameEn}</td>
