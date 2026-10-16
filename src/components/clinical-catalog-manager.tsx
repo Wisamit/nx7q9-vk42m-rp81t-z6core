@@ -1,4 +1,5 @@
 "use client";
+import { SystemDateField } from "@/components/system-date-field";
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -121,8 +122,8 @@ export function ClinicalCatalogManager({
         <label>{tr("Repeat escalation every (minutes)", "تكرار التصعيد كل (دقائق)")}<input name="escalationRepeatMinutes" type="number" min="1" placeholder={tr("Required only for multiple levels", "مطلوب فقط عند تعدد المستويات")} /></label>
         <label>{tr("Maximum escalation level", "الحد الأقصى لمستوى التصعيد")}<input name="maxEscalationLevel" type="number" min="1" max="10" defaultValue="1" /></label>
         <label>{tr("Recipient permission code", "رمز صلاحية المستلمين")}<input name="escalationPermissionCode" maxLength={120} placeholder={tr("Permission code, e.g. results.verify", "رمز الصلاحية، مثال results.verify")} /></label>
-        <label>{tr("Effective from", "ساري من")}<input name="effectiveFrom" type="date" required /></label>
-        <label>{tr("Effective to", "ساري حتى")}<input name="effectiveTo" type="date" /></label>
+        <label>{tr("Effective from", "ساري من")}<SystemDateField name="effectiveFrom" required /></label>
+        <label>{tr("Effective to", "ساري حتى")}<SystemDateField name="effectiveTo" /></label>
         <p className="muted form-span">{tr(
           "New policies are saved as inactive drafts. After approval, resolution priority is exact branch + exact priority, branch default, organization priority, then organization default. TAT and escalation settings are snapshotted on the order item.",
           "تُحفظ السياسات الجديدة كمسودات غير نشطة. بعد الاعتماد تكون أولوية الاختيار: الفرع والأولوية المطابقان، ثم افتراضي الفرع، ثم أولوية المؤسسة، ثم افتراضي المؤسسة. ويتم حفظ إعدادات TAT والتصعيد كلقطة تاريخية على الفحص المطلوب."
@@ -150,7 +151,7 @@ export function ClinicalCatalogManager({
         <label>{tr("Gestational age from (weeks)", "عمر الحمل من (أسابيع)")}<input name="gestationalAgeFromWeeks" inputMode="decimal" /></label>
         <label>{tr("Gestational age to (weeks)", "عمر الحمل إلى (أسابيع)")}<input name="gestationalAgeToWeeks" inputMode="decimal" /></label>
         <label>{tr("Population code", "رمز المجموعة المرجعية")}<input name="populationCode" maxLength={80} placeholder={tr("Optional configured code", "رمز اختياري مُهيأ")} /></label>
-        <label>{tr("Effective from", "ساري من")}<input name="effectiveFrom" type="date" required /></label>
+        <label>{tr("Effective from", "ساري من")}<SystemDateField name="effectiveFrom" required /></label>
         <label>{tr("Source", "المصدر")}<input name="source" /></label>
         <p className="muted form-span">{tr(
           "New reference intervals are saved as inactive drafts. They cannot affect result flags or critical alerts until an authorized user explicitly approves them.",
