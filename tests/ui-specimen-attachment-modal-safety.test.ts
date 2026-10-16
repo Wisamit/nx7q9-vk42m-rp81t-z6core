@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 
 const attachment = readFileSync("src/components/attachment-manager.tsx", "utf8");
 const aliquot = readFileSync("src/components/specimen-aliquot-manager.tsx", "utf8");
+const specimen = readFileSync("src/components/specimen-actions.tsx", "utf8");
 
 test("Issue #265: attachment upload is gated by permissions, file and user confirmation", () => {
   assert.ok(attachment.includes('import { CrudModal } from "@/components/crud-modal"'));
@@ -61,4 +62,31 @@ test("Issue #265: specimen barcode lineage, volume and storage history remain se
   assert.ok(aliquot.includes('child.barcode'));
   assert.ok(aliquot.includes('usageEvents.map'));
   assert.ok(aliquot.includes("router.refresh()"));
+});
+
+test("Issue #265: specimen reception, scope-specific rejection and disposal are guarded by custody modal", () => {
+  assert.ok(specimen.includes('import { CrudModal } from "@/components/crud-modal"'));
+  assert.ok(specimen.includes("open={mode !== null}"));
+  assert.ok(specimen.includes('size="compact"'));
+  assert.ok(specimen.includes("Barcode: " + "barcode"));
+  assert.ok(specimen.includes("if (!busy) { setMode(null)"));
+  assert.ok(specimen.includes('if (!mode || busy) return;'));
+  assert.ok(specimen.includes('mode && <form className="catalog-form specimen-action-form"'));
+  assert.ok(specimen.includes('role="alert"'));
+  assert.ok(specimen.includes('} catch {'));
+  assert.ok(specimen.includes('} finally {'));
+  assert.ok(specimen.includes('setBusy(false)'));
+  for (const term of [
+    'labelAssessment: form.get("labelAssessment")',
+    'conditionCode: form.get("conditionCode")',
+    'observedContainerCode: form.get("observedContainerCode")',
+    'receptionNotes: form.get("receptionNotes")',
+    'rejectionReasonId: form.get("rejectionReasonId")',
+    'scope: rejectionScope',
+    'orderItemIds: form.getAll("orderItemIds")',
+    'disposalReason',
+    'replacementBarcode',
+    'requirementsFinalized',
+    'specimenTypeConfigured',
+  ]) assert.ok(specimen.includes(term), "Custody history or reviewer data lost: " + term);
 });
