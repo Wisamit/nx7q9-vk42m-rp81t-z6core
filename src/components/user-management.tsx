@@ -140,10 +140,6 @@ export function UserManagement({ locale, canManageDiscountLimits, canResetPasswo
       setResetError(tr("New passwords do not match.", "كلمتا المرور الجديدتان غير متطابقتين."));
       return;
     }
-    if (!confirm(tr(
-      "Reset this staff member's password, revoke ALL of their sessions and require a fresh login? Their MFA remains enabled.",
-      "هل تريد تغيير كلمة مرور هذا الموظف وإنهاء جميع جلساته؟ ستبقى المصادقة متعددة العوامل مفعّلة.",
-    ))) return;
     setBusy(true); setResetError("");
     try {
       const response = await fetch("/api/admin/users/" + resetting.id + "/reset-password", {
@@ -250,8 +246,8 @@ export function UserManagement({ locale, canManageDiscountLimits, canResetPasswo
     >
       {resetting && <form className="settings-grid" onSubmit={e => void resetStaffPassword(e)}>
         <p className="muted form-span">{tr(
-          "Only an authorized system admin may reset another active staff account. You must re-enter YOUR own password. This revokes all of their sessions and preserves their MFA settings.",
-          "فقط مدير نظام مخوّل يمكنه تغيير كلمة مرور موظف آخر فعّال. أدخل كلمة مرورك أنت للتحقق. ستُلغى جلسات الموظف وتبقى إعدادات MFA محفوظة.",
+          "Review the selected staff account carefully before confirmation. Only an authorized system admin may reset another active staff account. You must re-enter YOUR own password. Submitting this form immediately revokes ALL target sessions and requires a fresh login. MFA remains enabled.",
+          "راجع حساب الموظف المحدد قبل التأكيد. يحق فقط لمدير نظام مخوّل إعادة تعيين كلمة مرور موظف آخر فعّال. أدخل كلمة مرور المدير الخاصة بك؛ يؤدي إرسال هذا النموذج فوراً إلى إلغاء جميع جلسات الموظف وطلب دخول جديد، مع بقاء MFA مفعّلة.",
         )}</p>
         <label>{tr("Your administrator password", "كلمة مرور المدير الخاصة بك")}
           <input type="password" name="actorPassword" required autoComplete="current-password" /></label>
