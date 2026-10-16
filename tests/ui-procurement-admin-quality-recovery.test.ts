@@ -78,6 +78,8 @@ test("Issue #265: QC and qualitative option effective dates are explicitly chose
   const qms = source("quality-management-console");
   assert.match(qms, /Assigned at \(local date\)/);
   assert.match(qms, /Assessed at \(local date\)/);
+  assert.match(qms, /name="assignedAt" type="date" required/);
+  assert.match(qms, /name="assessedAt" type="date" required/);
   assert.doesNotMatch(qms, /defaultValue=\{new Date\(\)\.toISOString\(\)\.slice\(0,\s*10\)\}/);
 });
 
