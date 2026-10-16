@@ -19,7 +19,7 @@ test("UI #265: protected procurement, QC, quality, notification, retention and s
     assert.ok(source.includes('import { CrudModal } from "@/components/crud-modal"'),
       moduleName + " must import shared modal");
     assert.equal((source.match(/<CrudModal\b/g) || []).length,
-      names.length + (["quality-management-console", "qc-manager"].includes(moduleName) ? 1 : 0), moduleName);
+      names.length + (["quality-management-console", "qc-manager", "send-out-manager"].includes(moduleName) ? 1 : 0), moduleName);
     if (moduleName === "qc-manager") {
       assert.ok(source.includes('open={resolutionId!==null}'),
         "QC violation resolution has its own audited compact review dialog");
@@ -47,8 +47,14 @@ test("UI #265: protected procurement, QC, quality, notification, retention and s
 test("UI #265: all nine EQA actions use role-gated review dialogs, with custody separate", () => {
   const sendOut = read("src/components/send-out-manager.tsx");
   const eqa = read("src/components/eqa-workspace.tsx");
-  assert.ok(sendOut.includes('onSubmit={event =>'),
-    "send-out dispatch/receipt actions need a dedicated chain-of-custody review");
+  assert.ok(sendOut.includes('open={review !== null}'),
+    "send-out dispatch/receipt/verification/cancel actions must use a dedicated custody review dialog");
+  assert.ok(sendOut.includes('onSubmit={confirmReview}'));
+  assert.ok(sendOut.includes('current.specimenBarcode'));
+  assert.ok(sendOut.includes('referral.status === "RESULT_RECEIVED" && canVerify'));
+  assert.ok(sendOut.includes('const success = await act(referral.id, action, payload)'));
+  assert.ok(sendOut.includes('if (success) setReview(null)'));
+  assert.ok(sendOut.includes('Documented cancellation reason required.'));
   assert.equal((eqa.match(/<CrudModal\b/g) || []).length, 9);
   assert.equal((eqa.match(/<form\b/g) || []).length, 9);
   assert.ok(!/\bconfirm\s*\(/.test(eqa),
