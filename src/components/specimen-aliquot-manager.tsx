@@ -168,24 +168,39 @@ export function SpecimenAliquotManager({
     }
   }
 
+  async function refreshLocations(includeInactive = canManageStorageSettings) {
+    if (!currentBranchId) return false;
+    try {
+      const params = new URLSearchParams({ branchId: currentBranchId });
+      if (includeInactive) params.set("includeInactive", "true");
+      const response = await fetch("/api/settings/specimen-storage-locations?" + params.toString());
+      if (!response.ok) return false;
+      const data = await response.json();
+      if (!Array.isArray(data.locations)) return false;
+      setLocations(data.locations);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   async function registerStorage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (busy || storageBusy) return;
     const form = new FormData(event.currentTarget);
     const ok = await post("/api/settings/specimen-storage-locations", {
       branchId: currentBranchId,
       storagePosition: {
-        zone: form.get("zone"), unit: form.get("unit"), rack: form.get("rack"), slot: form.get("slot"),
+        zone: form.get("zone"), unit: form.get("unit"),
+        rack: form.get("rack"), slot: form.get("slot"),
       },
     });
-    if (ok && currentBranchId) {
-      setActionModal("");
-      const response = await fetch(`/api/settings/specimen-storage-locations?branchId=${encodeURIComponent(currentBranchId)}${canManageStorageSettings ? "&includeInactive=true" : ""}`);
-      if (response.ok) {
-        const data = await response.json();
-        setLocations(data.locations || []);
-      }
-      setMessage(tr("Storage location registered for this branch.", "تم تعريف موقع التخزين لهذا الفرع."));
-    }
+    if (!ok) return;
+    setActionModal("");
+    const refreshed = await refreshLocations();
+    setMessage(refreshed
+      ? tr("Storage location registered for this branch.", "تم تعريف موقع التخزين لهذا الفرع.")
+      : tr("Storage location registered; location list could not refresh.", "تم تعريف موقع التخزين؛ تعذر تحديث قائمة المواقع."));
   }
 
   async function changeStorageStatus(event: FormEvent<HTMLFormElement>) {
@@ -198,27 +213,28 @@ export function SpecimenAliquotManager({
       const response = await fetch("/api/settings/specimen-storage-locations", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: form.get("locationId"), status: form.get("status"), reason: form.get("reason") }),
+        body: JSON.stringify({
+          id: form.get("locationId"),
+          status: form.get("status"),
+          reason: form.get("reason"),
+        }),
       });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) {
         setMessage(errorMessage(body.error));
         return;
       }
+      // A successful audited PATCH is not undone by a separate list-refresh failure.
       setActionModal("");
-      if (currentBranchId) {
-        const refreshed = await fetch(`/api/settings/specimen-storage-locations?branchId=${encodeURIComponent(currentBranchId)}&includeInactive=true`);
-        if (refreshed.ok) {
-          const data = await refreshed.json();
-          setLocations(Array.isArray(data.locations) ? data.locations : []);
-        } else {
-          setMessage(tr("Status saved, but location list could not refresh.", "تم حفظ الحالة ولكن تعذر تحديث قائمة مواقع التخزين."));
-          return;
-        }
-      }
-      setMessage(tr("Storage location status updated and audited.", "تم تحديث حالة موقع التخزين وتسجيل العملية."));
+      const refreshed = await refreshLocations(true);
+      setMessage(refreshed
+        ? tr("Storage location status updated and audited.", "تم تحديث حالة موقع التخزين وتسجيل العملية.")
+        : tr("Status saved, but location list could not refresh.", "تم حفظ الحالة ولكن تعذر تحديث قائمة مواقع التخزين."));
     } catch {
-      setMessage(tr("Connection failed while updating storage status.", "فشل الاتصال أثناء تحديث حالة موقع التخزين."));
+      setMessage(tr(
+        "Connection interrupted; check the storage status before retrying.",
+        "انقطع الاتصال؛ راجع حالة موقع التخزين قبل إعادة المحاولة.",
+      ));
     } finally {
       setStorageBusy(false);
     }
