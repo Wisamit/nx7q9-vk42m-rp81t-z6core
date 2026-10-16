@@ -767,7 +767,7 @@ export function QualityManagementConsole({
           <label>{tr("SOP/document","SOP / الوثيقة")}<select name="documentVersionId" defaultValue=""><option value="">{tr("None","لا يوجد")}</option>{effectiveDocumentVersions.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
           <label>{tr("Analyzer","الجهاز")}<select name="analyzerId" value={trainingAnalyzerId} onChange={event => setTrainingAnalyzerId(event.target.value)}><option value="">{tr("None","لا يوجد")}</option>{analyzers.map(item => <option key={item.id} value={item.id}>{item.code} — {item.name}</option>)}</select></label>
           <label>{tr("Status","الحالة")}<select name="status" defaultValue="ASSIGNED"><option value="ASSIGNED">{qmsStatusLabel("ASSIGNED")}</option><option value="IN_PROGRESS">{qmsStatusLabel("IN_PROGRESS")}</option><option value="COMPLETED">{qmsStatusLabel("COMPLETED")}</option><option value="WAIVED">{qmsStatusLabel("WAIVED")}</option></select></label>
-          <label>{tr("Assigned at (local date)","تاريخ التعيين (التاريخ المحلي)")}<input name="assignedAt" type="date" /></label>
+          <label>{tr("Assigned at (local date)","تاريخ التعيين (التاريخ المحلي)")}<input name="assignedAt" type="date" required /></label>
           <label>{tr("Completed at","تاريخ الإكمال")}<input name="completedAt" type="date" /></label>
           <label>{tr("Expires","تاريخ الانتهاء")}<input name="expiresAt" type="date" /></label>
           <label className="form-span">{tr("Certificate URL","رابط الشهادة")}<input name="certificateUrl" type="url" /></label>
@@ -793,7 +793,7 @@ export function QualityManagementConsole({
           <label>{tr("Competency","الكفاءة")}<input name="competencyName" required /></label>
           <label>{tr("Assessment method","طريقة التقييم")}<input name="assessmentMethod" required placeholder={tr("Direct observation / blind sample / quiz…","ملاحظة مباشرة / عينة عمياء / اختبار…")} /></label>
           <label>{tr("Result","النتيجة")}<select name="result" defaultValue="PASS"><option value="PASS">{competencyResultLabel("PASS")}</option><option value="CONDITIONAL">{competencyResultLabel("CONDITIONAL")}</option><option value="FAIL">{competencyResultLabel("FAIL")}</option></select></label>
-          <label>{tr("Assessed at (local date)","تاريخ التقييم (التاريخ المحلي)")}<input name="assessedAt" type="date" /></label>
+          <label>{tr("Assessed at (local date)","تاريخ التقييم (التاريخ المحلي)")}<input name="assessedAt" type="date" required /></label>
           <label>{tr("Next due","الاستحقاق التالي")}<input name="nextDueAt" type="date" /></label>
           <label className="form-span">{tr("Notes","ملاحظات")}<textarea name="notes" rows={2} /></label>
           <button className="primary-button form-span" disabled={busy !== ""}>{busy === "competency-create" ? tr("Saving…","جارٍ الحفظ…") : tr("Record Competency","تسجيل تقييم الكفاءة")}</button>
