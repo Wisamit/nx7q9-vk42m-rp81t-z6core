@@ -234,7 +234,24 @@ html[data-density="compact"] :where(.detail-card,.dashboard-panel,.settings-card
 .crud-modal{display:flex;flex-direction:column;width:min(760px,100%);max-height:calc(100vh - 48px);background:var(--fl-surface);color:var(--fl-text);border:1px solid var(--fl-border);border-radius:18px;box-shadow:0 28px 90px color-mix(in srgb,var(--fl-text) 35%,transparent);overflow:hidden}
 .crud-modal-compact{width:min(33.333vw,520px);min-width:0}
 .crud-modal-compact .settings-layout{padding-bottom:0;min-width:0}
-.crud-modal-compact .catalog-form{grid-template-columns:minmax(0,1fr)}
+.crud-modal-compact .catalog-form,
+.crud-modal-compact .form-grid,
+.crud-modal-compact .detail-grid,
+.crud-modal-compact .admin-grid{grid-template-columns:minmax(0,1fr)}
+.crud-modal-compact :is(input,select,textarea,button){max-width:100%}
+.crud-modal-compact :is(.inline-actions,.result-actions){flex-wrap:wrap;min-width:0}
+.crud-modal-compact :is(.detail-card,.table-card,.detail-section,.form-grid,.catalog-form){min-width:0}
+.crud-modal-compact :is(p,small,strong,code){overflow-wrap:anywhere}
+.crud-modal-compact :is(button,a,input,select,textarea):focus-visible{
+  outline:2px solid var(--fl-primary);
+  outline-offset:2px;
+}
+.crud-modal-compact .form-span{grid-column:1/-1}
+@media(max-width:760px){
+  .crud-modal-backdrop{height:100dvh}
+  .crud-modal-compact{height:100dvh}
+  .crud-modal-compact .crud-modal-body{padding-bottom:max(16px,env(safe-area-inset-bottom))}
+}
 .crud-modal-compact .catalog-form>*{min-width:0}
 .crud-modal-compact .settings-grid,
 .crud-modal-compact .branding-upload-grid,
