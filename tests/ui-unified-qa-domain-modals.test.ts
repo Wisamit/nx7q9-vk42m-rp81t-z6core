@@ -41,9 +41,9 @@ test("UI #265: protected procurement, QC, quality, notification, retention and s
       assert.ok(source.slice(start, close).includes("</form>"), name + " must remain a complete form");
     }
     assert.ok(
-      moduleName === "notification-center-actions"
+      ["notification-center-actions", "procurement-manager"].includes(moduleName)
         ? source.includes('if (!submitting.current) setUiEditor("")')
-        : ["procurement-manager", "qc-manager", "quality-management-console"].includes(moduleName)
+        : ["qc-manager", "quality-management-console"].includes(moduleName)
           ? source.includes('if (!submitting.current && !busy) setUiEditor("")')
           : source.includes('if (!busy) setUiEditor("")'),
       moduleName + " must refuse dismissing a modal during an in-flight mutation",
