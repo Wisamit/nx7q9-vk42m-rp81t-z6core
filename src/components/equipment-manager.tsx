@@ -194,8 +194,8 @@ export function EquipmentManager({
         <label>{tr("Manufacturer", "الشركة المصنعة")}<input name="manufacturer" /></label>
         <label>{tr("Model", "الطراز")}<input name="model" /></label>
         <label>{tr("Serial number", "الرقم التسلسلي")}<input name="serialNumber" /></label>
-        <label>{tr("Installation date", "تاريخ التركيب")}<SystemDateField name="installationDate"  /></label>
-        <label>{tr("Warranty until", "الضمان حتى")}<SystemDateField name="warrantyUntil"  /></label>
+        <label>{tr("Installation date", "تاريخ التركيب")}<SystemDateField name="installationDate" /></label>
+        <label>{tr("Warranty until", "الضمان حتى")}<SystemDateField name="warrantyUntil" /></label>
         <label>{tr("Service vendor", "مزود الصيانة")}<input name="serviceVendor" /></label>
         <label>{tr("Location", "الموقع")}<input name="locationText" /></label>
         <label className="form-span">{tr("Notes", "ملاحظات")}<textarea name="notes" rows={2} /></label>
@@ -250,7 +250,7 @@ export function EquipmentManager({
     {uiEditor === "calibration" && <form className="catalog-form" onSubmit={calibration}>
         <label className="form-span">{tr("Equipment", "المعدة")}<select name="equipmentId" required defaultValue=""><option value="">{tr("Select equipment…", "اختر المعدة…")}</option>{equipmentOptions.map(item => <option key={item.id} value={item.id}>{item.assetId} — {item.name}</option>)}</select></label>
         <label>{tr("Status", "الحالة")}<select name="status" defaultValue="PASS"><option value="DUE">{eventStatusLabel("DUE")}</option><option value="IN_PROGRESS">{eventStatusLabel("IN_PROGRESS")}</option><option value="PASS">{eventStatusLabel("PASS")}</option><option value="FAIL">{eventStatusLabel("FAIL")}</option></select></label>
-        <label>{tr("Due date", "تاريخ الاستحقاق")}<SystemDateField name="dueAt"  /></label>
+        <label>{tr("Due date", "تاريخ الاستحقاق")}<SystemDateField name="dueAt" /></label>
         <label>{tr("Performed at", "وقت التنفيذ")}<input name="performedAt" type="datetime-local" /></label>
         <label>{tr("Material", "المادة")}<input name="materialName" /></label>
         <label>{tr("Material lot", "تشغيلة المادة")}<input name="materialLot" /></label>
@@ -298,7 +298,7 @@ export function EquipmentManager({
         <label className="form-span">{tr("Equipment", "المعدة")}<select name="equipmentId" required defaultValue=""><option value="">{tr("Select equipment…", "اختر المعدة…")}</option>{equipmentOptions.map(item => <option key={item.id} value={item.id}>{item.assetId} — {item.name}</option>)}</select></label>
         <label>{tr("Plan name", "اسم الخطة")}<input name="name" required placeholder={tr("Monthly preventive service", "صيانة وقائية شهرية")} /></label>
         <label>{tr("Frequency (days)", "التكرار (أيام)")}<input name="frequencyDays" type="number" min="1" max="3650" required /></label>
-        <label>{tr("Next due", "الاستحقاق التالي")}<SystemDateField name="nextDueAt"  required /></label>
+        <label>{tr("Next due", "الاستحقاق التالي")}<SystemDateField name="nextDueAt" required /></label>
         <label className="form-span">{tr("Instructions", "التعليمات")}<textarea name="instructions" rows={2} /></label>
         <button className="secondary-button form-span" disabled={busy !== ""}>{busy === "maintenance-plan" ? tr("Saving…", "جارٍ الحفظ…") : tr("Create Maintenance Plan", "إنشاء خطة الصيانة")}</button>
       </form>}
@@ -322,7 +322,7 @@ export function EquipmentManager({
         <label>{tr("Document type", "نوع الوثيقة")}<input name="documentType" required placeholder="MANUAL / CERTIFICATE / SERVICE_REPORT" /></label>
         <label>{tr("Name", "الاسم")}<input name="name" required /></label>
         <label className="form-span">{tr("External URL", "رابط خارجي")}<input name="externalUrl" type="url" required placeholder="https://…" /></label>
-        <label>{tr("Expiry", "الانتهاء")}<SystemDateField name="expiresAt"  /></label>
+        <label>{tr("Expiry", "الانتهاء")}<SystemDateField name="expiresAt" /></label>
         <label className="form-span">{tr("Notes", "ملاحظات")}<textarea name="notes" rows={2} /></label>
         <button className="secondary-button form-span" disabled={busy !== ""}>{busy === "document" ? tr("Saving…", "جارٍ الحفظ…") : tr("Record Document", "تسجيل الوثيقة")}</button>
       </form>}
