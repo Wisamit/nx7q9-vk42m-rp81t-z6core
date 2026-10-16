@@ -1,3 +1,5 @@
+import { SystemDateText } from "@/components/system-date-text";
+import { SystemDateField } from "@/components/system-date-field";
 import Link from "next/link";
 import { requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
@@ -157,10 +159,10 @@ export default async function ReportsPage({ searchParams }: { searchParams: Sear
             placeholder={tr(locale, "Accession number", "رقم الطلب")} />
         </label>
         <label>{tr(locale, "Issued from (UTC)", "تاريخ الإصدار من (UTC)")}
-          <input type="date" name="from" defaultValue={dateLabels.from} />
+          <SystemDateField name="from" defaultValue={dateLabels.from} />
         </label>
         <label>{tr(locale, "Issued through (UTC)", "تاريخ الإصدار إلى (UTC)")}
-          <input type="date" name="to" defaultValue={dateLabels.to} />
+          <SystemDateField name="to" defaultValue={dateLabels.to} />
         </label>
         <button type="submit" className="primary-button">{tr(locale, "Apply filters", "تطبيق التصفية")}</button>
       </form>
@@ -199,7 +201,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Sear
               <td>{version.deliveries.length
                 ? tr(locale, "Event recorded", "الحدث مسجل")
                 : tr(locale, "No record", "غير مسجل")}</td>
-              <td>{version.issuedAt.toISOString().replace("T", " ").slice(0, 19)}</td>
+              <td>{<SystemDateText value={version.issuedAt.toISOString()} />}</td>
               <td>{locale === "ar" ? version.issuedBy.displayNameAr ||
                 version.issuedBy.displayNameEn : version.issuedBy.displayNameEn}</td>
               <td><Link className="secondary-link" href={"/reports/" + report.orderId}>
