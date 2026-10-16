@@ -12,15 +12,7 @@ const FOCUSABLE_SELECTOR = [
   "[tabindex]:not([tabindex='-1'])",
 ].join(", ");
 
-export function CrudModal({
-  open,
-  onClose,
-  title,
-  description,
-  children,
-  size = "md",
-  protectUnsavedChanges = true,
-}: {
+type CrudModalProps = {
   open: boolean;
   onClose: () => void;
   title: string;
@@ -28,7 +20,26 @@ export function CrudModal({
   children: React.ReactNode;
   size?: "sm" | "md" | "lg" | "xl" | "full" | "compact";
   protectUnsavedChanges?: boolean;
-}) {
+};
+
+/**
+ * Mounts a fresh dialog session on every open. An external close caused by a
+ * successful save therefore cannot leave a stale discard confirmation open
+ * on the next edit attempt.
+ */
+export function CrudModal(props: CrudModalProps) {
+  if (!props.open) return null;
+  return <OpenCrudModal {...props} />;
+}
+
+function OpenCrudModal({
+  onClose,
+  title,
+  description,
+  children,
+  size = "md",
+  protectUnsavedChanges = true,
+}: CrudModalProps) {
   const headingId = useId();
   const descriptionId = useId();
   const discardTitleId = useId();
@@ -87,12 +98,6 @@ export function CrudModal({
   }, [discardOpen]);
 
   useEffect(() => {
-    if (!open) {
-      changedRef.current = false;
-      discardOpenRef.current = false;
-      return;
-    }
-
     const previouslyFocused = document.activeElement instanceof HTMLElement
       ? document.activeElement : null;
     const previousOverflow = document.body.style.overflow;
@@ -145,9 +150,7 @@ export function CrudModal({
       document.body.style.overflow = previousOverflow;
       if (previouslyFocused?.isConnected) previouslyFocused.focus({ preventScroll: true });
     };
-  }, [open, requestClose, cancelDiscard]);
-
-  if (!open) return null;
+  }, [requestClose, cancelDiscard]);
 
   return <div className="crud-modal-backdrop" role="presentation" onMouseDown={event => {
     if (event.target === event.currentTarget) requestClose();
