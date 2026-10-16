@@ -42,3 +42,26 @@ test("notification actions always release busy state on failed network operation
   assert.ok(text.includes('formElement.reset();\n      setUiEditor("");'));
   assert.doesNotMatch(text, /event\.currentTarget\.reset\(\)/);
 });
+
+test("order creation never reuses a lost React currentTarget after request completion", () => {
+  const text = source("order-create-form");
+  assert.match(text, /const formElement = event\.currentTarget;/);
+  assert.match(text, /if \(submitting\.current\) return;/);
+  assert.match(text, /formElement\.reset\(\)/);
+  assert.match(text, /Before retrying, check Orders/);
+  assert.match(text, /finally \{\s*submitting\.current = false;\s*setBusy\(false\);/);
+  assert.doesNotMatch(text, /event\.currentTarget\.reset\(\)/);
+});
+
+test("portal booking uses a compact, guarded request dialog with explicit uncertain-result feedback", () => {
+  const text = source("portal-booking-form");
+  assert.match(text, /<CrudModal open=\{open\}/);
+  assert.match(text, /size="compact"/);
+  assert.match(text, /if \(submitting\.current\) return;/);
+  assert.match(text, /const formElement = event\.currentTarget;/);
+  assert.match(text, /Number\.isFinite\(date\.getTime\(\)\)/);
+  assert.match(text, /Check your appointments before submitting another request/);
+  assert.match(text, /formElement\.reset\(\)/);
+  assert.match(text, /finally \{\s*submitting\.current = false;\s*setBusy\(false\);/);
+  assert.doesNotMatch(text, /event\.currentTarget\.reset\(\)/);
+});
