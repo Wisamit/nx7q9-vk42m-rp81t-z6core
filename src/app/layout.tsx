@@ -65,6 +65,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
     dir={direction}
     data-theme={initialTheme}
     data-density={settings?.density === "COMPACT" ? "compact" : "comfortable"}
+    data-date-format={settings?.dateFormat || "DD/MM/YYYY"}
   >
     <head>
       {settings && <style id="organization-theme" dangerouslySetInnerHTML={{ __html: buildThemeCss(settings) }} />}
