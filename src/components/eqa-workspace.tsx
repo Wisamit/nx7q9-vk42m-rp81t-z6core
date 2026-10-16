@@ -1,6 +1,7 @@
 "use client";
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
+import { CrudModal } from "@/components/crud-modal";
 
 type Branch = { id:string;code:string;nameEn:string;nameAr:string|null };
 type Program = { id:string;branchId:string;code:string;providerName:string;nameEn:string;
@@ -28,6 +29,7 @@ export function EqaWorkspace({locale,actorId,branches,programs,rounds,components
   const tr=(en:string,ar:string)=>locale==="ar"?ar:en;
   const [message,setMessage]=useState("");
   const [busy,setBusy]=useState(false);
+  const [editor,setEditor]=useState("");
   const [currentBranch,setCurrentBranch]=useState(branches[0]?.id||"");
   const [selectedProgram,setSelectedProgram]=useState(programs[0]?.id||"");
   const [selectedRound,setSelectedRound]=useState(rounds[0]?.id||"");
@@ -73,7 +75,15 @@ export function EqaWorkspace({locale,actorId,branches,programs,rounds,components
       <h2>{tr("1. Register external proficiency program","1. تسجيل برنامج الكفاءة الخارجية")}</h2>
       <p className="muted">{tr("Provider programs are separate per branch. No patient results are affected.",
         "البرامج مستقلة لكل فرع ولا تؤثر على نتائج المرضى.")}</p>
-      <form className="form-stack" onSubmit={e=>void send("CREATE_PROGRAM",e)}>
+      <button type="button" className="primary-button" disabled={busy}
+   onClick={()=>{setMessage("");setEditor("program");}}>
+   {tr("Register EQA Program","تسجيل برنامج تقييم خارجي")}
+  </button>
+  <CrudModal open={editor==="program"} onClose={()=>{if(!busy)setEditor("");}}
+    title={tr("Register EQA Program","تسجيل برنامج تقييم خارجي")}
+    description={tr("Branch-specific external quality program. This does not enter patient results.","برنامج جودة خارجية محصور بالفرع؛ لا يسجّل نتائج مرضى.")}
+    size="compact">
+    {editor==="program"&&<form className="form-stack" onSubmit={e=>void send("CREATE_PROGRAM",e)}>
         <label>{tr("Branch","الفرع")}<select name="branchId" required value={currentBranch}
           onChange={e=>setCurrentBranch(e.target.value)}>
           {branches.map(b=><option key={b.id} value={b.id}>{b.code} — {locale==="ar"?b.nameAr||b.nameEn:b.nameEn}</option>)}
@@ -83,11 +93,20 @@ export function EqaWorkspace({locale,actorId,branches,programs,rounds,components
         <label>{tr("Program name (English)","اسم البرنامج بالإنجليزية")}<input name="nameEn" required maxLength={220}/></label>
         <label>{tr("Program name (Arabic)","اسم البرنامج بالعربية")}<input name="nameAr" dir="rtl" maxLength={220}/></label>
         <button className="primary-button" disabled={busy}>{tr("Register program","تسجيل البرنامج")}</button>
-      </form>
+      </form>}
+  </CrudModal>
     </article>}
     {canEnter&&<article className="detail-card">
       <h2>{tr("2. Create provider round","2. إنشاء جولة فحص خارجية")}</h2>
-      <form className="form-stack" onSubmit={e=>void send("CREATE_ROUND",e)}>
+      <button type="button" className="primary-button" disabled={busy}
+   onClick={()=>{setMessage("");setEditor("round");}}>
+   {tr("Create EQA Provider Round","إنشاء جولة تقييم خارجي")}
+  </button>
+  <CrudModal open={editor==="round"} onClose={()=>{if(!busy)setEditor("");}}
+    title={tr("Create EQA Provider Round","إنشاء جولة تقييم خارجي")}
+    description={tr("Check external sample identity, provider program and submission due time.","راجع هوية العينة الخارجية والبرنامج وموعد تقديم القياسات.")}
+    size="compact">
+    {editor==="round"&&<form className="form-stack" onSubmit={e=>void send("CREATE_ROUND",e)}>
         <label>{tr("Program","البرنامج")}<select name="programId" required value={selectedProgram}
           onChange={e=>setSelectedProgram(e.target.value)}>
           <option value="">{tr("Choose","اختر")}</option>
@@ -99,13 +118,22 @@ export function EqaWorkspace({locale,actorId,branches,programs,rounds,components
         <label>{tr("Submission deadline (your browser local time; optional)","الموعد النهائي بالتوقيت المحلي للمتصفح (اختياري)")}
           <input name="dueAt" type="datetime-local"/></label>
         <button className="primary-button" disabled={busy||!selectedProgramItem}>{tr("Create open round","إنشاء جولة مفتوحة")}</button>
-      </form>
+      </form>}
+  </CrudModal>
     </article>}
     {canEnter&&<article className="detail-card">
       <h2>{tr("3. Enter EQA observations","3. تسجيل قياسات عينة الكفاءة")}</h2>
       <p className="muted">{tr("These are EQA sample values, never patient laboratory results. Text and units are snapshotted at entry.",
         "هذه نتائج عينات كفاءة خارجية وليست نتائج مرضى. يُحفظ النص والوحدة وقت الإدخال.")}</p>
-      <form className="form-stack" onSubmit={e=>void send("ADD_OBSERVATION",e)}>
+      <button type="button" className="primary-button" disabled={busy}
+   onClick={()=>{setMessage("");setEditor("observation");}}>
+   {tr("Record EQA Observation","تسجيل قراءة عينة تقييم خارجي")}
+  </button>
+  <CrudModal open={editor==="observation"} onClose={()=>{if(!busy)setEditor("");}}
+    title={tr("Record EQA Observation","تسجيل قراءة عينة تقييم خارجي")}
+    description={tr("This captures only external proficiency sample measurements, never patient results.","يسجّل قياسات عينات الكفاءة الخارجية فقط، وليس نتائج المرضى.")}
+    size="compact">
+    {editor==="observation"&&<form className="form-stack" onSubmit={e=>void send("ADD_OBSERVATION",e)}>
         <label>{tr("Open round","جولة مفتوحة")}<select name="roundId" required value={selectedRound}
           onChange={e=>setSelectedRound(e.target.value)}>
           <option value="">{tr("Choose round","اختر الجولة")}</option>
@@ -128,7 +156,8 @@ export function EqaWorkspace({locale,actorId,branches,programs,rounds,components
         <label>{tr("Notes","ملاحظات")}<textarea name="note" maxLength={1000} rows={2}/></label>
         <button className="primary-button" disabled={busy||currentRound?.status!=="OPEN"}>
           {tr("Record measurement","تسجيل القياس")}</button>
-      </form>
+      </form>}
+  </CrudModal>
     </article>}
     <article className="detail-card">
       <h2>{tr("4. Program and round worklist","4. قائمة عمل البرامج والجولات")}</h2>
@@ -221,7 +250,15 @@ export function EqaWorkspace({locale,actorId,branches,programs,rounds,components
     </article>
     {canManage&&<article className="detail-card">
       <h2>{tr("6. Retire completed EQA program","6. إيقاف برنامج كفاءة مكتمل")}</h2>
-      <form className="form-stack" onSubmit={e=>void send("DEACTIVATE_PROGRAM",e)}>
+      <button type="button" className="primary-button" disabled={busy}
+   onClick={()=>{setMessage("");setEditor("retire");}}>
+   {tr("Retire EQA Program","إيقاف برنامج تقييم خارجي")}
+  </button>
+  <CrudModal open={editor==="retire"} onClose={()=>{if(!busy)setEditor("");}}
+    title={tr("Retire EQA Program","إيقاف برنامج تقييم خارجي")}
+    description={tr("The server permits retirement only after all associated rounds are closed; a documented reason is required.","لا يسمح السيرفر بالإيقاف إلا بعد إغلاق كل الجولات؛ السبب الموثّق إلزامي.")}
+    size="compact">
+    {editor==="retire"&&<form className="form-stack" onSubmit={e=>void send("DEACTIVATE_PROGRAM",e)}>
         <select name="programId" required>
           <option value="">{tr("Choose program","اختر البرنامج")}</option>
           {programs.filter(p=>p.status==="ACTIVE").map(p=><option key={p.id} value={p.id}>
@@ -230,7 +267,8 @@ export function EqaWorkspace({locale,actorId,branches,programs,rounds,components
         <input name="reason" required minLength={10} maxLength={1000}
           placeholder={tr("Documented retirement reason","سبب الإيقاف الموثّق")}/>
         <button className="secondary-button" disabled={busy}>{tr("Retire if every round is closed","إيقاف إذا كانت جميع الجولات مغلقة")}</button>
-      </form>
+      </form>}
+  </CrudModal>
     </article>}
   </div>;
 }
