@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CrudModal } from "@/components/crud-modal";
 import { SystemIcon } from "@/components/system-icon";
@@ -25,86 +25,122 @@ export function ClientReferrerForms({
   const [referrerMessage, setReferrerMessage] = useState("");
   const [sourceMessage, setSourceMessage] = useState("");
   const [busy, setBusy] = useState<"client" | "referrer" | "source" | "">("");
+  const submitting = useRef(false);
   const [open, setOpen] = useState<"client" | "referrer" | "source" | "">("");
 
   async function submitClient(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    setBusy("client"); setClientMessage("");
-    const response = await fetch("/api/clients", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        code: form.get("code"),
-        type: form.get("type"),
-        nameEn: form.get("nameEn"),
-        nameAr: form.get("nameAr"),
-        phone: form.get("phone"),
-        email: form.get("email"),
-        paymentTermsDays: form.get("paymentTermsDays"),
-      }),
-    });
-    const body = await response.json().catch(() => ({}));
-    if (response.ok) {
-      setClientMessage(`${tr("Client created", "تم إنشاء العميل")}: ${body.client.code}`);
-      event.currentTarget.reset();
-      router.refresh();
+    if (submitting.current) return;
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
+    submitting.current = true;
+    setBusy("client");
+    setClientMessage("");
+    try {
+      const response = await fetch("/api/clients", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          code: form.get("code"),
+          type: form.get("type"),
+          nameEn: form.get("nameEn"),
+          nameAr: form.get("nameAr"),
+          phone: form.get("phone"),
+          email: form.get("email"),
+          paymentTermsDays: form.get("paymentTermsDays"),
+        }),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setClientMessage(body.error || tr("Client creation failed.", "تعذر إنشاء العميل."));
+        return;
+      }
+      setClientMessage(`${tr("Client created", "تم إنشاء العميل")}: ${body.client?.code || ""}`);
+      formElement.reset();
       setOpen("");
-    } else setClientMessage(body.error || tr("Client creation failed.", "تعذر إنشاء العميل."));
-    setBusy("");
+      router.refresh();
+    } catch {
+      setClientMessage(tr("Connection error. Check whether the client was created before retrying.", "حدث خطأ في الاتصال. تحقق من إنشاء العميل قبل إعادة المحاولة."));
+    } finally {
+      submitting.current = false;
+      setBusy("");
+    }
   }
 
   async function submitReferrer(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    setBusy("referrer"); setReferrerMessage("");
-    const response = await fetch("/api/referrers", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        code: form.get("code"),
-        type: form.get("type"),
-        nameEn: form.get("nameEn"),
-        nameAr: form.get("nameAr"),
-        phone: form.get("phone"),
-        email: form.get("email"),
-        licenseNumber: form.get("licenseNumber"),
-        clientId: form.get("clientId"),
-      }),
-    });
-    const body = await response.json().catch(() => ({}));
-    if (response.ok) {
-      setReferrerMessage(`${tr("Referrer created", "تم إنشاء المحيل")}: ${body.referrer.code}`);
-      event.currentTarget.reset();
-      router.refresh();
+    if (submitting.current) return;
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
+    submitting.current = true;
+    setBusy("referrer");
+    setReferrerMessage("");
+    try {
+      const response = await fetch("/api/referrers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          code: form.get("code"),
+          type: form.get("type"),
+          nameEn: form.get("nameEn"),
+          nameAr: form.get("nameAr"),
+          phone: form.get("phone"),
+          email: form.get("email"),
+          licenseNumber: form.get("licenseNumber"),
+          clientId: form.get("clientId"),
+        }),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setReferrerMessage(body.error || tr("Referrer creation failed.", "تعذر إنشاء المحيل."));
+        return;
+      }
+      setReferrerMessage(`${tr("Referrer created", "تم إنشاء المحيل")}: ${body.referrer?.code || ""}`);
+      formElement.reset();
       setOpen("");
-    } else setReferrerMessage(body.error || tr("Referrer creation failed.", "تعذر إنشاء المحيل."));
-    setBusy("");
+      router.refresh();
+    } catch {
+      setReferrerMessage(tr("Connection error. Check whether the referrer was created before retrying.", "حدث خطأ في الاتصال. تحقق من إنشاء المحيل قبل إعادة المحاولة."));
+    } finally {
+      submitting.current = false;
+      setBusy("");
+    }
   }
-
 
   async function submitSource(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    setBusy("source"); setSourceMessage("");
-    const response = await fetch("/api/sources", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        code: form.get("code"),
-        category: form.get("category"),
-        nameEn: form.get("nameEn"),
-        nameAr: form.get("nameAr"),
-      }),
-    });
-    const body = await response.json().catch(() => ({}));
-    if (response.ok) {
-      setSourceMessage(`${tr("Source created", "تم إنشاء المصدر")}: ${body.source.code}`);
-      event.currentTarget.reset();
-      router.refresh();
+    if (submitting.current) return;
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
+    submitting.current = true;
+    setBusy("source");
+    setSourceMessage("");
+    try {
+      const response = await fetch("/api/sources", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          code: form.get("code"),
+          category: form.get("category"),
+          nameEn: form.get("nameEn"),
+          nameAr: form.get("nameAr"),
+        }),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setSourceMessage(body.error || tr("Source creation failed.", "تعذر إنشاء المصدر."));
+        return;
+      }
+      setSourceMessage(`${tr("Source created", "تم إنشاء المصدر")}: ${body.source?.code || ""}`);
+      formElement.reset();
       setOpen("");
-    } else setSourceMessage(body.error || tr("Source creation failed.", "تعذر إنشاء المصدر."));
-    setBusy("");
+      router.refresh();
+    } catch {
+      setSourceMessage(tr("Connection error. Check whether the source was created before retrying.", "حدث خطأ في الاتصال. تحقق من إنشاء المصدر قبل إعادة المحاولة."));
+    } finally {
+      submitting.current = false;
+      setBusy("");
+    }
   }
 
   return <>
@@ -121,7 +157,7 @@ export function ClientReferrerForms({
       </div>
     </div>
 
-    <CrudModal open={open === "client"} onClose={() => setOpen("")} title={tr("Add Client", "إضافة عميل")} description={tr("Create a billing/commercial client account.", "إنشاء حساب عميل تجاري أو حساب فوترة.")} size="compact">
+    <CrudModal open={open === "client"} onClose={() => { if (!submitting.current) setOpen(""); }} title={tr("Add Client", "إضافة عميل")} description={tr("Create a billing/commercial client account.", "إنشاء حساب عميل تجاري أو حساب فوترة.")} size="compact">
       <form className="catalog-form" onSubmit={submitClient}>
         <label>{tr("Code", "الرمز")}<input name="code" placeholder={tr("Optional; generated from name","اختياري؛ يتم توليده من الاسم")} /></label>
         <label>{tr("Type", "النوع")}<select name="type" defaultValue="CLINIC"><option value="INDIVIDUAL">{clientTypeLabel("INDIVIDUAL")}</option><option value="CLINIC">{clientTypeLabel("CLINIC")}</option><option value="HOSPITAL">{clientTypeLabel("HOSPITAL")}</option><option value="COMPANY">{clientTypeLabel("COMPANY")}</option><option value="INSURANCE">{clientTypeLabel("INSURANCE")}</option><option value="OTHER">{clientTypeLabel("OTHER")}</option></select></label>
@@ -135,7 +171,7 @@ export function ClientReferrerForms({
       </form>
     </CrudModal>
 
-    <CrudModal open={open === "referrer"} onClose={() => setOpen("")} title={tr("Add Referrer", "إضافة محيل")} description={tr("Create a doctor, clinic or hospital referral source.", "إنشاء مصدر إحالة لطبيب أو عيادة أو مستشفى.")} size="compact">
+    <CrudModal open={open === "referrer"} onClose={() => { if (!submitting.current) setOpen(""); }} title={tr("Add Referrer", "إضافة محيل")} description={tr("Create a doctor, clinic or hospital referral source.", "إنشاء مصدر إحالة لطبيب أو عيادة أو مستشفى.")} size="compact">
       <form className="catalog-form" onSubmit={submitReferrer}>
         <label>{tr("Code", "الرمز")}<input name="code" placeholder={tr("Optional; generated from name","اختياري؛ يتم توليده من الاسم")} /></label>
         <label>{tr("Type", "النوع")}<select name="type" defaultValue="PHYSICIAN"><option value="PHYSICIAN">{referrerTypeLabel("PHYSICIAN")}</option><option value="CLINIC">{referrerTypeLabel("CLINIC")}</option><option value="HOSPITAL">{referrerTypeLabel("HOSPITAL")}</option><option value="OTHER">{referrerTypeLabel("OTHER")}</option></select></label>
@@ -150,7 +186,7 @@ export function ClientReferrerForms({
       </form>
     </CrudModal>
 
-    {canManageSources && <CrudModal open={open === "source"} onClose={() => setOpen("")} title={tr("Add Order Source", "إضافة مصدر طلب")} description={tr("Create a configurable acquisition/source category for orders and analytics.", "إنشاء مصدر قابل للتهيئة للطلبات والتحليلات.")} size="compact">
+    {canManageSources && <CrudModal open={open === "source"} onClose={() => { if (!submitting.current) setOpen(""); }} title={tr("Add Order Source", "إضافة مصدر طلب")} description={tr("Create a configurable acquisition/source category for orders and analytics.", "إنشاء مصدر قابل للتهيئة للطلبات والتحليلات.")} size="compact">
       <form className="catalog-form" onSubmit={submitSource}>
         <label>{tr("Code", "الرمز")}<input name="code" required placeholder="WALK_IN / CAMPAIGN / INSURANCE" /></label>
         <label>{tr("Category", "الفئة")}<input name="category" required placeholder="WALK_IN / DOCTOR / CORPORATE" /></label>
