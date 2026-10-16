@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { SystemIcon } from "@/components/system-icon";
 import { CrudModal } from "@/components/crud-modal";
 import { statusLabel } from "@/lib/ui-i18n";
@@ -23,6 +23,8 @@ export function UserManagement({ locale, canManageDiscountLimits, canResetPasswo
   const [data, setData] = useState<Data>({ users: [], roles: [], branches: [], departments: [] });
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const inFlight = useRef(false);
+  const [isError, setIsError] = useState(false);
   const [message, setMessage] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<UserRow | null>(null);
@@ -75,71 +77,104 @@ export function UserManagement({ locale, canManageDiscountLimits, canResetPasswo
 
   async function createUser(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setBusy(true); setMessage("");
-    const form = new FormData(event.currentTarget);
-    const response = await fetch("/api/admin/users", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        username: form.get("username"),
-        email: form.get("email"),
-        displayNameEn: form.get("displayNameEn"),
-        displayNameAr: form.get("displayNameAr"),
-        password: form.get("password"),
-        preferredLocale: form.get("preferredLocale"),
-        ...(canManageDiscountLimits ? { discountLimitPercent: form.get("discountLimitPercent") } : {}),
-        roleIds: form.getAll("roleIds"),
-        branchIds: form.getAll("branchIds"),
-        departmentIds: form.getAll("departmentIds"),
-      }),
-    });
-    const body = await response.json().catch(() => ({}));
-    if (response.ok) {
-      event.currentTarget.reset();
+    if (inFlight.current) return;
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
+    inFlight.current = true;
+    setBusy(true);
+    setMessage("");
+    setIsError(false);
+    try {
+      const response = await fetch("/api/admin/users", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: form.get("username"),
+          email: form.get("email"),
+          displayNameEn: form.get("displayNameEn"),
+          displayNameAr: form.get("displayNameAr"),
+          password: form.get("password"),
+          preferredLocale: form.get("preferredLocale"),
+          ...(canManageDiscountLimits ? { discountLimitPercent: form.get("discountLimitPercent") } : {}),
+          roleIds: form.getAll("roleIds"),
+          branchIds: form.getAll("branchIds"),
+          departmentIds: form.getAll("departmentIds"),
+        }),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setIsError(true);
+        setMessage(body.error === "invalid_scope"
+          ? tr("Select valid roles and branches.", "اختر أدوارًا وفروعًا صحيحة.")
+          : tr("Unable to create user. Username may already exist.", "تعذر إنشاء المستخدم. قد يكون اسم المستخدم مستخدمًا."));
+        return;
+      }
+      formElement.reset();
       setMessage(tr("User created successfully.", "تم إنشاء المستخدم بنجاح."));
       setCreateOpen(false);
       await load();
-    } else {
-      setMessage(body.error === "invalid_scope" ? tr("Select valid roles and branches.", "اختر أدوارًا وفروعًا صحيحة.") : tr("Unable to create user. Username may already exist.", "تعذر إنشاء المستخدم. قد يكون اسم المستخدم مستخدمًا."));
+    } catch {
+      setIsError(true);
+      setMessage(tr(
+        "Connection interrupted. Check the staff directory before issuing another user or temporary password.",
+        "انقطع الاتصال. تحقق من دليل الموظفين قبل إنشاء مستخدم أو كلمة مرور مؤقتة أخرى.",
+      ));
+    } finally {
+      inFlight.current = false;
+      setBusy(false);
     }
-    setBusy(false);
   }
 
   async function updateAccess(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!editing) return;
-    setBusy(true); setMessage("");
+    if (!editing || inFlight.current) return;
     const form = new FormData(event.currentTarget);
-    const response = await fetch("/api/admin/users/" + editing.id, {
-      method: "PATCH", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        roleIds: form.getAll("roleIds"),
-        branchIds: form.getAll("branchIds"),
-        departmentIds: form.getAll("departmentIds"),
-        ...(canManageDiscountLimits ? { discountLimitPercent: form.get("discountLimitPercent") } : {}),
-      }),
-    });
-    const body = await response.json().catch(() => ({}));
-    if (response.ok) {
+    inFlight.current = true;
+    setBusy(true);
+    setMessage("");
+    setIsError(false);
+    try {
+      const response = await fetch("/api/admin/users/" + editing.id, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          roleIds: form.getAll("roleIds"),
+          branchIds: form.getAll("branchIds"),
+          departmentIds: form.getAll("departmentIds"),
+          ...(canManageDiscountLimits ? { discountLimitPercent: form.get("discountLimitPercent") } : {}),
+        }),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setIsError(true);
+        setMessage(body.error === "invalid_scope"
+          ? tr("Department access must match the selected branches.", "يجب أن تتوافق صلاحيات الأقسام مع الفروع المحددة.")
+          : tr("Unable to update access.", "تعذر تحديث صلاحيات الوصول."));
+        return;
+      }
       setEditing(null);
       setMessage(tr("Access updated successfully.", "تم تحديث صلاحيات الوصول بنجاح."));
       await load();
-    } else {
-      setMessage(body.error === "invalid_scope"
-        ? tr("Department access must match the selected branches.", "يجب أن تتوافق صلاحيات الأقسام مع الفروع المحددة.")
-        : tr("Unable to update access.", "تعذر تحديث صلاحيات الوصول."));
+    } catch {
+      setIsError(true);
+      setMessage(tr(
+        "Connection interrupted. Verify staff branch and role assignments before trying again.",
+        "انقطع الاتصال. تحقق من تعيينات الفروع والأدوار قبل إعادة المحاولة.",
+      ));
+    } finally {
+      inFlight.current = false;
+      setBusy(false);
     }
-    setBusy(false);
   }
 
   async function resetStaffPassword(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (busy || !resetting || !canResetPasswords || resetting.id === currentUserId) return;
+    if (inFlight.current || !resetting || !canResetPasswords || resetting.id === currentUserId) return;
     const form = event.currentTarget;
     const fields = new FormData(form);
     if (fields.get("newPassword") !== fields.get("confirmPassword")) {
       setResetError(tr("New passwords do not match.", "كلمتا المرور الجديدتان غير متطابقتين."));
       return;
     }
+    inFlight.current = true;
     setBusy(true); setResetError("");
     try {
       const response = await fetch("/api/admin/users/" + resetting.id + "/reset-password", {
@@ -175,32 +210,51 @@ export function UserManagement({ locale, canManageDiscountLimits, canResetPasswo
     } catch {
       setResetError(tr("Connection failed. Check the user's login state before retrying.",
         "فشل الاتصال. تحقق من حالة دخول الموظف قبل إعادة المحاولة."));
-    } finally { setBusy(false); }
+    } finally { inFlight.current = false; setBusy(false); }
   }
 
   async function setStatus(user: UserRow, status: "ACTIVE" | "SUSPENDED") {
-    setBusy(true); setMessage("");
-    const response = await fetch("/api/admin/users/" + user.id, {
-      method: "PATCH", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status }),
-    });
-    const body = await response.json().catch(() => ({}));
-    if (!response.ok) setMessage(body.error === "last_system_admin" ? tr("The last system administrator cannot be disabled.", "لا يمكن تعطيل آخر مدير للنظام.") : tr("Unable to update user.", "تعذر تحديث المستخدم."));
-    await load();
-    setBusy(false);
+    if (inFlight.current) return;
+    inFlight.current = true;
+    setBusy(true);
+    setMessage("");
+    setIsError(false);
+    try {
+      const response = await fetch("/api/admin/users/" + user.id, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setIsError(true);
+        setMessage(body.error === "last_system_admin"
+          ? tr("The last system administrator cannot be disabled.", "لا يمكن تعطيل آخر مدير للنظام.")
+          : tr("Unable to update user.", "تعذر تحديث المستخدم."));
+      }
+      await load();
+    } catch {
+      setIsError(true);
+      setMessage(tr(
+        "Connection interrupted. Reload staff status before another access change.",
+        "انقطع الاتصال. أعد تحميل حالة المستخدم قبل تغيير آخر للصلاحيات.",
+      ));
+    } finally {
+      inFlight.current = false;
+      setBusy(false);
+    }
   }
 
   return <div className="admin-grid">
     <div className="admin-page-actions">
-      {message && <span className="crud-success-toast">{message}</span>}
-      <button type="button" className="primary-button" onClick={() => { setMessage(""); setCreateOpen(true); }}>
+      {message && !isError && <span className="crud-success-toast" role="status">{message}</span>}
+      <button type="button" className="primary-button" disabled={busy} onClick={() => { setIsError(false); setMessage(""); setCreateOpen(true); }}>
         <SystemIcon name="plus" size={16} />{tr("Add User", "إضافة مستخدم")}
       </button>
     </div>
 
     <CrudModal
       open={createOpen}
-      onClose={() => setCreateOpen(false)}
+      onClose={() => { if (!inFlight.current) setCreateOpen(false); }}
       title={tr("Create staff user", "إنشاء مستخدم موظف")}
       description={tr("Assign role-based permissions and explicit branch access.", "حدد الدور والصلاحيات والفروع المسموح بها.")}
       size="compact"
@@ -223,7 +277,7 @@ export function UserManagement({ locale, canManageDiscountLimits, canResetPasswo
 
     <CrudModal
       open={Boolean(editing)}
-      onClose={() => setEditing(null)}
+      onClose={() => { if (!inFlight.current) setEditing(null); }}
       title={tr("Edit access", "تعديل صلاحيات الوصول")}
       description={editing ? editing.displayNameEn + " · @" + editing.username : undefined}
       size="compact"
@@ -239,7 +293,7 @@ export function UserManagement({ locale, canManageDiscountLimits, canResetPasswo
 
     <CrudModal
       open={Boolean(resetting)}
-      onClose={() => { if (!busy) { setResetting(null); setResetError(""); } }}
+      onClose={() => { if (!inFlight.current) { setResetting(null); setResetError(""); } }}
       title={tr("Secure staff password reset", "إعادة تعيين كلمة مرور الموظف بأمان")}
       description={resetting ? resetting.displayNameEn + " · @" + resetting.username : undefined}
       size="compact"
