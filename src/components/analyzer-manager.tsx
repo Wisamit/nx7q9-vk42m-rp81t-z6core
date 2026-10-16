@@ -106,14 +106,21 @@ export function AnalyzerManager({
 
   async function createCredential(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (submitting.current) return;
+    if (submitting.current || issuedToken) return;
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
     const analyzerId = String(form.get("analyzerId") || "");
     if (!analyzerId) return;
+    const localExpiry = String(form.get("expiresAt") || "");
+    const expiry = localExpiry ? new Date(localExpiry) : null;
+    if (expiry && !Number.isFinite(expiry.getTime())) {
+      setIsError(true);
+      setMessage(tr("Enter a valid expiry in your local device time.", "أدخل موعد انتهاء صالحاً وفق توقيت جهازك المحلي."));
+      return;
+    }
     const body = await post(`/api/analyzers/${analyzerId}/credentials`, {
       name: form.get("name"),
-      expiresAt: form.get("expiresAt"),
+      expiresAt: expiry?.toISOString() || "",
     }, "credential");
     if (body) {
       if (typeof body.token !== "string" || !body.token) {
@@ -190,8 +197,8 @@ export function AnalyzerManager({
       <form className="catalog-form" onSubmit={createCredential}>
         <label className="form-span">{tr("Analyzer","الجهاز")}<select name="analyzerId" required defaultValue=""><option value="">{tr("Select analyzer…","اختر الجهاز…")}</option>{analyzers.map(item => <option key={item.id} value={item.id}>{item.code} — {item.name}</option>)}</select></label>
         <label>{tr("Credential name","اسم بيانات الاعتماد")}<input name="name" required placeholder={tr("Bridge workstation / service","محطة عمل / خدمة الجسر")} /></label>
-        <label>{tr("Expires at","تنتهي في")}<input name="expiresAt" type="datetime-local" /></label>
-        <button className="primary-button form-span" disabled={busy !== ""}>{busy === "credential" ? tr("Issuing…","جارٍ الإصدار…") : tr("Issue Credential","إصدار بيانات الاعتماد")}</button>
+        <label>{tr("Expires at (your device local time)","تنتهي في (التوقيت المحلي لجهازك)")}<input name="expiresAt" type="datetime-local" /></label>
+        <button className="primary-button form-span" disabled={busy !== "" || Boolean(issuedToken)}>{busy === "credential" ? tr("Issuing…","جارٍ الإصدار…") : tr("Issue Credential","إصدار بيانات الاعتماد")}</button>
       </form>
       {issuedToken && <div className="credential-token-box"><strong>{tr("Copy now — shown once","انسخ الآن — يظهر مرة واحدة")}</strong><code>{issuedToken}</code></div>}
       {message && <div className={isError ? "form-error" : "form-success"} role={isError ? "alert" : "status"}>{message}</div>}
