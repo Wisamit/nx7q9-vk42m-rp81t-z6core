@@ -1,3 +1,5 @@
+import { SystemDateText } from "@/components/system-date-text";
+import { SystemDateField } from "@/components/system-date-field";
 import Link from "next/link";
 import { AnalyticsBars } from "@/components/analytics-bars";
 import { permissionSet, requirePermission } from "@/lib/auth";
@@ -581,8 +583,8 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
         <option value="">{tr(locale, "All authorized branches", "كل الفروع المصرح بها")}</option>
         {branches.map(branch => <option key={branch.id} value={branch.id}>{branch.code} — {localizedName(branch)}</option>)}
       </select></label>
-      <label>{tr(locale, "From", "من")}<input type="date" name="from" defaultValue={first(params.from) || ""} /></label>
-      <label>{tr(locale, "To", "إلى")}<input type="date" name="to" defaultValue={first(params.to) || ""} /></label>
+      <label>{tr(locale, "From", "من")}<SystemDateField name="from" defaultValue={first(params.from) || ""} /></label>
+      <label>{tr(locale, "To", "إلى")}<SystemDateField name="to" defaultValue={first(params.to) || ""} /></label>
       <button className="secondary-button" type="submit">{tr(locale, "Apply", "تطبيق")}</button>
       <span className="muted">{periodLabel}</span>
     </form>
