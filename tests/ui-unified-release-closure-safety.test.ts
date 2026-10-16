@@ -89,7 +89,7 @@ test("Issue #265: governed clinical config keeps draft/audit and reasoned review
     [validation, "/api/clinical-rules/validation-policies",
       "src/app/api/clinical-rules/validation-policies/route.ts", "RESULT_VALIDATION_POLICY_DRAFT_CREATED"],
     [qualitative, "/api/clinical-rules/qualitative-options",
-      "src/app/api/clinical-rules/qualitative-options/route.ts", "QUALITATIVE_OPTION_DRAFT_CREATED"],
+      "src/app/api/clinical-rules/qualitative-options/route.ts", "QUALITATIVE_RESULT_OPTION_DRAFT_CREATED"],
   ] as const) {
     assert.ok(ui.includes(endpoint));
     assert.ok(ui.includes('role="alert"'));
