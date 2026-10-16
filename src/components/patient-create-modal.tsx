@@ -36,7 +36,7 @@ export function PatientCreateModal({
       onClose={() => setOpen(false)}
       title={tr("Register Patient", "تسجيل مريض")}
       description={tr("Create a central patient record shared across all branches.", "إنشاء سجل مركزي للمريض مشترك بين جميع الفروع.")}
-      size="lg"
+      size="compact"
     >
       <PatientCreateForm locale={locale} identifierSchemes={identifierSchemes} onSuccess={message => {
         setNotice(message);
