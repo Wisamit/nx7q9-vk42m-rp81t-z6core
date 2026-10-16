@@ -182,24 +182,84 @@ async function screenshotAll() {
       let documentLang = "";
       let documentDirection = "";
       let horizontalOverflow = false;
+      let renderedFormCount = 0;
+      let renderedActionCount = 0;
+      let visibleDialogCount = 0;
+      let unlabeledInputCount = 0;
+      let unlabeledActionCount = 0;
+      let interactiveViewportClippingCount = 0;
       try {
         const response = await page.goto(target, {waitUntil:"domcontentloaded",timeout:30000});
         responseStatus = response?.status() ?? null;
         await page.waitForLoadState("load", {timeout:12000}).catch(() => {});
         await page.waitForTimeout(180);
         finalRoute = new URL(page.url()).pathname;
-        const info = await page.evaluate(() => ({
-          lang: document.documentElement.lang,
-          direction: document.documentElement.dir || getComputedStyle(document.body).direction,
-          overflow: document.documentElement.scrollWidth > window.innerWidth + 12,
-          body: Boolean(document.querySelector("body")?.textContent?.trim()),
-        }));
+        // Read-only rendered-surface inspection: counts only, never captures
+        // form values, patient names, identifiers, labels or DOM text in JSON.
+        const info = await page.evaluate(() => {
+          const visible = (el) => {
+            const style = getComputedStyle(el);
+            return style.display !== "none" && style.visibility !== "hidden" &&
+              el.getClientRects().length > 0;
+          };
+          const controls = [...document.querySelectorAll(
+            "input:not([type=hidden]), select, textarea"
+          )].filter(visible);
+          const actions = [...document.querySelectorAll(
+            "button, [role=button], a[href]"
+          )].filter(visible);
+          const labeled = (el) => {
+            const aria = el.getAttribute("aria-label") || el.getAttribute("aria-labelledby");
+            if (aria?.trim()) return true;
+            if (el.labels?.length) return true;
+            if (el.closest("label")) return true;
+            if (el.getAttribute("title")?.trim()) return true;
+            return false;
+          };
+          const namedAction = (el) => {
+            if ((el.getAttribute("aria-label") || "").trim()) return true;
+            if ((el.getAttribute("aria-labelledby") || "").trim()) return true;
+            if ((el.getAttribute("title") || "").trim()) return true;
+            // The text is used only for a yes/no check and is NEVER reported.
+            if ((el.textContent || "").trim()) return true;
+            if (el.querySelector("img[alt]:not([alt=''])")) return true;
+            return false;
+          };
+          const viewportWidth = document.documentElement.clientWidth;
+          const clipped = [...controls, ...actions].filter(el => {
+            const rect = el.getBoundingClientRect();
+            return rect.width > 0 &&
+              (rect.left < -12 || rect.right > viewportWidth + 12);
+          }).length;
+          return {
+            lang: document.documentElement.lang,
+            direction: document.documentElement.dir || getComputedStyle(document.body).direction,
+            overflow: document.documentElement.scrollWidth > window.innerWidth + 12,
+            body: Boolean(document.querySelector("body")?.textContent?.trim()),
+            renderedFormCount: document.querySelectorAll("form").length,
+            renderedActionCount: actions.length,
+            visibleDialogCount: [...document.querySelectorAll('[role="dialog"],[role="alertdialog"]')]
+              .filter(visible).length,
+            unlabeledInputCount: controls.filter(el => !labeled(el)).length,
+            unlabeledActionCount: actions.filter(el => !namedAction(el)).length,
+            interactiveViewportClippingCount: clipped,
+          };
+        });
         documentLang = info.lang;
         documentDirection = info.direction;
         horizontalOverflow = info.overflow;
+        renderedFormCount = info.renderedFormCount;
+        renderedActionCount = info.renderedActionCount;
+        visibleDialogCount = info.visibleDialogCount;
+        unlabeledInputCount = info.unlabeledInputCount;
+        unlabeledActionCount = info.unlabeledActionCount;
+        interactiveViewportClippingCount = info.interactiveViewportClippingCount;
         if (responseStatus === null || responseStatus >= 400) issues.push("HTTP_NON_SUCCESS");
         if (!info.body) issues.push("EMPTY_DOCUMENT");
         if (info.overflow) issues.push("HORIZONTAL_VIEWPORT_OVERFLOW");
+        if (info.unlabeledInputCount) issues.push("VISIBLE_INPUT_ACCESSIBLE_NAME_MISSING");
+        if (info.unlabeledActionCount) issues.push("VISIBLE_ACTION_ACCESSIBLE_NAME_MISSING");
+        if (info.interactiveViewportClippingCount) issues.push("INTERACTIVE_CONTROL_CLIPPED");
         if (documentLang.toLowerCase().split("-")[0] !== scenario.locale) {
           issues.push("HTML_LANGUAGE_MISMATCH");
         }
@@ -227,6 +287,8 @@ async function screenshotAll() {
         responseStatus,redirectedToLogin:issues.includes("REDIRECTED_TO_LOGIN"),
         htmlLanguage:documentLang,htmlDirection:documentDirection,
         horizontalOverflow,uncaughtRuntimeErrorCount:pageErrorCount,
+        renderedFormCount,renderedActionCount,visibleDialogCount,
+        unlabeledInputCount,unlabeledActionCount,interactiveViewportClippingCount,
         evidenceImage:imageName,
         status:issues.length ? "REVIEW_REQUIRED" : "SCREENSHOT_CAPTURED",
         issues,
