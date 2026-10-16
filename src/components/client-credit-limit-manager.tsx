@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
+import { CrudModal } from "@/components/crud-modal";
 
 type CreditClientOption = { id: string; code: string; name: string };
 type CreditPolicyRow = {
@@ -37,6 +38,8 @@ export function ClientCreditLimitManager({
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [open, setOpen] = useState(false);
+  const [formError, setFormError] = useState("");
 
   function edit(policy: CreditPolicyRow) {
     setClientId(policy.clientId);
@@ -44,13 +47,16 @@ export function ClientCreditLimitManager({
     setMode(policy.mode);
     setLimitAmount(policy.limitAmount);
     setReason("");
-    setMessage(tr("Policy loaded. Enter a reason and save any changes.", "تم تحميل السياسة. أدخل سبب التعديل ثم احفظ."));
+    setFormError("");
+    setMessage("");
+    setOpen(true);
   }
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (busy) return;
     setBusy(true);
-    setMessage("");
+    setFormError("");
     try {
       const response = await fetch("/api/billing/credit-limits", {
         method: "PUT",
@@ -61,6 +67,7 @@ export function ClientCreditLimitManager({
       if (response.ok) {
         setMessage(tr("Credit policy saved and audited.", "تم حفظ سياسة الائتمان وتسجيلها في سجل التدقيق."));
         setReason("");
+        setOpen(false);
         router.refresh();
       } else {
         const errors: Record<string, string> = {
@@ -68,10 +75,10 @@ export function ClientCreditLimitManager({
           client_credit_state_changed: tr("The client credit state changed. Refresh and try again.", "تغيرت حالة ائتمان العميل. حدّث الصفحة وحاول مجددًا."),
           invalid_credit_policy_fields: tr("Enter a client, currency, valid non-negative limit and change reason.", "اختر العميل والعملة وحدًا غير سالب وسببًا للتغيير."),
         };
-        setMessage(errors[body.error] || tr("Could not save the credit policy.", "تعذر حفظ سياسة الائتمان."));
+        setFormError(errors[body.error] || tr("Could not save the credit policy.", "تعذر حفظ سياسة الائتمان."));
       }
     } catch {
-      setMessage(tr("Connection failed while saving the policy.", "فشل الاتصال أثناء حفظ سياسة الائتمان."));
+      setFormError(tr("Connection failed while saving the policy.", "فشل الاتصال أثناء حفظ سياسة الائتمان."));
     }
     setBusy(false);
   }
@@ -83,8 +90,19 @@ export function ClientCreditLimitManager({
           <h2>{tr("Configure Client Credit", "إعداد ائتمان العميل")}</h2>
           <span>{tr("One policy per client and currency across all branches. Clients without a policy remain unrestricted.", "سياسة لكل عميل وعملة تشمل كل الفروع. العملاء دون سياسة لا تُفرض عليهم حدود تلقائيًا.")}</span>
         </div>
+        <button type="button" className="primary-button" disabled={busy}
+          onClick={() => { setFormError(""); setMessage(""); setOpen(true); }}>
+          {tr("Configure Client Credit", "إعداد ائتمان العميل")}
+        </button>
       </div>
-      <form className="catalog-form" onSubmit={save}>
+      <CrudModal open={open} onClose={() => { if (!busy) setOpen(false); }}
+        size="compact"
+        title={tr("Configure Client Credit", "إعداد ائتمان العميل")}
+        description={tr(
+          "Financial credit limits are organization-wide per client and currency. Review the limit, mode and reason.",
+          "حدود الائتمان على مستوى المؤسسة لكل عميل وعملة. راجع الحد والنمط والسبب قبل الحفظ.",
+        )}>
+        {open && <form className="catalog-form" onSubmit={save}>
         <label className="form-span">{tr("Client", "العميل")}
           <select required value={clientId} onChange={event => setClientId(event.target.value)}>
             <option value="">{tr("Select client…", "اختر العميل…")}</option>
@@ -103,7 +121,9 @@ export function ClientCreditLimitManager({
         <label className="form-span">{tr("Reason for change", "سبب التغيير")}<textarea required maxLength={1000} value={reason} onChange={event => setReason(event.target.value)} /></label>
         <button type="submit" className="primary-button form-span" disabled={busy || !clientId}>{busy ? tr("Saving…", "جارٍ الحفظ…") : tr("Save Credit Policy", "حفظ سياسة الائتمان")}</button>
         {message && <div className="form-success form-span">{message}</div>}
-      </form>
+        {formError && <p className="form-error form-span" role="alert">{formError}</p>}
+      </form>}
+      </CrudModal>
     </section>
 
     <section className="table-card detail-section">
