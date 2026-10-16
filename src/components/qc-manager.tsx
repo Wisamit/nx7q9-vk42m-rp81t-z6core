@@ -274,7 +274,7 @@ export function QcManager({
         <label>{tr("Target CV %", "CV المستهدف %")}<input name="targetCv" inputMode="decimal" /></label>
         <label>{tr("Unit", "الوحدة")}<input name="unitSnapshot" /></label>
         <label>{tr("QC valid hours", "صلاحية QC بالساعات")}<input name="qcValidHours" type="number" min="1" max="168" defaultValue="24" required /></label>
-        <label>{tr("Effective from", "ساري من")}<input name="effectiveFrom" type="date" defaultValue={new Date().toISOString().slice(0,10)} required /></label>
+        <label>{tr("Effective from (choose intended local date)", "ساري من (اختر التاريخ المحلي المقصود)")}<input name="effectiveFrom" type="date" required /></label>
         <label>{tr("Effective to", "ساري حتى")}<input name="effectiveTo" type="date" /></label>
         <div className="form-span">
           <strong>{tr("Westgard rules", "قواعد Westgard")}</strong>
