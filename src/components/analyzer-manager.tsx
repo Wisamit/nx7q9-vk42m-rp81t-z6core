@@ -162,7 +162,7 @@ export function AnalyzerManager({
         <label>{tr("Analyzer unit code","رمز الوحدة في الجهاز")}<input name="analyzerUnitCode" maxLength={80} /></label>
         <label>{tr("LIS test","فحص LIS")}<select name="testId" required value={mappingTestId} onChange={event => setMappingTestId(event.target.value)}><option value="">{tr("Select test…","اختر الفحص…")}</option>{tests.map(item => <option key={item.id} value={item.id}>{item.code} — {localizedName(item)}</option>)}</select></label>
         <label>{tr("Component","المكوّن")}<select name="componentId" defaultValue="" disabled={!mappingTestId || mappingComponents.length === 0}><option value="">{mappingComponents.length ? tr("Select component…","اختر المكوّن…") : tr("Simple test","فحص بسيط")}</option>{mappingComponents.map(item => <option key={item.id} value={item.id}>{item.code} — {localizedName(item)}</option>)}</select></label>
-        <label>{tr("Effective from","ساري من")}<input name="effectiveFrom" type="date" defaultValue={new Date().toISOString().slice(0,10)} required /></label>
+        <label>{tr("Effective from (select local branch date)","ساري من (اختر تاريخ الفرع المحلي)")}<input name="effectiveFrom" type="date" required /></label>
         <label>{tr("Effective to","ساري حتى")}<input name="effectiveTo" type="date" /></label>
         <button className="primary-button form-span" disabled={busy !== ""}>{busy === "mapping" ? tr("Saving…","جارٍ الحفظ…") : tr("Create Draft","إنشاء المسودة")}</button>
         {message && <div className="form-success form-span">{message}</div>}
