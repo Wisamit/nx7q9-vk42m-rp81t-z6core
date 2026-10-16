@@ -7,11 +7,11 @@ test("UI #265: QC violation resolution is a reviewed bilingual action, not a bro
   assert.ok(ui.includes('open={resolutionId!==null}'));
   assert.ok(ui.includes('size="compact"'));
   assert.ok(ui.includes("saveResolution"));
-  assert.ok(ui.includes('if (!resolutionId || !canResolve || busy) return;'));
+  assert.ok(ui.includes('if (!resolutionId || !canResolve || submitting.current) return;'));
   assert.ok(ui.includes('name="actionType" required defaultValue="INVESTIGATE"'));
   assert.ok(ui.includes('name="description" required'));
   assert.ok(ui.includes('name="resolutionNote" required'));
-  assert.ok(ui.includes('onClose={()=>{if(!busy)setResolutionId(null);}}'));
+  assert.ok(ui.includes('onClose={()=>{if(!submitting.current&&!busy)setResolutionId(null);}}'));
   assert.ok(ui.includes('if (ok) setResolutionId(null)'));
   assert.doesNotMatch(ui, /(?:window\.)?(?:prompt|confirm)\s*\(/);
   assert.ok(ui.includes("catch {"));
