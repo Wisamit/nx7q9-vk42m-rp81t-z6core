@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
+import { CrudModal } from "@/components/crud-modal";
 
 type Unit = { id: string; code: string; symbol: string };
 type Method = { id: string; nameEn: string; nameAr?: string | null };
@@ -39,6 +40,7 @@ export function ClinicalCatalogManager({
 
   async function send(event: FormEvent<HTMLFormElement>, url: string, extra: Record<string, unknown> = {}) {
     event.preventDefault();
+    if (saving) return;
     setSaving(true);
     setMessage("");
     const raw = Object.fromEntries(new FormData(event.currentTarget).entries());
@@ -46,26 +48,43 @@ export function ClinicalCatalogManager({
     ["decimalPrecision", "displayOrder"].forEach(key => {
       if (body[key as keyof typeof body] !== "") (body as Record<string, unknown>)[key] = Number(body[key as keyof typeof body]);
     });
-    const response = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-    if (response.ok) { setMode(null); router.refresh(); }
-    else setMessage(tr("Could not save. Review the values and try again.", "تعذر الحفظ. راجع القيم وحاول مرة أخرى."));
-    setSaving(false);
+    try {
+      const response = await fetch(url, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const result = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) {
+        setMessage(result.error || tr("Could not save. Review the values and try again.",
+          "تعذر الحفظ. راجع القيم وحاول مرة أخرى."));
+        return;
+      }
+      setMode(null);
+      router.refresh();
+    } catch {
+      setMessage(tr("Connection interrupted; check the current catalog before retrying.",
+        "انقطع الاتصال؛ تحقق من الدليل الحالي قبل إعادة المحاولة."));
+    } finally {
+      setSaving(false);
+    }
   }
 
   return <div className="catalog-actions">
-    <button className="secondary-button" onClick={() => setMode("component")}>{tr("Add Component", "إضافة مكوّن")}</button>
-    <button className="secondary-button" onClick={() => setMode("panel")}>{tr("Add Panel / Profile", "إضافة باقة / ملف")}</button>
-    <button className="secondary-button" onClick={() => setMode("range")}>{tr("Add Reference Range", "إضافة مجال مرجعي")}</button>
-    <button className="secondary-button" onClick={() => setMode("tat")}>{tr("Add TAT / SLA Policy", "إضافة سياسة TAT / SLA")}</button>
+    <button type="button" disabled={saving} className="secondary-button" onClick={() => { setMessage(""); setMode("component"); }}>{tr("Add Component", "إضافة مكوّن")}</button>
+    <button type="button" disabled={saving} className="secondary-button" onClick={() => { setMessage(""); setMode("panel"); }}>{tr("Add Panel / Profile", "إضافة باقة / ملف")}</button>
+    <button type="button" disabled={saving} className="secondary-button" onClick={() => { setMessage(""); setMode("range"); }}>{tr("Add Reference Range", "إضافة مجال مرجعي")}</button>
+    <button type="button" disabled={saving} className="secondary-button" onClick={() => { setMessage(""); setMode("tat"); }}>{tr("Add TAT / SLA Policy", "إضافة سياسة TAT / SLA")}</button>
 
-    {mode && <div className="modal-backdrop" onMouseDown={() => setMode(null)}><section className="modal-card" onMouseDown={e => e.stopPropagation()}>
-      <div className="modal-head"><div><p className="eyebrow">{tr("Clinical Configuration", "الإعدادات السريرية")}</p><h2>{
-        mode === "component" ? tr("Test Component", "مكوّن الفحص") :
+    <CrudModal open={mode !== null} onClose={() => { if (!saving) setMode(null); }}
+      size="compact"
+      title={mode === "component" ? tr("Test Component", "مكوّن الفحص") :
         mode === "panel" ? tr("Panel / Profile", "الباقة / الملف") :
-        mode === "tat" ? tr("TAT / SLA Policy", "سياسة TAT / SLA") :
-        tr("Reference Range & Critical Limits", "المجال المرجعي والحدود الحرجة")
-      }</h2></div><button className="icon-button" onClick={() => setMode(null)}>×</button></div>
-
+        mode === "tat" ? tr("TAT / SLA Policy Draft", "مسودة سياسة TAT / SLA") :
+        tr("Reference Range & Critical Limits Draft", "مسودة المجال المرجعي والحدود الحرجة")}
+      description={tr(
+        "Clinical reference intervals and TAT policies remain inactive until authorized approval. Every exact scope, analyzer and effective date must be verified by a qualified reviewer.",
+        "تبقى المديات المرجعية وسياسات TAT غير مفعلة حتى الاعتماد المخوّل. يجب تدقيق كل نطاق وجهاز وتاريخ سريان بواسطة مراجع مؤهل.",
+      )}>
       {mode === "component" && <form className="catalog-form" onSubmit={e => send(e, "/api/catalog/components")}>
         <label>{tr("Test", "الفحص")}<select name="testId" required value={testId} onChange={e => setTestId(e.target.value)}>{tests.map(t => <option key={t.id} value={t.id}>{t.code} — {name(t)}</option>)}</select></label>
         <label>{tr("Component code", "رمز المكوّن")}<input name="code" required /></label>
@@ -75,7 +94,7 @@ export function ClinicalCatalogManager({
         <label>{tr("Unit", "الوحدة")}<select name="unitId"><option value="">—</option>{units.map(u => <option key={u.id} value={u.id}>{u.symbol} ({u.code})</option>)}</select></label>
         <label>{tr("Decimal precision", "عدد المنازل العشرية")}<input name="decimalPrecision" type="number" min="0" max="8" /></label>
         <label>{tr("Display order", "ترتيب العرض")}<input name="displayOrder" type="number" min="0" defaultValue="0" /></label>
-        {message && <p className="form-error form-span">{message}</p>}
+        {message && <p className="form-error form-span" role="alert">{message}</p>}
         <button className="primary-button form-span" disabled={saving}>{saving ? tr("Saving…", "جارٍ الحفظ…") : tr("Save Component", "حفظ المكوّن")}</button>
       </form>}
 
@@ -88,7 +107,7 @@ export function ClinicalCatalogManager({
         <label>{tr("English name", "الاسم بالإنجليزية")}<input name="nameEn" required /></label>
         <label>{tr("Arabic name", "الاسم بالعربية")}<input name="nameAr" dir="rtl" /></label>
         <fieldset className="test-picker form-span"><legend>{tr("Included tests", "الفحوصات المشمولة")}</legend>{tests.map(t => <label key={t.id} className="check-row"><input type="checkbox" name="testIds" value={t.id} /><span>{t.code} — {name(t)}</span></label>)}</fieldset>
-        {message && <p className="form-error form-span">{message}</p>}
+        {message && <p className="form-error form-span" role="alert">{message}</p>}
         <button className="primary-button form-span" disabled={saving}>{saving ? tr("Saving…", "جارٍ الحفظ…") : tr("Save Panel / Profile", "حفظ الباقة / الملف")}</button>
       </form>}
 
@@ -102,13 +121,13 @@ export function ClinicalCatalogManager({
         <label>{tr("Repeat escalation every (minutes)", "تكرار التصعيد كل (دقائق)")}<input name="escalationRepeatMinutes" type="number" min="1" placeholder={tr("Required only for multiple levels", "مطلوب فقط عند تعدد المستويات")} /></label>
         <label>{tr("Maximum escalation level", "الحد الأقصى لمستوى التصعيد")}<input name="maxEscalationLevel" type="number" min="1" max="10" defaultValue="1" /></label>
         <label>{tr("Recipient permission code", "رمز صلاحية المستلمين")}<input name="escalationPermissionCode" maxLength={120} placeholder={tr("Permission code, e.g. results.verify", "رمز الصلاحية، مثال results.verify")} /></label>
-        <label>{tr("Effective from", "ساري من")}<input name="effectiveFrom" type="date" required defaultValue={new Date().toISOString().slice(0, 10)} /></label>
+        <label>{tr("Effective from", "ساري من")}<input name="effectiveFrom" type="date" required /></label>
         <label>{tr("Effective to", "ساري حتى")}<input name="effectiveTo" type="date" /></label>
         <p className="muted form-span">{tr(
           "New policies are saved as inactive drafts. After approval, resolution priority is exact branch + exact priority, branch default, organization priority, then organization default. TAT and escalation settings are snapshotted on the order item.",
           "تُحفظ السياسات الجديدة كمسودات غير نشطة. بعد الاعتماد تكون أولوية الاختيار: الفرع والأولوية المطابقان، ثم افتراضي الفرع، ثم أولوية المؤسسة، ثم افتراضي المؤسسة. ويتم حفظ إعدادات TAT والتصعيد كلقطة تاريخية على الفحص المطلوب."
         )}</p>
-        {message && <p className="form-error form-span">{message}</p>}
+        {message && <p className="form-error form-span" role="alert">{message}</p>}
         <button className="primary-button form-span" disabled={saving}>{saving ? tr("Saving…", "جارٍ الحفظ…") : tr("Save TAT / SLA Draft", "حفظ مسودة TAT / SLA")}</button>
       </form>}
 
@@ -131,7 +150,7 @@ export function ClinicalCatalogManager({
         <label>{tr("Gestational age from (weeks)", "عمر الحمل من (أسابيع)")}<input name="gestationalAgeFromWeeks" inputMode="decimal" /></label>
         <label>{tr("Gestational age to (weeks)", "عمر الحمل إلى (أسابيع)")}<input name="gestationalAgeToWeeks" inputMode="decimal" /></label>
         <label>{tr("Population code", "رمز المجموعة المرجعية")}<input name="populationCode" maxLength={80} placeholder={tr("Optional configured code", "رمز اختياري مُهيأ")} /></label>
-        <label>{tr("Effective from", "ساري من")}<input name="effectiveFrom" type="date" required defaultValue={new Date().toISOString().slice(0, 10)} /></label>
+        <label>{tr("Effective from", "ساري من")}<input name="effectiveFrom" type="date" required /></label>
         <label>{tr("Source", "المصدر")}<input name="source" /></label>
         <p className="muted form-span">{tr(
           "New reference intervals are saved as inactive drafts. They cannot affect result flags or critical alerts until an authorized user explicitly approves them.",
@@ -139,9 +158,9 @@ export function ClinicalCatalogManager({
         )}</p>
         <label>{tr("Normal text (EN)", "النص الطبيعي (EN)")}<input name="normalTextEn" /></label>
         <label>{tr("Normal text (AR)", "النص الطبيعي (AR)")}<input name="normalTextAr" dir="rtl" /></label>
-        {message && <p className="form-error form-span">{message}</p>}
+        {message && <p className="form-error form-span" role="alert">{message}</p>}
         <button className="primary-button form-span" disabled={saving}>{saving ? tr("Saving…", "جارٍ الحفظ…") : tr("Save Reference Range Draft", "حفظ مسودة المجال المرجعي")}</button>
       </form>}
-    </section></div>}
+    </CrudModal>
   </div>;
 }
