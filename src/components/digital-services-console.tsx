@@ -88,6 +88,7 @@ export function DigitalServicesConsole({
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
   const [uiDialog, setUiDialog] = useState("");
+  const [sensitiveAction, setSensitiveAction] = useState<{ kind: "portal-status" | "portal-password" | "appointment-cancel" | "queue-call"; id: string; status?: "ACTIVE" | "DISABLED" } | null>(null);
   const [portalType, setPortalType] = useState("PATIENT");
   const [collectorByVisit, setCollectorByVisit] = useState<Record<string, string>>({});
   const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
@@ -161,33 +162,15 @@ export function DigitalServicesConsole({
   }
 
   async function setPortalStatus(accountId: string, status: "ACTIVE" | "DISABLED") {
-    if (!window.confirm(status === "DISABLED"
-      ? tr("Disable this portal account and revoke active sessions?", "هل تريد تعطيل حساب البوابة وإلغاء الجلسات النشطة؟")
-      : tr("Reactivate this portal account?", "هل تريد إعادة تفعيل حساب البوابة؟"))) return;
-    await send(
-      `/api/portal-accounts/${accountId}/status`,
-      "POST",
-      { status },
-      "portal-status-" + accountId,
-      status === "DISABLED" ? "Portal account disabled." : "Portal account reactivated.",
-      status === "DISABLED" ? "تم تعطيل حساب البوابة." : "تمت إعادة تفعيل حساب البوابة.",
-    );
+    if (busy) return;
+    setMessage("");
+    setSensitiveAction({ kind: "portal-status", id: accountId, status });
   }
 
   async function setTemporaryPassword(accountId: string) {
-    const temporaryPassword = window.prompt(tr(
-      "Enter a temporary password of at least 12 characters. The portal user will be forced to change it on first login.",
-      "أدخل كلمة مرور مؤقتة من 12 محرفاً على الأقل. سيُطلب من مستخدم البوابة تغييرها عند أول تسجيل دخول.",
-    ));
-    if (!temporaryPassword) return;
-    await send(
-      `/api/portal-accounts/${accountId}/temporary-password`,
-      "POST",
-      { temporaryPassword },
-      "portal-password-" + accountId,
-      "Temporary password set and existing portal sessions revoked.",
-      "تم تعيين كلمة المرور المؤقتة وإلغاء جلسات البوابة الحالية.",
-    );
+    if (busy) return;
+    setMessage("");
+    setSensitiveAction({ kind: "portal-password", id: accountId });
   }
 
   async function createCorporateAccess(event: FormEvent<HTMLFormElement>) {
@@ -224,12 +207,13 @@ export function DigitalServicesConsole({
   }
 
   async function changeAppointmentStatus(id: string, status: string) {
-    let reason = "";
     if (status === "CANCELLED") {
-      reason = window.prompt(tr("Cancellation reason:", "سبب الإلغاء:")) || "";
-      if (!reason.trim()) return;
+      if (busy) return;
+      setMessage("");
+      setSensitiveAction({ kind: "appointment-cancel", id });
+      return;
     }
-    await send(`/api/appointments/${id}/status`, "POST", { status, reason }, "appointment-" + id, "Appointment updated.", "تم تحديث الموعد.");
+    await send(`/api/appointments/${id}/status`, "POST", { status, reason: "" }, "appointment-" + id, "Appointment updated.", "تم تحديث الموعد.");
   }
 
   async function updateHomeCollection(item: HomeCollection, status: string) {
@@ -255,10 +239,50 @@ export function DigitalServicesConsole({
   }
 
   async function changeQueueStatus(id: string, status: string) {
-    const counterLabel = status === "CALLED"
-      ? (window.prompt(tr("Counter / station label:", "اسم الشباك / المحطة:"), "") || "")
-      : undefined;
-    await send(`/api/queue/${id}/status`, "POST", { status, counterLabel }, "queue-" + id, "Queue ticket updated.", "تم تحديث تذكرة الطابور.");
+    if (status === "CALLED") {
+      if (busy) return;
+      setMessage("");
+      setSensitiveAction({ kind: "queue-call", id });
+      return;
+    }
+    await send(`/api/queue/${id}/status`, "POST", { status, counterLabel: undefined }, "queue-" + id, "Queue ticket updated.", "تم تحديث تذكرة الطابور.");
+  }
+
+  async function confirmSensitiveAction(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!sensitiveAction || busy) return;
+    const form = new FormData(event.currentTarget);
+    let success = false;
+    const {kind, id, status} = sensitiveAction;
+    if (kind === "portal-status" && (status === "ACTIVE" || status === "DISABLED")) {
+      success = await send(`/api/portal-accounts/${id}/status`, "POST", {status},
+        "portal-status-" + id,
+        status === "DISABLED" ? "Portal account disabled." : "Portal account reactivated.",
+        status === "DISABLED" ? "تم تعطيل حساب البوابة." : "تمت إعادة تفعيل حساب البوابة.");
+    } else if (kind === "portal-password") {
+      const temporaryPassword = String(form.get("temporaryPassword") || "");
+      if (temporaryPassword.length < 12) {
+        setMessage(tr("Use a temporary password of at least 12 characters.", "استخدم كلمة مرور مؤقتة من 12 محرفاً على الأقل."));
+        return;
+      }
+      success = await send(`/api/portal-accounts/${id}/temporary-password`, "POST",
+        {temporaryPassword}, "portal-password-" + id,
+        "Temporary password set and existing portal sessions revoked.",
+        "تم تعيين كلمة المرور المؤقتة وإلغاء جلسات البوابة الحالية.");
+    } else if (kind === "appointment-cancel") {
+      const reason = String(form.get("reason") || "").trim();
+      if (!reason) {
+        setMessage(tr("Cancellation reason is required.", "سبب الإلغاء مطلوب."));
+        return;
+      }
+      success = await send(`/api/appointments/${id}/status`, "POST", {status: "CANCELLED", reason},
+        "appointment-" + id, "Appointment updated.", "تم تحديث الموعد.");
+    } else if (kind === "queue-call") {
+      const counterLabel = String(form.get("counterLabel") || "").trim();
+      success = await send(`/api/queue/${id}/status`, "POST", {status: "CALLED", counterLabel},
+        "queue-" + id, "Queue ticket updated.", "تم تحديث تذكرة الطابور.");
+    }
+    if (success) setSensitiveAction(null);
   }
 
   const subjects = portalType === "PATIENT" ? patients : portalType === "DOCTOR" ? referrers : clients;
@@ -446,5 +470,47 @@ export function DigitalServicesConsole({
         </tr>)}</tbody>
       </table></div>
     </article>
+    <CrudModal open={sensitiveAction !== null}
+      onClose={() => { if (!busy) setSensitiveAction(null); }}
+      size="compact"
+      title={sensitiveAction?.kind === "portal-password"
+        ? tr("Reset Portal Password", "إعادة تعيين كلمة مرور البوابة")
+        : sensitiveAction?.kind === "portal-status"
+        ? tr("Confirm Portal Account Status", "تأكيد حالة حساب البوابة")
+        : sensitiveAction?.kind === "appointment-cancel"
+        ? tr("Cancel Appointment", "إلغاء الموعد")
+        : tr("Call Queue Ticket", "نداء تذكرة الطابور")}
+      description={tr(
+        "Review this action. Access, appointment and queue changes are audited by the existing server workflow.",
+        "راجع هذا الإجراء. تخضع تغييرات الوصول والمواعيد والطابور للتدقيق ضمن السيرفر الحالي.",
+      )}>
+      {sensitiveAction && <form className="catalog-form" onSubmit={confirmSensitiveAction}>
+        {sensitiveAction.kind === "portal-status" && <p className="form-span">
+          {sensitiveAction.status === "DISABLED"
+            ? tr("Disable this account and revoke existing sessions?", "تعطيل هذا الحساب وإلغاء الجلسات النشطة؟")
+            : tr("Reactivate this portal account?", "إعادة تفعيل حساب البوابة؟")}
+        </p>}
+        {sensitiveAction.kind === "portal-password" && <label className="form-span">
+          {tr("Temporary password (minimum 12 characters)", "كلمة مرور مؤقتة (12 محرفاً على الأقل)")}
+          <input name="temporaryPassword" type="password" minLength={12} autoComplete="new-password" required />
+        </label>}
+        {sensitiveAction.kind === "portal-password" && <p className="muted form-span">
+          {tr("The portal user must change this password at first login; existing sessions will be revoked.",
+            "يجب أن يغيّر مستخدم البوابة كلمة المرور عند أول دخول، وستلغى الجلسات القائمة.")}
+        </p>}
+        {sensitiveAction.kind === "appointment-cancel" && <label className="form-span">
+          {tr("Cancellation reason (required)", "سبب إلغاء الموعد (مطلوب)")}
+          <textarea name="reason" rows={3} maxLength={1000} required />
+        </label>}
+        {sensitiveAction.kind === "queue-call" && <label className="form-span">
+          {tr("Counter or workstation (optional)", "اسم الشباك أو محطة العمل (اختياري)")}
+          <input name="counterLabel" maxLength={120}/>
+        </label>}
+        {message && <p className="form-warning form-span" role="status">{message}</p>}
+        <button type="submit" className="primary-button form-span" disabled={Boolean(busy)}>
+          {busy ? tr("Processing…", "جارٍ التنفيذ…") : tr("Confirm action", "تأكيد الإجراء")}
+        </button>
+      </form>}
+    </CrudModal>
   </section>;
 }
