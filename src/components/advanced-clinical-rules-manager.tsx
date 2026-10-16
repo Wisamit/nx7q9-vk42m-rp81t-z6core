@@ -32,58 +32,82 @@ export function AdvancedClinicalRulesManager({ tests, branches, locale }: { test
 
   async function createCalculated(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (busy) return;
     const form = new FormData(event.currentTarget);
-    setBusy("calculated"); setMessage("");
-    const response = await fetch("/api/clinical-rules/calculated", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        testId: form.get("testId"),
-        targetComponentId: form.get("targetComponentId"),
-        expression: form.get("expression"),
-        decimalPrecision: form.get("decimalPrecision"),
-        effectiveFrom: form.get("effectiveFrom"),
-        effectiveTo: form.get("effectiveTo"),
-      }),
-    });
-    setMessage(response.ok ? tr("Calculated result rule draft created. Approval is required before clinical use.", "تم إنشاء مسودة قاعدة النتيجة المحسوبة. يلزم اعتمادها قبل الاستخدام السريري.") : tr("Could not create calculated result rule.", "تعذر إنشاء قاعدة النتيجة المحسوبة."));
-    setBusy("");
-    if (response.ok) { event.currentTarget.reset(); setCalcTestId(""); router.refresh(); }
-  }
-
-  async function createReflex(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    setBusy("reflex"); setMessage("");
-    const response = await fetch("/api/clinical-rules/reflex", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        sourceTestId: form.get("sourceTestId"),
-        sourceComponentId: form.get("sourceComponentId"),
-        branchId: form.get("branchId"),
-        operator,
-        numericThreshold: form.get("numericThreshold"),
-        textThreshold: form.get("textThreshold"),
-        targetTestId: form.get("targetTestId"),
-        noteEn: form.get("noteEn"),
-        noteAr: form.get("noteAr"),
-        effectiveFrom: form.get("effectiveFrom"),
-        effectiveTo: form.get("effectiveTo"),
-      }),
-    });
-    setMessage(response.ok ? tr("Reflex recommendation rule draft created. Approval is required before clinical use.", "تم إنشاء مسودة قاعدة التوصية الانعكاسية. يلزم اعتمادها قبل الاستخدام السريري.") : tr("Could not create reflex rule.", "تعذر إنشاء قاعدة التوصية الانعكاسية."));
-    setBusy("");
-    if (response.ok) {
-      event.currentTarget.reset();
-      setReflexSourceTestId("");
-      setReflexSourceComponentId("");
-      setReflexTargetTestId("");
-      setOperator("GT");
+    setBusy("calculated");
+    setFormError("");
+    try {
+      const response = await fetch("/api/clinical-rules/calculated", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          testId: form.get("testId"),
+          targetComponentId: form.get("targetComponentId"),
+          expression: form.get("expression"),
+          decimalPrecision: form.get("decimalPrecision"),
+          effectiveFrom: form.get("effectiveFrom"),
+          effectiveTo: form.get("effectiveTo"),
+        }),
+      });
+      if (!response.ok) {
+        const detail = await response.json().catch(() => ({})) as { error?: string };
+        setFormError(tr("Could not create calculated result rule.", "تعذر إنشاء قاعدة النتيجة المحسوبة.") +
+          (detail.error ? " (" + detail.error + ")" : ""));
+        return;
+      }
+      setMessage(tr("Calculated result rule draft created. Approval is required before clinical use.", "تم إنشاء مسودة قاعدة النتيجة المحسوبة. يلزم اعتمادها قبل الاستخدام السريري."));
+      setOpen("");
+      setCalcTestId("");
       router.refresh();
+    } catch {
+      setFormError(tr("Connection error. The draft was not confirmed as saved.", "خطأ في الاتصال. لم يتم تأكيد حفظ المسودة."));
+    } finally {
+      setBusy("");
     }
   }
-
+  async function createReflex(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (busy) return;
+    const form = new FormData(event.currentTarget);
+    setBusy("reflex");
+    setFormError("");
+    try {
+      const response = await fetch("/api/clinical-rules/reflex", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sourceTestId: form.get("sourceTestId"),
+          sourceComponentId: form.get("sourceComponentId"),
+          branchId: form.get("branchId"),
+          operator,
+          numericThreshold: form.get("numericThreshold"),
+          textThreshold: form.get("textThreshold"),
+          targetTestId: form.get("targetTestId"),
+          noteEn: form.get("noteEn"),
+          noteAr: form.get("noteAr"),
+          effectiveFrom: form.get("effectiveFrom"),
+          effectiveTo: form.get("effectiveTo"),
+        }),
+      });
+      if (!response.ok) {
+        const detail = await response.json().catch(() => ({})) as { error?: string };
+        setFormError(tr("Could not create reflex rule.", "تعذر إنشاء قاعدة التوصية الانعكاسية.") +
+          (detail.error ? " (" + detail.error + ")" : ""));
+        return;
+      }
+      setMessage(tr("Reflex recommendation rule draft created. Approval is required before clinical use.", "تم إنشاء مسودة قاعدة التوصية الانعكاسية. يلزم اعتمادها قبل الاستخدام السريري."));
+      setOpen("");
+      setReflexSourceTestId("");
+            setReflexSourceComponentId("");
+            setReflexTargetTestId("");
+            setOperator("GT");
+      router.refresh();
+    } catch {
+      setFormError(tr("Connection error. The draft was not confirmed as saved.", "خطأ في الاتصال. لم يتم تأكيد حفظ المسودة."));
+    } finally {
+      setBusy("");
+    }
+  }
   return <section className="detail-grid detail-section">
     <article className="detail-card">
       <h2>{tr("Create Calculated Result Rule", "إنشاء قاعدة نتيجة محسوبة")}</h2>
