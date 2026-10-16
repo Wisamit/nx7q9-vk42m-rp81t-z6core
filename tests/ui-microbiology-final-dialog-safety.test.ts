@@ -32,6 +32,6 @@ test("UI #265: microbiology final result stays versioned with QC and validation 
  assert.ok(ui.includes("creates an immutable diagnostic report version"));
  assert.ok(ui.includes("Check for a released report/version before retrying"));
  assert.ok(ui.includes("finally {setBusy(\"\");}")||ui.includes("finally { setBusy(\"\"); }"));
- const releaseApi=readFileSync("src/app/api/results/[resultId]/release/route.ts","utf8");
+ const releaseApi=readFileSync("src/app/api/results/[id]/release/route.ts","utf8");
  assert.ok(releaseApi.includes("auditEvent")||releaseApi.includes("reportVersion"));
 });
