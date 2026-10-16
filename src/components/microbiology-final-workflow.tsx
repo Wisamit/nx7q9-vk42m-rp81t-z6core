@@ -1,7 +1,8 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter } from "next/navigation"
+import { CrudModal } from "@/components/crud-modal";;
 
 export function MicrobiologyFinalWorkflow({
   caseId,
@@ -30,22 +31,25 @@ export function MicrobiologyFinalWorkflow({
   const router = useRouter();
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [reviewAction, setReviewAction] = useState<"WITHDRAW"|"VERIFY"|"RELEASE"|null>(null);
 
   async function submitFinal(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (busy) return;
     const form = new FormData(event.currentTarget);
     setBusy("submit");
     setMessage("");
 
+    try {
     const response = await fetch(`/api/microbiology/cases/${caseId}/submit-final`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ finalComment: form.get("finalComment") }),
     });
     const body = await response.json().catch(() => ({}));
-    setBusy("");
-
     if (response.ok) {
+      setEditorOpen(false);
       setMessage(tr("Final microbiology content submitted for verification.", "تم إرسال المحتوى النهائي للأحياء الدقيقة للتحقق."));
       router.refresh();
     } else {
@@ -58,20 +62,23 @@ export function MicrobiologyFinalWorkflow({
       };
       setMessage(errors[body.error] || tr("Could not submit final microbiology result.", "تعذر إرسال نتيجة الأحياء الدقيقة النهائية."));
     }
+    } catch {
+      setMessage(tr("Connection interrupted. Check latest microbiology version before resubmitting.",
+        "انقطع الاتصال؛ راجع آخر إصدار لنتيجة الأحياء الدقيقة قبل إعادة الإرسال."));
+    } finally { setBusy(""); }
   }
 
-
   async function withdraw() {
-    if (!resultId) return;
-    if (!confirm(tr("Withdraw this unverified final submission for correction? The submitted result version will be preserved as CANCELLED.", "سحب الإرسال النهائي غير المتحقق منه للتصحيح؟ سيبقى إصدار النتيجة المرسل محفوظًا بحالة ملغى."))) return;
+    if (!resultId || busy) return;
+
 
     setBusy("withdraw");
     setMessage("");
+    try {
     const response = await fetch(`/api/microbiology/cases/${caseId}/withdraw-final`, { method: "POST" });
     const body = await response.json().catch(() => ({}));
-    setBusy("");
-
     if (response.ok) {
+      setReviewAction(null);
       setMessage(tr("Final submission withdrawn. Culture data is editable again; resubmission will create a new result version.", "تم سحب الإرسال النهائي. أصبحت بيانات الزرع قابلة للتعديل مجددًا، وسيؤدي الإرسال الجديد إلى إنشاء إصدار نتيجة جديد."));
       router.refresh();
     } else {
@@ -82,20 +89,20 @@ export function MicrobiologyFinalWorkflow({
   }
 
   async function verify() {
-    if (!resultId) return;
-    if (!confirm(tr("Verify this microbiology result? Later changes must use an amendment workflow.", "التحقق من نتيجة الأحياء الدقيقة؟ أي تغيير لاحق يجب أن يتم عبر مسار التعديل."))) return;
+    if (!resultId || busy) return;
+
 
     setBusy("verify");
     setMessage("");
+    try {
     const response = await fetch(`/api/results/${resultId}/verify`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ confirmDeltaWarnings: false }),
     });
     const body = await response.json().catch(() => ({}));
-    setBusy("");
-
     if (response.ok) {
+      setReviewAction(null);
       setMessage(tr("Microbiology result verified.", "تم التحقق من نتيجة الأحياء الدقيقة."));
       router.refresh();
     } else if (body.error === "validation_hold_review_required") {
@@ -108,16 +115,16 @@ export function MicrobiologyFinalWorkflow({
   }
 
   async function release() {
-    if (!resultId) return;
-    if (!confirm(tr("Release this verified microbiology result? This creates a new immutable diagnostic report version.", "إصدار نتيجة الأحياء الدقيقة المتحقق منها؟ سيؤدي ذلك إلى إنشاء إصدار تقرير تشخيصي جديد غير قابل للتغيير."))) return;
+    if (!resultId || busy) return;
+
 
     setBusy("release");
     setMessage("");
+    try {
     const response = await fetch(`/api/results/${resultId}/release`, { method: "POST" });
     const body = await response.json().catch(() => ({}));
-    setBusy("");
-
     if (response.ok) {
+      setReviewAction(null);
       setMessage(`${tr("Microbiology result released. Report version", "تم إصدار نتيجة الأحياء الدقيقة. تم إنشاء إصدار التقرير")} ${body.reportVersion}.`);
       router.refresh();
     } else {
