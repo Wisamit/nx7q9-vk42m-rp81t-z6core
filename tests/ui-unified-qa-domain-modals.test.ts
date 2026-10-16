@@ -40,7 +40,12 @@ test("UI #265: protected procurement, QC, quality, notification, retention and s
       assert.ok(wrapper.includes("uiEditor === "), name + " should mount form only when open");
       assert.ok(source.slice(start, close).includes("</form>"), name + " must remain a complete form");
     }
-    assert.ok(source.includes('if (!busy) setUiEditor("")'));
+    assert.ok(
+      moduleName === "notification-center-actions"
+        ? source.includes('if (!submitting.current) setUiEditor("")')
+        : source.includes('if (!busy) setUiEditor("")'),
+      moduleName + " must refuse dismissing a modal during an in-flight mutation",
+    );
   }
 });
 
