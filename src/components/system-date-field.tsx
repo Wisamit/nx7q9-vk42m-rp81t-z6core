@@ -8,7 +8,8 @@ import {
 } from "@/lib/system-date";
 
 type SystemDateFieldProps = {
-  name: string;
+  name?: string;
+  onIsoChange?: (iso: string) => void;
   defaultValue?: string | null;
   required?: boolean;
   disabled?: boolean;
@@ -29,7 +30,7 @@ const serverDateFormat = (): SystemDateFormat => "DD/MM/YYYY";
  * Do not convert date-only patient, finance or QC values through UTC offsets.
  */
 export function SystemDateField({
-  name, defaultValue, required, disabled, min, max, id, className,
+  name, defaultValue, required, disabled, min, max, id, className, onIsoChange,
 }: SystemDateFieldProps) {
   const initialIso = parseSystemDateInput(defaultValue || "", "YYYY-MM-DD") || "";
   const format = useSyncExternalStore(subscribeToRootDateFormat, readRootDateFormat, serverDateFormat);
@@ -44,10 +45,13 @@ export function SystemDateField({
   useEffect(() => {
     const form = inputRef.current?.form;
     if (!form) return;
-    const onReset = () => setDraft(null);
+    const onReset = () => {
+      setDraft(null);
+      onIsoChange?.(initialIso);
+    };
     form.addEventListener("reset", onReset);
     return () => form.removeEventListener("reset", onReset);
-  }, []);
+  }, [initialIso, onIsoChange]);
 
   useEffect(() => {
     if (!inputRef.current) return;
@@ -60,6 +64,7 @@ export function SystemDateField({
     setDraft(next);
     const parsed = parseSystemDateInput(next, format);
     const outOfRange = Boolean(parsed && ((min && parsed < min) || (max && parsed > max)));
+    onIsoChange?.(parsed && !outOfRange ? parsed : "");
     element.setCustomValidity(!next || (parsed && !outOfRange)
       ? "" : "Invalid date for the selected system format / تاريخ غير صالح حسب تنسيق النظام");
   }
@@ -92,7 +97,7 @@ export function SystemDateField({
       aria-invalid={Boolean(text && !validIso)}
       onChange={event => changeText(event.target.value, event.target)}
     />
-    <input type="hidden" name={name} value={validIso} disabled={disabled} />
+    {name && <input type="hidden" name={name} value={validIso} disabled={disabled} />}
     <input
       ref={calendarRef}
       type="date"
@@ -106,6 +111,7 @@ export function SystemDateField({
       onChange={event => {
         const next = event.target.value;
         setDraft(next ? formatSystemDate(next, format) : "");
+        onIsoChange?.(next);
         inputRef.current?.setCustomValidity("");
       }}
     />
