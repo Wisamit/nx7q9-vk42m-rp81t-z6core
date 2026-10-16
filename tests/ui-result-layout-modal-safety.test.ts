@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 
 const result = readFileSync("src/components/result-layout-manager.tsx", "utf8");
 const server = readFileSync("src/app/api/catalog/result-layout/route.ts", "utf8");
+const question = readFileSync("src/components/order-question-manager.tsx", "utf8");
 
 test("Issue #265: result layout section, component and assignment forms all live in compact dialogs", () => {
   const handlers = [
@@ -46,4 +47,22 @@ test("Issue #265: historical clinical report layout snapshots and section status
   assert.ok(result.includes("} finally {"));
   assert.ok(server.includes('requirePermission("catalog.manage")'));
   assert.ok(server.includes("auditEvent"));
+});
+
+test("Issue #265: effective-dated order question editor preserves prior order answers and requires explicit local date", () => {
+  assert.ok(question.includes('import { CrudModal } from "@/components/crud-modal"'));
+  assert.ok(question.includes('open={open}'));
+  assert.ok(question.includes('size="compact"'));
+  assert.ok(question.includes('open && <form className="catalog-form" onSubmit={submit}'));
+  assert.ok(question.includes('name="effectiveFrom" type="date" required'));
+  assert.ok(!question.includes("new Date().toISOString().slice(0,10)"),
+    "clinical effective dates must not silently use UTC's current date");
+  assert.ok(question.includes('fetch(`/api/catalog/tests/${testId}/questions`'));
+  assert.ok(question.includes("if (busy) return;"));
+  assert.ok(question.includes("setOpen(false)"));
+  assert.ok(question.includes("formElement.reset()"));
+  assert.ok(question.includes("} catch {"));
+  assert.ok(question.includes("} finally {"));
+  assert.ok(question.includes('role="alert"'));
+  assert.ok(question.includes('Reusing the same question code creates a new effective-dated version'));
 });
