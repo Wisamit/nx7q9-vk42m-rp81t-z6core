@@ -1,5 +1,7 @@
 "use client";
 
+import { SystemDateField } from "@/components/system-date-field";
+
 import { FormEvent, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CrudModal } from "@/components/crud-modal";
@@ -202,7 +204,7 @@ export function ProcurementManager({
         <label>{tr("PO number","رقم أمر الشراء")}<input name="poNumber" required /></label>
         <label>{tr("Currency","العملة")}<input name="currency" maxLength={3} defaultValue="AED" required /></label>
         <label>{tr("Supplier reference","مرجع المورد")}<input name="supplierReference" /></label>
-        <label>{tr("Expected date","التاريخ المتوقع")}<input name="expectedAt" type="date" /></label>
+        <label>{tr("Expected date","التاريخ المتوقع")}<SystemDateField name="expectedAt"  /></label>
         <label className="form-span">{tr("Notes","ملاحظات")}<textarea name="notes" rows={2} /></label>
 
         <div className="form-span">
