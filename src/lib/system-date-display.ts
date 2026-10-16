@@ -39,3 +39,20 @@ export function formatInstantDisplay(value: string, preferences: SystemDateDispl
     (preferences.timeFormat === "12" ? " " + part("dayPeriod") : "");
   return calendar + " " + clock;
 }
+
+
+/** Current-day/event-day rendering in an explicit timezone (not UTC day slicing). */
+export function formatInstantDateDisplay(value: string, preferences: SystemDateDisplayPreferences): string {
+  if (!/(?:Z|[+-]\d{2}:\d{2})$/i.test(value)) return "—";
+  const parsed = new Date(value);
+  if (!Number.isFinite(parsed.getTime())) return "—";
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: preferences.timeZone, year: "numeric", month: "2-digit", day: "2-digit",
+    }).formatToParts(parsed);
+    const part = (type: Intl.DateTimeFormatPartTypes) => parts.find(item => item.type === type)?.value || "";
+    return formatCalendarDisplay(part("year") + "-" + part("month") + "-" + part("day"), preferences.dateFormat);
+  } catch {
+    return "—";
+  }
+}
