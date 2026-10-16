@@ -44,7 +44,7 @@ export function HomeCollectionWorkstation({
   const [message, setMessage] = useState("");
   const [formError, setFormError] = useState("");
   type Proposed = { kind:"link"|"status"; next?:string; order?:string;
-    collector?:string; departure?:string; notes?:string };
+    collector?:string; depart?:string; notes?:string };
   const [pending,setPending] = useState<Proposed|null>(null);
   const [departureAt, setDepartureAt] = useState("");
   const [transportNotes, setTransportNotes] = useState("");
