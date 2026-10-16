@@ -1,5 +1,7 @@
 "use client";
 
+import { SystemDateField } from "@/components/system-date-field";
+
 import { FormEvent, useRef, useState } from "react";
 import { CrudModal } from "@/components/crud-modal";
 import { useRouter } from "next/navigation";
@@ -167,7 +169,7 @@ export function PatientEditForm({ patient, locale }: { patient: PatientEditValue
     <form className="catalog-form" onSubmit={submit}>
       <label>{tr("Full name (English)", "الاسم الكامل بالإنجليزية")}<input name="fullNameEn" required maxLength={220} defaultValue={patient.fullNameEn} /></label>
       <label>{tr("Full name (Arabic)", "الاسم الكامل بالعربية")}<input name="fullNameAr" maxLength={220} dir="rtl" defaultValue={patient.fullNameAr || ""} /></label>
-      <label>{tr("Date of birth (optional)", "تاريخ الميلاد (اختياري)")}<input name="dateOfBirth" type="date" defaultValue={patient.dateOfBirth || ""} /></label>
+      <label>{tr("Date of birth (optional)", "تاريخ الميلاد (اختياري)")}<SystemDateField name="dateOfBirth"  defaultValue={patient.dateOfBirth || ""} /></label>
       <label>{tr("Age", "العمر")}<input name="recordedAgeValue" type="number" min="0" max={recordedAgeUnit === "DAY" ? 54787 : recordedAgeUnit === "MONTH" ? 1800 : 150} step="1" defaultValue={patient.recordedAgeValue ?? ""} required /></label>
       <label>{tr("Age unit", "وحدة العمر")}<select name="recordedAgeUnit" value={recordedAgeUnit} onChange={event => setRecordedAgeUnit(event.target.value)} required><option value="YEAR">{tr("Years", "سنوات")}</option><option value="MONTH">{tr("Months", "أشهر")}</option><option value="DAY">{tr("Days", "أيام")}</option></select></label>
       <label>{tr("Sex", "الجنس")}<select name="sexAtBirth" defaultValue={patient.sexAtBirth} required>{patient.sexAtBirth === "UNKNOWN" && <option value="UNKNOWN" disabled>{tr("Select sex", "اختر الجنس")}</option>}<option value="MALE">{tr("Male", "ذكر")}</option><option value="FEMALE">{tr("Female", "أنثى")}</option></select></label>
