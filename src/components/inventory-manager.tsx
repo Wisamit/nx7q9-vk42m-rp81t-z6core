@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CrudModal } from "@/components/crud-modal";
 
@@ -37,6 +37,12 @@ export function InventoryManager({
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState("");
+  const inFlight = useRef(false);
+  const receiptForm = useRef<HTMLFormElement | null>(null);
+  const pendingReceipt = useRef<string | null>(null);
+  const [pendingReceiptId, setPendingReceiptId] = useState("");
+  const [receiptUncertain, setReceiptUncertain] = useState(false);
+  const [isError, setIsError] = useState(false);
   const [message, setMessage] = useState("");
   const [uiEditor, setUiEditor] = useState("");
   const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
@@ -48,37 +54,59 @@ export function InventoryManager({
 
   const itemById = useMemo(() => new Map(items.map(item => [item.id, item])), [items]);
 
-  async function submitJson(url: string, payload: unknown, key: string, success: string, form?: HTMLFormElement) {
+  async function submitJson(
+    url: string, payload: unknown, key: string, success: string,
+    form?: HTMLFormElement, refreshOnSuccess = true,
+  ) {
+    if (inFlight.current) return { ok: false, body: {}, uncertain: false };
+    inFlight.current = true;
     setBusy(key);
     setMessage("");
-    const response = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    const body = await response.json().catch(() => ({}));
-    setBusy("");
-    setMessage(response.ok ? success : tr("Request failed.", "فشل الطلب."));
-    if (response.ok) {
-      form?.reset();
-      router.refresh();
+    setIsError(false);
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const body = await response.json().catch(() => ({}));
+      setIsError(!response.ok);
+      setMessage(response.ok ? success : tr("Request failed.", "فشل الطلب."));
+      if (response.ok) {
+        form?.reset();
+        if (refreshOnSuccess) router.refresh();
+      }
+      return { ok: response.ok, body, uncertain: false };
+    } catch {
+      setIsError(true);
+      setMessage(tr(
+        "Connection interrupted. Verify the record before attempting another creation.",
+        "انقطع الاتصال. تحقق من السجل قبل محاولة إنشاء جديدة.",
+      ));
+      return { ok: false, body: {}, uncertain: true };
+    } finally {
+      inFlight.current = false;
+      setBusy("");
     }
-    return { response, body };
   }
 
   async function createCategory(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    if (inFlight.current) return;
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     await submitJson("/api/inventory/categories", {
       code: form.get("code"),
       nameEn: form.get("nameEn"),
       nameAr: form.get("nameAr"),
-    }, "category", tr("Inventory category created.", "تم إنشاء فئة المخزون."), event.currentTarget);
+    }, "category", tr("Inventory category created.", "تم إنشاء فئة المخزون."), formElement);
   }
 
   async function createSupplier(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    if (inFlight.current) return;
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     await submitJson("/api/inventory/suppliers", {
       code: form.get("code"),
       nameEn: form.get("nameEn"),
@@ -86,12 +114,14 @@ export function InventoryManager({
       phone: form.get("phone"),
       email: form.get("email"),
       taxNumber: form.get("taxNumber"),
-    }, "supplier", tr("Supplier created.", "تم إنشاء المورد."), event.currentTarget);
+    }, "supplier", tr("Supplier created.", "تم إنشاء المورد."), formElement);
   }
 
   async function createItem(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    if (inFlight.current) return;
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     await submitJson("/api/inventory/items", {
       code: form.get("code"),
       nameEn: form.get("nameEn"),
@@ -104,12 +134,65 @@ export function InventoryManager({
       storageConditions: form.get("storageConditions"),
       lotTracking: form.get("lotTracking") === "on",
       expiryTracking: form.get("expiryTracking") === "on",
-    }, "item", tr("Inventory item created.", "تم إنشاء صنف المخزون."), event.currentTarget);
+    }, "item", tr("Inventory item created.", "تم إنشاء صنف المخزون."), formElement);
+  }
+
+  async function postExistingReceipt(id: string) {
+    if (inFlight.current || !pendingReceipt.current || id !== pendingReceipt.current) return;
+    inFlight.current = true;
+    setBusy("receipt");
+    setIsError(false);
+    setMessage("");
+    try {
+      const response = await fetch(`/api/inventory/receipts/${id}/post`, { method: "POST" });
+      const body = await response.json().catch(() => ({}));
+      // A second attempt can observe the already-posted status when the
+      // original HTTP response was lost. Never create a second receipt.
+      const alreadyPosted = body.error === "goods_receipt_not_draft" && body.status === "POSTED";
+      if (!response.ok && !alreadyPosted) {
+        setIsError(true);
+        setMessage(tr(
+          "Draft receipt could not be posted. Retry posting this same draft, not creating another receipt.",
+          "تعذر ترحيل مسودة الاستلام. أعد ترحيل المسودة نفسها، ولا تنشئ استلاماً جديداً.",
+        ));
+        return;
+      }
+      pendingReceipt.current = null;
+      setPendingReceiptId("");
+      setReceiptUncertain(false);
+      if (receiptForm.current?.isConnected) receiptForm.current.reset();
+      setReceiptLines([{ itemId: "", lotNumber: "", expiryDate: "", quantity: "", unitCost: "", currency: "AED" }]);
+      setMessage(tr(
+        alreadyPosted ? "Existing receipt was already posted. Stock records refreshed." : "Goods receipt posted and branch stock updated.",
+        alreadyPosted ? "كان الاستلام مرحّلاً مسبقاً. تم تحديث سجل المخزون." : "تم ترحيل استلام البضاعة وتحديث مخزون الفرع.",
+      ));
+      router.refresh();
+    } catch {
+      setIsError(true);
+      setMessage(tr(
+        "Posting result is uncertain. Review the receipt or retry POST on this same receipt ID only.",
+        "نتيجة الترحيل غير مؤكدة. تحقق من الاستلام أو أعد ترحيل معرّف الاستلام نفسه فقط.",
+      ));
+    } finally {
+      inFlight.current = false;
+      setBusy("");
+    }
   }
 
   async function createReceipt(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    if (inFlight.current) return;
+    if (receiptUncertain || pendingReceipt.current) {
+      setIsError(true);
+      setMessage(tr(
+        "A previous receipt request needs reconciliation before any new receipt can be created.",
+        "هناك طلب استلام سابق يحتاج إلى المطابقة قبل إنشاء استلام جديد.",
+      ));
+      return;
+    }
+    const formElement = event.currentTarget;
+    receiptForm.current = formElement;
+    const form = new FormData(formElement);
     const payload = {
       branchId: form.get("branchId"),
       supplierId: form.get("supplierId"),
@@ -119,17 +202,31 @@ export function InventoryManager({
       notes: form.get("notes"),
       items: receiptLines,
     };
-    const { response, body } = await submitJson("/api/inventory/receipts", payload, "receipt", tr("Goods receipt draft created.", "تم إنشاء مسودة استلام البضاعة."));
-    if (response.ok && body.receipt?.id) {
-      const post = await fetch(`/api/inventory/receipts/${body.receipt.id}/post`, { method: "POST" });
-      const postBody = await post.json().catch(() => ({}));
-      setMessage(post.ok ? tr("Goods receipt posted and branch stock updated.", "تم ترحيل استلام البضاعة وتحديث مخزون الفرع.") : tr("Receipt created but could not be posted.", "تم إنشاء الاستلام لكن تعذر ترحيله."));
-      if (post.ok) {
-        event.currentTarget.reset();
-        setReceiptLines([{ itemId: "", lotNumber: "", expiryDate: "", quantity: "", unitCost: "", currency: "AED" }]);
-        router.refresh();
-      }
+    const result = await submitJson(
+      "/api/inventory/receipts", payload, "receipt",
+      tr("Goods receipt draft created.", "تم إنشاء مسودة استلام البضاعة."),
+      undefined, false,
+    );
+    if (result.uncertain) {
+      // No response ID is available: a second create could duplicate receipt
+      // business records. Require reconciliation or a fresh verified session.
+      setReceiptUncertain(true);
+      return;
     }
+    if (!result.ok) return;
+    const id = result.body?.receipt?.id;
+    if (typeof id !== "string" || !id) {
+      setReceiptUncertain(true);
+      setIsError(true);
+      setMessage(tr(
+        "Receipt creation may have succeeded but no receipt ID was returned. Reconcile before retrying.",
+        "قد يكون إنشاء الاستلام نجح لكن لم يُرجع معرّفاً. طابق السجل قبل إعادة المحاولة.",
+      ));
+      return;
+    }
+    pendingReceipt.current = id;
+    setPendingReceiptId(id);
+    await postExistingReceipt(id);
   }
 
   function updateLine(index: number, field: keyof ReceiptLine, value: string) {
@@ -248,12 +345,26 @@ export function InventoryManager({
           <button type="button" className="secondary-button" onClick={() => setReceiptLines(current => [...current, { itemId: "", lotNumber: "", expiryDate: "", quantity: "", unitCost: "", currency: "AED" }])}>{tr("Add Line","إضافة بند")}</button>
         </div>
 
-        <button className="primary-button form-span" disabled={busy !== ""}>{busy === "receipt" ? tr("Posting…","جارٍ الترحيل…") : tr("Receive & Post Stock","استلام وترحيل المخزون")}</button>
+        <button className="primary-button form-span" disabled={busy !== "" || Boolean(pendingReceiptId) || receiptUncertain}>{busy === "receipt" ? tr("Posting…","جارٍ الترحيل…") : tr("Receive & Post Stock","استلام وترحيل المخزون")}</button>
       </form>}
-    {uiEditor === "receipt" && message && <p className="form-warning" role="status">{message}</p>}
+    {uiEditor === "receipt" && pendingReceiptId && <div className="form-span">
+      <p className="form-warning" role="status">{tr(
+        "Existing receipt draft awaiting confirmation:",
+        "مسودة استلام موجودة بانتظار تأكيد الترحيل:",
+      )} <code dir="ltr">{pendingReceiptId}</code></p>
+      <button type="button" className="secondary-button" disabled={Boolean(busy)}
+        onClick={() => void postExistingReceipt(pendingReceiptId)}>
+        {tr("Retry posting this existing receipt", "إعادة ترحيل مسودة الاستلام نفسها")}
+      </button>
+    </div>}
+    {uiEditor === "receipt" && receiptUncertain && <p className="form-warning" role="alert">{tr(
+      "Receipt creation status is uncertain. Reconcile by receipt number before another creation.",
+      "حالة إنشاء الاستلام غير مؤكدة. طابق رقم الاستلام قبل إنشاء سجل جديد.",
+    )}</p>}
+    {uiEditor === "receipt" && message && <p className={isError ? "form-error" : "form-success"} role={isError ? "alert" : "status"}>{message}</p>}
   </CrudModal>
     </article>}
 
-    {message && <div className="form-success form-span">{message}</div>}
+    {message && <div className={(isError ? "form-error" : "form-success") + " form-span"} role={isError ? "alert" : "status"}>{message}</div>}
   </section>;
 }
