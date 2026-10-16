@@ -80,3 +80,13 @@ test("UI #265: already-modal staff password reset no longer stacks native confir
   const api = read("src/app/api/admin/users/[id]/reset-password/route.ts");
   assert.ok(api.includes("STAFF_PASSWORD_ADMIN_RESET"));
 });
+
+test("UI #265: new analyzer mapping dates are selected explicitly by branch operators, not silently UTC-defaulted", () => {
+  const analyzer = read("src/components/analyzer-manager.tsx");
+  assert.ok(analyzer.includes('name="effectiveFrom" type="date" required'));
+  assert.ok(analyzer.includes('Effective from (select local branch date)'));
+  assert.ok(analyzer.includes('ساري من (اختر تاريخ الفرع المحلي)'));
+  assert.ok(!analyzer.includes('defaultValue={new Date().toISOString().slice(0,10)}'),
+    "UTC midnight must not silently select the wrong local effective date");
+  assert.ok(analyzer.includes('name="effectiveTo" type="date"'));
+});
