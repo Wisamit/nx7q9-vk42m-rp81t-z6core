@@ -18,7 +18,12 @@ test("UI #265: protected procurement, QC, quality, notification, retention and s
     const source = read("src/components/" + moduleName + ".tsx");
     assert.ok(source.includes('import { CrudModal } from "@/components/crud-modal"'),
       moduleName + " must import shared modal");
-    assert.equal((source.match(/<CrudModal\b/g) || []).length, names.length, moduleName);
+    assert.equal((source.match(/<CrudModal\b/g) || []).length,
+      names.length + (moduleName === "quality-management-console" ? 1 : 0), moduleName);
+    if (moduleName === "quality-management-console") {
+      assert.ok(source.includes('open={pendingReview!==null}'),
+        "Specialty QMS governance modal is separate from the eight create editors");
+    }
     for (const name of names) {
       const marker = '<form className="catalog-form" onSubmit={' + name + '}>';
       const start = source.indexOf(marker);
