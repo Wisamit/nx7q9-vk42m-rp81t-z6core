@@ -26,7 +26,7 @@ test("UI #265: receipt quantities are snapshotted for review and original stock/
   const s=read("src/components/inventory-transfer-manager.tsx");
   assert.ok(s.includes('const remaining = Math.max(0, dispatched - received)'));
   assert.ok(s.includes('receiveQty[line.id] === undefined ? remaining.toString() : receiveQty[line.id]'));
-  assert.ok(s.includes('receivedQty: review.items'));
+  assert.ok(s.includes('items:review.items'));
   assert.ok(s.includes('finalize:action==="finalize"'));
   assert.ok(s.includes('sourceBranchId,'));
   assert.ok(s.includes('destinationBranchId,'));
