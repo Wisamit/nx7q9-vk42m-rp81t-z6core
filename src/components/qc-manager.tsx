@@ -251,9 +251,9 @@ export function QcManager({
           {materials.map(item => <option key={item.id} value={item.id}>{item.code} — {localizedName(item)} · {item.levelName}</option>)}
         </select></label>
         <label>{tr("Lot number", "رقم التشغيلة")}<input name="lotNumber" required /></label>
-        <label>{tr("Received", "تاريخ الاستلام")}<SystemDateField name="receivedAt"  /></label>
-        <label>{tr("Opened", "تاريخ الفتح")}<SystemDateField name="openedAt"  /></label>
-        <label>{tr("Expiry", "تاريخ الانتهاء")}<SystemDateField name="expiryDate"  /></label>
+        <label>{tr("Received", "تاريخ الاستلام")}<SystemDateField name="receivedAt" /></label>
+        <label>{tr("Opened", "تاريخ الفتح")}<SystemDateField name="openedAt" /></label>
+        <label>{tr("Expiry", "تاريخ الانتهاء")}<SystemDateField name="expiryDate" /></label>
         <button className="primary-button form-span" disabled={busy !== ""}>{busy === "lot" ? tr("Saving…", "جارٍ الحفظ…") : tr("Create QC Lot", "إنشاء تشغيلة QC")}</button>
       </form>}
      {uiEditor === "lot" && message && <p className="form-warning" role="status">{message}</p>}
@@ -291,8 +291,8 @@ export function QcManager({
         <label>{tr("Target CV %", "CV المستهدف %")}<input name="targetCv" inputMode="decimal" /></label>
         <label>{tr("Unit", "الوحدة")}<input name="unitSnapshot" /></label>
         <label>{tr("QC valid hours", "صلاحية QC بالساعات")}<input name="qcValidHours" type="number" min="1" max="168" defaultValue="24" required /></label>
-        <label>{tr("Effective from (choose intended local date)", "ساري من (اختر التاريخ المحلي المقصود)")}<SystemDateField name="effectiveFrom"  required /></label>
-        <label>{tr("Effective to", "ساري حتى")}<SystemDateField name="effectiveTo"  /></label>
+        <label>{tr("Effective from (choose intended local date)", "ساري من (اختر التاريخ المحلي المقصود)")}<SystemDateField name="effectiveFrom" required /></label>
+        <label>{tr("Effective to", "ساري حتى")}<SystemDateField name="effectiveTo" /></label>
         <div className="form-span">
           <strong>{tr("Westgard rules", "قواعد Westgard")}</strong>
           <div className="result-actions">
