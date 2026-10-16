@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
+import { CrudModal } from "@/components/crud-modal";
 
 type Branch = {
   id:string;code:string;nameEn:string;nameAr:string|null;timezone:string;defaultCurrency:string;
@@ -47,6 +48,9 @@ export function OrganizationStructureManager({locale,canManage}:{locale:"ar"|"en
   const [hours,setHours]=useState<WeeklyHours>(emptyHours);
   const [statusAction,setStatusAction]=useState<{kind:"branches"|"departments"|"workstations";id:string;operation:"deactivate"|"reactivate"}|null>(null);
   const [reason,setReason]=useState("");
+  const [branchEditorOpen,setBranchEditorOpen]=useState(false);
+  const [departmentEditorOpen,setDepartmentEditorOpen]=useState(false);
+  const [stationEditorOpen,setStationEditorOpen]=useState(false);
 
   const refresh=useCallback(async()=>{
     const endpoints=["/api/organization/branches","/api/organization/departments","/api/organization/workstations"];
@@ -142,7 +146,12 @@ export function OrganizationStructureManager({locale,canManage}:{locale:"ar"|"en
     {message&&<p role="status" className="muted">{message}</p>}
     {tab==="branches"&&<div className="detail-section">
       <section className="table-card">
-        <div className="table-toolbar"><h2>{tr("Organization branches","فروع المؤسسة")}</h2></div>
+        <div className="table-toolbar"><h2>{tr("Organization branches","فروع المؤسسة")}</h2>
+          {editableBranch&&<button type="button" className="primary-button" disabled={busy}
+            onClick={()=>{changeBranch("new");setBranchEditorOpen(true);}}>
+            {tr("Add branch","إضافة فرع")}
+          </button>}
+        </div>
         <div className="table-wrap"><table><thead><tr>
           <th>{tr("Code","الرمز")}</th><th>{tr("Branch","الفرع")}</th><th>{tr("Timezone","المنطقة الزمنية")}</th>
           <th>{tr("Currency","العملة")}</th><th>{tr("Status","الحالة")}</th><th>{tr("Actions","الإجراءات")}</th>
@@ -150,14 +159,19 @@ export function OrganizationStructureManager({locale,canManage}:{locale:"ar"|"en
           <td>{b.code}</td><td>{title(b,locale)}{b.isCentralLab?" · "+tr("Central lab","مختبر مركزي"):""}</td>
           <td dir="ltr">{b.timezone}</td><td>{b.defaultCurrency}</td><td>{b.status}</td>
           <td><div className="inline-actions">
-            <button className="secondary-button" onClick={()=>changeBranch(b.id)}>{tr("View / edit","عرض / تعديل")}</button>
+            <button type="button" className="secondary-button" onClick={()=>{changeBranch(b.id);setBranchEditorOpen(true);}}>{tr("View / edit","عرض / تعديل")}</button>
             {editableBranch&&<button className="secondary-button" onClick={()=>{setStatusAction({kind:"branches",id:b.id,operation:b.status==="ACTIVE"?"deactivate":"reactivate"});setReason("");}}>
               {b.status==="ACTIVE"?tr("Deactivate","تعطيل"):tr("Reactivate","إعادة التفعيل")}
             </button>}
           </div></td>
         </tr>)}</tbody></table></div>
       </section>
-      <section className="detail-card">
+      <CrudModal open={branchEditorOpen} onClose={()=>{if(!busy)setBranchEditorOpen(false);}}
+        size="compact"
+        title={tr("Branch details","بيانات الفرع")}
+        description={tr("Branch identity and local working hours; all changes require your branch authorization.",
+          "هوية الفرع وساعات العمل المحلية؛ تتطلب التعديلات صلاحية الفرع المناسبة.")}>
+      {branchEditorOpen&&<section className="detail-card">
         <h2>{tr("Branch details","بيانات الفرع")}</h2>
         <label>{tr("Select branch","اختر الفرع")}<select value={branchId} onChange={e=>changeBranch(e.target.value)}>
           {canCreate&&<option value="new">{tr("Create a branch","إنشاء فرع جديد")}</option>}
@@ -217,21 +231,32 @@ export function OrganizationStructureManager({locale,canManage}:{locale:"ar"|"en
             {tr("Save weekly schedule","حفظ الجدول الأسبوعي")}
           </button>}
         </div>}
-      </section>
+      </section>}
+      </CrudModal>
     </div>}
     {tab==="departments"&&<div className="detail-section">
-      <section className="table-card"><div className="table-toolbar"><h2>{tr("Departments and sections","الأقسام والوحدات")}</h2></div>
+      <section className="table-card"><div className="table-toolbar"><h2>{tr("Departments and sections","الأقسام والوحدات")}</h2>
+          {canManage&&<button type="button" className="primary-button" disabled={busy}
+            onClick={()=>{changeDepartment("new");setDepartmentEditorOpen(true);}}>
+            {tr("Add department","إضافة قسم")}
+          </button>}
+        </div>
         <div className="table-wrap"><table><thead><tr><th>{tr("Code","الرمز")}</th><th>{tr("Name","الاسم")}</th>
           <th>{tr("Scope","النطاق")}</th><th>{tr("Status","الحالة")}</th><th>{tr("Actions","الإجراءات")}</th></tr></thead>
           <tbody>{departments.map(d=><tr key={d.id}><td>{d.code}</td><td>{title(d,locale)}</td>
             <td>{d.branchId?branches.find(b=>b.id===d.branchId)?.code||"—":tr("Organization-wide","كل الفروع")}</td><td>{d.status}</td>
             <td><div className="inline-actions">
-              <button className="secondary-button" onClick={()=>changeDepartment(d.id)}>{tr("View / edit","عرض / تعديل")}</button>
+              <button type="button" className="secondary-button" onClick={()=>{changeDepartment(d.id);setDepartmentEditorOpen(true);}}>{tr("View / edit","عرض / تعديل")}</button>
               {canManage&&(d.branchId!==null||canCreate)&&<button className="secondary-button" onClick={()=>setStatusAction({kind:"departments",id:d.id,operation:d.status==="ACTIVE"?"deactivate":"reactivate"})}>
                 {d.status==="ACTIVE"?tr("Deactivate","تعطيل"):tr("Reactivate","إعادة التفعيل")}</button>}
             </div></td></tr>)}</tbody></table></div>
       </section>
-      <section className="detail-card">
+      <CrudModal open={departmentEditorOpen} onClose={()=>{if(!busy)setDepartmentEditorOpen(false);}}
+        size="compact"
+        title={tr("Department details","بيانات القسم")}
+        description={tr("Department codes and branch scope are immutable after creation.",
+          "تبقى رموز الأقسام ونطاق الفرع ثابتة بعد الإنشاء.")}>
+      {departmentEditorOpen&&<section className="detail-card">
         <h2>{tr("Department details","بيانات القسم")}</h2>
         <label>{tr("Select department","اختر القسم")}<select value={departmentId} onChange={e=>changeDepartment(e.target.value)}>
           <option value="new">{tr("New department","قسم جديد")}</option>{departments.map(d=><option key={d.id} value={d.id}>{d.code} · {title(d,locale)}</option>)}
@@ -254,21 +279,32 @@ export function OrganizationStructureManager({locale,canManage}:{locale:"ar"|"en
           {canManage&&(!chosenDepartment||chosenDepartment.status==="ACTIVE")&&(departmentId==="new"||chosenDepartment?.branchId||canCreate)&&
             <button type="submit" className="primary-button" disabled={busy}>{departmentId==="new"?tr("Create department","إنشاء قسم"):tr("Save department","حفظ القسم")}</button>}
         </form>
-      </section>
+      </section>}
+      </CrudModal>
     </div>}
     {tab==="workstations"&&<div className="detail-section">
-      <section className="table-card"><div className="table-toolbar"><h2>{tr("Operational workstations","محطات العمل التشغيلية")}</h2></div>
+      <section className="table-card"><div className="table-toolbar"><h2>{tr("Operational workstations","محطات العمل التشغيلية")}</h2>
+          {canManage&&<button type="button" className="primary-button" disabled={busy}
+            onClick={()=>{changeStation("new");setStationEditorOpen(true);}}>
+            {tr("Add workstation","إضافة محطة عمل")}
+          </button>}
+        </div>
         <div className="table-wrap"><table><thead><tr><th>{tr("Code","الرمز")}</th><th>{tr("Name","الاسم")}</th>
           <th>{tr("Branch","الفرع")}</th><th>{tr("Department","القسم")}</th><th>{tr("Status","الحالة")}</th><th>{tr("Actions","الإجراءات")}</th></tr></thead>
           <tbody>{stations.map(s=><tr key={s.id}><td>{s.code}</td><td>{title(s,locale)}</td>
             <td>{branches.find(b=>b.id===s.branchId)?.code||"—"}</td>
             <td>{departments.find(d=>d.id===s.departmentId)?.code||"—"}</td><td>{s.status}</td>
-            <td><div className="inline-actions"><button className="secondary-button" onClick={()=>changeStation(s.id)}>{tr("View / edit","عرض / تعديل")}</button>
+            <td><div className="inline-actions"><button type="button" className="secondary-button" onClick={()=>{changeStation(s.id);setStationEditorOpen(true);}}>{tr("View / edit","عرض / تعديل")}</button>
               {canManage&&<button className="secondary-button" onClick={()=>setStatusAction({kind:"workstations",id:s.id,operation:s.status==="ACTIVE"?"deactivate":"reactivate"})}>
                 {s.status==="ACTIVE"?tr("Deactivate","تعطيل"):tr("Reactivate","إعادة التفعيل")}</button>}
             </div></td></tr>)}</tbody></table></div>
       </section>
-      <section className="detail-card"><h2>{tr("Workstation details","بيانات محطة العمل")}</h2>
+      <CrudModal open={stationEditorOpen} onClose={()=>{if(!busy)setStationEditorOpen(false);}}
+        size="compact"
+        title={tr("Workstation details","بيانات محطة العمل")}
+        description={tr("Workstations remain branch-scoped; only qualified staff can update them.",
+          "تبقى محطات العمل محصورة ضمن فروعها، ولا يحق تعديلها إلا للمخولين.")}>
+      {stationEditorOpen&&<section className="detail-card"><h2>{tr("Workstation details","بيانات محطة العمل")}</h2>
         <label>{tr("Select workstation","اختر المحطة")}<select value={stationId} onChange={e=>changeStation(e.target.value)}>
           <option value="new">{tr("New workstation","محطة عمل جديدة")}</option>{stations.map(s=><option key={s.id} value={s.id}>{s.code} · {title(s,locale)}</option>)}
         </select></label>
@@ -292,8 +328,14 @@ export function OrganizationStructureManager({locale,canManage}:{locale:"ar"|"en
           {canManage&&(!chosenStation||chosenStation.status==="ACTIVE")&&
             <button type="submit" className="primary-button" disabled={busy}>{stationId==="new"?tr("Create workstation","إنشاء محطة عمل"):tr("Save workstation","حفظ محطة العمل")}</button>}
         </form>
-      </section>
+      </section>}
+      </CrudModal>
     </div>}
+    <CrudModal open={statusAction!==null} onClose={()=>{if(!busy)setStatusAction(null);}}
+      size="compact"
+      title={tr("Confirm structure status change","تأكيد تغيير حالة الهيكل")}
+      description={tr("Reasoned status changes preserve historical references and are enforced server-side.",
+        "يحافظ تغيير الحالة الموثق على المراجع التاريخية وتتحقق منه صلاحيات السيرفر.")}>
     {statusAction&&<section className="detail-card">
       <h3>{statusAction.operation==="deactivate"?tr("Confirm deactivation","تأكيد التعطيل"):tr("Confirm reactivation","تأكيد إعادة التفعيل")}</h3>
       <p className="muted">{tr("Deactivation preserves history. Branch closure is blocked while any operational/historical references remain.",
@@ -307,5 +349,6 @@ export function OrganizationStructureManager({locale,canManage}:{locale:"ar"|"en
           {tr("Confirm","تأكيد")}</button>
       </div>
     </section>}
+    </CrudModal>
   </div>;
 }
