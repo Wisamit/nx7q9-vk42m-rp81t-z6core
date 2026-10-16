@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { FormEvent, useState } from "react";
+import { CrudModal } from "@/components/crud-modal";
 import { useRouter } from "next/navigation";
 
 export function AnalyzerMappingGovernanceButton({
@@ -24,37 +25,40 @@ export function AnalyzerMappingGovernanceButton({
   const independent = !!authorId && authorId !== actorId;
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [reviewAction, setReviewAction] = useState<"APPROVE" | "RETIRE" | null>(null);
+  const [reviewReason, setReviewReason] = useState("");
   const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
 
-  async function act(action: "APPROVE" | "RETIRE") {
-    let reason = "";
-    if (action === "APPROVE") {
-      if (!confirm(tr(
-        "Approve this analyzer mapping for clinical use? No unit conversion is performed: the analyzer unit code must already represent the displayed LIS target unit.",
-        "اعتماد ربط جهاز التحليل للاستخدام السريري؟ لا يتم تحويل الوحدات: يجب أن يمثل رمز وحدة الجهاز وحدة LIS الهدف المعروضة فعلياً.",
-      ))) return;
-    } else {
-      const entered = prompt(tr(
-        "Retirement reason (required). Previously imported clinical results remain unchanged:",
-        "سبب إيقاف الربط (مطلوب). ستبقى النتائج السريرية المستوردة سابقاً دون تغيير:",
-      ));
-      if (entered === null) return;
-      reason = entered.trim();
-      if (!reason) {
-        setMessage(tr("Retirement reason is required.", "سبب الإيقاف مطلوب."));
-        return;
-      }
-    }
+  function openReview(action: "APPROVE" | "RETIRE") {
+    if (busy || !canApprove) return;
+    if (action === "APPROVE" && (approvalStatus !== "DRAFT" || !independent)) return;
+    if (action === "RETIRE" && approvalStatus !== "APPROVED") return;
+    setReviewReason("");
+    setMessage("");
+    setReviewAction(action);
+  }
 
+  async function act(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const action = reviewAction;
+    if (!action || busy || !canApprove) return;
+    if (action === "APPROVE" && (approvalStatus !== "DRAFT" || !independent)) return;
+    if (action === "RETIRE" && approvalStatus !== "APPROVED") return;
+    const reason = action === "RETIRE" ? reviewReason.trim() : "";
+    if (action === "RETIRE" && !reason) {
+      setMessage(tr("Retirement reason is required.", "سبب الإيقاف مطلوب."));
+      return;
+    }
     setBusy(true);
     setMessage("");
-    const response = await fetch(`/api/analyzers/${analyzerId}/mappings`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, action, reason }),
-    });
-    const body = await response.json().catch(() => ({})) as { error?: string };
-    if (!response.ok) {
+    try {
+      const response = await fetch(`/api/analyzers/${analyzerId}/mappings`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, action, reason }),
+      });
+      const body = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) {
       const friendly = body.error === "analyzer_mapping_self_approval_forbidden"
         ? tr("The draft author cannot approve their own clinical analyzer mapping.", "لا يستطيع منشئ مسودة ربط الجهاز اعتمادها للاستخدام السريري بنفسه.")
         : body.error === "analyzer_mapping_creator_unknown"
@@ -72,20 +76,55 @@ export function AnalyzerMappingGovernanceButton({
               : body.error === "only_approved_analyzer_mapping_can_be_retired"
                 ? tr("Only an approved mapping can be retired.", "يمكن إيقاف الربط المعتمد فقط.")
                 : body.error || tr("Could not update analyzer mapping governance.", "تعذر تحديث حوكمة ربط جهاز التحليل.");
-      setMessage(friendly);
+
+        setMessage(friendly);
+        return;
+      }
+      setReviewAction(null);
+      router.refresh();
+    } catch {
+      setMessage(tr("Connection interrupted. Verify mapping status before retrying.",
+        "انقطع الاتصال. تحقق من حالة الربط قبل إعادة المحاولة."));
+    } finally {
       setBusy(false);
-      return;
     }
-    setBusy(false);
-    router.refresh();
   }
 
   return <div>
-    {canApprove && independent && approvalStatus === "DRAFT" ? <button type="button" className="secondary-button" disabled={busy} onClick={() => void act("APPROVE")}>{busy ? tr("Saving…", "جارٍ الحفظ…") : tr("Approve", "اعتماد")}</button> : null}
+    {canApprove && independent && approvalStatus === "DRAFT" ? <button type="button" className="secondary-button" disabled={busy} onClick={() => openReview("APPROVE")}>{busy ? tr("Saving…", "جارٍ الحفظ…") : tr("Approve", "اعتماد")}</button> : null}
     {canApprove && approvalStatus === "DRAFT" && !independent ? <small>{authorId
       ? tr("Independent reviewer required.", "يجب أن يعتمد الربط شخص آخر.")
       : tr("Unverified draft author — governed review required.", "منشئ المسودة غير معروف — يلزم تدقيق موثق.")}</small> : null}
-    {canApprove && approvalStatus === "APPROVED" ? <button type="button" className="secondary-button" disabled={busy} onClick={() => void act("RETIRE")}>{busy ? tr("Saving…", "جارٍ الحفظ…") : tr("Retire", "إيقاف")}</button> : null}
-    {message ? <><br/><small>{message}</small></> : null}
+    {canApprove && approvalStatus === "APPROVED" ? <button type="button" className="secondary-button" disabled={busy} onClick={() => openReview("RETIRE")}>{busy ? tr("Saving…", "جارٍ الحفظ…") : tr("Retire", "إيقاف")}</button> : null}
+    <CrudModal open={reviewAction !== null} onClose={() => { if (!busy) setReviewAction(null); }}
+      size="compact"
+      title={reviewAction === "APPROVE"
+        ? tr("Independent Analyzer Mapping Approval", "اعتماد مستقل لربط جهاز التحليل")
+        : tr("Retire Analyzer Mapping", "إيقاف ربط جهاز التحليل")}
+      description={tr(
+        "This clinical mapping does not perform unit conversion. Review exact analyzer/LIS unit identity and the performing branch before any approval.",
+        "لا يجري هذا الربط تحويل الوحدات. راجع تطابق وحدات الجهاز وLIS والفرع المنفذ قبل الاعتماد.",
+      )}>
+      {reviewAction && <form className="catalog-form" onSubmit={event => void act(event)}>
+        <p className="form-span">{reviewAction === "APPROVE"
+          ? tr("The independent reviewer must verify this exact mapped code, target unit and effective scope.",
+            "يجب أن يتحقق المراجع المستقل من رمز الربط ووحدة الهدف ونطاق السريان بدقة.")
+          : tr("Retirement only affects future analyzer imports. Already imported clinical results remain unchanged.",
+            "يؤثر إيقاف الربط على الاستيراد المستقبلي فقط؛ تبقى النتائج المستوردة سابقاً دون تغيير.")}</p>
+        {reviewAction === "RETIRE" && <label className="form-span">
+          {tr("Retirement reason (required)", "سبب الإيقاف (مطلوب)")}
+          <textarea value={reviewReason} required rows={3} maxLength={1000}
+            onChange={event => setReviewReason(event.target.value)} />
+        </label>}
+        {message && <p role="alert" className="form-error form-span">{message}</p>}
+        <button className="primary-button form-span" type="submit"
+          disabled={busy || (reviewAction === "RETIRE" && !reviewReason.trim())}>
+          {busy ? tr("Saving…", "جارٍ الحفظ…")
+            : reviewAction === "APPROVE" ? tr("Confirm clinical mapping approval", "تأكيد اعتماد الربط السريري")
+              : tr("Confirm retirement", "تأكيد الإيقاف")}
+        </button>
+      </form>}
+    </CrudModal>
+    {message && !reviewAction ? <p role="alert" className="form-warning">{message}</p> : null}
   </div>;
 }

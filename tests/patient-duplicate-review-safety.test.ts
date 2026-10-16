@@ -29,6 +29,12 @@ test("merge review exposes duplicate evidence but never auto-merges", () => {
   assert.ok(page.includes("patientDuplicateEvidence"));
   assert.ok(panel.includes("Same normalized name + date of birth"));
   assert.ok(panel.includes("Same phone"));
-  assert.ok(panel.includes("window.confirm"));
+  assert.ok(panel.includes("CrudModal"));
+  assert.ok(panel.includes("confirmMergeReview"));
+  assert.ok(panel.includes("setPendingMerge({source,target,reason:reason.trim()})"));
+  assert.ok(panel.includes('action="PATIENT_MERGE"'));
+  assert.ok(panel.includes('x-staff-step-up-token'));
+  assert.ok(!panel.includes("window.confirm"));
+  assert.ok(!panel.includes("window.prompt"));
   assert.ok(panel.includes("/merge"));
 });

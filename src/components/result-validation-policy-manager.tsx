@@ -3,6 +3,7 @@
 import { FormEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ClinicalRuleGovernanceButton } from "@/components/clinical-rule-governance-button";
+import { CrudModal } from "@/components/crud-modal";
 
 type Scope = "ORGANIZATION" | "DEPARTMENT" | "TEST";
 type Option = { id: string; code: string; nameEn: string; nameAr?: string | null };
@@ -48,6 +49,8 @@ export function ResultValidationPolicyManager({
   const [requiresMedicalValidation, setRequiresMedicalValidation] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+  const [formError, setFormError] = useState("");
+  const [open, setOpen] = useState(false);
   const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
   const name = (x: Option) => locale === "ar" ? x.nameAr || x.nameEn : x.nameEn;
   const sortedPolicies = useMemo(
@@ -57,8 +60,9 @@ export function ResultValidationPolicyManager({
 
   async function createPolicy(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (saving) return;
     setSaving(true);
-    setMessage("");
+    setFormError("");
     const form = new FormData(event.currentTarget);
     const payload = {
       scope,
@@ -73,21 +77,27 @@ export function ResultValidationPolicyManager({
       effectiveFrom: form.get("effectiveFrom"),
       effectiveTo: form.get("effectiveTo"),
     };
-    const response = await fetch("/api/clinical-rules/validation-policies", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    const body = await response.json().catch(() => ({})) as { error?: string };
-    setSaving(false);
-    if (!response.ok) {
-      setMessage(body.error || tr("Could not create validation policy.", "تعذر إنشاء سياسة التحقق."));
-      return;
+    try {
+      const response = await fetch("/api/clinical-rules/validation-policies", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const body = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) {
+        setFormError(body.error || tr("Could not create validation policy.", "تعذر إنشاء سياسة التحقق."));
+        return;
+      }
+      setOpen(false);
+      setScope("ORGANIZATION");
+      setRequiresMedicalValidation(false);
+      setMessage(tr("Validation policy draft created. It will not affect result validation until approved.", "تم إنشاء مسودة سياسة التحقق. لن تؤثر على مسار التحقق من النتائج قبل اعتمادها."));
+      router.refresh();
+    } catch {
+      setFormError(tr("Connection error; draft creation not confirmed.", "خطأ في الاتصال؛ لم يتم تأكيد إنشاء المسودة."));
+    } finally {
+      setSaving(false);
     }
-    event.currentTarget.reset();
-    setRequiresMedicalValidation(false);
-    setMessage(tr("Validation policy draft created. It will not affect result validation until approved.", "تم إنشاء مسودة سياسة التحقق. لن تؤثر على مسار التحقق من النتائج قبل اعتمادها."));
-    router.refresh();
   }
 
   const scopeLabel = (value: Scope) => ({
@@ -105,9 +115,20 @@ export function ResultValidationPolicyManager({
           "المراجعة الفنية مطلوبة دائماً. تُنشأ مسارات التحقق الجديدة كمسودات غير نشطة حتى يتم اعتمادها بشكل منفصل. ويمكن اشتراط التحقق الطبي على مستوى المؤسسة أو القسم أو الفحص مع تجاوزات حسب الفرع.",
         )}</p>
       </div>
+      <button type="button" className="primary-button" disabled={saving}
+        onClick={() => { setFormError(""); setMessage(""); setOpen(true); }}>
+        {tr("Create Validation Policy Draft", "إنشاء مسودة سياسة تحقق")}
+      </button>
     </div>
 
-    <form className="catalog-form" onSubmit={createPolicy}>
+    <CrudModal open={open} onClose={() => { if (!saving) setOpen(false); }}
+      size="compact"
+      title={tr("Create Validation Policy Draft", "إنشاء مسودة سياسة التحقق")}
+      description={tr(
+        "This policy cannot change result validation until a separately authorized clinical review approves the draft.",
+        "لا تغيّر هذه السياسة مسار التحقق من النتائج حتى تعتمدها مراجعة سريرية مخوّلة ومنفصلة.",
+      )}>
+      {open && <form className="catalog-form" onSubmit={createPolicy}>
       <label>{tr("Scope", "النطاق")}<select value={scope} onChange={e => setScope(e.target.value as Scope)}>
         <option value="ORGANIZATION">{scopeLabel("ORGANIZATION")}</option>
         <option value="DEPARTMENT">{scopeLabel("DEPARTMENT")}</option>
@@ -133,7 +154,9 @@ export function ResultValidationPolicyManager({
       <label className="check-line"><input type="checkbox" checked={requiresMedicalValidation} onChange={e => setRequiresMedicalValidation(e.target.checked)} /> {tr("Require medical validation", "يتطلب تحققاً طبياً")}</label>
       {requiresMedicalValidation && <label className="check-line"><input type="checkbox" name="allowSameReviewer" /> {tr("Allow same user for technical and medical stages", "السماح لنفس المستخدم بالمراجعة الفنية والتحقق الطبي")}</label>}
       <button className="primary-button form-span" disabled={saving}>{saving ? tr("Saving…", "جارٍ الحفظ…") : tr("Create Validation Policy Draft", "إنشاء مسودة سياسة التحقق")}</button>
-    </form>
+      {formError && <p className="form-error form-span" role="alert">{formError}</p>}
+    </form>}
+    </CrudModal>
 
     <div className="table-wrap"><table>
       <thead><tr><th>{tr("Code", "الرمز")}</th><th>{tr("Branch", "الفرع")}</th><th>{tr("Scope", "النطاق")}</th><th>{tr("Path", "المسار")}</th><th>{tr("Reviewer separation", "فصل المراجعين")}</th><th>{tr("Effective", "السريان")}</th><th>{tr("Governance", "الحوكمة")}</th></tr></thead>

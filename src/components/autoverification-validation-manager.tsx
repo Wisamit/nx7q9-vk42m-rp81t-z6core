@@ -127,7 +127,7 @@ export function AutoverificationValidationManager({
         <label><input name="allowAnalyzer" type="checkbox" defaultChecked /> {tr("Allow analyzer results when QC gate permits", "السماح بنتائج الأجهزة عندما تسمح بوابة QC")}</label>
         <label><input name="allowImport" type="checkbox" /> {tr("Allow imported results", "السماح بالنتائج المستوردة")}</label>
         <label><input name="requireAllFlagsNormal" type="checkbox" /> {tr("Require all flags normal/unknown", "اشتراط أن تكون كل الإشارات طبيعية/غير معروفة")}</label>
-        <label>{tr("Effective from", "ساري من")}<input name="effectiveFrom" type="date" defaultValue={new Date().toISOString().slice(0,10)} required /></label>
+        <label>{tr("Effective from (select intended local date)", "ساري من (اختر التاريخ المحلي المقصود)")}<input name="effectiveFrom" type="date" required /></label>
         <label>{tr("Effective to", "ساري حتى")}<input name="effectiveTo" type="date" /></label>
         <button className="primary-button form-span" disabled={busy === "policy"}>{busy === "policy" ? tr("Saving…", "جارٍ الحفظ…") : tr("Create Autoverification Policy Draft", "إنشاء مسودة سياسة التحقق الآلي")}</button>
         {formError && <p className="form-error form-span" role="alert">{formError}</p>}
@@ -175,7 +175,7 @@ export function AutoverificationValidationManager({
         </select></label>
         <label className="form-span">{tr("Reason (English)", "السبب بالإنجليزية")}<input name="reasonEn" required /></label>
         <label className="form-span">{tr("Reason (Arabic)", "السبب بالعربية")}<input name="reasonAr" dir="rtl" /></label>
-        <label>{tr("Effective from", "ساري من")}<input name="effectiveFrom" type="date" defaultValue={new Date().toISOString().slice(0,10)} required /></label>
+        <label>{tr("Effective from (select intended local date)", "ساري من (اختر التاريخ المحلي المقصود)")}<input name="effectiveFrom" type="date" required /></label>
         <label>{tr("Effective to", "ساري حتى")}<input name="effectiveTo" type="date" /></label>
         <button className="primary-button form-span" disabled={busy === "hold"}>{busy === "hold" ? tr("Saving…", "جارٍ الحفظ…") : tr("Create Validation Hold Rule Draft", "إنشاء مسودة قاعدة إيقاف التحقق")}</button>
         {formError && <p className="form-error form-span" role="alert">{formError}</p>}

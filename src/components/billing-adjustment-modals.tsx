@@ -156,7 +156,7 @@ export function CreditNoteCreateModal({
       onClose={() => setOpen(false)}
       title={tr("Issue Credit Note", "إصدار إشعار دائن")}
       description={tr("Create a traceable financial adjustment without changing the original invoice amount.", "أنشئ تسوية مالية قابلة للتتبع دون تغيير القيمة الأصلية للفاتورة.")}
-      size="md"
+      size="compact"
     >
       <form ref={creditFormRef} className="catalog-form" onSubmit={submit}>
         <label className="form-span">{tr("Invoice", "الفاتورة")}
@@ -274,7 +274,7 @@ export function RefundCreateModal({
       onClose={() => setOpen(false)}
       title={tr("Post Refund", "تسجيل استرداد")}
       description={tr("Return money against an existing payment while keeping the original payment and allocation intact.", "أعد مبلغًا مقابل دفعة موجودة مع الإبقاء على الدفعة والتخصيص الأصليين دون تعديل.")}
-      size="md"
+      size="compact"
     >
       <form ref={refundFormRef} className="catalog-form" onSubmit={submit}>
         <label className="form-span">{tr("Payment allocation", "تخصيص الدفعة")}

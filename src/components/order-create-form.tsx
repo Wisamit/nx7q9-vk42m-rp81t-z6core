@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 type PatientOption = { id: string; patientNumber: string; fullNameEn: string; phone: string | null };
@@ -71,6 +71,7 @@ export function OrderCreateForm({
   const [selectedPackageIds, setSelectedPackageIds] = useState<string[]>([]);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const submitting = useRef(false);
   const [discountPercent, setDiscountPercent] = useState(0);
   const [discountApprovalRequestId, setDiscountApprovalRequestId] = useState("");
   const [pregnancyStatus, setPregnancyStatus] = useState<"UNKNOWN" | "NOT_PREGNANT" | "PREGNANT">("UNKNOWN");
@@ -124,6 +125,7 @@ export function OrderCreateForm({
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (submitting.current) return;
     if (initialDoctorRequisition && (
       patientId!==initialDoctorRequisition.patientId ||
       new Set(effectiveTestIds).size!==initialDoctorRequisition.testIds.length ||
@@ -134,7 +136,9 @@ export function OrderCreateForm({
     if (!patientId) { setMessage(tr("Select a valid patient.", "اختر مريضًا صحيحًا.")); return; }
     if (effectiveTestIds.length === 0) { setMessage(tr("Add at least one test or commercial package.", "أضف فحصًا واحدًا أو باقة تجارية واحدة على الأقل.")); return; }
 
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
+    submitting.current = true;
     setBusy(true);
     setMessage("");
 
@@ -145,6 +149,7 @@ export function OrderCreateForm({
       value: form.get("question_" + question.id),
     })));
 
+    try {
     const response = await fetch("/api/orders", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -191,7 +196,7 @@ export function OrderCreateForm({
       setDiscountPercent(0);
       setDiscountApprovalRequestId("");
       setPregnancyStatus("UNKNOWN");
-      event.currentTarget.reset();
+      formElement.reset();
       router.refresh();
       onSuccess?.(success);
     } else if (body.error === "invalid_gestational_age") {
@@ -241,7 +246,15 @@ export function OrderCreateForm({
     } else {
       setMessage(body.error || tr("Could not create order.", "تعذر إنشاء الطلب."));
     }
-    setBusy(false);
+    } catch {
+      setMessage(tr(
+        "Connection interrupted. Before retrying, check Orders to confirm whether the order and invoice were already created.",
+        "انقطع الاتصال. قبل إعادة المحاولة، تحقق من قائمة الطلبات للتأكد من عدم إنشاء الطلب والفاتورة مسبقاً.",
+      ));
+    } finally {
+      submitting.current = false;
+      setBusy(false);
+    }
   }
 
   return <form className="order-form" onSubmit={submit}>

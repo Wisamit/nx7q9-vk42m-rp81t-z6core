@@ -30,7 +30,23 @@ test("UI gate #265: unsaved edits request an explicit localized discard decision
   assert.ok(modal.includes("onInputCapture"));
   assert.ok(modal.includes("onChangeCapture"));
   assert.ok(modal.includes("changedRef.current"));
-  assert.ok(modal.includes("window.confirm(message)"));
+  assert.ok(!modal.includes("window.confirm("),
+    "Do not use native browser confirmations; render a themed accessible alertdialog.");
+  assert.ok(modal.includes('role="alertdialog"'));
+  assert.ok(modal.includes('aria-labelledby={discardTitleId}'));
+  assert.ok(modal.includes('aria-describedby={discardDescriptionId}'));
+  assert.ok(modal.includes('const trap = discardOpenRef.current ? discardRef.current : dialog'));
+  assert.ok(modal.includes('if (discardOpenRef.current) cancelDiscard()'));
+  assert.ok(modal.includes('setDiscardOpen(true)'));
+  assert.ok(modal.includes('setDiscardOpen(false)'));
+  assert.ok(modal.includes('Keep editing'));
+  assert.ok(modal.includes('Discard changes'));
+  assert.ok(modal.includes('if (!props.open) return null'),
+    "Each opened dialog gets fresh dirty/confirmation state.");
+  assert.ok(modal.includes('<OpenCrudModal {...props} />'));
+  assert.ok(css.includes(".crud-modal-discard-shade"));
+  assert.ok(css.includes(".crud-modal-discard-panel"));
+  assert.ok(css.includes(".crud-modal-discard-actions"));
   assert.ok(modal.includes("لديك تغييرات غير محفوظة"));
   assert.ok(modal.includes("You have unsaved changes."));
   assert.ok(modal.includes("event.target === event.currentTarget"));

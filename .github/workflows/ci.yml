@@ -180,6 +180,17 @@ jobs:
       - run: npm run test:ui-theme
       - run: npm run test:ui-i18n
       - run: node scripts/ui-route-form-inventory.mjs --check
+      - run: node scripts/ui-browser-evidence.mjs --validate
+      - run: node scripts/ui-full-surface-audit.mjs --check
+      - run: node scripts/ui-full-surface-audit.mjs --markdown > ui-full-surface-audit.md
+      - run: node scripts/ui-full-surface-audit.mjs --json > ui-full-surface-audit.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ui-full-surface-audit
+          path: |
+            ui-full-surface-audit.md
+            ui-full-surface-audit.json
+          if-no-files-found: error
       - run: node scripts/ui-route-form-inventory.mjs --markdown > ui-route-form-inventory.md
       - uses: actions/upload-artifact@v4
         with:
@@ -187,3 +198,31 @@ jobs:
           path: ui-route-form-inventory.md
           if-no-files-found: error
       - run: npx next build
+
+  # Browser evidence is intentionally opt-in on the *draft* UI release PR.
+  # Do not run against production or with real patient, device or billing data.
+  browser_review:
+    if: ${{ github.event_name == 'pull_request' && github.head_ref == 'ui-unified-release-complete-sweep' && github.event.pull_request.head.repo.full_name == github.repository && contains(github.event.pull_request.labels.*.name, 'ui-visual-ready') && vars.FL_UI_AUDIT_ENABLE == 'true' && vars.FL_UI_AUDIT_SYNTHETIC_ONLY == 'I_CONFIRM_SYNTHETIC_NONPRODUCTION_DATA' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      FL_UI_AUDIT_STAGING_ORIGIN: ${{ vars.FL_UI_AUDIT_STAGING_ORIGIN }}
+      FL_UI_AUDIT_SYNTHETIC_ONLY: ${{ vars.FL_UI_AUDIT_SYNTHETIC_ONLY }}
+      FL_UI_AUDIT_CONFIG_JSON: ${{ secrets.FL_UI_AUDIT_CONFIG_JSON }}
+      FL_UI_AUDIT_OUTPUT_DIR: ui-browser-evidence
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.18.0'
+      - run: npm install
+      - run: npm install --no-save playwright@1.56.1
+      - run: npx playwright install --with-deps chromium
+      - run: node scripts/ui-browser-evidence.mjs --run
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ui-browser-evidence-synthetic-only
+          path: ui-browser-evidence
+          if-no-files-found: warn
+          retention-days: 7

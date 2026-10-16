@@ -139,7 +139,7 @@ export function CashierShiftManager({
       {canManage && <button type="button" className="primary-button" onClick={() => setOpenModal(true)}>{tr("Open Cashier Shift", "فتح وردية أمين صندوق")}</button>}
     </div>
 
-    <CrudModal open={openModal} onClose={() => setOpenModal(false)} title={tr("Open cashier shift", "فتح وردية أمين صندوق")} description={tr("Each active shift is isolated by branch and currency.", "كل وردية نشطة منفصلة حسب الفرع والعملة.")} size="md">
+    <CrudModal open={openModal} onClose={() => setOpenModal(false)} title={tr("Open cashier shift", "فتح وردية أمين صندوق")} description={tr("Each active shift is isolated by branch and currency.", "كل وردية نشطة منفصلة حسب الفرع والعملة.")} size="compact">
       <form className="catalog-form" onSubmit={openShift}>
         <label className="form-span">{tr("Branch", "الفرع")}<select name="branchId" required defaultValue={defaultBranch?.id || ""}>{branches.map(item => <option key={item.id} value={item.id}>{item.code} — {item.name}</option>)}</select></label>
         <label>{tr("Currency", "العملة")}<input name="currency" required minLength={3} maxLength={3} defaultValue={defaultBranch?.defaultCurrency || "EGP"} /></label>
@@ -148,7 +148,7 @@ export function CashierShiftManager({
       </form>
     </CrudModal>
 
-    <CrudModal open={Boolean(closing)} onClose={() => setClosing(null)} title={tr("Submit cashier closing", "إرسال إغلاق الوردية")} description={closing ? closing.shiftNumber + " · " + closing.currency : undefined} size="md">
+    <CrudModal open={Boolean(closing)} onClose={() => setClosing(null)} title={tr("Submit cashier closing", "إرسال إغلاق الوردية")} description={closing ? closing.shiftNumber + " · " + closing.currency : undefined} size="compact">
       {closing && <form className="catalog-form" onSubmit={submitClosing}>
         <div className="form-span form-success">{tr("Opening cash", "النقد الافتتاحي")}: {closing.openingCash} {closing.currency}</div>
         <label>{tr("Actual cash counted", "النقد الفعلي بعد العد")}<input name="actualCash" type="number" min="0" step="0.0001" required /></label>
@@ -157,7 +157,7 @@ export function CashierShiftManager({
       </form>}
     </CrudModal>
 
-    <CrudModal open={Boolean(reviewing)} onClose={() => setReviewing(null)} title={reviewing?.action === "APPROVE" ? tr("Approve cashier closing", "اعتماد إغلاق الوردية") : tr("Reject cashier closing", "رفض إغلاق الوردية")} description={reviewing?.shift.shiftNumber} size="md">
+    <CrudModal open={Boolean(reviewing)} onClose={() => setReviewing(null)} title={reviewing?.action === "APPROVE" ? tr("Approve cashier closing", "اعتماد إغلاق الوردية") : tr("Reject cashier closing", "رفض إغلاق الوردية")} description={reviewing?.shift.shiftNumber} size="compact">
       {reviewing?.shift.latestClosure && <form className="catalog-form" onSubmit={reviewClosing}>
         <div className="form-span">
           <strong>{tr("Expected cash", "النقد المتوقع")}: {reviewing.shift.latestClosure.expectedCash} {reviewing.shift.currency}</strong><br/>

@@ -2,6 +2,7 @@
 
 import { FormEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { CrudModal } from "@/components/crud-modal";
 import { statusLabel as sharedStatusLabel } from "@/lib/ui-i18n";
 
 type BranchOption = { id: string; code: string; nameEn: string; nameAr?: string | null };
@@ -59,6 +60,8 @@ export function TransferManager({
   const [selectedSpecimens, setSelectedSpecimens] = useState<string[]>([]);
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
+  const [createOpen, setCreateOpen] = useState(false);
+  const [dispatchReviewId, setDispatchReviewId] = useState<string | null>(null);
   const [receiveBarcodes, setReceiveBarcodes] = useState<Record<string, string>>({});
   const [exceptionTypes, setExceptionTypes] = useState<Record<string, string>>({});
   const [exceptionNotes, setExceptionNotes] = useState<Record<string, string>>({});
@@ -80,53 +83,90 @@ export function TransferManager({
 
   async function createManifest(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!sourceBranchId || !destinationBranchId || selectedSpecimens.length === 0) {
-      setMessage(tr("Select source, destination and at least one specimen.", "اختر الفرع المصدر والوجهة وعينة واحدة على الأقل."));
+    if (busy) return;
+    if (!sourceBranchId || !destinationBranchId || selectedSpecimens.length === 0 ||
+        sourceBranchId === destinationBranchId) {
+      setMessage(tr("Select different source/destination branches and at least one specimen.",
+        "اختر فرعين مختلفين للمصدر والوجهة وعينة واحدة على الأقل."));
       return;
     }
     const form = new FormData(event.currentTarget);
     setBusy("create"); setMessage("");
-
-    const response = await fetch("/api/transfers", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        sourceBranchId,
-        destinationBranchId,
-        specimenIds: selectedSpecimens,
-        transportMode: form.get("transportMode"),
-        courierName: form.get("courierName"),
-        packageCount: form.get("packageCount"),
-        notes: form.get("notes"),
-      }),
-    });
-    const body = await response.json().catch(() => ({}));
-
-    if (response.ok) {
-      setMessage(tr(`Manifest created: ${body.manifest.manifestNumber}`, `تم إنشاء بيان الشحن: ${body.manifest.manifestNumber}`));
+    try {
+      const response = await fetch("/api/transfers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sourceBranchId,
+          destinationBranchId,
+          specimenIds: selectedSpecimens,
+          transportMode: form.get("transportMode"),
+          courierName: form.get("courierName"),
+          packageCount: form.get("packageCount"),
+          notes: form.get("notes"),
+        }),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setMessage(body.error
+          ? tr("Manifest could not be created: ", "تعذر إنشاء البيان: ") + body.error
+          : tr("Could not create transfer manifest.", "تعذر إنشاء بيان نقل العينات."));
+        return;
+      }
+      setMessage(tr(`Manifest created: ${body.manifest.manifestNumber}`,
+        `تم إنشاء بيان الشحن: ${body.manifest.manifestNumber}`));
+      setCreateOpen(false);
       setSelectedSpecimens([]);
       setDestinationBranchId("");
-      event.currentTarget.reset();
       router.refresh();
-    } else {
-      setMessage(tr("Could not create transfer manifest.", "تعذر إنشاء بيان نقل العينات."));
+    } catch {
+      setMessage(tr("Connection interrupted. Check manifests before retrying to avoid duplicates.",
+        "انقطع الاتصال؛ راجع بيانات الشحن قبل إعادة المحاولة لتجنب التكرار."));
+    } finally {
+      setBusy("");
     }
-    setBusy("");
   }
 
-  async function dispatch(manifestId: string) {
-    if (!confirm(tr("Dispatch this manifest? All included specimens will become IN_TRANSIT.", "هل تريد إرسال بيان الشحن؟ ستصبح جميع العينات المضمنة بحالة IN_TRANSIT."))) return;
-    setBusy(`dispatch:${manifestId}`); setMessage("");
-    const response = await fetch(`/api/transfers/${manifestId}/actions`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "DISPATCH" }),
-    });
-    const body = await response.json().catch(() => ({}));
-    setMessage(response.ok ? tr("Manifest dispatched.", "تم إرسال بيان الشحن.") : tr("Dispatch failed.", "فشل الإرسال."));
-    setBusy("");
-    if (response.ok) router.refresh();
+  function dispatch(manifestId: string) {
+    if (busy) return;
+    setMessage("");
+    setDispatchReviewId(manifestId);
   }
+
+  async function confirmDispatch(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!dispatchReviewId || busy) return;
+    const manifest = manifests.find(item => item.id === dispatchReviewId);
+    if (!manifest || manifest.status !== "DRAFT") {
+      setMessage(tr("Manifest state changed; refresh before dispatch.", "تغيّرت حالة البيان؛ حدّث الصفحة قبل الإرسال."));
+      return;
+    }
+    setBusy(`dispatch:${dispatchReviewId}`); setMessage("");
+    try {
+      const response = await fetch(`/api/transfers/${dispatchReviewId}/actions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "DISPATCH" }),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setMessage(body.error
+          ? tr("Dispatch failed: ", "فشل الإرسال: ") + body.error
+          : tr("Dispatch failed.", "فشل الإرسال."));
+        return;
+      }
+      setDispatchReviewId(null);
+      setMessage(tr("Manifest dispatched; selected specimens are now in transit.",
+        "تم إرسال بيان الشحن؛ أصبحت العينات المحددة قيد النقل."));
+      router.refresh();
+    } catch {
+      setMessage(tr("Connection interrupted; verify manifest status before re-dispatch.",
+        "انقطع الاتصال؛ تحقق من حالة البيان قبل إعادة الإرسال."));
+    } finally {
+      setBusy("");
+    }
+  }
+
 
   async function receiveItem(manifestId: string) {
     const barcode = receiveBarcodes[manifestId]?.trim();
@@ -181,7 +221,18 @@ export function TransferManager({
   return <div className="transfer-layout">
     <section className="detail-card">
       <h2>{tr("Create Transfer Manifest","إنشاء بيان نقل")}</h2>
-      <form className="catalog-form" onSubmit={createManifest}>
+      <button type="button" className="primary-button" disabled={Boolean(busy)}
+        onClick={() => { setMessage(""); setCreateOpen(true); }}>
+        {tr("Create Transfer Manifest", "إنشاء بيان نقل عينات")}
+      </button>
+      <CrudModal open={createOpen} onClose={() => { if (!busy) setCreateOpen(false); }}
+        size="compact"
+        title={tr("Create Interbranch Specimen Manifest", "إنشاء بيان نقل عينات بين الفروع")}
+        description={tr(
+          "Review source and destination branches, individual specimen barcodes and custody conditions. Draft creation does not dispatch samples.",
+          "راجع فرع المصدر والوجهة وباركود كل عينة وشروط الحيازة؛ إنشاء البيان لا يعني إرسال العينات.",
+        )}>
+      {createOpen && <form className="catalog-form" onSubmit={createManifest}>
         <label>{tr("Source branch","الفرع المصدر")}
           <select value={sourceBranchId} onChange={(e) => { setSourceBranchId(e.target.value); setSelectedSpecimens([]); }} required>
             <option value="">{tr("Select source…","اختر الفرع المصدر…")}</option>
@@ -216,8 +267,10 @@ export function TransferManager({
         </div>
 
         <button className="primary-button form-span" disabled={busy === "create"}>{busy === "create" ? tr("Creating…","جارٍ الإنشاء…") : tr(`Create Manifest (${selectedSpecimens.length})`,`إنشاء بيان (${selectedSpecimens.length})`)}</button>
-      </form>
-      {message && <p className="form-success">{message}</p>}
+        {message && <p role="alert" className="form-error form-span">{message}</p>}
+      </form>}
+      </CrudModal>
+      {!createOpen && message && <p className="form-success" role="status">{message}</p>}
     </section>
 
     <section className="transfer-manifest-list">
@@ -276,5 +329,32 @@ export function TransferManager({
         })
       }
     </section>
+    <CrudModal open={dispatchReviewId !== null}
+      onClose={() => { if (!busy) setDispatchReviewId(null); }}
+      size="compact"
+      title={tr("Confirm Interbranch Dispatch", "تأكيد إرسال العينات بين الفروع")}
+      description={tr(
+        "Every barcode in this manifest becomes IN_TRANSIT. The receiving branch must use the chain-of-custody scan and discrepancy workflow.",
+        "ستصبح كل عينة في البيان قيد النقل. يجب أن يستخدم الفرع المستلم مسح الباركود ومسار توثيق الفروقات.",
+      )}>
+      {dispatchReviewId && <form className="catalog-form" onSubmit={confirmDispatch}>
+        {(() => {
+          const selected = manifests.find(manifest => manifest.id === dispatchReviewId);
+          if (!selected) return <p className="form-error form-span" role="alert">{tr("Manifest unavailable.", "البيان غير متاح.")}</p>;
+          return <div className="form-span">
+            <strong>{selected.manifestNumber}</strong>
+            <p>{selected.sourceBranch.code} → {selected.destinationBranch.code}</p>
+            <p>{selected.items.length} {tr("specimen(s)","عينة")}</p>
+            <div className="transfer-specimen-selector">
+              {selected.items.map(item => <p key={item.specimenId}><code>{item.barcodeSnapshot}</code></p>)}
+            </div>
+          </div>;
+        })()}
+        {message && <p className="form-error form-span" role="alert">{message}</p>}
+        <button type="submit" className="primary-button form-span" disabled={Boolean(busy)}>
+          {busy ? tr("Dispatching…", "جارٍ الإرسال…") : tr("Confirm dispatch and lock transit custody", "تأكيد الإرسال وتثبيت حيازة النقل")}
+        </button>
+      </form>}
+    </CrudModal>
   </div>;
 }

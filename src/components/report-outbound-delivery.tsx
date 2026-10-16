@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useMemo, useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation"
+import { CrudModal } from "@/components/crud-modal";
 
 type Channel = "EMAIL" | "SMS" | "WHATSAPP";
 type RecipientType = "PATIENT" | "REFERRER" | "CLIENT";
@@ -35,6 +36,12 @@ export function ReportOutboundDelivery({
   const [channel, setChannel] = useState<Channel>(selectedRecipient?.channels[0]?.channel || "EMAIL");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [reviewError, setReviewError] = useState("");
+  const [pending, setPending] = useState<
+    | {kind:"verify";recipient:RecipientOption;channel:"EMAIL"|"PHONE"}
+    | {kind:"deliver";recipient:RecipientOption;channel:Channel}
+    | null
+  >(null);
 
   function selectRecipient(value: RecipientType) {
     setRecipientType(value);
@@ -43,79 +50,95 @@ export function ReportOutboundDelivery({
     setMessage("");
   }
 
-  async function verifyContact(verificationChannel: "EMAIL" | "PHONE") {
-    if (!selectedRecipient || !canVerifyContacts) return;
-    const reason = window.prompt(tr(
-      verificationChannel === "EMAIL"
-        ? "Reason/evidence for confirming this email belongs to the portal recipient:"
-        : "Reason/evidence for confirming this phone belongs to the portal recipient:",
-      verificationChannel === "EMAIL"
-        ? "سبب/دليل تأكيد أن البريد الإلكتروني يعود لمستلم البوابة:"
-        : "سبب/دليل تأكيد أن رقم الهاتف يعود لمستلم البوابة:",
-    ));
-    if (!reason?.trim()) return;
-
-    setBusy(true);
-    setMessage("");
-    const response = await fetch(`/api/portal-accounts/${selectedRecipient.portalAccountId}/verify-contact`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ channel: verificationChannel, reason }),
-    });
-    const body = await response.json().catch(() => ({})) as { error?: string; destination?: string };
-    setBusy(false);
-
-    if (!response.ok) {
-      setMessage(body.error === "contact_already_verified"
-        ? tr("This contact is already verified.", "جهة الاتصال موثقة مسبقًا.")
-        : tr("Could not verify the portal contact.", "تعذر توثيق جهة اتصال البوابة."));
-      return;
-    }
-
-    setMessage(tr(
-      `Verified ${verificationChannel === "EMAIL" ? "email" : "phone"} ${body.destination || ""}.`,
-      `تم توثيق ${verificationChannel === "EMAIL" ? "البريد الإلكتروني" : "رقم الهاتف"} ${body.destination || ""}.`,
-    ));
-    router.refresh();
+  function requestVerification(verificationChannel:"EMAIL"|"PHONE") {
+    if (!selectedRecipient || !canVerifyContacts || busy) return;
+    setMessage("");setReviewError("");
+    setPending({kind:"verify",recipient:selectedRecipient,channel:verificationChannel});
   }
 
-  async function queueDelivery() {
-    if (!selectedRecipient || !selectedRecipient.channels.some(item => item.channel === channel)) return;
-    setBusy(true);
-    setMessage("");
+  function requestDelivery() {
+    if (!selectedRecipient || busy ||
+        !selectedRecipient.channels.some(item=>item.channel===channel)) return;
+    setMessage("");setReviewError("");
+    setPending({kind:"deliver",recipient:selectedRecipient,channel});
+  }
 
-    const response = await fetch(`/api/reports/${reportVersionId}/outbound`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ recipientType, channel }),
-    });
-    const body = await response.json().catch(() => ({})) as { error?: string; destination?: string };
-    setBusy(false);
-
-    if (!response.ok) {
-      const errors: Record<string, string> = {
-        active_portal_account_required: tr("An active portal account is required for this recipient.", "يلزم حساب بوابة نشط لهذا المستلم."),
-        verified_portal_contact_required: tr("The portal contact must be verified before sending a report notification.", "يجب التحقق من جهة اتصال البوابة قبل إرسال إشعار التقرير."),
-        verified_email_required: tr("A verified portal email is required.", "يلزم بريد إلكتروني موثق في البوابة."),
-        verified_phone_required: tr("A verified portal phone is required.", "يلزم رقم هاتف موثق في البوابة."),
-        public_app_url_required: tr("A public application URL is required before secure links can be sent.", "يلزم عنوان عام للتطبيق قبل إرسال الروابط الآمنة."),
-        corporate_report_access_required: tr("This corporate portal does not have active report access for the patient.", "لا تملك بوابة العميل المؤسسي صلاحية فعالة لعرض تقارير هذا المريض."),
-        portal_account_type_mismatch: tr("The linked portal account type does not match the recipient.", "نوع حساب البوابة المرتبط لا يطابق نوع المستلم."),
-        retracted_report_cannot_be_delivered: tr("A retracted report cannot be delivered.", "لا يمكن تسليم تقرير مسحوب."),
-        superseded_report_cannot_be_delivered: tr("Only the latest report version can be delivered.", "يمكن تسليم أحدث إصدار من التقرير فقط."),
-        report_version_changed_retry: tr("The report version changed during queueing. Refresh and review the latest report.", "تغير إصدار التقرير أثناء إضافته للإرسال. حدّث الصفحة وراجع التقرير الأحدث."),
-        report_delivery_already_pending_or_sent: tr("This report is already queued or sent to the selected verified contact.", "هذا التقرير موجود بالفعل في قائمة الإرسال أو تم إرساله إلى جهة الاتصال المحددة."),
-      };
-      setMessage(errors[body.error || ""] || tr("Could not queue report delivery.", "تعذر وضع تسليم التقرير في قائمة الإرسال."));
+  async function verifyContact(event:FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!pending || pending.kind!=="verify" || !canVerifyContacts || busy) return;
+    const reason=String(new FormData(event.currentTarget).get("reason")||"").trim();
+    if (!reason) {
+      setReviewError(tr("Verification evidence is required.", "دليل التوثيق مطلوب."));
       return;
     }
-
-    setMessage(tr(
-      `Queued for secure delivery to ${body.destination || "verified contact"}.`,
-      `تمت إضافة التسليم الآمن إلى قائمة الإرسال نحو ${body.destination || "جهة الاتصال الموثقة"}.`,
-    ));
-    router.refresh();
+    setBusy(true);setReviewError("");
+    try {
+      const response=await fetch(`/api/portal-accounts/${pending.recipient.portalAccountId}/verify-contact`,{
+        method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({channel:pending.channel,reason}),
+      });
+      const body=await response.json().catch(()=>({})) as {error?:string;destination?:string};
+      if(!response.ok) {
+        setReviewError(body.error==="contact_already_verified"
+          ?tr("This contact is already verified.", "جهة الاتصال موثقة مسبقًا.")
+          :body.error||tr("Could not verify the portal contact.", "تعذر توثيق جهة اتصال البوابة."));
+        return;
+      }
+      setMessage(tr(
+        `Verified ${pending.channel==="EMAIL"?"email":"phone"} ${body.destination||""}.`,
+        `تم توثيق ${pending.channel==="EMAIL"?"البريد الإلكتروني":"رقم الهاتف"} ${body.destination||""}.`,
+      ));
+      setPending(null);
+      router.refresh();
+    }catch{
+      setReviewError(tr("Connection interrupted. Recheck verification before retrying.",
+        "انقطع الاتصال؛ تحقق من حالة جهة الاتصال قبل المحاولة مجدداً."));
+    }finally{setBusy(false);}
   }
+
+  async function queueDelivery(event:FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!pending || pending.kind!=="deliver" || busy ||
+        !pending.recipient.channels.some(item=>item.channel===pending.channel)) return;
+    const destination=pending.recipient;
+    const deliveryChannel=pending.channel;
+    setBusy(true);setReviewError("");
+    try {
+      const response=await fetch(`/api/reports/${reportVersionId}/outbound`,{
+        method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({recipientType:destination.type,channel:deliveryChannel}),
+      });
+      const body=await response.json().catch(()=>({})) as {error?:string;destination?:string};
+      if(!response.ok){
+        const errors: Record<string, string> = {
+          active_portal_account_required: tr("An active portal account is required for this recipient.", "يلزم حساب بوابة نشط لهذا المستلم."),
+          verified_portal_contact_required: tr("The portal contact must be verified before sending a report notification.", "يجب التحقق من جهة اتصال البوابة قبل إرسال إشعار التقرير."),
+          verified_email_required: tr("A verified portal email is required.", "يلزم بريد إلكتروني موثق في البوابة."),
+          verified_phone_required: tr("A verified portal phone is required.", "يلزم رقم هاتف موثق في البوابة."),
+          public_app_url_required: tr("A public application URL is required before secure links can be sent.", "يلزم عنوان عام للتطبيق قبل إرسال الروابط الآمنة."),
+          corporate_report_access_required: tr("This corporate portal does not have active report access for the patient.", "لا تملك بوابة العميل المؤسسي صلاحية فعالة لعرض تقارير هذا المريض."),
+          portal_account_type_mismatch: tr("The linked portal account type does not match the recipient.", "نوع حساب البوابة المرتبط لا يطابق نوع المستلم."),
+          retracted_report_cannot_be_delivered: tr("A retracted report cannot be delivered.", "لا يمكن تسليم تقرير مسحوب."),
+          superseded_report_cannot_be_delivered: tr("Only the latest report version can be delivered.", "يمكن تسليم أحدث إصدار من التقرير فقط."),
+          report_version_changed_retry: tr("The report version changed during queueing. Refresh and review the latest report.", "تغير إصدار التقرير أثناء إضافته للإرسال. حدّث الصفحة وراجع التقرير الأحدث."),
+          report_delivery_already_pending_or_sent: tr("This report is already queued or sent to the selected verified contact.", "هذا التقرير موجود بالفعل في قائمة الإرسال أو تم إرساله إلى جهة الاتصال المحددة."),
+        };
+        setReviewError(errors[body.error||""]||
+          tr("Could not queue report delivery.", "تعذر وضع تسليم التقرير في قائمة الإرسال."));
+        return;
+      }
+      setMessage(tr(
+        `Queued for secure delivery to ${body.destination||"verified contact"}.`,
+        `تمت إضافة التسليم الآمن إلى قائمة الإرسال نحو ${body.destination||"جهة الاتصال الموثقة"}.`,
+      ));
+      setPending(null);
+      router.refresh();
+    }catch{
+      setReviewError(tr("Connection interrupted. Check delivery queue before retrying.",
+        "انقطع الاتصال؛ تحقق من طابور التسليم قبل إعادة المحاولة."));
+    }finally{setBusy(false);}
+  }
+
 
   const channelLabel = (value: Channel) =>
     value === "EMAIL" ? tr("Email", "البريد الإلكتروني")
@@ -150,7 +173,7 @@ export function ReportOutboundDelivery({
         className="primary-button"
         type="button"
         disabled={busy || !selectedRecipient || selectedRecipient.channels.length === 0}
-        onClick={() => void queueDelivery()}
+        onClick={requestDelivery}
       >
         {busy ? tr("Queueing…", "جارٍ الإضافة…") : tr("Queue Secure Delivery", "إضافة التسليم الآمن")}
       </button>
@@ -167,11 +190,46 @@ export function ReportOutboundDelivery({
           type="button"
           className="secondary-button"
           disabled={busy}
-          onClick={() => void verifyContact(candidate.channel)}
+          onClick={() => requestVerification(candidate.channel)}
         >{candidate.channel === "EMAIL" ? tr("Verify Email", "توثيق البريد") : tr("Verify Phone", "توثيق الهاتف")} · {candidate.destinationMasked}</button>)}
       </div>}
     </div>}
 
-    {message && <p className="muted">{message}</p>}
+    {message && <p role="status" className="form-success">{message}</p>}
+    <CrudModal open={pending!==null} onClose={()=>{if(!busy)setPending(null);}}
+      size="compact"
+      title={pending?.kind==="verify"
+        ?tr("Verify Portal Recipient Contact", "توثيق جهة اتصال مستلم البوابة")
+        :tr("Review Secure Report Delivery", "مراجعة التسليم الآمن للتقرير")}
+      description={pending?.kind==="verify"
+        ?tr("Verify identity and destination out of band before attesting this contact belongs to the selected portal recipient.",
+          "تحقق من الهوية ووجهة الاتصال بوسيلة مستقلة قبل الإقرار بأنها تخص مستلم البوابة المحدد.")
+        :tr("Only the latest released report can be queued. The external message contains no result values and links to the authenticated portal.",
+          "لا يمكن إضافة سوى أحدث تقرير صادر لطابور الإرسال؛ لا تتضمن الرسالة الخارجية قيماً مخبرية وترتبط بالبوابة الآمنة.")}>
+      {pending && <form className="catalog-form" onSubmit={pending.kind==="verify"?verifyContact:queueDelivery}>
+        <div className="form-span">
+          <strong>{tr("Recipient", "المستلم")}: {pending.recipient.label}</strong>
+          <p>{tr("Channel", "القناة")}: {pending.channel==="PHONE"
+            ?tr("Phone", "الهاتف"):channelLabel(pending.channel)}</p>
+          <p dir="ltr">{pending.kind==="verify"
+            ?pending.recipient.verificationCandidates.find(x=>x.channel===pending.channel)?.destinationMasked||"—"
+            :pending.recipient.channels.find(x=>x.channel===pending.channel)?.destinationMasked||"—"}</p>
+        </div>
+        {pending.kind==="verify" && <label className="form-span">
+          {tr("Verification reason and independently checked evidence", "سبب التوثيق والأدلة التي تم التحقق منها بشكل مستقل")}
+          <textarea name="reason" rows={3} maxLength={1000} required />
+        </label>}
+        {pending.kind==="deliver" && <p className="muted form-span">{tr(
+          "Confirm this masked recipient and delivery channel. Clinical result values are never embedded in the notification.",
+          "أكّد المستلم المقنّع وقناة التسليم. لا يتم تضمين قيم النتائج السريرية في الإشعار.",
+        )}</p>}
+        {reviewError&&<p className="form-error form-span" role="alert">{reviewError}</p>}
+        <button type="submit" className="primary-button form-span" disabled={busy}>
+          {busy?tr("Processing…", "جارٍ التنفيذ…"):
+            pending.kind==="verify"?tr("Confirm contact verification", "تأكيد توثيق جهة الاتصال"):
+            tr("Confirm secure delivery queueing", "تأكيد إدراج التسليم الآمن")}
+        </button>
+      </form>}
+    </CrudModal>
   </section>;
 }

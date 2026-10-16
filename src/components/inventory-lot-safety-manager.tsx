@@ -1,7 +1,8 @@
 "use client";
 import {useMemo,useState} from "react";
 import {useRouter} from "next/navigation";
-import Link from "next/link";
+import Link from "next/link"
+import {CrudModal} from "@/components/crud-modal";
 
 type SafetyStatus="AVAILABLE"|"QUARANTINED"|"RECALLED";
 type Action="QUARANTINE"|"RECALL"|"RELEASE";
@@ -18,6 +19,7 @@ export function InventoryLotSafetyManager({lots,history,locale,canManage}:{
  const [action,setAction]=useState<Action>("QUARANTINE");
  const [reason,setReason]=useState("");
  const [busy,setBusy]=useState(false),[message,setMessage]=useState("");
+ const [open,setOpen]=useState(false);
  const current=useMemo(()=>lots.find(l=>l.id===selected),[lots,selected]);
  const allowed:Action[]=current?.safetyStatus==="AVAILABLE"?["QUARANTINE","RECALL"]:
    current?.safetyStatus==="QUARANTINED"?["RECALL","RELEASE"]:[];
@@ -27,13 +29,13 @@ export function InventoryLotSafetyManager({lots,history,locale,canManage}:{
    QUARANTINED:tr("Quarantined","محجورة"),
    RECALLED:tr("Recalled — permanent hold","مسحوبة — حجز نهائي"),
  }[s]);
- async function submit(){
+ async function submit(event: React.FormEvent<HTMLFormElement>){
+   event.preventDefault();
+   if(!open||!canManage)return;
    if(!current||!choice||busy)return;
    if(reason.trim().length<20){
      setMessage(tr("Provide a reason of at least 20 characters.","أدخل سببًا واضحًا من 20 حرفًا على الأقل."));return;
    }
-   if(!confirm(tr("Record this safety decision for ALL branches? It affects stock availability immediately.",
-     "هل تريد اعتماد هذا القرار لجميع الفروع؟ سيؤثر على إمكانية استخدام التشغيلة فورًا.")))return;
    setBusy(true);setMessage("");
    try{
      const response=await fetch("/api/inventory/lot-safety",{
@@ -45,7 +47,7 @@ export function InventoryLotSafetyManager({lots,history,locale,canManage}:{
        setMessage(tr("Safety decision rejected: ","تم رفض القرار: ")+(data.error||"unknown"));
      }else{
        setMessage(tr("Safety decision recorded in the audit trail.","تم توثيق قرار السلامة في سجل التدقيق."));
-       setReason("");router.refresh();
+       setReason("");setOpen(false);router.refresh();
      }
    }catch{setMessage(tr("Connection interrupted. Verify status before retrying.",
      "انقطع الاتصال. تحقق من الحالة قبل إعادة المحاولة."));}
@@ -66,7 +68,18 @@ export function InventoryLotSafetyManager({lots,history,locale,canManage}:{
          <td>{label(lot.safetyStatus)}</td><td>{lot.branches.join(" · ")}</td><td>{lot.expiryDate||"—"}</td>
        </tr>)}</tbody>
    </table></div>
-   {canManage&&lots.length>0&&<div className="catalog-form">
+   {canManage&&lots.length>0&&<button type="button" className="primary-button"
+    disabled={busy} onClick={()=>{setMessage("");setOpen(true);}}>
+    {tr("Review inventory safety decision","مراجعة قرار سلامة المخزون")}
+   </button>}
+   <CrudModal open={open} onClose={()=>{if(!busy)setOpen(false);}}
+    size="compact"
+    title={tr("Organization-wide Lot Safety Decision","قرار سلامة تشغيلة على مستوى المؤسسة")}
+    description={tr(
+      "Quarantine and recall immediately affect all branches. A recall is irreversible. Releasing quarantined stock still requires independent authorization.",
+      "يؤثر الحجر والسحب فوراً على جميع الفروع؛ السحب نهائي وغير قابل للتراجع، ورفع الحجر يخضع لاعتماد مستقل.",
+    )}>
+   {open&&canManage&&lots.length>0&&<form className="catalog-form" onSubmit={submit}>
      <label>{tr("Select lot","اختر التشغيلة")}
        <select value={selected} onChange={e=>{setSelected(e.target.value);setReason("");setMessage("");}}>
          {lots.map(l=><option key={l.id} value={l.id}>{l.itemCode} · {l.lotNumber} · {label(l.safetyStatus)}</option>)}
@@ -81,10 +94,11 @@ export function InventoryLotSafetyManager({lots,history,locale,canManage}:{
          <textarea value={reason} maxLength={1000} rows={3} onChange={e=>setReason(e.target.value)}
            placeholder={tr("Describe manufacturer alert, QC investigation or authorized release decision.",
              "وثّق تحذير المصنع أو تحقيق ضبط الجودة أو سبب السماح برفع الحجر.")} required/></label>
-       <button className="primary-button" type="button" disabled={busy||reason.trim().length<20}
-         onClick={()=>void submit()}>{busy?tr("Recording…","جارٍ التسجيل…"):tr("Record audited decision","تسجيل قرار مدقّق")}</button>
+       <button className="primary-button" type="submit" disabled={busy||reason.trim().length<20}>{busy?tr("Recording…","جارٍ التسجيل…"):tr("Record audited decision","تسجيل قرار مدقّق")}</button>
      </>}
-   </div>}
+   </form>}
+   {open&&message&&<p className="form-warning" role="alert">{message}</p>}
+   </CrudModal>
    {message&&<p role="status" className="form-warning">{message}</p>}
    <h3>{tr("Immutable decision history (latest 50)","سجل القرارات المحفوظ (آخر 50)")}</h3>
    <div className="table-wrap"><table>

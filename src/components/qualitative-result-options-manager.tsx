@@ -1,7 +1,8 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { CrudModal } from "@/components/crud-modal";
 
 type ComponentOption = {
   id: string;
@@ -67,7 +68,12 @@ export function QualitativeResultOptionsManager({
   const [testId, setTestId] = useState("");
   const [componentId, setComponentId] = useState("");
   const [busy, setBusy] = useState("");
+  const submitting = useRef(false);
   const [message, setMessage] = useState("");
+  const [formError, setFormError] = useState("");
+  const [createOpen, setCreateOpen] = useState(false);
+  const [governance, setGovernance] = useState<{ id: string; action: "APPROVE" | "RETIRE" } | null>(null);
+  const [governanceReason, setGovernanceReason] = useState("");
   const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
   const localizedName = (item: { nameEn: string; nameAr?: string | null }) =>
     locale === "ar" ? item.nameAr || item.nameEn : item.nameEn;
@@ -83,76 +89,100 @@ export function QualitativeResultOptionsManager({
 
   async function createOption(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (submitting.current) return;
     const form = new FormData(event.currentTarget);
+    submitting.current = true;
     setBusy("create");
-    setMessage("");
-
-    const response = await fetch("/api/clinical-rules/qualitative-options", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        testId,
-        componentId: requiresComponent ? componentId : null,
-        code: form.get("code"),
-        valueEn: form.get("valueEn"),
-        valueAr: form.get("valueAr"),
-        flag: form.get("flag"),
-        isAbnormal: form.get("isAbnormal") === "on",
-        isCritical: form.get("isCritical") === "on",
-        displayOrder: form.get("displayOrder"),
-        effectiveFrom: form.get("effectiveFrom"),
-        effectiveTo: form.get("effectiveTo"),
-      }),
-    });
-    const body = await response.json().catch(() => ({}));
-
-    if (response.ok) {
-      setMessage(tr("Qualitative result option draft created. It cannot be used clinically until approval.", "تم إنشاء مسودة خيار النتيجة النوعية. لا يمكن استخدامها سريرياً قبل الاعتماد."));
-      event.currentTarget.reset();
+    setFormError("");
+    try {
+      const response = await fetch("/api/clinical-rules/qualitative-options", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          testId,
+          componentId: requiresComponent ? componentId : null,
+          code: form.get("code"),
+          valueEn: form.get("valueEn"),
+          valueAr: form.get("valueAr"),
+          flag: form.get("flag"),
+          isAbnormal: form.get("isAbnormal") === "on",
+          isCritical: form.get("isCritical") === "on",
+          displayOrder: form.get("displayOrder"),
+          effectiveFrom: form.get("effectiveFrom"),
+          effectiveTo: form.get("effectiveTo"),
+        }),
+      });
+      const body = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) {
+        setFormError(body.error || tr("Could not create qualitative option.", "تعذر إنشاء خيار النتيجة النوعية."));
+        return;
+      }
+      setCreateOpen(false);
+      setMessage(tr(
+        "Qualitative result option draft created. It cannot be used clinically until approval.",
+        "تم إنشاء مسودة خيار النتيجة النوعية. لا يمكن استخدامها سريرياً قبل الاعتماد.",
+      ));
       setTestId("");
       setComponentId("");
       router.refresh();
-    } else {
-      setMessage(typeof body.error === "string" ? body.error : tr("Could not create qualitative option.", "تعذر إنشاء خيار النتيجة النوعية."));
+    } catch {
+      setFormError(tr("Connection error; draft creation not confirmed.", "خطأ في الاتصال؛ لم يتم تأكيد إنشاء المسودة."));
+    } finally {
+      submitting.current = false;
+      setBusy("");
     }
-    setBusy("");
   }
 
-  async function governanceAction(id: string, action: "APPROVE" | "RETIRE") {
-    if (!canApprove) return;
-    let reason = "";
-    if (action === "APPROVE") {
-      if (!confirm(tr(
-        "Approve this qualitative result meaning for clinical use? Critical options can generate critical-result alerts after approval.",
-        "اعتماد معنى النتيجة النوعية للاستخدام السريري؟ الخيارات الحرجة قد تنشئ تنبيهات نتائج حرجة بعد الاعتماد.",
-      ))) return;
-    } else {
-      const entered = prompt(tr("Retirement reason (required):", "سبب إيقاف الخيار (مطلوب):"));
-      if (entered === null) return;
-      reason = entered.trim();
-      if (!reason) {
-        setMessage(tr("Retirement reason is required.", "سبب الإيقاف مطلوب."));
+  function openGovernance(id: string, action: "APPROVE" | "RETIRE") {
+    if (!canApprove || busy || submitting.current) return;
+    setFormError("");
+    setGovernanceReason("");
+    setGovernance({ id, action });
+  }
+
+  async function governanceAction(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!governance || !canApprove || submitting.current) return;
+    const current = options.find(option => option.id === governance.id);
+    if (!current || (governance.action === "APPROVE" && current.approvalStatus !== "DRAFT")
+      || (governance.action === "RETIRE" && current.approvalStatus !== "APPROVED")) {
+      setFormError(tr("The option state has changed. Refresh before retrying.", "تغيّرت حالة الخيار. حدّث الصفحة قبل إعادة المحاولة."));
+      return;
+    }
+    const reason = governance.action === "RETIRE" ? governanceReason.trim() : "";
+    if (governance.action === "RETIRE" && !reason) {
+      setFormError(tr("Retirement reason is required.", "سبب الإيقاف مطلوب."));
+      return;
+    }
+    submitting.current = true;
+    setBusy(current.id);
+    setFormError("");
+    try {
+      const response = await fetch("/api/clinical-rules/qualitative-options", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: current.id, action: governance.action, reason }),
+      });
+      const body = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) {
+        setFormError(body.error === "approved_qualitative_option_overlap"
+          ? tr("Approval blocked: another approved version with the same code overlaps this effective period.",
+            "تعذر الاعتماد: يوجد إصدار معتمد آخر بنفس الرمز ويتداخل مع فترة السريان.")
+          : body.error || tr("Could not update qualitative option.", "تعذر تحديث خيار النتيجة النوعية."));
         return;
       }
-    }
-
-    setBusy(id);
-    setMessage("");
-    const response = await fetch("/api/clinical-rules/qualitative-options", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, action, reason }),
-    });
-    const body = await response.json().catch(() => ({}));
-    setMessage(response.ok
-      ? action === "APPROVE"
+      setMessage(governance.action === "APPROVE"
         ? tr("Qualitative option approved for clinical use.", "تم اعتماد خيار النتيجة النوعية للاستخدام السريري.")
-        : tr("Qualitative option retired.", "تم إيقاف خيار النتيجة النوعية.")
-      : body.error === "approved_qualitative_option_overlap"
-        ? tr("Approval blocked: another approved version with the same code overlaps this effective period.", "تعذر الاعتماد: يوجد إصدار معتمد آخر بنفس الرمز ويتداخل مع فترة السريان.")
-        : typeof body.error === "string" ? body.error : tr("Could not update qualitative option.", "تعذر تحديث خيار النتيجة النوعية."));
-    setBusy("");
-    if (response.ok) router.refresh();
+        : tr("Qualitative option retired.", "تم إيقاف خيار النتيجة النوعية."));
+      setGovernance(null);
+      setGovernanceReason("");
+      router.refresh();
+    } catch {
+      setFormError(tr("Connection error; action was not confirmed.", "خطأ في الاتصال؛ لم يتم تأكيد الإجراء."));
+    } finally {
+      submitting.current = false;
+      setBusy("");
+    }
   }
 
   const flagLabel = (flag: string) => ({
@@ -172,9 +202,20 @@ export function QualitativeResultOptionsManager({
           "هيّئ القيم النوعية القابلة للاختيار لكل فحص/مكوّن. تُحفظ المعاني الجديدة كمسودات غير نشطة، ولا تُستخدم سريرياً إلا بعد اعتماد صريح. ويتم حفظ نسخة تاريخية من النص والإشارة والحالة الحرجة داخل النتيجة."
         )}</p>
       </div>
+      <button type="button" className="primary-button" disabled={Boolean(busy)}
+        onClick={() => { setFormError(""); setMessage(""); setCreateOpen(true); }}>
+        {tr("Create Qualitative Option Draft", "إنشاء مسودة خيار نوعي")}
+      </button>
     </div>
 
-    <form className="catalog-form" onSubmit={createOption}>
+    <CrudModal open={createOpen} onClose={() => { if (!busy && !submitting.current) setCreateOpen(false); }}
+      size="compact"
+      title={tr("Create Qualitative Option Draft", "إنشاء مسودة خيار نتيجة نوعية")}
+      description={tr(
+        "Clinical meanings remain inactive drafts until separately approved. Critical and abnormal flags need a qualified reviewer.",
+        "تبقى معاني النتائج مسودات غير فعالة حتى اعتمادها بشكل منفصل؛ تتطلب إشارات الخطورة مراجعاً مؤهلاً.",
+      )}>
+    {createOpen && <form className="catalog-form" onSubmit={createOption}>
       <label>{tr("Test", "الفحص")}
         <select required value={testId} onChange={(event) => {
           setTestId(event.target.value);
@@ -207,14 +248,16 @@ export function QualitativeResultOptionsManager({
       </label>
 
       <label>{tr("Display order", "ترتيب العرض")}<input name="displayOrder" type="number" min="0" max="10000" defaultValue="0" /></label>
-      <label>{tr("Effective from", "ساري من")}<input name="effectiveFrom" type="date" required defaultValue={new Date().toISOString().slice(0, 10)} /></label>
+      <label>{tr("Effective from (choose intended local date)", "ساري من (اختر التاريخ المحلي المقصود)")}<input name="effectiveFrom" type="date" required /></label>
       <label>{tr("Effective to", "ساري حتى")}<input name="effectiveTo" type="date" /></label>
       <label className="checkbox-row"><input name="isAbnormal" type="checkbox" /> {tr("Treat this option as abnormal", "اعتبر هذا الخيار غير طبيعي")}</label>
       <label className="checkbox-row"><input name="isCritical" type="checkbox" /> {tr("Treat this option as a critical result", "اعتبر هذا الخيار نتيجة حرجة")}</label>
       <button className="primary-button form-span" disabled={busy === "create" || !testId || (requiresComponent && !componentId)}>
         {busy === "create" ? tr("Saving…", "جارٍ الحفظ…") : tr("Create Qualitative Option Draft", "إنشاء مسودة الخيار النوعي")}
       </button>
-    </form>
+      {formError && <p className="form-error form-span" role="alert">{formError}</p>}
+    </form>}
+    </CrudModal>
 
     {message && <div className="form-success detail-section">{message}</div>}
 
@@ -256,14 +299,52 @@ export function QualitativeResultOptionsManager({
                 </td>
                 <td>{option.status}</td>
                 <td>{canApprove && option.approvalStatus === "DRAFT"
-                  ? <button type="button" className="primary-button" disabled={busy === option.id} onClick={() => void governanceAction(option.id, "APPROVE")}>{tr("Approve", "اعتماد")}</button>
+                  ? <button type="button" className="primary-button" disabled={busy === option.id} onClick={() => openGovernance(option.id, "APPROVE")}>{tr("Approve", "اعتماد")}</button>
                   : canApprove && option.approvalStatus === "APPROVED"
-                    ? <button type="button" className="secondary-button" disabled={busy === option.id} onClick={() => void governanceAction(option.id, "RETIRE")}>{tr("Retire", "إيقاف")}</button>
+                    ? <button type="button" className="secondary-button" disabled={busy === option.id} onClick={() => openGovernance(option.id, "RETIRE")}>{tr("Retire", "إيقاف")}</button>
                     : "—"}</td>
               </tr>;
             })}
         </tbody>
       </table>
     </div>
+    <CrudModal open={governance !== null} onClose={() => { if (!busy && !submitting.current) setGovernance(null); }}
+      size="compact"
+      title={governance?.action === "APPROVE"
+        ? tr("Approve Qualitative Clinical Meaning", "اعتماد معنى نتيجة نوعية سريرياً")
+        : tr("Retire Qualitative Clinical Meaning", "إيقاف معنى نتيجة نوعية")}
+      description={tr(
+        "This governed change may alter which qualitative labels trigger clinical flags. The existing approved history remains traceable.",
+        "قد يغيّر هذا الإجراء المحكوم المعاني التي تُنشئ إشارات سريرية. يبقى سجل النسخ المعتمدة قابلاً للتتبع.",
+      )}>
+      {governance && <form className="catalog-form" onSubmit={governanceAction}>
+        <p className="form-span">{tr(
+          "Review the selected result meaning and its clinical flags before confirming.",
+          "راجع معنى النتيجة المحدد وإشاراته السريرية قبل التأكيد.",
+        )}</p>
+        {(() => {
+          const current = options.find(option => option.id === governance.id);
+          if (!current) return <p className="form-error form-span" role="alert">{tr("Option unavailable.", "الخيار غير متاح.")}</p>;
+          return <div className="form-span">
+            <strong>{current.testCode} · {current.code}</strong>
+            <p>{locale === "ar" ? current.valueAr || current.valueEn : current.valueEn}</p>
+            <p>{flagLabel(current.flag)} · {current.isCritical
+              ? tr("Critical flag", "إشارة حرجة")
+              : tr("Non-critical", "غير حرج")}</p>
+          </div>;
+        })()}
+        {governance.action === "RETIRE" && <label className="form-span">
+          {tr("Reason for retirement (required)", "سبب الإيقاف (مطلوب)")}
+          <textarea rows={3} value={governanceReason} maxLength={1000} required
+            onChange={event => setGovernanceReason(event.target.value)} />
+        </label>}
+        {formError && <p className="form-error form-span" role="alert">{formError}</p>}
+        <button type="submit" className="primary-button form-span" disabled={Boolean(busy)}>
+          {busy ? tr("Saving…", "جارٍ الحفظ…") : governance.action === "APPROVE"
+            ? tr("Confirm Clinical Approval", "تأكيد الاعتماد السريري")
+            : tr("Confirm Retirement", "تأكيد الإيقاف")}
+        </button>
+      </form>}
+    </CrudModal>
   </section>;
 }

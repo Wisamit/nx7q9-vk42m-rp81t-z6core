@@ -143,7 +143,7 @@ export function ClinicalRulesManager({
         <label>{tr("Absolute limit", "الحد المطلق")}<input name="absoluteLimit" type="number" min="0" step="0.00000001" /></label>
         <label>{tr("Percent limit", "حد النسبة المئوية")}<input name="percentLimit" type="number" min="0" step="0.000001" /></label>
         <label>{tr("Lookback days", "أيام الرجوع للخلف")}<input name="lookbackDays" type="number" min="1" max="3650" defaultValue="365" required /></label>
-        <label>{tr("Effective from", "ساري من")}<input name="effectiveFrom" type="date" defaultValue={new Date().toISOString().slice(0,10)} required /></label>
+        <label>{tr("Effective from (select intended local date)", "ساري من (اختر التاريخ المحلي المقصود)")}<input name="effectiveFrom" type="date" required /></label>
         <label>{tr("Effective to", "ساري حتى")}<input name="effectiveTo" type="date" /></label>
         <button className="primary-button form-span" disabled={busy === "delta"}>{busy === "delta" ? tr("Saving…", "جارٍ الحفظ…") : tr("Create Delta Rule Draft", "إنشاء مسودة قاعدة الفرق")}</button>
         {formError && <p className="form-error form-span" role="alert">{formError}</p>}

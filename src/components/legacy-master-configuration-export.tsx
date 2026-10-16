@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { CrudModal } from "@/components/crud-modal";
 
 type Kind="REFERRER"|"SOURCE"|"ORGANISM"|"ANTIBIOTIC"|"CLIENT"|"COMMENT_TEMPLATE";
 type CsvPart={partNumber:number;rowCount:number;firstCode:string;lastCode:string;
@@ -27,14 +28,11 @@ export function LegacyMasterConfigurationExport({locale,kinds}:{
   const tr=(en:string,ar:string)=>locale==="ar"?ar:en;
   const [kind,setKind]=useState<Kind>(kinds[0]||"SOURCE");
   const [busy,setBusy]=useState(false);
+  const [confirmOpen,setConfirmOpen]=useState(false);
   const [notice,setNotice]=useState("");
   const [archive,setArchive]=useState<MasterManifest|null>(null);
   async function exportMaster(){
     if(busy)return;
-    if(!confirm(tr(
-      "Export the ACTIVE master records you are authorized to manage? Client and referrer exports may include contact details. Keep downloads secure.",
-      "هل تريد تصدير السجلات المرجعية النشطة المصرّح لك بها؟ قد تشمل بيانات العملاء والأطباء أرقام التواصل والعناوين. احفظ الملفات بمكان آمن."
-    )))return;
     setBusy(true);setNotice("");setArchive(null);
     try{
       const r=await fetch("/api/legacy/master-data-export?kind="+encodeURIComponent(kind),{
@@ -47,6 +45,7 @@ export function LegacyMasterConfigurationExport({locale,kinds}:{
       }
       const manifest=data as MasterManifest;
       setArchive(manifest);
+      setConfirmOpen(false);
       setNotice(tr("Export ready. Download the JSON evidence and selected CSV parts separately.",
         "التصدير جاهز. نزّل ملف إثبات JSON وأجزاء CSV المطلوبة بشكل منفصل."));
     }catch{
@@ -66,9 +65,30 @@ export function LegacyMasterConfigurationExport({locale,kinds}:{
         }}>{kinds.map(k=><option value={k} key={k}>{tr(labels[k][0],labels[k][1])}</option>)}</select>
       </label>
       <button type="button" className="primary-button" disabled={busy||kinds.length===0}
-        onClick={()=>void exportMaster()}>{busy?tr("Preparing…","جارٍ التجهيز…"):
+        onClick={()=>{setNotice("");setConfirmOpen(true);}}>{busy?tr("Preparing…","جارٍ التجهيز…"):
         tr("Prepare controlled export","تجهيز تصدير مضبوط")}</button>
     </div>
+    <CrudModal open={confirmOpen} onClose={()=>{if(!busy)setConfirmOpen(false);}}
+      size="compact"
+      title={tr("Confirm Controlled Master Export","تأكيد تصدير البيانات المرجعية المضبوط")}
+      description={tr(
+        "Exporting referrers and clients can disclose contact information. Only approved staff may export and must store/download data securely.",
+        "قد يكشف تصدير العملاء والأطباء معلومات التواصل. التصدير للمخولين فقط مع الالتزام بحفظ الملفات بأمان.",
+      )}>
+      {confirmOpen&&<div className="catalog-form">
+        <p className="form-span"><strong>{tr(labels[kind][0],labels[kind][1])}</strong></p>
+        <p className="form-warning form-span">{tr(
+          "This is an export of approved active master configuration, not a database backup. The downloaded files may contain personal and business contact details.",
+          "هذا تصدير للبيانات المرجعية النشطة المسموح بها وليس نسخة احتياطية. قد تحتوي الملفات على معلومات تواصل شخصية وتجارية.",
+        )}</p>
+        <button type="button" className="primary-button form-span" disabled={busy||kinds.length===0}
+          onClick={()=>void exportMaster()}>
+          {busy?tr("Preparing…","جارٍ التجهيز…"):
+            tr("Confirm authorized export","تأكيد التصدير المصرّح")}
+        </button>
+        {notice&&<p className="form-error form-span" role="alert">{notice}</p>}
+      </div>}
+    </CrudModal>
     {notice&&<p role="status" className="form-warning">{notice}</p>}
     {archive&&<div className="detail-section">
       <p><strong>{tr("Organization","المؤسسة")}:</strong> {archive.organizationId}</p>

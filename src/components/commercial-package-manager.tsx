@@ -2,6 +2,7 @@
 
 import { FormEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { CrudModal } from "@/components/crud-modal";
 
 type TestOption = { id: string; code: string; nameEn: string; nameAr?: string | null };
 
@@ -34,6 +35,7 @@ export function CommercialPackageManager({ tests, locale }: { tests: TestOption[
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (busy) return;
     if (selectedIds.length === 0) {
       setMessage(tr("Add at least one test to the package.", "أضف فحصًا واحدًا على الأقل إلى الباقة."));
       return;
@@ -41,41 +43,50 @@ export function CommercialPackageManager({ tests, locale }: { tests: TestOption[
     const form = new FormData(event.currentTarget);
     setBusy(true);
     setMessage("");
-    const response = await fetch("/api/catalog/packages", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        code: form.get("code"),
-        nameEn: form.get("nameEn"),
-        nameAr: form.get("nameAr"),
-        descriptionEn: form.get("descriptionEn"),
-        descriptionAr: form.get("descriptionAr"),
-        testIds: selectedIds,
-      }),
-    });
-    const body = await response.json().catch(() => ({}));
-    if (response.ok) {
-      setMessage(tr(`Package created: ${body.package.code}`, `تم إنشاء الباقة: ${body.package.code}`));
+    try {
+      const response = await fetch("/api/catalog/packages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          code: form.get("code"),
+          nameEn: form.get("nameEn"),
+          nameAr: form.get("nameAr"),
+          descriptionEn: form.get("descriptionEn"),
+          descriptionAr: form.get("descriptionAr"),
+          testIds: selectedIds,
+        }),
+      });
+      const body = await response.json().catch(() => ({})) as { error?: string; package?: { code?: string } };
+      if (!response.ok) {
+        setMessage(body.error || tr("Could not create package.", "تعذر إنشاء الباقة."));
+        return;
+      }
+      setOpen(false);
+      setMessage(tr(
+        "Package created: " + (body.package?.code || ""),
+        "تم إنشاء الباقة: " + (body.package?.code || ""),
+      ));
       setSelectedIds([]);
       setSearch("");
-      event.currentTarget.reset();
       router.refresh();
-    } else {
-      setMessage(tr("Could not create package.", "تعذر إنشاء الباقة."));
+    } catch {
+      setMessage(tr("Connection interrupted. Check if the package was saved before retrying.",
+        "انقطع الاتصال؛ تحقق إن كانت الباقة قد حُفظت قبل إعادة المحاولة."));
+    } finally {
+      setBusy(false);
     }
-    setBusy(false);
   }
 
   return <>
-    <button className="secondary-button" type="button" onClick={() => setOpen(true)}>{tr("Commercial Package", "باقة تجارية")}</button>
-    {open && <div className="modal-backdrop" onMouseDown={event => event.target === event.currentTarget && setOpen(false)}>
-      <div className="modal-card">
-        <div className="modal-head">
-          <div><p className="eyebrow">{tr("Commercial Catalog", "الدليل التجاري")}</p><h2>{tr("Create Package", "إنشاء باقة")}</h2></div>
-          <button className="icon-button" type="button" onClick={() => setOpen(false)}>×</button>
-        </div>
-        <p className="muted">{tr("Packages are commercial groupings. Member tests remain separate clinical order items for specimen, result and audit traceability.", "الباقات هي تجميعات تجارية، بينما تبقى الفحوصات عناصر سريرية مستقلة لضمان تتبع العينة والنتيجة وسجل التدقيق.")}</p>
-        <form className="catalog-form" onSubmit={submit}>
+    <button className="secondary-button" type="button" disabled={busy} onClick={() => { setMessage(""); setOpen(true); }}>{tr("Commercial Package", "باقة تجارية")}</button>
+    <CrudModal open={open} onClose={() => { if (!busy) setOpen(false); }}
+      size="compact"
+      title={tr("Create Commercial Package", "إنشاء باقة تجارية")}
+      description={tr(
+        "Commercial groupings do not merge member tests clinically; specimen, component result, pricing and audit traceability remain per test.",
+        "التجميع التجاري لا يدمج الفحوصات سريرياً؛ يظل تتبع العينات والنتائج والتسعير والتدقيق لكل فحص مستقلاً.",
+      )}>
+      {open &&         <form className="catalog-form" onSubmit={submit}>
           <label>{tr("Code", "الرمز")}<input name="code" required maxLength={80} /></label>
           <label>{tr("Name (English)", "الاسم بالإنجليزية")}<input name="nameEn" required maxLength={220} /></label>
           <label>{tr("Name (Arabic)", "الاسم بالعربية")}<input name="nameAr" dir="rtl" maxLength={220} /></label>
@@ -95,10 +106,10 @@ export function CommercialPackageManager({ tests, locale }: { tests: TestOption[
               )}
             </div>
           </div>
-          {message && <div className="form-success form-span">{message}</div>}
+          {message && <p role="alert" className="form-error form-span">{message}</p>}
           <button className="primary-button form-span" disabled={busy}>{busy ? tr("Saving…", "جارٍ الحفظ…") : tr("Create Commercial Package", "إنشاء الباقة التجارية")}</button>
-        </form>
-      </div>
-    </div>}
+        </form>}
+    </CrudModal>
+    {!open && message && <p className="form-success" role="status">{message}</p>}
   </>;
 }

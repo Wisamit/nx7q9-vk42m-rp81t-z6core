@@ -1,6 +1,7 @@
 "use client";
 import {useState, type FormEvent} from "react";
-import {useRouter} from "next/navigation";
+import {useRouter} from "next/navigation"
+import {CrudModal} from "@/components/crud-modal";
 
 export function RecallQualityCaseManager({lotId,safetyEventId,canCreate,
  caseNumber,locale}:{
@@ -10,14 +11,11 @@ export function RecallQualityCaseManager({lotId,safetyEventId,canCreate,
  const router=useRouter();
  const [busy,setBusy]=useState(false);
  const [message,setMessage]=useState("");
+ const [open,setOpen]=useState(false);
  async function submit(e:FormEvent<HTMLFormElement>){
   e.preventDefault();
   if(!safetyEventId||!canCreate||busy)return;
   const form=new FormData(e.currentTarget);
-  if(!confirm(tr(
-   "Open a branch-specific nonconformance from this confirmed recall escalation? This is not evidence of patient exposure.",
-   "فتح قضية عدم مطابقة خاصة بهذا الفرع من تصعيد السحب المسجل؟ هذا لا يُعد إثباتاً لتعرّض المرضى."
-  )))return;
   setBusy(true);setMessage("");
   try{
    const response=await fetch("/api/inventory/lot-quality-cases",{
@@ -29,6 +27,7 @@ export function RecallQualityCaseManager({lotId,safetyEventId,canCreate,
     nonconformance?:{caseNumber:string}};
    if(!response.ok){setMessage(tr("Request refused: ","رُفض الطلب: ")+(body.error||"unknown"));return;}
    setMessage(tr("Quality case created: ","تم فتح قضية جودة: ")+body.nonconformance?.caseNumber);
+   setOpen(false);
    router.refresh();
   }catch{setMessage(tr("Unable to contact the server.","تعذر الاتصال بالخادم."));}
   finally{setBusy(false);}
@@ -40,7 +39,19 @@ export function RecallQualityCaseManager({lotId,safetyEventId,canCreate,
    "يمكن لتصعيد سحب دفعة مخزون أن يفتح تحقيق جودة مستقلاً. فتح القضية لا يلغي حجز الدفعة ولا يغيّر نتائج المرضى أو التقارير الصادرة أو السجلات المالية."
   )}</p>
   {caseNumber?<p><strong>{tr("Existing case","القضية الحالية")}: {caseNumber}</strong></p>
-   :canCreate&&safetyEventId?<form className="catalog-form" onSubmit={e=>void submit(e)}>
+   :canCreate&&safetyEventId?<>
+   <button type="button" className="primary-button" disabled={busy}
+    onClick={()=>{setMessage("");setOpen(true);}}>
+    {tr("Open governed nonconformance","فتح قضية عدم مطابقة مضبوطة")}
+   </button>
+   <CrudModal open={open} onClose={()=>{if(!busy)setOpen(false);}}
+    size="compact"
+    title={tr("Open Recall Quality Investigation","فتح تحقيق جودة بسبب سحب دفعة")}
+    description={tr(
+     "Open a branch-specific nonconformance from the documented recall escalation. This is not evidence of patient exposure and never releases the held lot.",
+     "افتح عدم مطابقة ضمن الفرع استناداً إلى تصعيد السحب الموثق؛ لا يُعد إثباتاً لتعرض المرضى ولا يلغي حجز التشغيلة.",
+    )}>
+    {open&&<form className="catalog-form" onSubmit={e=>void submit(e)}>
     <label>{tr("Investigation title","عنوان التحقيق")}
      <input name="title" minLength={15} maxLength={255} required/></label>
     <label>{tr("Severity selected by quality staff","الشدة التي يحددها موظف الجودة")}
@@ -51,7 +62,9 @@ export function RecallQualityCaseManager({lotId,safetyEventId,canCreate,
      <textarea name="description" minLength={30} maxLength={5000} rows={4} required/></label>
     <button type="submit" className="primary-button" disabled={busy}>{busy?tr("Opening…","جارٍ الفتح…"):
      tr("Open governed nonconformance","فتح قضية عدم مطابقة مضبوطة")}</button>
-   </form>:<p>{tr(
+   </form>}
+   </CrudModal>
+   </>:<p>{tr(
     "To open a case, an authorized branch must first record ESCALATED_TO_QUALITY for the current lot safety event and have quality nonconformance management permission.",
     "لفتح قضية، يجب أن يسجّل الفرع المخوّل أولاً تصعيدًا للجودة عن آخر واقعة سلامة للتشغيلة وأن يمتلك صلاحية إدارة عدم المطابقة."
    )}</p>}

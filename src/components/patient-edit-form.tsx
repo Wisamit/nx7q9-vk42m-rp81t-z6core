@@ -1,6 +1,7 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useRef, useState } from "react";
+import { CrudModal } from "@/components/crud-modal";
 import { useRouter } from "next/navigation";
 
 type DuplicateCandidate = {
@@ -43,6 +44,8 @@ export function PatientEditForm({ patient, locale }: { patient: PatientEditValue
   const [message, setMessage] = useState("");
   const [duplicateReview, setDuplicateReview] = useState<{ payload: PatientPayload; candidates: DuplicateCandidate[] } | null>(null);
   const [duplicateReason, setDuplicateReason] = useState("");
+  const updating = useRef(false);
+  const [confirmDuplicate, setConfirmDuplicate] = useState(false);
 
   function payloadFrom(form: FormData): PatientPayload {
     return {
@@ -65,7 +68,10 @@ export function PatientEditForm({ patient, locale }: { patient: PatientEditValue
   }
 
   async function updatePatient(payload: PatientPayload, overrideReason = "") {
+    if (updating.current) return;
+    updating.current = true;
     setBusy(true);
+    try {
     setMessage("");
     const response = await fetch("/api/patients/" + patient.id, {
       method: "PATCH",
@@ -85,14 +91,17 @@ export function PatientEditForm({ patient, locale }: { patient: PatientEditValue
       setMessage(tr("Patient details updated.", "تم تحديث بيانات المريض."));
       setDuplicateReview(null);
       setDuplicateReason("");
+      setConfirmDuplicate(false);
       router.refresh();
     } else if (body.error === "possible_duplicates" && body.candidates?.length) {
+      setConfirmDuplicate(false);
       setDuplicateReview({ payload, candidates: body.candidates });
       setMessage(tr(
         "These changes would make the patient resemble another active identity. Review before saving.",
         "ستجعل هذه التغييرات المريض مشابهاً لهوية نشطة أخرى. راجع السجلات قبل الحفظ.",
       ));
     } else {
+      setConfirmDuplicate(false);
       const errors: Record<string, string> = {
         patient_state_changed: tr("The patient changed in another session. Refresh before editing again.", "تغير سجل المريض في جلسة أخرى. حدّث الصفحة قبل التعديل من جديد."),
         patient_not_editable: tr("Merged or inactive patient records cannot be edited.", "لا يمكن تعديل سجلات المرضى المدمجة أو غير النشطة."),
@@ -103,7 +112,16 @@ export function PatientEditForm({ patient, locale }: { patient: PatientEditValue
       };
       setMessage(errors[body.error || ""] || body.error || tr("Patient update failed.", "تعذر تحديث بيانات المريض."));
     }
-    setBusy(false);
+    } catch {
+      setConfirmDuplicate(false);
+      setMessage(tr(
+        "Connection interrupted. Verify the patient master and audit before retrying.",
+        "انقطع الاتصال. تحقق من سجل المريض وسجل التدقيق قبل إعادة المحاولة.",
+      ));
+    } finally {
+      updating.current = false;
+      setBusy(false);
+    }
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -120,10 +138,18 @@ export function PatientEditForm({ patient, locale }: { patient: PatientEditValue
       setMessage(tr("Explain why this is a different patient.", "اشرح لماذا هذا مريض مختلف."));
       return;
     }
-    if (!window.confirm(tr(
-      "Save these changes after duplicate review? The decision and reason will be audited.",
-      "حفظ التغييرات بعد مراجعة التكرار؟ سيتم تسجيل القرار والسبب في سجل التدقيق.",
-    ))) return;
+    if (updating.current) return;
+    setConfirmDuplicate(true);
+  }
+
+  async function confirmReviewedDuplicate() {
+    if (updating.current || !duplicateReview) return;
+    const reason = duplicateReason.trim();
+    if (!reason) {
+      setConfirmDuplicate(false);
+      setMessage(tr("Explain why these are separate identities.", "اشرح لماذا الهويتان منفصلتان."));
+      return;
+    }
     await updatePatient(duplicateReview.payload, reason);
   }
 
@@ -140,7 +166,7 @@ export function PatientEditForm({ patient, locale }: { patient: PatientEditValue
     )}</p>
     <form className="catalog-form" onSubmit={submit}>
       <label>{tr("Full name (English)", "الاسم الكامل بالإنجليزية")}<input name="fullNameEn" required maxLength={220} defaultValue={patient.fullNameEn} /></label>
-      <label dir="rtl">الاسم الكامل بالعربية<input name="fullNameAr" maxLength={220} dir="rtl" defaultValue={patient.fullNameAr || ""} /></label>
+      <label>{tr("Full name (Arabic)", "الاسم الكامل بالعربية")}<input name="fullNameAr" maxLength={220} dir="rtl" defaultValue={patient.fullNameAr || ""} /></label>
       <label>{tr("Date of birth (optional)", "تاريخ الميلاد (اختياري)")}<input name="dateOfBirth" type="date" defaultValue={patient.dateOfBirth || ""} /></label>
       <label>{tr("Age", "العمر")}<input name="recordedAgeValue" type="number" min="0" max={recordedAgeUnit === "DAY" ? 54787 : recordedAgeUnit === "MONTH" ? 1800 : 150} step="1" defaultValue={patient.recordedAgeValue ?? ""} required /></label>
       <label>{tr("Age unit", "وحدة العمر")}<select name="recordedAgeUnit" value={recordedAgeUnit} onChange={event => setRecordedAgeUnit(event.target.value)} required><option value="YEAR">{tr("Years", "سنوات")}</option><option value="MONTH">{tr("Months", "أشهر")}</option><option value="DAY">{tr("Days", "أيام")}</option></select></label>
@@ -171,6 +197,24 @@ export function PatientEditForm({ patient, locale }: { patient: PatientEditValue
       </button>
     </div>}
 
-    {message && <p className={duplicateReview ? "form-warning" : "muted"}>{message}</p>}
+    <CrudModal open={confirmDuplicate} onClose={() => { if (!updating.current) setConfirmDuplicate(false); }}
+      size="compact"
+      title={tr("Confirm Duplicate Identity Review", "تأكيد مراجعة الهوية المكررة")}
+      description={tr(
+        "Confirm that you reviewed the possible matches. The recorded reason and audit evidence remain attached to this patient change.",
+        "أكّد أنك راجعت الهوية المحتمل تكرارها. سيظل سبب القرار ودليل التدقيق مرتبطين بتعديل بيانات المريض.",
+      )}>
+      <p className="form-warning">{tr(
+        "This is an audited override of a duplicate warning, not a patient merge. Existing released reports retain their original identity snapshots.",
+        "هذا تجاوز موثق لتحذير التكرار، وليس دمجاً للمرضى. تظل هوية التقارير الصادرة السابقة محفوظة كما كانت.",
+      )}</p>
+      <p>{tr("Possible matching records", "السجلات المحتمل تطابقها")}: {duplicateReview?.candidates.length || 0}</p>
+      <p><strong>{tr("Reason", "السبب")}:</strong> {duplicateReason.trim()}</p>
+      <button type="button" className="primary-button" disabled={busy || !duplicateReason.trim()}
+        onClick={() => void confirmReviewedDuplicate()}>
+        {busy ? tr("Saving…", "جارٍ الحفظ…") : tr("Confirm Reviewed Distinction", "تأكيد مراجعة اختلاف الهوية")}
+      </button>
+    </CrudModal>
+    {message && <p className={duplicateReview ? "form-warning" : "muted"} role="status">{message}</p>}
   </section>;
 }

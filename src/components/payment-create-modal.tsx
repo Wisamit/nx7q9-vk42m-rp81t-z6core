@@ -45,7 +45,7 @@ export function PaymentCreateModal({
       onClose={() => setOpen(false)}
       title={tr("Post Payment", "تسجيل دفعة")}
       description={tr("Allocate a payment to an open invoice while preserving invoice history.", "تسجيل دفعة على فاتورة مفتوحة مع الحفاظ على السجل المالي التاريخي.")}
-      size="md"
+      size="compact"
     >
       <PaymentForm invoices={invoices} paymentMethods={paymentMethods} locale={locale} onSuccess={message => {
         setNotice(message);

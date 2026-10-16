@@ -1,7 +1,8 @@
 "use client";
 
 import { FormEvent, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter } from "next/navigation"
+import { CrudModal } from "@/components/crud-modal";;
 
 type DuplicateCandidate = {
   id: string;
@@ -46,6 +47,7 @@ export function PatientCreateForm({
   const [message, setMessage] = useState("");
   const [duplicateReview, setDuplicateReview] = useState<{ payload: PatientPayload; candidates: DuplicateCandidate[] } | null>(null);
   const [duplicateReason, setDuplicateReason] = useState("");
+  const [confirmSeparate, setConfirmSeparate] = useState(false);
   const [additionalIdentifiers, setAdditionalIdentifiers] = useState<AdditionalIdentifier[]>([]);
 
   function payloadFrom(form: FormData): PatientPayload {
@@ -78,6 +80,7 @@ export function PatientCreateForm({
     setBusy(true);
     setMessage("");
 
+    try {
     const response = await fetch("/api/patients", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -97,6 +100,7 @@ export function PatientCreateForm({
       const success = `${tr("Patient created", "تم إنشاء المريض")}: ${body.patient?.patientNumber || ""}`;
       setMessage(success);
       setDuplicateReview(null);
+      setConfirmSeparate(false);
       setDuplicateReason("");
       formRef.current?.reset();
       setAdditionalIdentifiers([]);
@@ -115,27 +119,31 @@ export function PatientCreateForm({
     } else {
       setMessage(body.error || tr("Patient creation failed.", "تعذر إنشاء المريض."));
     }
-    setBusy(false);
+    } catch {
+      setMessage(tr(
+        "Connection interrupted. Search patient records before retrying: the patient may have been created.",
+        "انقطع الاتصال. ابحث في سجلات المرضى قبل إعادة المحاولة؛ فقد تكون الهوية أُنشئت بالفعل.",
+      ));
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setDuplicateReview(null);
+    setConfirmSeparate(false);
     setDuplicateReason("");
     await createPatient(payloadFrom(new FormData(event.currentTarget)));
   }
 
   async function createSeparateIdentity() {
-    if (!duplicateReview) return;
+    if (!duplicateReview || busy || !confirmSeparate) return;
     const reason = duplicateReason.trim();
     if (!reason) {
       setMessage(tr("Explain why this is a different patient.", "اشرح لماذا هذا مريض مختلف."));
       return;
     }
-    if (!window.confirm(tr(
-      "Confirm creation of a separate patient after duplicate review. The reason will be audited.",
-      "تأكيد إنشاء مريض مستقل بعد مراجعة التكرار. سيتم حفظ السبب في سجل التدقيق.",
-    ))) return;
     await createPatient(duplicateReview.payload, reason);
   }
 
@@ -205,10 +213,44 @@ export function PatientCreateForm({
         </div>)}
       </div>
       <label>{tr("Reason to create a separate patient", "سبب إنشاء مريض مستقل")}<textarea value={duplicateReason} onChange={event => setDuplicateReason(event.target.value)} maxLength={1000} rows={3} required /></label>
-      <button type="button" className="secondary-button" disabled={busy} onClick={() => void createSeparateIdentity()}>
+      <button type="button" className="secondary-button" disabled={busy || !duplicateReason.trim()} onClick={() => setConfirmSeparate(true)}>
         {tr("Reviewed — Create Separate Patient", "تمت المراجعة — إنشاء مريض مستقل")}
       </button>
     </section>}
+
+    <CrudModal open={confirmSeparate && duplicateReview !== null}
+      onClose={() => { if (!busy) setConfirmSeparate(false); }}
+      size="compact"
+      title={tr("Confirm Separate Patient Identity", "تأكيد إنشاء هوية مريض مستقلة")}
+      description={tr(
+        "This decision may create an irreversible duplicate medical identity. Compare the listed existing patients and document why the new person is different.",
+        "قد يؤدي هذا القرار إلى إنشاء هوية طبية مكررة يصعب تصحيحها. راجع المرضى الحاليين ووثّق سبب اختلاف الشخص الجديد.",
+      )}>
+      {duplicateReview && <div className="catalog-form">
+        <p className="form-warning form-span">{tr(
+          "Do not proceed if any candidate is the same patient. Use the existing patient or a governed merge/review workflow.",
+          "لا تتابع إذا كان أي سجل مرشح لنفس المريض. استخدم المريض الحالي أو مسار دمج ومراجعة مضبوط.",
+        )}</p>
+        <div className="form-span summary-list">
+          {duplicateReview.candidates.map(candidate => <div key={candidate.id}>
+            <strong>{candidate.patientNumber} · {locale === "ar"
+              ? candidate.fullNameAr || candidate.fullNameEn : candidate.fullNameEn}</strong>
+            <small>{candidate.evidence.map(evidenceLabel).join(" · ")}</small>
+          </div>)}
+        </div>
+        <label className="form-span">{tr("Audited reason for separate identity (required)", "السبب المدقق لإنشاء هوية مستقلة (مطلوب)")}
+          <textarea rows={3} minLength={10} maxLength={1000} required
+            value={duplicateReason} onChange={event => setDuplicateReason(event.target.value)}/>
+        </label>
+        {message && <p className="form-warning form-span" role="alert">{message}</p>}
+        <button type="button" className="primary-button form-span"
+          disabled={busy || duplicateReason.trim().length < 10}
+          onClick={() => void createSeparateIdentity()}>
+          {busy ? tr("Saving…", "جارٍ الحفظ…") :
+            tr("Confirm this is a different patient", "تأكيد أن هذا شخص آخر")}
+        </button>
+      </div>}
+    </CrudModal>
 
     {message && <div className={duplicateReview ? "form-warning form-span" : "form-success form-span"}>{message}</div>}
   </form>;

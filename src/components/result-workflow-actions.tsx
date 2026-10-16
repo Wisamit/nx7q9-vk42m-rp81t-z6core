@@ -4,6 +4,7 @@ import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { statusLabel as sharedStatusLabel } from "@/lib/ui-i18n";
 import { StaffStepUpDialog, type StepUpPurpose } from "@/components/staff-step-up-dialog";
+import { CrudModal } from "@/components/crud-modal";
 
 type Communication = {
   id: string;
@@ -125,6 +126,10 @@ export function ResultWorkflowActions({
   const [showMedicalReturn, setShowMedicalReturn] = useState(false);
   const [stepUpPending,setStepUpPending]=useState<StepUpPurpose|null>(null);
   const [pendingAmendmentReason,setPendingAmendmentReason]=useState("");
+  const [governedConfirmation,setGovernedConfirmation]=useState<"MEDICAL_APPROVAL"|"RESULT_RELEASE"|null>(null);
+  const [qcWarningReasons,setQcWarningReasons]=useState<string[]|null>(null);
+  const [qcReviewConfirmed,setQcReviewConfirmed]=useState(false);
+  const [qcAcknowledgement,setQcAcknowledgement]=useState(false);
 
   const snapshot = validationPolicySnapshot && typeof validationPolicySnapshot === "object"
     ? validationPolicySnapshot as ValidationSnapshot
@@ -141,6 +146,7 @@ export function ResultWorkflowActions({
 
   async function submitCommunication(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (busy || !canLogCriticalNow) return;
     const form = new FormData(event.currentTarget);
     setBusy("communication");
     setMessage("");
@@ -176,81 +182,78 @@ export function ResultWorkflowActions({
   }
 
   async function approveMedicalValidation(stepUpToken?:string) {
-    if(!stepUpToken){
-    if (!confirm(tr(
-      "Approve medical validation? This completes the required validation path and locks the result for release.",
-      "اعتماد التحقق الطبي؟ سيؤدي ذلك إلى إكمال مسار التحقق المطلوب وقفل النتيجة تمهيداً للإصدار.",
-    ))) return;
-    setStepUpPending("MEDICAL_APPROVAL");return;
+    if(!stepUpToken) {
+      if(busy || !canMedicalValidate || resultStatus!=="ENTERED" ||
+        validationStage!=="MEDICAL_VALIDATION")return;
+      setMessage("");
+      setQcReviewConfirmed(false);
+      setGovernedConfirmation("MEDICAL_APPROVAL");
+      return;
     }
-
+    if(busy || !canMedicalValidate || resultStatus!=="ENTERED" ||
+      validationStage!=="MEDICAL_VALIDATION")return;
     setBusy("medical");
     setMessage("");
-    let confirmQcWarnings = false;
-
-    for (let attempt = 0; attempt < 2; attempt++) {
-      const response = await fetch("/api/results/" + resultId + "/medical-validate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-staff-step-up-token":stepUpToken },
-        body: JSON.stringify({ action: "APPROVE", confirmQcWarnings }),
+    try {
+      const response=await fetch("/api/results/"+resultId+"/medical-validate",{
+        method:"POST",
+        headers:{"Content-Type":"application/json","x-staff-step-up-token":stepUpToken},
+        body:JSON.stringify({action:"APPROVE",confirmQcWarnings:qcReviewConfirmed}),
       });
-      const body = await response.json().catch(() => ({})) as Record<string, unknown>;
-
-      if (response.ok) {
-        setMessage(tr("Medical validation completed. The result is ready for controlled release.", "اكتمل التحقق الطبي. النتيجة جاهزة للإصدار المضبوط."));
+      const body=await response.json().catch(()=>({})) as {
+        error?:string;reasons?:Array<{code?:string}>;
+      };
+      if(response.ok){
+        setQcReviewConfirmed(false);
+        setQcWarningReasons(null);
+        setMessage(tr(
+          "Medical validation completed. The result is ready for controlled release.",
+          "اكتمل التحقق الطبي. النتيجة جاهزة للإصدار المضبوط.",
+        ));
         router.refresh();
-        setBusy("");
         return;
       }
-
-      if (body.error === "qc_warning_confirmation_required" && !confirmQcWarnings) {
-        const reasons = Array.isArray(body.reasons)
-          ? body.reasons.map(reason => typeof reason === "object" && reason && "code" in reason ? String(reason.code) : "").filter(Boolean).join(", ")
-          : "";
-        const confirmed = confirm(tr(
-          "QC has warning-level conditions" + (reasons ? ": " + reasons : "") + ". Confirm that you reviewed QC and continue medical validation?",
-          "توجد حالات تحذير في QC" + (reasons ? ": " + reasons : "") + ". أكد أنك راجعت ضبط الجودة وتريد متابعة التحقق الطبي.",
-        ));
-        if (confirmed) {
-          confirmQcWarnings = true;
-          continue;
-        }
+      if(body.error==="qc_warning_confirmation_required" && !qcReviewConfirmed){
+        setQcWarningReasons(Array.isArray(body.reasons)
+          ?body.reasons.filter(x=>x&&typeof x.code==="string").map(x=>String(x.code))
+          :[]);
+        setQcAcknowledgement(false);
+        setMessage(tr("QC warning review and a NEW staff verification are required before proceeding.",
+          "يلزم مراجعة تحذير ضبط الجودة وإجراء تحقق موظف جديد قبل المتابعة."));
+        return;
       }
-
-      if (body.error === "medical_validator_must_differ_from_technical_reviewer") {
-        setMessage(tr("Medical validation requires a different authorized user under the snapshotted policy.", "تتطلب سياسة التحقق المحفوظة مستخدماً مخولاً مختلفاً عن منفذ المراجعة الفنية."));
-      } else if (body.error === "technical_review_evidence_missing") {
-        setMessage(tr(
-          "Medical validation requires a matching, approved technical review record for this result. Return the result for technical re-review.",
-          "يتطلب الاعتماد الطبي سجل مراجعة فنية معتمداً ومطابقاً لهذه النتيجة. أعد النتيجة للمراجعة الفنية من جديد.",
-        ));
-      } else if (body.error === "medical_validation_policy_snapshot_invalid") {
-        setMessage(tr(
-          "The medical validation policy snapshot is missing or inconsistent with this test/branch. Do not approve; escalate for clinical review.",
-          "نسخة سياسة الاعتماد الطبي مفقودة أو لا تطابق هذا الفحص أو الفرع. لا تعتمد النتيجة؛ صعّدها للمراجعة السريرية.",
-        ));
-      } else if (body.error === "validation_hold_review_required") {
-        setMessage(tr("Medical validation is blocked until active blocking validation holds are resolved.", "التحقق الطبي محظور حتى تتم معالجة حجوزات التحقق المانعة النشطة."));
-      } else if (body.error === "qc_blocking_hold") {
-        setMessage(tr("Medical validation is blocked because analyzer QC is not acceptable.", "التحقق الطبي محظور لأن حالة ضبط جودة جهاز التحليل غير مقبولة."));
-      } else {
-        setMessage(typeof body.error === "string" ? body.error : tr("Medical validation failed.", "فشل التحقق الطبي."));
+      setQcReviewConfirmed(false);
+      if(body.error==="medical_validator_must_differ_from_technical_reviewer"){
+        setMessage(tr("Medical validation requires a different authorized user under the snapshotted policy.",
+          "تتطلب سياسة التحقق المحفوظة مستخدماً مخولاً مختلفاً عن منفذ المراجعة الفنية."));
+      }else if(body.error==="technical_review_evidence_missing"){
+        setMessage(tr("Medical validation requires a matching, approved technical review record for this result. Return the result for technical re-review.",
+          "يتطلب الاعتماد الطبي سجل مراجعة فنية معتمداً ومطابقاً لهذه النتيجة. أعد النتيجة للمراجعة الفنية من جديد."));
+      }else if(body.error==="medical_validation_policy_snapshot_invalid"){
+        setMessage(tr("The medical validation policy snapshot is missing or inconsistent with this test/branch. Do not approve; escalate for clinical review.",
+          "نسخة سياسة الاعتماد الطبي مفقودة أو لا تطابق هذا الفحص أو الفرع. لا تعتمد النتيجة؛ صعّدها للمراجعة السريرية."));
+      }else if(body.error==="validation_hold_review_required"){
+        setMessage(tr("Medical validation is blocked until active blocking validation holds are resolved.",
+          "التحقق الطبي محظور حتى تتم معالجة حجوزات التحقق المانعة النشطة."));
+      }else if(body.error==="qc_blocking_hold"){
+        setMessage(tr("Medical validation is blocked because analyzer QC is not acceptable.",
+          "التحقق الطبي محظور لأن حالة ضبط جودة جهاز التحليل غير مقبولة."));
+      }else{
+        setMessage(body.error||tr("Medical validation failed.","فشل التحقق الطبي."));
       }
-      break;
-    }
-
-    setBusy("");
+    }catch{
+      setQcReviewConfirmed(false);
+      setMessage(tr("Connection interrupted. Check the validation record before using a fresh staff verification.",
+        "انقطع الاتصال؛ تحقق من سجل الاعتماد قبل استخدام تحقق موظف جديد."));
+    }finally{setBusy("");}
   }
 
   async function returnFromMedicalValidation(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (busy || !pendingMedical || !canMedicalValidate) return;
     const form = new FormData(event.currentTarget);
     const reason = String(form.get("reason") || "").trim();
     if (!reason) return;
-    if (!confirm(tr(
-      "Return this result for correction? The medical return and reason will remain in validation history.",
-      "إعادة هذه النتيجة للتصحيح؟ ستبقى عملية الإعادة وسببها محفوظتين في سجل التحقق.",
-    ))) return;
 
     setBusy("medical-return");
     setMessage("");
@@ -272,37 +275,51 @@ export function ResultWorkflowActions({
   }
 
   async function releaseResult(stepUpToken?:string) {
-    if(!stepUpToken){
-    if (!confirm(tr("Release this verified result? A new immutable diagnostic report version will be created.", "هل تريد إصدار هذه النتيجة المتحقق منها؟ سيتم إنشاء إصدار تقرير تشخيصي جديد غير قابل للتغيير."))) return;
-    setStepUpPending("RESULT_RELEASE");return;
+    if(!stepUpToken) {
+      if(busy || !canRelease || resultStatus!=="VERIFIED" ||
+        validationStage!=="COMPLETE")return;
+      setMessage("");
+      setGovernedConfirmation("RESULT_RELEASE");
+      return;
     }
+    if(busy || !canRelease || resultStatus!=="VERIFIED" ||
+      validationStage!=="COMPLETE")return;
     setBusy("release");
     setMessage("");
-
-    const response = await fetch("/api/results/" + resultId + "/release", { method: "POST",
-      headers:{"x-staff-step-up-token":stepUpToken} });
-    const body = await response.json().catch(() => ({}));
-
-    if (response.ok) {
-      setMessage(tr("Result released. Report version", "تم إصدار النتيجة. إصدار التقرير") + " " + body.reportVersion + " " + tr("created as", "أُنشئ بحالة") + " " + body.reportStatus + ".");
-      router.refresh();
-    } else if (body.error === "critical_acknowledgement_required") {
-      setMessage(tr("Release blocked: the critical result must be communicated and acknowledged first.", "الإصدار محظور: يجب أولًا التواصل بشأن النتيجة الحرجة وتوثيق الإقرار بها."));
-    } else if (body.error === "specimen_custody_changed_blocks_release") {
-      setMessage(tr("Release blocked: the source specimen was moved, rejected, disposed or no longer belongs to the performing branch. Recheck custody and clinical review.", "الإصدار محظور: تغيّر موقع أو وضع العينة الأصلية، أو لم تعد في فرع التنفيذ. راجع تتبع العينة واعتماد النتيجة."));
-    } else {
-      setMessage(body.error || tr("Result release failed.", "فشل إصدار النتيجة."));
-    }
-    setBusy("");
+    try{
+      const response=await fetch("/api/results/"+resultId+"/release",{
+        method:"POST",headers:{"x-staff-step-up-token":stepUpToken},
+      });
+      const body=await response.json().catch(()=>({})) as {
+        error?:string;reportVersion?:string;reportStatus?:string;
+      };
+      if(response.ok){
+        setMessage(tr("Result released. Report version","تم إصدار النتيجة. إصدار التقرير")+
+          " "+(body.reportVersion||"—")+" "+
+          tr("created as","أُنشئ بحالة")+" "+(body.reportStatus||"—")+".");
+        router.refresh();
+      }else if(body.error==="critical_acknowledgement_required"){
+        setMessage(tr("Release blocked: the critical result must be communicated and acknowledged first.",
+          "الإصدار محظور: يجب أولًا التواصل بشأن النتيجة الحرجة وتوثيق الإقرار بها."));
+      }else if(body.error==="specimen_custody_changed_blocks_release"){
+        setMessage(tr("Release blocked: the source specimen was moved, rejected, disposed or no longer belongs to the performing branch. Recheck custody and clinical review.",
+          "الإصدار محظور: تغيّر موقع أو وضع العينة الأصلية، أو لم تعد في فرع التنفيذ. راجع تتبع العينة واعتماد النتيجة."));
+      }else{
+        setMessage(body.error||tr("Result release failed.","فشل إصدار النتيجة."));
+      }
+    }catch{
+      setMessage(tr("Connection interrupted. Check published report versions before retrying release.",
+        "انقطع الاتصال. تحقق من إصدارات التقرير المنشورة قبل إعادة محاولة الإصدار."));
+    }finally{setBusy("");}
   }
 
   async function startAmendment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (busy || resultStatus !== "RELEASED" || !canAmend) return;
     const form = new FormData(event.currentTarget);
     const reason = String(form.get("reason") || "").trim();
     if (!reason) return;
 
-    if (!confirm(tr("Start an amendment? The released result will remain preserved while a new version is prepared.", "بدء تعديل؟ ستبقى النتيجة الصادرة محفوظة بينما يتم إعداد إصدار جديد."))) return;
 
     setPendingAmendmentReason(reason);
     setStepUpPending("RESULT_AMEND");
@@ -345,7 +362,7 @@ export function ResultWorkflowActions({
     <StaffStepUpDialog open={stepUpPending!==null}
       action={stepUpPending||"MEDICAL_APPROVAL"} resourceKey={resultId}
       branchId={performingBranchId} locale={locale}
-      onCancel={()=>{setStepUpPending(null);setPendingAmendmentReason("");}}
+      onCancel={()=>{setStepUpPending(null);setPendingAmendmentReason("");setQcReviewConfirmed(false);}}
       onGranted={token=>{
         const action=stepUpPending;setStepUpPending(null);
         if(action==="MEDICAL_APPROVAL")void approveMedicalValidation(token);
@@ -356,6 +373,68 @@ export function ResultWorkflowActions({
           if(reason)void commitAmendment(reason,token);
         }
       }}/>
+    <CrudModal open={governedConfirmation!==null}
+      onClose={()=>{if(!busy)setGovernedConfirmation(null);}}
+      size="compact"
+      title={governedConfirmation==="MEDICAL_APPROVAL"
+        ?tr("Approve Medical Validation","اعتماد التحقق الطبي")
+        :tr("Release Diagnostic Result","إصدار نتيجة تشخيصية")}
+      description={tr(
+        "This is a governed clinical decision. Fresh staff verification is required, and server-side QC, critical communication, custody and result-version gates cannot be bypassed.",
+        "هذا قرار سريري محكوم. يلزم تحقق موظف جديد؛ لا يمكن تجاوز قيود ضبط الجودة والإبلاغ عن النتائج الحرجة وتتبع العينة وإصدارات النتائج.",
+      )}>
+      {governedConfirmation&&<div className="catalog-form">
+        <p className="form-span"><strong>{sharedStatusLabel(locale,resultStatus)}</strong> ·
+          {validationStageLabel(validationStage)}</p>
+        <p className="form-span">{governedConfirmation==="MEDICAL_APPROVAL"
+          ?tr("Medical approval locks the result for controlled release. Review QC warnings, clinical context and any independent technical review.",
+            "يقفل الاعتماد الطبي النتيجة استعداداً للإصدار المضبوط. راجع تحذيرات الجودة والسياق الطبي والمراجعة الفنية المستقلة.")
+          :tr("Release creates a NEW immutable diagnostic report version. Released history is never overwritten.",
+            "ينشئ الإصدار نسخة جديدة ثابتة من التقرير التشخيصي. لا يُستبدل التاريخ السريري الصادر.")}</p>
+        {message&&<p className="form-warning form-span" role="alert">{message}</p>}
+        <button type="button" className="primary-button form-span" disabled={Boolean(busy)}
+          onClick={()=>{
+            if(!governedConfirmation)return;
+            setStepUpPending(governedConfirmation);
+            setGovernedConfirmation(null);
+          }}>
+          {tr("Continue to independent staff verification","المتابعة إلى تحقق الموظف المستقل")}
+        </button>
+      </div>}
+    </CrudModal>
+    <CrudModal open={qcWarningReasons!==null}
+      onClose={()=>{if(!busy){setQcWarningReasons(null);setQcAcknowledgement(false);setQcReviewConfirmed(false);}}}
+      size="compact"
+      title={tr("Review Analyzer QC Warnings","مراجعة تحذيرات ضبط جودة الأجهزة")}
+      description={tr(
+        "The server returned QC warning-level conditions. Do not proceed without qualified clinical review; QC blocking holds remain non-overridable.",
+        "أعاد السيرفر تحذيرات ضبط جودة. لا تتابع دون مراجعة سريرية مؤهلة؛ يبقى حظر ضبط الجودة المانع غير قابل للتجاوز.",
+      )}>
+      {qcWarningReasons!==null&&<form className="catalog-form" onSubmit={event=>{
+        event.preventDefault();
+        if(!qcAcknowledgement||busy||!canMedicalValidate)return;
+        setQcReviewConfirmed(true);
+        setQcWarningReasons(null);
+        setQcAcknowledgement(false);
+        setStepUpPending("MEDICAL_APPROVAL");
+      }}>
+        <div className="form-span">
+          <p>{tr("Warning codes returned by current QC gate","رموز التحذير الصادرة عن ضبط الجودة الحالي")}:</p>
+          <ul>{qcWarningReasons.map((code,i)=><li key={code+"-"+i}>{code}</li>)}</ul>
+        </div>
+        <label className="form-span">
+          <input type="checkbox" required checked={qcAcknowledgement}
+            onChange={event=>setQcAcknowledgement(event.target.checked)}/>
+          {tr("I reviewed these QC warning conditions and accept accountability for requesting a new independent staff verification.",
+            "راجعت ظروف تحذير ضبط الجودة وأتحمل مسؤولية طلب تحقق موظف مستقل جديد.")}
+        </label>
+        {message&&<p className="form-warning form-span" role="alert">{message}</p>}
+        <button type="submit" className="primary-button form-span"
+          disabled={Boolean(busy)||!qcAcknowledgement}>
+          {tr("Continue with NEW staff verification","المتابعة بتحقق موظف جديد")}
+        </button>
+      </form>}
+    </CrudModal>
     <div className="result-workflow-status">
       <div><span>{tr("Result status", "حالة النتيجة")}</span><strong>{sharedStatusLabel(locale, resultStatus)}</strong></div>
       <div><span>{tr("Validation stage", "مرحلة التحقق")}</span><strong>{validationStageLabel(validationStage)}</strong></div>
@@ -398,14 +477,24 @@ export function ResultWorkflowActions({
     {resultStatus === "VERIFIED" && validationStage === "COMPLETE" && !criticalAcknowledged &&
       <p className="form-error">{tr("Release is blocked until the critical result is communicated and acknowledgement is documented.", "الإصدار محظور حتى يتم التواصل بشأن النتيجة الحرجة وتوثيق الإقرار.")}</p>}
 
-    {showMedicalReturn && <form className="catalog-form result-workflow-form" onSubmit={returnFromMedicalValidation}>
+    <CrudModal open={showMedicalReturn} onClose={() => { if (!busy) setShowMedicalReturn(false); }}
+      size="compact"
+      title={tr("Return Result for Technical Correction", "إعادة النتيجة للمراجعة الفنية")}
+      description={tr("This governed medical return is recorded in validation history and requires a documented reason. It does not delete the earlier result.", "تُوثق الإعادة الطبية في تاريخ التحقق ويجب تقديم سبب؛ لا يتم حذف النتيجة السابقة.")}>
+      {showMedicalReturn && <form className="catalog-form result-workflow-form" onSubmit={returnFromMedicalValidation}>
       <label className="form-span">{tr("Return reason", "سبب الإعادة")}
         <textarea name="reason" rows={3} required maxLength={1000} placeholder={tr("Explain why the result must be corrected and technically reviewed again…", "وضح سبب الحاجة إلى تصحيح النتيجة وإعادة مراجعتها فنياً…")} />
       </label>
       <button className="secondary-button form-span" disabled={busy === "medical-return"}>{busy === "medical-return" ? tr("Returning…", "جارٍ الإعادة…") : tr("Return to Technical Review", "إعادة إلى المراجعة الفنية")}</button>
     </form>}
+      {showMedicalReturn && message && <p role="status" className="form-warning">{message}</p>}
+    </CrudModal>
 
-    {showCommunication && <form className="catalog-form result-workflow-form" onSubmit={submitCommunication}>
+    <CrudModal open={showCommunication} onClose={() => { if (!busy) setShowCommunication(false); }}
+      size="compact"
+      title={tr("Log Critical Result Communication", "توثيق التواصل بشأن نتيجة حرجة")}
+      description={tr("Document the actual recipient, method, outcome and read-back. Do not claim acknowledgement until independently confirmed.", "وثّق المستلم وطريقة التواصل والنتيجة وإعادة القراءة الفعلية؛ لا تسجل الإقرار قبل التأكد منه.")}>
+      {showCommunication && <form className="catalog-form result-workflow-form" onSubmit={submitCommunication}>
       <label>{tr("Method", "الطريقة")}
         <select name="method" required defaultValue="PHONE">
           <option value="PHONE">{methodLabel("PHONE")}</option><option value="VERBAL">{methodLabel("VERBAL")}</option><option value="EMAIL">{methodLabel("EMAIL")}</option><option value="SMS">{methodLabel("SMS")}</option><option value="WHATSAPP">{methodLabel("WHATSAPP")}</option><option value="OTHER">{methodLabel("OTHER")}</option>
@@ -424,13 +513,21 @@ export function ResultWorkflowActions({
       <label className="form-span">{tr("Notes", "ملاحظات")}<textarea name="notes" rows={2} /></label>
       <button className="primary-button form-span" disabled={busy === "communication"}>{busy === "communication" ? tr("Saving…", "جارٍ الحفظ…") : tr("Save Communication", "حفظ التواصل")}</button>
     </form>}
+      {showCommunication && message && <p role="status" className="form-warning">{message}</p>}
+    </CrudModal>
 
-    {showAmendment && <form className="catalog-form result-workflow-form" onSubmit={startAmendment}>
+    <CrudModal open={showAmendment} onClose={() => { if (!busy) setShowAmendment(false); }}
+      size="compact"
+      title={tr("Start Released Result Amendment", "بدء إصدار تعديل للنتيجة الصادرة")}
+      description={tr("A released result and report are never overwritten. This operation requires a reason and a fresh independent staff step-up; the prior version is preserved.", "لا تُستبدل النتائج والتقارير الصادرة؛ يلزم سبب موثق وتحقق موظف إضافي جديد، وتبقى النسخة السابقة محفوظة.")}>
+      {showAmendment && <form className="catalog-form result-workflow-form" onSubmit={startAmendment}>
       <label className="form-span">{tr("Amendment reason", "سبب التعديل")}
         <textarea name="reason" rows={3} required maxLength={1000} placeholder={tr("Reason for correcting the released result…", "سبب تصحيح النتيجة الصادرة…")} />
       </label>
       <button className="primary-button form-span" disabled={busy === "amend"}>{busy === "amend" ? tr("Creating…", "جارٍ الإنشاء…") : tr("Create Amendment Version", "إنشاء إصدار تعديل")}</button>
     </form>}
+      {showAmendment && message && <p role="status" className="form-warning">{message}</p>}
+    </CrudModal>
 
     {validationReviews.length > 0 && <details className="specimen-history">
       <summary>{tr("Validation history", "سجل التحقق")} ({validationReviews.length})</summary>

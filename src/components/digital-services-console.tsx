@@ -1,8 +1,9 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { CrudModal } from "@/components/crud-modal";
 import { statusLabel as sharedStatusLabel } from "@/lib/ui-i18n";
 
 type Option = { id: string; label: string };
@@ -85,7 +86,10 @@ export function DigitalServicesConsole({
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState("");
+  const submitting = useRef(false);
   const [message, setMessage] = useState("");
+  const [uiDialog, setUiDialog] = useState("");
+  const [sensitiveAction, setSensitiveAction] = useState<{ kind: "portal-status" | "portal-password" | "appointment-cancel" | "queue-call"; id: string; status?: "ACTIVE" | "DISABLED" } | null>(null);
   const [portalType, setPortalType] = useState("PATIENT");
   const [collectorByVisit, setCollectorByVisit] = useState<Record<string, string>>({});
   const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
@@ -129,23 +133,38 @@ export function DigitalServicesConsole({
     value;
 
   async function send(url: string, method: "POST" | "PATCH", payload: unknown, key: string, successEn: string, successAr: string) {
+    if (submitting.current) return false;
+    submitting.current = true;
     setBusy(key);
     setMessage("");
-    const response = await fetch(url, {
-      method,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    await response.json().catch(() => ({}));
-    setBusy("");
-    setMessage(response.ok ? tr(successEn, successAr) : tr("Action failed.", "فشلت العملية."));
-    if (response.ok) router.refresh();
-    return response.ok;
+    try {
+      const response = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const body = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) {
+        setMessage(body.error || tr("Action failed.", "فشلت العملية."));
+        return false;
+      }
+      setMessage(tr(successEn, successAr));
+      router.refresh();
+      return true;
+    } catch {
+      setMessage(tr("Connection error; action not confirmed.", "خطأ في الاتصال؛ لم يتم تأكيد الإجراء."));
+      return false;
+    } finally {
+      submitting.current = false;
+      setBusy("");
+    }
   }
 
   async function createPortalAccount(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    if (submitting.current) return;
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     const ok = await send("/api/portal-accounts", "POST", {
       type: portalType,
       patientId: portalType === "PATIENT" ? form.get("subjectId") : null,
@@ -155,42 +174,26 @@ export function DigitalServicesConsole({
       phone: form.get("phone"),
       preferredLocale: form.get("preferredLocale"),
     }, "portal-create", "Portal account provisioned.", "تم إنشاء حساب البوابة.");
-    if (ok) event.currentTarget.reset();
+    if (ok) formElement.reset();
   }
 
   async function setPortalStatus(accountId: string, status: "ACTIVE" | "DISABLED") {
-    if (!window.confirm(status === "DISABLED"
-      ? tr("Disable this portal account and revoke active sessions?", "هل تريد تعطيل حساب البوابة وإلغاء الجلسات النشطة؟")
-      : tr("Reactivate this portal account?", "هل تريد إعادة تفعيل حساب البوابة؟"))) return;
-    await send(
-      `/api/portal-accounts/${accountId}/status`,
-      "POST",
-      { status },
-      "portal-status-" + accountId,
-      status === "DISABLED" ? "Portal account disabled." : "Portal account reactivated.",
-      status === "DISABLED" ? "تم تعطيل حساب البوابة." : "تمت إعادة تفعيل حساب البوابة.",
-    );
+    if (busy) return;
+    setMessage("");
+    setSensitiveAction({ kind: "portal-status", id: accountId, status });
   }
 
   async function setTemporaryPassword(accountId: string) {
-    const temporaryPassword = window.prompt(tr(
-      "Enter a temporary password of at least 12 characters. The portal user will be forced to change it on first login.",
-      "أدخل كلمة مرور مؤقتة من 12 محرفاً على الأقل. سيُطلب من مستخدم البوابة تغييرها عند أول تسجيل دخول.",
-    ));
-    if (!temporaryPassword) return;
-    await send(
-      `/api/portal-accounts/${accountId}/temporary-password`,
-      "POST",
-      { temporaryPassword },
-      "portal-password-" + accountId,
-      "Temporary password set and existing portal sessions revoked.",
-      "تم تعيين كلمة المرور المؤقتة وإلغاء جلسات البوابة الحالية.",
-    );
+    if (busy) return;
+    setMessage("");
+    setSensitiveAction({ kind: "portal-password", id: accountId });
   }
 
   async function createCorporateAccess(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    if (submitting.current) return;
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     const ok = await send("/api/corporate-portal-access", "POST", {
       clientId: form.get("clientId"),
       patientId: form.get("patientId"),
@@ -200,34 +203,43 @@ export function DigitalServicesConsole({
       canBook: form.get("canBook") === "on",
       canViewReports: form.get("canViewReports") === "on",
     }, "corporate-access", "Corporate portal patient access created.", "تم إنشاء صلاحية وصول المريض عبر بوابة الشركة.");
-    if (ok) event.currentTarget.reset();
+    if (ok) formElement.reset();
   }
 
   async function createAppointment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    if (submitting.current) return;
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     const mode = String(form.get("mode") || "ONSITE");
+    const localStart = String(form.get("scheduledStart") || "");
+    const startDate = new Date(localStart);
+    if (!localStart || !Number.isFinite(startDate.getTime())) {
+      setMessage(tr("Choose a valid appointment date and time.", "اختر تاريخاً ووقتاً صالحين للموعد."));
+      return;
+    }
     const ok = await send("/api/appointments", "POST", {
       branchId: form.get("branchId"),
       patientId: form.get("patientId"),
       mode,
       serviceCode: form.get("serviceCode"),
       serviceNameSnapshot: form.get("serviceNameSnapshot"),
-      scheduledStart: new Date(String(form.get("scheduledStart"))).toISOString(),
+      scheduledStart: startDate.toISOString(),
       contactPhone: form.get("contactPhone"),
       address: form.get("address"),
       notes: form.get("notes"),
     }, "appointment-create", "Appointment created.", "تم إنشاء الموعد.");
-    if (ok) event.currentTarget.reset();
+    if (ok) formElement.reset();
   }
 
   async function changeAppointmentStatus(id: string, status: string) {
-    let reason = "";
     if (status === "CANCELLED") {
-      reason = window.prompt(tr("Cancellation reason:", "سبب الإلغاء:")) || "";
-      if (!reason.trim()) return;
+      if (busy) return;
+      setMessage("");
+      setSensitiveAction({ kind: "appointment-cancel", id });
+      return;
     }
-    await send(`/api/appointments/${id}/status`, "POST", { status, reason }, "appointment-" + id, "Appointment updated.", "تم تحديث الموعد.");
+    await send(`/api/appointments/${id}/status`, "POST", { status, reason: "" }, "appointment-" + id, "Appointment updated.", "تم تحديث الموعد.");
   }
 
   async function updateHomeCollection(item: HomeCollection, status: string) {
@@ -241,7 +253,9 @@ export function DigitalServicesConsole({
 
   async function issueQueueTicket(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    if (submitting.current) return;
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     const ok = await send("/api/queue", "POST", {
       branchId: form.get("branchId"),
       patientId: form.get("patientId"),
@@ -249,14 +263,54 @@ export function DigitalServicesConsole({
       stage: form.get("stage"),
       priority: Number(form.get("priority") || 0),
     }, "queue-create", "Queue ticket issued.", "تم إصدار تذكرة الطابور.");
-    if (ok) event.currentTarget.reset();
+    if (ok) formElement.reset();
   }
 
   async function changeQueueStatus(id: string, status: string) {
-    const counterLabel = status === "CALLED"
-      ? (window.prompt(tr("Counter / station label:", "اسم الشباك / المحطة:"), "") || "")
-      : undefined;
-    await send(`/api/queue/${id}/status`, "POST", { status, counterLabel }, "queue-" + id, "Queue ticket updated.", "تم تحديث تذكرة الطابور.");
+    if (status === "CALLED") {
+      if (busy) return;
+      setMessage("");
+      setSensitiveAction({ kind: "queue-call", id });
+      return;
+    }
+    await send(`/api/queue/${id}/status`, "POST", { status, counterLabel: undefined }, "queue-" + id, "Queue ticket updated.", "تم تحديث تذكرة الطابور.");
+  }
+
+  async function confirmSensitiveAction(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!sensitiveAction || busy) return;
+    const form = new FormData(event.currentTarget);
+    let success = false;
+    const {kind, id, status} = sensitiveAction;
+    if (kind === "portal-status" && (status === "ACTIVE" || status === "DISABLED")) {
+      success = await send(`/api/portal-accounts/${id}/status`, "POST", {status},
+        "portal-status-" + id,
+        status === "DISABLED" ? "Portal account disabled." : "Portal account reactivated.",
+        status === "DISABLED" ? "تم تعطيل حساب البوابة." : "تمت إعادة تفعيل حساب البوابة.");
+    } else if (kind === "portal-password") {
+      const temporaryPassword = String(form.get("temporaryPassword") || "");
+      if (temporaryPassword.length < 12) {
+        setMessage(tr("Use a temporary password of at least 12 characters.", "استخدم كلمة مرور مؤقتة من 12 محرفاً على الأقل."));
+        return;
+      }
+      success = await send(`/api/portal-accounts/${id}/temporary-password`, "POST",
+        {temporaryPassword}, "portal-password-" + id,
+        "Temporary password set and existing portal sessions revoked.",
+        "تم تعيين كلمة المرور المؤقتة وإلغاء جلسات البوابة الحالية.");
+    } else if (kind === "appointment-cancel") {
+      const reason = String(form.get("reason") || "").trim();
+      if (!reason) {
+        setMessage(tr("Cancellation reason is required.", "سبب الإلغاء مطلوب."));
+        return;
+      }
+      success = await send(`/api/appointments/${id}/status`, "POST", {status: "CANCELLED", reason},
+        "appointment-" + id, "Appointment updated.", "تم تحديث الموعد.");
+    } else if (kind === "queue-call") {
+      const counterLabel = String(form.get("counterLabel") || "").trim();
+      success = await send(`/api/queue/${id}/status`, "POST", {status: "CALLED", counterLabel},
+        "queue-" + id, "Queue ticket updated.", "تم تحديث تذكرة الطابور.");
+    }
+    if (success) setSensitiveAction(null);
   }
 
   const subjects = portalType === "PATIENT" ? patients : portalType === "DOCTOR" ? referrers : clients;
@@ -264,7 +318,15 @@ export function DigitalServicesConsole({
   return <section className="detail-grid detail-section">
     {permissions.portalAccounts && <article className="detail-card">
       <h2>{tr("Portal Account", "حساب البوابة")}</h2>
-      <form className="catalog-form" onSubmit={createPortalAccount}>
+      <button type="button" className="primary-button" disabled={Boolean(busy)}
+      onClick={() => { setMessage(""); setUiDialog("portal"); }}>
+      {tr("Create Portal Account", "إنشاء حساب بوابة")}
+    </button>
+    <CrudModal open={uiDialog === "portal"} onClose={() => { if (!busy) setUiDialog(""); }}
+      size="compact"
+      title={tr("Create Portal Account", "إنشاء حساب بوابة")}
+      description={tr("Account access is subject to server-side identity and role validation.", "الوصول إلى الحساب محكوم بتدقيق الهوية والصلاحيات من السيرفر.")}>
+      {uiDialog === "portal" && <form className="catalog-form" onSubmit={createPortalAccount}>
         <label>{tr("Type", "النوع")}<select value={portalType} onChange={e => setPortalType(e.target.value)}>
           <option value="PATIENT">{portalTypeLabel("PATIENT")}</option>
           <option value="DOCTOR">{portalTypeLabel("DOCTOR")}</option>
@@ -275,13 +337,23 @@ export function DigitalServicesConsole({
         <label>{tr("Phone", "الهاتف")}<input name="phone" /></label>
         <label>{tr("Language", "اللغة")}<select name="preferredLocale" defaultValue="en"><option value="en">{tr("English", "الإنجليزية")}</option><option value="ar">العربية</option></select></label>
         <button className="primary-button form-span" disabled={busy !== ""}>{busy === "portal-create" ? tr("Saving…", "جارٍ الحفظ…") : tr("Provision Portal Account", "إنشاء حساب البوابة")}</button>
-      </form>
+      </form>}
+      {uiDialog === "portal" && message && <p className="form-warning" role="status">{message}</p>}
+    </CrudModal>
     </article>}
 
     {permissions.portalAccounts && <article className="detail-card">
       <h2>{tr("Corporate Patient Access", "وصول مرضى الشركات")}</h2>
       <p className="muted">{tr("Explicitly authorize which employees/patients a corporate portal may book for and which reports it may view.", "حدد صراحةً الموظفين/المرضى الذين يمكن لبوابة الشركة الحجز لهم والتقارير التي يُسمح لها بعرضها.")}</p>
-      <form className="catalog-form" onSubmit={createCorporateAccess}>
+      <button type="button" className="primary-button" disabled={Boolean(busy)}
+      onClick={() => { setMessage(""); setUiDialog("corporate"); }}>
+      {tr("Grant Corporate Patient Access", "منح وصول لمريض عبر شركة")}
+    </button>
+    <CrudModal open={uiDialog === "corporate"} onClose={() => { if (!busy) setUiDialog(""); }}
+      size="compact"
+      title={tr("Grant Corporate Patient Access", "منح وصول لمريض عبر شركة")}
+      description={tr("Select exact patient and client scope; report access follows authorization policy.", "حدد المريض والعميل بدقة؛ الوصول للتقارير يتبع سياسة التفويض.")}>
+      {uiDialog === "corporate" && <form className="catalog-form" onSubmit={createCorporateAccess}>
         <label>{tr("Corporate client", "عميل الشركة")}<select name="clientId" required defaultValue=""><option value="">{tr("Select…", "اختر…")}</option>{clients.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
         <label>{tr("Patient", "المريض")}<select name="patientId" required defaultValue=""><option value="">{tr("Select…", "اختر…")}</option>{patients.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
         <label>{tr("Employee number", "رقم الموظف")}<input name="employeeNumber" /></label>
@@ -290,12 +362,22 @@ export function DigitalServicesConsole({
         <label><input name="canBook" type="checkbox" defaultChecked /> {tr("Can book", "يمكنه الحجز")}</label>
         <label><input name="canViewReports" type="checkbox" /> {tr("Can view reports", "يمكنه عرض التقارير")}</label>
         <button className="primary-button form-span" disabled={busy !== ""}>{busy === "corporate-access" ? tr("Saving…", "جارٍ الحفظ…") : tr("Add Corporate Access", "إضافة صلاحية شركة")}</button>
-      </form>
+      </form>}
+      {uiDialog === "corporate" && message && <p className="form-warning" role="status">{message}</p>}
+    </CrudModal>
     </article>}
 
     {permissions.appointments && <article className="detail-card">
       <h2>{tr("Create Appointment", "إنشاء موعد")}</h2>
-      <form className="catalog-form" onSubmit={createAppointment}>
+      <button type="button" className="primary-button" disabled={Boolean(busy)}
+      onClick={() => { setMessage(""); setUiDialog("appointment"); }}>
+      {tr("Create Appointment", "إنشاء موعد")}
+    </button>
+    <CrudModal open={uiDialog === "appointment"} onClose={() => { if (!busy) setUiDialog(""); }}
+      size="compact"
+      title={tr("Create Appointment", "إنشاء موعد")}
+      description={tr("Review branch, patient, appointment date/time and local timezone before saving.", "راجع الفرع والمريض وموعد الحجز والمنطقة الزمنية قبل الحفظ.")}>
+      {uiDialog === "appointment" && <form className="catalog-form" onSubmit={createAppointment}>
         <label>{tr("Branch", "الفرع")}<select name="branchId" required defaultValue=""><option value="">{tr("Select…", "اختر…")}</option>{branches.map(item => <option key={item.id} value={item.id}>{item.code} — {branchName(item)}</option>)}</select></label>
         <label>{tr("Patient", "المريض")}<select name="patientId" required defaultValue=""><option value="">{tr("Select…", "اختر…")}</option>{patients.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
         <label>{tr("Mode", "النمط")}<select name="mode" defaultValue="ONSITE"><option value="ONSITE">{modeLabel("ONSITE")}</option><option value="HOME_COLLECTION">{modeLabel("HOME_COLLECTION")}</option></select></label>
@@ -306,19 +388,31 @@ export function DigitalServicesConsole({
         <label className="form-span">{tr("Home address", "عنوان المنزل")}<input name="address" /></label>
         <label className="form-span">{tr("Notes", "ملاحظات")}<textarea name="notes" rows={2} /></label>
         <button className="primary-button form-span" disabled={busy !== ""}>{busy === "appointment-create" ? tr("Saving…", "جارٍ الحفظ…") : tr("Create Appointment", "إنشاء الموعد")}</button>
-      </form>
+      </form>}
+      {uiDialog === "appointment" && message && <p className="form-warning" role="status">{message}</p>}
+    </CrudModal>
     </article>}
 
     {permissions.queue && <article className="detail-card">
       <h2>{tr("Issue Queue Ticket", "إصدار تذكرة طابور")}</h2>
-      <form className="catalog-form" onSubmit={issueQueueTicket}>
+      <button type="button" className="primary-button" disabled={Boolean(busy)}
+      onClick={() => { setMessage(""); setUiDialog("queue"); }}>
+      {tr("Issue Queue Ticket", "إصدار تذكرة طابور")}
+    </button>
+    <CrudModal open={uiDialog === "queue"} onClose={() => { if (!busy) setUiDialog(""); }}
+      size="compact"
+      title={tr("Issue Queue Ticket", "إصدار تذكرة طابور")}
+      description={tr("Queue tickets must be tied to the selected patient and operating branch.", "تذاكر الانتظار مرتبطة بالمريض والفرع المحددين.")}>
+      {uiDialog === "queue" && <form className="catalog-form" onSubmit={issueQueueTicket}>
         <label>{tr("Branch", "الفرع")}<select name="branchId" required defaultValue=""><option value="">{tr("Select…", "اختر…")}</option>{branches.map(item => <option key={item.id} value={item.id}>{item.code} — {branchName(item)}</option>)}</select></label>
         <label>{tr("Patient", "المريض")}<select name="patientId" required defaultValue=""><option value="">{tr("Select…", "اختر…")}</option>{patients.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
         <label>{tr("Appointment", "الموعد")}<select name="appointmentId" defaultValue=""><option value="">{tr("Walk-in / none", "بدون موعد / حضور مباشر")}</option>{appointments.map(item => <option key={item.id} value={item.id}>{item.appointmentNumber} — {item.patient}</option>)}</select></label>
         <label>{tr("Stage", "المرحلة")}<select name="stage" defaultValue="RECEPTION"><option value="RECEPTION">{stageLabel("RECEPTION")}</option><option value="PHLEBOTOMY">{stageLabel("PHLEBOTOMY")}</option></select></label>
         <label>{tr("Priority", "الأولوية")}<input name="priority" type="number" min="-100" max="100" defaultValue="0" /></label>
         <button className="primary-button form-span" disabled={busy !== ""}>{busy === "queue-create" ? tr("Issuing…", "جارٍ الإصدار…") : tr("Issue Ticket", "إصدار التذكرة")}</button>
-      </form>
+      </form>}
+      {uiDialog === "queue" && message && <p className="form-warning" role="status">{message}</p>}
+    </CrudModal>
     </article>}
 
     {message && <div className="form-success form-span">{message}</div>}
@@ -404,5 +498,47 @@ export function DigitalServicesConsole({
         </tr>)}</tbody>
       </table></div>
     </article>
+    <CrudModal open={sensitiveAction !== null}
+      onClose={() => { if (!busy) setSensitiveAction(null); }}
+      size="compact"
+      title={sensitiveAction?.kind === "portal-password"
+        ? tr("Reset Portal Password", "إعادة تعيين كلمة مرور البوابة")
+        : sensitiveAction?.kind === "portal-status"
+        ? tr("Confirm Portal Account Status", "تأكيد حالة حساب البوابة")
+        : sensitiveAction?.kind === "appointment-cancel"
+        ? tr("Cancel Appointment", "إلغاء الموعد")
+        : tr("Call Queue Ticket", "نداء تذكرة الطابور")}
+      description={tr(
+        "Review this action. Access, appointment and queue changes are audited by the existing server workflow.",
+        "راجع هذا الإجراء. تخضع تغييرات الوصول والمواعيد والطابور للتدقيق ضمن السيرفر الحالي.",
+      )}>
+      {sensitiveAction && <form className="catalog-form" onSubmit={confirmSensitiveAction}>
+        {sensitiveAction.kind === "portal-status" && <p className="form-span">
+          {sensitiveAction.status === "DISABLED"
+            ? tr("Disable this account and revoke existing sessions?", "تعطيل هذا الحساب وإلغاء الجلسات النشطة؟")
+            : tr("Reactivate this portal account?", "إعادة تفعيل حساب البوابة؟")}
+        </p>}
+        {sensitiveAction.kind === "portal-password" && <label className="form-span">
+          {tr("Temporary password (minimum 12 characters)", "كلمة مرور مؤقتة (12 محرفاً على الأقل)")}
+          <input name="temporaryPassword" type="password" minLength={12} autoComplete="new-password" required />
+        </label>}
+        {sensitiveAction.kind === "portal-password" && <p className="muted form-span">
+          {tr("The portal user must change this password at first login; existing sessions will be revoked.",
+            "يجب أن يغيّر مستخدم البوابة كلمة المرور عند أول دخول، وستلغى الجلسات القائمة.")}
+        </p>}
+        {sensitiveAction.kind === "appointment-cancel" && <label className="form-span">
+          {tr("Cancellation reason (required)", "سبب إلغاء الموعد (مطلوب)")}
+          <textarea name="reason" rows={3} maxLength={1000} required />
+        </label>}
+        {sensitiveAction.kind === "queue-call" && <label className="form-span">
+          {tr("Counter or workstation (optional)", "اسم الشباك أو محطة العمل (اختياري)")}
+          <input name="counterLabel" maxLength={120}/>
+        </label>}
+        {message && <p className="form-warning form-span" role="status">{message}</p>}
+        <button type="submit" className="primary-button form-span" disabled={Boolean(busy)}>
+          {busy ? tr("Processing…", "جارٍ التنفيذ…") : tr("Confirm action", "تأكيد الإجراء")}
+        </button>
+      </form>}
+    </CrudModal>
   </section>;
 }

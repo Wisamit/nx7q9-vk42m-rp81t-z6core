@@ -2,6 +2,7 @@
 
 import { FormEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { CrudModal } from "@/components/crud-modal";
 
 type Branch = { id: string; code: string; nameEn: string; nameAr?: string | null };
 type Item = { id: string; code: string; nameEn: string; nameAr?: string | null; stockUnit: string };
@@ -29,6 +30,7 @@ export function InventoryOperationsManager({
   const [consumeItemId, setConsumeItemId] = useState("");
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
+  const [uiEditor, setUiEditor] = useState("");
   const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
   const localizedName = (item: { nameEn: string; nameAr?: string | null }) => locale === "ar" ? item.nameAr || item.nameEn : item.nameEn;
 
@@ -89,7 +91,15 @@ export function InventoryOperationsManager({
     {canAdjust && <article className="detail-card">
       <h2>{tr("Controlled Stock Adjustment","تسوية مخزون مضبوطة")}</h2>
       <p className="muted">{tr("Use only for documented physical-count corrections, returns to stock or disposal. Supplier receiving should use Goods Receipt instead.", "تُستخدم فقط لتصحيحات الجرد الفعلي الموثقة أو الإرجاع للمخزون أو الإتلاف. استلام المورد يجب أن يتم عبر Goods Receipt.")}</p>
-      <form className="catalog-form" onSubmit={adjust}>
+      <button type="button" className="primary-button" disabled={Boolean(busy)}
+    onClick={() => { setMessage(""); setUiEditor("adjust"); }}>
+    {tr("Controlled Stock Adjustment", "تسوية مخزون مضبوطة")}
+  </button>
+  <CrudModal open={uiEditor === "adjust"} onClose={() => { if (!busy) setUiEditor(""); }}
+    size="compact"
+    title={tr("Controlled Stock Adjustment", "تسوية مخزون مضبوطة")}
+    description={tr("A stock adjustment posts branch-specific lot movements. Verify the documented reason before submitting.", "تسوية المخزون تُرحّل حركة للفرع والتشغيلة؛ راجع السبب قبل الحفظ.")}>
+    {uiEditor === "adjust" && <form className="catalog-form" onSubmit={adjust}>
         <label>{tr("Branch","الفرع")}<select required value={adjustBranchId} onChange={event => { setAdjustBranchId(event.target.value); setAdjustItemId(""); }}><option value="">{tr("Select branch…","اختر الفرع…")}</option>{branches.map(branch => <option key={branch.id} value={branch.id}>{branch.code} — {localizedName(branch)}</option>)}</select></label>
         <label>{tr("Item","الصنف")}<select required disabled={!adjustBranchId} value={adjustItemId} onChange={event => setAdjustItemId(event.target.value)}><option value="">{tr("Select item…","اختر الصنف…")}</option>{items.map(item => <option key={item.id} value={item.id}>{item.code} — {localizedName(item)}</option>)}</select></label>
         <label>{tr("Lot","التشغيلة")}<select name="lotId" required disabled={!adjustItemId} defaultValue=""><option value="">{tr("Select lot…","اختر التشغيلة…")}</option>{adjustLots.map(lot => <option key={lot.lotId} value={lot.lotId}>{lot.lotNumber} · {tr("On hand","المتاح")} {lot.onHand}{lot.expiryDate ? " · " + tr("Exp","انتهاء") + " " + lot.expiryDate : ""}</option>)}</select></label>
@@ -101,13 +111,23 @@ export function InventoryOperationsManager({
         <label>{tr("Quantity","الكمية")}<input name="quantity" type="number" min="0.0001" step="0.0001" required /></label>
         <label className="form-span">{tr("Reason","السبب")}<input name="reason" required /></label>
         <button className="primary-button form-span" disabled={busy !== ""}>{busy === "adjust" ? tr("Posting…","جارٍ الترحيل…") : tr("Post Adjustment","ترحيل التسوية")}</button>
-      </form>
+      </form>}
+    {uiEditor === "adjust" && message && <p className="form-warning" role="status">{message}</p>}
+  </CrudModal>
     </article>}
 
     {canConsume && <article className="detail-card">
       <h2>{tr("Consume Inventory","استهلاك المخزون")}</h2>
       <p className="muted">{tr("Leave lot blank to allocate automatically by FEFO. Expired lots and reserved quantities are excluded.", "اترك التشغيلة فارغة ليتم التخصيص تلقائياً وفق FEFO. تُستبعد التشغيلات المنتهية والكميات المحجوزة.")}</p>
-      <form className="catalog-form" onSubmit={consume}>
+      <button type="button" className="primary-button" disabled={Boolean(busy)}
+    onClick={() => { setMessage(""); setUiEditor("consume"); }}>
+    {tr("Consume Inventory", "استهلاك المخزون")}
+  </button>
+  <CrudModal open={uiEditor === "consume"} onClose={() => { if (!busy) setUiEditor(""); }}
+    size="compact"
+    title={tr("Consume Inventory", "استهلاك المخزون")}
+    description={tr("Consumption changes available stock and respects lots, reservations and FEFO rules.", "يغيّر الاستهلاك المخزون المتاح وفق التشغيلات والحجوزات وFEFO.")}>
+    {uiEditor === "consume" && <form className="catalog-form" onSubmit={consume}>
         <label>{tr("Branch","الفرع")}<select required value={consumeBranchId} onChange={event => { setConsumeBranchId(event.target.value); setConsumeItemId(""); }}><option value="">{tr("Select branch…","اختر الفرع…")}</option>{branches.map(branch => <option key={branch.id} value={branch.id}>{branch.code} — {localizedName(branch)}</option>)}</select></label>
         <label>{tr("Item","الصنف")}<select required disabled={!consumeBranchId} value={consumeItemId} onChange={event => setConsumeItemId(event.target.value)}><option value="">{tr("Select item…","اختر الصنف…")}</option>{items.map(item => <option key={item.id} value={item.id}>{item.code} — {localizedName(item)}</option>)}</select></label>
         <label>{tr("Specific lot (optional)","تشغيلة محددة (اختياري)")}<select name="lotId" disabled={!consumeItemId} defaultValue=""><option value="">{tr("Automatic FEFO","FEFO تلقائي")}</option>{consumeLots.map(lot => <option key={lot.lotId} value={lot.lotId}>{lot.lotNumber} · {tr("Available","المتاح")} {(Number(lot.onHand)-Number(lot.reserved)).toFixed(4)}{lot.expiryDate ? " · " + tr("Exp","انتهاء") + " " + lot.expiryDate : ""}</option>)}</select></label>
@@ -116,7 +136,9 @@ export function InventoryOperationsManager({
         <label>{tr("Reference ID","معرّف المرجع")}<input name="referenceId" maxLength={36} /></label>
         <label className="form-span">{tr("Reason / context","السبب / السياق")}<input name="reason" /></label>
         <button className="primary-button form-span" disabled={busy !== ""}>{busy === "consume" ? tr("Posting…","جارٍ الترحيل…") : tr("Post Consumption","ترحيل الاستهلاك")}</button>
-      </form>
+      </form>}
+    {uiEditor === "consume" && message && <p className="form-warning" role="status">{message}</p>}
+  </CrudModal>
     </article>}
 
     {message && <div className="form-success form-span">{message}</div>}

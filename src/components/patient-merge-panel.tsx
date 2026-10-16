@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { StaffStepUpDialog } from "@/components/staff-step-up-dialog";
+import { CrudModal } from "@/components/crud-modal";
 
 type MergePatient = {
   id: string;
@@ -30,6 +31,9 @@ export function PatientMergePanel({
   const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
+  const [review, setReview] = useState<{source:MergePatient;target:MergePatient}|null>(null);
+  const [reason, setReason] = useState("");
+  const [formError, setFormError] = useState("");
   const [pendingMerge, setPendingMerge] = useState<{
     source: MergePatient; target: MergePatient; reason: string;
   } | null>(null);
@@ -38,7 +42,8 @@ export function PatientMergePanel({
       ? tr("Same normalized name + date of birth", "نفس الاسم المطبع + تاريخ الميلاد")
       : tr("Same phone", "نفس رقم الهاتف");
 
-  async function merge(source: MergePatient, target: MergePatient) {
+  function merge(source: MergePatient, target: MergePatient) {
+    if (busy || pendingMerge || source.id === target.id) return;
     if (source.hasPortalAccount && target.hasPortalAccount) {
       setMessage(tr(
         "Both patient records have portal accounts. Resolve the portal identity conflict before merging.",
@@ -46,25 +51,33 @@ export function PatientMergePanel({
       ));
       return;
     }
+    const expected = [current, ...candidates];
+    if (!expected.some(item=>item.id===source.id) || !expected.some(item=>item.id===target.id)) return;
+    setReview({source,target});
+    setReason("");
+    setFormError("");
+    setMessage("");
+  }
 
-    const reason = window.prompt(tr(
-      "Reason for merging " + source.patientNumber + " into " + target.patientNumber + ". This action preserves historical records and cannot be undone from the UI:",
-      "سبب دمج " + source.patientNumber + " ضمن " + target.patientNumber + ". سيتم حفظ السجلات التاريخية ولا يمكن التراجع عن الدمج من الواجهة:",
-    ));
-    if (!reason?.trim()) return;
-
-    const confirmation = window.confirm(tr(
-      "Confirm merge: " + source.patientNumber + " will become an inactive alias of " + target.patientNumber + ". Historical orders/results will stay on their original record.",
-      "تأكيد الدمج: سيصبح " + source.patientNumber + " سجلاً بديلاً غير نشط مرتبطاً بـ " + target.patientNumber + ". ستبقى الطلبات والنتائج التاريخية على سجلها الأصلي.",
-    ));
-    if (!confirmation) return;
-
-    setPendingMerge({ source, target, reason: reason.trim() });
+  function confirmMergeReview(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if(!review || busy || pendingMerge) return;
+    if(!reason.trim()) {
+      setFormError(tr("Documented patient identity merge reason is required.",
+        "سبب دمج هوية المريض الموثق إلزامي."));
+      return;
+    }
+    const {source,target}=review;
+    if(source.id===target.id || (source.hasPortalAccount&&target.hasPortalAccount))return;
+    setReview(null);
+    setPendingMerge({source,target,reason:reason.trim()});
   }
 
   async function commitMerge(source: MergePatient, target: MergePatient, reason: string, stepUpToken: string) {
+    if (busy) return;
     setBusy(source.id + ":" + target.id);
     setMessage("");
+    try {
     const response = await fetch("/api/patients/" + source.id + "/merge", {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-staff-step-up-token": stepUpToken },
@@ -75,7 +88,6 @@ export function PatientMergePanel({
       targetPatientId?: string;
       targetPatientNumber?: string;
     };
-    setBusy("");
 
     if (!response.ok) {
       const errors: Record<string, string> = {
@@ -100,6 +112,12 @@ export function PatientMergePanel({
     ));
     router.push("/patients/" + (body.targetPatientId || target.id));
     router.refresh();
+    } catch {
+      setMessage(tr("Connection interrupted; verify both patient identities before retrying.",
+        "انقطع الاتصال؛ تحقق من هويتي المريض قبل إعادة المحاولة."));
+    } finally {
+      setBusy("");
+    }
   }
 
   if (candidates.length === 0) return null;
@@ -148,6 +166,34 @@ export function PatientMergePanel({
       })}
     </div>
     {message && <p className="muted">{message}</p>}
+    <CrudModal open={review!==null} onClose={()=>{if(!busy)setReview(null);}}
+      size="compact"
+      title={tr("Verify Canonical Patient Merge","التحقق من دمج هويتي المريض")}
+      description={tr(
+        "This irreversible identity link preserves every original clinical, financial and audit record. Confirm exact source and survivor before fresh staff verification.",
+        "هذا الربط لهوية المرضى لا يمكن عكسه من الواجهة؛ تُحفظ جميع السجلات السريرية والمالية والتدقيق الأصلية. تأكد من المصدر والسجل الباقي قبل تحقق الموظف الإضافي.",
+      )}>
+      {review&&<form className="catalog-form" onSubmit={confirmMergeReview}>
+        <div className="form-span">
+          <p>{tr("Source to deactivate as alias","المصدر الذي سيصبح سجلاً بديلاً غير نشط")}:</p>
+          <strong>{review.source.patientNumber} · {locale==="ar" ? review.source.fullNameAr||review.source.fullNameEn : review.source.fullNameEn}</strong>
+          <p>{tr("Surviving canonical identity","الهوية الأساسية التي ستبقى")}:</p>
+          <strong>{review.target.patientNumber} · {locale==="ar" ? review.target.fullNameAr||review.target.fullNameEn : review.target.fullNameEn}</strong>
+          <p>{tr("Existing orders, released results, reports and payments retain their original historical patient association.",
+            "تبقى الطلبات والنتائج الصادرة والتقارير والمدفوعات مرتبطة بسجلاتها التاريخية الأصلية.")}</p>
+        </div>
+        <label className="form-span">
+          {tr("Clinical identity merge reason (required)","سبب دمج الهوية السريرية (مطلوب)")}
+          <textarea required rows={3} maxLength={1000}
+            value={reason} onChange={event=>setReason(event.target.value)}/>
+        </label>
+        {formError&&<p className="form-error form-span" role="alert">{formError}</p>}
+        <button type="submit" className="primary-button form-span"
+          disabled={Boolean(busy)||!reason.trim()}>
+          {tr("Proceed to fresh staff verification","المتابعة إلى تحقق هوية الموظف")}
+        </button>
+      </form>}
+    </CrudModal>
     <StaffStepUpDialog open={pendingMerge !== null} action="PATIENT_MERGE"
       resourceKey={pendingMerge ? [pendingMerge.source.id, pendingMerge.target.id].join(":") : ""}
       branchId={activeBranchId} locale={locale}

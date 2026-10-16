@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useState } from "react";
+import { FormEvent, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 type BranchOption = { id: string; code: string; name: string };
@@ -44,6 +44,8 @@ export function PhlebotomyCollectionCard({
   const [secondaryType, setSecondaryType] = useState(specimen.secondaryOptions[0]?.value || "PATIENT_NUMBER");
   const [locationType, setLocationType] = useState<"BRANCH" | "HOME" | "OTHER">(specimen.homeCollectionVisitId ? "HOME" : "BRANCH");
   const [busy, setBusy] = useState(false);
+  const submitting = useRef(false);
+  const [isError, setIsError] = useState(false);
   const [message, setMessage] = useState("");
 
   function errorMessage(code: string) {
@@ -76,10 +78,14 @@ export function PhlebotomyCollectionCard({
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    if (submitting.current) return;
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
+    submitting.current = true;
     setBusy(true);
     setMessage("");
-
+    setIsError(false);
+    try {
     const response = await fetch(`/api/specimens/${specimen.id}/collection-attempts`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -105,15 +111,25 @@ export function PhlebotomyCollectionCard({
       setMessage(outcome === "SUCCESS"
         ? tr("Collection recorded successfully.", "تم تسجيل سحب العينة بنجاح.")
         : `${tr("Failed attempt recorded. New recollection barcode", "تم تسجيل محاولة السحب الفاشلة. باركود إعادة السحب الجديد")}: ${body.replacementBarcode || "—"}`);
-      event.currentTarget.reset();
+      formElement.reset();
       setOutcome("SUCCESS");
       setLocationType(specimen.homeCollectionVisitId ? "HOME" : "BRANCH");
       setSecondaryType(specimen.secondaryOptions[0]?.value || "PATIENT_NUMBER");
       router.refresh();
     } else {
+      setIsError(true);
       setMessage(errorMessage(body.error || ""));
     }
-    setBusy(false);
+    } catch {
+      setIsError(true);
+      setMessage(tr(
+        "Connection interrupted. Scan and verify the specimen state before recording another collection attempt.",
+        "انقطع الاتصال. امسح باركود العينة وتحقق من حالتها قبل تسجيل محاولة سحب أخرى.",
+      ));
+    } finally {
+      submitting.current = false;
+      setBusy(false);
+    }
   }
 
   return <section className="detail-card specimen-card" id={`specimen-${specimen.id}`}>
@@ -218,7 +234,7 @@ export function PhlebotomyCollectionCard({
           {busy ? tr("Saving…", "جارٍ الحفظ…") : outcome === "SUCCESS" ? tr("Record Collection", "تسجيل السحب") : tr("Record Failed Attempt", "تسجيل المحاولة الفاشلة")}
         </button>
       </div>
-      {message && <div className="form-success form-span">{message}</div>}
+      {message && <div className={(isError ? "form-error" : "form-success") + " form-span"} role={isError ? "alert" : "status"}>{message}</div>}
     </form>}
   </section>;
 }

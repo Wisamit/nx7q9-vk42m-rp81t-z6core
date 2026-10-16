@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { SystemIcon } from "@/components/system-icon";
 import { CrudModal } from "@/components/crud-modal";
 import { statusLabel } from "@/lib/ui-i18n";
@@ -12,6 +12,8 @@ type Data = { roles: Role[]; permissions: Permission[] };
 export function RoleManagement({ locale, canManageDiscountLimits, canManageCashierAuthority, canManageCreditLimits, canManageTaxRules }: { locale: "ar" | "en"; canManageDiscountLimits: boolean; canManageCashierAuthority: boolean; canManageCreditLimits: boolean; canManageTaxRules: boolean }) {
   const [data, setData] = useState<Data>({ roles: [], permissions: [] });
   const [busy, setBusy] = useState(false);
+  const inFlight = useRef(false);
+  const [isError, setIsError] = useState(false);
   const [message, setMessage] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<Role | null>(null);
@@ -39,74 +41,126 @@ export function RoleManagement({ locale, canManageDiscountLimits, canManageCashi
   }, [data.permissions]);
 
   async function createRole(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); setBusy(true); setMessage("");
-    const form = new FormData(event.currentTarget);
-    const response = await fetch("/api/admin/roles", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code: form.get("code"), nameEn: form.get("nameEn"), nameAr: form.get("nameAr"), ...(canManageDiscountLimits ? { discountLimitPercent: Number(form.get("discountLimitPercent") || 0) } : {}), permissionIds: form.getAll("permissionIds") }),
-    });
-    const body = await response.json().catch(() => ({}));
-    if (response.ok) {
-      event.currentTarget.reset();
+    event.preventDefault();
+    if (inFlight.current) return;
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
+    inFlight.current = true;
+    setBusy(true);
+    setMessage("");
+    setIsError(false);
+    try {
+      const response = await fetch("/api/admin/roles", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          code: form.get("code"), nameEn: form.get("nameEn"), nameAr: form.get("nameAr"),
+          ...(canManageDiscountLimits ? { discountLimitPercent: Number(form.get("discountLimitPercent") || 0) } : {}),
+          permissionIds: form.getAll("permissionIds"),
+        }),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setIsError(true);
+        setMessage(body.error === "invalid_fields"
+          ? tr("Enter a role name and select at least one permission.", "أدخل اسم الدور واختر صلاحية واحدة على الأقل.")
+          : tr("Unable to create role. Code may already exist.", "تعذر إنشاء الدور. قد يكون الرمز مستخدمًا."));
+        return;
+      }
+      formElement.reset();
       setMessage(tr("Role created successfully.", "تم إنشاء الدور بنجاح."));
       setCreateOpen(false);
       await load();
-    } else setMessage(body.error === "invalid_fields" ? tr("Enter a role name and select at least one permission.", "أدخل اسم الدور واختر صلاحية واحدة على الأقل.") : tr("Unable to create role. Code may already exist.", "تعذر إنشاء الدور. قد يكون الرمز مستخدمًا."));
-    setBusy(false);
+    } catch {
+      setIsError(true);
+      setMessage(tr(
+        "Connection interrupted. Check whether this role was already created before retrying.",
+        "انقطع الاتصال. تحقق من وجود الدور قبل إعادة محاولة إنشائه.",
+      ));
+    } finally {
+      inFlight.current = false;
+      setBusy(false);
+    }
   }
 
   async function updateRole(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!editing || editing.isSystem) return;
+    if (!editing || editing.isSystem || inFlight.current) return;
+    const form = new FormData(event.currentTarget);
+    inFlight.current = true;
     setBusy(true);
     setMessage("");
-    const form = new FormData(event.currentTarget);
-    const response = await fetch("/api/admin/roles/" + editing.id, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        nameEn: form.get("nameEn"),
-        nameAr: form.get("nameAr"),
-        ...(canManageDiscountLimits ? { discountLimitPercent: Number(form.get("discountLimitPercent") || 0) } : {}),
-        permissionIds: form.getAll("permissionIds"),
-      }),
-    });
-    const body = await response.json().catch(() => ({}));
-    if (response.ok) {
+    setIsError(false);
+    try {
+      const response = await fetch("/api/admin/roles/" + editing.id, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          nameEn: form.get("nameEn"), nameAr: form.get("nameAr"),
+          ...(canManageDiscountLimits ? { discountLimitPercent: Number(form.get("discountLimitPercent") || 0) } : {}),
+          permissionIds: form.getAll("permissionIds"),
+        }),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setIsError(true);
+        setMessage(body.error === "invalid_fields"
+          ? tr("Enter valid role details, discount limit and permissions.", "أدخل بيانات الدور وحد الخصم والصلاحيات بشكل صحيح.")
+          : tr("Unable to update role.", "تعذر تحديث الدور."));
+        return;
+      }
       setEditing(null);
       setMessage(tr("Role updated successfully.", "تم تحديث الدور بنجاح."));
       await load();
-    } else {
-      setMessage(body.error === "invalid_fields"
-        ? tr("Enter valid role details, discount limit and permissions.", "أدخل بيانات الدور وحد الخصم والصلاحيات بشكل صحيح.")
-        : tr("Unable to update role.", "تعذر تحديث الدور."));
+    } catch {
+      setIsError(true);
+      setMessage(tr(
+        "Connection interrupted. Check current permissions before retrying the update.",
+        "انقطع الاتصال. تحقق من الصلاحيات الحالية قبل إعادة التعديل.",
+      ));
+    } finally {
+      inFlight.current = false;
+      setBusy(false);
     }
-    setBusy(false);
   }
 
   async function toggleRole(role: Role) {
-    if (role.isSystem) return;
+    if (role.isSystem || inFlight.current) return;
+    inFlight.current = true;
     setBusy(true);
-    const response = await fetch("/api/admin/roles/" + role.id, {
-      method: "PATCH", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: role.status === "ACTIVE" ? "INACTIVE" : "ACTIVE" }),
-    });
-    if (!response.ok) setMessage(tr("Unable to update role.", "تعذر تحديث الدور."));
-    await load();
-    setBusy(false);
+    setMessage("");
+    setIsError(false);
+    try {
+      const response = await fetch("/api/admin/roles/" + role.id, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: role.status === "ACTIVE" ? "INACTIVE" : "ACTIVE" }),
+      });
+      if (!response.ok) {
+        setIsError(true);
+        setMessage(tr("Unable to update role.", "تعذر تحديث الدور."));
+      }
+      await load();
+    } catch {
+      setIsError(true);
+      setMessage(tr(
+        "Connection interrupted. Reload role status before another change.",
+        "انقطع الاتصال. أعد تحميل حالة الدور قبل أي تعديل آخر.",
+      ));
+    } finally {
+      inFlight.current = false;
+      setBusy(false);
+    }
   }
 
   return <div className="admin-grid">
     <div className="admin-page-actions">
-      {message && <span className="crud-success-toast">{message}</span>}
-      <button type="button" className="primary-button" onClick={() => { setMessage(""); setCreateOpen(true); }}>
+      {message && !isError && <span className="crud-success-toast" role="status">{message}</span>}
+      <button type="button" className="primary-button" disabled={busy} onClick={() => { setIsError(false); setMessage(""); setCreateOpen(true); }}>
         <SystemIcon name="plus" size={16} />{tr("Add Role", "إضافة دور")}
       </button>
     </div>
 
     <CrudModal
       open={createOpen}
-      onClose={() => setCreateOpen(false)}
+      onClose={() => { if (!inFlight.current) setCreateOpen(false); }}
       title={tr("Create role", "إنشاء دور")}
       description={tr("Choose the permissions this role grants. Staff inherit permissions through assigned roles.", "اختر الصلاحيات التي يمنحها الدور، ثم يُسند الدور للمستخدمين.")}
       size="xl"
@@ -122,13 +176,13 @@ export function RoleManagement({ locale, canManageDiscountLimits, canManageCashi
   return <label key={permission.id}><input type="checkbox" name="permissionIds" value={permission.id} disabled={protectedFinancialPermission} /><span><strong>{permission.code}</strong><small>{permission.description || ""}{protectedFinancialPermission ? ` · ${tr("Financial admin only", "لمدير الصلاحيات المالية فقط")}` : ""}</small></span></label>;
 })}</fieldset>)}</div>
         <div className="crud-modal-actions"><button className="primary-button" disabled={busy}>{busy ? tr("Saving…", "جارٍ الحفظ…") : tr("Create role", "إنشاء الدور")}</button></div>
-        {message && <div className="form-success">{message}</div>}
+        {message && <div className={isError ? "form-error" : "form-success"} role={isError ? "alert" : "status"}>{message}</div>}
       </form>
     </CrudModal>
 
     <CrudModal
       open={Boolean(editing)}
-      onClose={() => setEditing(null)}
+      onClose={() => { if (!inFlight.current) setEditing(null); }}
       title={tr("Edit role", "تعديل الدور")}
       description={editing ? editing.code : undefined}
       size="xl"
@@ -149,6 +203,7 @@ export function RoleManagement({ locale, canManageDiscountLimits, canManageCashi
   return <label key={permission.id}>{protectedFinancialPermission && currentlyGranted && <input type="hidden" name="permissionIds" value={permission.id} />}<input type="checkbox" name="permissionIds" value={permission.id} defaultChecked={currentlyGranted} disabled={protectedFinancialPermission} /><span><strong>{permission.code}</strong><small>{permission.description || ""}{protectedFinancialPermission ? ` · ${tr("Financial admin only", "لمدير الصلاحيات المالية فقط")}` : ""}</small></span></label>;
 })}</fieldset>)}</div>
         <div className="crud-modal-actions"><button className="primary-button" disabled={busy}>{busy ? tr("Saving…", "جارٍ الحفظ…") : tr("Save role", "حفظ الدور")}</button></div>
+        {message && isError && <p className="form-error" role="alert">{message}</p>}
       </form>}
     </CrudModal>
 

@@ -2,6 +2,7 @@
 
 import { FormEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { CrudModal } from "@/components/crud-modal";
 import { statusLabel as sharedStatusLabel } from "@/lib/ui-i18n";
 
 type Branch = { id: string; code: string; nameEn: string; nameAr?: string | null };
@@ -59,6 +60,11 @@ export function InventoryTransferManager({
   const [receiveQty, setReceiveQty] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
+  const [formError, setFormError] = useState("");
+  const [createOpen, setCreateOpen] = useState(false);
+  type TransferReview = { transferId: string; action: "approve" | "dispatch" | "receive" | "finalize";
+    items: Array<{transferItemId:string;receivedQty:string}> };
+  const [review, setReview] = useState<TransferReview | null>(null);
   const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
   const branchName = (branch: Branch) => locale === "ar" ? branch.nameAr || branch.nameEn : branch.nameEn;
   const statusLabel = (value: string) => sharedStatusLabel(locale, value);
@@ -75,53 +81,51 @@ export function InventoryTransferManager({
 
   async function createTransfer(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (busy) return;
     const form = new FormData(event.currentTarget);
     setBusy("create");
-    setMessage("");
-    const response = await fetch("/api/inventory/transfers", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        transferNumber: form.get("transferNumber"),
-        sourceBranchId,
-        destinationBranchId,
-        notes: form.get("notes"),
-        items: lines.map(line => {
-          const stock = lotById.get(line.lotId);
-          return { itemId: stock?.itemId || "", lotId: line.lotId, requestedQty: line.requestedQty };
+    setFormError("");
+    try {
+      const response = await fetch("/api/inventory/transfers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          transferNumber: form.get("transferNumber"),
+          sourceBranchId,
+          destinationBranchId,
+          notes: form.get("notes"),
+          items: lines.map(line => {
+            const stock = lotById.get(line.lotId);
+            return { itemId: stock?.itemId || "", lotId: line.lotId, requestedQty: line.requestedQty };
+          }),
         }),
-      }),
-    });
-    const body = await response.json().catch(() => ({}));
-    setBusy("");
-    setMessage(response.ok ? tr("Stock transfer request created.", "تم إنشاء طلب نقل المخزون.") : tr("Could not create transfer.", "تعذر إنشاء طلب النقل."));
-    if (response.ok) {
-      event.currentTarget.reset();
+      });
+      const body = await response.json().catch(() => ({})) as {error?:string};
+      if (!response.ok) {
+        setFormError(body.error || tr("Could not create transfer.", "تعذر إنشاء طلب النقل."));
+        return;
+      }
+      setMessage(tr("Stock transfer request created.", "تم إنشاء طلب نقل المخزون."));
+      setCreateOpen(false);
       setSourceBranchId("");
       setDestinationBranchId("");
       setLines([{ lotId: "", requestedQty: "" }]);
       router.refresh();
+    } catch {
+      setFormError(tr("Connection interrupted; verify stock transfer status before retrying.",
+        "انقطع الاتصال؛ تحقق من حالة نقل المخزون قبل إعادة المحاولة."));
+    } finally {
+      setBusy("");
     }
   }
 
-  async function simpleAction(transferId: string, action: "approve" | "dispatch") {
-    if (!window.confirm(action === "approve" ? tr("Approve this transfer and reserve the requested stock?", "هل تريد الموافقة على هذا النقل وحجز المخزون المطلوب؟") : tr("Dispatch this transfer and remove the reserved stock from the source branch?", "هل تريد إرسال هذا النقل وخصم المخزون المحجوز من الفرع المصدر؟"))) return;
-    setBusy(transferId + action);
-    setMessage("");
-    const response = await fetch(`/api/inventory/transfers/${transferId}/${action}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: action === "approve" ? JSON.stringify({}) : undefined,
-    });
-    const body = await response.json().catch(() => ({}));
-    setBusy("");
-    setMessage(response.ok ? (action === "approve" ? tr("Transfer approval completed.", "تمت الموافقة على النقل.") : tr("Transfer dispatch completed.", "تم إرسال النقل.")) : tr("Action failed.", "فشلت العملية."));
-    if (response.ok) router.refresh();
-  }
-
-  async function receive(transfer: Transfer, finalize: boolean) {
-    if (finalize && !window.confirm(tr("Finalize receipt? Any difference between dispatched and received quantities will be recorded as discrepancy.", "هل تريد إنهاء الاستلام؟ أي فرق بين الكمية المرسلة والمستلمة سيُسجل كفرق."))) return;
-    const items = transfer.items.map(line => {
+  function openReview(transfer: Transfer, action: TransferReview["action"]) {
+    if (busy) return;
+    if ((action === "approve" && (transfer.status !== "DRAFT" || !transfer.canSourceAct)) ||
+      (action === "dispatch" && (transfer.status !== "APPROVED" || !transfer.canSourceAct)) ||
+      ((action === "receive" || action === "finalize") &&
+        (!["DISPATCHED","PARTIALLY_RECEIVED"].includes(transfer.status) || !transfer.canDestinationAct))) return;
+    const items = (action === "receive" || action === "finalize") ? transfer.items.map(line => {
       const dispatched = Number(line.dispatchedQty || "0");
       const received = Number(line.receivedQty || "0");
       const remaining = Math.max(0, dispatched - received);
@@ -129,28 +133,72 @@ export function InventoryTransferManager({
         transferItemId: line.id,
         receivedQty: receiveQty[line.id] === undefined ? remaining.toString() : receiveQty[line.id],
       };
-    });
-    setBusy(transfer.id + (finalize ? "final" : "receive"));
+    }) : [];
+    setFormError("");
     setMessage("");
-    const response = await fetch(`/api/inventory/transfers/${transfer.id}/receive`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ finalize, items }),
-    });
-    const body = await response.json().catch(() => ({}));
-    setBusy("");
-    setMessage(response.ok ? (finalize ? tr("Transfer receipt finalized.", "تم إنهاء استلام النقل.") : tr("Partial receipt posted.", "تم ترحيل استلام جزئي.")) : tr("Receipt failed.", "فشل الاستلام."));
-    if (response.ok) {
-      setReceiveQty({});
-      router.refresh();
+    setReview({transferId:transfer.id, action, items});
+  }
+
+  async function confirmReview(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!review || busy) return;
+    const transfer = transfers.find(item=>item.id===review.transferId);
+    if (!transfer || (review.action==="approve" && (transfer.status!=="DRAFT" || !transfer.canSourceAct)) ||
+      (review.action==="dispatch" && (transfer.status!=="APPROVED" || !transfer.canSourceAct)) ||
+      ((review.action==="receive" || review.action==="finalize") &&
+        (!["DISPATCHED","PARTIALLY_RECEIVED"].includes(transfer.status) || !transfer.canDestinationAct))) {
+      setFormError(tr("Transfer state changed. Refresh before retrying.",
+        "تغيّرت حالة النقل؛ حدّث الصفحة قبل إعادة المحاولة."));
+      return;
     }
+    const action = review.action;
+    const isReceipt = action==="receive" || action==="finalize";
+    const key=review.transferId+action;
+    setBusy(key); setFormError("");
+    try {
+      const url=isReceipt
+        ? `/api/inventory/transfers/${review.transferId}/receive`
+        : `/api/inventory/transfers/${review.transferId}/${action}`;
+      const response=await fetch(url,{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:isReceipt ? JSON.stringify({finalize:action==="finalize",items:review.items})
+          : action==="approve" ? JSON.stringify({}) : undefined,
+      });
+      const body=await response.json().catch(()=>({})) as {error?:string};
+      if(!response.ok){
+        setFormError(body.error || tr("Transfer action failed.", "فشل إجراء نقل المخزون."));
+        return;
+      }
+      setReview(null);
+      setMessage(action==="approve" ? tr("Transfer approval completed.","تمت الموافقة على النقل.")
+        : action==="dispatch" ? tr("Transfer dispatch completed.","تم إرسال النقل.")
+        : action==="finalize" ? tr("Transfer receipt finalized.","تم إنهاء استلام النقل.")
+        : tr("Partial receipt posted.","تم ترحيل استلام جزئي."));
+      if(isReceipt) setReceiveQty({});
+      router.refresh();
+    }catch{
+      setFormError(tr("Connection interrupted; verify custody and stock before retrying.",
+        "انقطع الاتصال؛ تحقق من الحيازة والمخزون قبل إعادة المحاولة."));
+    }finally{setBusy("");}
   }
 
   return <>
     <section className="detail-card detail-section">
       <h2>{tr("Request Stock Transfer", "طلب نقل مخزون")}</h2>
       <p className="muted">{tr("The destination branch requests stock. Source stock is only reserved after approval and only deducted on dispatch.", "الفرع الوجهة يطلب المخزون. لا يُحجز مخزون المصدر إلا بعد الموافقة ولا يُخصم إلا عند الإرسال.")}</p>
-      <form className="catalog-form" onSubmit={createTransfer}>
+      <button type="button" className="primary-button" disabled={Boolean(busy)}
+        onClick={() => {setMessage("");setFormError("");setCreateOpen(true);}}>
+        {tr("Create Stock Transfer Request", "إنشاء طلب نقل مخزون")}
+      </button>
+      <CrudModal open={createOpen} onClose={()=>{if(!busy)setCreateOpen(false);}}
+        size="compact"
+        title={tr("Create Stock Transfer Request", "إنشاء طلب نقل مخزون")}
+        description={tr(
+          "Choose exact source/destination branches and traceable lots. Source stock is reserved only on approval, and deducted only on dispatch.",
+          "اختر الفروع والتشغيلات القابلة للتتبع بدقة. يُحجز مخزون المصدر عند الاعتماد فقط، ويُخصم عند الإرسال فقط.",
+        )}>
+        {createOpen&&<form className="catalog-form" onSubmit={createTransfer}>
         <label>{tr("Transfer number", "رقم النقل")}<input name="transferNumber" required /></label>
         <label>{tr("Source branch", "الفرع المصدر")}<select required value={sourceBranchId} onChange={event => {
           setSourceBranchId(event.target.value);
@@ -181,8 +229,10 @@ export function InventoryTransferManager({
         </div>
 
         <button className="primary-button form-span" disabled={busy !== "" || !sourceBranchId || !destinationBranchId}>{busy === "create" ? tr("Saving…", "جارٍ الحفظ…") : tr("Create Transfer Request", "إنشاء طلب النقل")}</button>
-      </form>
-      {message && <div className="form-success">{message}</div>}
+        {formError&&<p className="form-error form-span" role="alert">{formError}</p>}
+      </form>}
+      </CrudModal>
+      {message && <div className="form-success" role="status">{message}</div>}
     </section>
 
     <section className="transfer-manifest-list detail-section">
@@ -194,8 +244,8 @@ export function InventoryTransferManager({
             <p className="muted">{transfer.sourceBranchName} → {transfer.destinationBranchName}</p>
           </div>
           <div className="result-actions">
-            {transfer.status === "DRAFT" && transfer.canSourceAct && <button type="button" className="secondary-button" disabled={busy !== ""} onClick={() => void simpleAction(transfer.id, "approve")}>{tr("Approve & Reserve", "موافقة وحجز")}</button>}
-            {transfer.status === "APPROVED" && transfer.canSourceAct && <button type="button" className="primary-button" disabled={busy !== ""} onClick={() => void simpleAction(transfer.id, "dispatch")}>{tr("Dispatch", "إرسال")}</button>}
+            {transfer.status === "DRAFT" && transfer.canSourceAct && <button type="button" className="secondary-button" disabled={busy !== ""} onClick={() => openReview(transfer, "approve")}>{tr("Approve & Reserve", "موافقة وحجز")}</button>}
+            {transfer.status === "APPROVED" && transfer.canSourceAct && <button type="button" className="primary-button" disabled={busy !== ""} onClick={() => openReview(transfer, "dispatch")}>{tr("Dispatch", "إرسال")}</button>}
           </div>
         </div>
 
@@ -224,10 +274,45 @@ export function InventoryTransferManager({
         </div>
 
         {["DISPATCHED","PARTIALLY_RECEIVED"].includes(transfer.status) && transfer.canDestinationAct && <div className="result-actions">
-          <button type="button" className="secondary-button" disabled={busy !== ""} onClick={() => void receive(transfer, false)}>{tr("Post Partial Receipt", "ترحيل استلام جزئي")}</button>
-          <button type="button" className="primary-button" disabled={busy !== ""} onClick={() => void receive(transfer, true)}>{tr("Finalize Receipt", "إنهاء الاستلام")}</button>
+          <button type="button" className="secondary-button" disabled={busy !== ""} onClick={() => openReview(transfer, "receive")}>{tr("Post Partial Receipt", "ترحيل استلام جزئي")}</button>
+          <button type="button" className="primary-button" disabled={busy !== ""} onClick={() => openReview(transfer, "finalize")}>{tr("Finalize Receipt", "إنهاء الاستلام")}</button>
         </div>}
       </article>)}
     </section>
+    <CrudModal open={review!==null} onClose={()=>{if(!busy)setReview(null);}}
+      size="compact"
+      title={review?.action==="approve" ? tr("Approve and Reserve Stock", "اعتماد وحجز المخزون")
+        :review?.action==="dispatch" ? tr("Dispatch Reserved Stock", "إرسال المخزون المحجوز")
+        :review?.action==="finalize" ? tr("Finalize Stock Receipt", "إنهاء استلام المخزون")
+        :tr("Post Partial Receipt", "ترحيل استلام جزئي")}
+      description={tr(
+        "Stock, lots and chain-of-custody records change on confirmation. Verify exact quantities and source/destination branches.",
+        "تتغير سجلات المخزون والتشغيلات والحيازة عند التأكيد؛ راجع الكميات والفروع بدقة.",
+      )}>
+      {review&&<form className="catalog-form" onSubmit={confirmReview}>
+        {(() => {
+          const transfer=transfers.find(item=>item.id===review.transferId);
+          return <div className="form-span">
+            <strong>{transfer?.transferNumber || tr("Transfer unavailable","النقل غير متاح")}</strong>
+            <p>{transfer?.sourceBranchName} → {transfer?.destinationBranchName}</p>
+            {transfer?.items.map(line=>{
+              const requested=review.items.find(item=>item.transferItemId===line.id);
+              return <p key={line.id}>
+                {line.itemCode} · {line.lotNumber} · {tr("Dispatched","مرسل")}: {line.dispatchedQty||"—"}
+                {requested&&<> · {tr("Receiving","قيد الاستلام")}: {requested.receivedQty}</>}
+              </p>;
+            })}
+            {review.action==="finalize"&&<p className="form-warning">
+              {tr("Any dispatched/received difference will be recorded as a discrepancy.",
+                "سيتم توثيق أي فرق بين الكميات المرسلة والمستلمة كاختلاف رسمي.")}
+            </p>}
+          </div>;
+        })()}
+        {formError&&<p className="form-error form-span" role="alert">{formError}</p>}
+        <button type="submit" className="primary-button form-span" disabled={Boolean(busy)}>
+          {busy?tr("Processing…","جارٍ التنفيذ…"):tr("Confirm recorded transfer action","تأكيد إجراء نقل المخزون")}
+        </button>
+      </form>}
+    </CrudModal>
   </>;
 }
