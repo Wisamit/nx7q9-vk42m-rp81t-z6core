@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { CrudModal } from "@/components/crud-modal";
 
 type ContainerOption = { id: string; code: string; name: string };
 type OrderItemOption = { id: string; code: string; name: string };
@@ -69,6 +70,7 @@ export function SpecimenAliquotManager({
   const [busy, setBusy] = useState(false);
   const [storageBusy, setStorageBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [actionModal, setActionModal] = useState("");
   const usable = ["COLLECTED","RECEIVED","IN_PROCESS"].includes(status);
   useEffect(() => {
     if (!currentBranchId) return;
@@ -145,7 +147,7 @@ export function SpecimenAliquotManager({
       availableVolumeUnit: form.get("availableVolumeUnit"),
       reason: form.get("reason"),
     });
-    if (ok) setMessage(tr("Available volume reconciled and audited.", "تمت تسوية الحجم المتاح وتسجيلها."));
+    if (ok) { setActionModal(""); setMessage(tr("Available volume reconciled and audited.", "تمت تسوية الحجم المتاح وتسجيلها.")); }
   }
 
   async function createAliquot(event: FormEvent<HTMLFormElement>) {
@@ -161,7 +163,7 @@ export function SpecimenAliquotManager({
       orderItemIds: form.getAll("orderItemIds"),
     });
     if (ok) {
-      event.currentTarget.reset();
+      setActionModal("");
       setMessage(tr("Aliquot created with an independent barcode and lineage record.", "تم إنشاء الجزء المشتق بباركود مستقل وسجل تتبع للأصل."));
     }
   }
@@ -176,6 +178,7 @@ export function SpecimenAliquotManager({
       },
     });
     if (ok && currentBranchId) {
+      setActionModal("");
       const response = await fetch(`/api/settings/specimen-storage-locations?branchId=${encodeURIComponent(currentBranchId)}${canManageStorageSettings ? "&includeInactive=true" : ""}`);
       if (response.ok) {
         const data = await response.json();
@@ -202,6 +205,7 @@ export function SpecimenAliquotManager({
         setMessage(errorMessage(body.error));
         return;
       }
+      setActionModal("");
       if (currentBranchId) {
         const refreshed = await fetch(`/api/settings/specimen-storage-locations?branchId=${encodeURIComponent(currentBranchId)}&includeInactive=true`);
         if (refreshed.ok) {
@@ -231,7 +235,7 @@ export function SpecimenAliquotManager({
       })(),
       reason: form.get("reason"),
     });
-    if (ok) setMessage(tr("Physical storage location updated and audited.", "تم تحديث موقع التخزين الفعلي وتسجيله."));
+    if (ok) { setActionModal(""); setMessage(tr("Physical storage location updated and audited.", "تم تحديث موقع التخزين الفعلي وتسجيله.")); }
   }
 
   async function recordUsage(event: FormEvent<HTMLFormElement>) {
@@ -245,7 +249,7 @@ export function SpecimenAliquotManager({
       notes: form.get("notes"),
     });
     if (ok) {
-      event.currentTarget.reset();
+      setActionModal("");
       setMessage(tr("Specimen usage recorded and available volume updated.", "تم تسجيل استخدام العينة وتحديث الحجم المتاح."));
     }
   }
@@ -275,17 +279,35 @@ export function SpecimenAliquotManager({
 
     {canManage && usable && remainingVolume === null && <details className="specimen-history" open>
       <summary>{tr("Reconcile Available Volume", "تسوية الحجم المتاح")}</summary>
-      <form className="catalog-form specimen-action-form" onSubmit={reconcile}>
+      <button type="button" className="secondary-button"
+    disabled={busy || storageBusy} onClick={() => { setMessage(""); setActionModal("reconcile"); }}>
+    {tr("Reconcile Available Volume", "تسوية الحجم المتاح")}
+  </button>
+  <CrudModal open={actionModal === "reconcile"}
+    onClose={() => { if (!busy && !storageBusy) setActionModal(""); }}
+    size="compact" title={tr("Reconcile Available Volume", "تسوية الحجم المتاح")}
+    description={tr("Record physically measured volume with an audit reason. No volume may exceed the original tracked specimen.", "سجّل الحجم المقاس فعلياً مع سبب مدقق؛ لا يجوز تجاوز الحجم الأصلي المسجّل للعينة.")}>
+    {actionModal === "reconcile" && <form className="catalog-form specimen-action-form" onSubmit={reconcile}>
         <label>{tr("Measured available volume", "الحجم المتاح المقاس")}<input name="availableVolume" type="number" min="0" step="0.001" max={originalVolume || undefined} required /></label>
         <label>{tr("Volume unit", "وحدة الحجم")}<input name="availableVolumeUnit" maxLength={30} defaultValue={originalVolumeUnit || ""} required /></label>
         <label className="form-span">{tr("Reconciliation reason", "سبب التسوية")}<textarea name="reason" rows={2} maxLength={1000} required /></label>
         <button className="primary-button form-span" disabled={busy}>{tr("Save Reconciled Volume", "حفظ الحجم بعد التسوية")}</button>
-      </form>
+      </form>}
+    {actionModal === "reconcile" && message && <p className="form-error" role="alert">{message}</p>}
+  </CrudModal>
     </details>}
 
     {canManage && usable && <details className="specimen-history">
       <summary>{tr("Update Physical Storage", "تحديث موقع التخزين الفعلي")}</summary>
-      {canManageStorageSettings && <form className="catalog-form specimen-action-form" onSubmit={changeStorageStatus}>
+      {canManageStorageSettings && <button type="button" className="secondary-button"
+    disabled={busy || storageBusy} onClick={() => { setMessage(""); setActionModal("status"); }}>
+    {tr("Change Storage Position Status", "تعديل حالة موقع التخزين")}
+  </button>
+  <CrudModal open={actionModal === "status"}
+    onClose={() => { if (!busy && !storageBusy) setActionModal(""); }}
+    size="compact" title={tr("Change Storage Position Status", "تعديل حالة موقع التخزين")}
+    description={tr("Only authorized users may activate or deactivate branch storage positions. Active specimens block unsafe deactivation.", "يحق للمستخدمين المخوّلين تفعيل أو تعطيل مواقع تخزين الفرع؛ تمنع العينات الفعالة التعطيل غير الآمن.")}>
+    {actionModal === "status" && <form className="catalog-form specimen-action-form" onSubmit={changeStorageStatus}>
         <strong className="form-span">{tr("Activate / deactivate storage location", "تفعيل / تعطيل موقع التخزين")}</strong>
         <label className="form-span">{tr("Registered position", "الموقع المعرّف")}
           <select name="locationId" defaultValue="" required>
@@ -299,7 +321,17 @@ export function SpecimenAliquotManager({
         <label className="form-span">{tr("Reason", "السبب")}<textarea name="reason" maxLength={1000} required /></label>
         <button className="secondary-button form-span" disabled={storageBusy || busy}>{tr("Save status", "حفظ الحالة")}</button>
       </form>}
-      {canManageStorageSettings && <form className="catalog-form specimen-action-form" onSubmit={registerStorage}>
+    {actionModal === "status" && message && <p className="form-error" role="alert">{message}</p>}
+  </CrudModal>}
+      {canManageStorageSettings && <button type="button" className="secondary-button"
+    disabled={busy || storageBusy} onClick={() => { setMessage(""); setActionModal("register"); }}>
+    {tr("Register Physical Storage Position", "تعريف موقع تخزين فعلي")}
+  </button>
+  <CrudModal open={actionModal === "register"}
+    onClose={() => { if (!busy && !storageBusy) setActionModal(""); }}
+    size="compact" title={tr("Register Physical Storage Position", "تعريف موقع تخزين فعلي")}
+    description={tr("Register a structured zone, unit, rack and slot for the current branch.", "عرّف منطقة ووحدة ورفاً وموضعاً منظّماً للفرع الحالي.")}>
+    {actionModal === "register" && <form className="catalog-form specimen-action-form" onSubmit={registerStorage}>
         <strong className="form-span">{tr("Register branch storage position", "تعريف موقع تخزين في الفرع")}</strong>
         <label>{tr("Zone / area", "المنطقة")}<input name="zone" maxLength={40} required /></label>
         <label>{tr("Fridge / freezer", "الثلاجة / المجمّد")}<input name="unit" maxLength={40} required /></label>
@@ -307,7 +339,17 @@ export function SpecimenAliquotManager({
         <label>{tr("Position / slot", "الموضع")}<input name="slot" maxLength={40} required /></label>
         <button className="secondary-button form-span" disabled={busy}>{tr("Register position", "تعريف الموقع")}</button>
       </form>}
-      <form className="catalog-form specimen-action-form" onSubmit={relocateStorage}>
+    {actionModal === "register" && message && <p className="form-error" role="alert">{message}</p>}
+  </CrudModal>}
+      <button type="button" className="secondary-button"
+    disabled={busy || storageBusy} onClick={() => { setMessage(""); setActionModal("relocate"); }}>
+    {tr("Relocate Stored Specimen", "نقل موقع تخزين العينة")}
+  </button>
+  <CrudModal open={actionModal === "relocate"}
+    onClose={() => { if (!busy && !storageBusy) setActionModal(""); }}
+    size="compact" title={tr("Relocate Stored Specimen", "نقل موقع تخزين العينة")}
+    description={tr("Select a registered position and reason. This updates the specimen location with an auditable movement.", "اختر موقعاً مسجلاً وسبب النقل. سيغيّر ذلك موقع العينة بحركة قابلة للتدقيق.")}>
+    {actionModal === "relocate" && <form className="catalog-form specimen-action-form" onSubmit={relocateStorage}>
         <label className="form-span">{tr("Registered physical position", "موقع التخزين المعرّف")}
           <select name="selectedLocation" required defaultValue="">
             <option value="">{tr("Select a storage position", "اختر موقع التخزين")}</option>
@@ -316,13 +358,23 @@ export function SpecimenAliquotManager({
         </label>
         <label className="form-span">{tr("Relocation reason", "سبب تغيير الموقع")}<textarea name="reason" rows={2} maxLength={1000} required /></label>
         <button className="secondary-button form-span" disabled={busy}>{tr("Update Storage Location", "تحديث موقع التخزين")}</button>
-      </form>
+      </form>}
+    {actionModal === "relocate" && message && <p className="form-error" role="alert">{message}</p>}
+  </CrudModal>
     </details>}
 
     {canManage && usable && remainingVolume !== null && Number(remainingVolume) > 0 && <div className="admin-grid">
       <details className="specimen-history">
         <summary>{tr("Create Aliquot", "إنشاء جزء مشتق")}</summary>
-        <form className="catalog-form specimen-action-form" onSubmit={createAliquot}>
+        <button type="button" className="secondary-button"
+    disabled={busy || storageBusy} onClick={() => { setMessage(""); setActionModal("aliquot"); }}>
+    {tr("Create Traceable Aliquot", "إنشاء جزء مشتق قابل للتتبع")}
+  </button>
+  <CrudModal open={actionModal === "aliquot"}
+    onClose={() => { if (!busy && !storageBusy) setActionModal(""); }}
+    size="compact" title={tr("Create Traceable Aliquot", "إنشاء جزء مشتق قابل للتتبع")}
+    description={tr("A new barcode and parent-child lineage are created. Confirm the specimen, volume, unit, container and linked tests.", "سيُنشأ باركود جديد وسجل تتبع للأصل. راجع العينة والحجم والوحدة والحاوية والفحوص المرتبطة.")}>
+    {actionModal === "aliquot" && <form className="catalog-form specimen-action-form" onSubmit={createAliquot}>
           <label>{tr("Purpose", "الغرض")}<select name="purpose" defaultValue="TESTING">
             <option value="TESTING">{tr("Testing", "فحص")}</option>
             <option value="STORAGE">{tr("Storage", "تخزين")}</option>
@@ -347,12 +399,22 @@ export function SpecimenAliquotManager({
           </fieldset>
           <label className="form-span">{tr("Notes", "ملاحظات")}<textarea name="notes" rows={2} maxLength={1000} /></label>
           <button className="primary-button form-span" disabled={busy}>{tr("Create Traceable Aliquot", "إنشاء جزء مشتق قابل للتتبع")}</button>
-        </form>
+        </form>}
+    {actionModal === "aliquot" && message && <p className="form-error" role="alert">{message}</p>}
+  </CrudModal>
       </details>
 
       <details className="specimen-history">
         <summary>{tr("Record Specimen Usage", "تسجيل استخدام العينة")}</summary>
-        <form className="catalog-form specimen-action-form" onSubmit={recordUsage}>
+        <button type="button" className="secondary-button"
+    disabled={busy || storageBusy} onClick={() => { setMessage(""); setActionModal("usage"); }}>
+    {tr("Record Specimen Volume Consumption", "تسجيل استهلاك حجم العينة")}
+  </button>
+  <CrudModal open={actionModal === "usage"}
+    onClose={() => { if (!busy && !storageBusy) setActionModal(""); }}
+    size="compact" title={tr("Record Specimen Volume Consumption", "تسجيل استهلاك حجم العينة")}
+    description={tr("This permanently records consumption against available specimen volume; the server rechecks the measured balance and branch.", "يسجّل الاستهلاك بشكل دائم مقابل الحجم المتاح؛ يعيد السيرفر التحقق من الرصيد والفرع.")}>
+    {actionModal === "usage" && <form className="catalog-form specimen-action-form" onSubmit={recordUsage}>
           <label>{tr("Usage", "الاستخدام")}<select name="usageType" defaultValue="TESTING">
             <option value="TESTING">{tr("Testing", "فحص")}</option>
             <option value="REPEAT_TESTING">{tr("Repeat testing", "إعادة فحص")}</option>
@@ -367,7 +429,9 @@ export function SpecimenAliquotManager({
           </select></label>
           <label className="form-span">{tr("Usage notes", "ملاحظات الاستخدام")}<textarea name="notes" rows={2} maxLength={1000} /></label>
           <button className="primary-button form-span" disabled={busy}>{tr("Record Usage", "تسجيل الاستخدام")}</button>
-        </form>
+        </form>}
+    {actionModal === "usage" && message && <p className="form-error" role="alert">{message}</p>}
+  </CrudModal>
       </details>
     </div>}
 
