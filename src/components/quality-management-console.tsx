@@ -1,5 +1,7 @@
 "use client";
 
+import { SystemDateField } from "@/components/system-date-field";
+
 import { FormEvent, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CrudModal } from "@/components/crud-modal";
@@ -683,7 +685,7 @@ export function QualityManagementConsole({
         <label>{tr("Branch","الفرع")}<select name="branchId" defaultValue=""><option value="">{tr("Organization-wide","على مستوى المؤسسة")}</option>{branches.map(branch => <option key={branch.id} value={branch.id}>{branch.code} — {branchName(branch)}</option>)}</select></label>
         <label>{tr("Linked nonconformance","عدم المطابقة المرتبط")}<select name="nonconformanceId" defaultValue=""><option value="">{tr("None","لا يوجد")}</option>{openNonconformances.map(item => <option key={item.id} value={item.id}>{item.caseNumber} — {item.title}</option>)}</select></label>
         <label>{tr("Owner","المسؤول")}<select name="ownerUserId" required defaultValue=""><option value="">{tr("Select owner…","اختر المسؤول…")}</option>{users.map(user => <option key={user.id} value={user.id}>{userName(user)}</option>)}</select></label>
-        <label>{tr("Due date","تاريخ الاستحقاق")}<input name="dueDate" type="date" /></label>
+        <label>{tr("Due date","تاريخ الاستحقاق")}<SystemDateField name="dueDate" /></label>
         <label className="form-span">{tr("Title","العنوان")}<input name="title" required /></label>
         <label className="form-span">{tr("Issue description","وصف المشكلة")}<textarea name="issueDescription" rows={3} required /></label>
         <label className="form-span">{tr("Root cause","السبب الجذري")}<textarea name="rootCause" rows={2} /></label>
@@ -720,7 +722,7 @@ export function QualityManagementConsole({
         <label>{tr("Owner","المسؤول")}<select name="ownerUserId" defaultValue=""><option value="">{tr("Unassigned","غير معين")}</option>{users.map(user => <option key={user.id} value={user.id}>{userName(user)}</option>)}</select></label>
         <label>{tr("Title (English)","العنوان بالإنجليزية")}<input name="titleEn" required /></label>
         <label>{tr("Title (Arabic)","العنوان بالعربية")}<input name="titleAr" dir="rtl" /></label>
-        <label>{tr("Review due","موعد المراجعة")}<input name="reviewDueAt" type="date" /></label>
+        <label>{tr("Review due","موعد المراجعة")}<SystemDateField name="reviewDueAt" /></label>
         <label>{tr("External URL","رابط خارجي")}<input name="externalUrl" type="url" /></label>
         <label className="form-span">{tr("Document content snapshot","لقطة محتوى الوثيقة")}<textarea name="content" rows={5} placeholder={tr("Controlled text content, or leave empty when using an external document URL.","محتوى نصي مضبوط، أو اتركه فارغاً عند استخدام رابط خارجي للوثيقة.")} /></label>
         <button className="primary-button form-span" disabled={busy !== ""}>{busy === "document-create" ? tr("Saving…","جارٍ الحفظ…") : tr("Create Draft v1","إنشاء المسودة v1")}</button>
@@ -767,9 +769,9 @@ export function QualityManagementConsole({
           <label>{tr("SOP/document","SOP / الوثيقة")}<select name="documentVersionId" defaultValue=""><option value="">{tr("None","لا يوجد")}</option>{effectiveDocumentVersions.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
           <label>{tr("Analyzer","الجهاز")}<select name="analyzerId" value={trainingAnalyzerId} onChange={event => setTrainingAnalyzerId(event.target.value)}><option value="">{tr("None","لا يوجد")}</option>{analyzers.map(item => <option key={item.id} value={item.id}>{item.code} — {item.name}</option>)}</select></label>
           <label>{tr("Status","الحالة")}<select name="status" defaultValue="ASSIGNED"><option value="ASSIGNED">{qmsStatusLabel("ASSIGNED")}</option><option value="IN_PROGRESS">{qmsStatusLabel("IN_PROGRESS")}</option><option value="COMPLETED">{qmsStatusLabel("COMPLETED")}</option><option value="WAIVED">{qmsStatusLabel("WAIVED")}</option></select></label>
-          <label>{tr("Assigned at (local date)","تاريخ التعيين (التاريخ المحلي)")}<input name="assignedAt" type="date" required /></label>
-          <label>{tr("Completed at","تاريخ الإكمال")}<input name="completedAt" type="date" /></label>
-          <label>{tr("Expires","تاريخ الانتهاء")}<input name="expiresAt" type="date" /></label>
+          <label>{tr("Assigned at (local date)","تاريخ التعيين (التاريخ المحلي)")}<SystemDateField name="assignedAt" required /></label>
+          <label>{tr("Completed at","تاريخ الإكمال")}<SystemDateField name="completedAt" /></label>
+          <label>{tr("Expires","تاريخ الانتهاء")}<SystemDateField name="expiresAt" /></label>
           <label className="form-span">{tr("Certificate URL","رابط الشهادة")}<input name="certificateUrl" type="url" /></label>
           <label className="form-span">{tr("Notes","ملاحظات")}<textarea name="notes" rows={2} /></label>
           <button className="primary-button form-span" disabled={busy !== ""}>{busy === "training-create" ? tr("Saving…","جارٍ الحفظ…") : tr("Save Training Record","حفظ سجل التدريب")}</button>
@@ -793,8 +795,8 @@ export function QualityManagementConsole({
           <label>{tr("Competency","الكفاءة")}<input name="competencyName" required /></label>
           <label>{tr("Assessment method","طريقة التقييم")}<input name="assessmentMethod" required placeholder={tr("Direct observation / blind sample / quiz…","ملاحظة مباشرة / عينة عمياء / اختبار…")} /></label>
           <label>{tr("Result","النتيجة")}<select name="result" defaultValue="PASS"><option value="PASS">{competencyResultLabel("PASS")}</option><option value="CONDITIONAL">{competencyResultLabel("CONDITIONAL")}</option><option value="FAIL">{competencyResultLabel("FAIL")}</option></select></label>
-          <label>{tr("Assessed at (local date)","تاريخ التقييم (التاريخ المحلي)")}<input name="assessedAt" type="date" required /></label>
-          <label>{tr("Next due","الاستحقاق التالي")}<input name="nextDueAt" type="date" /></label>
+          <label>{tr("Assessed at (local date)","تاريخ التقييم (التاريخ المحلي)")}<SystemDateField name="assessedAt" required /></label>
+          <label>{tr("Next due","الاستحقاق التالي")}<SystemDateField name="nextDueAt" /></label>
           <label className="form-span">{tr("Notes","ملاحظات")}<textarea name="notes" rows={2} /></label>
           <button className="primary-button form-span" disabled={busy !== ""}>{busy === "competency-create" ? tr("Saving…","جارٍ الحفظ…") : tr("Record Competency","تسجيل تقييم الكفاءة")}</button>
         </form>}
@@ -813,7 +815,7 @@ export function QualityManagementConsole({
      {uiEditor === "authorize" && <form className="catalog-form" onSubmit={grantAuthorization}>
           <label>{tr("User","المستخدم")}<select name="userId" required defaultValue=""><option value="">{tr("Select user…","اختر المستخدم…")}</option>{users.map(user => <option key={user.id} value={user.id}>{userName(user)}</option>)}</select></label>
           <label>{tr("Analyzer","الجهاز")}<select name="analyzerId" required defaultValue=""><option value="">{tr("Select analyzer…","اختر الجهاز…")}</option>{analyzers.map(item => <option key={item.id} value={item.id}>{item.code} — {item.name}</option>)}</select></label>
-          <label>{tr("Expires","تاريخ الانتهاء")}<input name="expiresAt" type="date" /></label>
+          <label>{tr("Expires","تاريخ الانتهاء")}<SystemDateField name="expiresAt" /></label>
           <label className="form-span">{tr("Scope notes","ملاحظات نطاق الصلاحية")}<textarea name="scopeNotes" rows={2} /></label>
           <button className="primary-button form-span" disabled={busy !== ""}>{busy === "authorization-create" ? tr("Saving…","جارٍ الحفظ…") : tr("Grant Authorization","منح الصلاحية")}</button>
         </form>}
@@ -887,7 +889,7 @@ export function QualityManagementConsole({
      {uiEditor === "audit" && <form className="catalog-form" onSubmit={createAudit}>
         <label>{tr("Branch","الفرع")}<select name="branchId" defaultValue=""><option value="">{tr("Organization-wide","على مستوى المؤسسة")}</option>{branches.map(branch => <option key={branch.id} value={branch.id}>{branchName(branch)}</option>)}</select></label>
         <label>{tr("Lead auditor","المدقق الرئيسي")}<select name="leadAuditorUserId" required defaultValue=""><option value="">{tr("Select auditor…","اختر المدقق…")}</option>{users.map(user => <option key={user.id} value={user.id}>{userName(user)}</option>)}</select></label>
-        <label>{tr("Scheduled date","التاريخ المجدول")}<input name="scheduledAt" type="date" required /></label>
+        <label>{tr("Scheduled date","التاريخ المجدول")}<SystemDateField name="scheduledAt" required /></label>
         <label className="form-span">{tr("Title","العنوان")}<input name="title" required /></label>
         <label className="form-span">{tr("Scope","النطاق")}<textarea name="scope" rows={3} required /></label>
         <button className="primary-button form-span" disabled={busy !== ""}>{busy === "audit-create" ? tr("Saving…","جارٍ الحفظ…") : tr("Plan Internal Audit","تخطيط التدقيق الداخلي")}</button>
@@ -936,7 +938,7 @@ export function QualityManagementConsole({
         <label className="form-span">{tr("Action description","وصف الإجراء")}
           <textarea name="description" rows={3} maxLength={4000} required/></label>
         <label>{tr("Due date (optional)","تاريخ الاستحقاق (اختياري)")}
-          <input type="date" name="dueDate"/></label>
+          <SystemDateField name="dueDate" /></label>
       </>}
       {pendingReview.kind==="CAPA_ACTION_COMPLETE" && <p className="form-span">{tr(
         "Confirm this exact CAPA action has been completed with supporting evidence. This action will be audited.",
@@ -981,8 +983,8 @@ export function QualityManagementConsole({
           <textarea name="reason" required rows={3} maxLength={1000}/></label>
       </>}
       {pendingReview.kind==="INDICATOR_MEASUREMENT" && <>
-        <label>{tr("Period start","بداية الفترة")}<input type="date" name="periodStart" required/></label>
-        <label>{tr("Period end","نهاية الفترة")}<input type="date" name="periodEnd" required/></label>
+        <label>{tr("Period start","بداية الفترة")}<SystemDateField name="periodStart" required /></label>
+        <label>{tr("Period end","نهاية الفترة")}<SystemDateField name="periodEnd" required /></label>
         <label className="form-span">{tr("Measured value","القيمة المقاسة")}{" "}
           {pendingReview.unit && <small>({pendingReview.unit})</small>}
           <input name="value" required inputMode="decimal" maxLength={100}/></label>
