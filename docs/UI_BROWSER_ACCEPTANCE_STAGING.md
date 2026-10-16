@@ -23,6 +23,12 @@ were visually examined.
 - Output includes a screenshot and HTTP/redirect/HTML lang/dir/viewport
   overflow/JavaScript-error flags, without storing URLs with IDs,
   page text, cookies, passwords or raw exception messages.
+- Each rendered scenario also records only **counts** of visible forms,
+  buttons/links, active dialogs, inputs missing accessible names, actions
+  missing accessible names, and horizontally clipped interactive elements.
+  Any detected accessibility-name or control-clipping violation is flagged
+  `REVIEW_REQUIRED`; the JSON never captures entered values, label text,
+  hidden inputs, patient details, cookies or authentication responses.
 - Every screenshot remains **UNREVIEWED** until an authorized person checks
   it; keyboard/form mutation, organization date/time formatting, branch/role
   isolation, accessibility, visual theme palette and clinical UAT require
