@@ -94,49 +94,76 @@ export function SendOutManager({
 
   async function createLab(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (busy) return;
     const form = new FormData(event.currentTarget);
-    setBusy("lab"); setMessage("");
-    const response = await fetch("/api/send-outs/laboratories", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(Object.fromEntries(form.entries())),
-    });
-    const body = await response.json().catch(() => ({}));
-    if (response.ok) {
+    setBusy("lab");
+    setMessage("");
+    try {
+      const response = await fetch("/api/send-outs/laboratories", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(Object.fromEntries(form.entries())),
+      });
+      const body = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) {
+        setMessage(body.error || tr("Could not create external laboratory.", "تعذر إنشاء المختبر الخارجي."));
+        return;
+      }
+      setUiEditor("");
       setMessage(tr("External laboratory created.", "تم إنشاء المختبر الخارجي."));
-      event.currentTarget.reset();
       router.refresh();
-    } else setMessage(tr("Could not create external laboratory.", "تعذر إنشاء المختبر الخارجي."));
-    setBusy("");
+    } catch {
+      setMessage(tr("Connection interrupted. Check existing laboratories before trying again.",
+        "انقطع الاتصال. راجع قائمة المختبرات الخارجية قبل إعادة المحاولة."));
+    } finally {
+      setBusy("");
+    }
   }
 
   async function createReferral(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (busy) return;
     const candidate = candidates.find(item => item.key === candidateKey);
-    if (!candidate) { setMessage(tr("Select an order item/specimen.", "اختر فحص الطلب/العينة.")); return; }
+    if (!candidate) {
+      setMessage(tr("Select an order item/specimen.", "اختر فحص الطلب/العينة."));
+      return;
+    }
     const form = new FormData(event.currentTarget);
-    setBusy("referral"); setMessage("");
-    const response = await fetch("/api/send-outs", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        branchId: candidate.branchId,
-        orderItemId: candidate.orderItemId,
-        specimenId: candidate.specimenId,
-        externalLaboratoryId: form.get("externalLaboratoryId"),
-        externalAccession: form.get("externalAccession"),
-        costAmount: form.get("costAmount"),
-        costCurrency: form.get("costCurrency"),
-        expectedResultAt: form.get("expectedResultAt"),
-        note: form.get("note"),
-      }),
-    });
-    const body = await response.json().catch(() => ({}));
-    if (response.ok) {
-      setMessage(tr("Send-out referral created.", "تم إنشاء إحالة للمختبر الخارجي."));
+    setBusy("referral");
+    setMessage("");
+    try {
+      const response = await fetch("/api/send-outs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          branchId: candidate.branchId,
+          orderItemId: candidate.orderItemId,
+          specimenId: candidate.specimenId,
+          externalLaboratoryId: form.get("externalLaboratoryId"),
+          externalAccession: form.get("externalAccession"),
+          costAmount: form.get("costAmount"),
+          costCurrency: form.get("costCurrency"),
+          expectedResultAt: form.get("expectedResultAt"),
+          note: form.get("note"),
+        }),
+      });
+      const body = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) {
+        setMessage(body.error || tr("Could not create send-out referral.", "تعذر إنشاء الإحالة الخارجية."));
+        return;
+      }
+      setUiEditor("");
       setCandidateKey("");
-      event.currentTarget.reset();
+      setMessage(tr("Send-out referral created.", "تم إنشاء إحالة للمختبر الخارجي."));
       router.refresh();
-    } else setMessage(tr("Could not create send-out referral.", "تعذر إنشاء الإحالة الخارجية."));
-    setBusy("");
+    } catch {
+      setMessage(tr(
+        "Connection interrupted. Verify the specimen's referral history before any retry; submission may have completed.",
+        "انقطع الاتصال. تحقق من تاريخ إحالات العينة قبل إعادة المحاولة؛ فقد يكون الطلب قد نُفّذ.",
+      ));
+    } finally {
+      setBusy("");
+    }
   }
 
   async function act(referralId: string, action: string, payload: Record<string, unknown> = {}) {
