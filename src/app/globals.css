@@ -231,7 +231,7 @@ html[data-density="compact"] :where(.detail-card,.dashboard-panel,.settings-card
 .admin-page-actions{margin:0 0 16px}
 .crud-success-toast{display:inline-flex;align-items:center;min-height:38px;padding:8px 12px;border-radius:10px;background:color-mix(in srgb,var(--fl-success) 12%,var(--fl-surface));border:1px solid color-mix(in srgb,var(--fl-success) 30%,var(--fl-border));color:var(--fl-success);font-size:12px;font-weight:750}
 .crud-modal-backdrop{position:fixed;inset:0;z-index:100;background:var(--fl-overlay);backdrop-filter:blur(5px);display:flex;align-items:center;justify-content:center;padding:24px}
-.crud-modal{display:flex;flex-direction:column;width:min(760px,100%);max-height:calc(100vh - 48px);background:var(--fl-surface);color:var(--fl-text);border:1px solid var(--fl-border);border-radius:18px;box-shadow:0 28px 90px color-mix(in srgb,var(--fl-text) 35%,transparent);overflow:hidden}
+.crud-modal{position:relative;display:flex;flex-direction:column;width:min(760px,100%);max-height:calc(100vh - 48px);background:var(--fl-surface);color:var(--fl-text);border:1px solid var(--fl-border);border-radius:18px;box-shadow:0 28px 90px color-mix(in srgb,var(--fl-text) 35%,transparent);overflow:hidden}
 .crud-modal-compact{width:min(33.333vw,520px);min-width:0}
 .crud-modal-compact .settings-layout{padding-bottom:0;min-width:0}
 .crud-modal-compact .catalog-form,
@@ -269,6 +269,16 @@ html[data-density="compact"] :where(.detail-card,.dashboard-panel,.settings-card
 .crud-modal-compact .branding-upload{min-width:0}
 .crud-modal-compact .settings-savebar{bottom:0;width:100%;max-width:100%;flex-wrap:wrap}
 .crud-modal-compact .settings-savebar button{flex:1;min-width:0}
+/* Accessible in-product discard confirmation for all CRUD modal forms.
+   Its own focus boundary prevents tabbing into the obscured editing surface. */
+.crud-modal-discard-shade{position:absolute;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;overflow:auto;padding:16px;background:color-mix(in srgb,var(--fl-overlay) 86%,transparent);backdrop-filter:blur(5px)}
+.crud-modal-discard-panel{display:grid;gap:12px;width:min(360px,100%);max-height:100%;overflow:auto;padding:22px;border:1px solid var(--fl-border);border-radius:14px;background:var(--fl-surface);color:var(--fl-text);box-shadow:0 20px 48px color-mix(in srgb,var(--fl-text) 25%,transparent)}
+.crud-modal-discard-panel h3{margin:0;font-size:18px;line-height:1.4}
+.crud-modal-discard-panel p{margin:0;color:var(--fl-muted);font-size:13px;line-height:1.7;overflow-wrap:anywhere}
+.crud-modal-discard-actions{display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap}
+.crud-modal-discard-actions button{min-height:40px;flex:1 1 auto}
+.crud-modal-discard-panel :is(button,[tabindex]):focus-visible{outline:2px solid var(--fl-primary);outline-offset:3px}
+@media(max-width:760px){.crud-modal-discard-shade{padding:16px}.crud-modal-discard-panel{max-width:440px}}
 .crud-modal-sm{width:min(520px,100%)}
 .crud-modal-md{width:min(720px,100%)}
 .crud-modal-lg{width:min(980px,100%)}
