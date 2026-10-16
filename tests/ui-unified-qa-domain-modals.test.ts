@@ -42,7 +42,7 @@ test("UI #265: all nine EQA actions use role-gated review dialogs, with custody 
     "send-out dispatch/receipt actions need a dedicated chain-of-custody review");
   assert.equal((eqa.match(/<CrudModal\b/g) || []).length, 9);
   assert.equal((eqa.match(/<form\b/g) || []).length, 9);
-  assert.ok(!/\\bconfirm\\s*\\(/.test(eqa),
+  assert.ok(!/\bconfirm\s*\(/.test(eqa),
     "EQA uses typed, explicit action dialogs, not browser-native confirmations");
   for (const action of ["CREATE_PROGRAM", "CREATE_ROUND", "ADD_OBSERVATION",
     "SUBMIT_ROUND", "FINALIZE_REVIEW", "CLOSE_ROUND", "REMOVE_OBSERVATION",
