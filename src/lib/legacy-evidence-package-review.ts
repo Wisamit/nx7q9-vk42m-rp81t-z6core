@@ -23,6 +23,7 @@ export function verifyLegacyEvidenceManifestPackage(input: {
   source: SourceIdentity;
   coverage: LegacySourceCoverage;
   lineage: readonly LegacyRowManifest[];
+  replayedLineage?: readonly LegacyRowManifest[];
 }) {
   const { source, coverage, lineage } = input;
   for (const key of ["sourceName", "sourceSha256", "sourceBytes"] as const) {
@@ -98,13 +99,45 @@ export function verifyLegacyEvidenceManifestPackage(input: {
   }
   if (tables.size !== reviewTables.filter(t => t.present).length)
     fail("legacy_evidence_unknown_table");
+  // A separate Windows ACE replay can re-extract each original row using the
+  // identical private HMAC key. It is still a SAME-IMPLEMENTATION re-read,
+  // not independent proof of source values, mapping, or clinical correctness.
+  let aceReplayMatches = false;
+  if (input.replayedLineage !== undefined) {
+    verifyLegacyEvidenceManifestPackage({
+      source, coverage, lineage: input.replayedLineage,
+    });
+    const replay = new Map(input.replayedLineage.map(page => [
+      page.tableName + ":" + page.chunkIndex, page,
+    ]));
+    if (replay.size !== lineage.length)
+      fail("legacy_replay_page_count_mismatch");
+    for (const original of lineage) {
+      const fresh = replay.get(original.tableName + ":" + original.chunkIndex);
+      if (!fresh || fresh.digestKeyId !== original.digestKeyId ||
+          fresh.rows.length !== original.rows.length ||
+          fresh.schemaSha256 !== original.schemaSha256)
+        fail("legacy_replay_page_metadata_mismatch");
+      for (let index = 0; index < original.rows.length; index++) {
+        const expected = original.rows[index];
+        const actual = fresh.rows[index];
+        if (expected.rowDigest !== actual.rowDigest ||
+            expected.occurrence !== actual.occurrence)
+          fail("legacy_replay_row_hmac_mismatch");
+      }
+    }
+    aceReplayMatches = true;
+  }
   return {
-    status: "METADATA_CONSISTENT_REVIEW_ONLY" as const,
+    status: aceReplayMatches
+      ? "ACE_HMAC_REPLAY_MATCHED_REVIEW_ONLY" as const
+      : "METADATA_CONSISTENT_REVIEW_ONLY" as const,
     sourceSha256: source.sourceSha256, sourceBytes: source.sourceBytes,
     sourceName: source.sourceName,
     digestKeyId,
     masterRows: totalRows,
     tables: reviewTables,
+    sourceHmacAceReplayMatches: aceReplayMatches,
     sourceHmacIndependentlyVerified: false as const,
     targetMappingCertified: false as const,
     clinicalApproved: false as const,
