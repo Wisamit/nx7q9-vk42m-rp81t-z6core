@@ -1,0 +1,331 @@
+{
+  "schemaVersion": 1,
+  "baselineMainSha": "5434d8af05d7f687e2f7ceba856429395ae1e46d",
+  "expectedRouteCount": 81,
+  "routes": [
+    {
+      "file": "src/app/analytics/page.tsx",
+      "route": "/analytics"
+    },
+    {
+      "file": "src/app/analyzers/page.tsx",
+      "route": "/analyzers"
+    },
+    {
+      "file": "src/app/billing/accounts/aging/page.tsx",
+      "route": "/billing/accounts/aging"
+    },
+    {
+      "file": "src/app/billing/accounts/credit-limits/page.tsx",
+      "route": "/billing/accounts/credit-limits"
+    },
+    {
+      "file": "src/app/billing/accounts/page.tsx",
+      "route": "/billing/accounts"
+    },
+    {
+      "file": "src/app/billing/accounts/statements/[id]/page.tsx",
+      "route": "/billing/accounts/statements/[id]"
+    },
+    {
+      "file": "src/app/billing/cashier/page.tsx",
+      "route": "/billing/cashier"
+    },
+    {
+      "file": "src/app/billing/page.tsx",
+      "route": "/billing"
+    },
+    {
+      "file": "src/app/billing/payment-methods/page.tsx",
+      "route": "/billing/payment-methods"
+    },
+    {
+      "file": "src/app/billing/reports/page.tsx",
+      "route": "/billing/reports"
+    },
+    {
+      "file": "src/app/billing/taxes/page.tsx",
+      "route": "/billing/taxes"
+    },
+    {
+      "file": "src/app/catalog/expert-reviews/page.tsx",
+      "route": "/catalog/expert-reviews"
+    },
+    {
+      "file": "src/app/catalog/imports/[id]/page.tsx",
+      "route": "/catalog/imports/[id]"
+    },
+    {
+      "file": "src/app/catalog/imports/reconciliation-ledger/page.tsx",
+      "route": "/catalog/imports/reconciliation-ledger"
+    },
+    {
+      "file": "src/app/catalog/legacy-master-data/page.tsx",
+      "route": "/catalog/legacy-master-data"
+    },
+    {
+      "file": "src/app/catalog/page.tsx",
+      "route": "/catalog"
+    },
+    {
+      "file": "src/app/catalog/tests/[id]/page.tsx",
+      "route": "/catalog/tests/[id]"
+    },
+    {
+      "file": "src/app/clinical-comments/review/page.tsx",
+      "route": "/clinical-comments/review"
+    },
+    {
+      "file": "src/app/clinical-comments/revisions/page.tsx",
+      "route": "/clinical-comments/revisions"
+    },
+    {
+      "file": "src/app/clinical-rules/page.tsx",
+      "route": "/clinical-rules"
+    },
+    {
+      "file": "src/app/critical-results/page.tsx",
+      "route": "/critical-results"
+    },
+    {
+      "file": "src/app/dashboard/page.tsx",
+      "route": "/dashboard"
+    },
+    {
+      "file": "src/app/digital-services/page.tsx",
+      "route": "/digital-services"
+    },
+    {
+      "file": "src/app/doctor-portal-access/page.tsx",
+      "route": "/doctor-portal-access"
+    },
+    {
+      "file": "src/app/doctor-requisitions/page.tsx",
+      "route": "/doctor-requisitions"
+    },
+    {
+      "file": "src/app/equipment/page.tsx",
+      "route": "/equipment"
+    },
+    {
+      "file": "src/app/home-collections/[id]/page.tsx",
+      "route": "/home-collections/[id]"
+    },
+    {
+      "file": "src/app/home-collections/page.tsx",
+      "route": "/home-collections"
+    },
+    {
+      "file": "src/app/integrations/page.tsx",
+      "route": "/integrations"
+    },
+    {
+      "file": "src/app/inventory/lot-impact/[lotId]/page.tsx",
+      "route": "/inventory/lot-impact/[lotId]"
+    },
+    {
+      "file": "src/app/inventory/operations/page.tsx",
+      "route": "/inventory/operations"
+    },
+    {
+      "file": "src/app/inventory/page.tsx",
+      "route": "/inventory"
+    },
+    {
+      "file": "src/app/inventory/procurement/page.tsx",
+      "route": "/inventory/procurement"
+    },
+    {
+      "file": "src/app/inventory/recall-quality/page.tsx",
+      "route": "/inventory/recall-quality"
+    },
+    {
+      "file": "src/app/inventory/transfers/page.tsx",
+      "route": "/inventory/transfers"
+    },
+    {
+      "file": "src/app/login/page.tsx",
+      "route": "/login"
+    },
+    {
+      "file": "src/app/microbiology/[id]/page.tsx",
+      "route": "/microbiology/[id]"
+    },
+    {
+      "file": "src/app/microbiology/page.tsx",
+      "route": "/microbiology"
+    },
+    {
+      "file": "src/app/notifications/page.tsx",
+      "route": "/notifications"
+    },
+    {
+      "file": "src/app/orders/[id]/clinical-handover/page.tsx",
+      "route": "/orders/[id]/clinical-handover"
+    },
+    {
+      "file": "src/app/orders/[id]/page.tsx",
+      "route": "/orders/[id]"
+    },
+    {
+      "file": "src/app/orders/delivery-queue/page.tsx",
+      "route": "/orders/delivery-queue"
+    },
+    {
+      "file": "src/app/orders/page.tsx",
+      "route": "/orders"
+    },
+    {
+      "file": "src/app/organization/branches/page.tsx",
+      "route": "/organization/branches"
+    },
+    {
+      "file": "src/app/page.tsx",
+      "route": "/"
+    },
+    {
+      "file": "src/app/patients/[id]/history/page.tsx",
+      "route": "/patients/[id]/history"
+    },
+    {
+      "file": "src/app/patients/[id]/page.tsx",
+      "route": "/patients/[id]"
+    },
+    {
+      "file": "src/app/patients/identifier-schemes/page.tsx",
+      "route": "/patients/identifier-schemes"
+    },
+    {
+      "file": "src/app/patients/page.tsx",
+      "route": "/patients"
+    },
+    {
+      "file": "src/app/phlebotomy/page.tsx",
+      "route": "/phlebotomy"
+    },
+    {
+      "file": "src/app/portal/change-password/page.tsx",
+      "route": "/portal/change-password"
+    },
+    {
+      "file": "src/app/portal/login/page.tsx",
+      "route": "/portal/login"
+    },
+    {
+      "file": "src/app/portal/page.tsx",
+      "route": "/portal"
+    },
+    {
+      "file": "src/app/portal/reports/[versionId]/page.tsx",
+      "route": "/portal/reports/[versionId]"
+    },
+    {
+      "file": "src/app/pricing/page.tsx",
+      "route": "/pricing"
+    },
+    {
+      "file": "src/app/qc/page.tsx",
+      "route": "/qc"
+    },
+    {
+      "file": "src/app/quality/eqa/page.tsx",
+      "route": "/quality/eqa"
+    },
+    {
+      "file": "src/app/quality/page.tsx",
+      "route": "/quality"
+    },
+    {
+      "file": "src/app/queue-display/[branchId]/page.tsx",
+      "route": "/queue-display/[branchId]"
+    },
+    {
+      "file": "src/app/referrers/page.tsx",
+      "route": "/referrers"
+    },
+    {
+      "file": "src/app/report-templates/page.tsx",
+      "route": "/report-templates"
+    },
+    {
+      "file": "src/app/reports/[orderId]/interpretation/page.tsx",
+      "route": "/reports/[orderId]/interpretation"
+    },
+    {
+      "file": "src/app/reports/[orderId]/page.tsx",
+      "route": "/reports/[orderId]"
+    },
+    {
+      "file": "src/app/reports/page.tsx",
+      "route": "/reports"
+    },
+    {
+      "file": "src/app/resilience/page.tsx",
+      "route": "/resilience"
+    },
+    {
+      "file": "src/app/roles/page.tsx",
+      "route": "/roles"
+    },
+    {
+      "file": "src/app/search/page.tsx",
+      "route": "/search"
+    },
+    {
+      "file": "src/app/security/page.tsx",
+      "route": "/security"
+    },
+    {
+      "file": "src/app/send-outs/page.tsx",
+      "route": "/send-outs"
+    },
+    {
+      "file": "src/app/settings/page.tsx",
+      "route": "/settings"
+    },
+    {
+      "file": "src/app/settings/specimens/page.tsx",
+      "route": "/settings/specimens"
+    },
+    {
+      "file": "src/app/setup/page.tsx",
+      "route": "/setup"
+    },
+    {
+      "file": "src/app/specimens/[id]/label/page.tsx",
+      "route": "/specimens/[id]/label"
+    },
+    {
+      "file": "src/app/specimens/page.tsx",
+      "route": "/specimens"
+    },
+    {
+      "file": "src/app/specimens/retention/page.tsx",
+      "route": "/specimens/retention"
+    },
+    {
+      "file": "src/app/specimens/scan/page.tsx",
+      "route": "/specimens/scan"
+    },
+    {
+      "file": "src/app/transfers/page.tsx",
+      "route": "/transfers"
+    },
+    {
+      "file": "src/app/users/page.tsx",
+      "route": "/users"
+    },
+    {
+      "file": "src/app/verify/report/[token]/page.tsx",
+      "route": "/verify/report/[token]"
+    },
+    {
+      "file": "src/app/worklists/[orderItemId]/page.tsx",
+      "route": "/worklists/[orderItemId]"
+    },
+    {
+      "file": "src/app/worklists/page.tsx",
+      "route": "/worklists"
+    }
+  ]
+}

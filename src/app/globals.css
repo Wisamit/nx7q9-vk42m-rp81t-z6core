@@ -234,6 +234,8 @@ html[data-density="compact"] :where(.detail-card,.dashboard-panel,.settings-card
 .crud-modal{display:flex;flex-direction:column;width:min(760px,100%);max-height:calc(100vh - 48px);background:var(--fl-surface);color:var(--fl-text);border:1px solid var(--fl-border);border-radius:18px;box-shadow:0 28px 90px color-mix(in srgb,var(--fl-text) 35%,transparent);overflow:hidden}
 .crud-modal-compact{width:min(33.333vw,520px);min-width:0}
 .crud-modal-compact .settings-layout{padding-bottom:0;min-width:0}
+.crud-modal-compact .catalog-form{grid-template-columns:minmax(0,1fr)}
+.crud-modal-compact .catalog-form>*{min-width:0}
 .crud-modal-compact .settings-grid,
 .crud-modal-compact .branding-upload-grid,
 .crud-modal-compact .theme-editor-grid,
