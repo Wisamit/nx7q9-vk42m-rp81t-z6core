@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useId, useRef } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { SystemIcon } from "@/components/system-icon";
 
 const FOCUSABLE_SELECTOR = [
@@ -31,33 +31,68 @@ export function CrudModal({
 }) {
   const headingId = useId();
   const descriptionId = useId();
+  const discardTitleId = useId();
+  const discardDescriptionId = useId();
   const dialogRef = useRef<HTMLElement>(null);
+  const discardRef = useRef<HTMLDivElement>(null);
+  const keepEditingRef = useRef<HTMLButtonElement>(null);
+  const focusBeforeDiscardRef = useRef<HTMLElement | null>(null);
   const closeRef = useRef(onClose);
   const changedRef = useRef(false);
+  const discardOpenRef = useRef(false);
+  const [discardOpen, setDiscardOpen] = useState(false);
+  const [discardArabic, setDiscardArabic] = useState(false);
+
   useEffect(() => { closeRef.current = onClose; }, [onClose]);
+  useEffect(() => { discardOpenRef.current = discardOpen; }, [discardOpen]);
 
   const requestClose = useCallback(() => {
+    if (discardOpenRef.current) return;
     if (protectUnsavedChanges && changedRef.current) {
-      const arabic = document.documentElement.lang.toLowerCase().startsWith("ar") ||
-        document.documentElement.dir === "rtl";
-      const message = arabic
-        ? "لديك تغييرات غير محفوظة. هل تريد تجاهلها وإغلاق النافذة؟"
-        : "You have unsaved changes. Discard them and close this dialog?";
-      if (!window.confirm(message)) return;
+      focusBeforeDiscardRef.current = document.activeElement instanceof HTMLElement
+        ? document.activeElement : null;
+      setDiscardArabic(
+        document.documentElement.lang.toLowerCase().startsWith("ar") ||
+        document.documentElement.dir === "rtl"
+      );
+      discardOpenRef.current = true;
+      setDiscardOpen(true);
+      return;
     }
-    // The parent may reject dismissal while an API mutation is running.
-    // Keep the dirty flag until open actually becomes false, otherwise a
-    // second close attempt could discard fields without any warning.
+    // The caller can still reject dismissal while a mutation is running.
+    // Do not clear dirty state until the dialog actually closes.
     closeRef.current();
   }, [protectUnsavedChanges]);
+
+  const cancelDiscard = useCallback(() => {
+    discardOpenRef.current = false;
+    setDiscardOpen(false);
+    const target = focusBeforeDiscardRef.current;
+    if (target?.isConnected) target.focus({ preventScroll: true });
+    else dialogRef.current?.focus({ preventScroll: true });
+  }, []);
+
+  const confirmDiscard = useCallback(() => {
+    discardOpenRef.current = false;
+    setDiscardOpen(false);
+    // The parent may refuse to close while an API write is in progress.
+    // Changed input remains dirty until the next actual open=false cleanup.
+    closeRef.current();
+  }, []);
+
+  useEffect(() => {
+    if (!discardOpen) return;
+    const frame = requestAnimationFrame(() => keepEditingRef.current?.focus({ preventScroll: true }));
+    return () => cancelAnimationFrame(frame);
+  }, [discardOpen]);
 
   useEffect(() => {
     if (!open) {
       changedRef.current = false;
+      discardOpenRef.current = false;
       return;
     }
 
-    // A modal is a true keyboard focus boundary, not just a visual overlay.
     const previouslyFocused = document.activeElement instanceof HTMLElement
       ? document.activeElement : null;
     const previousOverflow = document.body.style.overflow;
@@ -67,30 +102,37 @@ export function CrudModal({
     function onKey(event: KeyboardEvent) {
       const dialog = dialogRef.current;
       if (!dialog) return;
-      // Only the topmost dialog handles global key events.
+      // Only the topmost dialog responds when dialogs are nested.
       const dialogs = document.querySelectorAll<HTMLElement>("[data-crud-modal='true']");
       if (dialogs[dialogs.length - 1] !== dialog) return;
+
       if (event.key === "Escape") {
         event.preventDefault();
         event.stopPropagation();
-        requestClose();
+        if (discardOpenRef.current) cancelDiscard();
+        else requestClose();
         return;
       }
       if (event.key !== "Tab") return;
-      const focusable = Array.from(dialog.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR))
+
+      // When the unsaved changes alert is visible, the underlying form is
+      // deliberately excluded from the keyboard focus boundary.
+      const trap = discardOpenRef.current ? discardRef.current : dialog;
+      if (!trap) return;
+      const focusable = Array.from(trap.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR))
         .filter(element => element.getClientRects().length > 0 &&
           getComputedStyle(element).visibility !== "hidden");
       if (!focusable.length) {
         event.preventDefault();
-        dialog.focus({ preventScroll: true });
+        trap.focus({ preventScroll: true });
         return;
       }
       const first = focusable[0], last = focusable[focusable.length - 1];
       const active = document.activeElement;
-      if (event.shiftKey && (active === first || active === dialog || !dialog.contains(active))) {
+      if (event.shiftKey && (active === first || active === trap || !trap.contains(active))) {
         event.preventDefault();
         last.focus();
-      } else if (!event.shiftKey && (active === last || active === dialog || !dialog.contains(active))) {
+      } else if (!event.shiftKey && (active === last || active === trap || !trap.contains(active))) {
         event.preventDefault();
         first.focus();
       }
@@ -103,7 +145,7 @@ export function CrudModal({
       document.body.style.overflow = previousOverflow;
       if (previouslyFocused?.isConnected) previouslyFocused.focus({ preventScroll: true });
     };
-  }, [open, requestClose]);
+  }, [open, requestClose, cancelDiscard]);
 
   if (!open) return null;
 
@@ -132,6 +174,35 @@ export function CrudModal({
         </button>
       </header>
       <div className="crud-modal-body">{children}</div>
+      {discardOpen && <div className="crud-modal-discard-shade" role="presentation">
+        <div
+          className="crud-modal-discard-panel"
+          role="alertdialog"
+          aria-modal="true"
+          aria-labelledby={discardTitleId}
+          aria-describedby={discardDescriptionId}
+          ref={discardRef}
+          tabIndex={-1}
+        >
+          <h3 id={discardTitleId}>
+            {discardArabic ? "تغييرات غير محفوظة" : "Unsaved changes"}
+          </h3>
+          <p id={discardDescriptionId}>
+            {discardArabic
+              ? "لديك تغييرات غير محفوظة. هل تريد تجاهلها وإغلاق النافذة؟"
+              : "You have unsaved changes. Discard them and close this dialog?"}
+          </p>
+          <div className="crud-modal-discard-actions">
+            <button type="button" className="secondary-button" ref={keepEditingRef}
+              onClick={cancelDiscard}>
+              {discardArabic ? "متابعة التعديل" : "Keep editing"}
+            </button>
+            <button type="button" className="primary-button" onClick={confirmDiscard}>
+              {discardArabic ? "تجاهل التغييرات" : "Discard changes"}
+            </button>
+          </div>
+        </div>
+      </div>}
     </section>
   </div>;
 }
