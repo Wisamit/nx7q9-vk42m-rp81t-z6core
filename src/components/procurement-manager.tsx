@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CrudModal } from "@/components/crud-modal";
 
@@ -34,6 +34,8 @@ export function ProcurementManager({
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState("");
+  const submitting = useRef(false);
+  const [isError, setIsError] = useState(false);
   const [message, setMessage] = useState("");
   const [uiEditor, setUiEditor] = useState("");
   const [requestLines, setRequestLines] = useState<RequestLine[]>([
@@ -48,18 +50,33 @@ export function ProcurementManager({
   const selectedRequest = useMemo(() => approvedRequests.find(request => request.id === selectedRequestId) || null, [approvedRequests, selectedRequestId]);
 
   async function submit(url: string, payload: unknown, key: string, success: string) {
+    if (submitting.current) return false;
+    submitting.current = true;
     setBusy(key);
     setMessage("");
-    const response = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    const body = await response.json().catch(() => ({}));
-    setBusy("");
-    setMessage(response.ok ? success : tr("Request failed.", "فشل الطلب."));
-    if (response.ok) router.refresh();
-    return response.ok;
+    setIsError(false);
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      await response.json().catch(() => ({}));
+      setIsError(!response.ok);
+      setMessage(response.ok ? success : tr("Request failed.", "فشل الطلب."));
+      if (response.ok) router.refresh();
+      return response.ok;
+    } catch {
+      setIsError(true);
+      setMessage(tr(
+        "Connection interrupted. Verify the purchase request or order number before creating another.",
+        "انقطع الاتصال. تحقق من رقم طلب أو أمر الشراء قبل إنشاء سجل آخر.",
+      ));
+      return false;
+    } finally {
+      submitting.current = false;
+      setBusy("");
+    }
   }
 
   function setRequestLine(index: number, field: keyof RequestLine, value: string) {
@@ -71,7 +88,9 @@ export function ProcurementManager({
 
   async function createRequest(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    if (submitting.current) return;
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     const ok = await submit("/api/inventory/purchase-requests", {
       branchId: form.get("branchId"),
       requestNumber: form.get("requestNumber"),
@@ -85,14 +104,16 @@ export function ProcurementManager({
       })),
     }, "request", tr("Purchase request created.", "تم إنشاء طلب الشراء."));
     if (ok) {
-      event.currentTarget.reset();
+      formElement.reset();
       setRequestLines([{ itemId: "", requestedQty: "", estimatedUnitCost: "", currency: "AED", notes: "" }]);
     }
   }
 
   async function createOrder(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    if (submitting.current) return;
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     const ok = await submit("/api/inventory/purchase-orders", {
       branchId: selectedRequest?.branchId || form.get("branchId"),
       supplierId: form.get("supplierId"),
@@ -105,7 +126,7 @@ export function ProcurementManager({
       items: orderLines,
     }, "order", tr("Purchase order created.", "تم إنشاء أمر الشراء."));
     if (ok) {
-      event.currentTarget.reset();
+      formElement.reset();
       setSelectedRequestId("");
       setOrderLines([{ itemId: "", orderedQty: "", unitCost: "" }]);
     }
@@ -130,7 +151,7 @@ export function ProcurementManager({
      onClick={() => { setMessage(""); setUiEditor("request"); }}>
      {tr("Create Purchase Request", "إنشاء طلب شراء")}
    </button>
-   <CrudModal open={uiEditor === "request"} onClose={() => {if (!busy) setUiEditor("");}}
+   <CrudModal open={uiEditor === "request"} onClose={() => {if (!submitting.current) setUiEditor("");}}
      size="compact" title={tr("Create Purchase Request", "إنشاء طلب شراء")}
      description={tr("Supplier procurement is branch scoped and requires the existing approval workflow.", "المشتريات محصورة ضمن الفرع وتخضع لمسار الاعتماد الحالي.")}>
      {uiEditor === "request" && <form className="catalog-form" onSubmit={createRequest}>
@@ -157,7 +178,7 @@ export function ProcurementManager({
 
         <button className="primary-button form-span" disabled={busy !== ""}>{busy === "request" ? tr("Saving…","جارٍ الحفظ…") : tr("Create Purchase Request","إنشاء طلب الشراء")}</button>
       </form>}
-     {uiEditor === "request" && message && <p className="form-warning" role="status">{message}</p>}
+     {uiEditor === "request" && message && <p className={isError ? "form-error" : "form-success"} role={isError ? "alert" : "status"}>{message}</p>}
    </CrudModal>
     </article>
 
@@ -167,7 +188,7 @@ export function ProcurementManager({
      onClick={() => { setMessage(""); setUiEditor("order"); }}>
      {tr("Create Purchase Order", "إنشاء أمر شراء")}
    </button>
-   <CrudModal open={uiEditor === "order"} onClose={() => {if (!busy) setUiEditor("");}}
+   <CrudModal open={uiEditor === "order"} onClose={() => {if (!submitting.current) setUiEditor("");}}
      size="compact" title={tr("Create Purchase Order", "إنشاء أمر شراء")}
      description={tr("Only authorized approved requests may become purchase orders.", "تتحول الطلبات المعتمدة فقط إلى أوامر شراء وفق الصلاحيات.")}>
      {uiEditor === "order" && <form className="catalog-form" onSubmit={createOrder}>
@@ -201,10 +222,10 @@ export function ProcurementManager({
 
         <button className="primary-button form-span" disabled={busy !== ""}>{busy === "order" ? tr("Saving…","جارٍ الحفظ…") : tr("Create Purchase Order","إنشاء أمر الشراء")}</button>
       </form>}
-     {uiEditor === "order" && message && <p className="form-warning" role="status">{message}</p>}
+     {uiEditor === "order" && message && <p className={isError ? "form-error" : "form-success"} role={isError ? "alert" : "status"}>{message}</p>}
    </CrudModal>
     </article>
 
-    {message && <div className="form-success form-span">{message}</div>}
+    {message && <div className={(isError ? "form-error" : "form-success") + " form-span"} role={isError ? "alert" : "status"}>{message}</div>}
   </section>;
 }
