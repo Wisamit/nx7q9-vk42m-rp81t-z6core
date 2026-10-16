@@ -90,7 +90,7 @@ test("Issue #265: pricing editors keep failed fields and request explicit effect
   assert.equal(occurrences(ui, /formElement\.reset\(\)/g), 4);
   assert.equal(occurrences(ui, /submitting\.current = false;/g), 4);
   assert.equal(occurrences(ui, /setIsError\(!response\.ok\);/g), 4);
-  assert.equal(occurrences(ui, /name="effectiveFrom" type="date" required/g), 4);
+  assert.equal(occurrences(ui, /<SystemDateField name="effectiveFrom" required/g), 4);
   assert.doesNotMatch(ui, /defaultValue=\{new Date\(\)\.toISOString\(\)\.slice\(0,\s*10\)\}/);
   assert.doesNotMatch(ui, /event\.currentTarget\.reset\(\)/);
   assert.match(ui, /Verify existing contracts and price revisions before retrying/);
