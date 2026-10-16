@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { CrudModal } from "@/components/crud-modal";
 
 type Choice={id:string;label:string};
 type TestChoice=Choice&{code:string};
@@ -20,10 +21,10 @@ export function DoctorRequisitionForm({locale,patients,branches,tests,requests}:
   const [clinicalNotes,setClinicalNotes]=useState("");
   const [requestKey,setRequestKey]=useState(()=>crypto.randomUUID());
   const [busy,setBusy]=useState(false),[message,setMessage]=useState("");
+  const [createOpen,setCreateOpen]=useState(false);
+  const [cancelId,setCancelId]=useState<string|null>(null);
   async function submit(e:React.FormEvent<HTMLFormElement>) {
     e.preventDefault();if(busy||!patientId||!branchId||testIds.length===0)return;
-    if(!confirm(tr("Submit an electronic test requisition for staff review? No laboratory order or invoice will be created yet.",
-      "إرسال طلب فحوصات إلكتروني لمراجعة الاستقبال؟ لن يُنشأ طلب مخبري أو فاتورة الآن.")))return;
     setBusy(true);setMessage("");
     try {
       const response=await fetch("/api/portal/doctor-requisitions",{
@@ -34,6 +35,7 @@ export function DoctorRequisitionForm({locale,patients,branches,tests,requests}:
       const body=await response.json().catch(()=>({})) as {error?:string};
       if(!response.ok) {setMessage(tr("Request not accepted: ","لم يتم قبول الطلب: ")+(body.error||"unknown"));return;}
       setMessage(tr("Requisition recorded for reception review.","تم تسجيل الإحالة لمراجعة الاستقبال."));
+      setCreateOpen(false);
       setRequestKey(crypto.randomUUID());setTestIds([]);setDiagnosis("");setClinicalNotes("");
       router.refresh();
     }catch{setMessage(tr("Connection interrupted; retry uses the same request ID.",
@@ -41,7 +43,7 @@ export function DoctorRequisitionForm({locale,patients,branches,tests,requests}:
     finally{setBusy(false);}
   }
   async function cancel(id:string){
-    if(busy||!confirm(tr("Cancel this pending requisition?","إلغاء الإحالة المعلّقة؟")))return;
+    if(busy||cancelId!==id)return;
     setBusy(true);setMessage("");
     try{
       const r=await fetch("/api/portal/doctor-requisitions",{
@@ -50,7 +52,7 @@ export function DoctorRequisitionForm({locale,patients,branches,tests,requests}:
       const data=await r.json().catch(()=>({})) as {error?:string};
       setMessage(r.ok?tr("Pending request cancelled.","تم إلغاء الطلب المعلّق."):
         tr("Cancellation failed: ","فشل الإلغاء: ")+(data.error||"unknown"));
-      if(r.ok)router.refresh();
+      if(r.ok){setCancelId(null);router.refresh();}
     }catch{setMessage(tr("Connection failure; check request status.","انقطع الاتصال؛ تحقق من حالة الطلب."));}
     finally{setBusy(false);}
   }
@@ -59,7 +61,19 @@ export function DoctorRequisitionForm({locale,patients,branches,tests,requests}:
       <h2>{tr("Electronic laboratory requisition","طلب فحوصات مخبرية إلكتروني")}</h2>
       <p className="muted">{tr("Only explicitly authorized patients can be selected. A laboratory employee must review, price and register the order separately.",
         "تظهر فقط أسماء المرضى المفوّضين صراحةً. يجب على موظف المختبر مراجعة الطلب وتسعيره وتسجيله بشكل مستقل.")}</p>
-      <form className="form-stack" onSubmit={e=>void submit(e)}>
+      <button type="button" className="primary-button"
+        disabled={busy||patients.length===0||branches.length===0}
+        onClick={()=>{setMessage("");setCreateOpen(true);}}>
+        {tr("Create Electronic Requisition","إنشاء طلب مخبري إلكتروني")}
+      </button>
+      <CrudModal open={createOpen} onClose={()=>{if(!busy)setCreateOpen(false);}}
+        size="compact"
+        title={tr("Create Electronic Requisition","إنشاء طلب مخبري إلكتروني")}
+        description={tr(
+          "Submit for authorized laboratory staff review only. No laboratory order, patient result, or invoice will be created at this step.",
+          "يُقدَّم لمراجعة موظفي المختبر المخوّلين فقط؛ لا ينشئ هذا الإجراء طلباً مخبرياً أو نتيجة مريض أو فاتورة.",
+        )}>
+        {createOpen&&<form className="form-stack" onSubmit={e=>void submit(e)}>
         <label>{tr("Authorized patient","المريض المفوّض")}
           <select required value={patientId} onChange={e=>setPatientId(e.target.value)}>
             {patients.map(p=><option value={p.id} key={p.id}>{p.label}</option>)}
@@ -90,7 +104,9 @@ export function DoctorRequisitionForm({locale,patients,branches,tests,requests}:
         <button className="primary-button" disabled={busy||!patientId||!branchId||testIds.length===0}>
           {busy?tr("Submitting…","جارٍ الإرسال…"):tr("Submit for lab review","إرسال لمراجعة المختبر")}</button>
         {message&&<p role="status">{message}</p>}
-      </form>
+      </form>}
+      </CrudModal>
+      {message&&<p role="status" className="form-warning">{message}</p>}
     </article>
     <article className="detail-card">
       <h2>{tr("Recent requisitions","الإحالات الحديثة")}</h2>
@@ -103,9 +119,25 @@ export function DoctorRequisitionForm({locale,patients,branches,tests,requests}:
         <td>{r.testNames.join(", ")}<small className="table-subtext">{r.priority}</small></td>
         <td>{r.status}</td>
         <td>{r.status==="SUBMITTED"&&<button type="button" className="secondary-button" disabled={busy}
-          onClick={()=>void cancel(r.id)}>{tr("Cancel","إلغاء")}</button>}</td>
+          onClick={()=>{setMessage("");setCancelId(r.id);}}>{tr("Cancel","إلغاء")}</button>}</td>
       </tr>)}</tbody></table></div>
       {requests.length===0&&<p className="muted">{tr("No authorized requisitions yet.","لا توجد إحالات مفوّضة بعد.")}</p>}
     </article>
+    <CrudModal open={cancelId!==null} onClose={()=>{if(!busy)setCancelId(null);}}
+      size="compact"
+      title={tr("Cancel Pending Doctor Requisition","إلغاء طلب الطبيب المعلّق")}
+      description={tr(
+        "Cancel only this unregistered pending electronic requisition. Existing registered laboratory orders and invoices are unaffected.",
+        "يُلغى هذا الطلب الإلكتروني المعلق فقط؛ لا تتأثر طلبات المختبر أو الفواتير المسجّلة.",
+      )}>
+      {cancelId&&<form className="form-stack" onSubmit={event=>{event.preventDefault();void cancel(cancelId);}}>
+        <p>{tr("Confirm cancellation of this pending requisition?",
+          "هل تريد تأكيد إلغاء الطلب المخبري الإلكتروني المعلق؟")}</p>
+        {message&&<p role="status" className="form-warning">{message}</p>}
+        <button type="submit" className="primary-button" disabled={busy}>
+          {busy?tr("Cancelling…","جارٍ الإلغاء…"):tr("Confirm cancellation","تأكيد الإلغاء")}
+        </button>
+      </form>}
+    </CrudModal>
   </section>;
 }
