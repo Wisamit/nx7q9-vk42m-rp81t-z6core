@@ -29,36 +29,69 @@ export function ReportTemplateManager({ branches, templates, locale, currentUser
   };
 
   async function createTemplate(event:FormEvent<HTMLFormElement>){
-    event.preventDefault(); setBusy("template"); setMessage("");
+    event.preventDefault();
+    if(busy || !canManage) return;
+    setBusy("template");setFormError("");setMessage("");
     const f=new FormData(event.currentTarget);
-    const response=await fetch("/api/report-templates",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
-      code:f.get("code"),nameEn:f.get("nameEn"),nameAr:f.get("nameAr"),branchId:f.get("branchId")||null,isDefault:true,
-    })});
-    setBusy(""); setMessage(response.ok?tr("Template created.","تم إنشاء القالب."):tr("Template creation failed.","فشل إنشاء القالب."));
-    if(response.ok){event.currentTarget.reset();router.refresh();setOpen("");}
+    try {
+      const response=await fetch("/api/report-templates",{
+        method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({
+          code:f.get("code"),nameEn:f.get("nameEn"),nameAr:f.get("nameAr"),
+          branchId:f.get("branchId")||null,isDefault:true,
+        }),
+      });
+      const body=await response.json().catch(()=>({})) as {error?:string};
+      if(!response.ok){
+        setFormError(body.error||tr("Template creation failed.","فشل إنشاء القالب."));
+        return;
+      }
+      setMessage(tr("Template created.","تم إنشاء القالب."));
+      setOpen("");
+      router.refresh();
+    }catch{
+      setFormError(tr("Connection interrupted; check existing templates before retrying.",
+        "انقطع الاتصال؛ تحقق من القوالب الحالية قبل إعادة المحاولة."));
+    }finally{setBusy("");}
   }
 
   async function createVersion(event:FormEvent<HTMLFormElement>){
-    event.preventDefault(); setBusy("version"); setMessage("");
+    event.preventDefault();
+    if(busy || !canManage) return;
+    setBusy("version");setFormError("");setMessage("");
     const f=new FormData(event.currentTarget);
     const templateId=String(f.get("templateId")||"");
     const columns=["TEST","RESULT","FLAG","UNIT","REFERENCE"].filter(key=>f.get("col_"+key)==="on");
-    const response=await fetch(`/api/report-templates/${templateId}/versions`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
-      changeSummary:f.get("changeSummary"),
-      configuration:{
-        languageMode:f.get("languageMode"),
-        logoUrl:f.get("logoUrl"),
-        headerEn:f.get("headerEn"),headerAr:f.get("headerAr"),
-        footerEn:f.get("footerEn"),footerAr:f.get("footerAr"),
-        watermark:f.get("watermark"),
-        showSignature:f.get("showSignature")==="on",
-        showQr:f.get("showQr")==="on",
-        showPageNumbers:f.get("showPageNumbers")==="on",
-        columns,
-      },
-    })});
-    setBusy(""); setMessage(response.ok?tr("Draft version created.","تم إنشاء نسخة مسودة."):tr("Version creation failed.","فشل إنشاء النسخة."));
-    if(response.ok){event.currentTarget.reset();router.refresh();setOpen("");}
+    try {
+      const response=await fetch(`/api/report-templates/${templateId}/versions`,{
+        method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({
+          changeSummary:f.get("changeSummary"),
+          configuration:{
+            languageMode:f.get("languageMode"),
+            logoUrl:f.get("logoUrl"),
+            headerEn:f.get("headerEn"),headerAr:f.get("headerAr"),
+            footerEn:f.get("footerEn"),footerAr:f.get("footerAr"),
+            watermark:f.get("watermark"),
+            showSignature:f.get("showSignature")==="on",
+            showQr:f.get("showQr")==="on",
+            showPageNumbers:f.get("showPageNumbers")==="on",
+            columns,
+          },
+        }),
+      });
+      const body=await response.json().catch(()=>({})) as {error?:string};
+      if(!response.ok){
+        setFormError(body.error||tr("Version creation failed.","فشل إنشاء النسخة."));
+        return;
+      }
+      setMessage(tr("Draft version created.","تم إنشاء نسخة مسودة."));
+      setOpen("");
+      router.refresh();
+    }catch{
+      setFormError(tr("Connection interrupted; verify version history before retrying.",
+        "انقطع الاتصال؛ تحقق من سجل الإصدارات قبل إعادة المحاولة."));
+    }finally{setBusy("");}
   }
 
   function reviewVersion(templateId: string, versionId: string, action: "APPROVE" | "ACTIVATE") {
@@ -124,8 +157,8 @@ export function ReportTemplateManager({ branches, templates, locale, currentUser
     <div className="crud-action-bar">
       <div>{message&&<span className="crud-success-toast">{message}</span>}</div>
       <div className="crud-action-buttons">
-        <button type="button" className="primary-button" disabled={!canManage || !!busy} onClick={()=>{setMessage("");setOpen("template")}}><SystemIcon name="plus" size={16}/>{tr("New Template","قالب جديد")}</button>
-        <button type="button" className="secondary-button" disabled={!canManage || !!busy} onClick={()=>{setMessage("");setOpen("version")}}><SystemIcon name="plus" size={16}/>{tr("New Version","نسخة جديدة")}</button>
+        <button type="button" className="primary-button" disabled={!canManage || !!busy} onClick={()=>{setMessage("");setFormError("");setOpen("template")}}><SystemIcon name="plus" size={16}/>{tr("New Template","قالب جديد")}</button>
+        <button type="button" className="secondary-button" disabled={!canManage || !!busy} onClick={()=>{setMessage("");setFormError("");setOpen("version")}}><SystemIcon name="plus" size={16}/>{tr("New Version","نسخة جديدة")}</button>
       </div>
     </div>
 
@@ -136,7 +169,7 @@ export function ReportTemplateManager({ branches, templates, locale, currentUser
         <label>{tr("Name (English)","الاسم بالإنجليزية")}<input name="nameEn" required/></label>
         <label>{tr("Name (Arabic)","الاسم بالعربية")}<input name="nameAr" dir="rtl"/></label>
         <button className="primary-button form-span" disabled={busy==="template"}>{busy==="template"?tr("Saving…","جارٍ الحفظ…"):tr("Create Default Template","إنشاء القالب الافتراضي")}</button>
-        {message&&<div className="form-success form-span">{message}</div>}
+        {formError&&<p className="form-error form-span" role="alert">{formError}</p>}
       </form>}
     </CrudModal>
 
@@ -156,7 +189,7 @@ export function ReportTemplateManager({ branches, templates, locale, currentUser
         </fieldset>
         <label className="form-span">{tr("Change summary","ملخص التغيير")}<input name="changeSummary" required/></label>
         <button className="primary-button form-span" disabled={busy==="version"}>{busy==="version"?tr("Saving…","جارٍ الحفظ…"):tr("Create Draft Version","إنشاء نسخة مسودة")}</button>
-        {message&&<div className="form-success form-span">{message}</div>}
+        {formError&&<p className="form-error form-span" role="alert">{formError}</p>}
       </form>}
     </CrudModal>
 
