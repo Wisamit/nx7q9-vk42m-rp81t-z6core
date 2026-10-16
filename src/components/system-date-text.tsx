@@ -1,12 +1,12 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-import { formatCalendarDisplay, formatInstantDisplay } from "@/lib/system-date-display";
+import { formatCalendarDisplay, formatInstantDisplay, formatInstantDateDisplay } from "@/lib/system-date-display";
 import { normalizeSystemDateFormat } from "@/lib/system-date";
 
 type Props = {
   value: string;
-  kind?: "calendar" | "instant";
+  kind?: "calendar" | "instant" | "instant-date";
   timeZone?: string;
 };
 
@@ -27,18 +27,23 @@ export function SystemDateText({ value, kind = "instant", timeZone }: Props) {
   const settings = useSyncExternalStore(subscribe, currentSettings, initialSettings).split("|");
   const dateFormat = normalizeSystemDateFormat(settings[0]);
   const zone = timeZone || settings[1] || "UTC";
+  const preferences = {
+    dateFormat,
+    timeFormat: settings[2] === "12" ? "12" as const : "24" as const,
+    timeZone: zone,
+    showSeconds: settings[3] === "true",
+  };
   const display = kind === "calendar"
     ? formatCalendarDisplay(value, dateFormat)
+    : kind === "instant-date"
+    ? formatInstantDateDisplay(value, preferences)
     : formatInstantDisplay(value, {
-      dateFormat,
-      timeFormat: settings[2] === "12" ? "12" : "24",
-      timeZone: zone,
-      showSeconds: settings[3] === "true",
+      ...preferences,
     });
   return <time
     className="system-date-text"
     dir="ltr"
     dateTime={value}
-    title={kind === "instant" ? value + " · " + zone : value}
+    title={kind === "calendar" ? value : value + " · " + zone}
   >{display}</time>;
 }
