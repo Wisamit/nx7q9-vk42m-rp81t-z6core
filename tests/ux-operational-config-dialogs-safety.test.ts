@@ -53,7 +53,7 @@ test("UI gate #265: identifier creation and reasoned deactivation remain auditab
 test("UI gate #265: tax publishing retains exact existing user-entered fields and history", () => {
   const source = managers.tax;
   const route = readFileSync("src/app/api/billing/tax-rules/route.ts", "utf8");
-  assert.match(source, /onClick=\{\(\) => \{ setMessage\(" "\); setOpen\(true\); \}\}/);
+  assert.match(source, /onClick=\{\(\) => \{ setMessage\(""\); setOpen\(true\); \}\}/);
   assert.match(source, /open && <form className="catalog-form" onSubmit=\{publish\}/);
   assert.match(source, /\/api\/billing\/tax-rules/);
   assert.match(source, /ratePercent: rate/);
