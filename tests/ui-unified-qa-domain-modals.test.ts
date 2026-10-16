@@ -43,7 +43,9 @@ test("UI #265: protected procurement, QC, quality, notification, retention and s
     assert.ok(
       moduleName === "notification-center-actions"
         ? source.includes('if (!submitting.current) setUiEditor("")')
-        : source.includes('if (!busy) setUiEditor("")'),
+        : ["procurement-manager", "qc-manager", "quality-management-console"].includes(moduleName)
+          ? source.includes('if (!submitting.current && !busy) setUiEditor("")')
+          : source.includes('if (!busy) setUiEditor("")'),
       moduleName + " must refuse dismissing a modal during an in-flight mutation",
     );
   }
