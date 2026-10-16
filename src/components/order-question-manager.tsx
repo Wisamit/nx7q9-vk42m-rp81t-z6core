@@ -1,4 +1,5 @@
 "use client";
+import { SystemDateField } from "@/components/system-date-field";
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -93,8 +94,8 @@ export function OrderQuestionManager({ testId, locale }: { testId: string; local
     <label>{tr("Question (English)","السؤال بالإنجليزية")}<input name="questionEn" required /></label>
     <label>{tr("Question (Arabic)","السؤال بالعربية")}<input name="questionAr" dir="rtl" /></label>
     <label>{tr("Display order","ترتيب العرض")}<input name="displayOrder" type="number" min="0" defaultValue="0" /></label>
-    <label>{tr("Effective from","ساري من")}<input name="effectiveFrom" type="date" required  /></label>
-    <label>{tr("Effective to","ساري حتى")}<input name="effectiveTo" type="date" /></label>
+    <label>{tr("Effective from","ساري من")}<SystemDateField name="effectiveFrom" required /></label>
+    <label>{tr("Effective to","ساري حتى")}<SystemDateField name="effectiveTo" /></label>
     <label className="check-line"><input name="required" type="checkbox" /> {tr("Required at order entry","مطلوب عند إدخال الطلب")}</label>
     <label className="form-span">{tr("Choice options","خيارات الاختيار")} <small>{tr("For SINGLE_CHOICE: CODE | English | Arabic, one option per line.","لنوع SINGLE_CHOICE: الرمز | English | العربية، خيار واحد في كل سطر.")}</small>
       <textarea name="options" rows={4} placeholder={"FASTING | Fasting | صائم\nNON_FASTING | Non-fasting | غير صائم"} />

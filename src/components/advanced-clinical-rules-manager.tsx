@@ -1,4 +1,5 @@
 "use client";
+import { SystemDateField } from "@/components/system-date-field";
 
 import { FormEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -133,8 +134,8 @@ export function AdvancedClinicalRulesManager({ tests, branches, locale }: { test
         <label className="form-span">{tr("Formula", "المعادلة")}<input name="expression" required placeholder={tr("Example: TC - HDL - (TG / 5)","مثال: TC - HDL - (TG / 5)")} /></label>
         <p className="muted form-span">{tr("Available component codes:", "رموز المكونات المتاحة:")} {calcComponents.map(component => component.code).join(", ") || tr("Select a test first.", "اختر فحصًا أولاً.")}</p>
         <label>{tr("Decimal precision", "عدد المنازل العشرية")}<input name="decimalPrecision" type="number" min="0" max="12" defaultValue="2" /></label>
-        <label>{tr("Effective from (select intended local date)", "ساري من (اختر التاريخ المحلي المقصود)")}<input name="effectiveFrom" type="date" required /></label>
-        <label>{tr("Effective to", "ساري حتى")}<input name="effectiveTo" type="date" /></label>
+        <label>{tr("Effective from (select intended local date)", "ساري من (اختر التاريخ المحلي المقصود)")}<SystemDateField name="effectiveFrom" required /></label>
+        <label>{tr("Effective to", "ساري حتى")}<SystemDateField name="effectiveTo" /></label>
         <button className="primary-button form-span" disabled={busy === "calculated"}>{busy === "calculated" ? tr("Saving…", "جارٍ الحفظ…") : tr("Create Calculated Rule Draft", "إنشاء مسودة القاعدة المحسوبة")}</button>
         {formError && <p className="form-error form-span" role="alert">{formError}</p>}
       </form>}
@@ -176,8 +177,8 @@ export function AdvancedClinicalRulesManager({ tests, branches, locale }: { test
         </select></label>
         <label className="form-span">{tr("Note (English)", "الملاحظة بالإنجليزية")}<textarea name="noteEn" rows={2} /></label>
         <label className="form-span">{tr("Note (Arabic)", "الملاحظة بالعربية")}<textarea name="noteAr" rows={2} dir="rtl" /></label>
-        <label>{tr("Effective from (select intended local date)", "ساري من (اختر التاريخ المحلي المقصود)")}<input name="effectiveFrom" type="date" required /></label>
-        <label>{tr("Effective to", "ساري حتى")}<input name="effectiveTo" type="date" /></label>
+        <label>{tr("Effective from (select intended local date)", "ساري من (اختر التاريخ المحلي المقصود)")}<SystemDateField name="effectiveFrom" required /></label>
+        <label>{tr("Effective to", "ساري حتى")}<SystemDateField name="effectiveTo" /></label>
         <button className="primary-button form-span" disabled={busy === "reflex"}>{busy === "reflex" ? tr("Saving…", "جارٍ الحفظ…") : tr("Create Reflex Rule Draft", "إنشاء مسودة قاعدة التوصية")}</button>
         {formError && <p className="form-error form-span" role="alert">{formError}</p>}
       </form>}

@@ -1,4 +1,5 @@
 "use client";
+import { SystemDateField } from "@/components/system-date-field";
 
 import { FormEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -149,8 +150,8 @@ export function ResultValidationPolicyManager({
       <label>{tr("Policy code", "رمز السياسة")}<input name="code" required /></label>
       <label>{tr("English name", "الاسم بالإنجليزية")}<input name="nameEn" required /></label>
       <label>{tr("Arabic name", "الاسم بالعربية")}<input name="nameAr" dir="rtl" /></label>
-      <label>{tr("Effective from", "ساري من")}<input name="effectiveFrom" type="date" required defaultValue={new Date().toISOString().slice(0,10)} /></label>
-      <label>{tr("Effective to", "ساري حتى")}<input name="effectiveTo" type="date" /></label>
+      <label>{tr("Effective from", "ساري من")}<SystemDateField name="effectiveFrom" required /></label>
+      <label>{tr("Effective to", "ساري حتى")}<SystemDateField name="effectiveTo" /></label>
       <label className="check-line"><input type="checkbox" checked={requiresMedicalValidation} onChange={e => setRequiresMedicalValidation(e.target.checked)} /> {tr("Require medical validation", "يتطلب تحققاً طبياً")}</label>
       {requiresMedicalValidation && <label className="check-line"><input type="checkbox" name="allowSameReviewer" /> {tr("Allow same user for technical and medical stages", "السماح لنفس المستخدم بالمراجعة الفنية والتحقق الطبي")}</label>}
       <button className="primary-button form-span" disabled={saving}>{saving ? tr("Saving…", "جارٍ الحفظ…") : tr("Create Validation Policy Draft", "إنشاء مسودة سياسة التحقق")}</button>

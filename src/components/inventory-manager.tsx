@@ -1,4 +1,5 @@
 "use client";
+import { SystemDateTimeField } from "@/components/system-date-time-field";
 
 import { FormEvent, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -318,7 +319,7 @@ export function InventoryManager({
         <label>{tr("Supplier","المورد")}<select name="supplierId" required defaultValue=""><option value="">{tr("Select supplier…","اختر المورد…")}</option>{suppliers.map(supplier => <option key={supplier.id} value={supplier.id}>{supplier.code} — {localizedName(supplier)}</option>)}</select></label>
         <label>{tr("Receipt number","رقم الاستلام")}<input name="receiptNumber" required /></label>
         <label>{tr("Supplier reference","مرجع المورد")}<input name="supplierReference" /></label>
-        <label>{tr("Received at","وقت الاستلام")}<input name="receivedAt" type="datetime-local" /></label>
+        <label>{tr("Received at","وقت الاستلام")}<SystemDateTimeField name="receivedAt" /></label>
         <label className="form-span">{tr("Notes","ملاحظات")}<textarea name="notes" rows={2} /></label>
 
         <div className="form-span">

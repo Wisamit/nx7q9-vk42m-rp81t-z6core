@@ -1,4 +1,5 @@
 "use client";
+import { SystemDateTimeField } from "@/components/system-date-time-field";
 
 import { FormEvent, useRef, useState } from "react";
 import { CrudModal } from "@/components/crud-modal";
@@ -93,7 +94,7 @@ export function PortalBookingForm({
       <label>{tr("Mode", "النوع")}<select value={mode} onChange={e => setMode(e.target.value)}><option value="ONSITE">{tr("Onsite", "في المختبر")}</option><option value="HOME_COLLECTION">{tr("Home collection", "سحب منزلي")}</option></select></label>
       <label>{tr("Service code", "رمز الخدمة")}<input name="serviceCode" /></label>
       <label className="form-span">{tr("Service / request", "الخدمة / الطلب")}<input name="serviceNameSnapshot" required placeholder={tr("Laboratory appointment", "موعد مختبر")} /></label>
-      <label>{tr("Preferred date/time", "التاريخ والوقت المفضل")}<input name="scheduledStart" type="datetime-local" required /></label>
+      <label>{tr("Preferred date/time", "التاريخ والوقت المفضل")}<SystemDateTimeField name="scheduledStart" required /></label>
       {mode === "HOME_COLLECTION" && <label className="form-span">{tr("Collection address", "عنوان السحب")}<textarea name="address" rows={2} required /></label>}
       <label className="form-span">{tr("Notes", "ملاحظات")}<textarea name="notes" rows={2} /></label>
       <button className="primary-button form-span" disabled={busy}>{busy ? tr("Submitting…", "جارٍ الإرسال…") : tr("Request Booking", "طلب الحجز")}</button>

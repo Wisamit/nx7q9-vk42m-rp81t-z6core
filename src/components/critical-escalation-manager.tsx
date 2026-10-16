@@ -1,4 +1,5 @@
 "use client";
+import { SystemDateField } from "@/components/system-date-field";
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -90,8 +91,8 @@ export function CriticalEscalationManager({
       <label>{tr("Escalation interval (minutes)", "فاصل التصعيد (بالدقائق)")}<input name="escalationIntervalMinutes" type="number" min="1" max="1440" defaultValue="15" required /></label>
       <label>{tr("Maximum escalation level", "أقصى مستوى للتصعيد")}<input name="maxEscalationLevel" type="number" min="1" max="10" defaultValue="3" required /></label>
       <label className="check-line"><input name="requireReadBack" type="checkbox" defaultChecked /> {tr("Require read-back on acknowledgement", "اشتراط إعادة القراءة عند الإقرار")}</label>
-      <label>{tr("Effective from (select intended local date)", "ساري من (اختر التاريخ المحلي المقصود)")}<input name="effectiveFrom" type="date" required /></label>
-      <label>{tr("Effective to", "ساري حتى")}<input name="effectiveTo" type="date" /></label>
+      <label>{tr("Effective from (select intended local date)", "ساري من (اختر التاريخ المحلي المقصود)")}<SystemDateField name="effectiveFrom" required /></label>
+      <label>{tr("Effective to", "ساري حتى")}<SystemDateField name="effectiveTo" /></label>
       <button className="primary-button form-span" disabled={busy}>{busy ? tr("Saving…", "جارٍ الحفظ…") : tr("Create Critical Escalation Policy Draft", "إنشاء مسودة سياسة التصعيد")}</button>
       {formError && <p className="form-error form-span" role="alert">{formError}</p>}
     </form>}

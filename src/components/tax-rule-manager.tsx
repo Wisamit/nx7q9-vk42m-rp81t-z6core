@@ -1,4 +1,5 @@
 "use client";
+import { SystemDateField } from "@/components/system-date-field";
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -130,7 +131,7 @@ export function TaxRuleManager({
           </select>
         </label>
         <label>{tr("Rate (%)", "النسبة (%)")}<input type="number" min="0" max="100" step="0.01" required disabled={treatment !== "STANDARD"} value={rate} onChange={event => setRate(event.target.value)} /></label>
-        <label>{tr("Effective date", "تاريخ السريان")}<input name="effectiveFrom" type="date" required /></label>
+        <label>{tr("Effective date", "تاريخ السريان")}<SystemDateField name="effectiveFrom" required /></label>
         <label className="form-span">{tr("Publication reason", "سبب نشر القاعدة")}<textarea name="reason" maxLength={1000} required /></label>
         <button className="primary-button form-span" disabled={busy}>{busy ? tr("Publishing…", "جارٍ النشر…") : tr("Publish New Tax Rule", "نشر قاعدة ضريبية جديدة")}</button>
         {message && <div className="form-error form-span" role="alert">{message}</div>}

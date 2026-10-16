@@ -30,7 +30,7 @@ test("UI #265: catalog and clinical catalog use shared compact modal, no dismiss
 
 test("UI #265: clinical effective dates require explicit input, no UTC day silently applied", () => {
   const source = read("src/components/clinical-catalog-manager.tsx");
-  const dateFields = [...source.matchAll(/<input name="effectiveFrom" type="date" required\s*\/>/g)];
+  const dateFields = [...source.matchAll(/<SystemDateField name="effectiveFrom" required\s*\/>/g)];
   assert.equal(dateFields.length, 2, "TAT and reference range effective date both require clinician entry");
   assert.ok(!source.includes('new Date().toISOString().slice(0, 10)'));
   assert.ok(source.includes("New reference intervals are saved as inactive drafts"));

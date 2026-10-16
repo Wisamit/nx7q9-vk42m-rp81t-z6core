@@ -1,4 +1,5 @@
 "use client";
+import { SystemDateTimeField } from "@/components/system-date-time-field";
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CrudModal } from "@/components/crud-modal";
@@ -115,7 +116,7 @@ export function EqaWorkspace({locale,actorId,branches,programs,rounds,components
         <label>{tr("Provider round code","رمز الجولة")}<input name="roundCode" required maxLength={80}/></label>
         <label>{tr("External sample identifier","معرّف عينة التقييم")}<input name="sampleCode" required maxLength={120}/></label>
         <label>{tr("Submission deadline (your browser local time; optional)","الموعد النهائي بالتوقيت المحلي للمتصفح (اختياري)")}
-          <input name="dueAt" type="datetime-local"/></label>
+          <SystemDateTimeField name="dueAt" /></label>
         <button className="primary-button" disabled={busy||!selectedProgramItem}>{tr("Create open round","إنشاء جولة مفتوحة")}</button>
       </form>}
   </CrudModal>

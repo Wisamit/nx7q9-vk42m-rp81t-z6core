@@ -54,7 +54,7 @@ test("Issue #265: effective-dated order question editor preserves prior order an
   assert.ok(question.includes('open={open}'));
   assert.ok(question.includes('size="compact"'));
   assert.ok(question.includes('open && <form className="catalog-form" onSubmit={submit}'));
-  assert.ok(question.includes('name="effectiveFrom" type="date" required'));
+  assert.ok(question.includes('<SystemDateField name="effectiveFrom" required'));
   assert.ok(!question.includes("new Date().toISOString().slice(0,10)"),
     "clinical effective dates must not silently use UTC's current date");
   assert.ok(question.includes('fetch(`/api/catalog/tests/${testId}/questions`'));

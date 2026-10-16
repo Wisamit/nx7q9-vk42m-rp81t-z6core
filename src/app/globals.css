@@ -523,3 +523,8 @@ html[data-density="compact"] :where(.detail-card,.dashboard-panel,.settings-card
 .system-date-picker-trigger{display:inline-flex;align-items:center;justify-content:center;min-height:38px;min-width:38px;background:var(--fl-surface);color:var(--fl-text);border:1px solid var(--fl-border);border-radius:8px;cursor:pointer}
 .system-date-picker-trigger:focus-visible{outline:2px solid var(--fl-primary);outline-offset:2px}
 .system-date-native-picker{position:absolute;inset-inline-end:0;bottom:0;width:1px;height:1px;opacity:0;pointer-events:none}
+
+/* Keep local clock time next to the date rendered in the organization's configured format. */
+.system-date-time-field{display:grid;grid-template-columns:minmax(0,1fr) minmax(110px,.48fr);gap:8px;align-items:center;width:100%;min-width:0}
+.system-date-time-field>input[type=time]{min-width:0;width:100%;direction:ltr;font-variant-numeric:tabular-nums}
+@media(max-width:480px){.system-date-time-field{grid-template-columns:1fr}}
