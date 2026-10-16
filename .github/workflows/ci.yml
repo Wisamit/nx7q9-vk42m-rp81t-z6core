@@ -180,6 +180,16 @@ jobs:
       - run: npm run test:ui-theme
       - run: npm run test:ui-i18n
       - run: node scripts/ui-route-form-inventory.mjs --check
+      - run: node scripts/ui-full-surface-audit.mjs --check
+      - run: node scripts/ui-full-surface-audit.mjs --markdown > ui-full-surface-audit.md
+      - run: node scripts/ui-full-surface-audit.mjs --json > ui-full-surface-audit.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ui-full-surface-audit
+          path: |
+            ui-full-surface-audit.md
+            ui-full-surface-audit.json
+          if-no-files-found: error
       - run: node scripts/ui-route-form-inventory.mjs --markdown > ui-route-form-inventory.md
       - uses: actions/upload-artifact@v4
         with:
