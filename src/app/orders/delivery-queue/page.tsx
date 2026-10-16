@@ -1,3 +1,4 @@
+import { SystemDateText } from "@/components/system-date-text";
 import Link from "next/link";
 import {notFound} from "next/navigation";
 import {permissionSet,requirePermission} from "@/lib/auth";
@@ -138,7 +139,7 @@ export default async function DeliveryQueuePage({searchParams}:{searchParams:Sea
             <td><strong>{row.accessionNumber}</strong></td>
             <td>{branchNames.get(row.orderingBranchId)||"—"}</td>
             <td>{local}</td>
-            <td>{row.promisedUtc.toISOString().replace("T"," ").slice(0,19)}</td>
+            <td>{<SystemDateText value={row.promisedUtc.toISOString()} />}</td>
             <td>{statusText(follow)}</td>
             <td>{row.currentReportStatus?
               statusLabel(locale,row.currentReportStatus):

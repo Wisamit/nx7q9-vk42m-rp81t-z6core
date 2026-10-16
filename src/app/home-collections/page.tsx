@@ -1,3 +1,4 @@
+import { SystemDateText } from "@/components/system-date-text";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { permissionSet, requireSession } from "@/lib/auth";
@@ -104,9 +105,7 @@ export default async function HomeCollectionsBoard({
             const collector = visit.assignedCollector;
             return <tr key={visit.id}>
               <td><strong>{visit.appointment.appointmentNumber}</strong><br/>
-                <small>{new Intl.DateTimeFormat(locale === "ar" ? "ar" : "en-GB",
-                  { timeZone: visit.branch.timezone, dateStyle: "short", timeStyle: "short" })
-                  .format(visit.appointment.scheduledStart)}</small></td>
+                <small>{<SystemDateText value={visit.appointment.scheduledStart.toISOString()} timeZone={visit.branch.timezone} />}</small></td>
               <td>{patient.patientNumber}<br/><small>{locale === "ar" ?
                 patient.fullNameAr || patient.fullNameEn : patient.fullNameEn}</small></td>
               <td>{visit.branch.code}<br/><small>{collector ?

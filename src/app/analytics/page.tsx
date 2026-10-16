@@ -1,3 +1,5 @@
+import { SystemDateText } from "@/components/system-date-text";
+import { SystemDateField } from "@/components/system-date-field";
 import Link from "next/link";
 import { AnalyticsBars } from "@/components/analytics-bars";
 import { permissionSet, requirePermission } from "@/lib/auth";
@@ -555,7 +557,8 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
     .slice(0, 10);
 
   const periodLabel = start || end
-    ? (start ? start.toISOString().slice(0, 10) : tr(locale, "Beginning", "البداية")) + " → " + (end ? end.toISOString().slice(0, 10) : tr(locale, "Now", "الآن"))
+    ? <>{start ? <SystemDateText value={start.toISOString().slice(0, 10)} kind="calendar" /> : tr(locale, "Beginning", "البداية")} {" → "}
+        {end ? <SystemDateText value={end.toISOString().slice(0, 10)} kind="calendar" /> : tr(locale, "Now", "الآن")}</>
     : tr(locale, "All time", "كل الوقت");
 
   return <main className="catalog-shell">
@@ -581,8 +584,8 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
         <option value="">{tr(locale, "All authorized branches", "كل الفروع المصرح بها")}</option>
         {branches.map(branch => <option key={branch.id} value={branch.id}>{branch.code} — {localizedName(branch)}</option>)}
       </select></label>
-      <label>{tr(locale, "From", "من")}<input type="date" name="from" defaultValue={first(params.from) || ""} /></label>
-      <label>{tr(locale, "To", "إلى")}<input type="date" name="to" defaultValue={first(params.to) || ""} /></label>
+      <label>{tr(locale, "From", "من")}<SystemDateField name="from" defaultValue={first(params.from) || ""} /></label>
+      <label>{tr(locale, "To", "إلى")}<SystemDateField name="to" defaultValue={first(params.to) || ""} /></label>
       <button className="secondary-button" type="submit">{tr(locale, "Apply", "تطبيق")}</button>
       <span className="muted">{periodLabel}</span>
     </form>
@@ -716,7 +719,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
             <td>{indicator.branch ? indicator.branch.code + " — " + localizedName(indicator.branch) : tr(locale, "Organization", "المؤسسة")}</td>
             <td>{measurement ? measurement.value.toString() + (indicator.unit ? " " + indicator.unit : "") : "—"}</td>
             <td>{target}</td>
-            <td>{measurement ? measurement.periodStart.toISOString().slice(0,10) + " → " + measurement.periodEnd.toISOString().slice(0,10) : "—"}</td>
+            <td>{measurement ? <><SystemDateText value={measurement.periodStart.toISOString().slice(0,10)} kind="calendar" /> {" → "} <SystemDateText value={measurement.periodEnd.toISOString().slice(0,10)} kind="calendar" /></> : "—"}</td>
           </tr>;
         })}</tbody>
       </table></div>

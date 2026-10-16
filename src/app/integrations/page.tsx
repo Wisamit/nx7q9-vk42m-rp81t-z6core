@@ -1,3 +1,4 @@
+import { SystemDateText } from "@/components/system-date-text";
 import Link from "next/link";
 import { IntegrationManager } from "@/components/integration-manager";
 import { permissionSet, requirePermission } from "@/lib/auth";
@@ -151,7 +152,7 @@ export default async function IntegrationsPage() {
           <tbody>{mappings.length === 0 ? <tr><td colSpan={6} className="empty-state">{tr(locale, "No terminology mappings.", "لا توجد روابط مصطلحات.")}</td></tr> : mappings.map(mapping => <tr key={mapping.id}>
             <td><strong>{mapping.test.code}</strong>{mapping.component ? " / " + mapping.component.code : ""}</td>
             <td>{mapping.system}</td><td>{mapping.code}</td><td>{mapping.display || "—"}</td>
-            <td>{mapping.effectiveFrom.toISOString().slice(0,10)} → {mapping.effectiveTo?.toISOString().slice(0,10) || tr(locale, "Open", "مفتوح")}</td>
+            <td>{<SystemDateText value={mapping.effectiveFrom.toISOString().slice(0,10)} kind="calendar" />} → {mapping.effectiveTo ? <SystemDateText value={mapping.effectiveTo.toISOString().slice(0,10)} kind="calendar" /> : tr(locale, "Open", "مفتوح")}</td>
             <td>{statusLabel(locale, mapping.status)}</td>
           </tr>)}</tbody>
         </table></div>
@@ -166,7 +167,7 @@ export default async function IntegrationsPage() {
             return <tr key={key.id}>
               <td>{key.name}</td><td>{key.endpoint.code}</td><td><code>{key.keyPrefix}</code></td>
               <td>{Array.isArray(key.scopes) ? key.scopes.join(", ") : "—"}</td>
-              <td>{key.lastUsedAt?.toISOString().replace("T"," ").slice(0,19) || tr(locale, "Never", "لم يُستخدم")}</td>
+              <td>{key.lastUsedAt ? <SystemDateText value={key.lastUsedAt.toISOString()} /> : tr(locale, "Never", "لم يُستخدم")}</td>
               <td>{keyStatus}</td>
             </tr>;
           })}</tbody>
@@ -180,7 +181,7 @@ export default async function IntegrationsPage() {
         <div className="table-wrap"><table>
           <thead><tr><th>{tr(locale, "Created", "تاريخ الإنشاء")}</th><th>{tr(locale, "Endpoint", "نقطة التكامل")}</th><th>{tr(locale, "Direction", "الاتجاه")}</th><th>{tr(locale, "Type", "النوع")}</th><th>{tr(locale, "Control ID", "معرّف التحكم")}</th><th>{tr(locale, "Status", "الحالة")}</th><th>{tr(locale, "Attempts", "المحاولات")}</th></tr></thead>
           <tbody>{messages.length === 0 ? <tr><td colSpan={7} className="empty-state">{tr(locale, "No integration messages.", "لا توجد رسائل تكامل.")}</td></tr> : messages.map(item => <tr key={item.id}>
-            <td>{item.createdAt.toISOString().replace("T"," ").slice(0,19)}</td><td>{item.endpoint.code}</td><td>{directionLabel(item.direction)}</td>
+            <td>{<SystemDateText value={item.createdAt.toISOString()} />}</td><td>{item.endpoint.code}</td><td>{directionLabel(item.direction)}</td>
             <td>{item.messageType}</td><td><small>{item.controlId || "—"}</small></td>
             <td><span className={"status-badge status-" + item.status.toLowerCase().replaceAll("_","-")}>{statusLabel(locale, item.status)}</span></td><td>{item.attemptCount}</td>
           </tr>)}</tbody>
@@ -192,9 +193,9 @@ export default async function IntegrationsPage() {
         <div className="table-wrap"><table>
           <thead><tr><th>{tr(locale, "Created", "تاريخ الإنشاء")}</th><th>{tr(locale, "Endpoint", "نقطة التكامل")}</th><th>{tr(locale, "Event", "الحدث")}</th><th>{tr(locale, "Status", "الحالة")}</th><th>{tr(locale, "Attempts", "المحاولات")}</th><th>HTTP</th><th>{tr(locale, "Next retry", "المحاولة التالية")}</th></tr></thead>
           <tbody>{deliveries.length === 0 ? <tr><td colSpan={7} className="empty-state">{tr(locale, "No webhook deliveries.", "لا توجد عمليات تسليم Webhook.")}</td></tr> : deliveries.map(item => <tr key={item.id}>
-            <td>{item.createdAt.toISOString().replace("T"," ").slice(0,19)}</td><td>{item.subscription.endpoint.code}</td><td>{eventLabel(item.eventType)}</td>
+            <td>{<SystemDateText value={item.createdAt.toISOString()} />}</td><td>{item.subscription.endpoint.code}</td><td>{eventLabel(item.eventType)}</td>
             <td><span className={"status-badge status-" + item.status.toLowerCase().replaceAll("_","-")}>{statusLabel(locale, item.status)}</span></td><td>{item.attemptCount}</td>
-            <td>{item.lastHttpStatus || "—"}</td><td>{item.nextAttemptAt?.toISOString().replace("T"," ").slice(0,19) || "—"}</td>
+            <td>{item.lastHttpStatus || "—"}</td><td>{item.nextAttemptAt ? <SystemDateText value={item.nextAttemptAt.toISOString()} /> : "—"}</td>
           </tr>)}</tbody>
         </table></div>
       </article>

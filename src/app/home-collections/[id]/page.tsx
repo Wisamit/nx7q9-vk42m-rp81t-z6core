@@ -1,3 +1,4 @@
+import { SystemDateText } from "@/components/system-date-text";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { permissionSet, requireSession } from "@/lib/auth";
@@ -89,9 +90,7 @@ export default async function HomeCollectionDetails({
         <p className="eyebrow">{tr(locale, "Home Collection Operations", "عمليات السحب المنزلي")}</p>
         <h1>{visit.appointment.appointmentNumber}</h1>
         <p className="muted">{name} · {patient.patientNumber} · {visit.branch.code} ·
-          {" "}{new Intl.DateTimeFormat(locale === "ar" ? "ar" : "en-GB",
-            { timeZone: visit.branch.timezone, dateStyle: "medium", timeStyle: "short" })
-            .format(visit.appointment.scheduledStart)}</p>
+          {" "}{<SystemDateText value={visit.appointment.scheduledStart.toISOString()} timeZone={visit.branch.timezone} />}</p>
         <p>{tr(locale,"Address","العنوان")}: {visit.appointment.addressSnapshot || "—"}</p>
         <p>{tr(locale,"Collector","المُجمّع")}: {visit.assignedCollector ?
           (locale === "ar" ? visit.assignedCollector.displayNameAr ||
