@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CrudModal } from "@/components/crud-modal";
 
@@ -50,6 +50,8 @@ export function QcManager({
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState("");
+  const submitting = useRef(false);
+  const [isError, setIsError] = useState(false);
   const [message, setMessage] = useState("");
   const [uiEditor, setUiEditor] = useState("");
   const [resolutionId, setResolutionId] = useState<string|null>(null);
@@ -69,8 +71,10 @@ export function QcManager({
   );
 
   async function submit(url: string, payload: unknown, key: string, success: string, form?: HTMLFormElement) {
-    if (busy) return false;
+    if (submitting.current) return false;
+    submitting.current = true;
     setBusy(key);
+    setIsError(false);
     setMessage("");
     try {
       const response = await fetch(url, {
@@ -80,6 +84,7 @@ export function QcManager({
       });
       const body = await response.json().catch(() => ({})) as {error?: string};
       if (!response.ok) {
+        setIsError(true);
         setMessage(body.error || tr("Action failed; review QC state before retrying.",
           "فشلت العملية؛ راجع حالة ضبط الجودة قبل إعادة المحاولة."));
         return false;
@@ -89,45 +94,53 @@ export function QcManager({
       router.refresh();
       return true;
     } catch {
+      setIsError(true);
       setMessage(tr("Network error; check the latest QC state before retrying.",
         "خطأ اتصال؛ تحقق من أحدث حالة ضبط الجودة قبل إعادة المحاولة."));
       return false;
     } finally {
+      submitting.current = false;
       setBusy("");
     }
   }
 
   async function createMaterial(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    if (submitting.current) return;
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     await submit("/api/qc/materials", {
       code: form.get("code"),
       nameEn: form.get("nameEn"),
       nameAr: form.get("nameAr"),
       manufacturer: form.get("manufacturer"),
       levelName: form.get("levelName"),
-    }, "material", tr("QC material created.", "تم إنشاء مادة QC."), event.currentTarget);
+    }, "material", tr("QC material created.", "تم إنشاء مادة QC."), formElement);
   }
 
   async function createLot(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    if (submitting.current) return;
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     await submit("/api/qc/lots", {
       materialId: form.get("materialId"),
       lotNumber: form.get("lotNumber"),
       receivedAt: form.get("receivedAt"),
       openedAt: form.get("openedAt"),
       expiryDate: form.get("expiryDate"),
-    }, "lot", tr("QC lot created.", "تم إنشاء تشغيلة QC."), event.currentTarget);
+    }, "lot", tr("QC lot created.", "تم إنشاء تشغيلة QC."), formElement);
   }
 
   async function createTarget(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    if (submitting.current) return;
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     const enabledRules = ["1:2s","1:3s","2:2s","R:4s","4:1s","10x"]
       .filter(rule => form.get("rule-" + rule) === "on");
 
-    await submit("/api/qc/targets", {
+    const ok = await submit("/api/qc/targets", {
       qcLotId: form.get("qcLotId"),
       analyzerId: form.get("analyzerId"),
       testId: form.get("testId"),
@@ -140,13 +153,15 @@ export function QcManager({
       enabledRules,
       effectiveFrom: form.get("effectiveFrom"),
       effectiveTo: form.get("effectiveTo"),
-    }, "target", tr("QC target created.", "تم إنشاء هدف QC."), event.currentTarget);
-    setTargetTestId("");
+    }, "target", tr("QC target created.", "تم إنشاء هدف QC."), formElement);
+    if (ok) setTargetTestId("");
   }
 
   async function createRun(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    if (submitting.current) return;
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     const runTargets = targets.filter(target => target.analyzerId === runAnalyzerId);
     const results = runTargets
       .map(target => ({
@@ -163,24 +178,24 @@ export function QcManager({
       return;
     }
 
-    await submit("/api/qc/runs", {
+    const ok = await submit("/api/qc/runs", {
       analyzerId: runAnalyzerId,
       runAt: form.get("runAt"),
       notes: form.get("notes"),
       results,
-    }, "run", tr("QC run evaluated.", "تم تقييم تشغيل QC."), event.currentTarget);
-    setRunAnalyzerId("");
+    }, "run", tr("QC run evaluated.", "تم تقييم تشغيل QC."), formElement);
+    if (ok) setRunAnalyzerId("");
   }
 
   function resolveViolation(violationId: string) {
-    if (busy || !canResolve) return;
+    if (submitting.current || !canResolve) return;
     setMessage("");
     setResolutionId(violationId);
   }
 
   async function saveResolution(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!resolutionId || !canResolve || busy) return;
+    if (!resolutionId || !canResolve || submitting.current) return;
     const form = new FormData(event.currentTarget);
     const actionType = String(form.get("actionType") || "");
     const description = String(form.get("description") || "").trim();
@@ -204,7 +219,7 @@ export function QcManager({
      onClick={() => { setMessage(""); setUiEditor("material"); }}>
      {tr("Create QC Material", "إنشاء مادة ضبط جودة")}
    </button>
-   <CrudModal open={uiEditor === "material"} onClose={() => {if (!busy) setUiEditor("");}}
+   <CrudModal open={uiEditor === "material"} onClose={() => {if (!submitting.current && !busy) setUiEditor("");}}
      size="compact" title={tr("Create QC Material", "إنشاء مادة ضبط جودة")}
      description={tr("QC materials require exact identification and branch/device governance.", "تتطلب مواد ضبط الجودة تعريفاً دقيقاً وحوكمة الفرع والجهاز.")}>
      {uiEditor === "material" && <form className="catalog-form" onSubmit={createMaterial}>
@@ -225,7 +240,7 @@ export function QcManager({
      onClick={() => { setMessage(""); setUiEditor("lot"); }}>
      {tr("Create QC Lot", "إنشاء تشغيلة ضبط جودة")}
    </button>
-   <CrudModal open={uiEditor === "lot"} onClose={() => {if (!busy) setUiEditor("");}}
+   <CrudModal open={uiEditor === "lot"} onClose={() => {if (!submitting.current && !busy) setUiEditor("");}}
      size="compact" title={tr("Create QC Lot", "إنشاء تشغيلة ضبط جودة")}
      description={tr("Check lot identity and expiry date before adding a QC lot.", "راجع هوية التشغيلة والصلاحية قبل الإنشاء.")}>
      {uiEditor === "lot" && <form className="catalog-form" onSubmit={createLot}>
@@ -249,7 +264,7 @@ export function QcManager({
      onClick={() => { setMessage(""); setUiEditor("target"); }}>
      {tr("Configure QC Target", "إعداد هدف ضبط الجودة")}
    </button>
-   <CrudModal open={uiEditor === "target"} onClose={() => {if (!busy) setUiEditor("");}}
+   <CrudModal open={uiEditor === "target"} onClose={() => {if (!submitting.current && !busy) setUiEditor("");}}
      size="compact" title={tr("Configure QC Target", "إعداد هدف ضبط الجودة")}
      description={tr("Targets and Westgard rules require laboratory approval; do not infer limits.", "تتطلب الأهداف وقواعد Westgard اعتماد المختبر؛ لا تخترع حدوداً.")}>
      {uiEditor === "target" && <form className="catalog-form" onSubmit={createTarget}>
@@ -300,7 +315,7 @@ export function QcManager({
      onClick={() => { setMessage(""); setUiEditor("run"); }}>
      {tr("Record QC Run", "تسجيل تشغيل ضبط جودة")}
    </button>
-   <CrudModal open={uiEditor === "run"} onClose={() => {if (!busy) setUiEditor("");}}
+   <CrudModal open={uiEditor === "run"} onClose={() => {if (!submitting.current && !busy) setUiEditor("");}}
      size="compact" title={tr("Record QC Run", "تسجيل تشغيل ضبط جودة")}
      description={tr("Recorded QC measurements and release gates must remain traceable.", "تظل قياسات ضبط الجودة وبوابات إصدار النتائج قابلة للتتبع.")}>
      {uiEditor === "run" && <form className="catalog-form" onSubmit={createRun}>
@@ -344,7 +359,7 @@ export function QcManager({
 
     {message && <div className="form-success form-span">{message}</div>}
     <CrudModal open={resolutionId!==null}
-      onClose={()=>{if(!busy)setResolutionId(null);}}
+      onClose={()=>{if(!submitting.current&&!busy)setResolutionId(null);}}
       size="compact"
       title={tr("Resolve QC Violation","معالجة مخالفة ضبط الجودة")}
       description={tr(
