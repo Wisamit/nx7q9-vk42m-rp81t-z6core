@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CrudModal } from "@/components/crud-modal";
 import { statusLabel as sharedStatusLabel } from "@/lib/ui-i18n";
@@ -171,6 +171,8 @@ export function QualityManagementConsole({
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState("");
+  const submitting = useRef(false);
+  const [isError, setIsError] = useState(false);
   const [message, setMessage] = useState("");
   const [uiEditor, setUiEditor] = useState("");
   type ReviewKind = "NC_STATUS" | "CAPA_ACTION_CREATE" | "CAPA_ACTION_COMPLETE" |
@@ -264,8 +266,10 @@ export function QualityManagementConsole({
   );
 
   async function send(url: string, method: "POST" | "PATCH", payload: unknown, key: string, success: string) {
-    if (busy) return false;
+    if (submitting.current) return false;
+    submitting.current = true;
     setBusy(key);
+    setIsError(false);
     setMessage("");
     try {
       const response = await fetch(url, {
@@ -293,6 +297,7 @@ export function QualityManagementConsole({
       older_version_cannot_replace_effective: tr("An older SOP version cannot replace a newer effective version.", "لا يمكن لإصدار أقدم من إجراء العمل أن يحل محل إصدار أحدث نافذ."),
     };
       if (!response.ok) {
+        setIsError(true);
         setMessage(errorMessages[reason] ||
           tr("Action failed. Refresh and review the record.", "فشلت العملية. حدّث الصفحة وراجع السجل."));
         return false;
@@ -301,10 +306,12 @@ export function QualityManagementConsole({
       router.refresh();
       return true;
     } catch {
+      setIsError(true);
       setMessage(tr("Connection interrupted. Review the latest audited state before retrying.",
         "انقطع الاتصال. راجع آخر حالة مدققة قبل إعادة المحاولة."));
       return false;
     } finally {
+      submitting.current = false;
       setBusy("");
     }
   }
@@ -424,7 +431,9 @@ export function QualityManagementConsole({
 
   async function createNonconformance(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    if (submitting.current) return;
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     const ok = await send("/api/quality/nonconformances", "POST", {
       branchId: form.get("branchId"),
       title: form.get("title"),
@@ -437,7 +446,7 @@ export function QualityManagementConsole({
       sourceEntityType: form.get("sourceEntityType"),
       sourceEntityId: form.get("sourceEntityId"),
     }, "nc-create", tr("Nonconformance recorded.", "تم تسجيل حالة عدم المطابقة."));
-    if (ok) event.currentTarget.reset();
+    if (ok) formElement.reset();
   }
 
   function updateNonconformance(item: Nonconformance, close: boolean) {
@@ -447,7 +456,9 @@ export function QualityManagementConsole({
 
   async function createCapa(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    if (submitting.current) return;
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     const ok = await send("/api/quality/capas", "POST", {
       branchId: form.get("branchId"),
       nonconformanceId: form.get("nonconformanceId"),
@@ -457,7 +468,7 @@ export function QualityManagementConsole({
       ownerUserId: form.get("ownerUserId"),
       dueDate: form.get("dueDate"),
     }, "capa-create", tr("CAPA created.", "تم إنشاء CAPA."));
-    if (ok) event.currentTarget.reset();
+    if (ok) formElement.reset();
   }
 
   function addCapaAction(capa: Capa) {
@@ -474,7 +485,9 @@ export function QualityManagementConsole({
 
   async function createDocument(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    if (submitting.current) return;
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     const content = String(form.get("content") || "").trim();
     const ok = await send("/api/quality/documents", "POST", {
       branchId: form.get("branchId"),
@@ -488,7 +501,7 @@ export function QualityManagementConsole({
       contentSnapshot: content ? { text: content } : null,
       changeSummary: "Initial version",
     }, "document-create", tr("Controlled document created as version 1 draft.", "تم إنشاء الوثيقة المضبوطة كمسودة إصدار 1."));
-    if (ok) event.currentTarget.reset();
+    if (ok) formElement.reset();
   }
 
   function newDocumentVersion(document: QualityDocument) {
@@ -501,7 +514,9 @@ export function QualityManagementConsole({
 
   async function createTraining(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    if (submitting.current) return;
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     const ok = await send("/api/quality/training", "POST", {
       branchId: form.get("branchId"),
       userId: form.get("userId"),
@@ -517,14 +532,16 @@ export function QualityManagementConsole({
       notes: form.get("notes"),
     }, "training-create", tr("Training record saved.", "تم حفظ سجل التدريب."));
     if (ok) {
-      event.currentTarget.reset();
+      formElement.reset();
       setTrainingAnalyzerId("");
     }
   }
 
   async function createCompetency(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    if (submitting.current) return;
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     const ok = await send("/api/quality/competency", "POST", {
       branchId: form.get("branchId"),
       userId: form.get("userId"),
@@ -538,21 +555,23 @@ export function QualityManagementConsole({
       notes: form.get("notes"),
     }, "competency-create", tr("Competency assessment recorded.", "تم تسجيل تقييم الكفاءة."));
     if (ok) {
-      event.currentTarget.reset();
+      formElement.reset();
       setCompetencyAnalyzerId("");
     }
   }
 
   async function grantAuthorization(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    if (submitting.current) return;
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     const ok = await send("/api/quality/analyzer-authorizations", "POST", {
       userId: form.get("userId"),
       analyzerId: form.get("analyzerId"),
       expiresAt: form.get("expiresAt"),
       scopeNotes: form.get("scopeNotes"),
     }, "authorization-create", tr("Analyzer authorization granted.", "تم منح صلاحية استخدام الجهاز."));
-    if (ok) event.currentTarget.reset();
+    if (ok) formElement.reset();
   }
 
   function revokeAuthorization(item: Authorization) {
@@ -561,7 +580,9 @@ export function QualityManagementConsole({
 
   async function createIndicator(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    if (submitting.current) return;
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     const ok = await send("/api/quality/indicators", "POST", {
       branchId: form.get("branchId"),
       code: form.get("code"),
@@ -573,7 +594,7 @@ export function QualityManagementConsole({
       targetMax: form.get("targetMax"),
       description: form.get("description"),
     }, "indicator-create", tr("Quality indicator created.", "تم إنشاء مؤشر الجودة."));
-    if (ok) event.currentTarget.reset();
+    if (ok) formElement.reset();
   }
 
   function addMeasurement(indicator: Indicator) {
@@ -582,7 +603,9 @@ export function QualityManagementConsole({
 
   async function createAudit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    if (submitting.current) return;
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     const ok = await send("/api/quality/audits", "POST", {
       branchId: form.get("branchId"),
       title: form.get("title"),
@@ -590,7 +613,7 @@ export function QualityManagementConsole({
       scheduledAt: form.get("scheduledAt"),
       leadAuditorUserId: form.get("leadAuditorUserId"),
     }, "audit-create", tr("Internal audit planned.", "تم تخطيط التدقيق الداخلي."));
-    if (ok) event.currentTarget.reset();
+    if (ok) formElement.reset();
   }
 
   function addFinding(audit: InternalAudit) {
@@ -612,7 +635,7 @@ export function QualityManagementConsole({
       <h2>{tr("Record Nonconformance","تسجيل حالة عدم مطابقة")}</h2>
       <button type="button" className="primary-button" disabled={Boolean(busy)}
    onClick={() => { setMessage(""); setUiEditor("nonconformance"); }}>{tr("Record Nonconformance", "تسجيل عدم مطابقة")}</button>
-   <CrudModal open={uiEditor === "nonconformance"} onClose={() => { if (!busy) setUiEditor(""); }}
+   <CrudModal open={uiEditor === "nonconformance"} onClose={() => { if (!submitting.current && !busy) setUiEditor(""); }}
      size="compact" title={tr("Record Nonconformance", "تسجيل عدم مطابقة")}
      description={tr("Record documented quality events and preserve their immutable investigation history.", "سجّل حدث الجودة الموثق مع الحفاظ على تاريخ التحقيق.")}>
      {uiEditor === "nonconformance" && <form className="catalog-form" onSubmit={createNonconformance}>
@@ -653,7 +676,7 @@ export function QualityManagementConsole({
       <h2>{tr("Create CAPA","إنشاء CAPA")}</h2>
       <button type="button" className="primary-button" disabled={Boolean(busy)}
    onClick={() => { setMessage(""); setUiEditor("capa"); }}>{tr("Create CAPA", "إنشاء إجراء تصحيحي ووقائي")}</button>
-   <CrudModal open={uiEditor === "capa"} onClose={() => { if (!busy) setUiEditor(""); }}
+   <CrudModal open={uiEditor === "capa"} onClose={() => { if (!submitting.current && !busy) setUiEditor(""); }}
      size="compact" title={tr("Create CAPA", "إنشاء إجراء تصحيحي ووقائي")}
      description={tr("Corrective and preventive actions require governed owners, deadlines and follow-up.", "تتطلب الإجراءات التصحيحية والوقائية مسؤولاً ومهلاً ومتابعة موثقة.")}>
      {uiEditor === "capa" && <form className="catalog-form" onSubmit={createCapa}>
@@ -687,7 +710,7 @@ export function QualityManagementConsole({
       <h2>{tr("Create Controlled Document","إنشاء وثيقة مضبوطة")}</h2>
       <button type="button" className="primary-button" disabled={Boolean(busy)}
    onClick={() => { setMessage(""); setUiEditor("document"); }}>{tr("Create Controlled Document", "إنشاء وثيقة مضبوطة")}</button>
-   <CrudModal open={uiEditor === "document"} onClose={() => { if (!busy) setUiEditor(""); }}
+   <CrudModal open={uiEditor === "document"} onClose={() => { if (!submitting.current && !busy) setUiEditor(""); }}
      size="compact" title={tr("Create Controlled Document", "إنشاء وثيقة مضبوطة")}
      description={tr("Controlled documents require explicit versioning and independent approval.", "تحتاج الوثائق المضبوطة إلى إصدارات واعتماد مستقل.")}>
      {uiEditor === "document" && <form className="catalog-form" onSubmit={createDocument}>
@@ -733,7 +756,7 @@ export function QualityManagementConsole({
         <h2>{tr("Training Record","سجل التدريب")}</h2>
         <button type="button" className="primary-button" disabled={Boolean(busy)}
    onClick={() => { setMessage(""); setUiEditor("training"); }}>{tr("Record Training", "تسجيل تدريب")}</button>
-   <CrudModal open={uiEditor === "training"} onClose={() => { if (!busy) setUiEditor(""); }}
+   <CrudModal open={uiEditor === "training"} onClose={() => { if (!submitting.current && !busy) setUiEditor(""); }}
      size="compact" title={tr("Record Training", "تسجيل تدريب")}
      description={tr("Training and credential histories must be preserved for qualified staff.", "تُحفظ سجلات التدريب والتأهيل التاريخية للموظفين.")}>
      {uiEditor === "training" && <form className="catalog-form" onSubmit={createTraining}>
@@ -744,7 +767,7 @@ export function QualityManagementConsole({
           <label>{tr("SOP/document","SOP / الوثيقة")}<select name="documentVersionId" defaultValue=""><option value="">{tr("None","لا يوجد")}</option>{effectiveDocumentVersions.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
           <label>{tr("Analyzer","الجهاز")}<select name="analyzerId" value={trainingAnalyzerId} onChange={event => setTrainingAnalyzerId(event.target.value)}><option value="">{tr("None","لا يوجد")}</option>{analyzers.map(item => <option key={item.id} value={item.id}>{item.code} — {item.name}</option>)}</select></label>
           <label>{tr("Status","الحالة")}<select name="status" defaultValue="ASSIGNED"><option value="ASSIGNED">{qmsStatusLabel("ASSIGNED")}</option><option value="IN_PROGRESS">{qmsStatusLabel("IN_PROGRESS")}</option><option value="COMPLETED">{qmsStatusLabel("COMPLETED")}</option><option value="WAIVED">{qmsStatusLabel("WAIVED")}</option></select></label>
-          <label>{tr("Assigned at","تاريخ التعيين")}<input name="assignedAt" type="date" defaultValue={new Date().toISOString().slice(0,10)} /></label>
+          <label>{tr("Assigned at (local date)","تاريخ التعيين (التاريخ المحلي)")}<input name="assignedAt" type="date" /></label>
           <label>{tr("Completed at","تاريخ الإكمال")}<input name="completedAt" type="date" /></label>
           <label>{tr("Expires","تاريخ الانتهاء")}<input name="expiresAt" type="date" /></label>
           <label className="form-span">{tr("Certificate URL","رابط الشهادة")}<input name="certificateUrl" type="url" /></label>
@@ -759,7 +782,7 @@ export function QualityManagementConsole({
         <h2>{tr("Competency Assessment","تقييم الكفاءة")}</h2>
         <button type="button" className="primary-button" disabled={Boolean(busy)}
    onClick={() => { setMessage(""); setUiEditor("competency"); }}>{tr("Record Competency Assessment", "تسجيل تقييم كفاءة")}</button>
-   <CrudModal open={uiEditor === "competency"} onClose={() => { if (!busy) setUiEditor(""); }}
+   <CrudModal open={uiEditor === "competency"} onClose={() => { if (!submitting.current && !busy) setUiEditor(""); }}
      size="compact" title={tr("Record Competency Assessment", "تسجيل تقييم كفاءة")}
      description={tr("Competency evidence affects analyzer authorization; review real assessed values.", "تؤثر أدلة الكفاءة على صلاحيات تشغيل الأجهزة؛ راجع النتائج الحقيقية.")}>
      {uiEditor === "competency" && <form className="catalog-form" onSubmit={createCompetency}>
@@ -770,7 +793,7 @@ export function QualityManagementConsole({
           <label>{tr("Competency","الكفاءة")}<input name="competencyName" required /></label>
           <label>{tr("Assessment method","طريقة التقييم")}<input name="assessmentMethod" required placeholder={tr("Direct observation / blind sample / quiz…","ملاحظة مباشرة / عينة عمياء / اختبار…")} /></label>
           <label>{tr("Result","النتيجة")}<select name="result" defaultValue="PASS"><option value="PASS">{competencyResultLabel("PASS")}</option><option value="CONDITIONAL">{competencyResultLabel("CONDITIONAL")}</option><option value="FAIL">{competencyResultLabel("FAIL")}</option></select></label>
-          <label>{tr("Assessed at","تاريخ التقييم")}<input name="assessedAt" type="date" defaultValue={new Date().toISOString().slice(0,10)} /></label>
+          <label>{tr("Assessed at (local date)","تاريخ التقييم (التاريخ المحلي)")}<input name="assessedAt" type="date" /></label>
           <label>{tr("Next due","الاستحقاق التالي")}<input name="nextDueAt" type="date" /></label>
           <label className="form-span">{tr("Notes","ملاحظات")}<textarea name="notes" rows={2} /></label>
           <button className="primary-button form-span" disabled={busy !== ""}>{busy === "competency-create" ? tr("Saving…","جارٍ الحفظ…") : tr("Record Competency","تسجيل تقييم الكفاءة")}</button>
@@ -784,7 +807,7 @@ export function QualityManagementConsole({
         <p className="muted">{tr("An active, current PASS competency assessment for the same analyzer is mandatory before authorization.","يجب توفر تقييم كفاءة حالي وناجح لنفس الجهاز قبل منح الصلاحية.")}</p>
         <button type="button" className="primary-button" disabled={Boolean(busy)}
    onClick={() => { setMessage(""); setUiEditor("authorize"); }}>{tr("Grant Analyzer Authorization", "منح صلاحية تشغيل جهاز")}</button>
-   <CrudModal open={uiEditor === "authorize"} onClose={() => { if (!busy) setUiEditor(""); }}
+   <CrudModal open={uiEditor === "authorize"} onClose={() => { if (!submitting.current && !busy) setUiEditor(""); }}
      size="compact" title={tr("Grant Analyzer Authorization", "منح صلاحية تشغيل جهاز")}
      description={tr("Equipment privileges depend on current approved competency and branch policies.", "تعتمد صلاحيات تشغيل الأجهزة على الكفاءة المعتمدة والسياسات الفرعية.")}>
      {uiEditor === "authorize" && <form className="catalog-form" onSubmit={grantAuthorization}>
@@ -823,7 +846,7 @@ export function QualityManagementConsole({
       <h2>{tr("Quality Indicator","مؤشر جودة")}</h2>
       <button type="button" className="primary-button" disabled={Boolean(busy)}
    onClick={() => { setMessage(""); setUiEditor("indicator"); }}>{tr("Create Quality Indicator", "إنشاء مؤشر جودة")}</button>
-   <CrudModal open={uiEditor === "indicator"} onClose={() => { if (!busy) setUiEditor(""); }}
+   <CrudModal open={uiEditor === "indicator"} onClose={() => { if (!submitting.current && !busy) setUiEditor(""); }}
      size="compact" title={tr("Create Quality Indicator", "إنشاء مؤشر جودة")}
      description={tr("Targets and units must come from approved policy, not assumed thresholds.", "يجب أن تأتي الأهداف والوحدات من سياسة معتمدة دون افتراض حدود.")}>
      {uiEditor === "indicator" && <form className="catalog-form" onSubmit={createIndicator}>
@@ -858,7 +881,7 @@ export function QualityManagementConsole({
       <h2>{tr("Plan Internal Audit","تخطيط تدقيق داخلي")}</h2>
       <button type="button" className="primary-button" disabled={Boolean(busy)}
    onClick={() => { setMessage(""); setUiEditor("audit"); }}>{tr("Plan Internal Audit", "تخطيط تدقيق داخلي")}</button>
-   <CrudModal open={uiEditor === "audit"} onClose={() => { if (!busy) setUiEditor(""); }}
+   <CrudModal open={uiEditor === "audit"} onClose={() => { if (!submitting.current && !busy) setUiEditor(""); }}
      size="compact" title={tr("Plan Internal Audit", "تخطيط تدقيق داخلي")}
      description={tr("Audit scope and accountable staff must be documented and traceable.", "يجب توثيق نطاق التدقيق والمسؤولين مع قابلية التتبع.")}>
      {uiEditor === "audit" && <form className="catalog-form" onSubmit={createAudit}>
@@ -885,7 +908,7 @@ export function QualityManagementConsole({
       </table></div>
     </section>
   <CrudModal open={pendingReview!==null}
-    onClose={()=>{if(!busy)setPendingReview(null);}}
+    onClose={()=>{if(!submitting.current&&!busy)setPendingReview(null);}}
     size="compact"
     title={pendingReview ? reviewLabel(pendingReview.kind) : tr("Quality Review","مراجعة الجودة")}
     description={tr(
