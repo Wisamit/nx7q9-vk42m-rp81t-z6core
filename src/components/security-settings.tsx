@@ -112,70 +112,119 @@ export function SecuritySettings({
     setBusy(false);
   }
 
-  async function removeAvatar() {
-    setBusy(true); setMessage("");
-    const response = await fetch("/api/security/profile/avatar", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ avatarDataUrl: null }),
-    });
-    if (response.ok) {
+  async function removeAvatar(): Promise<boolean> {
+    if (busy) return false;
+    setBusy(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/security/profile/avatar", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ avatarDataUrl: null }),
+      });
+      if (!response.ok) {
+        setMessage(tr("Unable to remove profile picture.", "تعذر إزالة الصورة الشخصية."));
+        return false;
+      }
       setAvatar(null);
       window.location.reload();
-    } else setMessage(tr("Unable to remove profile picture.", "تعذر إزالة الصورة الشخصية."));
-    setBusy(false);
+      return true;
+    } catch {
+      setMessage(tr("Connection interrupted; image removal was not confirmed.",
+        "انقطع الاتصال ولم يتم تأكيد إزالة الصورة."));
+      return false;
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function beginEnrollment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setBusy(true); setMessage(""); setRecoveryCodes([]);
+    if (busy) return;
     const form = new FormData(event.currentTarget);
-    const response = await fetch("/api/security/mfa/enroll", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ currentPassword: form.get("currentPassword") }),
-    });
-    const body = await response.json().catch(() => ({}));
-    if (response.ok) setEnrollment(body);
-    else setMessage(body.error === "invalid_password"
-      ? tr("Current password is incorrect.", "كلمة المرور الحالية غير صحيحة.")
-      : tr("Unable to start MFA enrollment.", "تعذر بدء إعداد المصادقة متعددة العوامل."));
-    setBusy(false);
+    setBusy(true);
+    setMessage("");
+    setRecoveryCodes([]);
+    try {
+      const response = await fetch("/api/security/mfa/enroll", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentPassword: form.get("currentPassword") }),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (response.ok) {
+        setEnrollment(body as Enrollment);
+      } else setMessage(body.error === "invalid_password"
+        ? tr("Current password is incorrect.", "كلمة المرور الحالية غير صحيحة.")
+        : tr("Unable to start MFA enrollment.", "تعذر بدء إعداد المصادقة متعددة العوامل."));
+    } catch {
+      setMessage(tr("Connection interrupted; enrollment not confirmed.",
+        "انقطع الاتصال ولم يتم تأكيد بدء إعداد المصادقة."));
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function confirmEnrollment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setBusy(true); setMessage("");
+    if (busy) return;
     const form = new FormData(event.currentTarget);
-    const response = await fetch("/api/security/mfa/confirm", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code: form.get("code") }),
-    });
-    const body = await response.json().catch(() => ({}));
-    if (response.ok) {
-      setRecoveryCodes(body.recoveryCodes || []);
-      setEnrollment(null);
-      setMessage(tr(
-        "MFA enabled. Save the recovery codes below now; they are shown only once.",
-        "تم تفعيل المصادقة متعددة العوامل. احفظ رموز الاسترداد الآن لأنها تظهر مرة واحدة فقط."
-      ));
-    } else setMessage(tr("Invalid authenticator code.", "رمز تطبيق المصادقة غير صحيح."));
-    setBusy(false);
+    setBusy(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/security/mfa/confirm", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: form.get("code") }),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (response.ok) {
+        const codes: string[] = Array.isArray(body.recoveryCodes)
+          ? body.recoveryCodes.filter((value: unknown): value is string => typeof value === "string")
+          : [];
+        // Never treat a successful enablement with missing recovery codes as
+        // a completed visual flow: user needs a separate authenticated retry.
+        setRecoveryCodes(codes);
+        setEnrollment(null);
+        setMessage(codes.length
+          ? tr("MFA enabled. Save the recovery codes below now; they are shown only once.",
+            "تم تفعيل المصادقة متعددة العوامل. احفظ رموز الاسترداد الآن لأنها تظهر مرة واحدة فقط.")
+          : tr("MFA was enabled, but recovery codes were not returned. Contact an administrator before closing.",
+            "تم تفعيل المصادقة لكن لم تُرجع رموز الاسترداد. اتصل بالمسؤول قبل إغلاق النافذة."));
+      } else {
+        setMessage(tr("Invalid authenticator code.", "رمز تطبيق المصادقة غير صحيح."));
+      }
+    } catch {
+      setMessage(tr("Connection interrupted. Check enrollment status before retrying.",
+        "انقطع الاتصال. تحقق من حالة المصادقة قبل إعادة المحاولة."));
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function disableMfa(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setBusy(true); setMessage("");
+    if (busy) return;
     const form = new FormData(event.currentTarget);
-    const response = await fetch("/api/security/mfa/disable", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ currentPassword: form.get("currentPassword"), code: form.get("code") }),
-    });
-    const body = await response.json().catch(() => ({}));
-    if (response.ok) return window.location.reload();
-    setMessage(body.error === "invalid_password"
-      ? tr("Current password is incorrect.", "كلمة المرور الحالية غير صحيحة.")
-      : tr("MFA code is invalid.", "رمز المصادقة غير صحيح."));
-    setBusy(false);
+    setBusy(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/security/mfa/disable", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentPassword: form.get("currentPassword"), code: form.get("code") }),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (response.ok) {
+        window.location.reload();
+        return;
+      }
+      setMessage(body.error === "invalid_password"
+        ? tr("Current password is incorrect.", "كلمة المرور الحالية غير صحيحة.")
+        : tr("MFA code is invalid.", "رمز المصادقة غير صحيح."));
+    } catch {
+      setMessage(tr("Connection interrupted. Check MFA status before retrying.",
+        "انقطع الاتصال. تحقق من حالة المصادقة قبل إعادة المحاولة."));
+    } finally {
+      setBusy(false);
+    }
   }
 
   function dismissMfa() {
@@ -202,13 +251,8 @@ export function SecuritySettings({
 
   async function confirmAvatarRemoval() {
     if (busy) return;
-    try {
-      await removeAvatar();
-      setAvatarRemovalOpen(false);
-    } catch {
-      setMessage(tr("Could not remove the picture. Check your connection.",
-        "تعذر إزالة الصورة. تحقق من الاتصال."));
-    }
+    const confirmed = await removeAvatar();
+    if (confirmed) setAvatarRemovalOpen(false);
   }
 
   return <div className="detail-grid">
