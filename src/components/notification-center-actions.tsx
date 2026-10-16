@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
+import { CrudModal } from "@/components/crud-modal";
 
 type Preference = { eventCode: string; channel: string; enabled: boolean };
 
@@ -21,6 +22,7 @@ export function NotificationCenterActions({
   const router = useRouter();
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
+  const [uiEditor, setUiEditor] = useState("");
   const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
   const channelLabel = (value: string) => value === "IN_APP" ? tr("In-app", "داخل النظام") : value === "EMAIL" ? tr("Email", "البريد الإلكتروني") : value === "SMS" ? tr("SMS", "رسالة نصية") : value === "WHATSAPP" ? tr("WhatsApp", "واتساب") : value;
   const eventLabel = (value: string) => value === "CRITICAL_RESULT_OPENED" ? tr("Critical result opened", "فتح نتيجة حرجة") : value === "CRITICAL_RESULT_ESCALATED" ? tr("Critical result escalated", "تصعيد نتيجة حرجة") : value === "REPORT_RELEASED" ? tr("Report released", "إصدار تقرير") : value === "TAT_BREACH" ? tr("TAT breach", "تجاوز زمن الإنجاز") : value === "APPOINTMENT_REMINDER" ? tr("Appointment reminder", "تذكير بموعد") : value;
@@ -138,7 +140,14 @@ export function NotificationCenterActions({
 
     {canManage && <section className="detail-card">
       <h2>{tr("Create Notification Template", "إنشاء قالب إشعار")}</h2>
-      <form className="catalog-form" onSubmit={createTemplate}>
+      <button type="button" className="primary-button" disabled={Boolean(busy)}
+     onClick={() => { setMessage(""); setUiEditor("template"); }}>
+     {tr("Create Notification Template", "إنشاء قالب إشعار")}
+   </button>
+   <CrudModal open={uiEditor === "template"} onClose={() => {if (!busy) setUiEditor("");}}
+     size="compact" title={tr("Create Notification Template", "إنشاء قالب إشعار")}
+     description={tr("Templates are configurable and notification events remain audited.", "القوالب قابلة للتهيئة وتظل أحداث الإشعارات موثقة.")}>
+     {uiEditor === "template" && <form className="catalog-form" onSubmit={createTemplate}>
         <label>{tr("Code", "الرمز")}<input name="code" required placeholder="CRITICAL_RESULT_EMAIL" /></label>
         <label>{tr("Event code", "رمز الحدث")}<input name="eventCode" required placeholder="CRITICAL_RESULT_OPENED" /></label>
         <label>{tr("Channel", "القناة")}<select name="channel" defaultValue="IN_APP"><option value="IN_APP">{channelLabel("IN_APP")}</option><option value="EMAIL">{channelLabel("EMAIL")}</option><option value="SMS">{channelLabel("SMS")}</option><option value="WHATSAPP">{channelLabel("WHATSAPP")}</option></select></label>
@@ -147,7 +156,9 @@ export function NotificationCenterActions({
         <label className="form-span">{tr("Body (English)", "النص بالإنجليزية")}<textarea name="bodyEn" rows={4} required /></label>
         <label className="form-span">{tr("Body (Arabic)", "النص بالعربية")}<textarea name="bodyAr" rows={4} dir="rtl" /></label>
         <button className="primary-button form-span" disabled={busy === "template"}>{busy === "template" ? tr("Saving…", "جارٍ الحفظ…") : tr("Create Template", "إنشاء القالب")}</button>
-      </form>
+      </form>}
+     {uiEditor === "template" && message && <p className="form-warning" role="status">{message}</p>}
+   </CrudModal>
     </section>}
   </div>;
 }
