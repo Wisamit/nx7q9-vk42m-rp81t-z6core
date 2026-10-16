@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
+import { CrudModal } from "@/components/crud-modal";
 
 type OrganismOption = { id: string; code: string; nameEn: string; nameAr?: string | null };
 type AntibioticOption = { id: string; code: string; nameEn: string; nameAr?: string | null };
@@ -42,34 +43,46 @@ export function MicrobiologyCaseEditor({
   const router = useRouter();
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
+  const [editor, setEditor] = useState<"culture" | "observation" | "isolate" | null>(null);
   const [selectedIsolateId, setSelectedIsolateId] = useState(isolates[0]?.id || "");
   const [rows, setRows] = useState<Row[]>([emptyRow(1)]);
 
   async function postJson(url: string, payload: unknown, busyKey: string) {
+    if (busy) return null;
     setBusy(busyKey);
     setMessage("");
-    const response = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    const body = await response.json().catch(() => ({}));
-    setBusy("");
-    if (!response.ok) {
-      const messageByError: Record<string, string> = {
-        microbiology_case_state_changed: tr("Another operator changed this culture. Refresh before editing.", "عدّل مستخدم آخر هذه الزراعة. حدّث الصفحة قبل المتابعة."),
-        microbiology_case_locked: tr("This microbiology case is finalized or cancelled.", "حالة الأحياء الدقيقة نهائية أو ملغاة."),
-        microbiology_result_submitted_withdraw_before_edit: tr("A final result was submitted. Withdraw it for correction before changing culture or susceptibility data.", "تم إرسال النتيجة النهائية. اسحبها للتصحيح قبل تعديل الزرع أو الحساسية."),
-        specimen_not_ready_for_microbiology: tr("The specimen is unavailable at this performing branch, quarantined or transferred.", "العينة غير متاحة في فرع التنفيذ أو محجورة أو منقولة."),
-        no_growth_conflicts_with_isolates: tr("No-growth cannot be selected while isolates are recorded.", "لا يمكن اختيار عدم وجود نمو مع وجود عزلات مسجلة."),
-        invalid_susceptibility_value: tr("Check the AST interpretation, MIC/zone precision and MIC unit.", "تحقق من تفسير الحساسية ودقة قيم MIC/القطر ووحدة MIC."),
-        microbiology_ast_catalog_changed: tr("Organism or antibiotic configuration changed. Refresh and retry.", "تغيرت إعدادات الكائن أو المضاد الحيوي. حدّث الصفحة وأعد المحاولة."),
-      };
-      setMessage(messageByError[body.error] || tr("The microbiology action could not be saved. Refresh if data changed.", "تعذر حفظ إجراء الأحياء الدقيقة. حدّث الصفحة إذا تغيرت البيانات."));
+    setErrorMessage("");
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const messageByError: Record<string, string> = {
+          microbiology_case_state_changed: tr("Another operator changed this culture. Refresh before editing.", "عدّل مستخدم آخر هذه الزراعة. حدّث الصفحة قبل المتابعة."),
+          microbiology_case_locked: tr("This microbiology case is finalized or cancelled.", "حالة الأحياء الدقيقة نهائية أو ملغاة."),
+          microbiology_result_submitted_withdraw_before_edit: tr("A final result was submitted. Withdraw it for correction before changing culture or susceptibility data.", "تم إرسال النتيجة النهائية. اسحبها للتصحيح قبل تعديل الزرع أو الحساسية."),
+          specimen_not_ready_for_microbiology: tr("The specimen is unavailable at this performing branch, quarantined or transferred.", "العينة غير متاحة في فرع التنفيذ أو محجورة أو منقولة."),
+          no_growth_conflicts_with_isolates: tr("No-growth cannot be selected while isolates are recorded.", "لا يمكن اختيار عدم وجود نمو مع وجود عزلات مسجلة."),
+          invalid_susceptibility_value: tr("Check the AST interpretation, MIC/zone precision and MIC unit.", "تحقق من تفسير الحساسية ودقة قيم MIC/القطر ووحدة MIC."),
+          microbiology_ast_catalog_changed: tr("Organism or antibiotic configuration changed. Refresh and retry.", "تغيرت إعدادات الكائن أو المضاد الحيوي. حدّث الصفحة وأعد المحاولة."),
+        };
+        setErrorMessage(messageByError[body.error] ||
+          tr("The microbiology action could not be saved. Refresh if data changed.", "تعذر حفظ إجراء الأحياء الدقيقة. حدّث الصفحة إذا تغيرت البيانات."));
+        return null;
+      }
+      router.refresh();
+      return body;
+    } catch {
+      setErrorMessage(tr("Connection failed; check the latest case state before retrying.",
+        "فشل الاتصال؛ راجع أحدث حالة للزرع قبل إعادة المحاولة."));
       return null;
+    } finally {
+      setBusy("");
     }
-    router.refresh();
-    return body;
   }
 
   async function updateCulture(event: FormEvent<HTMLFormElement>) {
@@ -80,32 +93,39 @@ export function MicrobiologyCaseEditor({
       preliminaryComment: form.get("preliminaryComment"),
       markPreliminary: form.get("markPreliminary") === "on",
     }, "culture");
-    if (result) setMessage(tr("Culture status updated.", "تم تحديث حالة الزرع."));
+    if (result) {
+      setEditor(null);
+      setMessage(tr("Culture status updated.", "تم تحديث حالة الزرع."));
+    }
   }
 
   async function addObservation(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     const result = await postJson("/api/microbiology/cases/" + caseId + "/observations", {
       observationType: form.get("observationType"),
       observationText: form.get("observationText"),
     }, "observation");
     if (result) {
-      event.currentTarget.reset();
+      formElement.reset();
+      setEditor(null);
       setMessage(tr("Observation added.", "تمت إضافة الملاحظة."));
     }
   }
 
   async function addIsolate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     const result = await postJson("/api/microbiology/cases/" + caseId + "/isolates", {
       organismId: form.get("organismId"),
       quantityText: form.get("quantityText"),
       colonyNotes: form.get("colonyNotes"),
     }, "isolate");
     if (result) {
-      event.currentTarget.reset();
+      formElement.reset();
+      setEditor(null);
       setMessage(tr("Isolate added.", "تمت إضافة العزلة."));
     }
   }
@@ -120,7 +140,8 @@ export function MicrobiologyCaseEditor({
       setMessage(tr("Select an isolate first.", "اختر عزلة أولًا."));
       return;
     }
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     const activeRows = rows.filter(row => row.antibioticId);
     if (activeRows.length === 0) {
       setMessage(tr("Add at least one antibiotic result.", "أضف نتيجة مضاد حيوي واحدة على الأقل."));
@@ -141,7 +162,7 @@ export function MicrobiologyCaseEditor({
     }, "susceptibility");
     if (result) {
       setRows([emptyRow(1)]);
-      event.currentTarget.reset();
+      formElement.reset();
       setMessage(tr("Susceptibility panel recorded.", "تم تسجيل لوحة الحساسية."));
     }
   }
@@ -149,7 +170,15 @@ export function MicrobiologyCaseEditor({
   return <section className="detail-grid detail-section">
     <article className="detail-card">
       <h2>{tr("Culture Status", "حالة الزرع")}</h2>
-      <form className="catalog-form" onSubmit={updateCulture}>
+      <button type="button" className="primary-button" disabled={busy !== ""}
+        onClick={() => { setErrorMessage(""); setMessage(""); setEditor("culture"); }}>
+        {tr("Update Culture Status", "تحديث حالة الزرع")}
+      </button>
+      <CrudModal open={editor === "culture"} onClose={() => { if (!busy) setEditor(null); }}
+        size="compact"
+        title={tr("Update Culture Status", "تحديث حالة الزرع")}
+        description={tr("Culture status and preliminary classification affect specimen interpretation. Review patient and isolate context before saving.", "تؤثر حالة الزرع والتصنيف الأولي على تفسير العينة؛ راجع سياق المريض والعزلات قبل الحفظ.")}>
+        {editor === "culture" && <form className="catalog-form" onSubmit={updateCulture}>
         <label>{tr("Status", "الحالة")}<select name="cultureStatus" defaultValue={cultureStatus}>
           <option value="PENDING">{tr("Pending", "قيد الانتظار")}</option>
           <option value="NO_GROWTH">{tr("No growth", "لا يوجد نمو")}</option>
@@ -160,12 +189,22 @@ export function MicrobiologyCaseEditor({
         <label className="form-span">{tr("Preliminary comment", "تعليق أولي")}<textarea name="preliminaryComment" rows={3} defaultValue={preliminaryComment} /></label>
         <label className="check-line form-span"><input type="checkbox" name="markPreliminary" /> {tr("Mark case as PRELIMINARY", "تعيين الحالة كأولية")}</label>
         <button className="primary-button form-span" disabled={busy !== ""}>{busy === "culture" ? tr("Saving…", "جارٍ الحفظ…") : tr("Save Culture Status", "حفظ حالة الزرع")}</button>
-      </form>
+      </form>}
+        {editor === "culture" && errorMessage && <p className="form-error" role="alert">{errorMessage}</p>}
+      </CrudModal>
     </article>
 
     <article className="detail-card">
       <h2>{tr("Add Observation", "إضافة ملاحظة")}</h2>
-      <form className="catalog-form" onSubmit={addObservation}>
+      <button type="button" className="primary-button" disabled={busy !== ""}
+        onClick={() => { setErrorMessage(""); setMessage(""); setEditor("observation"); }}>
+        {tr("Add Microbiology Observation", "إضافة ملاحظة أحياء دقيقة")}
+      </button>
+      <CrudModal open={editor === "observation"} onClose={() => { if (!busy) setEditor(null); }}
+        size="compact"
+        title={tr("Add Microbiology Observation", "إضافة ملاحظة أحياء دقيقة")}
+        description={tr("Observations are recorded against the current culture and performing specimen; history remains traceable.", "تُسجّل الملاحظة ضمن الزرع والعينة المنفذة، ويبقى تاريخ التعديلات قابلاً للتتبع.")}>
+        {editor === "observation" && <form className="catalog-form" onSubmit={addObservation}>
         <label>{tr("Type", "النوع")}<select name="observationType" defaultValue="GRAM_STAIN">
           <option value="GRAM_STAIN">{tr("Gram stain", "صبغة غرام")}</option>
           <option value="MICROSCOPY">{tr("Microscopy", "فحص مجهري")}</option>
@@ -175,12 +214,22 @@ export function MicrobiologyCaseEditor({
         </select></label>
         <label className="form-span">{tr("Observation", "الملاحظة")}<textarea name="observationText" rows={4} required /></label>
         <button className="primary-button form-span" disabled={busy !== ""}>{busy === "observation" ? tr("Saving…", "جارٍ الحفظ…") : tr("Add Observation", "إضافة الملاحظة")}</button>
-      </form>
+      </form>}
+        {editor === "observation" && errorMessage && <p className="form-error" role="alert">{errorMessage}</p>}
+      </CrudModal>
     </article>
 
     <article className="detail-card">
       <h2>{tr("Add Isolate", "إضافة عزلة")}</h2>
-      <form className="catalog-form" onSubmit={addIsolate}>
+      <button type="button" className="primary-button" disabled={busy !== ""}
+        onClick={() => { setErrorMessage(""); setMessage(""); setEditor("isolate"); }}>
+        {tr("Add Microbiology Isolate", "إضافة عزلة أحياء دقيقة")}
+      </button>
+      <CrudModal open={editor === "isolate"} onClose={() => { if (!busy) setEditor(null); }}
+        size="compact"
+        title={tr("Add Microbiology Isolate", "إضافة عزلة أحياء دقيقة")}
+        description={tr("Choose the catalogued organism and observed growth only; susceptibility testing is a separate reviewed workflow.", "اختر الكائن المعرّف والنمو الملاحظ فقط؛ فحص الحساسية مسار مستقل يحتاج مراجعة.")}>
+        {editor === "isolate" && <form className="catalog-form" onSubmit={addIsolate}>
         <label>{tr("Organism", "الكائن الدقيق")}<select name="organismId" required defaultValue="">
           <option value="">{tr("Select organism…", "اختر الكائن الدقيق…")}</option>
           {organisms.map(item => <option key={item.id} value={item.id}>{item.code} — {locale === "ar" ? item.nameAr || item.nameEn : item.nameEn}</option>)}
@@ -188,7 +237,9 @@ export function MicrobiologyCaseEditor({
         <label>{tr("Quantity / growth", "الكمية / النمو")}<input name="quantityText" placeholder={tr("e.g. Heavy growth / 10^5 CFU/mL","مثال: نمو كثيف / 10^5 CFU/mL")} /></label>
         <label className="form-span">{tr("Colony notes", "ملاحظات المستعمرات")}<textarea name="colonyNotes" rows={2} /></label>
         <button className="primary-button form-span" disabled={busy !== "" || organisms.length === 0}>{busy === "isolate" ? tr("Saving…", "جارٍ الحفظ…") : tr("Add Isolate", "إضافة العزلة")}</button>
-      </form>
+      </form>}
+        {editor === "isolate" && errorMessage && <p className="form-error" role="alert">{errorMessage}</p>}
+      </CrudModal>
     </article>
 
     <article className="detail-card">
@@ -223,6 +274,7 @@ export function MicrobiologyCaseEditor({
       </form>
     </article>
 
-    {message && <p className="form-success form-span">{message}</p>}
+    {message && <p className="form-success form-span" role="status">{message}</p>}
+    {errorMessage && !editor && <p className="form-error form-span" role="alert">{errorMessage}</p>}
   </section>;
 }
