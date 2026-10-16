@@ -179,4 +179,11 @@ jobs:
       - run: node --experimental-strip-types --test tests/analyzer-bridge-mariadb.integration.test.ts
       - run: npm run test:ui-theme
       - run: npm run test:ui-i18n
+      - run: node scripts/ui-route-form-inventory.mjs --check
+      - run: node scripts/ui-route-form-inventory.mjs --markdown > ui-route-form-inventory.md
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ui-route-form-inventory
+          path: ui-route-form-inventory.md
+          if-no-files-found: error
       - run: npx next build
