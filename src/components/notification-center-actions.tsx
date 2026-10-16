@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CrudModal } from "@/components/crud-modal";
 
@@ -21,6 +21,7 @@ export function NotificationCenterActions({
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState("");
+  const submitting = useRef(false);
   const [message, setMessage] = useState("");
   const [uiEditor, setUiEditor] = useState("");
   const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
@@ -28,68 +29,110 @@ export function NotificationCenterActions({
   const eventLabel = (value: string) => value === "CRITICAL_RESULT_OPENED" ? tr("Critical result opened", "فتح نتيجة حرجة") : value === "CRITICAL_RESULT_ESCALATED" ? tr("Critical result escalated", "تصعيد نتيجة حرجة") : value === "REPORT_RELEASED" ? tr("Report released", "إصدار تقرير") : value === "TAT_BREACH" ? tr("TAT breach", "تجاوز زمن الإنجاز") : value === "APPOINTMENT_REMINDER" ? tr("Appointment reminder", "تذكير بموعد") : value;
 
   async function markAllRead() {
-    setBusy("read"); setMessage("");
-    for (const id of notificationIds) {
-      const response = await fetch(`/api/notifications/${id}/read`, { method: "POST" });
-      if (!response.ok) {
-        setMessage(tr("Could not mark all notifications as read.", "تعذر تعليم كل الإشعارات كمقروءة."));
-        setBusy("");
-        return;
+    if (submitting.current) return;
+    submitting.current = true;
+    setBusy("read");
+    setMessage("");
+    try {
+      for (const id of notificationIds) {
+        const response = await fetch(`/api/notifications/${id}/read`, { method: "POST" });
+        if (!response.ok) {
+          setMessage(tr("Could not mark all notifications as read. Some items may already be updated.", "تعذر تعليم كل الإشعارات كمقروءة. قد تكون بعض العناصر قد تحدّثت بالفعل."));
+          return;
+        }
       }
+      setMessage(tr("Notifications marked as read.", "تم تعليم الإشعارات كمقروءة."));
+      router.refresh();
+    } catch {
+      setMessage(tr("Connection interrupted. Refresh to verify which notifications were marked read.", "انقطع الاتصال. حدّث الصفحة للتحقق من الإشعارات التي أصبحت مقروءة."));
+    } finally {
+      submitting.current = false;
+      setBusy("");
     }
-    setBusy(""); setMessage(tr("Notifications marked as read.", "تم تعليم الإشعارات كمقروءة.")); router.refresh();
   }
 
   async function togglePreference(eventCode: string, channel: string, enabled: boolean) {
+    if (submitting.current) return;
+    submitting.current = true;
     const key = `pref:${eventCode}:${channel}`;
-    setBusy(key); setMessage("");
-    const response = await fetch("/api/notifications/preferences", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ eventCode, channel, enabled }),
-    });
-    setBusy(""); setMessage(response.ok ? tr("Preference updated.", "تم تحديث التفضيل.") : tr("Preference update failed.", "فشل تحديث التفضيل."));
-    if (response.ok) router.refresh();
+    setBusy(key);
+    setMessage("");
+    try {
+      const response = await fetch("/api/notifications/preferences", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ eventCode, channel, enabled }),
+      });
+      setMessage(response.ok ? tr("Preference updated.", "تم تحديث التفضيل.") : tr("Preference update failed.", "فشل تحديث التفضيل."));
+      if (response.ok) router.refresh();
+    } catch {
+      setMessage(tr("Connection interrupted. Refresh to verify the current notification preference.", "انقطع الاتصال. حدّث الصفحة للتحقق من التفضيل الحالي للإشعارات."));
+    } finally {
+      submitting.current = false;
+      setBusy("");
+    }
   }
 
   async function dispatch() {
-    setBusy("dispatch"); setMessage("");
-    const response = await fetch("/api/notifications/dispatch", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ limit: 100 }),
-    });
-    const body = await response.json().catch(() => ({}));
-    setBusy("");
-    setMessage(response.ok ? tr(
-      `Created ${body.tatEscalations?.length || 0} TAT escalation(s) and processed ${body.results?.length || 0} outbound deliveries.`,
-      `تم إنشاء ${body.tatEscalations?.length || 0} تصعيد TAT ومعالجة ${body.results?.length || 0} عملية تسليم صادرة.`,
-    ) : tr("Dispatch failed.", "فشلت عملية الإرسال."));
-    if (response.ok) router.refresh();
+    if (submitting.current) return;
+    submitting.current = true;
+    setBusy("dispatch");
+    setMessage("");
+    try {
+      const response = await fetch("/api/notifications/dispatch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ limit: 100 }),
+      });
+      const body = await response.json().catch(() => ({}));
+      setMessage(response.ok ? tr(
+        `Created ${body.tatEscalations?.length || 0} TAT escalation(s) and processed ${body.results?.length || 0} outbound deliveries.`,
+        `تم إنشاء ${body.tatEscalations?.length || 0} تصعيد TAT ومعالجة ${body.results?.length || 0} عملية تسليم صادرة.`,
+      ) : tr("Dispatch failed.", "فشلت عملية الإرسال."));
+      if (response.ok) router.refresh();
+    } catch {
+      setMessage(tr("Connection interrupted. Check the dispatch status before requesting another run.", "انقطع الاتصال. تحقق من حالة الإرسال قبل بدء محاولة جديدة."));
+    } finally {
+      submitting.current = false;
+      setBusy("");
+    }
   }
 
   async function createTemplate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setBusy("template"); setMessage("");
-    const form = new FormData(event.currentTarget);
-    const response = await fetch("/api/notifications/templates", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        code: form.get("code"),
-        eventCode: form.get("eventCode"),
-        channel: form.get("channel"),
-        subjectEn: form.get("subjectEn"),
-        subjectAr: form.get("subjectAr"),
-        bodyEn: form.get("bodyEn"),
-        bodyAr: form.get("bodyAr"),
-      }),
-    });
-    setBusy("");
-    setMessage(response.ok ? tr("Notification template created.", "تم إنشاء قالب الإشعار.") : tr("Template creation failed.", "فشل إنشاء القالب."));
-    if (response.ok) {
-      event.currentTarget.reset();
+    if (submitting.current) return;
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
+    submitting.current = true;
+    setBusy("template");
+    setMessage("");
+    try {
+      const response = await fetch("/api/notifications/templates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          code: form.get("code"),
+          eventCode: form.get("eventCode"),
+          channel: form.get("channel"),
+          subjectEn: form.get("subjectEn"),
+          subjectAr: form.get("subjectAr"),
+          bodyEn: form.get("bodyEn"),
+          bodyAr: form.get("bodyAr"),
+        }),
+      });
+      if (!response.ok) {
+        setMessage(tr("Template creation failed.", "فشل إنشاء القالب."));
+        return;
+      }
+      formElement.reset();
+      setUiEditor("");
+      setMessage(tr("Notification template created.", "تم إنشاء قالب الإشعار."));
       router.refresh();
+    } catch {
+      setMessage(tr("Connection error. Check whether the template was created before retrying.", "حدث خطأ في الاتصال. تحقق من إنشاء القالب قبل إعادة المحاولة."));
+    } finally {
+      submitting.current = false;
+      setBusy("");
     }
   }
 
@@ -144,7 +187,7 @@ export function NotificationCenterActions({
      onClick={() => { setMessage(""); setUiEditor("template"); }}>
      {tr("Create Notification Template", "إنشاء قالب إشعار")}
    </button>
-   <CrudModal open={uiEditor === "template"} onClose={() => {if (!busy) setUiEditor("");}}
+   <CrudModal open={uiEditor === "template"} onClose={() => { if (!submitting.current) setUiEditor(""); }}
      size="compact" title={tr("Create Notification Template", "إنشاء قالب إشعار")}
      description={tr("Templates are configurable and notification events remain audited.", "القوالب قابلة للتهيئة وتظل أحداث الإشعارات موثقة.")}>
      {uiEditor === "template" && <form className="catalog-form" onSubmit={createTemplate}>
