@@ -24,6 +24,9 @@ export function ClientReferrerForms({
   const [clientMessage, setClientMessage] = useState("");
   const [referrerMessage, setReferrerMessage] = useState("");
   const [sourceMessage, setSourceMessage] = useState("");
+  const [clientError, setClientError] = useState(false);
+  const [referrerError, setReferrerError] = useState(false);
+  const [sourceError, setSourceError] = useState(false);
   const [busy, setBusy] = useState<"client" | "referrer" | "source" | "">("");
   const submitting = useRef(false);
   const [open, setOpen] = useState<"client" | "referrer" | "source" | "">("");
@@ -36,6 +39,7 @@ export function ClientReferrerForms({
     submitting.current = true;
     setBusy("client");
     setClientMessage("");
+    setClientError(false);
     try {
       const response = await fetch("/api/clients", {
         method: "POST",
@@ -52,6 +56,7 @@ export function ClientReferrerForms({
       });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) {
+        setClientError(true);
         setClientMessage(body.error || tr("Client creation failed.", "تعذر إنشاء العميل."));
         return;
       }
@@ -60,6 +65,7 @@ export function ClientReferrerForms({
       setOpen("");
       router.refresh();
     } catch {
+      setClientError(true);
       setClientMessage(tr("Connection error. Check whether the client was created before retrying.", "حدث خطأ في الاتصال. تحقق من إنشاء العميل قبل إعادة المحاولة."));
     } finally {
       submitting.current = false;
@@ -75,6 +81,7 @@ export function ClientReferrerForms({
     submitting.current = true;
     setBusy("referrer");
     setReferrerMessage("");
+    setReferrerError(false);
     try {
       const response = await fetch("/api/referrers", {
         method: "POST",
@@ -92,6 +99,7 @@ export function ClientReferrerForms({
       });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) {
+        setReferrerError(true);
         setReferrerMessage(body.error || tr("Referrer creation failed.", "تعذر إنشاء المحيل."));
         return;
       }
@@ -100,6 +108,7 @@ export function ClientReferrerForms({
       setOpen("");
       router.refresh();
     } catch {
+      setReferrerError(true);
       setReferrerMessage(tr("Connection error. Check whether the referrer was created before retrying.", "حدث خطأ في الاتصال. تحقق من إنشاء المحيل قبل إعادة المحاولة."));
     } finally {
       submitting.current = false;
@@ -115,6 +124,7 @@ export function ClientReferrerForms({
     submitting.current = true;
     setBusy("source");
     setSourceMessage("");
+    setSourceError(false);
     try {
       const response = await fetch("/api/sources", {
         method: "POST",
@@ -128,6 +138,7 @@ export function ClientReferrerForms({
       });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) {
+        setSourceError(true);
         setSourceMessage(body.error || tr("Source creation failed.", "تعذر إنشاء المصدر."));
         return;
       }
@@ -136,6 +147,7 @@ export function ClientReferrerForms({
       setOpen("");
       router.refresh();
     } catch {
+      setSourceError(true);
       setSourceMessage(tr("Connection error. Check whether the source was created before retrying.", "حدث خطأ في الاتصال. تحقق من إنشاء المصدر قبل إعادة المحاولة."));
     } finally {
       submitting.current = false;
@@ -146,14 +158,14 @@ export function ClientReferrerForms({
   return <>
     <div className="crud-action-bar">
       <div>
-        {clientMessage && <span className="crud-success-toast">{clientMessage}</span>}
-        {referrerMessage && <span className="crud-success-toast">{referrerMessage}</span>}
-        {sourceMessage && <span className="crud-success-toast">{sourceMessage}</span>}
+        {clientMessage && !clientError && <span className="crud-success-toast" role="status">{clientMessage}</span>}
+        {referrerMessage && !referrerError && <span className="crud-success-toast" role="status">{referrerMessage}</span>}
+        {sourceMessage && !sourceError && <span className="crud-success-toast" role="status">{sourceMessage}</span>}
       </div>
       <div className="crud-action-buttons">
-        <button type="button" className="primary-button" onClick={() => { setClientMessage(""); setOpen("client"); }}><SystemIcon name="plus" size={16}/>{tr("Add Client", "إضافة عميل")}</button>
-        <button type="button" className="secondary-button" onClick={() => { setReferrerMessage(""); setOpen("referrer"); }}><SystemIcon name="plus" size={16}/>{tr("Add Referrer", "إضافة محيل")}</button>
-        {canManageSources && <button type="button" className="secondary-button" onClick={() => { setSourceMessage(""); setOpen("source"); }}><SystemIcon name="plus" size={16}/>{tr("Add Source", "إضافة مصدر")}</button>}
+        <button type="button" className="primary-button" disabled={Boolean(busy)} onClick={() => { setClientError(false); setClientMessage(""); setOpen("client"); }}><SystemIcon name="plus" size={16}/>{tr("Add Client", "إضافة عميل")}</button>
+        <button type="button" className="secondary-button" disabled={Boolean(busy)} onClick={() => { setReferrerError(false); setReferrerMessage(""); setOpen("referrer"); }}><SystemIcon name="plus" size={16}/>{tr("Add Referrer", "إضافة محيل")}</button>
+        {canManageSources && <button type="button" className="secondary-button" disabled={Boolean(busy)} onClick={() => { setSourceError(false); setSourceMessage(""); setOpen("source"); }}><SystemIcon name="plus" size={16}/>{tr("Add Source", "إضافة مصدر")}</button>}
       </div>
     </div>
 
@@ -167,7 +179,7 @@ export function ClientReferrerForms({
         <label>{tr("Email", "البريد الإلكتروني")}<input name="email" type="email" /></label>
         <label>{tr("Payment terms (days)", "شروط الدفع (أيام)")}<input name="paymentTermsDays" type="number" min="0" max="3650" /></label>
         <button className="primary-button form-span" disabled={busy === "client"}>{busy === "client" ? tr("Saving…", "جارٍ الحفظ…") : tr("Create Client", "إنشاء العميل")}</button>
-        {clientMessage && <div className="form-success form-span">{clientMessage}</div>}
+        {clientMessage && <div className={(clientError ? "form-error" : "form-success") + " form-span"} role={clientError ? "alert" : "status"}>{clientMessage}</div>}
       </form>
     </CrudModal>
 
@@ -176,13 +188,13 @@ export function ClientReferrerForms({
         <label>{tr("Code", "الرمز")}<input name="code" placeholder={tr("Optional; generated from name","اختياري؛ يتم توليده من الاسم")} /></label>
         <label>{tr("Type", "النوع")}<select name="type" defaultValue="PHYSICIAN"><option value="PHYSICIAN">{referrerTypeLabel("PHYSICIAN")}</option><option value="CLINIC">{referrerTypeLabel("CLINIC")}</option><option value="HOSPITAL">{referrerTypeLabel("HOSPITAL")}</option><option value="OTHER">{referrerTypeLabel("OTHER")}</option></select></label>
         <label>{tr("Name (English)", "الاسم بالإنجليزية")}<input name="nameEn" required /></label>
-        <label dir="rtl">الاسم بالعربية<input name="nameAr" dir="rtl" /></label>
+        <label>{tr("Name (Arabic)", "الاسم بالعربية")}<input name="nameAr" dir="rtl" /></label>
         <label>{tr("License #", "رقم الترخيص")}<input name="licenseNumber" /></label>
         <label>{tr("Phone", "الهاتف")}<input name="phone" /></label>
         <label>{tr("Email", "البريد الإلكتروني")}<input name="email" type="email" /></label>
         <label>{tr("Billing client", "عميل الفوترة")}<select name="clientId" defaultValue=""><option value="">{tr("No linked client","لا يوجد عميل مرتبط")}</option>{clients.map(client => <option key={client.id} value={client.id}>{client.code} — {localizedName(client)}</option>)}</select></label>
         <button className="primary-button form-span" disabled={busy === "referrer"}>{busy === "referrer" ? tr("Saving…", "جارٍ الحفظ…") : tr("Create Referrer", "إنشاء المحيل")}</button>
-        {referrerMessage && <div className="form-success form-span">{referrerMessage}</div>}
+        {referrerMessage && <div className={(referrerError ? "form-error" : "form-success") + " form-span"} role={referrerError ? "alert" : "status"}>{referrerMessage}</div>}
       </form>
     </CrudModal>
 
@@ -191,9 +203,9 @@ export function ClientReferrerForms({
         <label>{tr("Code", "الرمز")}<input name="code" required placeholder="WALK_IN / CAMPAIGN / INSURANCE" /></label>
         <label>{tr("Category", "الفئة")}<input name="category" required placeholder="WALK_IN / DOCTOR / CORPORATE" /></label>
         <label>{tr("Name (English)", "الاسم بالإنجليزية")}<input name="nameEn" required /></label>
-        <label dir="rtl">الاسم بالعربية<input name="nameAr" dir="rtl" /></label>
+        <label>{tr("Name (Arabic)", "الاسم بالعربية")}<input name="nameAr" dir="rtl" /></label>
         <button className="primary-button form-span" disabled={busy === "source"}>{busy === "source" ? tr("Saving…", "جارٍ الحفظ…") : tr("Create Source", "إنشاء المصدر")}</button>
-        {sourceMessage && <div className="form-success form-span">{sourceMessage}</div>}
+        {sourceMessage && <div className={(sourceError ? "form-error" : "form-success") + " form-span"} role={sourceError ? "alert" : "status"}>{sourceMessage}</div>}
       </form>
     </CrudModal>}
   </>;
