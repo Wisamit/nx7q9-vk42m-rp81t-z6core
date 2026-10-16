@@ -35,7 +35,7 @@ test("Issue #265: all reviewed clinical effective dates require an explicit cale
     const ui = source(name);
     assert.doesNotMatch(ui, /defaultValue=\{new Date\(\)\.toISOString\(\)\.slice\(0,\s*10\)\}/,
       name + " cannot silently choose UTC day for effective-dated configuration");
-    assert.ok(occurrences(ui, /name="effectiveFrom" type="date" required/g) >= requiredCount,
+    assert.ok(occurrences(ui, /(?:<SystemDateField name="effectiveFrom" required|name="effectiveFrom" type="date" required)/g) >= requiredCount,
       name + " must require explicit date selection");
   }
 });
