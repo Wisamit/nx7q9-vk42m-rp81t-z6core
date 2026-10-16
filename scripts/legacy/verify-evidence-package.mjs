@@ -27,7 +27,7 @@ async function loadLineagePages(pageDirectory) {
     throw new Error("evidence_directory_invalid");
   const names = await readdir(pageDirectory);
   if (names.length < 1 || names.length > 6000 ||
-      names.some(name => !/^legacy-row-hashes-[A-Za-z0-9_]+-[0-9]{5}\\.json$/.test(name)))
+      names.some(name => !/^legacy-row-hashes-[A-Za-z0-9_]+-[0-9]{5}\.json$/.test(name)))
     throw new Error("unexpected_evidence_page_name");
   const lineage = [];
   for (const name of names) {
