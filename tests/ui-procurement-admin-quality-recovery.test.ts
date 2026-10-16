@@ -76,7 +76,7 @@ test("Issue #265: QC and qualitative option effective dates are explicitly chose
     assert.doesNotMatch(ui, /new Date\(\)\.toISOString\(\)\.slice\(0,\s*10\)/);
   }
   assert.match(targets[0], /<SystemDateField name="effectiveFrom" required/);
-  assert.match(targets[1], /name="effectiveFrom" type="date"/);
+  assert.match(targets[1], /<SystemDateField name="effectiveFrom" required/);
   const qms = source("quality-management-console");
   assert.match(qms, /Assigned at \(local date\)/);
   assert.match(qms, /Assessed at \(local date\)/);
