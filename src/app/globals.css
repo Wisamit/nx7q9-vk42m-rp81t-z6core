@@ -253,6 +253,13 @@ html[data-density="compact"] :where(.detail-card,.dashboard-panel,.settings-card
   .crud-modal-compact .crud-modal-body{padding-bottom:max(16px,env(safe-area-inset-bottom))}
 }
 .crud-modal-compact .catalog-form>*{min-width:0}
+@media(min-width:761px) and (max-width:1199px){
+  .crud-modal-compact{width:min(460px,calc(100vw - 48px))}
+}
+.crud-modal-compact .table-wrap{max-width:100%;overflow-x:auto}
+.crud-modal-compact .permission-grid{grid-template-columns:minmax(0,1fr)}
+.crud-modal-compact :is(.checkbox-row,.check-row,.check-line){min-width:0;overflow-wrap:anywhere}
+
 .crud-modal-compact .settings-grid,
 .crud-modal-compact .branding-upload-grid,
 .crud-modal-compact .theme-editor-grid,
