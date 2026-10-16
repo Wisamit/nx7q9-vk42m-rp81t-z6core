@@ -155,10 +155,10 @@ export function IntegrationManager({
       <h2>{tr("External API Key", "مفتاح API خارجي")}</h2>
       <p className="muted">{tr("The secret is displayed once. Only its SHA-256 hash is stored.", "يُعرض السر مرة واحدة فقط، ويُخزن فقط تجزئته SHA-256.")}</p>
       <button type="button" className="primary-button" disabled={Boolean(busy)}
-      onClick={() => { setMessage(""); setUiDialog("key"); }}>
+      onClick={() => { setMessage(""); setSecret(""); setUiDialog("key"); }}>
       {tr("Issue External API Key", "إصدار مفتاح API خارجي")}
     </button>
-    <CrudModal open={uiDialog === "key"} onClose={() => { if (!busy) setUiDialog(""); }}
+    <CrudModal open={uiDialog === "key"} onClose={() => { if (!busy) { setSecret(""); setUiDialog(""); } }}
       size="compact"
       title={tr("Issue External API Key", "إصدار مفتاح API خارجي")}
       description={tr("The new secret is displayed once; copy it before dismissing the dialog.", "يظهر السر الجديد مرة واحدة فقط؛ انسخه قبل إغلاق النافذة.")}>
@@ -178,7 +178,7 @@ export function IntegrationManager({
       <code dir="ltr">{secret}</code>
     </div>}
     </CrudModal>
-      {secret && <div className="integration-secret"><strong>{tr("Copy now — shown once", "انسخه الآن — يظهر مرة واحدة فقط")}</strong><code>{secret}</code></div>}
+      
     </article>}
 
     {canManage && <article className="detail-card">
