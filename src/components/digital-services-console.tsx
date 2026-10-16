@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { CrudModal } from "@/components/crud-modal";
@@ -86,6 +86,7 @@ export function DigitalServicesConsole({
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState("");
+  const submitting = useRef(false);
   const [message, setMessage] = useState("");
   const [uiDialog, setUiDialog] = useState("");
   const [sensitiveAction, setSensitiveAction] = useState<{ kind: "portal-status" | "portal-password" | "appointment-cancel" | "queue-call"; id: string; status?: "ACTIVE" | "DISABLED" } | null>(null);
@@ -132,7 +133,8 @@ export function DigitalServicesConsole({
     value;
 
   async function send(url: string, method: "POST" | "PATCH", payload: unknown, key: string, successEn: string, successAr: string) {
-    if (busy) return false;
+    if (submitting.current) return false;
+    submitting.current = true;
     setBusy(key);
     setMessage("");
     try {
@@ -153,13 +155,16 @@ export function DigitalServicesConsole({
       setMessage(tr("Connection error; action not confirmed.", "خطأ في الاتصال؛ لم يتم تأكيد الإجراء."));
       return false;
     } finally {
+      submitting.current = false;
       setBusy("");
     }
   }
 
   async function createPortalAccount(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    if (submitting.current) return;
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     const ok = await send("/api/portal-accounts", "POST", {
       type: portalType,
       patientId: portalType === "PATIENT" ? form.get("subjectId") : null,
@@ -169,7 +174,7 @@ export function DigitalServicesConsole({
       phone: form.get("phone"),
       preferredLocale: form.get("preferredLocale"),
     }, "portal-create", "Portal account provisioned.", "تم إنشاء حساب البوابة.");
-    if (ok) event.currentTarget.reset();
+    if (ok) formElement.reset();
   }
 
   async function setPortalStatus(accountId: string, status: "ACTIVE" | "DISABLED") {
@@ -186,7 +191,9 @@ export function DigitalServicesConsole({
 
   async function createCorporateAccess(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    if (submitting.current) return;
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     const ok = await send("/api/corporate-portal-access", "POST", {
       clientId: form.get("clientId"),
       patientId: form.get("patientId"),
@@ -196,25 +203,33 @@ export function DigitalServicesConsole({
       canBook: form.get("canBook") === "on",
       canViewReports: form.get("canViewReports") === "on",
     }, "corporate-access", "Corporate portal patient access created.", "تم إنشاء صلاحية وصول المريض عبر بوابة الشركة.");
-    if (ok) event.currentTarget.reset();
+    if (ok) formElement.reset();
   }
 
   async function createAppointment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    if (submitting.current) return;
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     const mode = String(form.get("mode") || "ONSITE");
+    const localStart = String(form.get("scheduledStart") || "");
+    const startDate = new Date(localStart);
+    if (!localStart || !Number.isFinite(startDate.getTime())) {
+      setMessage(tr("Choose a valid appointment date and time.", "اختر تاريخاً ووقتاً صالحين للموعد."));
+      return;
+    }
     const ok = await send("/api/appointments", "POST", {
       branchId: form.get("branchId"),
       patientId: form.get("patientId"),
       mode,
       serviceCode: form.get("serviceCode"),
       serviceNameSnapshot: form.get("serviceNameSnapshot"),
-      scheduledStart: new Date(String(form.get("scheduledStart"))).toISOString(),
+      scheduledStart: startDate.toISOString(),
       contactPhone: form.get("contactPhone"),
       address: form.get("address"),
       notes: form.get("notes"),
     }, "appointment-create", "Appointment created.", "تم إنشاء الموعد.");
-    if (ok) event.currentTarget.reset();
+    if (ok) formElement.reset();
   }
 
   async function changeAppointmentStatus(id: string, status: string) {
@@ -238,7 +253,9 @@ export function DigitalServicesConsole({
 
   async function issueQueueTicket(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    if (submitting.current) return;
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     const ok = await send("/api/queue", "POST", {
       branchId: form.get("branchId"),
       patientId: form.get("patientId"),
@@ -246,7 +263,7 @@ export function DigitalServicesConsole({
       stage: form.get("stage"),
       priority: Number(form.get("priority") || 0),
     }, "queue-create", "Queue ticket issued.", "تم إصدار تذكرة الطابور.");
-    if (ok) event.currentTarget.reset();
+    if (ok) formElement.reset();
   }
 
   async function changeQueueStatus(id: string, status: string) {
