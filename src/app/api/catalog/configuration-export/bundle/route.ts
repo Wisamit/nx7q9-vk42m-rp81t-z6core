@@ -3,6 +3,7 @@ import { getCurrentSession, permissionSet, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { attestCatalogBundle, catalogBundleSigningSecret } from "@/lib/catalog-bundle-attestation";
 import { clinicalImportTestWhere, resolveClinicalImportScope } from "@/lib/catalog-clinical-import-scope";
+import { genericCatalogPriceScope } from "@/lib/catalog-generic-price-scope";
 import { BUNDLE_REVIEW_MAX_BYTES, BUNDLE_REVIEW_MAX_ROWS } from "@/lib/catalog-bundle-review";
 import { catalogExportTypes, type CatalogExportType } from "@/lib/catalog-configuration-export";
 
@@ -93,10 +94,7 @@ export async function GET(request: NextRequest) {
       every: { test: testScope },
     };
     const branchScope = { OR: [{ branchId: null }, { branchId: { in: branchIds } }] };
-    const genericPriceScope = { OR: [
-      { scopeType: "ORGANIZATION" as const, branchId: null },
-      { scopeType: "BRANCH" as const, branchId: { in: branchIds } },
-    ] };
+    const genericPriceScope = genericCatalogPriceScope(branchIds);
     const groups: Array<{ entityType: CatalogExportType; records: Array<{ id: string }> }> = [];
     let total = 0;
     for (const type of ordered.filter(value => requested.includes(value))) {
