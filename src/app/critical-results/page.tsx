@@ -1,3 +1,4 @@
+import { SystemDateText } from "@/components/system-date-text";
 import Link from "next/link";
 import { authorizedDepartmentIds, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
@@ -124,12 +125,12 @@ export default async function CriticalResultsPage({
               return <div key={index}><strong>{component}: {display}</strong>{optionCode ? <><br/><small>{optionCode} · {String(value.flag || "")}</small></> : <><br/><small>{String(value.flag || "")}</small></>}</div>;
             })}</td>
             <td>{event.result.performingBranch.nameEn}</td>
-            <td>{event.detectedAt.toISOString().replace("T"," ").slice(0,19)}</td>
+            <td>{<SystemDateText value={event.detectedAt.toISOString()} />}</td>
             <td>{event.acknowledgementDueAt
-              ? <strong className={overdue ? "delta-exceeded" : ""}>{event.acknowledgementDueAt.toISOString().replace("T"," ").slice(0,19)}{overdue ? " · " + tr(locale, "OVERDUE", "متأخر") : ""}</strong>
+              ? <strong className={overdue ? "delta-exceeded" : ""}>{<SystemDateText value={event.acknowledgementDueAt.toISOString()} />}{overdue ? " · " + tr(locale, "OVERDUE", "متأخر") : ""}</strong>
               : tr(locale, "No policy", "لا توجد سياسة")}</td>
-            <td>{tr(locale, "Level", "المستوى")} {event.escalationLevel}{event.maxEscalationLevelSnapshot !== null ? ` / ${event.maxEscalationLevelSnapshot}` : ""}<br/><small>{event.nextEscalationDueAt ? tr(locale, "Next", "التالي") + ": " + event.nextEscalationDueAt.toISOString().replace("T"," ").slice(0,19) : "—"}</small></td>
-            <td>{last ? <><strong>{last.outcome}</strong><br/><small>{last.communicatedAt.toISOString().replace("T"," ").slice(0,19)} · {last.recipientName}</small></> : tr(locale, "No communication yet", "لا يوجد تواصل بعد")}</td>
+            <td>{tr(locale, "Level", "المستوى")} {event.escalationLevel}{event.maxEscalationLevelSnapshot !== null ? ` / ${event.maxEscalationLevelSnapshot}` : ""}<br/><small>{event.nextEscalationDueAt ? tr(locale, "Next", "التالي") + ": " + <SystemDateText value={event.nextEscalationDueAt.toISOString()} /> : "—"}</small></td>
+            <td>{last ? <><strong>{last.outcome}</strong><br/><small>{<SystemDateText value={last.communicatedAt.toISOString()} />} · {last.recipientName}</small></> : tr(locale, "No communication yet", "لا يوجد تواصل بعد")}</td>
             <td><Link className="secondary-link" href={`/worklists/${event.result.orderItemId}`}>{tr(locale, "Open Result", "فتح النتيجة")}</Link></td>
           </tr>;
         })}</tbody>
