@@ -2,6 +2,7 @@
 
 import { FormEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { CrudModal } from "@/components/crud-modal";
 
 type Analyzer = { id: string; code: string; name: string; branchId: string };
 type Material = { id: string; code: string; nameEn: string; nameAr?: string | null; levelName: string };
@@ -50,6 +51,7 @@ export function QcManager({
   const router = useRouter();
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
+  const [uiEditor, setUiEditor] = useState("");
   const [targetTestId, setTargetTestId] = useState("");
   const [runAnalyzerId, setRunAnalyzerId] = useState("");
   const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
@@ -181,19 +183,35 @@ export function QcManager({
   return <section className="detail-grid detail-section">
     {canManage && <article className="detail-card">
       <h2>{tr("QC Material", "مادة QC")}</h2>
-      <form className="catalog-form" onSubmit={createMaterial}>
+      <button type="button" className="primary-button" disabled={Boolean(busy)}
+     onClick={() => { setMessage(""); setUiEditor("material"); }}>
+     {tr("Create QC Material", "إنشاء مادة ضبط جودة")}
+   </button>
+   <CrudModal open={uiEditor === "material"} onClose={() => {if (!busy) setUiEditor("");}}
+     size="compact" title={tr("Create QC Material", "إنشاء مادة ضبط جودة")}
+     description={tr("QC materials require exact identification and branch/device governance.", "تتطلب مواد ضبط الجودة تعريفاً دقيقاً وحوكمة الفرع والجهاز.")}>
+     {uiEditor === "material" && <form className="catalog-form" onSubmit={createMaterial}>
         <label>{tr("Code", "الرمز")}<input name="code" required /></label>
         <label>{tr("Level", "المستوى")}<input name="levelName" placeholder={tr("Level 1 / Normal", "المستوى 1 / طبيعي")} required /></label>
         <label>{tr("Name (English)", "الاسم بالإنجليزية")}<input name="nameEn" required /></label>
         <label>{tr("Name (Arabic)", "الاسم بالعربية")}<input name="nameAr" dir="rtl" /></label>
         <label>{tr("Manufacturer", "الشركة المصنعة")}<input name="manufacturer" /></label>
         <button className="primary-button form-span" disabled={busy !== ""}>{busy === "material" ? tr("Saving…", "جارٍ الحفظ…") : tr("Create QC Material", "إنشاء مادة QC")}</button>
-      </form>
+      </form>}
+     {uiEditor === "material" && message && <p className="form-warning" role="status">{message}</p>}
+   </CrudModal>
     </article>}
 
     {canManage && <article className="detail-card">
       <h2>{tr("QC Lot", "تشغيلة QC")}</h2>
-      <form className="catalog-form" onSubmit={createLot}>
+      <button type="button" className="primary-button" disabled={Boolean(busy)}
+     onClick={() => { setMessage(""); setUiEditor("lot"); }}>
+     {tr("Create QC Lot", "إنشاء تشغيلة ضبط جودة")}
+   </button>
+   <CrudModal open={uiEditor === "lot"} onClose={() => {if (!busy) setUiEditor("");}}
+     size="compact" title={tr("Create QC Lot", "إنشاء تشغيلة ضبط جودة")}
+     description={tr("Check lot identity and expiry date before adding a QC lot.", "راجع هوية التشغيلة والصلاحية قبل الإنشاء.")}>
+     {uiEditor === "lot" && <form className="catalog-form" onSubmit={createLot}>
         <label className="form-span">{tr("Material", "المادة")}<select name="materialId" required defaultValue="">
           <option value="">{tr("Select material…", "اختر المادة…")}</option>
           {materials.map(item => <option key={item.id} value={item.id}>{item.code} — {localizedName(item)} · {item.levelName}</option>)}
@@ -203,12 +221,21 @@ export function QcManager({
         <label>{tr("Opened", "تاريخ الفتح")}<input name="openedAt" type="date" /></label>
         <label>{tr("Expiry", "تاريخ الانتهاء")}<input name="expiryDate" type="date" /></label>
         <button className="primary-button form-span" disabled={busy !== ""}>{busy === "lot" ? tr("Saving…", "جارٍ الحفظ…") : tr("Create QC Lot", "إنشاء تشغيلة QC")}</button>
-      </form>
+      </form>}
+     {uiEditor === "lot" && message && <p className="form-warning" role="status">{message}</p>}
+   </CrudModal>
     </article>}
 
     {canManage && <article className="detail-card">
       <h2>{tr("QC Target & Westgard Rules", "هدف QC وقواعد Westgard")}</h2>
-      <form className="catalog-form" onSubmit={createTarget}>
+      <button type="button" className="primary-button" disabled={Boolean(busy)}
+     onClick={() => { setMessage(""); setUiEditor("target"); }}>
+     {tr("Configure QC Target", "إعداد هدف ضبط الجودة")}
+   </button>
+   <CrudModal open={uiEditor === "target"} onClose={() => {if (!busy) setUiEditor("");}}
+     size="compact" title={tr("Configure QC Target", "إعداد هدف ضبط الجودة")}
+     description={tr("Targets and Westgard rules require laboratory approval; do not infer limits.", "تتطلب الأهداف وقواعد Westgard اعتماد المختبر؛ لا تخترع حدوداً.")}>
+     {uiEditor === "target" && <form className="catalog-form" onSubmit={createTarget}>
         <label>{tr("QC lot", "تشغيلة QC")}<select name="qcLotId" required defaultValue="">
           <option value="">{tr("Select lot…", "اختر التشغيلة…")}</option>
           {lots.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}
@@ -241,7 +268,9 @@ export function QcManager({
           </div>
         </div>
         <button className="primary-button form-span" disabled={busy !== ""}>{busy === "target" ? tr("Saving…", "جارٍ الحفظ…") : tr("Create QC Target", "إنشاء هدف QC")}</button>
-      </form>
+      </form>}
+     {uiEditor === "target" && message && <p className="form-warning" role="status">{message}</p>}
+   </CrudModal>
     </article>}
 
     {canEnter && <article className="detail-card">
@@ -250,7 +279,14 @@ export function QcManager({
         "Enter multiple control levels in the same run when available so multi-level rules such as R:4s are evaluated within the same QC event.",
         "أدخل عدة مستويات ضبط ضمن نفس التشغيل عند توفرها، حتى تُقيّم القواعد متعددة المستويات مثل R:4s ضمن حدث QC نفسه.",
       )}</p>
-      <form className="catalog-form" onSubmit={createRun}>
+      <button type="button" className="primary-button" disabled={Boolean(busy)}
+     onClick={() => { setMessage(""); setUiEditor("run"); }}>
+     {tr("Record QC Run", "تسجيل تشغيل ضبط جودة")}
+   </button>
+   <CrudModal open={uiEditor === "run"} onClose={() => {if (!busy) setUiEditor("");}}
+     size="compact" title={tr("Record QC Run", "تسجيل تشغيل ضبط جودة")}
+     description={tr("Recorded QC measurements and release gates must remain traceable.", "تظل قياسات ضبط الجودة وبوابات إصدار النتائج قابلة للتتبع.")}>
+     {uiEditor === "run" && <form className="catalog-form" onSubmit={createRun}>
         <label>{tr("Analyzer", "الجهاز")}<select required value={runAnalyzerId} onChange={event => setRunAnalyzerId(event.target.value)}>
           <option value="">{tr("Select analyzer…", "اختر الجهاز…")}</option>
           {analyzers.map(item => <option key={item.id} value={item.id}>{item.code} — {item.name}</option>)}
@@ -268,7 +304,9 @@ export function QcManager({
         </div>
         <label className="form-span">{tr("Notes", "ملاحظات")}<textarea name="notes" rows={2} /></label>
         <button className="primary-button form-span" disabled={busy !== ""}>{busy === "run" ? tr("Evaluating…", "جارٍ التقييم…") : tr("Save & Evaluate QC", "حفظ وتقييم QC")}</button>
-      </form>
+      </form>}
+     {uiEditor === "run" && message && <p className="form-warning" role="status">{message}</p>}
+   </CrudModal>
     </article>}
 
     {openViolations.length > 0 && <article className="detail-card">
