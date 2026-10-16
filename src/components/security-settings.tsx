@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { ChangeEvent, FormEvent, useState } from "react";
 import { SystemIcon } from "@/components/system-icon";
+import { CrudModal } from "@/components/crud-modal";
 
 type Enrollment = {
   secret: string;
@@ -42,6 +43,9 @@ export function SecuritySettings({
   const [busy, setBusy] = useState(false);
   const [passwordBusy, setPasswordBusy] = useState(false);
   const [passwordMessage, setPasswordMessage] = useState("");
+  const [passwordOpen, setPasswordOpen] = useState(false);
+  const [mfaOpen, setMfaOpen] = useState(false);
+  const [avatarRemovalOpen, setAvatarRemovalOpen] = useState(false);
 
   async function changePassword(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -54,10 +58,6 @@ export function SecuritySettings({
       setPasswordMessage(tr("New passwords do not match.", "كلمتا المرور الجديدتان غير متطابقتين."));
       return;
     }
-    if (!confirm(tr(
-      "Change your password and sign out ALL existing sessions, including this one?",
-      "هل تريد تغيير كلمة المرور وإنهاء جميع جلسات الدخول بما فيها الجلسة الحالية؟",
-    ))) return;
     setPasswordBusy(true); setPasswordMessage("");
     try {
       const response = await fetch("/api/security/profile/password", {
@@ -164,10 +164,6 @@ export function SecuritySettings({
 
   async function disableMfa(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!confirm(tr(
-      "Disable multi-factor authentication for this staff account? Other active sessions will be revoked.",
-      "تعطيل المصادقة متعددة العوامل لهذا الحساب؟ سيتم إلغاء الجلسات النشطة الأخرى."
-    ))) return;
     setBusy(true); setMessage("");
     const form = new FormData(event.currentTarget);
     const response = await fetch("/api/security/mfa/disable", {
@@ -180,6 +176,39 @@ export function SecuritySettings({
       ? tr("Current password is incorrect.", "كلمة المرور الحالية غير صحيحة.")
       : tr("MFA code is invalid.", "رمز المصادقة غير صحيح."));
     setBusy(false);
+  }
+
+  function dismissMfa() {
+    if (busy) return;
+    if (recoveryCodes.length) {
+      setMessage(tr(
+        "Save the one-time recovery codes and choose 'I saved the codes' before closing.",
+        "احفظ رموز الاسترداد التي تظهر مرة واحدة، ثم اختر «حفظت الرموز» قبل الإغلاق."
+      ));
+      return;
+    }
+    setMfaOpen(false);
+    setEnrollment(null);
+    setMessage("");
+  }
+
+  function finishRecoveryCodes() {
+    if (busy || !recoveryCodes.length) return;
+    setRecoveryCodes([]);
+    setEnrollment(null);
+    setMfaOpen(false);
+    window.location.reload();
+  }
+
+  async function confirmAvatarRemoval() {
+    if (busy) return;
+    try {
+      await removeAvatar();
+      setAvatarRemovalOpen(false);
+    } catch {
+      setMessage(tr("Could not remove the picture. Check your connection.",
+        "تعذر إزالة الصورة. تحقق من الاتصال."));
+    }
   }
 
   return <div className="detail-grid">
@@ -195,11 +224,13 @@ export function SecuritySettings({
           <strong>{displayName}</strong>
           <p className="muted">{tr("PNG, JPEG or WEBP. Maximum 1 MB.", "PNG أو JPEG أو WEBP. الحد الأقصى 1 ميغابايت.")}</p>
           <div className="header-actions">
-            <label className="secondary-button file-button">{busy ? tr("Saving…", "جارٍ الحفظ…") : tr("Choose image", "اختيار صورة")}<input type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={e => void saveAvatar(e)} /></label>
-            {avatar && <button type="button" className="secondary-button" disabled={busy} onClick={() => void removeAvatar()}>{tr("Remove image", "إزالة الصورة")}</button>}
+            <label className="secondary-button file-button">{busy ? tr("Saving…", "جارٍ الحفظ…") : tr("Choose image", "اختيار صورة")}<input type="file" accept="image/png,image/jpeg,image/webp" hidden disabled={busy} onChange={e => void saveAvatar(e)} /></label>
+            {avatar && <button type="button" className="secondary-button" disabled={busy}
+              onClick={() => { setMessage(""); setAvatarRemovalOpen(true); }}>{tr("Remove image", "إزالة الصورة")}</button>}
           </div>
         </div>
       </div>
+      {message && !mfaOpen && !avatarRemovalOpen && <p role="status" className="form-warning">{message}</p>}
     </article>
 
     <article className="detail-card">
@@ -211,19 +242,36 @@ export function SecuritySettings({
         "Verify your current password. Changing it revokes every existing login session; your MFA settings remain unchanged.",
         "أكّد كلمة المرور الحالية. تغييرها ينهي جميع جلسات الدخول وتبقى إعدادات المصادقة متعددة العوامل كما هي.",
       )}</p>
-      <form className="form-stack" onSubmit={e => void changePassword(e)}>
-        <label>{tr("Current password", "كلمة المرور الحالية")}
-          <input name="currentPassword" type="password" required autoComplete="current-password" /></label>
-        <label>{tr("New password (minimum 12 characters)", "كلمة المرور الجديدة (12 محرفًا على الأقل)")}
-          <input name="newPassword" type="password" minLength={12} required autoComplete="new-password" /></label>
-        <label>{tr("Confirm new password", "تأكيد كلمة المرور الجديدة")}
-          <input name="confirmPassword" type="password" minLength={12} required autoComplete="new-password" /></label>
-        <button className="primary-button" disabled={passwordBusy}>
-          {passwordBusy ? tr("Changing…", "جارٍ التغيير…") :
-            tr("Change password and sign out", "تغيير كلمة المرور وتسجيل الخروج")}
-        </button>
-        {passwordMessage && <p role="alert" className="form-warning">{passwordMessage}</p>}
-      </form>
+      <button type="button" className="primary-button" disabled={passwordBusy}
+        onClick={() => { setPasswordMessage(""); setPasswordOpen(true); }}>
+        {tr("Change password", "تغيير كلمة المرور")}
+      </button>
+      <CrudModal open={passwordOpen} onClose={() => { if (!passwordBusy) setPasswordOpen(false); }}
+        size="compact"
+        title={tr("Change Password and Sign Out", "تغيير كلمة المرور وتسجيل الخروج")}
+        description={tr(
+          "This revokes ALL active staff sessions, including your current session. Existing MFA configuration is retained.",
+          "يُلغي هذا الإجراء جميع جلسات الموظف النشطة بما فيها الحالية، مع الحفاظ على إعدادات المصادقة متعددة العوامل.",
+        )}>
+        {passwordOpen && <form className="form-stack" onSubmit={e => void changePassword(e)}>
+          <label>{tr("Current password", "كلمة المرور الحالية")}
+            <input name="currentPassword" type="password" required autoComplete="current-password" /></label>
+          <label>{tr("New password (minimum 12 characters)", "كلمة المرور الجديدة (12 محرفًا على الأقل)")}
+            <input name="newPassword" type="password" minLength={12} required autoComplete="new-password" /></label>
+          <label>{tr("Confirm new password", "تأكيد كلمة المرور الجديدة")}
+            <input name="confirmPassword" type="password" minLength={12} required autoComplete="new-password" /></label>
+          <label className="check-line">
+            <input name="confirmLogout" type="checkbox" required />
+            {tr("I understand that changing my password signs out all sessions.",
+              "أؤكد علمي أن تغيير كلمة المرور سينهي جميع جلسات الدخول.")}
+          </label>
+          {passwordMessage && <p role="alert" className="form-warning">{passwordMessage}</p>}
+          <button className="primary-button" disabled={passwordBusy}>
+            {passwordBusy ? tr("Changing…", "جارٍ التغيير…") :
+              tr("Change password and sign out", "تغيير كلمة المرور وتسجيل الخروج")}
+          </button>
+        </form>}
+      </CrudModal>
     </article>
 
     <article className="detail-card">
@@ -236,47 +284,86 @@ export function SecuritySettings({
         "تعمل المصادقة TOTP مع تطبيقات المصادقة القياسية، ويتم تشفير المفتاح السري أثناء التخزين."
       )}</p>
       {mfaEnabled && mfaConfirmedAt && <p className="muted">{tr("Confirmed", "تم التأكيد")}: {new Date(mfaConfirmedAt).toLocaleString(locale === "ar" ? "ar-EG" : "en-GB")}</p>}
+      <button type="button" className={mfaEnabled ? "secondary-button" : "primary-button"} disabled={busy}
+        onClick={() => { setMessage(""); setMfaOpen(true); }}>
+        {mfaEnabled ? tr("Manage MFA / Disable", "إدارة المصادقة / تعطيل")
+          : tr("Set up MFA", "إعداد المصادقة متعددة العوامل")}
+      </button>
+      <CrudModal open={mfaOpen} onClose={dismissMfa} size="compact"
+        title={mfaEnabled ? tr("Manage Multi-Factor Authentication", "إدارة المصادقة متعددة العوامل")
+          : tr("Enroll Authenticator", "إعداد تطبيق المصادقة")}
+        description={tr(
+          "Security secrets and recovery codes are shown only in this protected session. MFA enrollment requires verification.",
+          "تظهر أسرار الأمان ورموز الاسترداد في هذه الجلسة المحمية فقط. يتطلب التفعيل التحقق من الهوية.",
+        )}>
+        {mfaOpen && <>
+          {!mfaEnabled && !enrollment && !recoveryCodes.length && <form className="form-stack" onSubmit={beginEnrollment}>
+            <label>{tr("Current password", "كلمة المرور الحالية")}<input name="currentPassword" type="password" required autoComplete="current-password" /></label>
+            <button className="primary-button" disabled={busy}>{busy ? tr("Starting…", "جارٍ البدء…") : tr("Set up MFA", "إعداد المصادقة متعددة العوامل")}</button>
+          </form>}
 
-      {!mfaEnabled && !enrollment && <form className="form-stack" onSubmit={beginEnrollment}>
-        <label>{tr("Current password", "كلمة المرور الحالية")}<input name="currentPassword" type="password" required autoComplete="current-password" /></label>
-        <button className="primary-button" disabled={busy}>{busy ? tr("Starting…", "جارٍ البدء…") : tr("Set up MFA", "إعداد المصادقة متعددة العوامل")}</button>
-      </form>}
+          {!mfaEnabled && enrollment && <>
+            <div className="mfa-enrollment">
+              <Image src={enrollment.qrDataUrl} alt={tr("Authenticator QR code", "رمز QR لتطبيق المصادقة")} width={190} height={190} unoptimized />
+              <div>
+                <strong>{tr("Scan this QR code", "امسح رمز QR")}</strong>
+                <p className="muted">{tr("Or enter this secret manually in your authenticator app:", "أو أدخل هذا المفتاح يدويًا في تطبيق المصادقة:")}</p>
+                <code className="security-secret" dir="ltr">{enrollment.secret}</code>
+              </div>
+            </div>
+            <form className="form-stack" onSubmit={confirmEnrollment}>
+              <label>{tr("6-digit authenticator code", "رمز المصادقة المكون من 6 أرقام")}<input name="code" inputMode="numeric" autoComplete="one-time-code" required maxLength={6} /></label>
+              <button className="primary-button" disabled={busy}>{busy ? tr("Confirming…", "جارٍ التأكيد…") : tr("Confirm and enable MFA", "تأكيد وتفعيل المصادقة")}</button>
+            </form>
+          </>}
 
-      {!mfaEnabled && enrollment && <>
-        <div className="mfa-enrollment">
-          <Image src={enrollment.qrDataUrl} alt={tr("Authenticator QR code", "رمز QR لتطبيق المصادقة")} width={190} height={190} unoptimized />
-          <div>
-            <strong>{tr("Scan this QR code", "امسح رمز QR")}</strong>
-            <p className="muted">{tr("Or enter this secret manually in your authenticator app:", "أو أدخل هذا المفتاح يدويًا في تطبيق المصادقة:")}</p>
-            <code className="security-secret">{enrollment.secret}</code>
-          </div>
-        </div>
-        <form className="form-stack" onSubmit={confirmEnrollment}>
-          <label>{tr("6-digit authenticator code", "رمز المصادقة المكون من 6 أرقام")}<input name="code" inputMode="numeric" autoComplete="one-time-code" required maxLength={6} /></label>
-          <button className="primary-button" disabled={busy}>{busy ? tr("Confirming…", "جارٍ التأكيد…") : tr("Confirm and enable MFA", "تأكيد وتفعيل المصادقة")}</button>
-        </form>
-      </>}
+          {mfaEnabled && <form className="form-stack" onSubmit={disableMfa}>
+            <label>{tr("Current password", "كلمة المرور الحالية")}<input name="currentPassword" type="password" required autoComplete="current-password" /></label>
+            <label>{tr("Authenticator or recovery code", "رمز المصادقة أو رمز الاسترداد")}<input name="code" required autoComplete="one-time-code" /></label>
+            <label className="check-line">
+              <input type="checkbox" name="confirmDisable" required />
+              {tr("I understand that disabling MFA weakens account protection and revokes other sessions.",
+                "أؤكد علمي أن تعطيل المصادقة يضعف حماية الحساب ويُلغي الجلسات الأخرى.")}
+            </label>
+            <button className="danger-button" disabled={busy}>{busy ? tr("Disabling…", "جارٍ التعطيل…") : tr("Disable MFA", "تعطيل المصادقة")}</button>
+          </form>}
 
-      {mfaEnabled && <form className="form-stack" onSubmit={disableMfa}>
-        <label>{tr("Current password", "كلمة المرور الحالية")}<input name="currentPassword" type="password" required autoComplete="current-password" /></label>
-        <label>{tr("Authenticator or recovery code", "رمز المصادقة أو رمز الاسترداد")}<input name="code" required autoComplete="one-time-code" /></label>
-        <button className="danger-button" disabled={busy}>{busy ? tr("Disabling…", "جارٍ التعطيل…") : tr("Disable MFA", "تعطيل المصادقة")}</button>
-      </form>}
-      {message && <p className="form-success">{message}</p>}
+          {recoveryCodes.length > 0 && <div className="mfa-enrollment" role="status">
+            <div>
+              <strong>{tr("Save these recovery codes now — they will never be shown again.", "احفظ رموز الاسترداد الآن — لن تظهر مرة أخرى.")}</strong>
+              <p>{tr("Each code is single-use. Store them securely outside this device.",
+                "كل رمز يُستخدم مرة واحدة. احفظها بأمان خارج هذا الجهاز.")}</p>
+            </div>
+            <div className="recovery-code-grid">{recoveryCodes.map(code => <code key={code} dir="ltr">{code}</code>)}</div>
+            <button type="button" className="primary-button" onClick={finishRecoveryCodes}>
+              {tr("I saved the codes — finish setup", "حفظت الرموز — إنهاء الإعداد")}
+            </button>
+          </div>}
+          {message && <p className="form-warning" role={recoveryCodes.length ? "status" : "alert"}>{message}</p>}
+        </>}
+      </CrudModal>
     </article>
 
     <article className="detail-card">
       <p className="eyebrow">{tr("Recovery", "الاسترداد")}</p>
       <h2>{tr("Recovery Codes", "رموز الاسترداد")}</h2>
-      {recoveryCodes.length ? <>
-        <p className="muted">{tr(
-          "Store these codes securely. Each code can be used once if the authenticator device is unavailable.",
-          "احفظ هذه الرموز في مكان آمن. يمكن استخدام كل رمز مرة واحدة إذا تعذر الوصول إلى جهاز المصادقة."
-        )}</p>
-        <div className="recovery-code-grid">{recoveryCodes.map(code => <code key={code}>{code}</code>)}</div>
-      </> : <p className="muted">{mfaEnabled
+      <p className="muted">{mfaEnabled
         ? tr("Recovery codes were issued when MFA was enabled. They are not displayed again.", "تم إصدار رموز الاسترداد عند تفعيل المصادقة ولن يتم عرضها مرة أخرى.")
-        : tr("Recovery codes will be generated after MFA is confirmed.", "سيتم إنشاء رموز الاسترداد بعد تأكيد المصادقة.")}</p>}
+        : tr("Recovery codes will be generated after MFA is confirmed.", "سيتم إنشاء رموز الاسترداد بعد تأكيد المصادقة.")}</p>
     </article>
+
+    <CrudModal open={avatarRemovalOpen} onClose={() => { if (!busy) setAvatarRemovalOpen(false); }}
+      size="compact"
+      title={tr("Remove Profile Picture", "إزالة الصورة الشخصية")}
+      description={tr("Your profile identity remains unchanged. This removes the stored picture only.",
+        "تبقى هوية الحساب دون تغيير؛ تُزال الصورة المحفوظة فقط.")}>
+      {avatarRemovalOpen && <div className="form-stack">
+        <p>{tr("Are you sure you want to remove your profile picture?", "هل تريد إزالة صورتك الشخصية؟")}</p>
+        <button type="button" className="primary-button" disabled={busy} onClick={() => void confirmAvatarRemoval()}>
+          {busy ? tr("Removing…", "جارٍ الإزالة…") : tr("Confirm removal", "تأكيد إزالة الصورة")}
+        </button>
+        {message && <p role="alert" className="form-warning">{message}</p>}
+      </div>}
+    </CrudModal>
   </div>;
 }
