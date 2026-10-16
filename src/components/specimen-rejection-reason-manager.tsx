@@ -123,7 +123,7 @@ export function SpecimenRejectionReasonManager({
 
     <CrudModal
       open={modal !== null}
-      onClose={() => setModal(null)}
+      onClose={() => { if (!busy) setModal(null); }}
       size="compact"
       title={modal === "create" ? tr("Add Rejection Reason", "إضافة سبب رفض") :
         tr("Edit Rejection Reason", "تعديل سبب الرفض")}
