@@ -629,7 +629,7 @@ export function QualityManagementConsole({
   }
 
   return <div className="detail-section">
-    {message && <div className="form-success">{message}</div>}
+    {message && <div className={isError ? "form-error" : "form-success"} role={isError ? "alert" : "status"}>{message}</div>}
 
     {permissions.nonconformance && <section className="detail-card detail-section">
       <h2>{tr("Record Nonconformance","تسجيل حالة عدم مطابقة")}</h2>
@@ -1022,7 +1022,7 @@ export function QualityManagementConsole({
           <textarea name="summary" rows={3} required maxLength={4000}/></label>
       </>}
       {reviewError && <p className="form-error form-span" role="alert">{reviewError}</p>}
-      {message && <p className="form-warning form-span" role="status">{message}</p>}
+      {message && <p className={(isError ? "form-error" : "form-success") + " form-span"} role={isError ? "alert" : "status"}>{message}</p>}
       <button type="submit" className="primary-button form-span" disabled={Boolean(busy)}>
         {busy ? tr("Processing…","جارٍ التنفيذ…") : tr("Confirm governed action","تأكيد الإجراء المحكوم")}
       </button>
