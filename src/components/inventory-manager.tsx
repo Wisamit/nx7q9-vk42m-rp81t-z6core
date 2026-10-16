@@ -2,6 +2,7 @@
 
 import { FormEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { CrudModal } from "@/components/crud-modal";
 
 type Category = { id: string; code: string; nameEn: string; nameAr?: string | null };
 type Supplier = { id: string; code: string; nameEn: string; nameAr?: string | null };
@@ -37,6 +38,7 @@ export function InventoryManager({
   const router = useRouter();
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
+  const [uiEditor, setUiEditor] = useState("");
   const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
   const localizedName = (item: { nameEn: string; nameAr?: string | null }) => locale === "ar" ? item.nameAr || item.nameEn : item.nameEn;
   const itemTypeLabel = (value: string) => ({ REAGENT: tr("Reagent","كاشف"), CONTROL: tr("Control","مادة ضبط"), CALIBRATOR: tr("Calibrator","مادة معايرة"), KIT: tr("Kit","طقم"), TUBE: tr("Tube","أنبوب"), NEEDLE: tr("Needle","إبرة"), CONSUMABLE: tr("Consumable","مستهلك"), OTHER: tr("Other","أخرى") }[value] || value);
@@ -137,15 +139,33 @@ export function InventoryManager({
   return <section className="detail-grid detail-section">
     {canManage && <article className="detail-card">
       <h2>{tr("Inventory Master Data", "البيانات الأساسية للمخزون")}</h2>
-      <form className="catalog-form" onSubmit={createCategory}>
+      <button type="button" className="primary-button" disabled={Boolean(busy)}
+    onClick={() => { setMessage(""); setUiEditor("category"); }}>
+    {tr("Create Inventory Category", "إنشاء فئة مخزون")}
+  </button>
+  <CrudModal open={uiEditor === "category"} onClose={() => { if (!busy) setUiEditor(""); }}
+    size="compact"
+    title={tr("Create Inventory Category", "إنشاء فئة مخزون")}
+    description={tr("Adds organization master data; existing inventory movements remain unchanged.", "ينشئ بيانات مرجعية دون تغيير حركات المخزون السابقة.")}>
+    {uiEditor === "category" && <form className="catalog-form" onSubmit={createCategory}>
         <h3 className="form-span">{tr("Category", "الفئة")}</h3>
         <label>{tr("Code", "الرمز")}<input name="code" required /></label>
         <label>{tr("Name (English)", "الاسم بالإنجليزية")}<input name="nameEn" required /></label>
         <label className="form-span">{tr("Name (Arabic)", "الاسم بالعربية")}<input name="nameAr" dir="rtl" /></label>
         <button className="secondary-button form-span" disabled={busy !== ""}>{busy === "category" ? tr("Saving…","جارٍ الحفظ…") : tr("Create Category","إنشاء الفئة")}</button>
-      </form>
+      </form>}
+    {uiEditor === "category" && message && <p className="form-warning" role="status">{message}</p>}
+  </CrudModal>
 
-      <form className="catalog-form" onSubmit={createSupplier}>
+      <button type="button" className="primary-button" disabled={Boolean(busy)}
+    onClick={() => { setMessage(""); setUiEditor("supplier"); }}>
+    {tr("Create Supplier", "إنشاء مورد")}
+  </button>
+  <CrudModal open={uiEditor === "supplier"} onClose={() => { if (!busy) setUiEditor(""); }}
+    size="compact"
+    title={tr("Create Supplier", "إنشاء مورد")}
+    description={tr("New supplier records do not rewrite historical purchase or receipt data.", "لا تغيّر بيانات المورد الجديدة المشتريات أو المستندات السابقة.")}>
+    {uiEditor === "supplier" && <form className="catalog-form" onSubmit={createSupplier}>
         <h3 className="form-span">{tr("Supplier", "المورد")}</h3>
         <label>{tr("Code", "الرمز")}<input name="code" required /></label>
         <label>{tr("Name (English)", "الاسم بالإنجليزية")}<input name="nameEn" required /></label>
@@ -154,9 +174,19 @@ export function InventoryManager({
         <label>{tr("Tax number", "الرقم الضريبي")}<input name="taxNumber" /></label>
         <label>{tr("Name (Arabic)", "الاسم بالعربية")}<input name="nameAr" dir="rtl" /></label>
         <button className="secondary-button form-span" disabled={busy !== ""}>{busy === "supplier" ? tr("Saving…","جارٍ الحفظ…") : tr("Create Supplier","إنشاء المورد")}</button>
-      </form>
+      </form>}
+    {uiEditor === "supplier" && message && <p className="form-warning" role="status">{message}</p>}
+  </CrudModal>
 
-      <form className="catalog-form" onSubmit={createItem}>
+      <button type="button" className="primary-button" disabled={Boolean(busy)}
+    onClick={() => { setMessage(""); setUiEditor("item"); }}>
+    {tr("Create Inventory Item", "إنشاء صنف مخزون")}
+  </button>
+  <CrudModal open={uiEditor === "item"} onClose={() => { if (!busy) setUiEditor(""); }}
+    size="compact"
+    title={tr("Create Inventory Item", "إنشاء صنف مخزون")}
+    description={tr("Choose unit, lot tracking and expiration behavior before creating a new item.", "اختر الوحدة والتتبع وتاريخ الصلاحية قبل إنشاء الصنف.")}>
+    {uiEditor === "item" && <form className="catalog-form" onSubmit={createItem}>
         <h3 className="form-span">{tr("Inventory Item", "صنف المخزون")}</h3>
         <label>{tr("Code", "الرمز")}<input name="code" required /></label>
         <label>{tr("Name (English)", "الاسم بالإنجليزية")}<input name="nameEn" required /></label>
@@ -170,13 +200,23 @@ export function InventoryManager({
         <label className="check-line"><input name="expiryTracking" type="checkbox" defaultChecked /> {tr("Expiry tracking","تتبع الصلاحية")}</label>
         <label className="form-span">{tr("Name (Arabic)", "الاسم بالعربية")}<input name="nameAr" dir="rtl" /></label>
         <button className="primary-button form-span" disabled={busy !== ""}>{busy === "item" ? tr("Saving…","جارٍ الحفظ…") : tr("Create Item","إنشاء الصنف")}</button>
-      </form>
+      </form>}
+    {uiEditor === "item" && message && <p className="form-warning" role="status">{message}</p>}
+  </CrudModal>
     </article>}
 
     {canReceive && <article className="detail-card">
       <h2>{tr("Receive Supplier Stock", "استلام مخزون من المورد")}</h2>
       <p className="muted">{tr("Creates and immediately posts one goods receipt. Posting is atomic and records lot, branch stock and stock movements.", "ينشئ مستند استلام بضاعة ويرحله فوراً كعملية ذرية تسجل التشغيلة ومخزون الفرع وحركات المخزون.")}</p>
-      <form className="catalog-form" onSubmit={createReceipt}>
+      <button type="button" className="primary-button" disabled={Boolean(busy)}
+    onClick={() => { setMessage(""); setUiEditor("receipt"); }}>
+    {tr("Receive Supplier Stock", "استلام مخزون من المورد")}
+  </button>
+  <CrudModal open={uiEditor === "receipt"} onClose={() => { if (!busy) setUiEditor(""); }}
+    size="compact"
+    title={tr("Receive Supplier Stock", "استلام مخزون من المورد")}
+    description={tr("Posting a goods receipt writes branch stock and lot movements. Review quantities, unit cost and currency.", "يُرحّل الاستلام الكميات والتشغيلات في الفرع. راجع الكمية والكلفة والعملة.")}>
+    {uiEditor === "receipt" && <form className="catalog-form" onSubmit={createReceipt}>
         <label>{tr("Branch","الفرع")}<select name="branchId" required defaultValue=""><option value="">{tr("Select branch…","اختر الفرع…")}</option>{branches.map(branch => <option key={branch.id} value={branch.id}>{branch.code} — {localizedName(branch)}</option>)}</select></label>
         <label>{tr("Supplier","المورد")}<select name="supplierId" required defaultValue=""><option value="">{tr("Select supplier…","اختر المورد…")}</option>{suppliers.map(supplier => <option key={supplier.id} value={supplier.id}>{supplier.code} — {localizedName(supplier)}</option>)}</select></label>
         <label>{tr("Receipt number","رقم الاستلام")}<input name="receiptNumber" required /></label>
@@ -209,7 +249,9 @@ export function InventoryManager({
         </div>
 
         <button className="primary-button form-span" disabled={busy !== ""}>{busy === "receipt" ? tr("Posting…","جارٍ الترحيل…") : tr("Receive & Post Stock","استلام وترحيل المخزون")}</button>
-      </form>
+      </form>}
+    {uiEditor === "receipt" && message && <p className="form-warning" role="status">{message}</p>}
+  </CrudModal>
     </article>}
 
     {message && <div className="form-success form-span">{message}</div>}
