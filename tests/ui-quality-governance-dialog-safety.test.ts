@@ -42,7 +42,7 @@ test("UI #265: CAPA and critical findings keep independent safety and data snaps
   ];
   for (const part of required) assert.ok(ui.includes(part), "Missing clinical QMS safety rule: " + part);
   assert.ok(safetyCode("src/app/api/quality/capas/[id]/review/route.ts")
-    .includes("permission"), "CAPA review still has server permission enforcement");
+    .includes('requirePermission("quality.capa.manage")'), "CAPA review still has server permission enforcement");
   assert.ok(ui.includes("router.refresh()"));
   assert.ok(ui.includes('Connection interrupted.'));
   assert.ok(ui.includes("finally {"));
@@ -60,6 +60,6 @@ test("UI #265: document activation and analyzer revocation still use original se
     '!changeSummary || (!content && !externalUrl) || (content && externalUrl)',
     'contentSnapshot: content ? {text: content} : null',
   ]) assert.ok(ui.includes(fragment), "Lost governed document/device rule: " + fragment);
-  assert.ok(safetyCode("src/app/api/quality/document-versions/[versionId]/workflow/route.ts")
+  assert.ok(safetyCode("src/app/api/quality/document-versions/[id]/workflow/route.ts")
     .includes("auditEvent"));
 });
