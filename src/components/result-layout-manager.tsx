@@ -2,6 +2,7 @@
 
 import { FormEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { CrudModal } from "@/components/crud-modal";
 
 type ResultEntryLayout = "STANDARD" | "SECTIONED" | "COMPACT_GRID";
 type ResultSection = {
@@ -66,6 +67,8 @@ export function ResultLayoutManager({
   const [entryHintAr, setEntryHintAr] = useState(components[0]?.entryHintAr || "");
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
+  const [uiEditor, setUiEditor] = useState("");
+  const [statusReview, setStatusReview] = useState<{ id: string; status: "ACTIVE" | "INACTIVE" } | null>(null);
   const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
   const localizedName = (item: { nameEn: string; nameAr?: string | null }) =>
     locale === "ar" ? item.nameAr || item.nameEn : item.nameEn;
@@ -81,26 +84,37 @@ export function ResultLayoutManager({
   }[value]);
 
   async function post(action: string, data: Record<string, unknown>) {
+    if (busy) return false;
     setBusy(action);
     setMessage("");
-    const response = await fetch("/api/catalog/result-layout", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action, testId, ...data }),
-    });
-    const body = await response.json().catch(() => ({})) as { error?: string };
-    setBusy("");
-    if (!response.ok) {
-      setMessage(body.error || tr("Could not save result layout configuration.", "تعذر حفظ إعدادات تخطيط النتائج."));
+    try {
+      const response = await fetch("/api/catalog/result-layout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, testId, ...data }),
+      });
+      const body = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) {
+        setMessage(body.error || tr("Could not save result layout configuration.", "تعذر حفظ إعدادات تخطيط النتائج."));
+        return false;
+      }
+      router.refresh();
+      return true;
+    } catch {
+      setMessage(tr(
+        "Connection error. Check the current layout before retrying.",
+        "خطأ في الاتصال؛ راجع التخطيط الحالي قبل إعادة المحاولة.",
+      ));
       return false;
+    } finally {
+      setBusy("");
     }
-    router.refresh();
-    return true;
   }
 
   async function saveLayout(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (await post("SET_LAYOUT", { layout: selectedLayout })) {
+      setUiEditor("");
       setMessage(tr("Result entry layout updated.", "تم تحديث تخطيط إدخال النتائج."));
     }
   }
@@ -110,6 +124,7 @@ export function ResultLayoutManager({
     const form = event.currentTarget;
     const data = Object.fromEntries(new FormData(form).entries());
     if (await post("CREATE_SECTION", data)) {
+      setUiEditor("");
       form.reset();
       setMessage(tr("Result section created.", "تم إنشاء قسم النتائج."));
     }
@@ -118,6 +133,7 @@ export function ResultLayoutManager({
   async function assignComponent(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (await post("ASSIGN_COMPONENT", { componentId, sectionId })) {
+      setUiEditor("");
       setMessage(tr("Component section updated.", "تم تحديث قسم المكوّن."));
     }
   }
@@ -133,6 +149,7 @@ export function ResultLayoutManager({
       hintEn: sectionHintEn,
       hintAr: sectionHintAr,
     })) {
+      setUiEditor("");
       setMessage(tr("Section presentation updated.", "تم تحديث عرض القسم."));
     }
   }
@@ -150,17 +167,17 @@ export function ResultLayoutManager({
       entryHintEn,
       entryHintAr,
     })) {
+      setUiEditor("");
       setMessage(tr("Component presentation updated.", "تم تحديث عرض المكوّن."));
     }
   }
 
-  async function setSectionStatus(id: string, status: "ACTIVE" | "INACTIVE") {
-    if (status === "INACTIVE" && !confirm(tr(
-      "Deactivate this section? Components remain linked and will appear as ungrouped until the section is reactivated or reassigned.",
-      "تعطيل هذا القسم؟ ستبقى المكوّنات مرتبطة به وستظهر بدون تجميع إلى أن يُعاد تفعيل القسم أو نقلها إلى قسم آخر.",
-    ))) return;
-
+  async function setSectionStatus(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!statusReview) return;
+    const { id, status } = statusReview;
     if (await post("SET_SECTION_STATUS", { sectionId: id, status })) {
+      setStatusReview(null);
       setMessage(status === "ACTIVE"
         ? tr("Section reactivated.", "تمت إعادة تفعيل القسم.")
         : tr("Section deactivated.", "تم تعطيل القسم."));
@@ -175,14 +192,25 @@ export function ResultLayoutManager({
           "Choose how this test's components are arranged during result entry. This changes presentation only; result storage and clinical rules remain generic.",
           "اختر طريقة ترتيب مكوّنات هذا الفحص أثناء إدخال النتائج. هذا يغيّر العرض فقط؛ تخزين النتائج والقواعد السريرية تبقى عامة.",
         )}</p>
-        <form className="catalog-form" onSubmit={saveLayout}>
+        <button type="button" className="primary-button" disabled={busy !== ""}
+    onClick={() => { setMessage(""); setUiEditor("layout"); }}>
+    {tr("Edit Result Workspace Layout", "تعديل تخطيط مساحة النتائج")}
+  </button>
+  <CrudModal open={uiEditor === "layout"}
+    onClose={() => { if (!busy) setUiEditor(""); }}
+    size="compact"
+    title={tr("Edit Result Workspace Layout", "تعديل تخطيط مساحة النتائج")}
+    description={tr("Presentation changes are applied to future result entry, not historical validated results.", "تؤثر تغييرات العرض على إدخال النتائج المستقبلية لا النتائج المعتمدة سابقاً.")}>
+    {uiEditor === "layout" && <form className="catalog-form" onSubmit={saveLayout}>
           <label>{tr("Layout", "التخطيط")}<select value={selectedLayout} onChange={event => setSelectedLayout(event.target.value as ResultEntryLayout)}>
             <option value="STANDARD">{layoutLabel("STANDARD")}</option>
             <option value="SECTIONED">{layoutLabel("SECTIONED")}</option>
             <option value="COMPACT_GRID">{layoutLabel("COMPACT_GRID")}</option>
           </select></label>
           <button className="primary-button" disabled={busy !== ""}>{busy === "SET_LAYOUT" ? tr("Saving…", "جارٍ الحفظ…") : tr("Save Layout", "حفظ التخطيط")}</button>
-        </form>
+        </form>}
+    {uiEditor === "layout" && message && <p className="form-error" role="alert">{message}</p>}
+  </CrudModal>
       </article>
 
       <article className="detail-card">
@@ -191,7 +219,16 @@ export function ResultLayoutManager({
           "Sections are reusable presentation groups inside this test, such as Differential or Microscopy. Names are configuration, not hard-coded test logic.",
           "الأقسام هي مجموعات عرض داخل الفحص مثل Differential أو Microscopy، وأسماؤها إعدادات وليست منطقًا ثابتًا داخل النظام.",
         )}</p>
-        <form className="catalog-form" onSubmit={createSection}>
+        <button type="button" className="primary-button" disabled={busy !== ""}
+    onClick={() => { setMessage(""); setUiEditor("section"); }}>
+    {tr("Create Result Section", "إنشاء قسم نتائج")}
+  </button>
+  <CrudModal open={uiEditor === "section"}
+    onClose={() => { if (!busy) setUiEditor(""); }}
+    size="compact"
+    title={tr("Create Result Section", "إنشاء قسم نتائج")}
+    description={tr("Create one bilingual, test-scoped section. Names and instructions are configuration, not test logic.", "أنشئ قسماً ثنائي اللغة مرتبطاً بالفحص؛ الأسماء والتعليمات إعدادات وليست منطقاً ثابتاً.")}>
+    {uiEditor === "section" && <form className="catalog-form" onSubmit={createSection}>
           <label>{tr("Section code", "رمز القسم")}<input name="code" required placeholder={tr("e.g. MICROSCOPY", "مثال: MICROSCOPY")} /></label>
           <label>{tr("English name", "الاسم بالإنجليزية")}<input name="nameEn" required /></label>
           <label>{tr("Arabic name", "الاسم بالعربية")}<input name="nameAr" dir="rtl" /></label>
@@ -202,14 +239,25 @@ export function ResultLayoutManager({
           <label className="form-span">{tr("Section hint (English)", "تعليمات القسم بالإنجليزية")}<input name="hintEn" maxLength={500} /></label>
           <label className="form-span">{tr("Section hint (Arabic)", "تعليمات القسم بالعربية")}<input name="hintAr" dir="rtl" maxLength={500} /></label>
           <button className="primary-button form-span" disabled={busy !== ""}>{busy === "CREATE_SECTION" ? tr("Saving…", "جارٍ الحفظ…") : tr("Create Section", "إنشاء القسم")}</button>
-        </form>
+        </form>}
+    {uiEditor === "section" && message && <p className="form-error" role="alert">{message}</p>}
+  </CrudModal>
       </article>
     </div>
 
     {sections.length > 0 && <article className="detail-card">
       <h3>{tr("Section Presentation", "عرض القسم")}</h3>
       <p className="muted">{tr("Choose the compact-grid density and optional instructions for each configured section.", "حدد كثافة الشبكة المدمجة وتعليمات اختيارية لكل قسم مهيأ.")}</p>
-      <form className="catalog-form" onSubmit={updateSectionPresentation}>
+      <button type="button" className="primary-button" disabled={busy !== ""}
+    onClick={() => { setMessage(""); setUiEditor("section-presentation"); }}>
+    {tr("Edit Section Report Presentation", "تعديل ظهور القسم بالتقرير")}
+  </button>
+  <CrudModal open={uiEditor === "section-presentation"}
+    onClose={() => { if (!busy) setUiEditor(""); }}
+    size="compact"
+    title={tr("Edit Section Report Presentation", "تعديل ظهور القسم بالتقرير")}
+    description={tr("Change grid columns, report display order and instructions only for future report snapshots.", "غيّر الأعمدة وترتيب التقرير والتعليمات للقطات التقارير المستقبلية فقط.")}>
+    {uiEditor === "section-presentation" && <form className="catalog-form" onSubmit={updateSectionPresentation}>
         <label>{tr("Section", "القسم")}<select value={presentationSectionId} onChange={event => {
           const id = event.target.value;
           setPresentationSectionId(id);
@@ -230,13 +278,24 @@ export function ResultLayoutManager({
         <label className="form-span">{tr("English hint", "التعليمات بالإنجليزية")}<input value={sectionHintEn} onChange={event => setSectionHintEn(event.target.value)} maxLength={500} /></label>
         <label className="form-span">{tr("Arabic hint", "التعليمات بالعربية")}<input dir="rtl" value={sectionHintAr} onChange={event => setSectionHintAr(event.target.value)} maxLength={500} /></label>
         <button className="secondary-button form-span" disabled={busy !== ""}>{busy === "UPDATE_SECTION_PRESENTATION" ? tr("Saving…", "جارٍ الحفظ…") : tr("Save Section Presentation", "حفظ عرض القسم")}</button>
-      </form>
+      </form>}
+    {uiEditor === "section-presentation" && message && <p className="form-error" role="alert">{message}</p>}
+  </CrudModal>
     </article>}
 
     {components.length > 0 && <article className="detail-card">
       <h3>{tr("Component Presentation", "عرض المكوّن")}</h3>
       <p className="muted">{tr("Control entry guidance separately from report presentation. Report names, visibility, section and order are snapshotted with each new result so later catalog edits cannot rewrite released history.", "تحكم بتعليمات الإدخال بشكل مستقل عن عرض التقرير. تُحفظ أسماء التقرير وحالة الظهور والقسم والترتيب كلقطة مع كل نتيجة جديدة حتى لا تعيد تعديلات الدليل لاحقاً كتابة السجل الصادر.")}</p>
-      <form className="catalog-form" onSubmit={updateComponentPresentation}>
+      <button type="button" className="primary-button" disabled={busy !== ""}
+    onClick={() => { setMessage(""); setUiEditor("component-presentation"); }}>
+    {tr("Edit Result Component Presentation", "تعديل ظهور مكوّن النتائج")}
+  </button>
+  <CrudModal open={uiEditor === "component-presentation"}
+    onClose={() => { if (!busy) setUiEditor(""); }}
+    size="compact"
+    title={tr("Edit Result Component Presentation", "تعديل ظهور مكوّن النتائج")}
+    description={tr("Report name, width, visibility and hints are snapshotted on new results. Released historical reports remain immutable.", "تُحفظ أسماء العرض والعرض والإظهار والتعليمات مع النتائج الجديدة؛ التقارير السابقة الصادرة لا تتغير.")}>
+    {uiEditor === "component-presentation" && <form className="catalog-form" onSubmit={updateComponentPresentation}>
         <label>{tr("Component", "المكوّن")}<select value={presentationComponentId} onChange={event => {
           const id = event.target.value;
           setPresentationComponentId(id);
@@ -265,12 +324,23 @@ export function ResultLayoutManager({
         <label className="form-span">{tr("English entry hint", "تعليمات الإدخال بالإنجليزية")}<input value={entryHintEn} onChange={event => setEntryHintEn(event.target.value)} maxLength={500} /></label>
         <label className="form-span">{tr("Arabic entry hint", "تعليمات الإدخال بالعربية")}<input dir="rtl" value={entryHintAr} onChange={event => setEntryHintAr(event.target.value)} maxLength={500} /></label>
         <button className="secondary-button form-span" disabled={busy !== ""}>{busy === "UPDATE_COMPONENT_PRESENTATION" ? tr("Saving…", "جارٍ الحفظ…") : tr("Save Component Presentation", "حفظ عرض المكوّن")}</button>
-      </form>
+      </form>}
+    {uiEditor === "component-presentation" && message && <p className="form-error" role="alert">{message}</p>}
+  </CrudModal>
     </article>}
 
     {components.length > 0 && <article className="detail-card">
       <h3>{tr("Assign Components to Sections", "ربط المكوّنات بالأقسام")}</h3>
-      <form className="catalog-form result-layout-assignment" onSubmit={assignComponent}>
+      <button type="button" className="primary-button" disabled={busy !== ""}
+    onClick={() => { setMessage(""); setUiEditor("assignment"); }}>
+    {tr("Assign Components to Result Sections", "ربط مكوّنات النتائج بالأقسام")}
+  </button>
+  <CrudModal open={uiEditor === "assignment"}
+    onClose={() => { if (!busy) setUiEditor(""); }}
+    size="compact"
+    title={tr("Assign Components to Result Sections", "ربط مكوّنات النتائج بالأقسام")}
+    description={tr("Review the selected component and section; assignments do not rewrite released result history.", "راجع المكوّن والقسم المحددين؛ الربط لا يعيد كتابة النتائج الطبية الصادرة.")}>
+    {uiEditor === "assignment" && <form className="catalog-form result-layout-assignment" onSubmit={assignComponent}>
         <label>{tr("Component", "المكوّن")}<select value={componentId} onChange={event => {
           const nextId = event.target.value;
           setComponentId(nextId);
@@ -283,7 +353,9 @@ export function ResultLayoutManager({
           {activeSections.map(section => <option key={section.id} value={section.id}>{section.code} — {localizedName(section)}</option>)}
         </select></label>
         <button className="secondary-button" disabled={busy !== ""}>{busy === "ASSIGN_COMPONENT" ? tr("Saving…", "جارٍ الحفظ…") : tr("Assign", "ربط")}</button>
-      </form>
+      </form>}
+    {uiEditor === "assignment" && message && <p className="form-error" role="alert">{message}</p>}
+  </CrudModal>
     </article>}
 
     <article className="table-card">
@@ -313,7 +385,7 @@ export function ResultLayoutManager({
               type="button"
               className="secondary-button"
               disabled={busy !== ""}
-              onClick={() => void setSectionStatus(section.id, section.status === "ACTIVE" ? "INACTIVE" : "ACTIVE")}
+              onClick={() => { setMessage(""); setStatusReview({ id: section.id, status: section.status === "ACTIVE" ? "INACTIVE" : "ACTIVE" }); }}
             >
               {section.status === "ACTIVE" ? tr("Deactivate", "تعطيل") : tr("Reactivate", "إعادة تفعيل")}
             </button></td>
@@ -322,6 +394,27 @@ export function ResultLayoutManager({
       </table></div>
     </article>
 
-    {message && <div className="form-success">{message}</div>}
+    <CrudModal open={statusReview !== null}
+      onClose={() => { if (!busy) setStatusReview(null); }}
+      size="compact"
+      title={tr("Review Section Status", "مراجعة حالة قسم النتائج")}
+      description={tr(
+        "Deactivating a section does not delete its linked components; components may appear ungrouped until reactivated or reassigned.",
+        "تعطيل القسم لا يحذف مكوّناته المرتبطة؛ قد تظهر بدون تجميع حتى إعادة التفعيل أو النقل.",
+      )}>
+      {statusReview && <form className="catalog-form" onSubmit={setSectionStatus}>
+        <p className="form-span">{tr("Confirm this controlled status change for section:", "تأكيد تغيير حالة هذا القسم:")}{" "}
+          <strong>{sections.find(section => section.id === statusReview.id)?.code || "—"}</strong>
+        </p>
+        <p className="form-span">{statusReview.status === "ACTIVE"
+          ? tr("Reactivate this section?", "إعادة تفعيل هذا القسم؟")
+          : tr("Deactivate this section? Linked components will not be deleted.", "تعطيل القسم؟ لن تُحذف المكوّنات المرتبطة.")}</p>
+        {message && <p className="form-error form-span" role="alert">{message}</p>}
+        <button className="primary-button form-span" type="submit" disabled={busy !== ""}>
+          {busy ? tr("Saving…", "جارٍ الحفظ…") : tr("Confirm section status", "تأكيد حالة القسم")}
+        </button>
+      </form>}
+    </CrudModal>
+    {message && <div className="form-success" role="status">{message}</div>}
   </div>;
 }
