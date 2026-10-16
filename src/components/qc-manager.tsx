@@ -357,7 +357,7 @@ export function QcManager({
       </div>
     </article>}
 
-    {message && <div className="form-success form-span">{message}</div>}
+    {message && <div className={(isError ? "form-error" : "form-success") + " form-span"} role={isError ? "alert" : "status"}>{message}</div>}
     <CrudModal open={resolutionId!==null}
       onClose={()=>{if(!submitting.current&&!busy)setResolutionId(null);}}
       size="compact"
