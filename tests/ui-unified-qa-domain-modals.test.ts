@@ -87,6 +87,32 @@ test("UI #265: all nine EQA actions use role-gated review dialogs, with custody 
   assert.ok(quality.includes('setPendingReview(null)'));
 });
 
+
+test("UI #265: send-out laboratory and referral drafts are failure-safe and preserve custody context", () => {
+  const src = read("src/components/send-out-manager.tsx");
+  for (const handler of ["createLab", "createReferral"]) {
+    const start = src.indexOf("async function " + handler + "(");
+    const end = src.indexOf("\\n  }", start);
+    assert.ok(start >= 0 && end > start, handler);
+    const body = src.slice(start, end);
+    assert.ok(body.includes("if (busy) return;"));
+    assert.ok(body.includes("try {"));
+    assert.ok(body.includes("catch {"));
+    assert.ok(body.includes("finally {"));
+    assert.ok(body.includes("if (!response.ok)"));
+    assert.ok(body.includes('setUiEditor("");'), "close modal only after server success");
+    assert.ok(body.includes("router.refresh()"));
+    assert.doesNotMatch(body, /event\\.currentTarget\\.reset\\(\\)/,
+      "async handler cannot use reset() on an expired React currentTarget");
+  }
+  assert.ok(src.includes("Verify the specimen's referral history before any retry"));
+  assert.ok(src.includes("branchId: candidate.branchId"));
+  assert.ok(src.includes("orderItemId: candidate.orderItemId"));
+  assert.ok(src.includes("specimenId: candidate.specimenId"));
+  assert.ok(src.includes("costCurrency: form.get"));
+  assert.ok(src.includes("externalLaboratoryId: form.get"));
+});
+
 test("UI #265: one-time integration secret removed from public page after dialog close", () => {
   const source = read("src/components/integration-manager.tsx");
   assert.ok(source.includes('uiDialog === "key" && secret'));
