@@ -101,7 +101,7 @@ export function HomeCollectionWorkstation({
     setPending({
       kind:"status",
       next,collector:selectedCollector,
-      departure:departureAt,notes:transportNotes,
+      depart:departureAt,notes:transportNotes,
     });
   }
 
