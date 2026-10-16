@@ -75,19 +75,32 @@ export function SystemSettingsForm({ initial, locale }: { initial: SystemSetting
 
   async function submit(event: FormEvent) {
     event.preventDefault();
+    if (busy) return;
     setBusy(true);
     setMessage("");
-    const response = await fetch("/api/settings", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(value),
-    });
-    const body = await response.json().catch(() => ({}));
-    if (response.ok) {
+    try {
+      const response = await fetch("/api/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(value),
+      });
+      const body = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) {
+        setMessage(body.error === "invalid_image"
+          ? tr("Logo or favicon is invalid.", "اللوغو أو الأيقونة غير صالحة.")
+          : tr("Unable to save settings.", "تعذر حفظ الإعدادات."));
+        setBusy(false);
+        return;
+      }
       setMessage(tr("Settings saved. Reloading the interface…", "تم حفظ الإعدادات. يتم تحديث الواجهة…"));
       window.setTimeout(() => window.location.reload(), 500);
-    } else {
-      setMessage(body.error === "invalid_image" ? tr("Logo or favicon is invalid.", "اللوغو أو الأيقونة غير صالحة.") : tr("Unable to save settings.", "تعذر حفظ الإعدادات."));
+    } catch {
+      // Never leave the editor permanently disabled after a network failure.
+      // Retain all entered values and allow a deliberate user retry.
+      setMessage(tr(
+        "Connection error. The settings were not confirmed as saved. Review and try again.",
+        "حدث خطأ في الاتصال. لم يتأكد حفظ الإعدادات؛ راجعها وأعد المحاولة.",
+      ));
       setBusy(false);
     }
   }
@@ -105,13 +118,13 @@ export function SystemSettingsForm({ initial, locale }: { initial: SystemSetting
         <div className="branding-upload">
           <strong>{tr("Logo", "اللوغو")}</strong>
           <div className="branding-preview logo-preview">{value.logoDataUrl ? <Image src={value.logoDataUrl} alt="Family Lab logo preview" width={240} height={110} unoptimized /> : <span>Family Lab</span>}</div>
-          <input type="file" accept="image/png,image/jpeg,image/webp" onChange={e => void handleImage(e, "logoDataUrl")} />
+          <input type="file" aria-label={tr("Upload center logo", "رفع شعار المركز")} accept="image/png,image/jpeg,image/webp" onChange={e => void handleImage(e, "logoDataUrl")} />
           {value.logoDataUrl && <button type="button" className="secondary-button" onClick={() => set("logoDataUrl", null)}>{tr("Remove custom logo", "إزالة اللوغو المخصص")}</button>}
         </div>
         <div className="branding-upload">
           <strong>{tr("Browser icon / favicon", "أيقونة المتصفح / Favicon")}</strong>
           <div className="branding-preview favicon-preview">{value.faviconDataUrl ? <Image src={value.faviconDataUrl} alt="Favicon preview" width={64} height={64} unoptimized /> : <span>FL</span>}</div>
-          <input type="file" accept="image/png,image/x-icon,image/vnd.microsoft.icon" onChange={e => void handleImage(e, "faviconDataUrl")} />
+          <input type="file" aria-label={tr("Upload browser icon", "رفع أيقونة المتصفح")} accept="image/png,image/x-icon,image/vnd.microsoft.icon" onChange={e => void handleImage(e, "faviconDataUrl")} />
           {value.faviconDataUrl && <button type="button" className="secondary-button" onClick={() => set("faviconDataUrl", null)}>{tr("Remove custom icon", "إزالة الأيقونة المخصصة")}</button>}
         </div>
       </div>
