@@ -26,8 +26,13 @@ test("Stage 50: one repeatable-read transaction encloses live grants, all six qu
   assert.match(exporter, /clinicalImportTestWhere\(liveScope\)/);
   assert.match(exporter, /records\.length \+ total > BUNDLE_REVIEW_MAX_ROWS/);
   assert.match(exporter, /Buffer\.byteLength\(serialized, "utf8"\) > BUNDLE_REVIEW_MAX_BYTES/);
-  assert.match(exporter, /scopeType: "ORGANIZATION"/);
-  assert.match(exporter, /scopeType: "BRANCH"/);
+  assert.match(exporter, /genericCatalogPriceScope\(branchIds\)/);
+  const scope = readFileSync("src/lib/catalog-generic-price-scope.ts","utf8");
+  assert.match(scope, /scopeType: "ORGANIZATION"/);
+  assert.match(scope, /scopeType: "BRANCH"/);
+  for (const field of ["sourceId", "referrerId", "clientId", "contractId"]) {
+    assert.match(scope, new RegExp(field + ": null"));
+  }
   assert.doesNotMatch(exporter, /scopeType: "CLIENT"/);
   assert.doesNotMatch(exporter, /scopeType: "CONTRACT"/);
   assert.doesNotMatch(exporter, /tx\.(?:labTest|testComponent|referenceInterval|priceListItem)\.(?:create|update|upsert)/);
