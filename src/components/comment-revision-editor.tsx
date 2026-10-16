@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { CrudModal } from "@/components/crud-modal";
 
 type Source = {
   id: string;
@@ -30,6 +31,7 @@ export function CommentRevisionEditor({
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [open, setOpen] = useState(false);
 
   function choose(value: string) {
     const item = sources.find(x => x.id === value);
@@ -45,10 +47,6 @@ export function CommentRevisionEditor({
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!current || busy) return;
-    if (!confirm(tr(
-      "Create a new INACTIVE revision without changing the approved source? A separate clinical reviewer must approve it and retire the source in one transaction.",
-      "هل تريد إنشاء نسخة جديدة غير مفعلة دون تغيير الأصل المعتمد؟ يجب أن يعتمدها مراجع سريري آخر مع إيقاف الأصل في عملية واحدة.",
-    ))) return;
     setBusy(true); setMessage("");
     try {
       const response = await fetch("/api/clinical-rules/comments/revisions", {
@@ -62,6 +60,7 @@ export function CommentRevisionEditor({
       if (!response.ok) {
         setMessage(tr("Revision not saved: ", "تعذر حفظ النسخة: ") + (result.error ?? "unknown_error"));
       } else {
+        setOpen(false);
         setMessage(tr(
           "Inactive revision saved. An independent clinical reviewer can examine it in the Comment Approval Queue.",
           "تم حفظ النسخة الجديدة غير مفعلة، ويمكن للمراجع السريري المستقل اعتمادها من قائمة مراجعة التعليقات.",
@@ -78,7 +77,20 @@ export function CommentRevisionEditor({
     "No active templates without a successor in this page. Go to the next page if available.",
     "لا توجد قوالب معتمدة بدون نسخة لاحقة في هذه الصفحة. انتقل إلى الصفحة التالية إن وجدت.",
   )}</p>;
-  return <form className="catalog-form" onSubmit={e => void submit(e)}>
+  return <>
+    <button type="button" className="primary-button" disabled={busy}
+      onClick={() => { setMessage(""); setOpen(true); }}>
+      {tr("Create New Comment Revision", "إنشاء إصدار جديد لتعليق سريري")}
+    </button>
+    {!open && message && <p className="form-success" role="status">{message}</p>}
+    <CrudModal open={open} onClose={() => { if (!busy) setOpen(false); }}
+      size="compact"
+      title={tr("Create Result Comment Revision Draft", "إنشاء مسودة إصدار تعليق على النتائج")}
+      description={tr(
+        "The approved source is never overwritten. A separate clinical reviewer must approve the inactive revision and retire the predecessor in one governed transaction.",
+        "لا تُستبدل النسخة المعتمدة مباشرة؛ يجب أن يعتمد مراجع سريري مستقل المسودة غير الفعالة ويوقف النسخة السابقة في معاملة واحدة مضبوطة.",
+      )}>
+      {open && <form className="catalog-form" onSubmit={e => void submit(e)}>
     <label>{tr("Approved source version", "النسخة المعتمدة الأصلية")}
       <select value={id} onChange={e => choose(e.target.value)}>
         {sources.map(source => <option key={source.id} value={source.id}>
@@ -117,6 +129,8 @@ export function CommentRevisionEditor({
     <button type="submit" className="primary-button form-span" disabled={busy || !current}>
       {busy ? tr("Saving…", "جارٍ الحفظ…") : tr("Create inactive revision", "إنشاء نسخة جديدة غير مفعلة")}
     </button>
-    {message && <p className="form-span" role="status">{message}</p>}
-  </form>;
+    {message && <p className="form-warning form-span" role="alert">{message}</p>}
+  </form>}
+  </CrudModal>
+  </>;
 }
