@@ -56,8 +56,20 @@ test("UI #265: all nine EQA actions use role-gated review dialogs, with custody 
   assert.ok(eqa.includes('setEditor("");'));
   assert.ok(eqa.includes('if(!busy)setEditor("")'));
   const quality = read("src/components/quality-management-console.tsx");
-  assert.ok(quality.includes("window.prompt("),
-    "other high-impact quality actions still require individual review and are not marked done");
+  assert.ok(quality.includes("confirmQualityReview"), "quality actions require a governed review form");
+  assert.ok(quality.includes("openReview({kind:"));
+  assert.ok(!/window\\.(?:prompt|confirm)\\s*\\(/.test(quality),
+    "quality lifecycle transitions must not use bare browser prompts");
+  for (const action of ["NC_STATUS", "CAPA_ACTION_CREATE", "CAPA_ACTION_COMPLETE",
+    "CAPA_EFFECTIVENESS", "DOCUMENT_VERSION_CREATE", "DOCUMENT_WORKFLOW",
+    "ANALYZER_REVOKE", "INDICATOR_MEASUREMENT", "AUDIT_FINDING_CREATE",
+    "AUDIT_FINDING_CLOSE", "AUDIT_COMPLETE"]) {
+    assert.ok(quality.includes('"' + action + '"'), "Governed transition missing: " + action);
+  }
+  assert.ok(quality.includes('reviewSeverity==="CRITICAL"'));
+  assert.ok(quality.includes('openCapas.some(item => item.id === capaId)'));
+  assert.ok(quality.includes('pendingReview.close'));
+  assert.ok(quality.includes('setPendingReview(null)'));
 });
 
 test("UI #265: one-time integration secret removed from public page after dialog close", () => {
