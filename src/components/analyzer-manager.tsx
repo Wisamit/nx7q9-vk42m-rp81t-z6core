@@ -127,7 +127,7 @@ export function AnalyzerManager({
       </div>
     </div>
 
-    <CrudModal open={open === "analyzer"} onClose={() => setOpen("")} title={tr("Register Analyzer","تسجيل جهاز تحليل")} description={tr("Store analyzer identity, branch, protocol and routing metadata. Device connectivity remains in Analyzer Bridge.","احفظ هوية الجهاز والفرع والبروتوكول وبيانات التوجيه. يبقى اتصال الجهاز الفعلي ضمن Analyzer Bridge.")} size="lg">
+    <CrudModal open={open === "analyzer"} onClose={() => setOpen("")} title={tr("Register Analyzer","تسجيل جهاز تحليل")} description={tr("Store analyzer identity, branch, protocol and routing metadata. Device connectivity remains in Analyzer Bridge.","احفظ هوية الجهاز والفرع والبروتوكول وبيانات التوجيه. يبقى اتصال الجهاز الفعلي ضمن Analyzer Bridge.")} size="compact">
       <form className="catalog-form" onSubmit={createAnalyzer}>
         <label>{tr("Branch","الفرع")}<select name="branchId" required value={branchId} onChange={event => setBranchId(event.target.value)}>{branches.map(item => <option key={item.id} value={item.id}>{item.code} — {localizedName(item)}</option>)}</select></label>
         <label>{tr("Department","القسم")}<select name="departmentId" defaultValue=""><option value="">{tr("Unassigned","غير معين")}</option>{branchDepartments.map(item => <option key={item.id} value={item.id}>{item.code} — {localizedName(item)}</option>)}</select></label>
@@ -144,7 +144,7 @@ export function AnalyzerManager({
       </form>
     </CrudModal>
 
-    <CrudModal open={open === "credential"} onClose={() => setOpen("")} title={tr("Issue Bridge Credential","إصدار بيانات اعتماد الجسر")} description={tr("The raw token is shown once. Copy it before closing this window.","يظهر الرمز الخام مرة واحدة فقط. انسخه قبل إغلاق هذه النافذة.")} size="md">
+    <CrudModal open={open === "credential"} onClose={() => setOpen("")} title={tr("Issue Bridge Credential","إصدار بيانات اعتماد الجسر")} description={tr("The raw token is shown once. Copy it before closing this window.","يظهر الرمز الخام مرة واحدة فقط. انسخه قبل إغلاق هذه النافذة.")} size="compact">
       <form className="catalog-form" onSubmit={createCredential}>
         <label className="form-span">{tr("Analyzer","الجهاز")}<select name="analyzerId" required defaultValue=""><option value="">{tr("Select analyzer…","اختر الجهاز…")}</option>{analyzers.map(item => <option key={item.id} value={item.id}>{item.code} — {item.name}</option>)}</select></label>
         <label>{tr("Credential name","اسم بيانات الاعتماد")}<input name="name" required placeholder={tr("Bridge workstation / service","محطة عمل / خدمة الجسر")} /></label>
@@ -155,7 +155,7 @@ export function AnalyzerManager({
       {message && <div className="form-success">{message}</div>}
     </CrudModal>
 
-    <CrudModal open={open === "mapping"} onClose={() => setOpen("")} title={tr("Create Test Mapping Draft","إنشاء مسودة ربط فحص")} description={tr("Create a governed analyzer-to-LIS mapping draft. Unit-bearing targets require the exact analyzer unit code; approval is required before clinical use and no unit conversion is performed.","أنشئ مسودة ربط محكومة بين الجهاز وLIS. الأهداف ذات الوحدة تتطلب رمز وحدة الجهاز بدقة، ويلزم الاعتماد قبل الاستخدام السريري ولا يتم إجراء تحويل للوحدات.")} size="lg">
+    <CrudModal open={open === "mapping"} onClose={() => setOpen("")} title={tr("Create Test Mapping Draft","إنشاء مسودة ربط فحص")} description={tr("Create a governed analyzer-to-LIS mapping draft. Unit-bearing targets require the exact analyzer unit code; approval is required before clinical use and no unit conversion is performed.","أنشئ مسودة ربط محكومة بين الجهاز وLIS. الأهداف ذات الوحدة تتطلب رمز وحدة الجهاز بدقة، ويلزم الاعتماد قبل الاستخدام السريري ولا يتم إجراء تحويل للوحدات.")} size="compact">
       <form className="catalog-form" onSubmit={createMapping}>
         <label>{tr("Analyzer","الجهاز")}<select name="analyzerId" required defaultValue=""><option value="">{tr("Select analyzer…","اختر الجهاز…")}</option>{analyzers.map(item => <option key={item.id} value={item.id}>{item.code} — {item.name}</option>)}</select></label>
         <label>{tr("Analyzer test code","رمز الفحص في الجهاز")}<input name="analyzerTestCode" required maxLength={120} /></label>
