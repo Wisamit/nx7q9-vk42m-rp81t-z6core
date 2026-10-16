@@ -516,3 +516,10 @@ html[data-density="compact"] :where(.detail-card,.dashboard-panel,.settings-card
 }
 
 .report-section-heading td{background:var(--fl-surface-soft);border-top:1px solid var(--fl-border);font-size:11px;letter-spacing:.02em;color:var(--fl-primary)}
+
+/* Visible organization-date entry; native calendar value stays ISO in a visually hidden picker. */
+.system-date-field{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:6px;width:100%;min-width:0;position:relative}
+.system-date-field>input[type=text]{min-width:0;width:100%;direction:ltr;text-align:left;font-variant-numeric:tabular-nums}
+.system-date-picker-trigger{display:inline-flex;align-items:center;justify-content:center;min-height:38px;min-width:38px;background:var(--fl-surface);color:var(--fl-text);border:1px solid var(--fl-border);border-radius:8px;cursor:pointer}
+.system-date-picker-trigger:focus-visible{outline:2px solid var(--fl-primary);outline-offset:2px}
+.system-date-native-picker{position:absolute;inset-inline-end:0;bottom:0;width:1px;height:1px;opacity:0;pointer-events:none}
