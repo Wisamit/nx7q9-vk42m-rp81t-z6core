@@ -30,7 +30,7 @@ test("UI #265: all eleven QMS decisions are explicit review dialogs without nati
 test("UI #265: CAPA and critical findings keep independent safety and data snapshots", () => {
   const required = [
     'effectiveness === "EFFECTIVE" && fields.get("close") === "on"',
-    'payload = {effectiveness, effectivenessReview, close}',
+    'payload = {effectiveness, effectivenessReview: field("effectivenessReview"), close}',
     'payload = {actionId: review.subId, status: "COMPLETED"}',
     'const capaId = field("capaId")',
     'severity === "CRITICAL" && !capaId',
