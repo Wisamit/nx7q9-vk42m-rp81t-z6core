@@ -45,7 +45,9 @@ export function CrudModal({
         : "You have unsaved changes. Discard them and close this dialog?";
       if (!window.confirm(message)) return;
     }
-    changedRef.current = false;
+    // The parent may reject dismissal while an API mutation is running.
+    // Keep the dirty flag until open actually becomes false, otherwise a
+    // second close attempt could discard fields without any warning.
     closeRef.current();
   }, [protectUnsavedChanges]);
 
