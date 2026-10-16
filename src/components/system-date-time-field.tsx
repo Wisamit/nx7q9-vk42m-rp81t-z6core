@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { SystemDateField } from "@/components/system-date-field";
-import { parseSystemDateInput } from "@/lib/system-date";
+import { parseSystemLocalDateTime, composeSystemLocalDateTime } from "@/lib/system-date-time";
 
 type Props = {
   name: string;
@@ -18,19 +18,12 @@ type Props = {
  * Converting this local wall time into UTC belongs to the existing endpoint
  * workflow and its selected branch timezone policy, not this display field.
  */
-function parseLocalDateTime(raw: string | null | undefined) {
-  const match = (raw || "").match(/^(\d{4}-\d{2}-\d{2})T([01]\d|2[0-3]):([0-5]\d)$/);
-  if (!match || !parseSystemDateInput(match[1], "YYYY-MM-DD")) return { date: "", time: "" };
-  return { date: match[1], time: match[2] + ":" + match[3] };
-}
-
 export function SystemDateTimeField({ name, defaultValue, required, disabled, id }: Props) {
-  const initial = parseLocalDateTime(defaultValue);
+  const initial = parseSystemLocalDateTime(defaultValue);
   const [dateIso, setDateIso] = useState(initial.date);
   const [clockTime, setClockTime] = useState(initial.time);
   const timeRef = useRef<HTMLInputElement>(null);
-  const value = dateIso && /^([01]\d|2[0-3]):[0-5]\d$/.test(clockTime)
-    ? dateIso + "T" + clockTime : "";
+  const value = composeSystemLocalDateTime(dateIso, clockTime);
 
   useEffect(() => {
     const form = timeRef.current?.form;
