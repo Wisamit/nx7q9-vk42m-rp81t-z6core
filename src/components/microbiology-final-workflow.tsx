@@ -2,7 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation"
-import { CrudModal } from "@/components/crud-modal";;
+import { CrudModal } from "@/components/crud-modal";
 
 export function MicrobiologyFinalWorkflow({
   caseId,
@@ -69,67 +69,80 @@ export function MicrobiologyFinalWorkflow({
   }
 
   async function withdraw() {
-    if (!resultId || busy) return;
-
-
+    if (!resultId || busy || reviewAction !== "WITHDRAW") return;
     setBusy("withdraw");
     setMessage("");
     try {
-    const response = await fetch(`/api/microbiology/cases/${caseId}/withdraw-final`, { method: "POST" });
-    const body = await response.json().catch(() => ({}));
-    if (response.ok) {
-      setReviewAction(null);
-      setMessage(tr("Final submission withdrawn. Culture data is editable again; resubmission will create a new result version.", "تم سحب الإرسال النهائي. أصبحت بيانات الزرع قابلة للتعديل مجددًا، وسيؤدي الإرسال الجديد إلى إنشاء إصدار نتيجة جديد."));
-      router.refresh();
-    } else {
-      setMessage(body.error === "microbiology_result_changed_or_under_review"
-        ? tr("The result has already been reviewed or changed; use the controlled review/return workflow.", "تمت مراجعة النتيجة أو تعديلها؛ استخدم مسار المراجعة أو الإرجاع المعتمد.")
-        : tr("Could not withdraw microbiology submission. Refresh and try again.", "تعذر سحب إرسال الأحياء الدقيقة. حدّث الصفحة ثم أعد المحاولة."));
-    }
+      const response = await fetch("/api/microbiology/cases/" + caseId + "/withdraw-final", {method:"POST"});
+      const body = await response.json().catch(() => ({})) as {error?: string};
+      if (response.ok) {
+        setReviewAction(null);
+        setMessage(tr(
+          "Final submission withdrawn. Culture data is editable again; resubmission will create a new result version.",
+          "تم سحب الإرسال النهائي. أصبحت بيانات الزرع قابلة للتعديل مجددًا، وسيؤدي الإرسال الجديد إلى إنشاء إصدار نتيجة جديد.",
+        ));
+        router.refresh();
+      } else {
+        setMessage(body.error === "microbiology_result_changed_or_under_review"
+          ? tr("The result has already been reviewed or changed; use the controlled review/return workflow.",
+            "تمت مراجعة النتيجة أو تعديلها؛ استخدم مسار المراجعة أو الإرجاع المعتمد.")
+          : tr("Could not withdraw microbiology submission. Refresh and try again.",
+            "تعذر سحب إرسال الأحياء الدقيقة. حدّث الصفحة ثم أعد المحاولة."));
+      }
+    } catch {
+      setMessage(tr("Connection interrupted. Check result/version state before retrying.",
+        "انقطع الاتصال؛ تحقق من حالة النتيجة وإصدارها قبل إعادة المحاولة."));
+    } finally { setBusy(""); }
   }
 
   async function verify() {
-    if (!resultId || busy) return;
-
-
+    if (!resultId || busy || reviewAction !== "VERIFY") return;
     setBusy("verify");
     setMessage("");
     try {
-    const response = await fetch(`/api/results/${resultId}/verify`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ confirmDeltaWarnings: false }),
-    });
-    const body = await response.json().catch(() => ({}));
-    if (response.ok) {
-      setReviewAction(null);
-      setMessage(tr("Microbiology result verified.", "تم التحقق من نتيجة الأحياء الدقيقة."));
-      router.refresh();
-    } else if (body.error === "validation_hold_review_required") {
-      setMessage(tr("Verification blocked: resolve active blocking validation holds first.", "التحقق محظور: يجب حل حجوزات التحقق المانعة أولًا."));
-    } else if (body.error === "reflex_review_required") {
-      setMessage(tr("Verification blocked: review pending reflex recommendations first.", "التحقق محظور: راجع توصيات الفحوصات الانعكاسية المعلقة أولًا."));
-    } else {
-      setMessage(body.error || tr("Microbiology verification failed.", "فشل التحقق من نتيجة الأحياء الدقيقة."));
-    }
+      const response = await fetch("/api/results/" + resultId + "/verify", {
+        method: "POST", headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({confirmDeltaWarnings:false}),
+      });
+      const body = await response.json().catch(() => ({})) as {error?: string};
+      if (response.ok) {
+        setReviewAction(null);
+        setMessage(tr("Microbiology result verified.", "تم التحقق من نتيجة الأحياء الدقيقة."));
+        router.refresh();
+      } else if (body.error === "validation_hold_review_required") {
+        setMessage(tr("Verification blocked: resolve active blocking validation holds first.",
+          "التحقق محظور: يجب حل حجوزات التحقق المانعة أولًا."));
+      } else if (body.error === "reflex_review_required") {
+        setMessage(tr("Verification blocked: review pending reflex recommendations first.",
+          "التحقق محظور: راجع توصيات الفحوصات الانعكاسية المعلقة أولًا."));
+      } else {
+        setMessage(body.error || tr("Microbiology verification failed.", "فشل التحقق من نتيجة الأحياء الدقيقة."));
+      }
+    } catch {
+      setMessage(tr("Connection interrupted. Check result/version state before retrying.",
+        "انقطع الاتصال؛ تحقق من حالة النتيجة وإصدارها قبل إعادة المحاولة."));
+    } finally {setBusy("");}
   }
 
   async function release() {
-    if (!resultId || busy) return;
-
-
+    if (!resultId || busy || reviewAction !== "RELEASE") return;
     setBusy("release");
     setMessage("");
     try {
-    const response = await fetch(`/api/results/${resultId}/release`, { method: "POST" });
-    const body = await response.json().catch(() => ({}));
-    if (response.ok) {
-      setReviewAction(null);
-      setMessage(`${tr("Microbiology result released. Report version", "تم إصدار نتيجة الأحياء الدقيقة. تم إنشاء إصدار التقرير")} ${body.reportVersion}.`);
-      router.refresh();
-    } else {
-      setMessage(body.error || tr("Microbiology release failed.", "فشل إصدار نتيجة الأحياء الدقيقة."));
-    }
+      const response = await fetch("/api/results/" + resultId + "/release", {method:"POST"});
+      const body = await response.json().catch(() => ({})) as {error?: string; reportVersion?: string};
+      if (response.ok) {
+        setReviewAction(null);
+        setMessage(tr("Microbiology result released. Report version",
+          "تم إصدار نتيجة الأحياء الدقيقة. تم إنشاء إصدار التقرير") + " " + (body.reportVersion || "—") + ".");
+        router.refresh();
+      } else {
+        setMessage(body.error || tr("Microbiology release failed.", "فشل إصدار نتيجة الأحياء الدقيقة."));
+      }
+    } catch {
+      setMessage(tr("Connection interrupted. Check for a released report/version before retrying.",
+        "انقطع الاتصال؛ تحقق من وجود تقرير وإصدار منشور قبل إعادة المحاولة."));
+    } finally {setBusy("");}
   }
 
   return <section className="detail-card detail-section">
