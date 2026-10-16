@@ -234,7 +234,7 @@ export function PhlebotomyCollectionCard({
           {busy ? tr("Saving…", "جارٍ الحفظ…") : outcome === "SUCCESS" ? tr("Record Collection", "تسجيل السحب") : tr("Record Failed Attempt", "تسجيل المحاولة الفاشلة")}
         </button>
       </div>
-      {message && <div className="form-success form-span">{message}</div>}
+      {message && <div className={(isError ? "form-error" : "form-success") + " form-span"} role={isError ? "alert" : "status"}>{message}</div>}
     </form>}
   </section>;
 }
