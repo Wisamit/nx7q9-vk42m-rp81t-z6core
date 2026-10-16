@@ -207,7 +207,7 @@ export function UserManagement({ locale, canManageDiscountLimits, canResetPasswo
       onClose={() => setCreateOpen(false)}
       title={tr("Create staff user", "إنشاء مستخدم موظف")}
       description={tr("Assign role-based permissions and explicit branch access.", "حدد الدور والصلاحيات والفروع المسموح بها.")}
-      size="lg"
+      size="compact"
     >
       <form className="settings-grid" onSubmit={createUser}>
         <label>{tr("English display name", "الاسم بالإنجليزية")}<input name="displayNameEn" required /></label>
@@ -230,7 +230,7 @@ export function UserManagement({ locale, canManageDiscountLimits, canResetPasswo
       onClose={() => setEditing(null)}
       title={tr("Edit access", "تعديل صلاحيات الوصول")}
       description={editing ? editing.displayNameEn + " · @" + editing.username : undefined}
-      size="lg"
+      size="compact"
     >
       {editing && <form className="settings-grid" onSubmit={updateAccess}>
         {canManageDiscountLimits && <label>{tr("Discount limit override (%)", "تجاوز حد الخصم للمستخدم (%)")}<input name="discountLimitPercent" type="number" min="0" max="100" step="0.01" defaultValue={editing.discountLimitPercent || ""} placeholder={tr("Leave blank to inherit from roles", "اتركه فارغًا ليرث من الأدوار")} /><small>{tr("Current effective limit", "الحد الفعلي الحالي")}: {Number(editing.effectiveDiscountLimitPercent || 0).toFixed(2)}%</small></label>}
@@ -246,7 +246,7 @@ export function UserManagement({ locale, canManageDiscountLimits, canResetPasswo
       onClose={() => { if (!busy) { setResetting(null); setResetError(""); } }}
       title={tr("Secure staff password reset", "إعادة تعيين كلمة مرور الموظف بأمان")}
       description={resetting ? resetting.displayNameEn + " · @" + resetting.username : undefined}
-      size="lg"
+      size="compact"
     >
       {resetting && <form className="settings-grid" onSubmit={e => void resetStaffPassword(e)}>
         <p className="muted form-span">{tr(
