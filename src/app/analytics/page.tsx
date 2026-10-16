@@ -557,7 +557,8 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
     .slice(0, 10);
 
   const periodLabel = start || end
-    ? (start ? start.toISOString().slice(0, 10) : tr(locale, "Beginning", "البداية")) + " → " + (end ? end.toISOString().slice(0, 10) : tr(locale, "Now", "الآن"))
+    ? <>{start ? <SystemDateText value={start.toISOString().slice(0, 10)} kind="calendar" /> : tr(locale, "Beginning", "البداية")} {" → "}
+        {end ? <SystemDateText value={end.toISOString().slice(0, 10)} kind="calendar" /> : tr(locale, "Now", "الآن")}</>
     : tr(locale, "All time", "كل الوقت");
 
   return <main className="catalog-shell">
@@ -718,7 +719,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
             <td>{indicator.branch ? indicator.branch.code + " — " + localizedName(indicator.branch) : tr(locale, "Organization", "المؤسسة")}</td>
             <td>{measurement ? measurement.value.toString() + (indicator.unit ? " " + indicator.unit : "") : "—"}</td>
             <td>{target}</td>
-            <td>{measurement ? measurement.periodStart.toISOString().slice(0,10) + " → " + measurement.periodEnd.toISOString().slice(0,10) : "—"}</td>
+            <td>{measurement ? <><SystemDateText value={measurement.periodStart.toISOString().slice(0,10)} kind="calendar" /> {" → "} <SystemDateText value={measurement.periodEnd.toISOString().slice(0,10)} kind="calendar" /></> : "—"}</td>
           </tr>;
         })}</tbody>
       </table></div>
