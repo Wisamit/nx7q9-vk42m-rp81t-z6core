@@ -129,7 +129,7 @@ export default async function CriticalResultsPage({
             <td>{event.acknowledgementDueAt
               ? <strong className={overdue ? "delta-exceeded" : ""}>{<SystemDateText value={event.acknowledgementDueAt.toISOString()} />}{overdue ? " · " + tr(locale, "OVERDUE", "متأخر") : ""}</strong>
               : tr(locale, "No policy", "لا توجد سياسة")}</td>
-            <td>{tr(locale, "Level", "المستوى")} {event.escalationLevel}{event.maxEscalationLevelSnapshot !== null ? ` / ${event.maxEscalationLevelSnapshot}` : ""}<br/><small>{event.nextEscalationDueAt ? tr(locale, "Next", "التالي") + ": " + <SystemDateText value={event.nextEscalationDueAt.toISOString()} /> : "—"}</small></td>
+            <td>{tr(locale, "Level", "المستوى")} {event.escalationLevel}{event.maxEscalationLevelSnapshot !== null ? ` / ${event.maxEscalationLevelSnapshot}` : ""}<br/><small>{event.nextEscalationDueAt ? <>{tr(locale, "Next", "التالي") + ": "}<SystemDateText value={event.nextEscalationDueAt.toISOString()} /></> : "—"}</small></td>
             <td>{last ? <><strong>{last.outcome}</strong><br/><small>{<SystemDateText value={last.communicatedAt.toISOString()} />} · {last.recipientName}</small></> : tr(locale, "No communication yet", "لا يوجد تواصل بعد")}</td>
             <td><Link className="secondary-link" href={`/worklists/${event.result.orderItemId}`}>{tr(locale, "Open Result", "فتح النتيجة")}</Link></td>
           </tr>;
