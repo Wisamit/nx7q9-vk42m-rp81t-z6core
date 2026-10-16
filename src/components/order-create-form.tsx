@@ -1,5 +1,7 @@
 "use client";
 
+import { SystemDateField } from "@/components/system-date-field";
+
 import { FormEvent, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -453,7 +455,7 @@ export function OrderCreateForm({
             {question.questionAr && <small dir="rtl">{question.questionAr}</small>}
             {question.responseType === "TEXT" && <input name={"question_" + question.id} required={question.required} />}
             {question.responseType === "NUMERIC" && <input name={"question_" + question.id} type="number" step="any" required={question.required} />}
-            {question.responseType === "DATE" && <input name={"question_" + question.id} type="date" required={question.required} />}
+            {question.responseType === "DATE" && <SystemDateField name={"question_" + question.id}  required={question.required} />}
             {question.responseType === "DATETIME" && <input name={"question_" + question.id} type="datetime-local" required={question.required} />}
             {question.responseType === "BOOLEAN" && <select name={"question_" + question.id} required={question.required} defaultValue="">
               <option value="">{tr("Select…", "اختر…")}</option><option value="true">{tr("Yes", "نعم")}</option><option value="false">{tr("No", "لا")}</option>
