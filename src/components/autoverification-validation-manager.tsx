@@ -27,63 +27,79 @@ export function AutoverificationValidationManager({
 
   async function createPolicy(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (busy) return;
     const form = new FormData(event.currentTarget);
     setBusy("policy");
-    setMessage("");
-
-    const response = await fetch("/api/clinical-rules/autoverification", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        testId: form.get("testId"),
-        branchId: form.get("branchId"),
-        enabled: form.get("enabled") === "on",
-        allowManual: form.get("allowManual") === "on",
-        allowAnalyzer: form.get("allowAnalyzer") === "on",
-        allowImport: form.get("allowImport") === "on",
-        requireAllFlagsNormal: form.get("requireAllFlagsNormal") === "on",
-        effectiveFrom: form.get("effectiveFrom"),
-        effectiveTo: form.get("effectiveTo"),
-      }),
-    });
-    setMessage(response.ok ? tr("Autoverification policy draft created. Approval is required before it can verify results.", "تم إنشاء مسودة سياسة التحقق الآلي. يلزم اعتمادها قبل أن تتمكن من التحقق من النتائج.") : tr("Could not create autoverification policy.", "تعذر إنشاء سياسة التحقق الآلي."));
-    setBusy("");
-    if (response.ok) {
-      event.currentTarget.reset();
+    setFormError("");
+    try {
+      const response = await fetch("/api/clinical-rules/autoverification", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          testId: form.get("testId"),
+          branchId: form.get("branchId"),
+          enabled: form.get("enabled") === "on",
+          allowManual: form.get("allowManual") === "on",
+          allowAnalyzer: form.get("allowAnalyzer") === "on",
+          allowImport: form.get("allowImport") === "on",
+          requireAllFlagsNormal: form.get("requireAllFlagsNormal") === "on",
+          effectiveFrom: form.get("effectiveFrom"),
+          effectiveTo: form.get("effectiveTo"),
+        }),
+      });
+      if (!response.ok) {
+        const detail = await response.json().catch(() => ({})) as { error?: string };
+        setFormError(tr("Could not create autoverification policy.", "تعذر إنشاء سياسة التحقق الآلي.") +
+          (detail.error ? " (" + detail.error + ")" : ""));
+        return;
+      }
+      setMessage(tr("Autoverification policy draft created. Approval is required before it can verify results.", "تم إنشاء مسودة سياسة التحقق الآلي. يلزم اعتمادها قبل أن تتمكن من التحقق من النتائج."));
+      setOpen("");
       router.refresh();
+    } catch {
+      setFormError(tr("Connection error. The draft was not confirmed as saved.", "خطأ في الاتصال. لم يتم تأكيد حفظ المسودة."));
+    } finally {
+      setBusy("");
     }
   }
-
   async function createHold(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (busy) return;
     const form = new FormData(event.currentTarget);
     setBusy("hold");
-    setMessage("");
-
-    const response = await fetch("/api/clinical-rules/validation-holds", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        testId: form.get("testId"),
-        branchId: form.get("branchId"),
-        condition,
-        resultSource: condition === "RESULT_SOURCE" ? form.get("resultSource") : null,
-        severity: form.get("severity"),
-        reasonEn: form.get("reasonEn"),
-        reasonAr: form.get("reasonAr"),
-        effectiveFrom: form.get("effectiveFrom"),
-        effectiveTo: form.get("effectiveTo"),
-      }),
-    });
-    setMessage(response.ok ? tr("Validation hold rule draft created. Approval is required before it can block or warn.", "تم إنشاء مسودة قاعدة إيقاف التحقق. يلزم اعتمادها قبل أن تتمكن من الحظر أو التحذير.") : tr("Could not create validation hold rule.", "تعذر إنشاء قاعدة إيقاف التحقق."));
-    setBusy("");
-    if (response.ok) {
-      event.currentTarget.reset();
+    setFormError("");
+    try {
+      const response = await fetch("/api/clinical-rules/validation-holds", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          testId: form.get("testId"),
+          branchId: form.get("branchId"),
+          condition,
+          resultSource: condition === "RESULT_SOURCE" ? form.get("resultSource") : null,
+          severity: form.get("severity"),
+          reasonEn: form.get("reasonEn"),
+          reasonAr: form.get("reasonAr"),
+          effectiveFrom: form.get("effectiveFrom"),
+          effectiveTo: form.get("effectiveTo"),
+        }),
+      });
+      if (!response.ok) {
+        const detail = await response.json().catch(() => ({})) as { error?: string };
+        setFormError(tr("Could not create validation hold rule.", "تعذر إنشاء قاعدة إيقاف التحقق.") +
+          (detail.error ? " (" + detail.error + ")" : ""));
+        return;
+      }
+      setMessage(tr("Validation hold rule draft created. Approval is required before it can block or warn.", "تم إنشاء مسودة قاعدة إيقاف التحقق. يلزم اعتمادها قبل أن تتمكن من الحظر أو التحذير."));
+      setOpen("");
       setCondition("ALWAYS");
       router.refresh();
+    } catch {
+      setFormError(tr("Connection error. The draft was not confirmed as saved.", "خطأ في الاتصال. لم يتم تأكيد حفظ المسودة."));
+    } finally {
+      setBusy("");
     }
   }
-
   return <section className="detail-grid detail-section">
     <article className="detail-card">
       <h2>{tr("Create Autoverification Policy", "إنشاء سياسة تحقق آلي")}</h2>
