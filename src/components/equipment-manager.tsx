@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
+import { CrudModal } from "@/components/crud-modal";
 
 type Branch = { id: string; code: string; nameEn: string; nameAr?: string | null };
 type Department = { id: string; code: string; nameEn: string; nameAr?: string | null; branchId: string | null };
@@ -34,6 +35,7 @@ export function EquipmentManager({
   const [branchId, setBranchId] = useState("");
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
+  const [uiEditor, setUiEditor] = useState("");
   const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
   const localizedName = (item: { nameEn: string; nameAr?: string | null }) => locale === "ar" ? item.nameAr || item.nameEn : item.nameEn;
   const maintenanceTypeLabel = (value: string) =>
@@ -171,7 +173,15 @@ export function EquipmentManager({
   return <section className="detail-grid detail-section">
     <article className="detail-card">
       <h2>{tr("Register Equipment", "تسجيل معدة")}</h2>
-      <form className="catalog-form" onSubmit={createEquipment}>
+      <button type="button" className="primary-button" disabled={Boolean(busy)}
+    onClick={() => { setMessage(""); setUiEditor("equipment"); }}>
+    {tr("Register Equipment", "تسجيل معدة")}
+  </button>
+  <CrudModal open={uiEditor === "equipment"} onClose={() => { if (!busy) setUiEditor(""); }}
+    size="compact"
+    title={tr("Register Equipment", "تسجيل معدة")}
+    description={tr("Equipment belongs to a branch and keeps its immutable identity.", "المعدة مرتبطة بفرع ولها هوية ثابتة.")}>
+    {uiEditor === "equipment" && <form className="catalog-form" onSubmit={createEquipment}>
         <label>{tr("Branch", "الفرع")}<select required value={branchId} onChange={event => setBranchId(event.target.value)}>
           <option value="">{tr("Select branch…", "اختر الفرع…")}</option>{branches.map(branch => <option key={branch.id} value={branch.id}>{branch.code} — {localizedName(branch)}</option>)}
         </select></label>
@@ -188,12 +198,22 @@ export function EquipmentManager({
         <label>{tr("Location", "الموقع")}<input name="locationText" /></label>
         <label className="form-span">{tr("Notes", "ملاحظات")}<textarea name="notes" rows={2} /></label>
         <button className="primary-button form-span" disabled={busy !== ""}>{busy === "equipment" ? tr("Saving…", "جارٍ الحفظ…") : tr("Register Equipment", "تسجيل المعدة")}</button>
-      </form>
+      </form>}
+    {uiEditor === "equipment" && message && <p className="form-warning" role="status">{message}</p>}
+  </CrudModal>
     </article>
 
     <article className="detail-card">
       <h2>{tr("Maintenance Event", "حدث صيانة")}</h2>
-      <form className="catalog-form" onSubmit={maintenance}>
+      <button type="button" className="primary-button" disabled={Boolean(busy)}
+    onClick={() => { setMessage(""); setUiEditor("maintenance"); }}>
+    {tr("Record Maintenance", "تسجيل صيانة")}
+  </button>
+  <CrudModal open={uiEditor === "maintenance"} onClose={() => { if (!busy) setUiEditor(""); }}
+    size="compact"
+    title={tr("Record Maintenance", "تسجيل صيانة")}
+    description={tr("Records an equipment maintenance event; previous history is preserved.", "يسجل حدث صيانة دون حذف التاريخ السابق.")}>
+    {uiEditor === "maintenance" && <form className="catalog-form" onSubmit={maintenance}>
         <label className="form-span">{tr("Equipment", "المعدة")}<select name="equipmentId" required defaultValue=""><option value="">{tr("Select equipment…", "اختر المعدة…")}</option>{equipmentOptions.map(item => <option key={item.id} value={item.id}>{item.assetId} — {item.name}</option>)}</select></label>
         <label>{tr("Type", "النوع")}<select name="maintenanceType" defaultValue="PREVENTIVE"><option value="PREVENTIVE">{maintenanceTypeLabel("PREVENTIVE")}</option><option value="CORRECTIVE">{maintenanceTypeLabel("CORRECTIVE")}</option></select></label>
         <label>{tr("Plan", "الخطة")}<select name="maintenancePlanId" defaultValue="">
@@ -210,12 +230,22 @@ export function EquipmentManager({
         <label className="form-span">{tr("Work performed", "العمل المنفذ")}<textarea name="workPerformed" rows={2} /></label>
         <label className="form-span">{tr("Corrective action", "الإجراء التصحيحي")}<textarea name="correctiveAction" rows={2} /></label>
         <button className="secondary-button form-span" disabled={busy !== ""}>{busy === "maintenance" ? tr("Saving…", "جارٍ الحفظ…") : tr("Record Maintenance", "تسجيل الصيانة")}</button>
-      </form>
+      </form>}
+    {uiEditor === "maintenance" && message && <p className="form-warning" role="status">{message}</p>}
+  </CrudModal>
     </article>
 
     <article className="detail-card">
       <h2>{tr("Calibration", "المعايرة")}</h2>
-      <form className="catalog-form" onSubmit={calibration}>
+      <button type="button" className="primary-button" disabled={Boolean(busy)}
+    onClick={() => { setMessage(""); setUiEditor("calibration"); }}>
+    {tr("Record Calibration", "تسجيل معايرة")}
+  </button>
+  <CrudModal open={uiEditor === "calibration"} onClose={() => { if (!busy) setUiEditor(""); }}
+    size="compact"
+    title={tr("Record Calibration", "تسجيل معايرة")}
+    description={tr("Record measured calibration evidence only; no invented QC limits.", "سجّل أدلة المعايرة المقاسة فقط، دون اختراع حدود ضبط جودة.")}>
+    {uiEditor === "calibration" && <form className="catalog-form" onSubmit={calibration}>
         <label className="form-span">{tr("Equipment", "المعدة")}<select name="equipmentId" required defaultValue=""><option value="">{tr("Select equipment…", "اختر المعدة…")}</option>{equipmentOptions.map(item => <option key={item.id} value={item.id}>{item.assetId} — {item.name}</option>)}</select></label>
         <label>{tr("Status", "الحالة")}<select name="status" defaultValue="PASS"><option value="DUE">{eventStatusLabel("DUE")}</option><option value="IN_PROGRESS">{eventStatusLabel("IN_PROGRESS")}</option><option value="PASS">{eventStatusLabel("PASS")}</option><option value="FAIL">{eventStatusLabel("FAIL")}</option></select></label>
         <label>{tr("Due date", "تاريخ الاستحقاق")}<input name="dueAt" type="date" /></label>
@@ -225,37 +255,67 @@ export function EquipmentManager({
         <label className="check-line"><input name="approve" type="checkbox" /> {tr("Approve passing calibration", "اعتماد المعايرة الناجحة")}</label>
         <label className="form-span">{tr("Result summary", "ملخص النتيجة")}<textarea name="resultSummary" rows={2} /></label>
         <button className="secondary-button form-span" disabled={busy !== ""}>{busy === "calibration" ? tr("Saving…", "جارٍ الحفظ…") : tr("Record Calibration", "تسجيل المعايرة")}</button>
-      </form>
+      </form>}
+    {uiEditor === "calibration" && message && <p className="form-warning" role="status">{message}</p>}
+  </CrudModal>
     </article>
 
     <article className="detail-card">
       <h2>{tr("Downtime", "التوقف")}</h2>
-      <form className="catalog-form" onSubmit={downtime}>
+      <button type="button" className="primary-button" disabled={Boolean(busy)}
+    onClick={() => { setMessage(""); setUiEditor("downtime"); }}>
+    {tr("Update Equipment Downtime", "تحديث توقف المعدة")}
+  </button>
+  <CrudModal open={uiEditor === "downtime"} onClose={() => { if (!busy) setUiEditor(""); }}
+    size="compact"
+    title={tr("Update Equipment Downtime", "تحديث توقف المعدة")}
+    description={tr("Downtime affects analyzer/equipment readiness. Review actual downtime periods.", "يؤثر التوقف على جاهزية الأجهزة، لذا راجع المدة الفعلية.")}>
+    {uiEditor === "downtime" && <form className="catalog-form" onSubmit={downtime}>
         <label className="form-span">{tr("Equipment", "المعدة")}<select name="equipmentId" required defaultValue=""><option value="">{tr("Select equipment…", "اختر المعدة…")}</option>{equipmentOptions.map(item => <option key={item.id} value={item.id}>{item.assetId} — {item.name}</option>)}</select></label>
         <label>{tr("Action", "الإجراء")}<select name="action" defaultValue="OPEN"><option value="OPEN">{tr("Open downtime", "فتح توقف")}</option><option value="CLOSE">{tr("Close downtime", "إغلاق التوقف")}</option><option value="RESTORE">{tr("Return to service (after clearance)", "إعادة للخدمة بعد استيفاء الشروط")}</option></select></label>
         <label className="form-span">{tr("Reason", "السبب")}<input name="reason" /></label>
         <label className="form-span">{tr("Impact", "التأثير")}<input name="impact" /></label>
         <label className="form-span">{tr("Resolution", "الحل")}<input name="resolution" /></label>
         <button className="secondary-button form-span" disabled={busy !== ""}>{busy === "downtime" ? tr("Saving…", "جارٍ الحفظ…") : tr("Update Downtime", "تحديث التوقف")}</button>
-      </form>
+      </form>}
+    {uiEditor === "downtime" && message && <p className="form-warning" role="status">{message}</p>}
+  </CrudModal>
     </article>
 
     <article className="detail-card">
       <h2>{tr("Preventive Maintenance Plan", "خطة الصيانة الوقائية")}</h2>
-      <form className="catalog-form" onSubmit={maintenancePlan}>
+      <button type="button" className="primary-button" disabled={Boolean(busy)}
+    onClick={() => { setMessage(""); setUiEditor("plan"); }}>
+    {tr("Manage Maintenance Plan", "إدارة خطة الصيانة")}
+  </button>
+  <CrudModal open={uiEditor === "plan"} onClose={() => { if (!busy) setUiEditor(""); }}
+    size="compact"
+    title={tr("Manage Maintenance Plan", "إدارة خطة الصيانة")}
+    description={tr("Schedule governed preventive maintenance for the selected equipment.", "جدولة الصيانة الوقائية الموثقة للمعدة المحددة.")}>
+    {uiEditor === "plan" && <form className="catalog-form" onSubmit={maintenancePlan}>
         <label className="form-span">{tr("Equipment", "المعدة")}<select name="equipmentId" required defaultValue=""><option value="">{tr("Select equipment…", "اختر المعدة…")}</option>{equipmentOptions.map(item => <option key={item.id} value={item.id}>{item.assetId} — {item.name}</option>)}</select></label>
         <label>{tr("Plan name", "اسم الخطة")}<input name="name" required placeholder={tr("Monthly preventive service", "صيانة وقائية شهرية")} /></label>
         <label>{tr("Frequency (days)", "التكرار (أيام)")}<input name="frequencyDays" type="number" min="1" max="3650" required /></label>
         <label>{tr("Next due", "الاستحقاق التالي")}<input name="nextDueAt" type="date" required /></label>
         <label className="form-span">{tr("Instructions", "التعليمات")}<textarea name="instructions" rows={2} /></label>
         <button className="secondary-button form-span" disabled={busy !== ""}>{busy === "maintenance-plan" ? tr("Saving…", "جارٍ الحفظ…") : tr("Create Maintenance Plan", "إنشاء خطة الصيانة")}</button>
-      </form>
+      </form>}
+    {uiEditor === "plan" && message && <p className="form-warning" role="status">{message}</p>}
+  </CrudModal>
     </article>
 
     <article className="detail-card">
       <h2>{tr("Equipment Document", "وثيقة المعدة")}</h2>
       <p className="muted">{tr("Record a controlled document or attachment reference. File-storage upload can use the storage-key field through the API when a storage provider is connected.", "سجل وثيقة مضبوطة أو مرجع مرفق. يمكن لرفع الملفات استخدام حقل storage-key عبر API عند ربط مزود تخزين.")}</p>
-      <form className="catalog-form" onSubmit={equipmentDocument}>
+      <button type="button" className="primary-button" disabled={Boolean(busy)}
+    onClick={() => { setMessage(""); setUiEditor("document"); }}>
+    {tr("Record Equipment Document", "إضافة وثيقة معدة")}
+  </button>
+  <CrudModal open={uiEditor === "document"} onClose={() => { if (!busy) setUiEditor(""); }}
+    size="compact"
+    title={tr("Record Equipment Document", "إضافة وثيقة معدة")}
+    description={tr("Attach controlled equipment documentation without changing clinical history.", "أضف وثائق المعدة المضبوطة دون تغيير التاريخ السريري.")}>
+    {uiEditor === "document" && <form className="catalog-form" onSubmit={equipmentDocument}>
         <label className="form-span">{tr("Equipment", "المعدة")}<select name="equipmentId" required defaultValue=""><option value="">{tr("Select equipment…", "اختر المعدة…")}</option>{equipmentOptions.map(item => <option key={item.id} value={item.id}>{item.assetId} — {item.name}</option>)}</select></label>
         <label>{tr("Document type", "نوع الوثيقة")}<input name="documentType" required placeholder="MANUAL / CERTIFICATE / SERVICE_REPORT" /></label>
         <label>{tr("Name", "الاسم")}<input name="name" required /></label>
@@ -263,7 +323,9 @@ export function EquipmentManager({
         <label>{tr("Expiry", "الانتهاء")}<input name="expiresAt" type="date" /></label>
         <label className="form-span">{tr("Notes", "ملاحظات")}<textarea name="notes" rows={2} /></label>
         <button className="secondary-button form-span" disabled={busy !== ""}>{busy === "document" ? tr("Saving…", "جارٍ الحفظ…") : tr("Record Document", "تسجيل الوثيقة")}</button>
-      </form>
+      </form>}
+    {uiEditor === "document" && message && <p className="form-warning" role="status">{message}</p>}
+  </CrudModal>
     </article>
 
     {message && <div className="form-success form-span">{message}</div>}
