@@ -80,3 +80,29 @@ test("Issue #265: QC and qualitative option effective dates are explicitly chose
   assert.match(qms, /Assessed at \(local date\)/);
   assert.doesNotMatch(qms, /defaultValue=\{new Date\(\)\.toISOString\(\)\.slice\(0,\s*10\)\}/);
 });
+
+test("Issue #265: QC target and run forms keep selected analyzer/test until the server confirms success", () => {
+  const ui = source("qc-manager");
+  assert.match(ui, /const submitting = useRef\(false\)/);
+  assert.match(ui, /if \(submitting\.current\) return false;/);
+  assert.equal(count(ui, /const formElement = event\.currentTarget;/g), 4);
+  assert.equal(count(ui, /, formElement\);/g), 4);
+  assert.match(ui, /const ok = await submit\("\/api\/qc\/targets"/);
+  assert.match(ui, /if \(ok\) setTargetTestId\(""\)/);
+  assert.match(ui, /const ok = await submit\("\/api\/qc\/runs"/);
+  assert.match(ui, /if \(ok\) setRunAnalyzerId\(""\)/);
+  assert.match(ui, /if \(!resolutionId \|\| !canResolve \|\| submitting\.current\) return;/);
+  assert.match(ui, /role=\{isError \? "alert" : "status"\}/);
+  assert.match(ui, /finally \{\s*submitting\.current = false;\s*setBusy\(""\);/);
+});
+
+test("Issue #265: qualitative draft approval cannot race duplicate clinical transitions", () => {
+  const ui = source("qualitative-result-options-manager");
+  assert.match(ui, /const submitting = useRef\(false\)/);
+  assert.equal(count(ui, /submitting\.current = true;/g), 2);
+  assert.equal(count(ui, /submitting\.current = false;/g), 2);
+  assert.match(ui, /if \(!governance \|\| !canApprove \|\| submitting\.current\) return;/);
+  assert.match(ui, /if \(!canApprove \|\| busy \|\| submitting\.current\) return;/);
+  assert.match(ui, /if \(!busy && !submitting\.current\) setGovernance\(null\)/);
+  assert.match(ui, /approvalStatus !== "DRAFT"/);
+});
