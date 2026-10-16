@@ -68,6 +68,15 @@ export function SendOutManager({
   const router = useRouter();
   const [message, setMessage] = useState("");
   const [uiEditor, setUiEditor] = useState("");
+  const [review, setReview] = useState<{
+    id: string; action:"DISPATCH"|"RECEIVE_RESULT"|"VERIFY"|"COMPLETE"|"CANCEL";
+  } | null>(null);
+  const [actionError, setActionError] = useState("");
+  function reviewAction(id: string, action:"DISPATCH"|"RECEIVE_RESULT"|"VERIFY"|"COMPLETE"|"CANCEL") {
+    if (busy) return;
+    setMessage("");setActionError("");
+    setReview({id,action});
+  }
   const [busy, setBusy] = useState("");
   const [candidateKey, setCandidateKey] = useState("");
   const [resultTexts, setResultTexts] = useState<Record<string, string>>({});
@@ -131,17 +140,73 @@ export function SendOutManager({
   }
 
   async function act(referralId: string, action: string, payload: Record<string, unknown> = {}) {
-    setBusy(referralId + action); setMessage("");
-    const response = await fetch(`/api/send-outs/${referralId}/actions`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action, ...payload }),
-    });
-    const body = await response.json().catch(() => ({}));
-    if (response.ok) {
+    if (busy) return false;
+    setBusy(referralId + action); setActionError("");
+    try {
+      const response = await fetch(`/api/send-outs/${referralId}/actions`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, ...payload }),
+      });
+      const body = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) {
+        setActionError(body.error || tr("Send-out action failed.", "فشل إجراء الإحالة الخارجية."));
+        return false;
+      }
       setMessage(tr("Send-out updated.", "تم تحديث الإحالة الخارجية."));
       router.refresh();
-    } else setMessage(tr("Send-out action failed.", "فشل إجراء الإحالة الخارجية."));
-    setBusy("");
+      return true;
+    } catch {
+      setActionError(tr("Connection interrupted. Recheck the custody and referral status before retrying.",
+        "انقطع الاتصال؛ تحقق من سلسلة حيازة العينة وحالة الإحالة قبل إعادة المحاولة."));
+      return false;
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function confirmReview(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!review || busy) return;
+    const referral = referrals.find(item => item.id === review.id);
+    if (!referral) {
+      setActionError(tr("Referral not available.", "الإحالة غير متاحة."));
+      return;
+    }
+    const form = new FormData(event.currentTarget);
+    const action = review.action;
+    const statusAllowed = action === "DISPATCH" ? referral.status === "CREATED" && canManage
+      : action === "RECEIVE_RESULT" ? referral.status === "DISPATCHED" && canManage
+      : action === "VERIFY" ? referral.status === "RESULT_RECEIVED" && canVerify
+      : action === "COMPLETE" ? referral.status === "VERIFIED" && canVerify
+      : ["CREATED","DISPATCHED"].includes(referral.status) && canManage;
+    if (!statusAllowed) {
+      setActionError(tr("This action is not allowed for the current referral state.",
+        "الإجراء غير مسموح في حالة الإحالة الحالية."));
+      return;
+    }
+    let payload: Record<string, unknown> = {};
+    if (action === "DISPATCH") {
+      payload = {
+        externalAccession: form.get("externalAccession"),
+        courier: form.get("courier"),
+        trackingReference: form.get("trackingReference"),
+        note: form.get("note"),
+      };
+    } else if (action === "RECEIVE_RESULT") {
+      payload = {
+        externalResultText: resultTexts[referral.id] ?? referral.externalResultText ?? "",
+        note: form.get("note"),
+      };
+    } else if (action === "CANCEL") {
+      const note = String(form.get("note") || "").trim();
+      if (!note) {
+        setActionError(tr("Documented cancellation reason required.", "سبب الإلغاء الموثق مطلوب."));
+        return;
+      }
+      payload = { note };
+    }
+    const success = await act(referral.id, action, payload);
+    if (success) setReview(null);
   }
 
   return <div className="sendout-workspace">
@@ -222,41 +287,31 @@ export function SendOutManager({
           </div>
 
           <div className="sendout-actions">
-            {canManage && referral.status === "CREATED" && <form onSubmit={event => {
-              event.preventDefault();
-              const form = new FormData(event.currentTarget);
-              void act(referral.id, "DISPATCH", {
-                externalAccession: form.get("externalAccession"),
-                courier: form.get("courier"),
-                trackingReference: form.get("trackingReference"),
-                note: form.get("note"),
-              });
-            }}>
-              <input name="externalAccession" defaultValue={referral.externalAccession || ""} placeholder={tr("External accession","رقم الطلب الخارجي")} />
-              <input name="courier" placeholder={tr("Courier","شركة النقل / المندوب")} />
-              <input name="trackingReference" placeholder={tr("Tracking reference","مرجع التتبع")} />
-              <input name="note" placeholder={tr("Dispatch note","ملاحظة الإرسال")} />
-              <button className="primary-button" disabled={busy === referral.id + "DISPATCH"}>{tr("Dispatch","إرسال")}</button>
-            </form>}
-
-            {canManage && referral.status === "DISPATCHED" && <form onSubmit={event => {
-              event.preventDefault();
-              void act(referral.id, "RECEIVE_RESULT", {
-                externalResultText: resultTexts[referral.id] || "",
-                note: new FormData(event.currentTarget).get("note"),
-              });
-            }}>
-              <textarea rows={3} value={resultTexts[referral.id] ?? referral.externalResultText ?? ""} onChange={event => setResultTexts(current => ({...current,[referral.id]:event.target.value}))} placeholder={tr("External result / interpretation (or upload report below)","النتيجة / التفسير الخارجي (أو ارفع التقرير أدناه)")} />
-              <input name="note" placeholder={tr("Receipt note","ملاحظة الاستلام")} />
-              <button className="primary-button" disabled={busy === referral.id + "RECEIVE_RESULT"}>{tr("Record Result Received","تسجيل استلام النتيجة")}</button>
-            </form>}
-
-            {canVerify && referral.status === "RESULT_RECEIVED" && <button className="primary-button" onClick={() => void act(referral.id, "VERIFY")} disabled={busy === referral.id + "VERIFY"}>{tr("Verify External Result","التحقق من النتيجة الخارجية")}</button>}
-            {canVerify && referral.status === "VERIFIED" && <button className="primary-button" onClick={() => void act(referral.id, "COMPLETE")} disabled={busy === referral.id + "COMPLETE"}>{tr("Complete Send-out","إكمال الإحالة الخارجية")}</button>}
-            {canManage && ["CREATED","DISPATCHED"].includes(referral.status) && <button className="secondary-button" onClick={() => {
-              const note = prompt(tr("Cancellation reason:","سبب الإلغاء:"));
-              if (note) void act(referral.id, "CANCEL", { note });
-            }}>{tr("Cancel","إلغاء")}</button>}
+            {canManage && referral.status === "CREATED" &&
+              <button type="button" className="primary-button" disabled={Boolean(busy)}
+                onClick={() => reviewAction(referral.id, "DISPATCH")}>
+                {tr("Dispatch","إرسال")}
+              </button>}
+            {canManage && referral.status === "DISPATCHED" &&
+              <button type="button" className="primary-button" disabled={Boolean(busy)}
+                onClick={() => reviewAction(referral.id, "RECEIVE_RESULT")}>
+                {tr("Record Result Received","تسجيل استلام النتيجة")}
+              </button>}
+            {canVerify && referral.status === "RESULT_RECEIVED" &&
+              <button type="button" className="primary-button" disabled={Boolean(busy)}
+                onClick={() => reviewAction(referral.id, "VERIFY")}>
+                {tr("Verify External Result","التحقق من النتيجة الخارجية")}
+              </button>}
+            {canVerify && referral.status === "VERIFIED" &&
+              <button type="button" className="primary-button" disabled={Boolean(busy)}
+                onClick={() => reviewAction(referral.id, "COMPLETE")}>
+                {tr("Complete Send-out","إكمال الإحالة الخارجية")}
+              </button>}
+            {canManage && ["CREATED","DISPATCHED"].includes(referral.status) &&
+              <button type="button" className="secondary-button" disabled={Boolean(busy)}
+                onClick={() => reviewAction(referral.id, "CANCEL")}>
+                {tr("Cancel","إلغاء")}
+              </button>}
           </div>
 
           {referral.externalResultText && <div className="sendout-result"><strong>{tr("External result","النتيجة الخارجية")}</strong><p>{referral.externalResultText}</p></div>}
@@ -276,5 +331,70 @@ export function SendOutManager({
         </article>)
       }
     </section>
+    <CrudModal open={review !== null} onClose={() => { if (!busy) setReview(null); }}
+      size="compact"
+      title={review?.action === "DISPATCH"
+        ? tr("Dispatch External Specimen","إرسال العينة للمختبر الخارجي")
+        : review?.action === "RECEIVE_RESULT"
+          ? tr("Record External Result Receipt","تسجيل استلام النتيجة الخارجية")
+          : review?.action === "VERIFY"
+            ? tr("Verify External Result","التحقق من النتيجة الخارجية")
+            : review?.action === "COMPLETE"
+              ? tr("Complete Send-out Referral","إكمال الإحالة الخارجية")
+              : tr("Cancel Send-out Referral","إلغاء الإحالة الخارجية")}
+      description={tr(
+        "Review exact patient, accession, specimen barcode, external destination and status. Chain-of-custody and independent result verification remain enforced server-side.",
+        "راجع المريض ورقم الطلب وباركود العينة والوجهة الخارجية والحالة. تبقى سلسلة الحيازة والاعتماد المستقل للنتائج خاضعين لقيود السيرفر.",
+      )}>
+      {review && (() => {
+        const current = referrals.find(item => item.id === review.id);
+        if (!current) return <p className="form-error" role="alert">{tr("Referral unavailable.", "الإحالة غير متاحة.")}</p>;
+        return <form key={current.id + review.action} className="catalog-form" onSubmit={confirmReview}>
+          <div className="form-span">
+            <strong>{current.accessionNumber} · {current.patientNumber} · {current.patientName}</strong>
+            <p>{current.testCode} — {current.testName}</p>
+            <p>{tr("Specimen barcode","باركود العينة")}: <span dir="ltr">{current.specimenBarcode || "—"}</span></p>
+            <p>{tr("External laboratory","المختبر الخارجي")}: {current.laboratoryCode} — {current.laboratoryName}</p>
+            <p>{tr("Status","الحالة")}: {referralStatusLabel(current.status)}</p>
+          </div>
+          {review.action === "DISPATCH" && <>
+            <label className="form-span">{tr("External accession","رقم الطلب الخارجي")}
+              <input name="externalAccession" defaultValue={current.externalAccession||""}/></label>
+            <label className="form-span">{tr("Courier / collection agent","شركة النقل / المندوب")}
+              <input name="courier"/></label>
+            <label className="form-span">{tr("Tracking reference","مرجع التتبع")}
+              <input name="trackingReference"/></label>
+            <label className="form-span">{tr("Dispatch notes","ملاحظات الإرسال")}
+              <textarea name="note" rows={2}/></label>
+          </>}
+          {review.action === "RECEIVE_RESULT" && <>
+            <label className="form-span">{tr("External result / interpretation (or upload the report first)",
+              "النتيجة / التفسير الخارجي (أو ارفع التقرير أولاً)")}
+              <textarea rows={4} value={resultTexts[current.id]??current.externalResultText??""}
+                onChange={event => setResultTexts(existing => ({...existing,[current.id]:event.target.value}))}/>
+            </label>
+            <label className="form-span">{tr("Receipt note","ملاحظة الاستلام")}
+              <textarea name="note" rows={2}/></label>
+          </>}
+          {review.action === "CANCEL" && <label className="form-span">
+            {tr("Documented cancellation reason","سبب الإلغاء الموثق")}
+            <textarea name="note" required rows={3} maxLength={1000}/>
+          </label>}
+          {review.action === "VERIFY" && <p className="muted form-span">{tr(
+            "Verify the received external result and its supporting evidence. This is not automatic release of an internal diagnostic report.",
+            "تحقق من النتيجة الخارجية والأدلة الداعمة. هذا ليس إصداراً آلياً لتقرير تشخيصي داخلي.",
+          )}</p>}
+          {review.action === "COMPLETE" && <p className="muted form-span">{tr(
+            "Confirm the externally verified referral is complete and its custody events have been reviewed.",
+            "أكّد اكتمال الإحالة المعتمدة خارجياً بعد مراجعة أحداث سلسلة الحيازة.",
+          )}</p>}
+          {actionError && <p className="form-error form-span" role="alert">{actionError}</p>}
+          <button type="submit" className="primary-button form-span" disabled={Boolean(busy)}>
+            {busy ? tr("Processing…","جارٍ التنفيذ…") :
+              tr("Confirm governed referral action","تأكيد إجراء الإحالة المحكوم")}
+          </button>
+        </form>;
+      })()}
+    </CrudModal>
   </div>;
 }
