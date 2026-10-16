@@ -1,3 +1,4 @@
+import { SystemDateField } from "@/components/system-date-field";
 import Link from "next/link";
 import { agingBucket, aggregateAging, historicalInvoiceReceivable, localCalendarDate, sumMoney4, type AgingBucket } from "@/lib/accounts-receivable-aging";
 import { localDateStartUtc, nextDateString } from "@/lib/client-accounting";
@@ -257,7 +258,7 @@ export default async function AccountsReceivableAgingPage({
           </select>
         </label>
         <label>{tr(locale, "Currency", "العملة")}<input name="currency" maxLength={3} defaultValue={currency} placeholder={tr(locale, "All", "الكل")} /></label>
-        <label>{tr(locale, "As of date", "كما في تاريخ")}<input name="asOf" type="date" defaultValue={asOfDate} required /></label>
+        <label>{tr(locale, "As of date", "كما في تاريخ")}<SystemDateField name="asOf" defaultValue={asOfDate} required /></label>
         <button className="primary-button form-span">{tr(locale, "Apply Aging", "تطبيق أعمار الذمم")}</button>
       </form>
     </section>
