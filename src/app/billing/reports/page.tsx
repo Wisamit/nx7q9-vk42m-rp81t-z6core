@@ -1,3 +1,4 @@
+import { SystemDateField } from "@/components/system-date-field";
 import Link from "next/link";
 import type { Prisma } from "../../../../generated/prisma/client";
 import { requirePermission } from "@/lib/auth";
@@ -381,8 +382,8 @@ export default async function FinancialReportsPage({ searchParams }: { searchPar
           {cashiers.map(item => <option key={item.id} value={item.id}>{locale === "ar" ? item.displayNameAr || item.displayNameEn : item.displayNameEn} · {item.username}</option>)}
         </select></label>
         <label>{tr(locale, "Currency", "العملة")}<input name="currency" maxLength={3} defaultValue={currency} placeholder={tr(locale, "All", "الكل")} /></label>
-        <label>{tr(locale, "From", "من")}<input name="from" type="date" defaultValue={period.from || ""} /></label>
-        <label>{tr(locale, "To", "إلى")}<input name="to" type="date" defaultValue={period.to || ""} /></label>
+        <label>{tr(locale, "From", "من")}<SystemDateField name="from" defaultValue={period.from || ""} /></label>
+        <label>{tr(locale, "To", "إلى")}<SystemDateField name="to" defaultValue={period.to || ""} /></label>
         <button className="primary-button form-span" type="submit">{tr(locale, "Apply Report", "تطبيق التقرير")}</button>
       </form>
       <div className="form-warning">
