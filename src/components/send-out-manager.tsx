@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
+import { CrudModal } from "@/components/crud-modal";
 import { AttachmentManager } from "@/components/attachment-manager";
 import { statusLabel as sharedStatusLabel } from "@/lib/ui-i18n";
 
@@ -66,6 +67,7 @@ export function SendOutManager({
 }) {
   const router = useRouter();
   const [message, setMessage] = useState("");
+  const [uiEditor, setUiEditor] = useState("");
   const [busy, setBusy] = useState("");
   const [candidateKey, setCandidateKey] = useState("");
   const [resultTexts, setResultTexts] = useState<Record<string, string>>({});
@@ -146,7 +148,14 @@ export function SendOutManager({
     {canManage && <section className="detail-grid">
       <article className="detail-card">
         <h2>{tr("External Laboratory","مختبر خارجي")}</h2>
-        <form className="catalog-form" onSubmit={createLab}>
+        <button type="button" className="primary-button" disabled={Boolean(busy)}
+     onClick={() => { setMessage(""); setUiEditor("lab"); }}>
+     {tr("Register External Laboratory", "تسجيل مختبر خارجي")}
+   </button>
+   <CrudModal open={uiEditor === "lab"} onClose={() => {if (!busy) setUiEditor("");}}
+     size="compact" title={tr("Register External Laboratory", "تسجيل مختبر خارجي")}
+     description={tr("External labs need governed identities and branch-scoped contracts.", "تحتاج المختبرات الخارجية إلى هوية مضبوطة وعقود محددة النطاق.")}>
+     {uiEditor === "lab" && <form className="catalog-form" onSubmit={createLab}>
           <label>{tr("Code","الرمز")}<input name="code" required /></label>
           <label>{tr("Name (English)","الاسم بالإنجليزية")}<input name="nameEn" required /></label>
           <label>{tr("Name (Arabic)","الاسم بالعربية")}<input name="nameAr" dir="rtl" /></label>
@@ -154,12 +163,21 @@ export function SendOutManager({
           <label>{tr("Email","البريد الإلكتروني")}<input name="email" type="email" /></label>
           <label className="form-span">{tr("Address","العنوان")}<textarea name="address" rows={2} /></label>
           <button className="secondary-button form-span" disabled={busy === "lab"}>{busy === "lab" ? tr("Saving…","جارٍ الحفظ…") : tr("Add External Laboratory","إضافة مختبر خارجي")}</button>
-        </form>
+        </form>}
+     {uiEditor === "lab" && message && <p className="form-warning" role="status">{message}</p>}
+   </CrudModal>
       </article>
 
       <article className="detail-card">
         <h2>{tr("Create Send-out","إنشاء إحالة خارجية")}</h2>
-        <form className="catalog-form" onSubmit={createReferral}>
+        <button type="button" className="primary-button" disabled={Boolean(busy)}
+     onClick={() => { setMessage(""); setUiEditor("referral"); }}>
+     {tr("Create Send-out Referral", "إنشاء إحالة خارجية")}
+   </button>
+   <CrudModal open={uiEditor === "referral"} onClose={() => {if (!busy) setUiEditor("");}}
+     size="compact" title={tr("Create Send-out Referral", "إنشاء إحالة خارجية")}
+     description={tr("Review specimen barcode, custody and destination before creating a referral.", "راجع باركود العينة وسلسلة الحيازة والوجهة قبل إنشاء الإحالة.")}>
+     {uiEditor === "referral" && <form className="catalog-form" onSubmit={createReferral}>
           <label className="form-span">{tr("Ordered test / specimen","الفحص المطلوب / العينة")}<select value={candidateKey} onChange={event => setCandidateKey(event.target.value)} required>
             <option value="">{tr("Select…","اختر…")}</option>
             {candidates.map(item => <option key={item.key} value={item.key}>{item.label}</option>)}
@@ -174,7 +192,9 @@ export function SendOutManager({
           <label>{tr("Currency","العملة")}<input name="costCurrency" maxLength={3} placeholder="AED" /></label>
           <label className="form-span">{tr("Note","ملاحظة")}<input name="note" /></label>
           <button className="primary-button form-span" disabled={busy === "referral"}>{busy === "referral" ? tr("Creating…","جارٍ الإنشاء…") : tr("Create Send-out Referral","إنشاء إحالة خارجية")}</button>
-        </form>
+        </form>}
+     {uiEditor === "referral" && message && <p className="form-warning" role="status">{message}</p>}
+   </CrudModal>
       </article>
     </section>}
 
