@@ -4,6 +4,7 @@ import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { statusLabel as sharedStatusLabel } from "@/lib/ui-i18n";
 import { StaffStepUpDialog, type StepUpPurpose } from "@/components/staff-step-up-dialog";
+import { CrudModal } from "@/components/crud-modal";
 
 type Communication = {
   id: string;
@@ -141,6 +142,7 @@ export function ResultWorkflowActions({
 
   async function submitCommunication(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (busy || !canLogCriticalNow) return;
     const form = new FormData(event.currentTarget);
     setBusy("communication");
     setMessage("");
@@ -244,13 +246,10 @@ export function ResultWorkflowActions({
 
   async function returnFromMedicalValidation(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (busy || !pendingMedical || !canMedicalValidate) return;
     const form = new FormData(event.currentTarget);
     const reason = String(form.get("reason") || "").trim();
     if (!reason) return;
-    if (!confirm(tr(
-      "Return this result for correction? The medical return and reason will remain in validation history.",
-      "إعادة هذه النتيجة للتصحيح؟ ستبقى عملية الإعادة وسببها محفوظتين في سجل التحقق.",
-    ))) return;
 
     setBusy("medical-return");
     setMessage("");
@@ -298,11 +297,11 @@ export function ResultWorkflowActions({
 
   async function startAmendment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (busy || resultStatus !== "RELEASED" || !canAmend) return;
     const form = new FormData(event.currentTarget);
     const reason = String(form.get("reason") || "").trim();
     if (!reason) return;
 
-    if (!confirm(tr("Start an amendment? The released result will remain preserved while a new version is prepared.", "بدء تعديل؟ ستبقى النتيجة الصادرة محفوظة بينما يتم إعداد إصدار جديد."))) return;
 
     setPendingAmendmentReason(reason);
     setStepUpPending("RESULT_AMEND");
@@ -398,14 +397,24 @@ export function ResultWorkflowActions({
     {resultStatus === "VERIFIED" && validationStage === "COMPLETE" && !criticalAcknowledged &&
       <p className="form-error">{tr("Release is blocked until the critical result is communicated and acknowledgement is documented.", "الإصدار محظور حتى يتم التواصل بشأن النتيجة الحرجة وتوثيق الإقرار.")}</p>}
 
-    {showMedicalReturn && <form className="catalog-form result-workflow-form" onSubmit={returnFromMedicalValidation}>
+    <CrudModal open={showMedicalReturn} onClose={() => { if (!busy) setShowMedicalReturn(false); }}
+      size="compact"
+      title={tr("Return Result for Technical Correction", "إعادة النتيجة للمراجعة الفنية")}
+      description={tr("This governed medical return is recorded in validation history and requires a documented reason. It does not delete the earlier result.", "تُوثق الإعادة الطبية في تاريخ التحقق ويجب تقديم سبب؛ لا يتم حذف النتيجة السابقة.")}>
+      {showMedicalReturn && <form className="catalog-form result-workflow-form" onSubmit={returnFromMedicalValidation}>
       <label className="form-span">{tr("Return reason", "سبب الإعادة")}
         <textarea name="reason" rows={3} required maxLength={1000} placeholder={tr("Explain why the result must be corrected and technically reviewed again…", "وضح سبب الحاجة إلى تصحيح النتيجة وإعادة مراجعتها فنياً…")} />
       </label>
       <button className="secondary-button form-span" disabled={busy === "medical-return"}>{busy === "medical-return" ? tr("Returning…", "جارٍ الإعادة…") : tr("Return to Technical Review", "إعادة إلى المراجعة الفنية")}</button>
     </form>}
+      {showMedicalReturn && message && <p role="status" className="form-warning">{message}</p>}
+    </CrudModal>
 
-    {showCommunication && <form className="catalog-form result-workflow-form" onSubmit={submitCommunication}>
+    <CrudModal open={showCommunication} onClose={() => { if (!busy) setShowCommunication(false); }}
+      size="compact"
+      title={tr("Log Critical Result Communication", "توثيق التواصل بشأن نتيجة حرجة")}
+      description={tr("Document the actual recipient, method, outcome and read-back. Do not claim acknowledgement until independently confirmed.", "وثّق المستلم وطريقة التواصل والنتيجة وإعادة القراءة الفعلية؛ لا تسجل الإقرار قبل التأكد منه.")}>
+      {showCommunication && <form className="catalog-form result-workflow-form" onSubmit={submitCommunication}>
       <label>{tr("Method", "الطريقة")}
         <select name="method" required defaultValue="PHONE">
           <option value="PHONE">{methodLabel("PHONE")}</option><option value="VERBAL">{methodLabel("VERBAL")}</option><option value="EMAIL">{methodLabel("EMAIL")}</option><option value="SMS">{methodLabel("SMS")}</option><option value="WHATSAPP">{methodLabel("WHATSAPP")}</option><option value="OTHER">{methodLabel("OTHER")}</option>
@@ -424,13 +433,21 @@ export function ResultWorkflowActions({
       <label className="form-span">{tr("Notes", "ملاحظات")}<textarea name="notes" rows={2} /></label>
       <button className="primary-button form-span" disabled={busy === "communication"}>{busy === "communication" ? tr("Saving…", "جارٍ الحفظ…") : tr("Save Communication", "حفظ التواصل")}</button>
     </form>}
+      {showCommunication && message && <p role="status" className="form-warning">{message}</p>}
+    </CrudModal>
 
-    {showAmendment && <form className="catalog-form result-workflow-form" onSubmit={startAmendment}>
+    <CrudModal open={showAmendment} onClose={() => { if (!busy) setShowAmendment(false); }}
+      size="compact"
+      title={tr("Start Released Result Amendment", "بدء إصدار تعديل للنتيجة الصادرة")}
+      description={tr("A released result and report are never overwritten. This operation requires a reason and a fresh independent staff step-up; the prior version is preserved.", "لا تُستبدل النتائج والتقارير الصادرة؛ يلزم سبب موثق وتحقق موظف إضافي جديد، وتبقى النسخة السابقة محفوظة.")}>
+      {showAmendment && <form className="catalog-form result-workflow-form" onSubmit={startAmendment}>
       <label className="form-span">{tr("Amendment reason", "سبب التعديل")}
         <textarea name="reason" rows={3} required maxLength={1000} placeholder={tr("Reason for correcting the released result…", "سبب تصحيح النتيجة الصادرة…")} />
       </label>
       <button className="primary-button form-span" disabled={busy === "amend"}>{busy === "amend" ? tr("Creating…", "جارٍ الإنشاء…") : tr("Create Amendment Version", "إنشاء إصدار تعديل")}</button>
     </form>}
+      {showAmendment && message && <p role="status" className="form-warning">{message}</p>}
+    </CrudModal>
 
     {validationReviews.length > 0 && <details className="specimen-history">
       <summary>{tr("Validation history", "سجل التحقق")} ({validationReviews.length})</summary>
