@@ -20,7 +20,9 @@ test("UI gate #265: three sensitive configuration editors use explicit compact m
     assert.match(source, /role="alert"/, name);
     assert.match(source, /router\.refresh\(\)/, name);
   }
-  assert.match(css, /\.crud-modal-compact \.catalog-form\{grid-template-columns:minmax\(0,1fr\)\}/);
+  assert.ok(css.includes(".crud-modal-compact .catalog-form,"));
+  assert.ok(css.includes(".crud-modal-compact .form-grid,"));
+  assert.ok(css.includes(".crud-modal-compact .admin-grid{grid-template-columns:minmax(0,1fr)}"));
 });
 
 test("UI gate #265: specimen create/edit use unique modal forms and preserve API audit endpoints", () => {
