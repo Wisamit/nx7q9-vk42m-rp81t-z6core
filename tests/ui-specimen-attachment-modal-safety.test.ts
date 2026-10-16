@@ -68,7 +68,7 @@ test("Issue #265: specimen reception, scope-specific rejection and disposal are 
   assert.ok(specimen.includes('import { CrudModal } from "@/components/crud-modal"'));
   assert.ok(specimen.includes("open={mode !== null}"));
   assert.ok(specimen.includes('size="compact"'));
-  assert.ok(specimen.includes("Barcode: " + "barcode"));
+  assert.ok(specimen.includes('"Barcode: " + barcode'));
   assert.ok(specimen.includes("if (!busy) { setMode(null)"));
   assert.ok(specimen.includes('if (!mode || busy) return;'));
   assert.ok(specimen.includes('mode && <form className="catalog-form specimen-action-form"'));
