@@ -42,63 +42,80 @@ export function ClinicalRulesManager({
 
   async function createDelta(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (busy) return;
     const form = new FormData(event.currentTarget);
-    setBusy("delta"); setMessage("");
-    const response = await fetch("/api/clinical-rules/delta", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        testId: form.get("testId"),
-        componentId: form.get("componentId"),
-        branchId: form.get("branchId"),
-        methodId: form.get("methodId"),
-        absoluteLimit: form.get("absoluteLimit"),
-        percentLimit: form.get("percentLimit"),
-        lookbackDays: form.get("lookbackDays"),
-        effectiveFrom: form.get("effectiveFrom"),
-        effectiveTo: form.get("effectiveTo"),
-      }),
-    });
-    if (response.ok) {
+    setBusy("delta");
+    setFormError("");
+    try {
+      const response = await fetch("/api/clinical-rules/delta", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          testId: form.get("testId"),
+          componentId: form.get("componentId"),
+          branchId: form.get("branchId"),
+          methodId: form.get("methodId"),
+          absoluteLimit: form.get("absoluteLimit"),
+          percentLimit: form.get("percentLimit"),
+          lookbackDays: form.get("lookbackDays"),
+          effectiveFrom: form.get("effectiveFrom"),
+          effectiveTo: form.get("effectiveTo"),
+        }),
+      });
+      if (!response.ok) {
+        const detail = await response.json().catch(() => ({})) as { error?: string };
+        setFormError(tr("Could not create delta rule.", "تعذر إنشاء قاعدة الفرق.") +
+          (detail.error ? " (" + detail.error + ")" : ""));
+        return;
+      }
       setMessage(tr("Delta rule draft created. Approval is required before clinical use.", "تم إنشاء مسودة قاعدة Delta. يلزم اعتمادها قبل الاستخدام السريري."));
-      event.currentTarget.reset();
+      setOpen("");
       setDeltaTestId("");
       router.refresh();
-    } else setMessage(tr("Could not create delta rule.", "تعذر إنشاء قاعدة الفرق."));
-    setBusy("");
+    } catch {
+      setFormError(tr("Connection error. The draft was not confirmed as saved.", "خطأ في الاتصال. لم يتم تأكيد حفظ المسودة."));
+    } finally {
+      setBusy("");
+    }
   }
-
   async function createComment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (busy) return;
     const form = new FormData(event.currentTarget);
-    setBusy("comment"); setMessage("");
-    const response = await fetch("/api/clinical-rules/comments", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        scope: commentScope,
-        testId: form.get("testId"),
-        componentId: form.get("componentId"),
-        code: form.get("code"),
-        nameEn: form.get("nameEn"),
-        nameAr: form.get("nameAr"),
-        textEn: form.get("textEn"),
-        textAr: form.get("textAr"),
-      }),
-    });
-    if (response.ok) {
+    setBusy("comment");
+    setFormError("");
+    try {
+      const response = await fetch("/api/clinical-rules/comments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          scope: commentScope,
+          testId: form.get("testId"),
+          componentId: form.get("componentId"),
+          code: form.get("code"),
+          nameEn: form.get("nameEn"),
+          nameAr: form.get("nameAr"),
+          textEn: form.get("textEn"),
+          textAr: form.get("textAr"),
+        }),
+      });
+      if (!response.ok) {
+        const detail = await response.json().catch(() => ({})) as { error?: string };
+        setFormError(tr("Could not create comment draft.", "تعذر إنشاء قالب التعليق.") +
+          (detail.error ? " (" + detail.error + ")" : ""));
+        return;
+      }
       setMessage(tr("Inactive comment draft saved. A different authorized reviewer must approve it in Comment Approvals before clinical use.", "تم حفظ قالب التعليق غير مفعّل. يجب اعتماده من مراجع سريري آخر عبر قائمة اعتماد التعليقات قبل استخدامه."));
-      event.currentTarget.reset();
+      setOpen("");
       setCommentScope("ORGANIZATION");
-      setCommentTestId("");
+            setCommentTestId("");
       router.refresh();
-    } else {
-      const detail = await response.json().catch(() => ({})) as { error?: string };
-      setMessage(tr("Could not create comment draft: ", "تعذر إنشاء قالب التعليق: ") + (detail.error || "unknown_error"));
+    } catch {
+      setFormError(tr("Connection error. The draft was not confirmed as saved.", "خطأ في الاتصال. لم يتم تأكيد حفظ المسودة."));
+    } finally {
+      setBusy("");
     }
-    setBusy("");
   }
-
   return <div className="detail-grid">
     <article className="detail-card">
       <h2>{tr("Create Delta Rule", "إنشاء قاعدة مقارنة سابقة")}</h2>
