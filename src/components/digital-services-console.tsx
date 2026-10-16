@@ -359,8 +359,8 @@ export function DigitalServicesConsole({
         <label>{tr("Corporate client", "عميل الشركة")}<select name="clientId" required defaultValue=""><option value="">{tr("Select…", "اختر…")}</option>{clients.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
         <label>{tr("Patient", "المريض")}<select name="patientId" required defaultValue=""><option value="">{tr("Select…", "اختر…")}</option>{patients.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
         <label>{tr("Employee number", "رقم الموظف")}<input name="employeeNumber" /></label>
-        <label>{tr("Effective from", "ساري من")}<SystemDateField name="effectiveFrom"  required /></label>
-        <label>{tr("Effective to", "ساري حتى")}<SystemDateField name="effectiveTo"  /></label>
+        <label>{tr("Effective from", "ساري من")}<SystemDateField name="effectiveFrom" required /></label>
+        <label>{tr("Effective to", "ساري حتى")}<SystemDateField name="effectiveTo" /></label>
         <label><input name="canBook" type="checkbox" defaultChecked /> {tr("Can book", "يمكنه الحجز")}</label>
         <label><input name="canViewReports" type="checkbox" /> {tr("Can view reports", "يمكنه عرض التقارير")}</label>
         <button className="primary-button form-span" disabled={busy !== ""}>{busy === "corporate-access" ? tr("Saving…", "جارٍ الحفظ…") : tr("Add Corporate Access", "إضافة صلاحية شركة")}</button>
