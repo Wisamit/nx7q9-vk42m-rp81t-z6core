@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
+import { CrudModal } from "@/components/crud-modal";
 
 type Option = { id: string; code: string; nameEn: string; nameAr?: string | null };
 type Branch = { id: string; code: string; nameEn: string; nameAr?: string | null };
@@ -19,73 +20,100 @@ export function AutoverificationValidationManager({
   const [condition, setCondition] = useState("ALWAYS");
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
+  const [formError, setFormError] = useState("");
+  const [open, setOpen] = useState("");
   const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
   const localizedName = (item: { nameEn: string; nameAr?: string | null }) => locale === "ar" ? item.nameAr || item.nameEn : item.nameEn;
 
   async function createPolicy(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (busy) return;
     const form = new FormData(event.currentTarget);
     setBusy("policy");
-    setMessage("");
-
-    const response = await fetch("/api/clinical-rules/autoverification", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        testId: form.get("testId"),
-        branchId: form.get("branchId"),
-        enabled: form.get("enabled") === "on",
-        allowManual: form.get("allowManual") === "on",
-        allowAnalyzer: form.get("allowAnalyzer") === "on",
-        allowImport: form.get("allowImport") === "on",
-        requireAllFlagsNormal: form.get("requireAllFlagsNormal") === "on",
-        effectiveFrom: form.get("effectiveFrom"),
-        effectiveTo: form.get("effectiveTo"),
-      }),
-    });
-    setMessage(response.ok ? tr("Autoverification policy draft created. Approval is required before it can verify results.", "تم إنشاء مسودة سياسة التحقق الآلي. يلزم اعتمادها قبل أن تتمكن من التحقق من النتائج.") : tr("Could not create autoverification policy.", "تعذر إنشاء سياسة التحقق الآلي."));
-    setBusy("");
-    if (response.ok) {
-      event.currentTarget.reset();
+    setFormError("");
+    try {
+      const response = await fetch("/api/clinical-rules/autoverification", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          testId: form.get("testId"),
+          branchId: form.get("branchId"),
+          enabled: form.get("enabled") === "on",
+          allowManual: form.get("allowManual") === "on",
+          allowAnalyzer: form.get("allowAnalyzer") === "on",
+          allowImport: form.get("allowImport") === "on",
+          requireAllFlagsNormal: form.get("requireAllFlagsNormal") === "on",
+          effectiveFrom: form.get("effectiveFrom"),
+          effectiveTo: form.get("effectiveTo"),
+        }),
+      });
+      if (!response.ok) {
+        const detail = await response.json().catch(() => ({})) as { error?: string };
+        setFormError(tr("Could not create autoverification policy.", "تعذر إنشاء سياسة التحقق الآلي.") +
+          (detail.error ? " (" + detail.error + ")" : ""));
+        return;
+      }
+      setMessage(tr("Autoverification policy draft created. Approval is required before it can verify results.", "تم إنشاء مسودة سياسة التحقق الآلي. يلزم اعتمادها قبل أن تتمكن من التحقق من النتائج."));
+      setOpen("");
       router.refresh();
+    } catch {
+      setFormError(tr("Connection error. The draft was not confirmed as saved.", "خطأ في الاتصال. لم يتم تأكيد حفظ المسودة."));
+    } finally {
+      setBusy("");
     }
   }
-
   async function createHold(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (busy) return;
     const form = new FormData(event.currentTarget);
     setBusy("hold");
-    setMessage("");
-
-    const response = await fetch("/api/clinical-rules/validation-holds", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        testId: form.get("testId"),
-        branchId: form.get("branchId"),
-        condition,
-        resultSource: condition === "RESULT_SOURCE" ? form.get("resultSource") : null,
-        severity: form.get("severity"),
-        reasonEn: form.get("reasonEn"),
-        reasonAr: form.get("reasonAr"),
-        effectiveFrom: form.get("effectiveFrom"),
-        effectiveTo: form.get("effectiveTo"),
-      }),
-    });
-    setMessage(response.ok ? tr("Validation hold rule draft created. Approval is required before it can block or warn.", "تم إنشاء مسودة قاعدة إيقاف التحقق. يلزم اعتمادها قبل أن تتمكن من الحظر أو التحذير.") : tr("Could not create validation hold rule.", "تعذر إنشاء قاعدة إيقاف التحقق."));
-    setBusy("");
-    if (response.ok) {
-      event.currentTarget.reset();
+    setFormError("");
+    try {
+      const response = await fetch("/api/clinical-rules/validation-holds", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          testId: form.get("testId"),
+          branchId: form.get("branchId"),
+          condition,
+          resultSource: condition === "RESULT_SOURCE" ? form.get("resultSource") : null,
+          severity: form.get("severity"),
+          reasonEn: form.get("reasonEn"),
+          reasonAr: form.get("reasonAr"),
+          effectiveFrom: form.get("effectiveFrom"),
+          effectiveTo: form.get("effectiveTo"),
+        }),
+      });
+      if (!response.ok) {
+        const detail = await response.json().catch(() => ({})) as { error?: string };
+        setFormError(tr("Could not create validation hold rule.", "تعذر إنشاء قاعدة إيقاف التحقق.") +
+          (detail.error ? " (" + detail.error + ")" : ""));
+        return;
+      }
+      setMessage(tr("Validation hold rule draft created. Approval is required before it can block or warn.", "تم إنشاء مسودة قاعدة إيقاف التحقق. يلزم اعتمادها قبل أن تتمكن من الحظر أو التحذير."));
+      setOpen("");
       setCondition("ALWAYS");
       router.refresh();
+    } catch {
+      setFormError(tr("Connection error. The draft was not confirmed as saved.", "خطأ في الاتصال. لم يتم تأكيد حفظ المسودة."));
+    } finally {
+      setBusy("");
     }
   }
-
   return <section className="detail-grid detail-section">
     <article className="detail-card">
       <h2>{tr("Create Autoverification Policy", "إنشاء سياسة تحقق آلي")}</h2>
       <p className="muted">{tr("Autoverification stops at VERIFIED. Critical values, exceeded delta checks, pending reflex recommendations and blocking holds are mandatory hard stops.", "يتوقف التحقق الآلي عند حالة VERIFIED. القيم الحرجة وتجاوزات Delta والتوصيات الانعكاسية المعلقة وحالات الحظر هي نقاط توقف إلزامية.")}</p>
-      <form className="catalog-form" onSubmit={createPolicy}>
+      <button type="button" className="primary-button" disabled={Boolean(busy)}
+        onClick={() => { setMessage(""); setFormError(""); setOpen("policy"); }}>
+        {tr("Create Autoverification Policy Draft", "إنشاء مسودة سياسة تحقق آلي")}
+      </button>
+      <CrudModal open={open === "policy"}
+        onClose={() => { if (!busy) setOpen(""); }}
+        size="compact"
+        title={tr("Create Autoverification Policy Draft", "إنشاء مسودة سياسة تحقق آلي")}
+        description={tr("A draft cannot release results or bypass critical, QC, delta, reflex or hold gates.", "المسودة لا تصدر نتائج ولا تتجاوز بوابات النتائج الحرجة وضبط الجودة وDelta وReflex والحظر.")}>
+        {open === "policy" && <form className="catalog-form" onSubmit={createPolicy}>
         <label>{tr("Test", "الفحص")}<select name="testId" required defaultValue="">
           <option value="">{tr("Select test…", "اختر الفحص…")}</option>
           {tests.map(test => <option key={test.id} value={test.id}>{test.code} — {localizedName(test)}</option>)}
@@ -102,13 +130,24 @@ export function AutoverificationValidationManager({
         <label>{tr("Effective from", "ساري من")}<input name="effectiveFrom" type="date" defaultValue={new Date().toISOString().slice(0,10)} required /></label>
         <label>{tr("Effective to", "ساري حتى")}<input name="effectiveTo" type="date" /></label>
         <button className="primary-button form-span" disabled={busy === "policy"}>{busy === "policy" ? tr("Saving…", "جارٍ الحفظ…") : tr("Create Autoverification Policy Draft", "إنشاء مسودة سياسة التحقق الآلي")}</button>
-      </form>
+        {formError && <p className="form-error form-span" role="alert">{formError}</p>}
+      </form>}
+      </CrudModal>
     </article>
 
     <article className="detail-card">
       <h2>{tr("Create Validation Hold Rule", "إنشاء قاعدة إيقاف التحقق")}</h2>
       <p className="muted">{tr("Blocking holds stop verification until an authorized reviewer resolves them with a documented note. Warning holds remain visible but do not block.", "حالات الحظر توقف التحقق حتى يعالجها مراجع مخول مع ملاحظة موثقة، بينما تبقى التحذيرات ظاهرة من دون منع التحقق.")}</p>
-      <form className="catalog-form" onSubmit={createHold}>
+      <button type="button" className="primary-button" disabled={Boolean(busy)}
+        onClick={() => { setMessage(""); setFormError(""); setOpen("hold"); }}>
+        {tr("Create Validation Hold Draft", "إنشاء مسودة قاعدة إيقاف تحقق")}
+      </button>
+      <CrudModal open={open === "hold"}
+        onClose={() => { if (!busy) setOpen(""); }}
+        size="compact"
+        title={tr("Create Validation Hold Draft", "إنشاء مسودة قاعدة إيقاف تحقق")}
+        description={tr("The rule remains a draft until authorized approval; blocking and warning are reviewed separately.", "تبقى القاعدة مسودة حتى الاعتماد المخوّل، وتراجع حالات الحظر والتحذير بشكل مستقل.")}>
+        {open === "hold" && <form className="catalog-form" onSubmit={createHold}>
         <label>{tr("Test", "الفحص")}<select name="testId" required defaultValue="">
           <option value="">{tr("Select test…", "اختر الفحص…")}</option>
           {tests.map(test => <option key={test.id} value={test.id}>{test.code} — {localizedName(test)}</option>)}
@@ -139,7 +178,9 @@ export function AutoverificationValidationManager({
         <label>{tr("Effective from", "ساري من")}<input name="effectiveFrom" type="date" defaultValue={new Date().toISOString().slice(0,10)} required /></label>
         <label>{tr("Effective to", "ساري حتى")}<input name="effectiveTo" type="date" /></label>
         <button className="primary-button form-span" disabled={busy === "hold"}>{busy === "hold" ? tr("Saving…", "جارٍ الحفظ…") : tr("Create Validation Hold Rule Draft", "إنشاء مسودة قاعدة إيقاف التحقق")}</button>
-      </form>
+        {formError && <p className="form-error form-span" role="alert">{formError}</p>}
+      </form>}
+      </CrudModal>
     </article>
 
     {message && <div className="form-success form-span">{message}</div>}

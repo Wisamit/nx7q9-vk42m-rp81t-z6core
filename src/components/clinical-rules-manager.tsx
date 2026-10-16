@@ -2,6 +2,7 @@
 
 import { FormEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { CrudModal } from "@/components/crud-modal";
 
 type Branch = { id: string; code: string; nameEn: string; nameAr?: string | null };
 type Method = { id: string; code: string; nameEn: string; nameAr?: string | null };
@@ -25,6 +26,8 @@ export function ClinicalRulesManager({
   const [commentScope, setCommentScope] = useState("ORGANIZATION");
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
+  const [formError, setFormError] = useState("");
+  const [open, setOpen] = useState("");
   const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
   const localizedName = (item: { nameEn: string; nameAr?: string | null }) => locale === "ar" ? item.nameAr || item.nameEn : item.nameEn;
 
@@ -39,68 +42,94 @@ export function ClinicalRulesManager({
 
   async function createDelta(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (busy) return;
     const form = new FormData(event.currentTarget);
-    setBusy("delta"); setMessage("");
-    const response = await fetch("/api/clinical-rules/delta", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        testId: form.get("testId"),
-        componentId: form.get("componentId"),
-        branchId: form.get("branchId"),
-        methodId: form.get("methodId"),
-        absoluteLimit: form.get("absoluteLimit"),
-        percentLimit: form.get("percentLimit"),
-        lookbackDays: form.get("lookbackDays"),
-        effectiveFrom: form.get("effectiveFrom"),
-        effectiveTo: form.get("effectiveTo"),
-      }),
-    });
-    if (response.ok) {
+    setBusy("delta");
+    setFormError("");
+    try {
+      const response = await fetch("/api/clinical-rules/delta", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          testId: form.get("testId"),
+          componentId: form.get("componentId"),
+          branchId: form.get("branchId"),
+          methodId: form.get("methodId"),
+          absoluteLimit: form.get("absoluteLimit"),
+          percentLimit: form.get("percentLimit"),
+          lookbackDays: form.get("lookbackDays"),
+          effectiveFrom: form.get("effectiveFrom"),
+          effectiveTo: form.get("effectiveTo"),
+        }),
+      });
+      if (!response.ok) {
+        const detail = await response.json().catch(() => ({})) as { error?: string };
+        setFormError(tr("Could not create delta rule.", "تعذر إنشاء قاعدة الفرق.") +
+          (detail.error ? " (" + detail.error + ")" : ""));
+        return;
+      }
       setMessage(tr("Delta rule draft created. Approval is required before clinical use.", "تم إنشاء مسودة قاعدة Delta. يلزم اعتمادها قبل الاستخدام السريري."));
-      event.currentTarget.reset();
+      setOpen("");
       setDeltaTestId("");
       router.refresh();
-    } else setMessage(tr("Could not create delta rule.", "تعذر إنشاء قاعدة الفرق."));
-    setBusy("");
+    } catch {
+      setFormError(tr("Connection error. The draft was not confirmed as saved.", "خطأ في الاتصال. لم يتم تأكيد حفظ المسودة."));
+    } finally {
+      setBusy("");
+    }
   }
-
   async function createComment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (busy) return;
     const form = new FormData(event.currentTarget);
-    setBusy("comment"); setMessage("");
-    const response = await fetch("/api/clinical-rules/comments", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        scope: commentScope,
-        testId: form.get("testId"),
-        componentId: form.get("componentId"),
-        code: form.get("code"),
-        nameEn: form.get("nameEn"),
-        nameAr: form.get("nameAr"),
-        textEn: form.get("textEn"),
-        textAr: form.get("textAr"),
-      }),
-    });
-    if (response.ok) {
+    setBusy("comment");
+    setFormError("");
+    try {
+      const response = await fetch("/api/clinical-rules/comments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          scope: commentScope,
+          testId: form.get("testId"),
+          componentId: form.get("componentId"),
+          code: form.get("code"),
+          nameEn: form.get("nameEn"),
+          nameAr: form.get("nameAr"),
+          textEn: form.get("textEn"),
+          textAr: form.get("textAr"),
+        }),
+      });
+      if (!response.ok) {
+        const detail = await response.json().catch(() => ({})) as { error?: string };
+        setFormError(tr("Could not create comment draft.", "تعذر إنشاء قالب التعليق.") +
+          (detail.error ? " (" + detail.error + ")" : ""));
+        return;
+      }
       setMessage(tr("Inactive comment draft saved. A different authorized reviewer must approve it in Comment Approvals before clinical use.", "تم حفظ قالب التعليق غير مفعّل. يجب اعتماده من مراجع سريري آخر عبر قائمة اعتماد التعليقات قبل استخدامه."));
-      event.currentTarget.reset();
+      setOpen("");
       setCommentScope("ORGANIZATION");
-      setCommentTestId("");
+            setCommentTestId("");
       router.refresh();
-    } else {
-      const detail = await response.json().catch(() => ({})) as { error?: string };
-      setMessage(tr("Could not create comment draft: ", "تعذر إنشاء قالب التعليق: ") + (detail.error || "unknown_error"));
+    } catch {
+      setFormError(tr("Connection error. The draft was not confirmed as saved.", "خطأ في الاتصال. لم يتم تأكيد حفظ المسودة."));
+    } finally {
+      setBusy("");
     }
-    setBusy("");
   }
-
   return <div className="detail-grid">
     <article className="detail-card">
       <h2>{tr("Create Delta Rule", "إنشاء قاعدة مقارنة سابقة")}</h2>
       <p className="muted">{tr("Compare a new numeric result against the patient's prior released value. Exceeding either configured threshold is flagged for review.", "تقارن النتيجة الرقمية الجديدة بآخر نتيجة صادرة للمريض، ويؤدي تجاوز أي حد مُهيأ إلى وضع علامة للمراجعة.")}</p>
-      <form className="catalog-form" onSubmit={createDelta}>
+      <button type="button" className="primary-button" disabled={Boolean(busy)}
+        onClick={() => { setMessage(""); setFormError(""); setOpen("delta"); }}>
+        {tr("Create Delta Rule Draft", "إنشاء مسودة قاعدة مقارنة سابقة")}
+      </button>
+      <CrudModal open={open === "delta"}
+        onClose={() => { if (!busy) setOpen(""); }}
+        size="compact"
+        title={tr("Create Delta Rule Draft", "إنشاء مسودة قاعدة مقارنة سابقة")}
+        description={tr("Draft only: clinical approval is required before the rule can affect result review.", "مسودة فقط: يلزم الاعتماد السريري قبل أن تؤثر القاعدة على مراجعة النتائج.")}>
+        {open === "delta" && <form className="catalog-form" onSubmit={createDelta}>
         <label>{tr("Test", "الفحص")}<select name="testId" required value={deltaTestId} onChange={e => setDeltaTestId(e.target.value)}>
           <option value="">{tr("Select test…", "اختر الفحص…")}</option>
           {tests.map(test => <option key={test.id} value={test.id}>{test.code} — {localizedName(test)}</option>)}
@@ -117,12 +146,23 @@ export function ClinicalRulesManager({
         <label>{tr("Effective from", "ساري من")}<input name="effectiveFrom" type="date" defaultValue={new Date().toISOString().slice(0,10)} required /></label>
         <label>{tr("Effective to", "ساري حتى")}<input name="effectiveTo" type="date" /></label>
         <button className="primary-button form-span" disabled={busy === "delta"}>{busy === "delta" ? tr("Saving…", "جارٍ الحفظ…") : tr("Create Delta Rule Draft", "إنشاء مسودة قاعدة الفرق")}</button>
-      </form>
+        {formError && <p className="form-error form-span" role="alert">{formError}</p>}
+      </form>}
+      </CrudModal>
     </article>
 
     <article className="detail-card">
       <h2>{tr("Create Result Comment Template", "إنشاء قالب تعليق للنتيجة")}</h2>
-      <form className="catalog-form" onSubmit={createComment}>
+      <button type="button" className="primary-button" disabled={Boolean(busy)}
+        onClick={() => { setMessage(""); setFormError(""); setOpen("comment"); }}>
+        {tr("Create Result Comment Draft", "إنشاء مسودة قالب تعليق")}
+      </button>
+      <CrudModal open={open === "comment"}
+        onClose={() => { if (!busy) setOpen(""); }}
+        size="compact"
+        title={tr("Create Result Comment Draft", "إنشاء مسودة قالب تعليق")}
+        description={tr("New comments remain inactive until a different authorized reviewer approves them.", "تبقى التعليقات الجديدة غير مفعّلة حتى يعتمدها مراجع مخوّل آخر.")}>
+        {open === "comment" && <form className="catalog-form" onSubmit={createComment}>
         <label>{tr("Scope", "النطاق")}<select value={commentScope} onChange={e => setCommentScope(e.target.value)}>
           <option value="ORGANIZATION">{tr("Organization", "المؤسسة")}</option>
           <option value="TEST">{tr("Test", "الفحص")}</option>
@@ -138,7 +178,9 @@ export function ClinicalRulesManager({
         <label className="form-span">{tr("Comment (English)", "التعليق بالإنجليزية")}<textarea name="textEn" rows={3} required /></label>
         <label className="form-span">{tr("Comment (Arabic)", "التعليق بالعربية")}<textarea name="textAr" rows={3} dir="rtl" /></label>
         <button className="primary-button form-span" disabled={busy === "comment"}>{busy === "comment" ? tr("Saving…", "جارٍ الحفظ…") : tr("Create Comment Template", "إنشاء قالب التعليق")}</button>
-      </form>
+        {formError && <p className="form-error form-span" role="alert">{formError}</p>}
+      </form>}
+      </CrudModal>
     </article>
     {message && <div className="form-success form-span">{message}</div>}
   </div>;

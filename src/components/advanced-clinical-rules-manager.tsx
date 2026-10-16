@@ -2,6 +2,7 @@
 
 import { FormEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { CrudModal } from "@/components/crud-modal";
 
 type Branch = { id: string; code: string; nameEn: string; nameAr?: string | null };
 type ComponentOption = { id: string; code: string; nameEn: string; nameAr?: string | null; resultType: string };
@@ -16,6 +17,8 @@ export function AdvancedClinicalRulesManager({ tests, branches, locale }: { test
   const [operator, setOperator] = useState("GT");
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
+  const [formError, setFormError] = useState("");
+  const [open, setOpen] = useState("");
   const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
   const localizedName = (item: { nameEn: string; nameAr?: string | null }) => locale === "ar" ? item.nameAr || item.nameEn : item.nameEn;
 
@@ -29,63 +32,96 @@ export function AdvancedClinicalRulesManager({ tests, branches, locale }: { test
 
   async function createCalculated(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (busy) return;
     const form = new FormData(event.currentTarget);
-    setBusy("calculated"); setMessage("");
-    const response = await fetch("/api/clinical-rules/calculated", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        testId: form.get("testId"),
-        targetComponentId: form.get("targetComponentId"),
-        expression: form.get("expression"),
-        decimalPrecision: form.get("decimalPrecision"),
-        effectiveFrom: form.get("effectiveFrom"),
-        effectiveTo: form.get("effectiveTo"),
-      }),
-    });
-    setMessage(response.ok ? tr("Calculated result rule draft created. Approval is required before clinical use.", "تم إنشاء مسودة قاعدة النتيجة المحسوبة. يلزم اعتمادها قبل الاستخدام السريري.") : tr("Could not create calculated result rule.", "تعذر إنشاء قاعدة النتيجة المحسوبة."));
-    setBusy("");
-    if (response.ok) { event.currentTarget.reset(); setCalcTestId(""); router.refresh(); }
-  }
-
-  async function createReflex(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    setBusy("reflex"); setMessage("");
-    const response = await fetch("/api/clinical-rules/reflex", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        sourceTestId: form.get("sourceTestId"),
-        sourceComponentId: form.get("sourceComponentId"),
-        branchId: form.get("branchId"),
-        operator,
-        numericThreshold: form.get("numericThreshold"),
-        textThreshold: form.get("textThreshold"),
-        targetTestId: form.get("targetTestId"),
-        noteEn: form.get("noteEn"),
-        noteAr: form.get("noteAr"),
-        effectiveFrom: form.get("effectiveFrom"),
-        effectiveTo: form.get("effectiveTo"),
-      }),
-    });
-    setMessage(response.ok ? tr("Reflex recommendation rule draft created. Approval is required before clinical use.", "تم إنشاء مسودة قاعدة التوصية الانعكاسية. يلزم اعتمادها قبل الاستخدام السريري.") : tr("Could not create reflex rule.", "تعذر إنشاء قاعدة التوصية الانعكاسية."));
-    setBusy("");
-    if (response.ok) {
-      event.currentTarget.reset();
-      setReflexSourceTestId("");
-      setReflexSourceComponentId("");
-      setReflexTargetTestId("");
-      setOperator("GT");
+    setBusy("calculated");
+    setFormError("");
+    try {
+      const response = await fetch("/api/clinical-rules/calculated", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          testId: form.get("testId"),
+          targetComponentId: form.get("targetComponentId"),
+          expression: form.get("expression"),
+          decimalPrecision: form.get("decimalPrecision"),
+          effectiveFrom: form.get("effectiveFrom"),
+          effectiveTo: form.get("effectiveTo"),
+        }),
+      });
+      if (!response.ok) {
+        const detail = await response.json().catch(() => ({})) as { error?: string };
+        setFormError(tr("Could not create calculated result rule.", "تعذر إنشاء قاعدة النتيجة المحسوبة.") +
+          (detail.error ? " (" + detail.error + ")" : ""));
+        return;
+      }
+      setMessage(tr("Calculated result rule draft created. Approval is required before clinical use.", "تم إنشاء مسودة قاعدة النتيجة المحسوبة. يلزم اعتمادها قبل الاستخدام السريري."));
+      setOpen("");
+      setCalcTestId("");
       router.refresh();
+    } catch {
+      setFormError(tr("Connection error. The draft was not confirmed as saved.", "خطأ في الاتصال. لم يتم تأكيد حفظ المسودة."));
+    } finally {
+      setBusy("");
     }
   }
-
+  async function createReflex(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (busy) return;
+    const form = new FormData(event.currentTarget);
+    setBusy("reflex");
+    setFormError("");
+    try {
+      const response = await fetch("/api/clinical-rules/reflex", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sourceTestId: form.get("sourceTestId"),
+          sourceComponentId: form.get("sourceComponentId"),
+          branchId: form.get("branchId"),
+          operator,
+          numericThreshold: form.get("numericThreshold"),
+          textThreshold: form.get("textThreshold"),
+          targetTestId: form.get("targetTestId"),
+          noteEn: form.get("noteEn"),
+          noteAr: form.get("noteAr"),
+          effectiveFrom: form.get("effectiveFrom"),
+          effectiveTo: form.get("effectiveTo"),
+        }),
+      });
+      if (!response.ok) {
+        const detail = await response.json().catch(() => ({})) as { error?: string };
+        setFormError(tr("Could not create reflex rule.", "تعذر إنشاء قاعدة التوصية الانعكاسية.") +
+          (detail.error ? " (" + detail.error + ")" : ""));
+        return;
+      }
+      setMessage(tr("Reflex recommendation rule draft created. Approval is required before clinical use.", "تم إنشاء مسودة قاعدة التوصية الانعكاسية. يلزم اعتمادها قبل الاستخدام السريري."));
+      setOpen("");
+      setReflexSourceTestId("");
+            setReflexSourceComponentId("");
+            setReflexTargetTestId("");
+            setOperator("GT");
+      router.refresh();
+    } catch {
+      setFormError(tr("Connection error. The draft was not confirmed as saved.", "خطأ في الاتصال. لم يتم تأكيد حفظ المسودة."));
+    } finally {
+      setBusy("");
+    }
+  }
   return <section className="detail-grid detail-section">
     <article className="detail-card">
       <h2>{tr("Create Calculated Result Rule", "إنشاء قاعدة نتيجة محسوبة")}</h2>
       <p className="muted">{tr("Uses a restricted arithmetic expression. Component codes are variables; arbitrary code execution is not allowed.", "تستخدم معادلة حسابية مقيدة، حيث تعمل رموز المكونات كمتغيرات، ولا يُسمح بتنفيذ كود عام.")}</p>
-      <form className="catalog-form" onSubmit={createCalculated}>
+      <button type="button" className="primary-button" disabled={Boolean(busy)}
+        onClick={() => { setMessage(""); setFormError(""); setOpen("calculated"); }}>
+        {tr("Create Calculated Rule Draft", "إنشاء مسودة قاعدة نتيجة محسوبة")}
+      </button>
+      <CrudModal open={open === "calculated"}
+        onClose={() => { if (!busy) setOpen(""); }}
+        size="compact"
+        title={tr("Create Calculated Rule Draft", "إنشاء مسودة قاعدة نتيجة محسوبة")}
+        description={tr("This restricted formula is created as a draft; approval is required for clinical use.", "تُنشأ المعادلة المقيدة كمسودة، ويلزم اعتمادها قبل الاستخدام السريري.")}>
+        {open === "calculated" && <form className="catalog-form" onSubmit={createCalculated}>
         <label>{tr("Test", "الفحص")}<select name="testId" required value={calcTestId} onChange={event => setCalcTestId(event.target.value)}>
           <option value="">{tr("Select test…", "اختر الفحص…")}</option>
           {tests.filter(test => test.components.length > 1).map(test => <option key={test.id} value={test.id}>{test.code} — {localizedName(test)}</option>)}
@@ -100,13 +136,24 @@ export function AdvancedClinicalRulesManager({ tests, branches, locale }: { test
         <label>{tr("Effective from", "ساري من")}<input name="effectiveFrom" type="date" defaultValue={new Date().toISOString().slice(0,10)} required /></label>
         <label>{tr("Effective to", "ساري حتى")}<input name="effectiveTo" type="date" /></label>
         <button className="primary-button form-span" disabled={busy === "calculated"}>{busy === "calculated" ? tr("Saving…", "جارٍ الحفظ…") : tr("Create Calculated Rule Draft", "إنشاء مسودة القاعدة المحسوبة")}</button>
-      </form>
+        {formError && <p className="form-error form-span" role="alert">{formError}</p>}
+      </form>}
+      </CrudModal>
     </article>
 
     <article className="detail-card">
       <h2>{tr("Create Reflex Recommendation Rule", "إنشاء قاعدة توصية انعكاسية")}</h2>
       <p className="muted">{tr("A matching result creates a recommendation for review. It does not automatically add or bill a new test.", "عند تحقق الشرط تُنشأ توصية للمراجعة فقط، ولا يُضاف أو يُفوتر فحص جديد تلقائيًا.")}</p>
-      <form className="catalog-form" onSubmit={createReflex}>
+      <button type="button" className="primary-button" disabled={Boolean(busy)}
+        onClick={() => { setMessage(""); setFormError(""); setOpen("reflex"); }}>
+        {tr("Create Reflex Recommendation Draft", "إنشاء مسودة توصية انعكاسية")}
+      </button>
+      <CrudModal open={open === "reflex"}
+        onClose={() => { if (!busy) setOpen(""); }}
+        size="compact"
+        title={tr("Create Reflex Recommendation Draft", "إنشاء مسودة توصية انعكاسية")}
+        description={tr("A reflex rule recommends review; it cannot automatically order or bill a test.", "توصي قاعدة Reflex بالمراجعة فقط ولا تطلب أو تفوتر فحصاً تلقائياً.")}>
+        {open === "reflex" && <form className="catalog-form" onSubmit={createReflex}>
         <label>{tr("Source test", "الفحص المصدر")}<select name="sourceTestId" required value={reflexSourceTestId} onChange={event => {
           setReflexSourceTestId(event.target.value);
           setReflexSourceComponentId("");
@@ -132,7 +179,9 @@ export function AdvancedClinicalRulesManager({ tests, branches, locale }: { test
         <label>{tr("Effective from", "ساري من")}<input name="effectiveFrom" type="date" defaultValue={new Date().toISOString().slice(0,10)} required /></label>
         <label>{tr("Effective to", "ساري حتى")}<input name="effectiveTo" type="date" /></label>
         <button className="primary-button form-span" disabled={busy === "reflex"}>{busy === "reflex" ? tr("Saving…", "جارٍ الحفظ…") : tr("Create Reflex Rule Draft", "إنشاء مسودة قاعدة التوصية")}</button>
-      </form>
+        {formError && <p className="form-error form-span" role="alert">{formError}</p>}
+      </form>}
+      </CrudModal>
     </article>
     {message && <div className="form-success form-span">{message}</div>}
   </section>;
