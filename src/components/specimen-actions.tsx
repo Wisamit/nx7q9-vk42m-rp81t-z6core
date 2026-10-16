@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
+import { CrudModal } from "@/components/crud-modal";
 
 type BranchOption = { id: string; code: string; nameEn: string };
 type OrderItemOption = { id: string; code: string; name: string };
@@ -102,11 +103,12 @@ export function SpecimenActions({
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!mode) return;
+    if (!mode || busy) return;
     const form = new FormData(event.currentTarget);
     setBusy(true);
     setMessage("");
 
+    try {
     const isReject = mode === "REJECT";
     const isDispose = mode === "DISPOSE";
     const endpoint = isDispose ? `/api/specimens/${specimenId}/dispose` : isReject
@@ -162,7 +164,14 @@ export function SpecimenActions({
     } else {
       setMessage(actionError(body));
     }
-    setBusy(false);
+    } catch {
+      setMessage(tr(
+        "Connection interrupted. Review specimen custody state before retrying.",
+        "انقطع الاتصال. راجع حالة العينة وسلسلة الحيازة قبل إعادة المحاولة.",
+      ));
+    } finally {
+      setBusy(false);
+    }
   }
 
   return <div className="specimen-actions">
@@ -183,6 +192,16 @@ export function SpecimenActions({
     {requirementsFinalized && collectionInstructions.length > 0 && status === "PLANNED" && <div className="muted"><strong>{tr("Collection instructions", "تعليمات الجمع")}:</strong> {collectionInstructions.join(" · ")}</div>}
     {message && <p className="form-success">{message}</p>}
 
+    <CrudModal open={mode !== null}
+      onClose={() => { if (!busy) { setMode(null); setRejectionScope("WHOLE_SPECIMEN"); } }}
+      size="compact"
+      title={mode === "RECEIVE" ? tr("Receive Specimen", "استلام العينة")
+        : mode === "REJECT" ? tr("Reject Specimen", "رفض العينة")
+        : tr("Dispose Rejected Specimen", "إتلاف العينة المرفوضة")}
+      description={tr(
+        "Barcode: " + barcode + ". Validate identity, branch custody and condition. This operation is audited and may affect test eligibility.",
+        "الباركود: " + barcode + ". تحقق من الهوية وحيازة الفرع وحالة العينة؛ الإجراء مدقق وقد يؤثر على أهلية الفحوص.",
+      )}>
     {mode && <form className="catalog-form specimen-action-form" onSubmit={submit}>
       <label className="form-span">{tr("Branch", "الفرع")}
         <select
@@ -246,11 +265,12 @@ export function SpecimenActions({
       </>}
 
       <div className="form-span specimen-form-actions">
-        <button className="secondary-button" type="button" onClick={() => { setMode(null); setRejectionScope("WHOLE_SPECIMEN"); }}>{tr("Cancel", "إلغاء")}</button>
         <button className={mode === "REJECT" ? "danger-button" : "primary-button"} disabled={busy || (mode === "REJECT" && rejectionReasons.length === 0)}>
           {busy ? tr("Saving…", "جارٍ الحفظ…") : tr(mode === "DISPOSE" ? "Dispose specimen" : mode, mode === "RECEIVE" ? "استلام" : mode === "DISPOSE" ? "التخلص من العينة" : "رفض")}
         </button>
       </div>
+      {message && <p className="form-error form-span" role="alert">{message}</p>}
     </form>}
+    </CrudModal>
   </div>;
 }
