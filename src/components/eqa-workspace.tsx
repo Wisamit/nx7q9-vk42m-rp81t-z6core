@@ -47,8 +47,6 @@ export function EqaWorkspace({locale,actorId,branches,programs,rounds,components
       }
       data.dueAt=parsed.toISOString();
     }
-    if(!confirm(tr("Confirm "+action.replaceAll("_"," ").toLowerCase()+"? This step is audited.",
-      "تأكيد العملية؟ سيتم تسجيلها في سجل التدقيق.")))return;
     setBusy(true);setMessage("");
     try {
       const response=await fetch("/api/quality/eqa",{
@@ -60,6 +58,7 @@ export function EqaWorkspace({locale,actorId,branches,programs,rounds,components
         setMessage(tr("Operation was not saved: ","لم تُحفظ العملية: ")+(result.error||"unknown_error"));
       }else{
         setMessage(tr("Saved and audited. Refreshing records.","تم الحفظ والتوثيق، جاري تحديث السجلات."));
+        setEditor("");
         form.reset();
         router.refresh();
       }
@@ -178,22 +177,52 @@ export function EqaWorkspace({locale,actorId,branches,programs,rounds,components
           <td><strong>{r.observations.length}</strong>
             <small className="table-subtext">{r.observations.filter(o=>o.assessment!==null).length} {tr("assessed","مُقيّمة")}</small></td>
           <td>
-            {canEnter&&r.status==="OPEN"&&<form onSubmit={e=>void send("SUBMIT_ROUND",e,{roundId:r.id})}
+            {canEnter&&r.status==="OPEN"&&<><button type="button" className="secondary-button" disabled={busy}
+   onClick={()=>{setMessage("");setEditor("submit:"+r.id);}}>
+   {tr("Submit EQA Measurements","تقديم قياسات التقييم الخارجي")}
+  </button>
+  <CrudModal open={editor==="submit:"+r.id} onClose={()=>{if(!busy)setEditor("");}}
+    title={tr("Submit EQA Measurements","تقديم قياسات التقييم الخارجي")}
+    description={tr("Submission freezes EQA measurements for independent assessment; include a documented reason.","يُثبّت التقديم قياسات التقييم للمراجعة المستقلة؛ أدرج سبباً موثقاً.")}
+    size="compact">
+    {editor==="submit:"+r.id&&<form onSubmit={e=>void send("SUBMIT_ROUND",e,{roundId:r.id})}
               className="form-stack">
               <input name="reason" placeholder={tr("Submission reason (10+ chars)","سبب تقديم النتائج (10 أحرف)") } required minLength={10} maxLength={1000}/>
               <button className="secondary-button" disabled={busy||r.observations.length===0}>
                 {tr("Submit results","تقديم النتائج")}</button></form>}
+    {editor==="submit:"+r.id&&message&&<p role="alert" className="form-warning">{message}</p>}
+  </CrudModal></>}
             {canResolve&&r.status==="SUBMITTED"&&r.reviewedByUserId===actorId&&
               r.observations.length>0&&r.observations.every(o=>o.assessment!==null)&&
-              <form onSubmit={e=>void send("FINALIZE_REVIEW",e,{roundId:r.id})} className="form-stack">
+              <><button type="button" className="secondary-button" disabled={busy}
+   onClick={()=>{setMessage("");setEditor("finalize:"+r.id);}}>
+   {tr("Finalize Independent EQA Review","اعتماد مراجعة التقييم المستقلة")}
+  </button>
+  <CrudModal open={editor==="finalize:"+r.id} onClose={()=>{if(!busy)setEditor("");}}
+    title={tr("Finalize Independent EQA Review","اعتماد مراجعة التقييم المستقلة")}
+    description={tr("Only an independently qualified reviewer may finalize all assessed observations.","لا يحق الاعتماد النهائي إلا لمراجع مستقل مؤهل بعد تقييم كل القراءات.")}
+    size="compact">
+    {editor==="finalize:"+r.id&&<form onSubmit={e=>void send("FINALIZE_REVIEW",e,{roundId:r.id})} className="form-stack">
                 <input name="reason" placeholder={tr("Independent review justification","تبرير المراجعة المستقلة")} required minLength={10} maxLength={1000}/>
                 <button className="secondary-button" disabled={busy}>{tr("Finalize review","اعتماد المراجعة")}</button>
               </form>}
+    {editor==="finalize:"+r.id&&message&&<p role="alert" className="form-warning">{message}</p>}
+  </CrudModal></>}
             {canResolve&&r.status==="ASSESSED"&&
-              <form onSubmit={e=>void send("CLOSE_ROUND",e,{roundId:r.id})} className="form-stack">
+              <><button type="button" className="secondary-button" disabled={busy}
+   onClick={()=>{setMessage("");setEditor("close:"+r.id);}}>
+   {tr("Close EQA Round","إغلاق جولة تقييم خارجي")}
+  </button>
+  <CrudModal open={editor==="close:"+r.id} onClose={()=>{if(!busy)setEditor("");}}
+    title={tr("Close EQA Round","إغلاق جولة تقييم خارجي")}
+    description={tr("Closing is audited and retains immutable measurements, verdicts and follow-up references.","يُسجّل الإغلاق في التدقيق مع الاحتفاظ بالقياسات والأحكام ومراجع المتابعة.")}
+    size="compact">
+    {editor==="close:"+r.id&&<form onSubmit={e=>void send("CLOSE_ROUND",e,{roundId:r.id})} className="form-stack">
                 <input name="reason" placeholder={tr("Closure and follow-up reference","سبب الإغلاق وإجراءات المتابعة")} required minLength={10} maxLength={1000}/>
                 <button className="secondary-button" disabled={busy}>{tr("Close & archive","إغلاق وأرشفة")}</button>
               </form>}
+    {editor==="close:"+r.id&&message&&<p role="alert" className="form-warning">{message}</p>}
+  </CrudModal></>}
             <button className="secondary-button" type="button" onClick={()=>setSelectedRound(r.id)}>
               {tr("Select round","اختيار الجولة")}</button>
           </td>
@@ -219,15 +248,33 @@ export function EqaWorkspace({locale,actorId,branches,programs,rounds,components
         <td>{o.assessment||tr("Pending","قيد الانتظار")}
           {o.providerExpectedValue&&<small className="table-subtext">{tr("Expected","المتوقع")}: {o.providerExpectedValue}</small>}
           {o.providerFeedback&&<small className="table-subtext">{o.providerFeedback}</small>}</td>
-        <td>{canEnter&&currentRound.status==="OPEN"&&<form className="form-stack"
+        <td>{canEnter&&currentRound.status==="OPEN"&&<><button type="button" className="secondary-button" disabled={busy}
+   onClick={()=>{setMessage("");setEditor("remove:"+currentRound.id+":"+o.id);}}>
+   {tr("Remove Draft EQA Observation","إزالة قراءة تقييم مسودة")}
+  </button>
+  <CrudModal open={editor==="remove:"+currentRound.id+":"+o.id} onClose={()=>{if(!busy)setEditor("");}}
+    title={tr("Remove Draft EQA Observation","إزالة قراءة تقييم مسودة")}
+    description={tr("Only open round draft readings can be removed with an audited reason.","يمكن إزالة قراءات المسودات للجولات المفتوحة فقط مع سبب مدقق.")}
+    size="compact">
+    {editor==="remove:"+currentRound.id+":"+o.id&&<form className="form-stack"
           onSubmit={e=>void send("REMOVE_OBSERVATION",e,{roundId:currentRound.id,observationId:o.id})}>
           <input name="reason" placeholder={tr("Removal reason","سبب الإزالة")} required minLength={10} maxLength={1000}/>
           <button className="secondary-button" disabled={busy}>{tr("Remove draft","حذف المسودة")}</button>
         </form>}
+    {editor==="remove:"+currentRound.id+":"+o.id&&message&&<p role="alert" className="form-warning">{message}</p>}
+  </CrudModal></>}
         {canResolve&&currentRound.status==="SUBMITTED"&&o.assessment===null&&
           currentRound.submittedByUserId!==actorId&&o.createdByUserId!==actorId&&
           (!currentRound.reviewedByUserId||currentRound.reviewedByUserId===actorId)&&
-          <form className="form-stack" onSubmit={e=>void send("ASSESS_OBSERVATION",e,
+          <><button type="button" className="secondary-button" disabled={busy}
+   onClick={()=>{setMessage("");setEditor("assess:"+currentRound.id+":"+o.id);}}>
+   {tr("Record Independent EQA Assessment","تسجيل تقييم خارجي مستقل")}
+  </button>
+  <CrudModal open={editor==="assess:"+currentRound.id+":"+o.id} onClose={()=>{if(!busy)setEditor("");}}
+    title={tr("Record Independent EQA Assessment","تسجيل تقييم خارجي مستقل")}
+    description={tr("Review external provider verdict, expected value and corrective follow-up; the submitting operator cannot self-review.","راجع حكم الجهة والقيمة المتوقعة والمتابعة التصحيحية؛ لا يجوز لمن أدخل القياس مراجعته بنفسه.")}
+    size="compact">
+    {editor==="assess:"+currentRound.id+":"+o.id&&<form className="form-stack" onSubmit={e=>void send("ASSESS_OBSERVATION",e,
             {roundId:currentRound.id,observationId:o.id})}>
             <select name="assessment" required defaultValue="">
               <option value="">{tr("Select provider verdict","اختر حكم الجهة")}</option>
@@ -241,7 +288,9 @@ export function EqaWorkspace({locale,actorId,branches,programs,rounds,components
             <input name="reason" minLength={10} maxLength={1000} required
               placeholder={tr("Review justification","مبرر المراجعة")}/>
             <button className="secondary-button" disabled={busy}>{tr("Record external assessment","تسجيل التقييم الخارجي")}</button>
-          </form>}</td>
+          </form>}
+    {editor==="assess:"+currentRound.id+":"+o.id&&message&&<p role="alert" className="form-warning">{message}</p>}
+  </CrudModal></>}</td>
       </tr>)}</tbody></table></div>}
       <p className="muted">{tr(
         "Submitted measurements and finalized provider verdicts are immutable. EQA is documented separately from patient results; no automatic clinical release or QC blocking is applied.",
