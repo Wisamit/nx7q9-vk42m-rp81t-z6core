@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { CrudModal } from "@/components/crud-modal";
 import { legacyRowTargets, type LegacyRowClassification } from "@/lib/catalog-legacy-row-lineage";
 
 type SourceKey = { sourceSha256: string; tableName: string; digestKeyId: string };
@@ -45,13 +46,14 @@ export function LegacyRowLineageReview({ locale }: { locale: "ar" | "en" }) {
   const [tariffTo, setTariffTo] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [uiEditor, setUiEditor] = useState("");
   async function load(source: SourceKey, after: number) {
     const url = new URLSearchParams({ ...source, after: String(after) });
     const response = await fetch("/api/catalog/legacy-row-lineage?" + url, { cache: "no-store" });
     const parsed = await response.json() as Review;
     if (!response.ok || parsed.rowParityCertified !== false)
       throw Error(parsed.error || "lineage_review_failed");
-    setKey(source); setReview(parsed); setCursor(after); setSelected(null);
+    setKey(source); setReview(parsed); setCursor(after); setSelected(null); setUiEditor("");
   }
   async function upload(file: File) {
     if (busy) return;
@@ -88,7 +90,7 @@ export function LegacyRowLineageReview({ locale }: { locale: "ar" | "en" }) {
     setSelected(row); setClassification(row.classification);
     setTargetType(row.targetType || ""); setTargetId(row.targetId || "");
     setBatchId(row.batchId || ""); setImportRowId(row.importRowId || "");
-    setReason(""); setError("");
+    setReason(""); setError(""); setUiEditor("mapping");
   }
   async function decide() {
     if (!selected || !key || busy) return;
@@ -188,7 +190,15 @@ export function LegacyRowLineageReview({ locale }: { locale: "ar" | "en" }) {
           onClick={() => review.nextAfter !== null && void load(key, review.nextAfter)}>
           {tr("Next", "التالي")}</button>
       </div>
-      {selected && <form onSubmit={event => { event.preventDefault(); void decide(); }}
+      <CrudModal open={selected !== null && uiEditor === "mapping"}
+        onClose={() => { if (!busy) setUiEditor(""); }}
+        size="compact"
+        title={tr("Review Source Row Mapping", "مراجعة مطابقة صف المصدر")}
+        description={tr(
+          "This decision records only a governed source mapping. It cannot activate clinical values, prices or templates.",
+          "يسجّل القرار مطابقة مصدر محكومة فقط؛ ولا يفعّل القيم السريرية أو الأسعار أو القوالب.",
+        )}>
+      {selected && uiEditor === "mapping" && <form onSubmit={event => { event.preventDefault(); void decide(); }}
         className="detail-section">
         <h4>{tr("Classify source row", "تصنيف صف المصدر")} {selected.rowDigest.slice(0, 12)}</h4>
         <label>{tr("Decision", "القرار")}
@@ -220,7 +230,22 @@ export function LegacyRowLineageReview({ locale }: { locale: "ar" | "en" }) {
           {tr("Save audited mapping review", "حفظ مراجعة المطابقة وتدقيقها")}
         </button>
       </form>}
-      {selected && selected.sourceTable === "price" &&
+      {uiEditor === "mapping" && error && <p className="form-error" role="alert">{error}</p>}
+      </CrudModal>
+      {selected && selected.sourceTable === "price" && selected.classification === "UNRESOLVED" &&
+        <button type="button" className="primary-button" disabled={busy}
+          onClick={() => { setError(""); setUiEditor("tariff"); }}>
+          {tr("Create Inactive Package Tariff Draft", "إنشاء مسودة غير نشطة لسعر باقة")}
+        </button>}
+      <CrudModal open={selected !== null && uiEditor === "tariff"}
+        onClose={() => { if (!busy) setUiEditor(""); }}
+        size="compact"
+        title={tr("Create Governed Package Tariff Draft", "إنشاء مسودة سعر باقة محكومة")}
+        description={tr(
+          "This only stages an INACTIVE_DRAFT, never activates financial prices. Exact amount, scope, dates and reviewer rationale remain required.",
+          "يُجهّز مسودة غير نشطة فقط ولا يفعّل الأسعار؛ يلزم المبلغ والنطاق والتواريخ ومبرر المراجع.",
+        )}>
+      {selected && uiEditor === "tariff" && selected.sourceTable === "price" &&
         selected.classification === "UNRESOLVED" && <form
         onSubmit={event => { event.preventDefault(); void createTariffDraft(); }}
         className="detail-section">
@@ -250,6 +275,8 @@ export function LegacyRowLineageReview({ locale }: { locale: "ar" | "en" }) {
           {tr("Create inactive tariff draft only", "إنشاء مسودة السعر غير النشطة فقط")}
         </button>
       </form>}
+      {uiEditor === "tariff" && error && <p className="form-error" role="alert">{error}</p>}
+      </CrudModal>
     </div>}
   </section>;
 }
