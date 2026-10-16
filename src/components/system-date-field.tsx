@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { SystemIcon } from "@/components/system-icon";
 import {
   dateInputExample, formatSystemDate, normalizeSystemDateFormat,
@@ -18,6 +18,11 @@ type SystemDateFieldProps = {
   className?: string;
 };
 
+const subscribeToRootDateFormat = () => () => {};
+const readRootDateFormat = (): SystemDateFormat =>
+  normalizeSystemDateFormat(document.documentElement.dataset.dateFormat);
+const serverDateFormat = (): SystemDateFormat => "DD/MM/YYYY";
+
 /**
  * Date-only editor: visible text follows organization settings, while the
  * named FormData field and calendar picker always carry YYYY-MM-DD.
@@ -27,19 +32,14 @@ export function SystemDateField({
   name, defaultValue, required, disabled, min, max, id, className,
 }: SystemDateFieldProps) {
   const initialIso = parseSystemDateInput(defaultValue || "", "YYYY-MM-DD") || "";
-  const [format, setFormat] = useState<SystemDateFormat>("DD/MM/YYYY");
-  const [text, setText] = useState(() => formatSystemDate(initialIso, "DD/MM/YYYY"));
+  const format = useSyncExternalStore(subscribeToRootDateFormat, readRootDateFormat, serverDateFormat);
+  const [draft, setDraft] = useState<string | null>(null);
+  const text = draft ?? formatSystemDate(initialIso, format);
   const inputRef = useRef<HTMLInputElement>(null);
   const calendarRef = useRef<HTMLInputElement>(null);
   const iso = parseSystemDateInput(text, format) || "";
   const outsideRange = Boolean(iso && ((min && iso < min) || (max && iso > max)));
   const validIso = outsideRange ? "" : iso;
-
-  useEffect(() => {
-    const nextFormat = normalizeSystemDateFormat(document.documentElement.dataset.dateFormat);
-    setFormat(nextFormat);
-    setText(formatSystemDate(initialIso, nextFormat));
-  }, [initialIso]);
 
   useEffect(() => {
     if (!inputRef.current) return;
@@ -49,7 +49,7 @@ export function SystemDateField({
   }, [text, validIso]);
 
   function changeText(next: string, element: HTMLInputElement) {
-    setText(next);
+    setDraft(next);
     const parsed = parseSystemDateInput(next, format);
     const outOfRange = Boolean(parsed && ((min && parsed < min) || (max && parsed > max)));
     element.setCustomValidity(!next || (parsed && !outOfRange)
@@ -97,7 +97,7 @@ export function SystemDateField({
       disabled={disabled}
       onChange={event => {
         const next = event.target.value;
-        setText(next ? formatSystemDate(next, format) : "");
+        setDraft(next ? formatSystemDate(next, format) : "");
         inputRef.current?.setCustomValidity("");
       }}
     />
