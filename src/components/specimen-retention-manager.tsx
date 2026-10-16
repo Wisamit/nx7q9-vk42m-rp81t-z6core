@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
+import { CrudModal } from "@/components/crud-modal";
 
 type Policy = {
   id: string; specimenTypeId: string; minimumDays: number; rationale: string;
@@ -25,6 +26,7 @@ export function SpecimenRetentionManager({
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [uiEditor, setUiEditor] = useState("");
   const [failed, setFailed] = useState(false);
   const [policyType, setPolicyType] = useState(specimenTypes[0]?.id || "");
   const [days, setDays] = useState("");
@@ -91,7 +93,14 @@ export function SpecimenRetentionManager({
 
     {mayConfigure && <section className="detail-card">
       <h2>{tr("Draft retention policy", "إنشاء مسودة سياسة احتفاظ")}</h2>
-      <form className="catalog-form" onSubmit={createPolicy}>
+      <button type="button" className="primary-button" disabled={Boolean(busy)}
+     onClick={() => { setMessage(""); setUiEditor("policy"); }}>
+     {tr("Create Retention Policy Draft", "إنشاء مسودة سياسة احتفاظ")}
+   </button>
+   <CrudModal open={uiEditor === "policy"} onClose={() => {if (!busy) setUiEditor("");}}
+     size="compact" title={tr("Create Retention Policy Draft", "إنشاء مسودة سياسة احتفاظ")}
+     description={tr("Policy drafts require independent approval before they govern specimen disposal.", "تحتاج المسودات إلى اعتماد مستقل قبل تطبيقها على إتلاف العينات.")}>
+     {uiEditor === "policy" && <form className="catalog-form" onSubmit={createPolicy}>
         <label>{tr("Specimen type", "نوع العينة")}
           <select value={policyType} onChange={e => setPolicyType(e.target.value)} required>
             {specimenTypes.map(type => <option key={type.id} value={type.id}>
@@ -110,7 +119,9 @@ export function SpecimenRetentionManager({
         <button className="primary-button" type="submit" disabled={busy || !policyType}>
           {tr("Submit draft for independent review", "إرسال المسودة للمراجعة المستقلة")}
         </button>
-      </form>
+      </form>}
+     {uiEditor === "policy" && message && <p className="form-warning" role="status">{message}</p>}
+   </CrudModal>
     </section>}
 
     {(mayAuthorize || mayRequest) && <section className="detail-card">
@@ -144,7 +155,14 @@ export function SpecimenRetentionManager({
 
     {mayRequest && <section className="detail-card">
       <h2>{tr("Request retained-specimen disposal", "طلب إتلاف عينة محتفظ بها")}</h2>
-      <form className="catalog-form" onSubmit={requestDisposal}>
+      <button type="button" className="primary-button" disabled={Boolean(busy)}
+     onClick={() => { setMessage(""); setUiEditor("disposal"); }}>
+     {tr("Request Specimen Disposal", "طلب إتلاف عينة")}
+   </button>
+   <CrudModal open={uiEditor === "disposal"} onClose={() => {if (!busy) setUiEditor("");}}
+     size="compact" title={tr("Request Specimen Disposal", "طلب إتلاف عينة")}
+     description={tr("Disposal is a high-risk documented request, never automatic destruction.", "الإتلاف طلب عالي الحساسية وموثق، وليس تخلصاً آلياً من العينة.")}>
+     {uiEditor === "disposal" && <form className="catalog-form" onSubmit={requestDisposal}>
         <label>{tr("Specimen barcode in current branch", "باركود العينة في الفرع الحالي")}
           <input value={barcode} onChange={e => setBarcode(e.target.value)} maxLength={80} minLength={3} required />
         </label>
@@ -155,7 +173,9 @@ export function SpecimenRetentionManager({
         <button className="primary-button" type="submit" disabled={busy}>
           {tr("Submit disposal request", "تقديم طلب الإتلاف")}
         </button>
-      </form>
+      </form>}
+     {uiEditor === "disposal" && message && <p className="form-warning" role="status">{message}</p>}
+   </CrudModal>
     </section>}
 
     <section className="table-card">
