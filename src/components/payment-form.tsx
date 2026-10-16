@@ -36,10 +36,14 @@ export function PaymentForm({
   const [paymentMethodId, setPaymentMethodId] = useState(paymentMethods[0]?.id || "");
   const selectedMethod = paymentMethods.find(method => method.id === paymentMethodId);
   const postingAttempt = useRef<{ payload: string; key: string } | null>(null);
+  const submitting = useRef(false);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    if (submitting.current) return;
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
+    submitting.current = true;
     setBusy(true);
     setMessage("");
 
@@ -64,7 +68,7 @@ export function PaymentForm({
       postingAttempt.current = null;
       const success = `${tr("Payment posted", "تم تسجيل الدفعة")}. ${tr("Invoice", "الفاتورة")} ${body.invoiceNumber} · ${tr("Balance", "الرصيد")}: ${body.balanceAmount}`;
       setMessage(success);
-      event.currentTarget.reset();
+      formElement.reset();
       setPaymentMethodId(paymentMethods[0]?.id || "");
       router.refresh();
       onSuccess?.(success);
@@ -88,6 +92,7 @@ export function PaymentForm({
     } catch {
       setMessage(tr("Connection interrupted. Check the posting status; submitting the unchanged form will safely retry the same request.", "انقطع الاتصال. تحقق من حالة الدفعة؛ إعادة إرسال نفس البيانات تستخدم رقم المحاولة نفسه دون تكرار القيد."));
     } finally {
+      submitting.current = false;
       setBusy(false);
     }
   }
