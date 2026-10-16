@@ -1,4 +1,4 @@
-import { parseSystemDateInput } from "./system-date";
+import { parseSystemDateInput } from "./system-date.ts";
 
 /** A local wall-clock datetime, independent of machine/server timezone. */
 export function parseSystemLocalDateTime(raw: string | null | undefined) {
