@@ -7,3 +7,6 @@ out/
 npm-debug.log*
 .DS_Store
 generated/
+
+# Browser QA artifacts may contain screenshots and account-specific UI content.
+ui-evidence/
