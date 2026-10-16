@@ -176,7 +176,7 @@ export function IntegrationManager({
       <strong>{tr("Copy this key now — the secret will not be displayed by the server again.",
         "انسخ هذا المفتاح الآن — لن يعرض السيرفر السر مرة أخرى.")}</strong>
       <code dir="ltr">{secret}</code>
-    </div>
+    </div>}
     </CrudModal>
       {secret && <div className="integration-secret"><strong>{tr("Copy now — shown once", "انسخه الآن — يظهر مرة واحدة فقط")}</strong><code>{secret}</code></div>}
     </article>}
