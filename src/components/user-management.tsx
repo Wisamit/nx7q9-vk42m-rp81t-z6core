@@ -271,7 +271,7 @@ export function UserManagement({ locale, canManageDiscountLimits, canResetPasswo
         <fieldset className="admin-checklist"><legend>{tr("Branch access", "صلاحية الفروع")}</legend>{data.branches.map(branch => <label key={branch.id}><input type="checkbox" name="branchIds" value={branch.id} />{branch.code} — {locale === "ar" ? branch.nameAr || branch.nameEn : branch.nameEn}</label>)}</fieldset>
         <fieldset className="admin-checklist form-span"><legend>{tr("Department access", "صلاحية الأقسام")}</legend><small>{tr("Optional: no selection means all departments within the selected branches. Selecting departments restricts clinical access.", "اختياري: عدم التحديد يعني كل الأقسام ضمن الفروع المختارة. تحديد أقسام يقيّد الوصول السريري بها.")}</small>{data.departments.map(department => <label key={department.id}><input type="checkbox" name="departmentIds" value={department.id} />{department.code} — {locale === "ar" ? department.nameAr || department.nameEn : department.nameEn}</label>)}</fieldset>
         <button className="primary-button form-span" disabled={busy}>{busy ? tr("Saving…", "جارٍ الحفظ…") : tr("Create user", "إنشاء المستخدم")}</button>
-        {message && <div className="form-success form-span">{message}</div>}
+        {message && <div className={(isError ? "form-error" : "form-success") + " form-span"} role={isError ? "alert" : "status"}>{message}</div>}
       </form>
     </CrudModal>
 
