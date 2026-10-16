@@ -47,8 +47,34 @@ preferences, branch RBAC and keyboard/screen reader use as `NOT_EXECUTED`.
 - Shared compact layout: force admin/detail/forms to a safe single column
   inside the one-third-width desktop dialog; protect focus-visible,
   wrap long values, and respect mobile dynamic viewport and safe-area.
+- Additional compact dialog conversions: supplier/category/item and lot
+  receiving, stock adjustments and consumption, equipment registration/
+  maintenance/calibration/downtime/document, client credit policies,
+  integration endpoint/mapping/external API key/webhook, corporate/portal
+  patient access, appointments and queue issuing, doctor-patient access
+  grants and reasoned revocation, finance discount approval/rejection with
+  mandatory staff step-up, clinical requisition decline, QC material/lot/
+  target/run, procurement request/order, controlled quality documents/
+  CAPA/training/audits, notification templates, send-out laboratory/referral
+  and specimen retention/disposal request authorship.
+- Secrets from integration API key issuance are visible only while the
+  relevant dialog remains open, cleared when closed, and not in the
+  underlying page. Existing authorization still stays server-side.
 - Dedicated CI regression for changed workflows, all 81 source pages,
   nested component coverage and honest real-browser evidence status.
+
+### Unresolved action-level UI debt
+- Quality management contains many native high-impact workflows (closure,
+  CAPA review/action, audit findings, document approval, analyzer
+  authorization). They must be redesigned as reasoned validated dialogs
+  **without weakening** the existing clinical/quality authorization.
+- EQA has 9 source forms including assessment/finalization that are not
+  ordinary CRUD; preserve reviewer separation and protected escalation.
+- Historical specialty result entry, clinical report print, specimen custody,
+  invoice refund/reversal, doctor portal, password step-up and other
+  noncompact dialogs need intentional viewport/role/keyboard assessment.
+- The source audit exposes every candidate; these remain NOT_ACCEPTED until
+  actual interactive browser evidence is produced.
 
 ## Must happen **before** one final deployment
 
