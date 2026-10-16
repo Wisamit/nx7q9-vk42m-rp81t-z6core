@@ -288,6 +288,7 @@ export function UserManagement({ locale, canManageDiscountLimits, canResetPasswo
         <fieldset className="admin-checklist"><legend>{tr("Branch access", "صلاحية الفروع")}</legend>{data.branches.map(branch => <label key={branch.id}><input type="checkbox" name="branchIds" value={branch.id} defaultChecked={editing.branchIds.includes(branch.id)} />{branch.code} — {locale === "ar" ? branch.nameAr || branch.nameEn : branch.nameEn}</label>)}</fieldset>
         <fieldset className="admin-checklist form-span"><legend>{tr("Department access", "صلاحية الأقسام")}</legend><small>{tr("No department selection means unrestricted department access inside the selected branches.", "عدم تحديد أقسام يعني السماح بكل الأقسام ضمن الفروع المحددة.")}</small>{data.departments.map(department => <label key={department.id}><input type="checkbox" name="departmentIds" value={department.id} defaultChecked={editing.departmentIds.includes(department.id)} />{department.code} — {locale === "ar" ? department.nameAr || department.nameEn : department.nameEn}</label>)}</fieldset>
         <button className="primary-button form-span" disabled={busy}>{busy ? tr("Saving…", "جارٍ الحفظ…") : tr("Save access", "حفظ الصلاحيات")}</button>
+        {message && isError && <p className="form-error form-span" role="alert">{message}</p>}
       </form>}
     </CrudModal>
 
