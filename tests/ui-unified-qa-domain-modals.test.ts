@@ -35,16 +35,29 @@ test("UI #265: protected procurement, QC, quality, notification, retention and s
   }
 });
 
-test("UI #265: regulated send-out movement and EQA work actions remain separate review candidates", () => {
+test("UI #265: all nine EQA actions use role-gated review dialogs, with custody separate", () => {
   const sendOut = read("src/components/send-out-manager.tsx");
   const eqa = read("src/components/eqa-workspace.tsx");
   assert.ok(sendOut.includes('onSubmit={event =>'),
-    "direct custody-changing inline actions need separate review, not blindly wrapped");
-  assert.ok(eqa.includes('onSubmit={e=>void send("ASSESS_OBSERVATION",e'),
-    "EQA assessment must retain authorized reviewer workflow");
+    "send-out dispatch/receipt actions need a dedicated chain-of-custody review");
+  assert.equal((eqa.match(/<CrudModal\\b/g) || []).length, 9);
+  assert.equal((eqa.match(/<form\\b/g) || []).length, 9);
+  assert.ok(!/\\bconfirm\\s*\\(/.test(eqa),
+    "EQA uses typed, explicit action dialogs, not browser-native confirmations");
+  for (const action of ["CREATE_PROGRAM", "CREATE_ROUND", "ADD_OBSERVATION",
+    "SUBMIT_ROUND", "FINALIZE_REVIEW", "CLOSE_ROUND", "REMOVE_OBSERVATION",
+    "ASSESS_OBSERVATION", "DEACTIVATE_PROGRAM"]) {
+    assert.ok(eqa.includes('send("' + action + '"'),
+      "Each governed server action must retain its original request payload: " + action);
+  }
+  assert.ok(eqa.includes('currentRound.submittedByUserId!==actorId'));
+  assert.ok(eqa.includes('o.createdByUserId!==actorId'));
+  assert.ok(eqa.includes('currentRound.reviewedByUserId===actorId'));
+  assert.ok(eqa.includes('setEditor("");'));
+  assert.ok(eqa.includes('if(!busy)setEditor("")'));
   const quality = read("src/components/quality-management-console.tsx");
   assert.ok(quality.includes("window.prompt("),
-    "other 29 high-impact quality actions are explicitly pending review, not marked done");
+    "other high-impact quality actions still require individual review and are not marked done");
 });
 
 test("UI #265: one-time integration secret removed from public page after dialog close", () => {
