@@ -92,7 +92,7 @@ test("UI #265: send-out laboratory and referral drafts are failure-safe and pres
   const src = read("src/components/send-out-manager.tsx");
   for (const handler of ["createLab", "createReferral"]) {
     const start = src.indexOf("async function " + handler + "(");
-    const end = src.indexOf("\\n  }", start);
+    const end = src.indexOf("\n  }", start);
     assert.ok(start >= 0 && end > start, handler);
     const body = src.slice(start, end);
     assert.ok(body.includes("if (busy) return;"));
@@ -102,7 +102,7 @@ test("UI #265: send-out laboratory and referral drafts are failure-safe and pres
     assert.ok(body.includes("if (!response.ok)"));
     assert.ok(body.includes('setUiEditor("");'), "close modal only after server success");
     assert.ok(body.includes("router.refresh()"));
-    assert.doesNotMatch(body, /event\\.currentTarget\\.reset\\(\\)/,
+    assert.doesNotMatch(body, /event\.currentTarget\.reset\(\)/,
       "async handler cannot use reset() on an expired React currentTarget");
   }
   assert.ok(src.includes("Verify the specimen's referral history before any retry"));
