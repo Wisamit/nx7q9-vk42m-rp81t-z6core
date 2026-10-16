@@ -21,7 +21,30 @@ async function safeJson(path, maxBytes) {
   return JSON.parse(await readFile(path, "utf8"));
 }
 
-export async function checkPrivateLegacyEvidencePackage(mdbPath, coveragePath, pageDirectory) {
+async function loadLineagePages(pageDirectory) {
+  const stat = await lstat(pageDirectory);
+  if (!stat.isDirectory() || stat.isSymbolicLink())
+    throw new Error("evidence_directory_invalid");
+  const names = await readdir(pageDirectory);
+  if (names.length < 1 || names.length > 6000 ||
+      names.some(name => !/^legacy-row-hashes-[A-Za-z0-9_]+-[0-9]{5}\\.json$/.test(name)))
+    throw new Error("unexpected_evidence_page_name");
+  const lineage = [];
+  for (const name of names) {
+    const page = parseLegacyRowManifest(
+      await safeJson(join(pageDirectory, name), LEGACY_ROW_LINEAGE_MAX_BYTES));
+    const expectedName = "legacy-row-hashes-" +
+      page.tableName.replace(/[^A-Za-z0-9]/g, "_") + "-" +
+      String(page.chunkIndex).padStart(5, "0") + ".json";
+    if (name !== expectedName) throw new Error("evidence_page_filename_mismatch");
+    lineage.push(page);
+  }
+  return lineage;
+}
+
+export async function checkPrivateLegacyEvidencePackage(
+  mdbPath, coveragePath, pageDirectory, replayDirectory,
+) {
   if (!/\.mdb$/i.test(basename(mdbPath))) throw new Error("mdb_extension_invalid");
   const start = await lstat(mdbPath);
   if (!start.isFile() || start.isSymbolicLink() || start.size < 4096 ||
@@ -51,40 +74,30 @@ export async function checkPrivateLegacyEvidencePackage(mdbPath, coveragePath, p
   };
   const coverage = parseLegacySourceCoverage(
     await safeJson(coveragePath, LEGACY_COVERAGE_MAX_BYTES));
-  const stat = await lstat(pageDirectory);
-  if (!stat.isDirectory() || stat.isSymbolicLink())
-    throw new Error("evidence_directory_invalid");
-  const names = await readdir(pageDirectory);
-  if (names.length < 1 || names.length > 6000 ||
-      names.some(name => !/^legacy-row-hashes-[A-Za-z0-9_]+-[0-9]{5}\.json$/.test(name)))
-    throw new Error("unexpected_evidence_page_name");
-  const lineage = [];
-  for (const name of names) {
-    const page = parseLegacyRowManifest(
-      await safeJson(join(pageDirectory, name), LEGACY_ROW_LINEAGE_MAX_BYTES));
-    const expectedName = "legacy-row-hashes-" +
-      page.tableName.replace(/[^A-Za-z0-9]/g, "_") + "-" +
-      String(page.chunkIndex).padStart(5, "0") + ".json";
-    if (name !== expectedName) throw new Error("evidence_page_filename_mismatch");
-    lineage.push(page);
-  }
-  const review = verifyLegacyEvidenceManifestPackage({ source, coverage, lineage });
+  const lineage = await loadLineagePages(pageDirectory);
+  const replayedLineage = replayDirectory === undefined
+    ? undefined : await loadLineagePages(replayDirectory);
+  const review = verifyLegacyEvidenceManifestPackage({
+    source, coverage, lineage, replayedLineage,
+  });
   return {
     ...review,
     localMdbBytesHashMatched: true,
     sourceRowsIndependentlyRecomputedFromMdb: false,
+    sameExtractorAceReplayMatched: review.sourceHmacAceReplayMatches,
   };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const args = process.argv.slice(2);
-  if (args.length !== 6 || args[0] !== "--mdb" || args[2] !== "--coverage" ||
-      args[4] !== "--lineage-dir") {
-    process.stderr.write("Usage: node --experimental-strip-types scripts/legacy/verify-evidence-package.mjs --mdb SOURCE.mdb --coverage COVERAGE.json --lineage-dir PRIVATE_DIRECTORY\n");
+  if (![6, 8].includes(args.length) || args[0] !== "--mdb" ||
+      args[2] !== "--coverage" || args[4] !== "--lineage-dir" ||
+      (args.length === 8 && args[6] !== "--ace-replay-dir")) {
+    process.stderr.write("Usage: node --experimental-strip-types scripts/legacy/verify-evidence-package.mjs --mdb SOURCE.mdb --coverage COVERAGE.json --lineage-dir PRIVATE_DIRECTORY [--ace-replay-dir FRESH_PRIVATE_PAGES]\n");
     process.exitCode = 2;
   } else {
     try {
-      const result = await checkPrivateLegacyEvidencePackage(args[1], args[3], args[5]);
+      const result = await checkPrivateLegacyEvidencePackage(args[1], args[3], args[5], args[7]);
       process.stdout.write(JSON.stringify(result, null, 2) + "\n");
     } catch (error) {
       // Deliberately don't print the source path, HMAC key or row content.
