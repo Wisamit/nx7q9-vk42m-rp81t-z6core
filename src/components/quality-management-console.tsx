@@ -173,6 +173,26 @@ export function QualityManagementConsole({
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
   const [uiEditor, setUiEditor] = useState("");
+  type ReviewKind = "NC_STATUS" | "CAPA_ACTION_CREATE" | "CAPA_ACTION_COMPLETE" |
+    "CAPA_EFFECTIVENESS" | "DOCUMENT_VERSION_CREATE" | "DOCUMENT_WORKFLOW" |
+    "ANALYZER_REVOKE" | "INDICATOR_MEASUREMENT" | "AUDIT_FINDING_CREATE" |
+    "AUDIT_FINDING_CLOSE" | "AUDIT_COMPLETE";
+  type PendingReview = { kind: ReviewKind; id: string; subId?: string;
+    operation?: string; close?: boolean; rootCause?: string;
+    closureSummary?: string; unit?: string };
+  const [pendingReview, setPendingReview] = useState<PendingReview | null>(null);
+  const [reviewSeverity, setReviewSeverity] = useState("MINOR");
+  const [reviewEffectiveness, setReviewEffectiveness] = useState("EFFECTIVE");
+  const [reviewError, setReviewError] = useState("");
+  function openReview(data: PendingReview) {
+    if (busy) return;
+    setMessage("");
+    setReviewError("");
+    setReviewSeverity("MINOR");
+    setReviewEffectiveness("EFFECTIVE");
+    setPendingReview(data);
+  }
+
   const [trainingAnalyzerId, setTrainingAnalyzerId] = useState("");
   const [competencyAnalyzerId, setCompetencyAnalyzerId] = useState("");
   const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
@@ -294,21 +314,9 @@ export function QualityManagementConsole({
     if (ok) event.currentTarget.reset();
   }
 
-  async function updateNonconformance(item: Nonconformance, close: boolean) {
-    let rootCause = item.rootCause || "";
-    let closureSummary = item.closureSummary || "";
-    if (close) {
-      rootCause = window.prompt(tr("Root cause is required before closure:", "السبب الجذري مطلوب قبل الإغلاق:"), rootCause) || "";
-      if (!rootCause.trim()) return;
-      closureSummary = window.prompt(tr("Closure summary is required:", "ملخص الإغلاق مطلوب:"), closureSummary) || "";
-      if (!closureSummary.trim()) return;
-      if (!window.confirm(tr("Close this nonconformance? The closure will remain in audit history.", "هل تريد إغلاق حالة عدم المطابقة؟ سيبقى الإغلاق محفوظاً في سجل التدقيق."))) return;
-    }
-    await send(`/api/quality/nonconformances/${item.id}`, "PATCH", {
-      status: close ? "CLOSED" : "INVESTIGATING",
-      rootCause,
-      closureSummary,
-    }, "nc-" + item.id, close ? tr("Nonconformance closed.", "تم إغلاق حالة عدم المطابقة.") : tr("Nonconformance moved to investigation.", "تم نقل حالة عدم المطابقة إلى التحقيق."));
+  function updateNonconformance(item: Nonconformance, close: boolean) {
+    openReview({kind: "NC_STATUS", id: item.id, close,
+      rootCause: item.rootCause || "", closureSummary: item.closureSummary || ""});
   }
 
   async function createCapa(event: FormEvent<HTMLFormElement>) {
@@ -326,37 +334,16 @@ export function QualityManagementConsole({
     if (ok) event.currentTarget.reset();
   }
 
-  async function addCapaAction(capa: Capa) {
-    const actionType = window.confirm(tr("OK = corrective action. Cancel = preventive action.", "موافق = إجراء تصحيحي. إلغاء = إجراء وقائي.")) ? "CORRECTIVE" : "PREVENTIVE";
-    const description = window.prompt(actionType === "CORRECTIVE" ? tr("Describe the corrective action:", "صف الإجراء التصحيحي:") : tr("Describe the preventive action:", "صف الإجراء الوقائي:"));
-    if (!description?.trim()) return;
-    const dueDate = window.prompt(tr("Due date (YYYY-MM-DD), optional:", "تاريخ الاستحقاق (YYYY-MM-DD)، اختياري:")) || "";
-    await send(`/api/quality/capas/${capa.id}/actions`, "POST", {
-      actionType,
-      description,
-      dueDate,
-    }, "capa-action-" + capa.id, "CAPA action added.");
+  function addCapaAction(capa: Capa) {
+    openReview({kind: "CAPA_ACTION_CREATE", id: capa.id});
   }
 
-  async function completeCapaAction(capaId: string, actionId: string) {
-    if (!window.confirm(tr("Mark this CAPA action as completed?", "هل تريد تعليم إجراء CAPA كمكتمل؟"))) return;
-    await send(`/api/quality/capas/${capaId}/actions`, "PATCH", {
-      actionId,
-      status: "COMPLETED",
-    }, "capa-action-" + actionId, tr("CAPA action completed.", "تم إكمال إجراء CAPA."));
+  function completeCapaAction(capaId: string, actionId: string) {
+    openReview({kind: "CAPA_ACTION_COMPLETE", id: capaId, subId: actionId});
   }
 
-  async function reviewCapa(capa: Capa) {
-    const effectiveness = window.prompt(tr("Effectiveness code: EFFECTIVE, PARTIALLY_EFFECTIVE, or INEFFECTIVE", "رمز الفعالية: EFFECTIVE أو PARTIALLY_EFFECTIVE أو INEFFECTIVE"), "EFFECTIVE")?.trim().toUpperCase();
-    if (!effectiveness || !["EFFECTIVE","PARTIALLY_EFFECTIVE","INEFFECTIVE"].includes(effectiveness)) return;
-    const effectivenessReview = window.prompt(tr("Document the effectiveness review:", "وثّق مراجعة الفعالية:"));
-    if (!effectivenessReview?.trim()) return;
-    const close = effectiveness === "EFFECTIVE" && window.confirm(tr("Close this CAPA after the effectiveness review?", "هل تريد إغلاق CAPA بعد مراجعة الفعالية؟"));
-    await send(`/api/quality/capas/${capa.id}/review`, "POST", {
-      effectiveness,
-      effectivenessReview,
-      close,
-    }, "capa-review-" + capa.id, close ? tr("CAPA reviewed and closed.", "تمت مراجعة CAPA وإغلاقها.") : tr("CAPA effectiveness review recorded.", "تم تسجيل مراجعة فعالية CAPA."));
+  function reviewCapa(capa: Capa) {
+    openReview({kind: "CAPA_EFFECTIVENESS", id: capa.id});
   }
 
   async function createDocument(event: FormEvent<HTMLFormElement>) {
@@ -378,29 +365,12 @@ export function QualityManagementConsole({
     if (ok) event.currentTarget.reset();
   }
 
-  async function newDocumentVersion(document: QualityDocument) {
-    const changeSummary = window.prompt(tr("Change summary for the new version:", "ملخص التغييرات للإصدار الجديد:"));
-    if (!changeSummary?.trim()) return;
-    const content = window.prompt(tr("Document text/content snapshot (or leave empty if you will provide an external URL):", "لقطة نص/محتوى الوثيقة (أو اتركها فارغة إذا ستوفر رابطاً خارجياً):")) || "";
-    const externalUrl = content ? "" : window.prompt(tr("External document URL:", "رابط الوثيقة الخارجي:")) || "";
-    if (!content.trim() && !externalUrl.trim()) return;
-    await send(`/api/quality/documents/${document.id}/versions`, "POST", {
-      changeSummary,
-      contentSnapshot: content.trim() ? { text: content } : null,
-      externalUrl,
-    }, "doc-new-" + document.id, tr("New immutable document version created.", "تم إنشاء إصدار جديد غير قابل للتغيير من الوثيقة."));
+  function newDocumentVersion(document: QualityDocument) {
+    openReview({kind: "DOCUMENT_VERSION_CREATE", id: document.id});
   }
 
-  async function documentWorkflow(versionId: string, action: "SUBMIT_REVIEW" | "COMPLETE_REVIEW" | "APPROVE" | "MAKE_EFFECTIVE") {
-    const label = action === "SUBMIT_REVIEW"
-      ? tr("submit for review", "إرسال للمراجعة")
-      : action === "COMPLETE_REVIEW"
-        ? tr("complete review", "إكمال المراجعة")
-        : action === "APPROVE"
-          ? tr("approve", "اعتماد")
-          : tr("make effective", "جعل الإصدار سارياً");
-    if (!window.confirm(tr("Confirm: ", "تأكيد: ") + label + tr(" this document version?", " هذا الإصدار من الوثيقة؟"))) return;
-    await send(`/api/quality/document-versions/${versionId}/workflow`, "POST", { action }, "doc-workflow-" + versionId, tr("Document version action completed: ", "تم تنفيذ إجراء إصدار الوثيقة: ") + label + ".");
+  function documentWorkflow(versionId: string, action: "SUBMIT_REVIEW" | "COMPLETE_REVIEW" | "APPROVE" | "MAKE_EFFECTIVE") {
+    openReview({kind: "DOCUMENT_WORKFLOW", id: versionId, operation: action});
   }
 
   async function createTraining(event: FormEvent<HTMLFormElement>) {
@@ -459,15 +429,8 @@ export function QualityManagementConsole({
     if (ok) event.currentTarget.reset();
   }
 
-  async function revokeAuthorization(item: Authorization) {
-    const reason = window.prompt(tr("Reason for revocation:", "سبب إلغاء الصلاحية:"));
-    if (!reason?.trim()) return;
-    if (!window.confirm(tr("Revoke this analyzer authorization?", "هل تريد إلغاء صلاحية استخدام هذا الجهاز؟"))) return;
-    await send("/api/quality/analyzer-authorizations", "PATCH", {
-      id: item.id,
-      status: "REVOKED",
-      revocationReason: reason,
-    }, "auth-" + item.id, tr("Analyzer authorization revoked.", "تم إلغاء صلاحية استخدام الجهاز."));
+  function revokeAuthorization(item: Authorization) {
+    openReview({kind: "ANALYZER_REVOKE", id: item.id});
   }
 
   async function createIndicator(event: FormEvent<HTMLFormElement>) {
@@ -487,22 +450,8 @@ export function QualityManagementConsole({
     if (ok) event.currentTarget.reset();
   }
 
-  async function addMeasurement(indicator: Indicator) {
-    const periodStart = window.prompt(tr("Period start (YYYY-MM-DD):", "بداية الفترة (YYYY-MM-DD):"));
-    if (!periodStart) return;
-    const periodEnd = window.prompt(tr("Period end (YYYY-MM-DD):", "نهاية الفترة (YYYY-MM-DD):"));
-    if (!periodEnd) return;
-    const value = window.prompt(tr("Measured value", "القيمة المقاسة") + (indicator.unit ? " (" + indicator.unit + ")" : "") + ":");
-    if (!value) return;
-    const numerator = window.prompt(tr("Numerator (optional):", "البسط (اختياري):")) || "";
-    const denominator = window.prompt(tr("Denominator (optional):", "المقام (اختياري):")) || "";
-    await send(`/api/quality/indicators/${indicator.id}/measurements`, "POST", {
-      periodStart,
-      periodEnd,
-      value,
-      numerator,
-      denominator,
-    }, "indicator-measure-" + indicator.id, tr("Indicator measurement recorded.", "تم تسجيل قياس المؤشر."));
+  function addMeasurement(indicator: Indicator) {
+    openReview({kind: "INDICATOR_MEASUREMENT", id: indicator.id, unit: indicator.unit || ""});
   }
 
   async function createAudit(event: FormEvent<HTMLFormElement>) {
@@ -518,54 +467,16 @@ export function QualityManagementConsole({
     if (ok) event.currentTarget.reset();
   }
 
-  async function addFinding(audit: InternalAudit) {
-    const severity = window.prompt(tr("Severity code: OBSERVATION, MINOR, MAJOR, CRITICAL", "رمز الشدة: OBSERVATION أو MINOR أو MAJOR أو CRITICAL"), "MINOR")?.trim().toUpperCase();
-    if (!severity || !["OBSERVATION","MINOR","MAJOR","CRITICAL"].includes(severity)) return;
-    const description = window.prompt(tr("Finding description:", "وصف الملاحظة:"));
-    if (!description?.trim()) return;
-    const requirementRef = window.prompt(tr("Requirement / SOP / clause reference (optional):", "مرجع المتطلب / SOP / البند (اختياري):")) || "";
-    let capaId = "";
-    if (severity === "CRITICAL") {
-      const capaNumber = window.prompt(tr("Critical findings require a linked open CAPA. Enter CAPA number:", "الملاحظات الحرجة تتطلب CAPA مفتوحة مرتبطة. أدخل رقم CAPA:"));
-      const capa = openCapas.find(item => item.capaNumber.toUpperCase() === capaNumber?.trim().toUpperCase());
-      if (!capa) {
-        setMessage(tr("Critical finding was not saved: select an existing open CAPA first.", "لم يتم حفظ الملاحظة الحرجة: اختر أولاً CAPA مفتوحة موجودة."));
-        return;
-      }
-      capaId = capa.id;
-    } else {
-      const capaNumber = window.prompt(tr("Link an open CAPA number (optional):", "اربط رقم CAPA مفتوحة (اختياري):"))?.trim();
-      if (capaNumber) {
-        const capa = openCapas.find(item => item.capaNumber.toUpperCase() === capaNumber.toUpperCase());
-        if (!capa) {
-          setMessage(tr("CAPA number not found among open CAPA records.", "رقم CAPA غير موجود ضمن سجلات CAPA المفتوحة."));
-          return;
-        }
-        capaId = capa.id;
-      }
-    }
-    await send(`/api/quality/audits/${audit.id}/findings`, "POST", {
-      severity,
-      description,
-      requirementRef,
-      capaId,
-    }, "finding-create-" + audit.id, tr("Audit finding recorded.", "تم تسجيل ملاحظة التدقيق."));
+  function addFinding(audit: InternalAudit) {
+    openReview({kind: "AUDIT_FINDING_CREATE", id: audit.id});
   }
 
-  async function closeFinding(auditId: string, findingId: string) {
-    const closureNote = window.prompt(tr("Finding closure note:", "ملاحظة إغلاق الملاحظة:"));
-    if (!closureNote?.trim()) return;
-    await send(`/api/quality/audits/${auditId}/findings`, "PATCH", {
-      findingId,
-      closureNote,
-    }, "finding-close-" + findingId, tr("Audit finding closed.", "تم إغلاق ملاحظة التدقيق."));
+  function closeFinding(auditId: string, findingId: string) {
+    openReview({kind: "AUDIT_FINDING_CLOSE", id: auditId, subId: findingId});
   }
 
-  async function completeAudit(audit: InternalAudit) {
-    const summary = window.prompt(tr("Audit completion summary:", "ملخص إكمال التدقيق:"));
-    if (!summary?.trim()) return;
-    if (!window.confirm(tr("Complete this internal audit? All findings must already be closed.", "هل تريد إكمال التدقيق الداخلي؟ يجب أن تكون كل الملاحظات مغلقة مسبقاً."))) return;
-    await send(`/api/quality/audits/${audit.id}/complete`, "POST", { summary }, "audit-complete-" + audit.id, tr("Internal audit completed.", "تم إكمال التدقيق الداخلي."));
+  function completeAudit(audit: InternalAudit) {
+    openReview({kind: "AUDIT_COMPLETE", id: audit.id});
   }
 
   return <div className="detail-section">
