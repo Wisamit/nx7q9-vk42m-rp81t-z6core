@@ -232,6 +232,17 @@ html[data-density="compact"] :where(.detail-card,.dashboard-panel,.settings-card
 .crud-success-toast{display:inline-flex;align-items:center;min-height:38px;padding:8px 12px;border-radius:10px;background:color-mix(in srgb,var(--fl-success) 12%,var(--fl-surface));border:1px solid color-mix(in srgb,var(--fl-success) 30%,var(--fl-border));color:var(--fl-success);font-size:12px;font-weight:750}
 .crud-modal-backdrop{position:fixed;inset:0;z-index:100;background:var(--fl-overlay);backdrop-filter:blur(5px);display:flex;align-items:center;justify-content:center;padding:24px}
 .crud-modal{display:flex;flex-direction:column;width:min(760px,100%);max-height:calc(100vh - 48px);background:var(--fl-surface);color:var(--fl-text);border:1px solid var(--fl-border);border-radius:18px;box-shadow:0 28px 90px color-mix(in srgb,var(--fl-text) 35%,transparent);overflow:hidden}
+.crud-modal-compact{width:min(33.333vw,520px);min-width:0}
+.crud-modal-compact .settings-layout{padding-bottom:0;min-width:0}
+.crud-modal-compact .settings-grid,
+.crud-modal-compact .branding-upload-grid,
+.crud-modal-compact .theme-editor-grid,
+.crud-modal-compact .color-grid{grid-template-columns:minmax(0,1fr)}
+.crud-modal-compact .settings-card,
+.crud-modal-compact .theme-editor,
+.crud-modal-compact .branding-upload{min-width:0}
+.crud-modal-compact .settings-savebar{bottom:0;width:100%;max-width:100%;flex-wrap:wrap}
+.crud-modal-compact .settings-savebar button{flex:1;min-width:0}
 .crud-modal-sm{width:min(520px,100%)}
 .crud-modal-md{width:min(720px,100%)}
 .crud-modal-lg{width:min(980px,100%)}
@@ -254,7 +265,7 @@ html[data-density="compact"] :where(.detail-card,.dashboard-panel,.settings-card
 .primary-button,.secondary-button{display:inline-flex;align-items:center;justify-content:center;gap:7px}
 @media(max-width:760px){
  .crud-modal-backdrop{padding:0;align-items:stretch}
- .crud-modal,.crud-modal-sm,.crud-modal-md,.crud-modal-lg,.crud-modal-xl,.crud-modal-full{width:100%;height:100%;max-height:none;border-radius:0}
+ .crud-modal,.crud-modal-sm,.crud-modal-md,.crud-modal-lg,.crud-modal-xl,.crud-modal-full,.crud-modal-compact{width:100%;height:100%;max-height:none;border-radius:0}
  .crud-modal-header{padding:16px}
  .crud-modal-body{padding:16px}
  .crud-modal-body .order-form>.form-grid,.crud-modal-body .settings-grid{grid-template-columns:1fr}
