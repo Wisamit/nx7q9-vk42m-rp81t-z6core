@@ -1,6 +1,7 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { FormEvent, useRef, useState } from "react";
+import { CrudModal } from "@/components/crud-modal";
 import { useRouter } from "next/navigation";
 
 export function CommentTemplateStatusButton({
@@ -17,15 +18,13 @@ export function CommentTemplateStatusButton({
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [reviewReason, setReviewReason] = useState("");
   const pending = useRef(false);
   const tr = (en: string, ar: string) => locale === "ar" ? ar : en;
   const nextStatus = status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
 
-  async function changeStatus() {
-    if (pending.current) return;
-    if (nextStatus === "ACTIVE" && !canApprove) return;
-    if (nextStatus === "INACTIVE" && !canManage) return;
-    const question = nextStatus === "ACTIVE"
+  const question = nextStatus === "ACTIVE"
       ? supersedesTemplateId
         ? tr("Approve this exact revision and ATOMICALLY RETIRE the preceding approved template for future use? Released reports remain unchanged. Independent clinical approval is required.",
           "هل تعتمد هذه النسخة المحددة وتوقف القالب المعتمد السابق ضمن العملية نفسها للاستخدام المستقبلي؟ التقارير الصادرة لا تتغير ويجب الاعتماد من مراجع سريري مستقل.")
@@ -37,19 +36,25 @@ export function CommentTemplateStatusButton({
         "Deactivate this template for future use? Released reports and recorded results will remain unchanged.",
         "هل تريد تعطيل استخدام القالب مستقبلًا؟ ستبقى التقارير الصادرة والنتائج المسجّلة دون تعديل.",
       );
-    if (!confirm(question)) return;
-    const supplied = prompt(tr(
-      nextStatus === "ACTIVE"
-        ? "Clinical review justification (10–1000 characters, required):"
-        : "Deactivation reason (10–1000 characters, required):",
-      nextStatus === "ACTIVE"
-        ? "سبب الاعتماد بعد المراجعة السريرية (من 10 إلى 1000 حرف، إلزامي):"
-        : "سبب التعطيل (من 10 إلى 1000 حرف، إلزامي):",
-    ));
-    if (supplied === null) return;
-    const reason = supplied.trim();
+
+  function openReview() {
+    if (pending.current) return;
+    if (nextStatus === "ACTIVE" && !canApprove) return;
+    if (nextStatus === "INACTIVE" && !canManage) return;
+    setReviewReason("");
+    setError("");
+    setReviewOpen(true);
+  }
+
+  async function changeStatus(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (pending.current) return;
+    if (nextStatus === "ACTIVE" && !canApprove) return;
+    if (nextStatus === "INACTIVE" && !canManage) return;
+    const reason = reviewReason.trim();
     if (reason.length < 10 || reason.length > 1000) {
-      setError(tr("A meaningful 10–1000 character reason is required.", "يجب إدخال سبب واضح من 10 إلى 1000 حرف."));
+      setError(tr("A meaningful 10–1000 character reason is required.",
+        "يجب إدخال سبب واضح من 10 إلى 1000 حرف."));
       return;
     }
     pending.current = true;
@@ -84,6 +89,8 @@ export function CommentTemplateStatusButton({
           result.error || tr("Could not update template.", "تعذر تحديث القالب."));
         return;
       }
+      setReviewOpen(false);
+      setReviewReason("");
       router.refresh();
     } catch {
       setError(tr("Connection failed. Verify status before retrying.", "فشل الاتصال. تحقق من الحالة قبل إعادة المحاولة."));
@@ -99,11 +106,39 @@ export function CommentTemplateStatusButton({
   if (nextStatus === "INACTIVE" && !canManage) return null;
   return <div>
     <button type="button" className="secondary-button" disabled={busy}
-      onClick={() => void changeStatus()}>
+      onClick={openReview}>
       {busy ? tr("Saving…", "جارٍ الحفظ…") :
         nextStatus === "INACTIVE" ? tr("Deactivate", "تعطيل") :
         tr("Review & approve", "مراجعة واعتماد")}
     </button>
-    {error && <p role="alert" className="form-warning">{error}</p>}
+    <CrudModal open={reviewOpen} onClose={() => { if (!busy) setReviewOpen(false); }}
+      size="compact"
+      title={nextStatus === "ACTIVE"
+        ? tr("Independent Clinical Template Approval", "الاعتماد السريري المستقل للقالب")
+        : tr("Retire Comment Template", "إيقاف قالب التعليق")}
+      description={question}>
+      {reviewOpen && <form className="catalog-form" onSubmit={event => void changeStatus(event)}>
+        <p className="form-span">{nextStatus === "ACTIVE"
+          ? tr("Review the EXACT bilingual template above and confirm clinical suitability. The creator cannot self-approve.",
+            "راجع النص ثنائي اللغة كما هو معروض وتأكد من صلاحيته السريرية. لا يحق للمُنشئ اعتماد قالب أنشأه.")
+          : tr("Deactivation affects future use only; released results and reports are immutable.",
+            "يؤثر الإيقاف على الاستخدام المستقبلي فقط؛ تبقى النتائج والتقارير الصادرة ثابتة.")}</p>
+        <label className="form-span">
+          {nextStatus === "ACTIVE"
+            ? tr("Clinical approval justification (10–1000 characters)", "سبب الاعتماد السريري (10–1000 محرف)")
+            : tr("Deactivation reason (10–1000 characters)", "سبب التعطيل (10–1000 محرف)")}
+          <textarea value={reviewReason} required minLength={10} maxLength={1000}
+            rows={4} onChange={event => setReviewReason(event.target.value)} />
+        </label>
+        {error && <p role="alert" className="form-error form-span">{error}</p>}
+        <button className="primary-button form-span" type="submit"
+          disabled={busy || reviewReason.trim().length < 10}>
+          {busy ? tr("Saving…", "جارٍ الحفظ…")
+            : nextStatus === "ACTIVE" ? tr("Confirm exact clinical approval", "تأكيد الاعتماد السريري الدقيق")
+              : tr("Confirm deactivation", "تأكيد التعطيل")}
+        </button>
+      </form>}
+    </CrudModal>
+    {error && !reviewOpen && <p role="alert" className="form-warning">{error}</p>}
   </div>;
 }
