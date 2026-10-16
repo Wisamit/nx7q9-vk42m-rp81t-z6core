@@ -243,7 +243,7 @@ export function QualitativeResultOptionsManager({
       </label>
 
       <label>{tr("Display order", "ترتيب العرض")}<input name="displayOrder" type="number" min="0" max="10000" defaultValue="0" /></label>
-      <label>{tr("Effective from", "ساري من")}<input name="effectiveFrom" type="date" required defaultValue={new Date().toISOString().slice(0, 10)} /></label>
+      <label>{tr("Effective from (choose intended local date)", "ساري من (اختر التاريخ المحلي المقصود)")}<input name="effectiveFrom" type="date" required /></label>
       <label>{tr("Effective to", "ساري حتى")}<input name="effectiveTo" type="date" /></label>
       <label className="checkbox-row"><input name="isAbnormal" type="checkbox" /> {tr("Treat this option as abnormal", "اعتبر هذا الخيار غير طبيعي")}</label>
       <label className="checkbox-row"><input name="isCritical" type="checkbox" /> {tr("Treat this option as a critical result", "اعتبر هذا الخيار نتيجة حرجة")}</label>
