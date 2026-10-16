@@ -53,3 +53,15 @@ test("UI #265: one-time integration secret removed from public page after dialog
   assert.ok(source.includes('setSecret(""); setUiDialog("");'));
   assert.ok(!source.includes('className="integration-secret"'));
 });
+
+test("UI #265: doctor clinical requisition declines require explicit audited reason", () => {
+  const screen = read("src/components/doctor-requisition-review.tsx");
+  assert.ok(screen.includes("<CrudModal"));
+  assert.ok(screen.includes('size="compact"'));
+  assert.ok(screen.includes('minLength={10}'));
+  assert.ok(screen.includes('decision:"DECLINE"'));
+  assert.ok(screen.includes('reason:decisionReason'));
+  assert.doesNotMatch(screen, /(?:window\.)?(?:prompt|confirm)\s*\(/);
+  const route = read("src/app/api/doctor-requisitions/review/route.ts");
+  assert.ok(route.includes("DECLINE"));
+});
