@@ -65,6 +65,7 @@ test("Issue #265: four configuration screens moved into safe modal workflows", (
     assert.equal((contents.match(/<form\b/g) || []).length, formCount, file);
     assert.ok(contents.includes('size="compact"'), file);
     assert.ok(contents.includes('onClose={() => { if (!busy)') ||
+      contents.includes('onClose={() => { if (!busy && !submitting.current)') ||
       contents.includes('onClose={()=>{if(!busy)') ||
       contents.includes('onClose={() => { if (!saving)'),
       file + " must guard in-flight mutation dismissal");
