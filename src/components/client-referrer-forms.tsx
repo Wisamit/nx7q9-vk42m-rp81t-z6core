@@ -121,7 +121,7 @@ export function ClientReferrerForms({
       </div>
     </div>
 
-    <CrudModal open={open === "client"} onClose={() => setOpen("")} title={tr("Add Client", "إضافة عميل")} description={tr("Create a billing/commercial client account.", "إنشاء حساب عميل تجاري أو حساب فوترة.")} size="lg">
+    <CrudModal open={open === "client"} onClose={() => setOpen("")} title={tr("Add Client", "إضافة عميل")} description={tr("Create a billing/commercial client account.", "إنشاء حساب عميل تجاري أو حساب فوترة.")} size="compact">
       <form className="catalog-form" onSubmit={submitClient}>
         <label>{tr("Code", "الرمز")}<input name="code" placeholder={tr("Optional; generated from name","اختياري؛ يتم توليده من الاسم")} /></label>
         <label>{tr("Type", "النوع")}<select name="type" defaultValue="CLINIC"><option value="INDIVIDUAL">{clientTypeLabel("INDIVIDUAL")}</option><option value="CLINIC">{clientTypeLabel("CLINIC")}</option><option value="HOSPITAL">{clientTypeLabel("HOSPITAL")}</option><option value="COMPANY">{clientTypeLabel("COMPANY")}</option><option value="INSURANCE">{clientTypeLabel("INSURANCE")}</option><option value="OTHER">{clientTypeLabel("OTHER")}</option></select></label>
@@ -135,7 +135,7 @@ export function ClientReferrerForms({
       </form>
     </CrudModal>
 
-    <CrudModal open={open === "referrer"} onClose={() => setOpen("")} title={tr("Add Referrer", "إضافة محيل")} description={tr("Create a doctor, clinic or hospital referral source.", "إنشاء مصدر إحالة لطبيب أو عيادة أو مستشفى.")} size="lg">
+    <CrudModal open={open === "referrer"} onClose={() => setOpen("")} title={tr("Add Referrer", "إضافة محيل")} description={tr("Create a doctor, clinic or hospital referral source.", "إنشاء مصدر إحالة لطبيب أو عيادة أو مستشفى.")} size="compact">
       <form className="catalog-form" onSubmit={submitReferrer}>
         <label>{tr("Code", "الرمز")}<input name="code" placeholder={tr("Optional; generated from name","اختياري؛ يتم توليده من الاسم")} /></label>
         <label>{tr("Type", "النوع")}<select name="type" defaultValue="PHYSICIAN"><option value="PHYSICIAN">{referrerTypeLabel("PHYSICIAN")}</option><option value="CLINIC">{referrerTypeLabel("CLINIC")}</option><option value="HOSPITAL">{referrerTypeLabel("HOSPITAL")}</option><option value="OTHER">{referrerTypeLabel("OTHER")}</option></select></label>
@@ -150,7 +150,7 @@ export function ClientReferrerForms({
       </form>
     </CrudModal>
 
-    {canManageSources && <CrudModal open={open === "source"} onClose={() => setOpen("")} title={tr("Add Order Source", "إضافة مصدر طلب")} description={tr("Create a configurable acquisition/source category for orders and analytics.", "إنشاء مصدر قابل للتهيئة للطلبات والتحليلات.")} size="md">
+    {canManageSources && <CrudModal open={open === "source"} onClose={() => setOpen("")} title={tr("Add Order Source", "إضافة مصدر طلب")} description={tr("Create a configurable acquisition/source category for orders and analytics.", "إنشاء مصدر قابل للتهيئة للطلبات والتحليلات.")} size="compact">
       <form className="catalog-form" onSubmit={submitSource}>
         <label>{tr("Code", "الرمز")}<input name="code" required placeholder="WALK_IN / CAMPAIGN / INSURANCE" /></label>
         <label>{tr("Category", "الفئة")}<input name="category" required placeholder="WALK_IN / DOCTOR / CORPORATE" /></label>
