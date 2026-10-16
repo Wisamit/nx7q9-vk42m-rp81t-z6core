@@ -52,6 +52,7 @@ export function QcManager({
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
   const [uiEditor, setUiEditor] = useState("");
+  const [resolutionId, setResolutionId] = useState<string|null>(null);
   const [targetTestId, setTargetTestId] = useState("");
   const [runAnalyzerId, setRunAnalyzerId] = useState("");
   const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
@@ -68,19 +69,31 @@ export function QcManager({
   );
 
   async function submit(url: string, payload: unknown, key: string, success: string, form?: HTMLFormElement) {
+    if (busy) return false;
     setBusy(key);
     setMessage("");
-    const response = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    await response.json().catch(() => ({}));
-    setBusy("");
-    setMessage(response.ok ? success : tr("Action failed.", "فشلت العملية."));
-    if (response.ok) {
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const body = await response.json().catch(() => ({})) as {error?: string};
+      if (!response.ok) {
+        setMessage(body.error || tr("Action failed; review QC state before retrying.",
+          "فشلت العملية؛ راجع حالة ضبط الجودة قبل إعادة المحاولة."));
+        return false;
+      }
+      setMessage(success);
       form?.reset();
       router.refresh();
+      return true;
+    } catch {
+      setMessage(tr("Network error; check the latest QC state before retrying.",
+        "خطأ اتصال؛ تحقق من أحدث حالة ضبط الجودة قبل إعادة المحاولة."));
+      return false;
+    } finally {
+      setBusy("");
     }
   }
 
@@ -159,25 +172,29 @@ export function QcManager({
     setRunAnalyzerId("");
   }
 
-  async function resolveViolation(violationId: string) {
-    const actionType = window.prompt(
-      tr(
-        "Corrective action type — enter one code: REPEAT_QC, RECALIBRATE, MAINTENANCE, REPLACE_REAGENT, REPLACE_CONTROL, INVESTIGATE, OTHER",
-        "نوع الإجراء التصحيحي — أدخل أحد الأكواد: REPEAT_QC, RECALIBRATE, MAINTENANCE, REPLACE_REAGENT, REPLACE_CONTROL, INVESTIGATE, OTHER",
-      ),
-      "INVESTIGATE",
-    );
-    if (!actionType) return;
-    const description = window.prompt(tr("Describe the corrective action performed:", "صف الإجراء التصحيحي الذي تم تنفيذه:"));
-    if (!description?.trim()) return;
-    const resolutionNote = window.prompt(tr("Resolution note:", "ملاحظة الحل:"));
-    if (!resolutionNote?.trim()) return;
+  function resolveViolation(violationId: string) {
+    if (busy || !canResolve) return;
+    setMessage("");
+    setResolutionId(violationId);
+  }
 
-    await submit(`/api/qc/violations/${violationId}/resolve`, {
-      actionType,
-      description,
-      resolutionNote,
-    }, "resolve-" + violationId, tr("QC violation resolved.", "تمت معالجة مخالفة QC."));
+  async function saveResolution(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!resolutionId || !canResolve || busy) return;
+    const form = new FormData(event.currentTarget);
+    const actionType = String(form.get("actionType") || "");
+    const description = String(form.get("description") || "").trim();
+    const resolutionNote = String(form.get("resolutionNote") || "").trim();
+    if (!description || !resolutionNote) {
+      setMessage(tr("Corrective action and resolution note are required.",
+        "وصف الإجراء التصحيحي وملاحظة الحل إلزاميان."));
+      return;
+    }
+    const ok = await submit(`/api/qc/violations/${resolutionId}/resolve`, {
+      actionType, description, resolutionNote,
+    }, "resolve-" + resolutionId,
+      tr("QC violation resolved.", "تمت معالجة مخالفة QC."));
+    if (ok) setResolutionId(null);
   }
 
   return <section className="detail-grid detail-section">
@@ -326,5 +343,32 @@ export function QcManager({
     </article>}
 
     {message && <div className="form-success form-span">{message}</div>}
+    <CrudModal open={resolutionId!==null}
+      onClose={()=>{if(!busy)setResolutionId(null);}}
+      size="compact"
+      title={tr("Resolve QC Violation","معالجة مخالفة ضبط الجودة")}
+      description={tr(
+        "Document an actual corrective action and the resolution evidence for this specific violation. Server QC release policies remain authoritative.",
+        "وثّق الإجراء التصحيحي الفعلي وأدلة الحل لهذه المخالفة تحديداً؛ تظل سياسات ضبط الجودة في السيرفر هي المرجع.",
+      )}>
+      {resolutionId&&<form className="catalog-form" onSubmit={saveResolution}>
+        <label className="form-span">{tr("Corrective action type","نوع الإجراء التصحيحي")}
+          <select name="actionType" required defaultValue="INVESTIGATE">
+            {["REPEAT_QC","RECALIBRATE","MAINTENANCE","REPLACE_REAGENT","REPLACE_CONTROL","INVESTIGATE","OTHER"].map(code=>
+              <option key={code} value={code}>{code}</option>)}
+          </select>
+        </label>
+        <label className="form-span">{tr("Action performed (required)","الإجراء المنفذ (مطلوب)")}
+          <textarea rows={3} maxLength={3000} name="description" required/>
+        </label>
+        <label className="form-span">{tr("Resolution evidence or note (required)","أدلة الحل أو ملاحظته (مطلوب)")}
+          <textarea rows={3} maxLength={3000} name="resolutionNote" required/>
+        </label>
+        {message&&<p className="form-warning form-span" role="alert">{message}</p>}
+        <button type="submit" className="primary-button form-span" disabled={Boolean(busy)}>
+          {busy?tr("Saving…","جارٍ الحفظ…"):tr("Confirm QC resolution","تأكيد معالجة المخالفة")}
+        </button>
+      </form>}
+    </CrudModal>
   </section>;
 }
