@@ -94,12 +94,14 @@ export function PatientEditForm({ patient, locale }: { patient: PatientEditValue
       setConfirmDuplicate(false);
       router.refresh();
     } else if (body.error === "possible_duplicates" && body.candidates?.length) {
+      setConfirmDuplicate(false);
       setDuplicateReview({ payload, candidates: body.candidates });
       setMessage(tr(
         "These changes would make the patient resemble another active identity. Review before saving.",
         "ستجعل هذه التغييرات المريض مشابهاً لهوية نشطة أخرى. راجع السجلات قبل الحفظ.",
       ));
     } else {
+      setConfirmDuplicate(false);
       const errors: Record<string, string> = {
         patient_state_changed: tr("The patient changed in another session. Refresh before editing again.", "تغير سجل المريض في جلسة أخرى. حدّث الصفحة قبل التعديل من جديد."),
         patient_not_editable: tr("Merged or inactive patient records cannot be edited.", "لا يمكن تعديل سجلات المرضى المدمجة أو غير النشطة."),
@@ -111,6 +113,7 @@ export function PatientEditForm({ patient, locale }: { patient: PatientEditValue
       setMessage(errors[body.error || ""] || body.error || tr("Patient update failed.", "تعذر تحديث بيانات المريض."));
     }
     } catch {
+      setConfirmDuplicate(false);
       setMessage(tr(
         "Connection interrupted. Verify the patient master and audit before retrying.",
         "انقطع الاتصال. تحقق من سجل المريض وسجل التدقيق قبل إعادة المحاولة.",
