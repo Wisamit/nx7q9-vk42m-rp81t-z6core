@@ -6,11 +6,14 @@ const read = (file: string) => readFileSync(file, "utf8");
 
 test("UI #265: critical communication and clinical medical return require explicit protected compact dialogs", () => {
   const ui = read("src/components/result-workflow-actions.tsx");
-  assert.equal((ui.match(/<CrudModal\b/g) || []).length, 3);
-  assert.equal((ui.match(/<form\b/g) || []).length, 3);
+  assert.equal((ui.match(/<CrudModal\b/g) || []).length, 5);
+  assert.equal((ui.match(/<form\b/g) || []).length, 4);
+  assert.ok(ui.includes('open={governedConfirmation!==null}'));
+  assert.ok(ui.includes('open={qcWarningReasons!==null}'));
   assert.ok(ui.includes('open={showMedicalReturn}'));
   assert.ok(ui.includes('open={showCommunication}'));
   assert.ok(ui.includes('open={showAmendment}'));
+  assert.ok(ui.includes('setStepUpPending("MEDICAL_APPROVAL")'));
   assert.ok(ui.includes('onSubmit={returnFromMedicalValidation}'));
   assert.ok(ui.includes('onSubmit={submitCommunication}'));
   assert.ok(ui.includes('onSubmit={startAmendment}'));
