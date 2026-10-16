@@ -42,6 +42,14 @@ export function SystemDateField({
   const validIso = outsideRange ? "" : iso;
 
   useEffect(() => {
+    const form = inputRef.current?.form;
+    if (!form) return;
+    const onReset = () => setDraft(null);
+    form.addEventListener("reset", onReset);
+    return () => form.removeEventListener("reset", onReset);
+  }, []);
+
+  useEffect(() => {
     if (!inputRef.current) return;
     inputRef.current.setCustomValidity(
       !text || validIso ? "" : "Invalid date for the selected system format / تاريخ غير صالح حسب تنسيق النظام",
@@ -72,7 +80,7 @@ export function SystemDateField({
       ref={inputRef}
       id={id}
       type="text"
-      inputMode="numeric"
+      inputMode={format === "DD MMM YYYY" ? "text" : "numeric"}
       dir="ltr"
       lang="en"
       autoComplete="off"
