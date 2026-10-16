@@ -104,6 +104,39 @@ preferences, branch RBAC and keyboard/screen reader use as `NOT_EXECUTED`.
   remain server enforced; network failure never pretends a stock
   transaction succeeded.
 
+### Additional UI protection on this same UNMERGED branch
+
+- Analyzer worklist routing: mapped instrument assignment and audited
+  removal now use separate compact modal reviews. Removing a route requires
+  a documented reason and does not delete prior analyzer observations.
+- Analyzer message replay: explicit modal to queue a single immutable raw
+  message again; this neither verifies nor releases a clinical result.
+- Analyzer clinical import: a separate confirmation dialog lists the number
+  of selected mapped observations; import only targets a result draft and
+  never substitutes for independent clinical validation.
+- Recall escalation: open a branch-scoped quality nonconformance only after
+  a deliberate confirmation; existing recall holds and patient/report
+  history remain unchanged.
+- Organization-wide lot quarantine, irreversible recall and independently
+  reviewed release now have a guarded one-third-width review, preserving
+  the original server-side lot/branch permissions and transactional audit.
+- Branch-specific inventory safety response now uses an explicit modal;
+  physical stock isolation remains an operator attestation, NOT proof of
+  physical stock verification or patient exposure.
+- Staff password reset keeps existing secure modal and administrator
+  re-authentication, but no longer stacks an additional native browser
+  confirm dialog; session revocation and MFA preservation are explained.
+- Clinical result comment revisions now open a compact edit dialog,
+  preserving the source version and fingerprint. A different authorized
+  reviewer must later approve the INACTIVE successor and supersede the
+  predecessor transactionally.
+- Order-level clinical handover annotation now offers compact creation,
+  correction, acknowledgment and reasoned retraction dialogs; corrections
+  keep stable idempotency keys until success, preserve every historical
+  note and cannot edit released results or invoices.
+- Domain-specific regression tests have been added for these workflows.
+  All claims above are code and CI scope, **not** live browser evidence.
+
 ### Still unresolved — not a screen-completion claim
 
 - Source audit and CI do **not** establish actual rendered screen layout,
