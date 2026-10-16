@@ -34,7 +34,7 @@ export function CrudModal({
   const dialogRef = useRef<HTMLElement>(null);
   const closeRef = useRef(onClose);
   const changedRef = useRef(false);
-  closeRef.current = onClose;
+  useEffect(() => { closeRef.current = onClose; }, [onClose]);
 
   const requestClose = useCallback(() => {
     if (protectUnsavedChanges && changedRef.current) {
