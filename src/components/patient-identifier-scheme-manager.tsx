@@ -143,7 +143,7 @@ export function PatientIdentifierSchemeManager({
       </table></div>
     </section>
 
-    <CrudModal open={createOpen} onClose={() => setCreateOpen(false)} size="compact"
+    <CrudModal open={createOpen} onClose={() => { if (!busy) setCreateOpen(false); }} size="compact"
       title={tr("Add Custom Identifier Scheme", "إضافة نوع معرّف مخصص")}
       description={tr(
         "Add an organization-wide identifier scheme without changing historical patient identifiers.",
@@ -161,7 +161,7 @@ export function PatientIdentifierSchemeManager({
       </form>}
     </CrudModal>
 
-    <CrudModal open={deactivation !== null} onClose={() => setDeactivationId(null)} size="compact"
+    <CrudModal open={deactivation !== null} onClose={() => { if (!busy) setDeactivationId(null); }} size="compact"
       title={tr("Deactivate Identifier Scheme", "تعطيل نوع معرّف")}
       description={tr(
         "This deactivates the custom scheme for future use only; existing patient identifiers remain unchanged.",
