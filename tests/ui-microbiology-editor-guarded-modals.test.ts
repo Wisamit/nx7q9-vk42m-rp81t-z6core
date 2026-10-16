@@ -10,7 +10,7 @@ const uiForms = [
 ] as const;
 
 test("Issue #265: microbiology culture, observation and isolates are scoped compact dialogs", () => {
-  assert.equal((editor.match(/<CrudModal\\b/g) || []).length, 3);
+  assert.equal((editor.match(/<CrudModal\b/g) || []).length, 3);
   for (const [handler, mode] of uiForms) {
     const needle = '<form className="catalog-form" onSubmit={' + handler + '}>';
     const start = editor.indexOf(needle);
