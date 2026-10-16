@@ -1,7 +1,7 @@
 import { requirePermission } from "@/lib/auth";
 import { getOrganizationSystemSettings } from "@/lib/system-settings";
 import Link from "next/link";
-import { SystemSettingsForm } from "@/components/system-settings-form";
+import { SystemSettingsDialog } from "@/components/system-settings-dialog";
 import { SystemIcon } from "@/components/system-icon";
 
 export const dynamic = "force-dynamic";
@@ -25,6 +25,6 @@ export default async function SettingsPage() {
         <Link className="secondary-link" href="/security"><SystemIcon name="security" size={15} />{locale === "ar" ? "الأمان والملف الشخصي" : "Security & Profile"}</Link>
       </div>
     </header>
-    <SystemSettingsForm initial={settings} locale={locale} />
+    <SystemSettingsDialog initial={settings} locale={locale} />
   </main>;
 }
