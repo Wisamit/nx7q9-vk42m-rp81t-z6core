@@ -58,6 +58,9 @@ function stagingOrigin(input) {
   if (url.username || url.password || url.pathname !== "/" || url.search || url.hash) {
     throw Error("Staging origin must not include credentials, paths, query parameters or fragments.");
   }
+  if (/(^|[.-])(prod|production|live)([.-]|$)/i.test(url.hostname)) {
+    throw Error("Production or live target is explicitly forbidden.");
+  }
   if (!isLocalhost && !/(^|[.-])(stage|staging|qa|sandbox|test)([.-]|$)/i.test(url.hostname)) {
     throw Error("Staging hostname must explicitly indicate non-production (stage, qa, sandbox or test).");
   }
@@ -100,7 +103,7 @@ function resolveRoute(base, row, config) {
 function profileForRoute(route, locale, config) {
   const overrides = config.routeProfiles || {};
   const names = overrides[route] || (
-    route === "/" || route === "/login" || route === "/setup" ||
+    route === "/" || route === "/login" || route === "/setup" || route === "/portal/login" ||
     route.startsWith("/verify/") || route.startsWith("/queue-display/")
       ? {ar:"anonymous",en:"anonymous"}
       : route.startsWith("/portal")
