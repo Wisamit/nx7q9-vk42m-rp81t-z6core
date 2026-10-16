@@ -1,5 +1,7 @@
 "use client";
 
+import { SystemDateField } from "@/components/system-date-field";
+
 import { FormEvent, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CrudModal } from "@/components/crud-modal";
@@ -263,8 +265,8 @@ export function PricingManager({
         <label>{tr("Name (English)", "الاسم بالإنجليزية")}<input name="nameEn" required /></label>
         <label>{tr("Name (Arabic)","الاسم بالعربية")}<input name="nameAr" dir="rtl" /></label>
         <label>{tr("Currency", "العملة")}<input name="currency" required maxLength={3} defaultValue={defaultCurrency} /></label>
-        <label>{tr("Effective from (select intended local date)", "ساري من (اختر التاريخ المحلي المقصود)")}<input name="effectiveFrom" type="date" required /></label>
-        <label>{tr("Effective to", "ساري حتى")}<input name="effectiveTo" type="date" /></label>
+        <label>{tr("Effective from (select intended local date)", "ساري من (اختر التاريخ المحلي المقصود)")}<SystemDateField name="effectiveFrom"  required /></label>
+        <label>{tr("Effective to", "ساري حتى")}<SystemDateField name="effectiveTo"  /></label>
         <button className="primary-button form-span" disabled={busy === "contract"}>{busy === "contract" ? tr("Saving…", "جارٍ الحفظ…") : tr("Create Contract", "إنشاء العقد")}</button>
         {message && <div className={(isError ? "form-error" : "form-success") + " form-span"} role={isError ? "alert" : "status"}>{message}</div>}
       </form>
@@ -283,8 +285,8 @@ export function PricingManager({
         {scopeType === "CONTRACT" && <label>{tr("Contract", "العقد")}<select name="contractId" required><option value="">{tr("Select contract…", "اختر العقد…")}</option>{contracts.map(x => <option key={x.id} value={x.id}>{x.code} — {localizedName(x)}</option>)}</select></label>}
         <label>{tr("Currency", "العملة")}<input name="currency" required maxLength={3} defaultValue={defaultCurrency} /></label>
         <label>{tr("Priority", "الأولوية")}<input name="priority" type="number" defaultValue="0" /></label>
-        <label>{tr("Effective from (select intended local date)", "ساري من (اختر التاريخ المحلي المقصود)")}<input name="effectiveFrom" type="date" required /></label>
-        <label>{tr("Effective to", "ساري حتى")}<input name="effectiveTo" type="date" /></label>
+        <label>{tr("Effective from (select intended local date)", "ساري من (اختر التاريخ المحلي المقصود)")}<SystemDateField name="effectiveFrom"  required /></label>
+        <label>{tr("Effective to", "ساري حتى")}<SystemDateField name="effectiveTo"  /></label>
         <button className="primary-button form-span" disabled={busy === "list"}>{busy === "list" ? tr("Saving…", "جارٍ الحفظ…") : tr("Create Price List", "إنشاء قائمة الأسعار")}</button>
         {message && <div className={(isError ? "form-error" : "form-success") + " form-span"} role={isError ? "alert" : "status"}>{message}</div>}
       </form>
@@ -298,8 +300,8 @@ export function PricingManager({
           <datalist id="pricing-test-options">{testOptions.map(test => <option key={test.id} value={test.label} />)}</datalist>
         </label>
         <label>{tr("Unit price", "سعر الوحدة")}<input name="unitPrice" type="number" step="0.0001" min="0" required /></label>
-        <label>{tr("Effective from (select intended local date)", "ساري من (اختر التاريخ المحلي المقصود)")}<input name="effectiveFrom" type="date" required /></label>
-        <label>{tr("Effective to", "ساري حتى")}<input name="effectiveTo" type="date" /></label>
+        <label>{tr("Effective from (select intended local date)", "ساري من (اختر التاريخ المحلي المقصود)")}<SystemDateField name="effectiveFrom"  required /></label>
+        <label>{tr("Effective to", "ساري حتى")}<SystemDateField name="effectiveTo"  /></label>
         <button className="primary-button form-span" disabled={busy === "item"}>{busy === "item" ? tr("Saving…", "جارٍ الحفظ…") : tr("Add Test Price", "إضافة سعر الفحص")}</button>
         {message && <div className={(isError ? "form-error" : "form-success") + " form-span"} role={isError ? "alert" : "status"}>{message}</div>}
       </form>
@@ -313,8 +315,8 @@ export function PricingManager({
           <datalist id="pricing-package-options">{packageOptions.map(pkg => <option key={pkg.id} value={pkg.label} />)}</datalist>
         </label>
         <label>{tr("Package price", "سعر الباقة")}<input name="unitPrice" type="number" step="0.0001" min="0" required /></label>
-        <label>{tr("Effective from (select intended local date)", "ساري من (اختر التاريخ المحلي المقصود)")}<input name="effectiveFrom" type="date" required /></label>
-        <label>{tr("Effective to", "ساري حتى")}<input name="effectiveTo" type="date" /></label>
+        <label>{tr("Effective from (select intended local date)", "ساري من (اختر التاريخ المحلي المقصود)")}<SystemDateField name="effectiveFrom"  required /></label>
+        <label>{tr("Effective to", "ساري حتى")}<SystemDateField name="effectiveTo"  /></label>
         <button className="primary-button form-span" disabled={busy === "package"}>{busy === "package" ? tr("Saving…", "جارٍ الحفظ…") : tr("Add Package Price", "إضافة سعر الباقة")}</button>
         {message && <div className={(isError ? "form-error" : "form-success") + " form-span"} role={isError ? "alert" : "status"}>{message}</div>}
       </form>
