@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
+import { CrudModal } from "@/components/crud-modal";
 
 type ServiceOption = { id: string; code: string; name: string };
 type BranchOption = { id: string; code: string; name: string };
@@ -22,6 +23,7 @@ export function TaxRuleManager({
   const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
   const router = useRouter();
   const [busy, setBusy] = useState(false);
+  const [open, setOpen] = useState(false);
   const [message, setMessage] = useState("");
   const [serviceType, setServiceType] = useState<"TEST" | "PACKAGE">("TEST");
   const [treatment, setTreatment] = useState<"STANDARD" | "ZERO_RATED" | "EXEMPT">("STANDARD");
@@ -29,6 +31,7 @@ export function TaxRuleManager({
 
   async function publish(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (busy) return;
     const form = new FormData(event.currentTarget);
     setBusy(true); setMessage("");
     try {
@@ -52,6 +55,7 @@ export function TaxRuleManager({
       const result = await response.json().catch(() => ({}));
       if (response.ok) {
         setMessage(tr("Tax revision published. Previous rules and issued invoices remain unchanged.", "تم نشر نسخة القاعدة الضريبية. بقيت القواعد القديمة والفواتير الصادرة دون تغيير."));
+        setOpen(false);
         router.refresh();
       } else {
         const errors: Record<string, string> = {
@@ -71,11 +75,25 @@ export function TaxRuleManager({
 
   return <div className="admin-grid">
     <section className="table-card">
-      <div className="table-toolbar"><div>
-        <h2>{tr("Publish Tax Rule", "نشر قاعدة ضريبية")}</h2>
-        <span>{tr("Only listed services are taxed. No rule means no tax. A newer effective-date revision supersedes previous rates without rewriting history.", "تُطبق الضرائب فقط على الخدمات المهيأة. عدم وجود قاعدة يعني عدم فرض ضريبة. نسخة أحدث بتاريخ سريان جديد تحل مكان القديمة دون تعديل السجلات التاريخية.")}</span>
-      </div></div>
-      <form className="catalog-form" onSubmit={publish}>
+      <div className="table-toolbar">
+        <div>
+          <h2>{tr("Tax Configuration", "إعدادات الضرائب")}</h2>
+          <span>{tr("Only explicitly published tax rules apply. Existing invoices remain unchanged.", "تُطبق القواعد المنشورة صراحة فقط. تبقى الفواتير السابقة دون تغيير.")}</span>
+        </div>
+        <button type="button" className="primary-button" disabled={busy}
+          onClick={() => { setMessage(""); setOpen(true); }}>
+          {tr("Publish Tax Rule", "نشر قاعدة ضريبية")}
+        </button>
+      </div>
+      {!open && message && <p className="form-success" role="status">{message}</p>}
+      <CrudModal open={open} onClose={() => { if (!busy) setOpen(false); }}
+        size="compact"
+        title={tr("Publish New Tax Rule", "نشر قاعدة ضريبية جديدة")}
+        description={tr(
+          "Review scope, service, tax treatment, exact rate and effective date before publication. Previous issued invoices remain unchanged.",
+          "راجع النطاق والخدمة والمعاملة والنسبة وتاريخ السريان قبل النشر. تبقى الفواتير الصادرة دون تغيير.",
+        )}>
+      {open && <form className="catalog-form" onSubmit={publish}>
         <label>{tr("Scope", "النطاق")}
           <select name="branchId" defaultValue={branches[0]?.id || ""} required={!canOrganizationScope}>
             {canOrganizationScope && <option value="">{tr("Organization default", "الافتراضي للمؤسسة")}</option>}
@@ -115,8 +133,9 @@ export function TaxRuleManager({
         <label>{tr("Effective date", "تاريخ السريان")}<input name="effectiveFrom" type="date" required /></label>
         <label className="form-span">{tr("Publication reason", "سبب نشر القاعدة")}<textarea name="reason" maxLength={1000} required /></label>
         <button className="primary-button form-span" disabled={busy}>{busy ? tr("Publishing…", "جارٍ النشر…") : tr("Publish New Tax Rule", "نشر قاعدة ضريبية جديدة")}</button>
-        {message && <div className="form-success form-span">{message}</div>}
-      </form>
+        {message && <div className="form-error form-span" role="alert">{message}</div>}
+      </form>}
+      </CrudModal>
     </section>
 
     <section className="table-card">
