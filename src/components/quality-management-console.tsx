@@ -2,6 +2,7 @@
 
 import { FormEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { CrudModal } from "@/components/crud-modal";
 import { statusLabel as sharedStatusLabel } from "@/lib/ui-i18n";
 
 type Branch = { id: string; code: string; nameEn: string; nameAr?: string | null };
@@ -171,6 +172,7 @@ export function QualityManagementConsole({
   const router = useRouter();
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
+  const [uiEditor, setUiEditor] = useState("");
   const [trainingAnalyzerId, setTrainingAnalyzerId] = useState("");
   const [competencyAnalyzerId, setCompetencyAnalyzerId] = useState("");
   const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
@@ -571,7 +573,12 @@ export function QualityManagementConsole({
 
     {permissions.nonconformance && <section className="detail-card detail-section">
       <h2>{tr("Record Nonconformance","تسجيل حالة عدم مطابقة")}</h2>
-      <form className="catalog-form" onSubmit={createNonconformance}>
+      <button type="button" className="primary-button" disabled={Boolean(busy)}
+   onClick={() => { setMessage(""); setUiEditor("nonconformance"); }}>{tr("Record Nonconformance", "تسجيل عدم مطابقة")}</button>
+   <CrudModal open={uiEditor === "nonconformance"} onClose={() => { if (!busy) setUiEditor(""); }}
+     size="compact" title={tr("Record Nonconformance", "تسجيل عدم مطابقة")}
+     description={tr("Record documented quality events and preserve their immutable investigation history.", "سجّل حدث الجودة الموثق مع الحفاظ على تاريخ التحقيق.")}>
+     {uiEditor === "nonconformance" && <form className="catalog-form" onSubmit={createNonconformance}>
         <label>{tr("Branch","الفرع")}<select name="branchId" defaultValue=""><option value="">{tr("Organization-wide","على مستوى المؤسسة")}</option>{branches.map(branch => <option key={branch.id} value={branch.id}>{branch.code} — {branchName(branch)}</option>)}</select></label>
         <label>{tr("Severity","الشدة")}<select name="severity" defaultValue="MINOR"><option value="MINOR">{severityLabel("MINOR")}</option><option value="MAJOR">{severityLabel("MAJOR")}</option><option value="CRITICAL">{severityLabel("CRITICAL")}</option></select></label>
         <label>{tr("Category","الفئة")}<input name="category" required placeholder={tr("Pre-analytical / Analytical / Post-analytical / Safety…","قبل التحليل / أثناء التحليل / بعد التحليل / السلامة…")} /></label>
@@ -583,7 +590,9 @@ export function QualityManagementConsole({
         <label>{tr("Source ID","معرّف المصدر")}<input name="sourceEntityId" /></label>
         <label className="form-span">{tr("Immediate action","الإجراء الفوري")}<textarea name="immediateAction" rows={2} /></label>
         <button className="primary-button form-span" disabled={busy !== ""}>{busy === "nc-create" ? tr("Saving…","جارٍ الحفظ…") : tr("Record Nonconformance","تسجيل حالة عدم المطابقة")}</button>
-      </form>
+      </form>}
+     {uiEditor === "nonconformance" && message && <p className="form-warning" role="status">{message}</p>}
+   </CrudModal>
     </section>}
 
     <section className="table-card detail-section">
@@ -605,7 +614,12 @@ export function QualityManagementConsole({
 
     {permissions.capa && <section className="detail-card detail-section">
       <h2>{tr("Create CAPA","إنشاء CAPA")}</h2>
-      <form className="catalog-form" onSubmit={createCapa}>
+      <button type="button" className="primary-button" disabled={Boolean(busy)}
+   onClick={() => { setMessage(""); setUiEditor("capa"); }}>{tr("Create CAPA", "إنشاء إجراء تصحيحي ووقائي")}</button>
+   <CrudModal open={uiEditor === "capa"} onClose={() => { if (!busy) setUiEditor(""); }}
+     size="compact" title={tr("Create CAPA", "إنشاء إجراء تصحيحي ووقائي")}
+     description={tr("Corrective and preventive actions require governed owners, deadlines and follow-up.", "تتطلب الإجراءات التصحيحية والوقائية مسؤولاً ومهلاً ومتابعة موثقة.")}>
+     {uiEditor === "capa" && <form className="catalog-form" onSubmit={createCapa}>
         <label>{tr("Branch","الفرع")}<select name="branchId" defaultValue=""><option value="">{tr("Organization-wide","على مستوى المؤسسة")}</option>{branches.map(branch => <option key={branch.id} value={branch.id}>{branch.code} — {branchName(branch)}</option>)}</select></label>
         <label>{tr("Linked nonconformance","عدم المطابقة المرتبط")}<select name="nonconformanceId" defaultValue=""><option value="">{tr("None","لا يوجد")}</option>{openNonconformances.map(item => <option key={item.id} value={item.id}>{item.caseNumber} — {item.title}</option>)}</select></label>
         <label>{tr("Owner","المسؤول")}<select name="ownerUserId" required defaultValue=""><option value="">{tr("Select owner…","اختر المسؤول…")}</option>{users.map(user => <option key={user.id} value={user.id}>{userName(user)}</option>)}</select></label>
@@ -614,7 +628,9 @@ export function QualityManagementConsole({
         <label className="form-span">{tr("Issue description","وصف المشكلة")}<textarea name="issueDescription" rows={3} required /></label>
         <label className="form-span">{tr("Root cause","السبب الجذري")}<textarea name="rootCause" rows={2} /></label>
         <button className="primary-button form-span" disabled={busy !== ""}>{busy === "capa-create" ? tr("Saving…","جارٍ الحفظ…") : tr("Create CAPA","إنشاء CAPA")}</button>
-      </form>
+      </form>}
+     {uiEditor === "capa" && message && <p className="form-warning" role="status">{message}</p>}
+   </CrudModal>
     </section>}
 
     <section className="table-card detail-section">
@@ -632,7 +648,12 @@ export function QualityManagementConsole({
 
     {permissions.documents && <section className="detail-card detail-section">
       <h2>{tr("Create Controlled Document","إنشاء وثيقة مضبوطة")}</h2>
-      <form className="catalog-form" onSubmit={createDocument}>
+      <button type="button" className="primary-button" disabled={Boolean(busy)}
+   onClick={() => { setMessage(""); setUiEditor("document"); }}>{tr("Create Controlled Document", "إنشاء وثيقة مضبوطة")}</button>
+   <CrudModal open={uiEditor === "document"} onClose={() => { if (!busy) setUiEditor(""); }}
+     size="compact" title={tr("Create Controlled Document", "إنشاء وثيقة مضبوطة")}
+     description={tr("Controlled documents require explicit versioning and independent approval.", "تحتاج الوثائق المضبوطة إلى إصدارات واعتماد مستقل.")}>
+     {uiEditor === "document" && <form className="catalog-form" onSubmit={createDocument}>
         <label>{tr("Code","الرمز")}<input name="code" required placeholder="SOP-HEM-001" /></label>
         <label>{tr("Type","النوع")}<select name="documentType" defaultValue="SOP"><option value="SOP">SOP</option><option value="POLICY">{documentTypeLabel("POLICY")}</option><option value="WORK_INSTRUCTION">{documentTypeLabel("WORK_INSTRUCTION")}</option><option value="FORM">{documentTypeLabel("FORM")}</option><option value="CHECKLIST">{documentTypeLabel("CHECKLIST")}</option><option value="OTHER">{documentTypeLabel("OTHER")}</option></select></label>
         <label>{tr("Branch","الفرع")}<select name="branchId" defaultValue=""><option value="">{tr("Organization-wide","على مستوى المؤسسة")}</option>{branches.map(branch => <option key={branch.id} value={branch.id}>{branchName(branch)}</option>)}</select></label>
@@ -643,7 +664,9 @@ export function QualityManagementConsole({
         <label>{tr("External URL","رابط خارجي")}<input name="externalUrl" type="url" /></label>
         <label className="form-span">{tr("Document content snapshot","لقطة محتوى الوثيقة")}<textarea name="content" rows={5} placeholder={tr("Controlled text content, or leave empty when using an external document URL.","محتوى نصي مضبوط، أو اتركه فارغاً عند استخدام رابط خارجي للوثيقة.")} /></label>
         <button className="primary-button form-span" disabled={busy !== ""}>{busy === "document-create" ? tr("Saving…","جارٍ الحفظ…") : tr("Create Draft v1","إنشاء المسودة v1")}</button>
-      </form>
+      </form>}
+     {uiEditor === "document" && message && <p className="form-warning" role="status">{message}</p>}
+   </CrudModal>
     </section>}
 
     <section className="table-card detail-section">
@@ -671,7 +694,12 @@ export function QualityManagementConsole({
     {permissions.training && <section className="detail-grid detail-section">
       <article className="detail-card">
         <h2>{tr("Training Record","سجل التدريب")}</h2>
-        <form className="catalog-form" onSubmit={createTraining}>
+        <button type="button" className="primary-button" disabled={Boolean(busy)}
+   onClick={() => { setMessage(""); setUiEditor("training"); }}>{tr("Record Training", "تسجيل تدريب")}</button>
+   <CrudModal open={uiEditor === "training"} onClose={() => { if (!busy) setUiEditor(""); }}
+     size="compact" title={tr("Record Training", "تسجيل تدريب")}
+     description={tr("Training and credential histories must be preserved for qualified staff.", "تُحفظ سجلات التدريب والتأهيل التاريخية للموظفين.")}>
+     {uiEditor === "training" && <form className="catalog-form" onSubmit={createTraining}>
           <label>{tr("User","المستخدم")}<select name="userId" required defaultValue=""><option value="">{tr("Select user…","اختر المستخدم…")}</option>{users.map(user => <option key={user.id} value={user.id}>{userName(user)}</option>)}</select></label>
           <label>{tr("Branch","الفرع")}<select name="branchId" defaultValue=""><option value="">{tr("Organization-wide","على مستوى المؤسسة")}</option>{branches.map(branch => <option key={branch.id} value={branch.id}>{branchName(branch)}</option>)}</select></label>
           <label className="form-span">{tr("Training title","عنوان التدريب")}<input name="title" required /></label>
@@ -685,12 +713,19 @@ export function QualityManagementConsole({
           <label className="form-span">{tr("Certificate URL","رابط الشهادة")}<input name="certificateUrl" type="url" /></label>
           <label className="form-span">{tr("Notes","ملاحظات")}<textarea name="notes" rows={2} /></label>
           <button className="primary-button form-span" disabled={busy !== ""}>{busy === "training-create" ? tr("Saving…","جارٍ الحفظ…") : tr("Save Training Record","حفظ سجل التدريب")}</button>
-        </form>
+        </form>}
+     {uiEditor === "training" && message && <p className="form-warning" role="status">{message}</p>}
+   </CrudModal>
       </article>
 
       <article className="detail-card">
         <h2>{tr("Competency Assessment","تقييم الكفاءة")}</h2>
-        <form className="catalog-form" onSubmit={createCompetency}>
+        <button type="button" className="primary-button" disabled={Boolean(busy)}
+   onClick={() => { setMessage(""); setUiEditor("competency"); }}>{tr("Record Competency Assessment", "تسجيل تقييم كفاءة")}</button>
+   <CrudModal open={uiEditor === "competency"} onClose={() => { if (!busy) setUiEditor(""); }}
+     size="compact" title={tr("Record Competency Assessment", "تسجيل تقييم كفاءة")}
+     description={tr("Competency evidence affects analyzer authorization; review real assessed values.", "تؤثر أدلة الكفاءة على صلاحيات تشغيل الأجهزة؛ راجع النتائج الحقيقية.")}>
+     {uiEditor === "competency" && <form className="catalog-form" onSubmit={createCompetency}>
           <label>{tr("User","المستخدم")}<select name="userId" required defaultValue=""><option value="">{tr("Select user…","اختر المستخدم…")}</option>{users.map(user => <option key={user.id} value={user.id}>{userName(user)}</option>)}</select></label>
           <label>{tr("Branch","الفرع")}<select name="branchId" defaultValue=""><option value="">{tr("Organization-wide","على مستوى المؤسسة")}</option>{branches.map(branch => <option key={branch.id} value={branch.id}>{branchName(branch)}</option>)}</select></label>
           <label>{tr("Analyzer","الجهاز")}<select name="analyzerId" value={competencyAnalyzerId} onChange={event => setCompetencyAnalyzerId(event.target.value)}><option value="">{tr("None","لا يوجد")}</option>{analyzers.map(item => <option key={item.id} value={item.id}>{item.code} — {item.name}</option>)}</select></label>
@@ -702,19 +737,28 @@ export function QualityManagementConsole({
           <label>{tr("Next due","الاستحقاق التالي")}<input name="nextDueAt" type="date" /></label>
           <label className="form-span">{tr("Notes","ملاحظات")}<textarea name="notes" rows={2} /></label>
           <button className="primary-button form-span" disabled={busy !== ""}>{busy === "competency-create" ? tr("Saving…","جارٍ الحفظ…") : tr("Record Competency","تسجيل تقييم الكفاءة")}</button>
-        </form>
+        </form>}
+     {uiEditor === "competency" && message && <p className="form-warning" role="status">{message}</p>}
+   </CrudModal>
       </article>
 
       <article className="detail-card">
         <h2>{tr("Analyzer Authorization","صلاحية استخدام الجهاز")}</h2>
         <p className="muted">{tr("An active, current PASS competency assessment for the same analyzer is mandatory before authorization.","يجب توفر تقييم كفاءة حالي وناجح لنفس الجهاز قبل منح الصلاحية.")}</p>
-        <form className="catalog-form" onSubmit={grantAuthorization}>
+        <button type="button" className="primary-button" disabled={Boolean(busy)}
+   onClick={() => { setMessage(""); setUiEditor("authorize"); }}>{tr("Grant Analyzer Authorization", "منح صلاحية تشغيل جهاز")}</button>
+   <CrudModal open={uiEditor === "authorize"} onClose={() => { if (!busy) setUiEditor(""); }}
+     size="compact" title={tr("Grant Analyzer Authorization", "منح صلاحية تشغيل جهاز")}
+     description={tr("Equipment privileges depend on current approved competency and branch policies.", "تعتمد صلاحيات تشغيل الأجهزة على الكفاءة المعتمدة والسياسات الفرعية.")}>
+     {uiEditor === "authorize" && <form className="catalog-form" onSubmit={grantAuthorization}>
           <label>{tr("User","المستخدم")}<select name="userId" required defaultValue=""><option value="">{tr("Select user…","اختر المستخدم…")}</option>{users.map(user => <option key={user.id} value={user.id}>{userName(user)}</option>)}</select></label>
           <label>{tr("Analyzer","الجهاز")}<select name="analyzerId" required defaultValue=""><option value="">{tr("Select analyzer…","اختر الجهاز…")}</option>{analyzers.map(item => <option key={item.id} value={item.id}>{item.code} — {item.name}</option>)}</select></label>
           <label>{tr("Expires","تاريخ الانتهاء")}<input name="expiresAt" type="date" /></label>
           <label className="form-span">{tr("Scope notes","ملاحظات نطاق الصلاحية")}<textarea name="scopeNotes" rows={2} /></label>
           <button className="primary-button form-span" disabled={busy !== ""}>{busy === "authorization-create" ? tr("Saving…","جارٍ الحفظ…") : tr("Grant Authorization","منح الصلاحية")}</button>
-        </form>
+        </form>}
+     {uiEditor === "authorize" && message && <p className="form-warning" role="status">{message}</p>}
+   </CrudModal>
       </article>
     </section>}
 
@@ -740,7 +784,12 @@ export function QualityManagementConsole({
 
     {permissions.indicators && <section className="detail-card detail-section">
       <h2>{tr("Quality Indicator","مؤشر جودة")}</h2>
-      <form className="catalog-form" onSubmit={createIndicator}>
+      <button type="button" className="primary-button" disabled={Boolean(busy)}
+   onClick={() => { setMessage(""); setUiEditor("indicator"); }}>{tr("Create Quality Indicator", "إنشاء مؤشر جودة")}</button>
+   <CrudModal open={uiEditor === "indicator"} onClose={() => { if (!busy) setUiEditor(""); }}
+     size="compact" title={tr("Create Quality Indicator", "إنشاء مؤشر جودة")}
+     description={tr("Targets and units must come from approved policy, not assumed thresholds.", "يجب أن تأتي الأهداف والوحدات من سياسة معتمدة دون افتراض حدود.")}>
+     {uiEditor === "indicator" && <form className="catalog-form" onSubmit={createIndicator}>
         <label>{tr("Code","الرمز")}<input name="code" required /></label>
         <label>{tr("Branch","الفرع")}<select name="branchId" defaultValue=""><option value="">{tr("Organization-wide","على مستوى المؤسسة")}</option>{branches.map(branch => <option key={branch.id} value={branch.id}>{branchName(branch)}</option>)}</select></label>
         <label>{tr("Name (English)","الاسم بالإنجليزية")}<input name="nameEn" required /></label>
@@ -751,7 +800,9 @@ export function QualityManagementConsole({
         <label>{tr("Target max","الحد الأعلى المستهدف")}<input name="targetMax" inputMode="decimal" /></label>
         <label className="form-span">{tr("Description","الوصف")}<textarea name="description" rows={2} /></label>
         <button className="primary-button form-span" disabled={busy !== ""}>{busy === "indicator-create" ? tr("Saving…","جارٍ الحفظ…") : tr("Create Indicator","إنشاء المؤشر")}</button>
-      </form>
+      </form>}
+     {uiEditor === "indicator" && message && <p className="form-warning" role="status">{message}</p>}
+   </CrudModal>
     </section>}
 
     <section className="table-card detail-section">
@@ -768,14 +819,21 @@ export function QualityManagementConsole({
 
     {permissions.audits && <section className="detail-card detail-section">
       <h2>{tr("Plan Internal Audit","تخطيط تدقيق داخلي")}</h2>
-      <form className="catalog-form" onSubmit={createAudit}>
+      <button type="button" className="primary-button" disabled={Boolean(busy)}
+   onClick={() => { setMessage(""); setUiEditor("audit"); }}>{tr("Plan Internal Audit", "تخطيط تدقيق داخلي")}</button>
+   <CrudModal open={uiEditor === "audit"} onClose={() => { if (!busy) setUiEditor(""); }}
+     size="compact" title={tr("Plan Internal Audit", "تخطيط تدقيق داخلي")}
+     description={tr("Audit scope and accountable staff must be documented and traceable.", "يجب توثيق نطاق التدقيق والمسؤولين مع قابلية التتبع.")}>
+     {uiEditor === "audit" && <form className="catalog-form" onSubmit={createAudit}>
         <label>{tr("Branch","الفرع")}<select name="branchId" defaultValue=""><option value="">{tr("Organization-wide","على مستوى المؤسسة")}</option>{branches.map(branch => <option key={branch.id} value={branch.id}>{branchName(branch)}</option>)}</select></label>
         <label>{tr("Lead auditor","المدقق الرئيسي")}<select name="leadAuditorUserId" required defaultValue=""><option value="">{tr("Select auditor…","اختر المدقق…")}</option>{users.map(user => <option key={user.id} value={user.id}>{userName(user)}</option>)}</select></label>
         <label>{tr("Scheduled date","التاريخ المجدول")}<input name="scheduledAt" type="date" required /></label>
         <label className="form-span">{tr("Title","العنوان")}<input name="title" required /></label>
         <label className="form-span">{tr("Scope","النطاق")}<textarea name="scope" rows={3} required /></label>
         <button className="primary-button form-span" disabled={busy !== ""}>{busy === "audit-create" ? tr("Saving…","جارٍ الحفظ…") : tr("Plan Internal Audit","تخطيط التدقيق الداخلي")}</button>
-      </form>
+      </form>}
+     {uiEditor === "audit" && message && <p className="form-warning" role="status">{message}</p>}
+   </CrudModal>
     </section>}
 
     <section className="table-card detail-section">
