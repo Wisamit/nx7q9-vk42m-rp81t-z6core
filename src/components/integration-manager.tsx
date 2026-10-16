@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CrudModal } from "@/components/crud-modal";
 
@@ -27,6 +27,8 @@ export function IntegrationManager({
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState("");
+  const submitting = useRef(false);
+  const [isError, setIsError] = useState(false);
   const [message, setMessage] = useState("");
   const [uiDialog, setUiDialog] = useState("");
   const [secret, setSecret] = useState("");
@@ -35,22 +37,39 @@ export function IntegrationManager({
   const localizedName = (item: { nameEn: string; nameAr?: string | null }) => locale === "ar" ? item.nameAr || item.nameEn : item.nameEn;
 
   async function post(url: string, payload: unknown, key: string, successEn: string, successAr: string) {
-    setBusy(key); setMessage("");
-    const response = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    const body = await response.json().catch(() => ({}));
-    setBusy("");
-    setMessage(response.ok ? tr(successEn, successAr) : tr("Action failed.", "فشلت العملية."));
-    if (response.ok) router.refresh();
-    return { ok: response.ok, body };
+    if (submitting.current) return { ok: false, body: {} };
+    submitting.current = true;
+    setBusy(key);
+    setMessage("");
+    setIsError(false);
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const body = await response.json().catch(() => ({}));
+      setIsError(!response.ok);
+      setMessage(response.ok ? tr(successEn, successAr) : tr("Action failed.", "فشلت العملية."));
+      if (response.ok) router.refresh();
+      return { ok: response.ok, body };
+    } catch {
+      setIsError(true);
+      setMessage(key === "key"
+        ? tr("Connection interrupted. Check issued keys before requesting another secret.", "انقطع الاتصال. تحقق من المفاتيح الصادرة قبل طلب سر جديد.")
+        : tr("Connection interrupted. Check the existing configuration before retrying.", "انقطع الاتصال. تحقق من الإعدادات الموجودة قبل إعادة المحاولة."));
+      return { ok: false, body: {} };
+    } finally {
+      submitting.current = false;
+      setBusy("");
+    }
   }
 
   async function createEndpoint(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    if (submitting.current) return;
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     const result = await post("/api/integrations/endpoints", {
       code: form.get("code"), name: form.get("name"), branchId: form.get("branchId"),
       endpointType: form.get("endpointType"), direction: form.get("direction"),
@@ -58,30 +77,42 @@ export function IntegrationManager({
       secretReference: form.get("secretReference"),
       timeoutSeconds: form.get("timeoutSeconds"), maxAttempts: form.get("maxAttempts"),
     }, "endpoint", "Integration endpoint created.", "تم إنشاء نقطة التكامل.");
-    if (result.ok) event.currentTarget.reset();
+    if (result.ok) formElement.reset();
   }
 
   async function createMapping(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    if (submitting.current) return;
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     const result = await post("/api/integrations/terminology", {
       testId: form.get("testId"), componentId: form.get("componentId"),
       system: form.get("system"), code: form.get("code"), display: form.get("display"),
       systemVersion: form.get("systemVersion"), isPrimary: true,
       effectiveFrom: form.get("effectiveFrom"), effectiveTo: form.get("effectiveTo"),
     }, "mapping", "Terminology mapping created.", "تم إنشاء ربط المصطلحات.");
-    if (result.ok) { event.currentTarget.reset(); setTestId(""); }
+    if (result.ok) { formElement.reset(); setTestId(""); }
   }
 
   async function createKey(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setSecret("");
+    if (submitting.current || secret) return;
     const form = new FormData(event.currentTarget);
     const scopes = ["fhir.read","hl7.write","messages.read","messages.ack"].filter(scope => form.get("scope-" + scope) === "on");
     const result = await post("/api/integrations/api-keys", {
       endpointId: form.get("endpointId"), name: form.get("name"), scopes, expiresAt: form.get("expiresAt"),
     }, "key", "API key created. Copy the secret now.", "تم إنشاء مفتاح API. انسخ السر الآن.");
-    if (result.ok && result.body.apiKey?.secret) setSecret(result.body.apiKey.secret);
+    if (result.ok) {
+      const generated = result.body.apiKey?.secret;
+      if (typeof generated === "string" && generated) setSecret(generated);
+      else {
+        setIsError(true);
+        setMessage(tr(
+          "No one-time secret was returned. Review issued API keys before another request.",
+          "لم يُرجع سر المفتاح لمرة واحدة. راجع مفاتيح API الصادرة قبل أي طلب جديد.",
+        ));
+      }
+    }
   }
 
   async function subscribe(event: FormEvent<HTMLFormElement>) {
@@ -143,7 +174,7 @@ export function IntegrationManager({
         <label>{tr("Code", "الرمز")}<input name="code" required /></label>
         <label>{tr("Display", "اسم العرض")}<input name="display" /></label>
         <label>{tr("System version", "إصدار النظام")}<input name="systemVersion" /></label>
-        <label>{tr("Effective from", "ساري من")}<input name="effectiveFrom" type="date" required defaultValue={new Date().toISOString().slice(0,10)} /></label>
+        <label>{tr("Effective from (select intended local date)", "ساري من (اختر التاريخ المحلي المقصود)")}<input name="effectiveFrom" type="date" required /></label>
         <label>{tr("Effective to", "ساري حتى")}<input name="effectiveTo" type="date" /></label>
         <button className="primary-button form-span" disabled={busy !== ""}>{busy === "mapping" ? tr("Saving…", "جارٍ الحفظ…") : tr("Create Mapping", "إنشاء الربط")}</button>
       </form>}
@@ -158,7 +189,7 @@ export function IntegrationManager({
       onClick={() => { setMessage(""); setSecret(""); setUiDialog("key"); }}>
       {tr("Issue External API Key", "إصدار مفتاح API خارجي")}
     </button>
-    <CrudModal open={uiDialog === "key"} onClose={() => { if (!busy) { setSecret(""); setUiDialog(""); } }}
+    <CrudModal open={uiDialog === "key"} onClose={() => { if (!submitting.current) { setSecret(""); setUiDialog(""); } }}
       size="compact"
       title={tr("Issue External API Key", "إصدار مفتاح API خارجي")}
       description={tr("The new secret is displayed once; copy it before dismissing the dialog.", "يظهر السر الجديد مرة واحدة فقط؛ انسخه قبل إغلاق النافذة.")}>
@@ -169,7 +200,7 @@ export function IntegrationManager({
         <div className="form-span result-actions">
           {["fhir.read","hl7.write","messages.read","messages.ack"].map(scope => <label key={scope}><input type="checkbox" name={"scope-" + scope} /> {scope}</label>)}
         </div>
-        <button className="primary-button form-span" disabled={busy !== ""}>{busy === "key" ? tr("Creating…", "جارٍ الإنشاء…") : tr("Create API Key", "إنشاء مفتاح API")}</button>
+        <button className="primary-button form-span" disabled={busy !== "" || Boolean(secret)}>{busy === "key" ? tr("Creating…", "جارٍ الإنشاء…") : tr("Create API Key", "إنشاء مفتاح API")}</button>
       </form>}
       {uiDialog === "key" && message && <p className="form-warning" role="status">{message}</p>}
     {uiDialog === "key" && secret && <div className="credential-token-box" role="status">
@@ -206,6 +237,6 @@ export function IntegrationManager({
       <button className="secondary-button" type="button" disabled={busy !== ""} onClick={() => void dispatch()}>{busy === "dispatch" ? tr("Dispatching…", "جارٍ الإرسال…") : tr("Dispatch Due Webhooks", "إرسال Webhooks المستحقة")}</button>
     </article>}
 
-    {message && <div className="form-success form-span">{message}</div>}
+    {message && <div className={(isError ? "form-error" : "form-success") + " form-span"} role={isError ? "alert" : "status"}>{message}</div>}
   </section>;
 }
