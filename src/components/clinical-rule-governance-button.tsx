@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { type FormEvent, useState } from "react";
+import { CrudModal } from "@/components/crud-modal";
 import { useRouter } from "next/navigation";
 import { StaffStepUpDialog } from "@/components/staff-step-up-dialog";
 import { clinicalRuleProofResource } from "@/lib/clinical-rule-step-up";
@@ -35,35 +36,43 @@ export function ClinicalRuleGovernanceButton({
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [pending, setPending] = useState<{action:"APPROVE"|"RETIRE"; reason:string}|null>(null);
+  const [reviewAction, setReviewAction] = useState<"APPROVE"|"RETIRE"|null>(null);
+  const [reviewReason, setReviewReason] = useState("");
   const resourceKey = clinicalRuleProofResource(ruleType,id) || "";
   const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
   const lifecycle = status === "ACTIVE" ? "APPROVED" : deactivatedAt ? "RETIRED" : "DRAFT";
 
   function act(action: "APPROVE" | "RETIRE") {
+    if (busy || pending || !canApprove) return;
     if (!branchId || !resourceKey) {
-      setMessage(tr("An authorized active branch is required.","يلزم اختيار فرع نشط ومصرح به."));
+      setMessage(tr("An authorized active branch is required.", "يلزم اختيار فرع نشط ومصرح به."));
       return;
     }
-    let reason = "";
-    if (action === "APPROVE") {
-      if (!confirm(tr(
-        "Approve this clinical rule for live result processing? Reauthentication is required.",
-        "هل تعتمد هذه القاعدة لتعمل على النتائج الفعلية؟ يلزم تأكيد هويتك من جديد.",
-      ))) return;
-    } else {
-      const entered = prompt(tr(
-        "Retirement reason (required). Historical results remain unchanged:",
-        "سبب إيقاف القاعدة (مطلوب). لن تتغير النتائج التاريخية:",
-      ));
-      if (entered === null) return;
-      reason = entered.trim();
-      if (!reason) {
-        setMessage(tr("Retirement reason is required.", "سبب الإيقاف مطلوب."));
-        return;
-      }
+    if ((action === "APPROVE" && lifecycle !== "DRAFT") ||
+        (action === "RETIRE" && lifecycle !== "APPROVED")) {
+      setMessage(tr("Rule state has changed. Refresh before reviewing.", "تغيّرت حالة القاعدة؛ حدّث الصفحة قبل المراجعة."));
+      return;
     }
     setMessage("");
-    setPending({action,reason});
+    setReviewReason("");
+    setReviewAction(action);
+  }
+
+  function confirmReview(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (busy || !reviewAction || !canApprove || !branchId || !resourceKey) return;
+    if ((reviewAction === "APPROVE" && lifecycle !== "DRAFT") ||
+        (reviewAction === "RETIRE" && lifecycle !== "APPROVED")) return;
+    const reason = reviewReason.trim();
+    if (reviewAction === "RETIRE" && (reason.length < 10 || reason.length > 1000)) {
+      setMessage(tr("A detailed retirement reason (10–1000 characters) is required.",
+        "سبب إيقاف مفصّل (10–1000 محرف) مطلوب."));
+      return;
+    }
+    // A separate, action-bound staff reauthentication is still mandatory.
+    setPending({action:reviewAction,reason});
+    setReviewAction(null);
+    setMessage("");
   }
 
   async function submitWithProof(token: string, action: "APPROVE" | "RETIRE", reason: string) {
@@ -120,6 +129,34 @@ export function ClinicalRuleGovernanceButton({
     <strong>{lifecycle === "APPROVED" ? tr("Approved", "معتمد") : lifecycle === "RETIRED" ? tr("Retired", "موقوف") : tr("Draft", "مسودة")}</strong>
     {canApprove && lifecycle === "DRAFT" ? <><br/><button type="button" className="secondary-button" disabled={busy} onClick={() => void act("APPROVE")}>{busy ? tr("Saving…", "جارٍ الحفظ…") : tr("Approve", "اعتماد")}</button></> : null}
     {canApprove && lifecycle === "APPROVED" ? <><br/><button type="button" className="secondary-button" disabled={busy} onClick={() => void act("RETIRE")}>{busy ? tr("Saving…", "جارٍ الحفظ…") : tr("Retire", "إيقاف")}</button></> : null}
+    <CrudModal open={reviewAction!==null}
+      onClose={()=>{if(!busy)setReviewAction(null);}}
+      size="compact"
+      title={reviewAction==="APPROVE"
+        ? tr("Approve Clinical Rule", "اعتماد قاعدة سريرية")
+        : tr("Retire Clinical Rule", "إيقاف قاعدة سريرية")}
+      description={tr(
+        "Review this exact governed rule. Approval affects live clinical validation and requires fresh staff reauthentication; prior released results remain immutable.",
+        "راجع القاعدة المحددة. يؤثر الاعتماد على التحقق من النتائج الفعلية ويتطلب تحققاً جديداً من الموظف؛ تبقى النتائج الصادرة السابقة ثابتة.",
+      )}>
+      {reviewAction&&<form className="catalog-form" onSubmit={confirmReview}>
+        <p className="form-span"><strong>{ruleType.replaceAll("_"," ")}</strong></p>
+        <p className="form-span">{reviewAction==="APPROVE"
+          ? tr("Approve this draft for live clinical processing only after checking exact effective dates, branches, methods and limits.",
+            "اعتمد هذه المسودة للاستخدام السريري فقط بعد مراجعة تواريخ السريان والفروع والطرق والحدود بدقة.")
+          : tr("Retiring this approved rule does not rewrite previously released clinical history.",
+            "إيقاف هذه القاعدة المعتمدة لا يغيّر التاريخ السريري الصادر سابقاً.")}</p>
+        {reviewAction==="RETIRE"&&<label className="form-span">
+          {tr("Documented retirement reason (required)", "سبب إيقاف القاعدة الموثق (إلزامي)")}
+          <textarea rows={3} minLength={10} maxLength={1000} required
+            value={reviewReason} onChange={e=>setReviewReason(e.target.value)}/>
+        </label>}
+        {message&&<p role="alert" className="form-error form-span">{message}</p>}
+        <button type="submit" className="primary-button form-span" disabled={busy}>
+          {tr("Continue to staff verification", "المتابعة إلى تحقق الموظف")}
+        </button>
+      </form>}
+    </CrudModal>
     <StaffStepUpDialog open={pending!==null}
       action={pending?.action==="RETIRE"?"CLINICAL_RULE_RETIRE":"CLINICAL_RULE_APPROVE"}
       resourceKey={resourceKey} branchId={branchId} locale={locale}
