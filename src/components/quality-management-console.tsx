@@ -884,5 +884,126 @@ export function QualityManagementConsole({
         </tr>)}</tbody>
       </table></div>
     </section>
+  <CrudModal open={pendingReview!==null}
+    onClose={()=>{if(!busy)setPendingReview(null);}}
+    size="compact"
+    title={pendingReview ? reviewLabel(pendingReview.kind) : tr("Quality Review","مراجعة الجودة")}
+    description={tr(
+      "Review this exact governed quality action and all supporting evidence before submitting. Only server-authorized staff may change the audited workflow.",
+      "راجع إجراء الجودة المحدد والأدلة الداعمة قبل الإرسال. لا يُسمح إلا للموظفين المخوّلين بتغيير مسار العمل المدقق.",
+    )}>
+    {pendingReview&&<form className="catalog-form" onSubmit={confirmQualityReview}>
+      {pendingReview.kind==="NC_STATUS" && (pendingReview.close
+        ? <>
+          <label className="form-span">{tr("Verified root cause (required)","السبب الجذري المثبت (مطلوب)")}
+            <textarea name="rootCause" required rows={3} maxLength={4000} defaultValue={pendingReview.rootCause}/></label>
+          <label className="form-span">{tr("Closure summary (required)","ملخص الإغلاق (مطلوب)")}
+            <textarea name="closureSummary" required rows={3} maxLength={4000} defaultValue={pendingReview.closureSummary}/></label>
+          <p className="muted form-span">{tr("Linked CAPA records must already be closed; the full nonconformance audit trail remains retained.",
+            "يجب أن تكون إجراءات CAPA المرتبطة مغلقة؛ يبقى سجل تدقيق عدم المطابقة محفوظاً.")}</p>
+        </>
+        : <p className="form-span">{tr("Move this nonconformance to investigation? Historical records will be retained.",
+          "نقل حالة عدم المطابقة إلى التحقيق؟ ستظل السجلات التاريخية محفوظة.")}</p>)}
+      {pendingReview.kind==="CAPA_ACTION_CREATE" && <>
+        <label className="form-span">{tr("Action type","نوع الإجراء")}
+          <select name="actionType" required defaultValue="CORRECTIVE">
+            <option value="CORRECTIVE">{tr("Corrective action","إجراء تصحيحي")}</option>
+            <option value="PREVENTIVE">{tr("Preventive action","إجراء وقائي")}</option>
+          </select></label>
+        <label className="form-span">{tr("Action description","وصف الإجراء")}
+          <textarea name="description" rows={3} maxLength={4000} required/></label>
+        <label>{tr("Due date (optional)","تاريخ الاستحقاق (اختياري)")}
+          <input type="date" name="dueDate"/></label>
+      </>}
+      {pendingReview.kind==="CAPA_ACTION_COMPLETE" && <p className="form-span">{tr(
+        "Confirm this exact CAPA action has been completed with supporting evidence. This action will be audited.",
+        "تأكد من اكتمال إجراء CAPA المحدد مع أدلة داعمة؛ سيُدقّق هذا الإجراء.")}</p>}
+      {pendingReview.kind==="CAPA_EFFECTIVENESS" && <>
+        <label className="form-span">{tr("Effectiveness outcome","نتيجة مراجعة الفعالية")}
+          <select name="effectiveness" required value={reviewEffectiveness}
+            onChange={event=>setReviewEffectiveness(event.target.value)}>
+            <option value="EFFECTIVE">{tr("Effective","فعّال")}</option>
+            <option value="PARTIALLY_EFFECTIVE">{tr("Partially effective","فعّال جزئياً")}</option>
+            <option value="INEFFECTIVE">{tr("Ineffective","غير فعّال")}</option>
+          </select></label>
+        <label className="form-span">{tr("Document independent effectiveness evidence","وثّق أدلة الفعالية للمراجع المستقل")}
+          <textarea name="effectivenessReview" rows={3} required maxLength={4000}/></label>
+        {reviewEffectiveness==="EFFECTIVE" && <label className="check-line form-span">
+          <input name="close" type="checkbox"/>
+          {tr("Also close CAPA if all required actions are complete","إغلاق CAPA أيضاً إذا اكتملت جميع الإجراءات المطلوبة")}
+        </label>}
+      </>}
+      {pendingReview.kind==="DOCUMENT_VERSION_CREATE" && <>
+        <label className="form-span">{tr("Version change summary","ملخص تغييرات الإصدار")}
+          <textarea name="changeSummary" rows={2} required maxLength={4000}/></label>
+        <label className="form-span">{tr("Controlled document text (one content source)","نص الوثيقة المضبوطة (أحد مصادر المحتوى)")}
+          <textarea name="content" rows={5}/></label>
+        <label className="form-span">{tr("OR external document URL","أو رابط خارجي للوثيقة")}
+          <input name="externalUrl" type="url"/></label>
+        <p className="muted form-span">{tr(
+          "Enter the content OR the external document URL, not both. A new immutable version is created.",
+          "أدخل نص الوثيقة أو رابطها فقط دون الجمع بينهما؛ ينشأ إصدار جديد ثابت.")}</p>
+      </>}
+      {pendingReview.kind==="DOCUMENT_WORKFLOW" && <p className="form-span">
+        {tr("Confirm the exact workflow transition","تأكيد انتقال حوكمة الوثيقة المحدد")}:{" "}
+        <strong>{pendingReview.operation}</strong>
+        <span className="table-subtext">{tr(
+          "Independent approval and effective version policies remain server-enforced.",
+          "تبقى متطلبات الاعتماد المستقل وسياسات سريان الإصدار مفروضة من السيرفر.")}</span>
+      </p>}
+      {pendingReview.kind==="ANALYZER_REVOKE" && <>
+        <p className="form-span">{tr("Revoke this equipment authorization? The prior competency record is preserved.",
+          "إلغاء صلاحية تشغيل هذا الجهاز؟ يبقى سجل الكفاءة السابق محفوظاً.")}</p>
+        <label className="form-span">{tr("Documented revocation reason","سبب إلغاء الصلاحية الموثق")}
+          <textarea name="reason" required rows={3} maxLength={1000}/></label>
+      </>}
+      {pendingReview.kind==="INDICATOR_MEASUREMENT" && <>
+        <label>{tr("Period start","بداية الفترة")}<input type="date" name="periodStart" required/></label>
+        <label>{tr("Period end","نهاية الفترة")}<input type="date" name="periodEnd" required/></label>
+        <label className="form-span">{tr("Measured value","القيمة المقاسة")}{" "}
+          {pendingReview.unit && <small>({pendingReview.unit})</small>}
+          <input name="value" required inputMode="decimal" maxLength={100}/></label>
+        <label>{tr("Numerator (optional)","البسط (اختياري)")}
+          <input name="numerator" inputMode="decimal"/></label>
+        <label>{tr("Denominator (optional)","المقام (اختياري)")}
+          <input name="denominator" inputMode="decimal"/></label>
+      </>}
+      {pendingReview.kind==="AUDIT_FINDING_CREATE" && <>
+        <label className="form-span">{tr("Audit finding severity","شدة ملاحظة التدقيق")}
+          <select name="severity" value={reviewSeverity} onChange={event=>setReviewSeverity(event.target.value)} required>
+            <option value="OBSERVATION">{tr("Observation","ملاحظة")}</option>
+            <option value="MINOR">{tr("Minor","طفيفة")}</option>
+            <option value="MAJOR">{tr("Major","جسيمة")}</option>
+            <option value="CRITICAL">{tr("Critical","حرجة")}</option>
+          </select></label>
+        <label className="form-span">{tr("Finding description","وصف الملاحظة")}
+          <textarea name="description" rows={3} required maxLength={4000}/></label>
+        <label className="form-span">{tr("SOP / standard / clause reference (optional)","مرجع المعيار أو الإجراء أو البند (اختياري)")}
+          <input name="requirementRef" maxLength={400}/></label>
+        <label className="form-span">{reviewSeverity==="CRITICAL"
+          ? tr("Existing open CAPA (required for critical findings)","ملف CAPA مفتوح (إلزامي للملاحظات الحرجة)")
+          : tr("Existing open CAPA (optional)","ملف CAPA مفتوح (اختياري)")}
+          <select name="capaId" required={reviewSeverity==="CRITICAL"} defaultValue="">
+            <option value="">{tr("Select open CAPA","اختر ملف CAPA مفتوحاً")}</option>
+            {openCapas.map(capa=><option key={capa.id} value={capa.id}>
+              {capa.capaNumber} — {capa.title}</option>)}
+          </select></label>
+      </>}
+      {pendingReview.kind==="AUDIT_FINDING_CLOSE" && <label className="form-span">
+        {tr("Finding closure note","ملاحظة إغلاق التدقيق")}
+        <textarea name="closureNote" rows={3} required maxLength={4000}/></label>}
+      {pendingReview.kind==="AUDIT_COMPLETE" && <>
+        <p className="form-span">{tr("All audit findings must already be closed. Completion is audited.",
+          "يجب إغلاق جميع ملاحظات التدقيق مسبقاً؛ سيُدقق الإكمال.")}</p>
+        <label className="form-span">{tr("Internal audit completion summary","ملخص إكمال التدقيق الداخلي")}
+          <textarea name="summary" rows={3} required maxLength={4000}/></label>
+      </>}
+      {reviewError && <p className="form-error form-span" role="alert">{reviewError}</p>}
+      {message && <p className="form-warning form-span" role="status">{message}</p>}
+      <button type="submit" className="primary-button form-span" disabled={Boolean(busy)}>
+        {busy ? tr("Processing…","جارٍ التنفيذ…") : tr("Confirm governed action","تأكيد الإجراء المحكوم")}
+      </button>
+    </form>}
+  </CrudModal>
   </div>;
 }
