@@ -9,7 +9,7 @@ test("UI #265: all eleven QMS decisions are explicit review dialogs without nati
   assert.ok(ui.includes('import { CrudModal } from "@/components/crud-modal";'));
   assert.ok(ui.includes("confirmQualityReview"));
   assert.ok(ui.includes('open={pendingReview!==null}'));
-  assert.ok(ui.includes('if(!busy)setPendingReview(null)'));
+  assert.ok(ui.includes('if(!submitting.current&&!busy)setPendingReview(null)'));
   assert.ok(ui.includes('size="compact"'));
   assert.ok(ui.includes('role="alert"'));
   assert.doesNotMatch(ui, /(?:window\.)?(?:prompt|confirm)\s*\(/);
