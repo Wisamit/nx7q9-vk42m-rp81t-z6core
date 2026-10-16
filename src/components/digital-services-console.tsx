@@ -3,6 +3,7 @@
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { CrudModal } from "@/components/crud-modal";
 import { statusLabel as sharedStatusLabel } from "@/lib/ui-i18n";
 
 type Option = { id: string; label: string };
@@ -86,6 +87,7 @@ export function DigitalServicesConsole({
   const router = useRouter();
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
+  const [uiDialog, setUiDialog] = useState("");
   const [portalType, setPortalType] = useState("PATIENT");
   const [collectorByVisit, setCollectorByVisit] = useState<Record<string, string>>({});
   const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
@@ -264,7 +266,15 @@ export function DigitalServicesConsole({
   return <section className="detail-grid detail-section">
     {permissions.portalAccounts && <article className="detail-card">
       <h2>{tr("Portal Account", "حساب البوابة")}</h2>
-      <form className="catalog-form" onSubmit={createPortalAccount}>
+      <button type="button" className="primary-button" disabled={Boolean(busy)}
+      onClick={() => { setMessage(""); setUiDialog("portal"); }}>
+      {tr("Create Portal Account", "إنشاء حساب بوابة")}
+    </button>
+    <CrudModal open={uiDialog === "portal"} onClose={() => { if (!busy) setUiDialog(""); }}
+      size="compact"
+      title={tr("Create Portal Account", "إنشاء حساب بوابة")}
+      description={tr("Account access is subject to server-side identity and role validation.", "الوصول إلى الحساب محكوم بتدقيق الهوية والصلاحيات من السيرفر.")}>
+      {uiDialog === "portal" && <form className="catalog-form" onSubmit={createPortalAccount}>
         <label>{tr("Type", "النوع")}<select value={portalType} onChange={e => setPortalType(e.target.value)}>
           <option value="PATIENT">{portalTypeLabel("PATIENT")}</option>
           <option value="DOCTOR">{portalTypeLabel("DOCTOR")}</option>
@@ -275,13 +285,23 @@ export function DigitalServicesConsole({
         <label>{tr("Phone", "الهاتف")}<input name="phone" /></label>
         <label>{tr("Language", "اللغة")}<select name="preferredLocale" defaultValue="en"><option value="en">{tr("English", "الإنجليزية")}</option><option value="ar">العربية</option></select></label>
         <button className="primary-button form-span" disabled={busy !== ""}>{busy === "portal-create" ? tr("Saving…", "جارٍ الحفظ…") : tr("Provision Portal Account", "إنشاء حساب البوابة")}</button>
-      </form>
+      </form>}
+      {uiDialog === "portal" && message && <p className="form-warning" role="status">{message}</p>}
+    </CrudModal>
     </article>}
 
     {permissions.portalAccounts && <article className="detail-card">
       <h2>{tr("Corporate Patient Access", "وصول مرضى الشركات")}</h2>
       <p className="muted">{tr("Explicitly authorize which employees/patients a corporate portal may book for and which reports it may view.", "حدد صراحةً الموظفين/المرضى الذين يمكن لبوابة الشركة الحجز لهم والتقارير التي يُسمح لها بعرضها.")}</p>
-      <form className="catalog-form" onSubmit={createCorporateAccess}>
+      <button type="button" className="primary-button" disabled={Boolean(busy)}
+      onClick={() => { setMessage(""); setUiDialog("corporate"); }}>
+      {tr("Grant Corporate Patient Access", "منح وصول لمريض عبر شركة")}
+    </button>
+    <CrudModal open={uiDialog === "corporate"} onClose={() => { if (!busy) setUiDialog(""); }}
+      size="compact"
+      title={tr("Grant Corporate Patient Access", "منح وصول لمريض عبر شركة")}
+      description={tr("Select exact patient and client scope; report access follows authorization policy.", "حدد المريض والعميل بدقة؛ الوصول للتقارير يتبع سياسة التفويض.")}>
+      {uiDialog === "corporate" && <form className="catalog-form" onSubmit={createCorporateAccess}>
         <label>{tr("Corporate client", "عميل الشركة")}<select name="clientId" required defaultValue=""><option value="">{tr("Select…", "اختر…")}</option>{clients.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
         <label>{tr("Patient", "المريض")}<select name="patientId" required defaultValue=""><option value="">{tr("Select…", "اختر…")}</option>{patients.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
         <label>{tr("Employee number", "رقم الموظف")}<input name="employeeNumber" /></label>
@@ -290,12 +310,22 @@ export function DigitalServicesConsole({
         <label><input name="canBook" type="checkbox" defaultChecked /> {tr("Can book", "يمكنه الحجز")}</label>
         <label><input name="canViewReports" type="checkbox" /> {tr("Can view reports", "يمكنه عرض التقارير")}</label>
         <button className="primary-button form-span" disabled={busy !== ""}>{busy === "corporate-access" ? tr("Saving…", "جارٍ الحفظ…") : tr("Add Corporate Access", "إضافة صلاحية شركة")}</button>
-      </form>
+      </form>}
+      {uiDialog === "corporate" && message && <p className="form-warning" role="status">{message}</p>}
+    </CrudModal>
     </article>}
 
     {permissions.appointments && <article className="detail-card">
       <h2>{tr("Create Appointment", "إنشاء موعد")}</h2>
-      <form className="catalog-form" onSubmit={createAppointment}>
+      <button type="button" className="primary-button" disabled={Boolean(busy)}
+      onClick={() => { setMessage(""); setUiDialog("appointment"); }}>
+      {tr("Create Appointment", "إنشاء موعد")}
+    </button>
+    <CrudModal open={uiDialog === "appointment"} onClose={() => { if (!busy) setUiDialog(""); }}
+      size="compact"
+      title={tr("Create Appointment", "إنشاء موعد")}
+      description={tr("Review branch, patient, appointment date/time and local timezone before saving.", "راجع الفرع والمريض وموعد الحجز والمنطقة الزمنية قبل الحفظ.")}>
+      {uiDialog === "appointment" && <form className="catalog-form" onSubmit={createAppointment}>
         <label>{tr("Branch", "الفرع")}<select name="branchId" required defaultValue=""><option value="">{tr("Select…", "اختر…")}</option>{branches.map(item => <option key={item.id} value={item.id}>{item.code} — {branchName(item)}</option>)}</select></label>
         <label>{tr("Patient", "المريض")}<select name="patientId" required defaultValue=""><option value="">{tr("Select…", "اختر…")}</option>{patients.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
         <label>{tr("Mode", "النمط")}<select name="mode" defaultValue="ONSITE"><option value="ONSITE">{modeLabel("ONSITE")}</option><option value="HOME_COLLECTION">{modeLabel("HOME_COLLECTION")}</option></select></label>
@@ -306,19 +336,31 @@ export function DigitalServicesConsole({
         <label className="form-span">{tr("Home address", "عنوان المنزل")}<input name="address" /></label>
         <label className="form-span">{tr("Notes", "ملاحظات")}<textarea name="notes" rows={2} /></label>
         <button className="primary-button form-span" disabled={busy !== ""}>{busy === "appointment-create" ? tr("Saving…", "جارٍ الحفظ…") : tr("Create Appointment", "إنشاء الموعد")}</button>
-      </form>
+      </form>}
+      {uiDialog === "appointment" && message && <p className="form-warning" role="status">{message}</p>}
+    </CrudModal>
     </article>}
 
     {permissions.queue && <article className="detail-card">
       <h2>{tr("Issue Queue Ticket", "إصدار تذكرة طابور")}</h2>
-      <form className="catalog-form" onSubmit={issueQueueTicket}>
+      <button type="button" className="primary-button" disabled={Boolean(busy)}
+      onClick={() => { setMessage(""); setUiDialog("queue"); }}>
+      {tr("Issue Queue Ticket", "إصدار تذكرة طابور")}
+    </button>
+    <CrudModal open={uiDialog === "queue"} onClose={() => { if (!busy) setUiDialog(""); }}
+      size="compact"
+      title={tr("Issue Queue Ticket", "إصدار تذكرة طابور")}
+      description={tr("Queue tickets must be tied to the selected patient and operating branch.", "تذاكر الانتظار مرتبطة بالمريض والفرع المحددين.")}>
+      {uiDialog === "queue" && <form className="catalog-form" onSubmit={issueQueueTicket}>
         <label>{tr("Branch", "الفرع")}<select name="branchId" required defaultValue=""><option value="">{tr("Select…", "اختر…")}</option>{branches.map(item => <option key={item.id} value={item.id}>{item.code} — {branchName(item)}</option>)}</select></label>
         <label>{tr("Patient", "المريض")}<select name="patientId" required defaultValue=""><option value="">{tr("Select…", "اختر…")}</option>{patients.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
         <label>{tr("Appointment", "الموعد")}<select name="appointmentId" defaultValue=""><option value="">{tr("Walk-in / none", "بدون موعد / حضور مباشر")}</option>{appointments.map(item => <option key={item.id} value={item.id}>{item.appointmentNumber} — {item.patient}</option>)}</select></label>
         <label>{tr("Stage", "المرحلة")}<select name="stage" defaultValue="RECEPTION"><option value="RECEPTION">{stageLabel("RECEPTION")}</option><option value="PHLEBOTOMY">{stageLabel("PHLEBOTOMY")}</option></select></label>
         <label>{tr("Priority", "الأولوية")}<input name="priority" type="number" min="-100" max="100" defaultValue="0" /></label>
         <button className="primary-button form-span" disabled={busy !== ""}>{busy === "queue-create" ? tr("Issuing…", "جارٍ الإصدار…") : tr("Issue Ticket", "إصدار التذكرة")}</button>
-      </form>
+      </form>}
+      {uiDialog === "queue" && message && <p className="form-warning" role="status">{message}</p>}
+    </CrudModal>
     </article>}
 
     {message && <div className="form-success form-span">{message}</div>}
