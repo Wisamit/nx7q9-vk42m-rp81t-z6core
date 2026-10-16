@@ -1,4 +1,5 @@
 "use client";
+import { SystemDateField } from "@/components/system-date-field";
 
 import { FormEvent, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -248,8 +249,8 @@ export function QualitativeResultOptionsManager({
       </label>
 
       <label>{tr("Display order", "ترتيب العرض")}<input name="displayOrder" type="number" min="0" max="10000" defaultValue="0" /></label>
-      <label>{tr("Effective from (choose intended local date)", "ساري من (اختر التاريخ المحلي المقصود)")}<input name="effectiveFrom" type="date" required /></label>
-      <label>{tr("Effective to", "ساري حتى")}<input name="effectiveTo" type="date" /></label>
+      <label>{tr("Effective from (choose intended local date)", "ساري من (اختر التاريخ المحلي المقصود)")}<SystemDateField name="effectiveFrom" required /></label>
+      <label>{tr("Effective to", "ساري حتى")}<SystemDateField name="effectiveTo" /></label>
       <label className="checkbox-row"><input name="isAbnormal" type="checkbox" /> {tr("Treat this option as abnormal", "اعتبر هذا الخيار غير طبيعي")}</label>
       <label className="checkbox-row"><input name="isCritical" type="checkbox" /> {tr("Treat this option as a critical result", "اعتبر هذا الخيار نتيجة حرجة")}</label>
       <button className="primary-button form-span" disabled={busy === "create" || !testId || (requiresComponent && !componentId)}>
