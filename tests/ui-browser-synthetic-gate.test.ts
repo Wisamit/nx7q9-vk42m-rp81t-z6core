@@ -77,3 +77,27 @@ test("Issue #265: visual CI is allowed only on an explicitly labelled trusted in
     "retention-days: 7",
   ]) assert.ok(workflow.includes(guard), "Visual CI policy missing: " + guard);
 });
+
+test("Issue #265: screenshot sweeps inspect rendered accessible controls and viewport clipping without patient content", () => {
+  for (const field of [
+    "renderedFormCount", "renderedActionCount", "visibleDialogCount",
+    "unlabeledInputCount", "unlabeledActionCount",
+    "interactiveViewportClippingCount",
+  ]) assert.ok(script.includes(field), "Browser evidence missing metric " + field);
+  for (const finding of [
+    "VISIBLE_INPUT_ACCESSIBLE_NAME_MISSING",
+    "VISIBLE_ACTION_ACCESSIBLE_NAME_MISSING",
+    "INTERACTIVE_CONTROL_CLIPPED",
+  ]) assert.ok(script.includes(finding), "Warning category missing: " + finding);
+  assert.ok(script.includes("el.labels?.length"));
+  assert.ok(script.includes("el.closest(\"label\")"));
+  assert.ok(script.includes('document.querySelectorAll("form").length'));
+  assert.ok(script.includes("filter(visible)"));
+  assert.ok(script.includes("This is screenshot/smoke") ||
+    script.includes("screenshot/smoke"));
+  assert.ok(!script.includes("outerHTML"));
+  assert.ok(!script.includes("innerHTML"));
+  assert.ok(!script.includes("formValues"));
+  assert.ok(!script.includes("value: el.value"));
+  assert.ok(script.includes('visualHumanSignoff:"NOT_EXECUTED"'));
+});
