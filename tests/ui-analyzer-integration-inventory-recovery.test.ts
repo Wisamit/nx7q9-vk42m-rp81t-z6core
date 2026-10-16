@@ -83,3 +83,42 @@ test("Issue #265: supplier stock receipt retries the same posted draft rather th
   assert.match(post, /goods_receipt_not_draft/);
   assert.match(post, /status: receipt\.status/);
 });
+
+test("Issue #265: pricing editors keep failed fields and request explicit effective dates", () => {
+  const ui = source("pricing-manager");
+  assert.equal(occurrences(ui, /const formElement = event\.currentTarget;/g), 4);
+  assert.equal(occurrences(ui, /formElement\.reset\(\)/g), 4);
+  assert.equal(occurrences(ui, /submitting\.current = false;/g), 4);
+  assert.equal(occurrences(ui, /setIsError\(!response\.ok\);/g), 4);
+  assert.equal(occurrences(ui, /name="effectiveFrom" type="date" required/g), 4);
+  assert.doesNotMatch(ui, /defaultValue=\{new Date\(\)\.toISOString\(\)\.slice\(0,\s*10\)\}/);
+  assert.doesNotMatch(ui, /event\.currentTarget\.reset\(\)/);
+  assert.match(ui, /Verify existing contracts and price revisions before retrying/);
+  assert.match(ui, /if \(!submitting\.current\) setOpen\(""\)/);
+});
+
+test("Issue #265: clinical specimen collection requires stable form, single pending request and verification after lost response", () => {
+  const ui = source("phlebotomy-collection-card");
+  assert.match(ui, /if \(submitting\.current\) return;/);
+  assert.match(ui, /const formElement = event\.currentTarget;/);
+  assert.match(ui, /formElement\.reset\(\)/);
+  assert.match(ui, /finally \{\s*submitting\.current = false;\s*setBusy\(false\);/);
+  assert.match(ui, /Scan and verify the specimen state before recording another collection attempt/);
+  assert.match(ui, /role=\{isError \? "alert" : "status"\}/);
+  assert.doesNotMatch(ui, /event\.currentTarget\.reset\(\)/);
+  assert.match(ui, /secondaryVerificationValue: form\.get\("secondaryVerificationValue"\)/);
+  assert.match(ui, /\/api\/specimens\/\$\{specimen\.id\}\/collection-attempts/);
+});
+
+test("Issue #265: patient duplicate override has an explicit audited confirmation instead of a native browser prompt", () => {
+  const ui = source("patient-edit-form");
+  assert.match(ui, /<CrudModal open=\{confirmDuplicate\}/);
+  assert.match(ui, /size="compact"/);
+  assert.match(ui, /duplicateReview\.payload, reason/);
+  assert.match(ui, /duplicateReviewOverride: Boolean\(overrideReason\)/);
+  assert.match(ui, /duplicateReviewReason: overrideReason/);
+  assert.match(ui, /The recorded reason and audit evidence remain attached/);
+  assert.match(ui, /if \(updating\.current\) return;/);
+  assert.match(ui, /finally \{\s*updating\.current = false;\s*setBusy\(false\);/);
+  assert.doesNotMatch(ui, /window\.confirm\(/);
+});
