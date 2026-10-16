@@ -1,3 +1,4 @@
+import { SystemDateText } from "@/components/system-date-text";
 import Link from "next/link";
 import { SystemIcon, type SystemIconName } from "@/components/system-icon";
 import { permissionSet, requireSession } from "@/lib/auth";
@@ -105,7 +106,7 @@ export default async function DashboardPage() {
       </div>
       <div className="dashboard-date">
         <span>{tr(locale, "Today", "اليوم")}</span>
-        <strong>{new Intl.DateTimeFormat(locale === "ar" ? "ar-EG" : "en-GB", { weekday: "long", day: "2-digit", month: "short", year: "numeric" }).format(new Date())}</strong>
+        <strong>{<SystemDateText value={new Date().toISOString()} kind="instant-date" />}</strong>
       </div>
     </section>
 
