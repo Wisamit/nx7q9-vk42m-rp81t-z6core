@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CrudModal } from "@/components/crud-modal";
 
@@ -68,6 +68,7 @@ export function QualitativeResultOptionsManager({
   const [testId, setTestId] = useState("");
   const [componentId, setComponentId] = useState("");
   const [busy, setBusy] = useState("");
+  const submitting = useRef(false);
   const [message, setMessage] = useState("");
   const [formError, setFormError] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
@@ -88,8 +89,9 @@ export function QualitativeResultOptionsManager({
 
   async function createOption(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (busy) return;
+    if (submitting.current) return;
     const form = new FormData(event.currentTarget);
+    submitting.current = true;
     setBusy("create");
     setFormError("");
     try {
@@ -126,12 +128,13 @@ export function QualitativeResultOptionsManager({
     } catch {
       setFormError(tr("Connection error; draft creation not confirmed.", "خطأ في الاتصال؛ لم يتم تأكيد إنشاء المسودة."));
     } finally {
+      submitting.current = false;
       setBusy("");
     }
   }
 
   function openGovernance(id: string, action: "APPROVE" | "RETIRE") {
-    if (!canApprove || busy) return;
+    if (!canApprove || busy || submitting.current) return;
     setFormError("");
     setGovernanceReason("");
     setGovernance({ id, action });
@@ -139,7 +142,7 @@ export function QualitativeResultOptionsManager({
 
   async function governanceAction(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!governance || !canApprove || busy) return;
+    if (!governance || !canApprove || submitting.current) return;
     const current = options.find(option => option.id === governance.id);
     if (!current || (governance.action === "APPROVE" && current.approvalStatus !== "DRAFT")
       || (governance.action === "RETIRE" && current.approvalStatus !== "APPROVED")) {
@@ -151,6 +154,7 @@ export function QualitativeResultOptionsManager({
       setFormError(tr("Retirement reason is required.", "سبب الإيقاف مطلوب."));
       return;
     }
+    submitting.current = true;
     setBusy(current.id);
     setFormError("");
     try {
@@ -176,6 +180,7 @@ export function QualitativeResultOptionsManager({
     } catch {
       setFormError(tr("Connection error; action was not confirmed.", "خطأ في الاتصال؛ لم يتم تأكيد الإجراء."));
     } finally {
+      submitting.current = false;
       setBusy("");
     }
   }
@@ -203,7 +208,7 @@ export function QualitativeResultOptionsManager({
       </button>
     </div>
 
-    <CrudModal open={createOpen} onClose={() => { if (!busy) setCreateOpen(false); }}
+    <CrudModal open={createOpen} onClose={() => { if (!busy && !submitting.current) setCreateOpen(false); }}
       size="compact"
       title={tr("Create Qualitative Option Draft", "إنشاء مسودة خيار نتيجة نوعية")}
       description={tr(
@@ -303,7 +308,7 @@ export function QualitativeResultOptionsManager({
         </tbody>
       </table>
     </div>
-    <CrudModal open={governance !== null} onClose={() => { if (!busy) setGovernance(null); }}
+    <CrudModal open={governance !== null} onClose={() => { if (!busy && !submitting.current) setGovernance(null); }}
       size="compact"
       title={governance?.action === "APPROVE"
         ? tr("Approve Qualitative Clinical Meaning", "اعتماد معنى نتيجة نوعية سريرياً")
