@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { CrudModal } from "@/components/crud-modal";
 
 type Choice = { id: string; label: string };
 type Specimen = {
@@ -41,6 +42,10 @@ export function HomeCollectionWorkstation({
   const [selectedCollector, setSelectedCollector] = useState(collectorUserId || "");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [formError, setFormError] = useState("");
+  type Proposed = { kind:"link"|"status"; next?:string; order?:string;
+    collector?:string; departure?:string; notes?:string };
+  const [pending,setPending] = useState<Proposed|null>(null);
   const [departureAt, setDepartureAt] = useState("");
   const [transportNotes, setTransportNotes] = useState("");
   const physical = specimens.filter(s => s.type !== "ALIQUOT" && s.status !== "COLLECTION_FAILED");
@@ -48,8 +53,8 @@ export function HomeCollectionWorkstation({
   const received = physical.filter(s => s.receivedHere && ["RECEIVED","IN_PROCESS"].includes(s.status)).length;
 
   async function send(url: string, payload: Record<string, unknown>) {
-    if (busy) return;
-    setBusy(true); setMessage("");
+    if (busy) return false;
+    setBusy(true); setFormError("");
     try {
       const response = await fetch(url, {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -67,29 +72,65 @@ export function HomeCollectionWorkstation({
           home_order_already_linked_elsewhere: ["The accession is already linked to another home visit.", "هذا الطلب مرتبط بزيارة منزلية أخرى."],
         };
         const err = label[data.error || ""];
-        setMessage(err ? tr(err[0],err[1]) :
-          tr("Action rejected: ", "تم رفض العملية: ") + (data.error || "unknown_error"));
-      } else {
-        setMessage(tr("Saved. Current visit data refreshed.", "تم الحفظ وتحديث بيانات الزيارة."));
-        router.refresh();
+        setFormError(err ? tr(err[0],err[1]) :
+          tr("Action rejected: ","تم رفض العملية: ") + (data.error || "unknown_error"));
+        return false;
       }
+      setMessage(tr("Saved. Current visit data refreshed.", "تم الحفظ وتحديث بيانات الزيارة."));
+      router.refresh();
+      return true;
     } catch {
-      setMessage(tr("Connection failed. Review the visit before retrying.",
-        "فشل الاتصال. راجع حالة الزيارة قبل إعادة المحاولة."));
-    } finally { setBusy(false); }
+      setFormError(tr("Connection failed. Review the visit and linked order before retrying.",
+        "فشل الاتصال. راجع حالة الزيارة والطلب المرتبط قبل إعادة المحاولة."));
+      return false;
+    } finally {
+      setBusy(false);
+    }
   }
 
-  async function transition(next: string) {
-    if (!window.confirm(tr(
-      "Apply this home collection status? Specimen/financial checks are enforced by the server.",
-      "هل تريد تغيير حالة الزيارة؟ سيتحقق النظام من العينات والفاتورة قبل الموافقة.",
-    ))) return;
-    await send(`/api/home-collections/${visitId}`, {
-      status: next,
-      ...(next === "ASSIGNED" ? { assignedCollectorUserId: selectedCollector } : {}),
-      ...(departureAt ? { scheduledDepartureAt: new Date(departureAt).toISOString() } : {}),
-      transportNotes,
+  function reviewLink() {
+    if (busy||!isManager||orderId||!selectedOrder) return;
+    if (!availableOrders.some(order=>order.id===selectedOrder)) return;
+    setFormError("");setMessage("");
+    setPending({kind:"link",order:selectedOrder});
+  }
+
+  function transition(next: string) {
+    if(busy)return;
+    setFormError("");setMessage("");
+    setPending({
+      kind:"status",
+      next,collector:selectedCollector,
+      departure:departureAt,notes:transportNotes,
     });
+  }
+
+  async function confirmPending(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if(!pending||busy)return;
+    const proposal=pending;
+    if(proposal.kind==="link"){
+      if(!isManager||orderId||!proposal.order||
+        !availableOrders.some(order=>order.id===proposal.order)) {
+        setFormError(tr("Selected order is no longer eligible.","لم يعد الطلب المحدد مؤهلاً."));
+        return;
+      }
+      const saved=await send(`/api/home-collections/${visitId}/order`, {orderId:proposal.order});
+      if(saved)setPending(null);
+      return;
+    }
+    if(!proposal.next || !["ASSIGNED","EN_ROUTE","ARRIVED","COLLECTING","COLLECTED","DELIVERED"].includes(proposal.next))return;
+    if(proposal.depart && Number.isNaN(new Date(proposal.depart).getTime())) {
+      setFormError(tr("Invalid local departure date/time.","تاريخ أو وقت المغادرة المحلي غير صحيح."));
+      return;
+    }
+    const saved=await send(`/api/home-collections/${visitId}`, {
+      status: proposal.next,
+      ...(proposal.next==="ASSIGNED"?{assignedCollectorUserId:proposal.collector}:{}),
+      ...(proposal.depart?{scheduledDepartureAt:new Date(proposal.depart).toISOString()}:{}),
+      transportNotes:proposal.notes||"",
+    });
+    if(saved)setPending(null);
   }
 
   return <div className="detail-grid">
@@ -124,7 +165,7 @@ export function HomeCollectionWorkstation({
           {availableOrders.map(o=><option key={o.id} value={o.id}>{o.label}</option>)}
         </select>
         <button className="primary-button" disabled={!selectedOrder || busy}
-          onClick={() => void send(`/api/home-collections/${visitId}/order`,{orderId:selectedOrder})}>
+          onClick={reviewLink}>
           {tr("Link accession to visit", "ربط الطلب بالزيارة")}
         </button>
       </> : <p className="form-warning">{tr(
@@ -142,7 +183,7 @@ export function HomeCollectionWorkstation({
           </select>
         </label>
         <button className="secondary-button" disabled={busy || !selectedCollector}
-          onClick={() => void transition("ASSIGNED")}>{tr("Assign collector", "تعيين المُجمّع")}</button>
+          onClick={() => transition("ASSIGNED")}>{tr("Assign collector", "تعيين المُجمّع")}</button>
       </>}
       {isManager && ["SCHEDULED","ASSIGNED"].includes(status) && <label>
         {tr("Planned departure (optional)", "المغادرة المخططة (اختياري)")}
@@ -153,15 +194,15 @@ export function HomeCollectionWorkstation({
           <textarea rows={3} value={transportNotes} onChange={e=>setTransportNotes(e.target.value)}/>
         </label>
         {status === "ASSIGNED" && <button className="secondary-button" disabled={busy || !orderId}
-          onClick={() => void transition("EN_ROUTE")}>{tr("Dispatch / en route", "المغادرة نحو المنزل")}</button>}
+          onClick={() => transition("EN_ROUTE")}>{tr("Dispatch / en route", "المغادرة نحو المنزل")}</button>}
         {status === "EN_ROUTE" && <button className="secondary-button" disabled={busy}
-          onClick={() => void transition("ARRIVED")}>{tr("Arrived at home", "وصل إلى المنزل")}</button>}
+          onClick={() => transition("ARRIVED")}>{tr("Arrived at home", "وصل إلى المنزل")}</button>}
         {status === "ARRIVED" && <button className="secondary-button" disabled={busy || !orderId}
-          onClick={() => void transition("COLLECTING")}>{tr("Start verified collection", "بدء السحب الموثق")}</button>}
+          onClick={() => transition("COLLECTING")}>{tr("Start verified collection", "بدء السحب الموثق")}</button>}
         {status === "COLLECTING" && <button className="secondary-button" disabled={busy || !orderId}
-          onClick={() => void transition("COLLECTED")}>{tr("Verify all specimens collected", "التحقق من سحب جميع العينات")}</button>}
+          onClick={() => transition("COLLECTED")}>{tr("Verify all specimens collected", "التحقق من سحب جميع العينات")}</button>}
         {isManager && status === "COLLECTED" && <button className="primary-button" disabled={busy || !orderId}
-          onClick={() => void transition("DELIVERED")}>{tr("Reconcile laboratory reception & complete", "مطابقة الاستلام بالمختبر وإتمام الزيارة")}</button>}
+          onClick={() => transition("DELIVERED")}>{tr("Reconcile laboratory reception & complete", "مطابقة الاستلام بالمختبر وإتمام الزيارة")}</button>}
       </>}
       <p className="muted">{tr(
         "A status button never records sample collection or receipt itself. Use barcode workflows below.",
@@ -195,5 +236,38 @@ export function HomeCollectionWorkstation({
         </td>
       </tr>)}</tbody></table></div>}
     </article>
+    <CrudModal open={pending!==null} onClose={()=>{if(!busy)setPending(null);}}
+      size="compact"
+      title={pending?.kind==="link"
+        ?tr("Confirm Exact Laboratory Order Link","تأكيد ربط الطلب المخبري المحدد")
+        :tr("Confirm Home Collection Transition","تأكيد انتقال حالة السحب المنزلي")}
+      description={tr(
+        "Only authorized staff may link a priced order or move a visit through custody stages. The server checks patient, branch, finance, barcode evidence and audit.",
+        "يربط الطلب المسعّر أو يغيّر حالة الزيارة الموظف المخوّل فقط. يتحقق السيرفر من المريض والفرع والفاتورة والباركود والتدقيق.",
+      )}>
+      {pending&&<form className="catalog-form" onSubmit={confirmPending}>
+        <div className="form-span">
+          <p>{tr("Current visit status","حالة الزيارة الحالية")}: <strong>{status}</strong></p>
+          {pending.kind==="link"?<>
+            <p>{tr("Selected authorized accession","الطلب المخبري المختار")}:{" "}
+              <strong>{availableOrders.find(order=>order.id===pending.order)?.label||"—"}</strong></p>
+            <p>{tr("Linking never issues an invoice or records sample collection.",
+              "الربط لا يصدر فاتورة ولا يسجّل سحب عينة.")}</p>
+          </>:<>
+            <p>{tr("Requested next status","الحالة التالية المطلوبة")}: <strong>{pending.next}</strong></p>
+            {pending.collector&&pending.next==="ASSIGNED"&&
+              <p>{tr("Assigned collector","موظف السحب")}:{" "}
+                {collectors.find(person=>person.id===pending.collector)?.label||"—"}</p>}
+            {pending.depart&&<p>{tr("Departure time (browser-local input)","موعد المغادرة (التوقيت المحلي للمتصفح)")}:{" "}
+              <span dir="ltr">{pending.depart}</span></p>}
+            {pending.notes&&<p>{tr("Transport notes","ملاحظات النقل")}: {pending.notes}</p>}
+          </>}
+        </div>
+        {formError&&<p className="form-error form-span" role="alert">{formError}</p>}
+        <button className="primary-button form-span" type="submit" disabled={busy}>
+          {busy?tr("Processing…","جارٍ التنفيذ…"):tr("Confirm exact authorized action","تأكيد الإجراء المخوّل")}
+        </button>
+      </form>}
+    </CrudModal>
   </div>;
 }
