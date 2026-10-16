@@ -115,7 +115,7 @@ test("Stage 46: all legacy mutation routes reject JSON review source before any 
 test("Stage 46: generic exports exclude private client/contract financial scopes",()=>{
   const exp=readFileSync("src/app/api/catalog/configuration-export/route.ts","utf8");
   assert.match(exp,/const genericPriceScope/);
-  assert.match(exp,/genericCatalogPriceScope\\(branchIds\\)/);
+  assert.match(exp,/genericCatalogPriceScope\(branchIds\)/);
   const scope = readFileSync("src/lib/catalog-generic-price-scope.ts","utf8");
   assert.match(scope,/scopeType: "ORGANIZATION"/);
   assert.match(scope,/scopeType: "BRANCH"/);
