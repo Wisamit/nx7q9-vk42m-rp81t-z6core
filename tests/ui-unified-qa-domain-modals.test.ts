@@ -58,7 +58,7 @@ test("UI #265: all nine EQA actions use role-gated review dialogs, with custody 
   const quality = read("src/components/quality-management-console.tsx");
   assert.ok(quality.includes("confirmQualityReview"), "quality actions require a governed review form");
   assert.ok(quality.includes("openReview({kind:"));
-  assert.ok(!/window\\.(?:prompt|confirm)\\s*\\(/.test(quality),
+  assert.ok(!/window\.(?:prompt|confirm)\s*\(/.test(quality),
     "quality lifecycle transitions must not use bare browser prompts");
   for (const action of ["NC_STATUS", "CAPA_ACTION_CREATE", "CAPA_ACTION_COMPLETE",
     "CAPA_EFFECTIVENESS", "DOCUMENT_VERSION_CREATE", "DOCUMENT_WORKFLOW",
