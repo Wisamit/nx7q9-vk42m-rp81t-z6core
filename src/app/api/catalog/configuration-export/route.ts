@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCurrentSession, permissionSet, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { clinicalImportTestWhere, resolveClinicalImportScope } from "@/lib/catalog-clinical-import-scope";
+import { genericCatalogPriceScope } from "@/lib/catalog-generic-price-scope";
 import {
   catalogExportNavigation, catalogExportTypes, type CatalogExportType,
 } from "@/lib/catalog-configuration-export";
@@ -61,10 +62,7 @@ export async function GET(request: NextRequest) {
   };
   const branchScope = { OR: [{ branchId: null }, { branchId: { in: branchIds } }] };
   // Generic exports cannot disclose client/contract/source/referrer prices.
-  const genericPriceScope = { OR: [
-    { scopeType: "ORGANIZATION" as const, branchId: null },
-    { scopeType: "BRANCH" as const, branchId: { in: branchIds } },
-  ] };
+  const genericPriceScope = genericCatalogPriceScope(branchIds);
   // Lexical id keyset paging does not depend on a cursor record still existing
   // and never uses a foreign-tenant row as a Prisma cursor anchor.
   const base = { orderBy: { id: "asc" as const }, take: 251 };
