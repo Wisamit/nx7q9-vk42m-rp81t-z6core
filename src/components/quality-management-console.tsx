@@ -264,15 +264,17 @@ export function QualityManagementConsole({
   );
 
   async function send(url: string, method: "POST" | "PATCH", payload: unknown, key: string, success: string) {
+    if (busy) return false;
     setBusy(key);
     setMessage("");
-    const response = await fetch(url, {
-      method,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    const body = await response.json().catch(() => ({})) as { error?: string };
-    const reason = body.error || "";
+    try {
+      const response = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const body = await response.json().catch(() => ({})) as { error?: string };
+      const reason = body.error || "";
     const errorMessages: Record<string, string> = {
       open_capa_actions: tr("Finish all CAPA actions before review.", "أكمل إجراءات CAPA المفتوحة قبل المراجعة."),
       completed_capa_action_required: tr("At least one completed CAPA action is required before closure.", "يجب إكمال إجراء تصحيحي أو وقائي واحد على الأقل قبل الإغلاق."),
@@ -290,10 +292,134 @@ export function QualityManagementConsole({
       document_workflow_state_conflict: tr("Document version changed. Refresh before retrying.", "تغيّرت حالة إصدار الوثيقة. حدّث الصفحة قبل إعادة المحاولة."),
       older_version_cannot_replace_effective: tr("An older SOP version cannot replace a newer effective version.", "لا يمكن لإصدار أقدم من إجراء العمل أن يحل محل إصدار أحدث نافذ."),
     };
-    setBusy("");
-    setMessage(response.ok ? success : errorMessages[reason] || tr("Action failed. Refresh and review the record.", "فشلت العملية. حدّث الصفحة وراجع السجل."));
-    if (response.ok) router.refresh();
-    return response.ok;
+      if (!response.ok) {
+        setMessage(errorMessages[reason] ||
+          tr("Action failed. Refresh and review the record.", "فشلت العملية. حدّث الصفحة وراجع السجل."));
+        return false;
+      }
+      setMessage(success);
+      router.refresh();
+      return true;
+    } catch {
+      setMessage(tr("Connection interrupted. Review the latest audited state before retrying.",
+        "انقطع الاتصال. راجع آخر حالة مدققة قبل إعادة المحاولة."));
+      return false;
+    } finally {
+      setBusy("");
+    }
+  }
+
+  const reviewLabel = (kind: ReviewKind) => ({
+    NC_STATUS: tr("Review Nonconformance Status", "مراجعة حالة عدم المطابقة"),
+    CAPA_ACTION_CREATE: tr("Add Corrective / Preventive Action", "إضافة إجراء تصحيحي أو وقائي"),
+    CAPA_ACTION_COMPLETE: tr("Confirm CAPA Action Completion", "تأكيد إكمال إجراء CAPA"),
+    CAPA_EFFECTIVENESS: tr("Independent CAPA Effectiveness Review", "مراجعة فعالية CAPA المستقلة"),
+    DOCUMENT_VERSION_CREATE: tr("Create Controlled Document Version", "إنشاء إصدار وثيقة مضبوطة"),
+    DOCUMENT_WORKFLOW: tr("Confirm Document Workflow Decision", "تأكيد قرار حوكمة الوثيقة"),
+    ANALYZER_REVOKE: tr("Revoke Equipment Authorization", "إلغاء صلاحية تشغيل جهاز"),
+    INDICATOR_MEASUREMENT: tr("Add Quality Indicator Measurement", "تسجيل قياس مؤشر جودة"),
+    AUDIT_FINDING_CREATE: tr("Record Internal Audit Finding", "تسجيل ملاحظة تدقيق داخلي"),
+    AUDIT_FINDING_CLOSE: tr("Close Internal Audit Finding", "إغلاق ملاحظة تدقيق داخلي"),
+    AUDIT_COMPLETE: tr("Complete Internal Audit", "إكمال التدقيق الداخلي"),
+  }[kind]);
+
+  async function confirmQualityReview(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const review = pendingReview;
+    if (!review || busy) return;
+    setReviewError("");
+    const fields = new FormData(event.currentTarget);
+    const field = (key: string) => String(fields.get(key) || "").trim();
+    const action = review.kind;
+    let url = "";
+    let method: "POST" | "PATCH" = "POST";
+    let payload: Record<string, unknown> = {};
+    let key = "quality-review-" + review.id;
+    if (action === "NC_STATUS") {
+      url = "/api/quality/nonconformances/" + review.id;
+      method = "PATCH";
+      const rootCause = review.close ? field("rootCause") : review.rootCause || "";
+      const closureSummary = review.close ? field("closureSummary") : review.closureSummary || "";
+      if (review.close && (!rootCause || !closureSummary)) {
+        setReviewError(tr("Root cause and closure summary are required.", "السبب الجذري وملخص الإغلاق إلزاميان."));
+        return;
+      }
+      payload = {status: review.close ? "CLOSED" : "INVESTIGATING", rootCause, closureSummary};
+      key = "nc-" + review.id;
+    } else if (action === "CAPA_ACTION_CREATE") {
+      url = "/api/quality/capas/" + review.id + "/actions";
+      payload = {actionType: field("actionType"), description: field("description"),
+        dueDate: field("dueDate")};
+      key = "capa-action-" + review.id;
+    } else if (action === "CAPA_ACTION_COMPLETE") {
+      url = "/api/quality/capas/" + review.id + "/actions";
+      method = "PATCH";
+      payload = {actionId: review.subId, status: "COMPLETED"};
+      key = "capa-action-" + review.subId;
+    } else if (action === "CAPA_EFFECTIVENESS") {
+      url = "/api/quality/capas/" + review.id + "/review";
+      const effectiveness = field("effectiveness");
+      const close = effectiveness === "EFFECTIVE" && fields.get("close") === "on";
+      payload = {effectiveness, effectivenessReview: field("effectivenessReview"), close};
+      key = "capa-review-" + review.id;
+    } else if (action === "DOCUMENT_VERSION_CREATE") {
+      const changeSummary = field("changeSummary");
+      const content = field("content");
+      const externalUrl = field("externalUrl");
+      if (!changeSummary || (!content && !externalUrl) || (content && externalUrl)) {
+        setReviewError(tr("Add a change summary and either document text or an external URL.",
+          "أدخل ملخص التغيير ونص الوثيقة أو رابطاً خارجياً واحداً."));
+        return;
+      }
+      url = "/api/quality/documents/" + review.id + "/versions";
+      payload = {changeSummary, contentSnapshot: content ? {text: content} : null, externalUrl};
+      key = "doc-new-" + review.id;
+    } else if (action === "DOCUMENT_WORKFLOW") {
+      if (!["SUBMIT_REVIEW", "COMPLETE_REVIEW", "APPROVE", "MAKE_EFFECTIVE"].includes(review.operation || "")) return;
+      url = "/api/quality/document-versions/" + review.id + "/workflow";
+      payload = {action: review.operation};
+      key = "doc-workflow-" + review.id;
+    } else if (action === "ANALYZER_REVOKE") {
+      const reason = field("reason");
+      if (!reason) {setReviewError(tr("A revocation reason is required.", "سبب الإلغاء إلزامي.")); return;}
+      url = "/api/quality/analyzer-authorizations";
+      method = "PATCH";
+      payload = {id: review.id, status: "REVOKED", revocationReason: reason};
+      key = "auth-" + review.id;
+    } else if (action === "INDICATOR_MEASUREMENT") {
+      url = "/api/quality/indicators/" + review.id + "/measurements";
+      payload = {periodStart: field("periodStart"), periodEnd: field("periodEnd"),
+        value: field("value"), numerator: field("numerator"), denominator: field("denominator")};
+      key = "indicator-measure-" + review.id;
+    } else if (action === "AUDIT_FINDING_CREATE") {
+      const severity = field("severity");
+      const capaId = field("capaId");
+      if (severity === "CRITICAL" && !capaId) {
+        setReviewError(tr("A critical audit finding must link an existing open CAPA.",
+          "الملاحظة الحرجة يجب ربطها بملف CAPA مفتوح."));
+        return;
+      }
+      if (capaId && !openCapas.some(item => item.id === capaId)) {
+        setReviewError(tr("The selected CAPA is no longer open.", "لم يعد ملف CAPA المحدد مفتوحاً."));
+        return;
+      }
+      url = "/api/quality/audits/" + review.id + "/findings";
+      payload = {severity, description: field("description"), requirementRef: field("requirementRef"), capaId};
+      key = "finding-create-" + review.id;
+    } else if (action === "AUDIT_FINDING_CLOSE") {
+      url = "/api/quality/audits/" + review.id + "/findings";
+      method = "PATCH";
+      payload = {findingId: review.subId, closureNote: field("closureNote")};
+      key = "finding-close-" + review.subId;
+    } else if (action === "AUDIT_COMPLETE") {
+      url = "/api/quality/audits/" + review.id + "/complete";
+      payload = {summary: field("summary")};
+      key = "audit-complete-" + review.id;
+    }
+    if (!url) return;
+    const ok = await send(url, method, payload, key,
+      tr("Governed quality action saved and audited.", "تم حفظ إجراء الجودة وتوثيقه."));
+    if (ok) setPendingReview(null);
   }
 
   async function createNonconformance(event: FormEvent<HTMLFormElement>) {
