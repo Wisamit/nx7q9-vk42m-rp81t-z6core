@@ -131,6 +131,11 @@ export async function executeScreenshots(){
          item.reason="bad-response-or-redirect";report.issues.push(item);
        }else if(profile.kind==="STAFF"&&!(await setStaffLocale(page,viewport.lang))){
          item.reason="requested-rtl-ltr-not-applied";report.issues.push(item);
+       }else if(profile.kind!=="STAFF"&&!(await page.evaluate(expected=>{
+         const element=document.querySelector("main[dir],.catalog-shell[dir],.auth-shell[dir]");
+         return element?.getAttribute("dir")===(expected==="ar"?"rtl":"ltr");
+       },viewport.lang))){
+         item.reason="public-or-portal-language-unverified";report.issues.push(item);
        }else{
          await page.evaluate(theme=>{
            window.localStorage.setItem("family-lab-theme",theme);
