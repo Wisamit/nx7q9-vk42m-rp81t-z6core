@@ -132,18 +132,29 @@ export function DigitalServicesConsole({
     value;
 
   async function send(url: string, method: "POST" | "PATCH", payload: unknown, key: string, successEn: string, successAr: string) {
+    if (busy) return false;
     setBusy(key);
     setMessage("");
-    const response = await fetch(url, {
-      method,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    await response.json().catch(() => ({}));
-    setBusy("");
-    setMessage(response.ok ? tr(successEn, successAr) : tr("Action failed.", "فشلت العملية."));
-    if (response.ok) router.refresh();
-    return response.ok;
+    try {
+      const response = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const body = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) {
+        setMessage(body.error || tr("Action failed.", "فشلت العملية."));
+        return false;
+      }
+      setMessage(tr(successEn, successAr));
+      router.refresh();
+      return true;
+    } catch {
+      setMessage(tr("Connection error; action not confirmed.", "خطأ في الاتصال؛ لم يتم تأكيد الإجراء."));
+      return false;
+    } finally {
+      setBusy("");
+    }
   }
 
   async function createPortalAccount(event: FormEvent<HTMLFormElement>) {
