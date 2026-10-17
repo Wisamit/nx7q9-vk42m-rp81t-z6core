@@ -1,5 +1,5 @@
-import { SystemDateText } from "@/components/system-date-text";
 "use client";
+import { SystemDateText } from "@/components/system-date-text";
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
