@@ -1,3 +1,4 @@
+import { SystemDateText } from "@/components/system-date-text";
 import Link from "next/link";
 import type { Prisma } from "../../../generated/prisma/client";
 import { authorizedDepartmentIds, permissionSet, requirePermission } from "@/lib/auth";
@@ -250,10 +251,6 @@ export default async function WorklistsPage({
     }
     return `${absolute}m`;
   };
-  const formatTatDueAt = (value: Date, timezone: string) => new Intl.DateTimeFormat(
-    locale === "ar" ? "ar-AE" : "en-GB",
-    { timeZone: timezone, year: "numeric", month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" },
-  ).format(value);
 
   const pendingEntry = visibleItems.filter(item => !item.results[0]).length;
   const inProgress = visibleItems.filter(item => item.results[0] && !["VERIFIED","RELEASED","AMENDED"].includes(item.results[0].status)).length;
@@ -478,11 +475,11 @@ export default async function WorklistsPage({
                               ? tr(locale, `${formatTatMinutes(tatRemaining)} remaining`, `متبقٍ ${formatTatMinutes(tatRemaining)}`)
                               : tr(locale, "Completed", "مكتمل")}
                       </strong>
-                      <br/><small>{formatTatDueAt(item.tatDueAt, item.order.orderingBranch.timezone)} · {item.tatMinutesSnapshot ?? "—"} {tr(locale, "min", "دقيقة")}{item.tatSnapshotSource === "SLA_POLICY" ? " · SLA" : ""}</small>
-                      {item.tatFirstEscalationAt ? <><br/><small>{tr(locale, "Escalation starts", "بدء التصعيد")}: {formatTatDueAt(item.tatFirstEscalationAt, item.order.orderingBranch.timezone)} · {tr(locale, "max", "حد أقصى")} {item.tatMaxEscalationLevelSnapshot || 1}</small></> : null}
+                      <br/><small>{<SystemDateText value={item.tatDueAt.toISOString()} timeZone={item.order.orderingBranch.timezone} />} · {item.tatMinutesSnapshot ?? "—"} {tr(locale, "min", "دقيقة")}{item.tatSnapshotSource === "SLA_POLICY" ? " · SLA" : ""}</small>
+                      {item.tatFirstEscalationAt ? <><br/><small>{tr(locale, "Escalation starts", "بدء التصعيد")}: {<SystemDateText value={item.tatFirstEscalationAt.toISOString()} timeZone={item.order.orderingBranch.timezone} />} · {tr(locale, "max", "حد أقصى")} {item.tatMaxEscalationLevelSnapshot || 1}</small></> : null}
                       {latestTatEscalation ? <div className={latestTatEscalation.status === "OPEN" ? "form-warning" : "muted"}>
                         <strong>{tr(locale, "TAT escalation", "تصعيد TAT")} L{latestTatEscalation.level} · {statusLabel(locale, latestTatEscalation.status)}</strong>
-                        <br/><small>{latestTatEscalation.escalationDueAtSnapshot.toISOString().replace("T"," ").slice(0,19)} · {tr(locale, "recipients", "المستلمون")}: {latestTatEscalation.recipientCount}</small>
+                        <br/><small>{<SystemDateText value={latestTatEscalation.escalationDueAtSnapshot.toISOString()} timeZone={item.order.orderingBranch.timezone} />} · {tr(locale, "recipients", "المستلمون")}: {latestTatEscalation.recipientCount}</small>
                         {latestTatEscalation.status === "OPEN" && permissions.has("worklists.tat_escalations.acknowledge") && <TatEscalationAcknowledge
                           orderItemId={item.id}
                           eventId={latestTatEscalation.id}
