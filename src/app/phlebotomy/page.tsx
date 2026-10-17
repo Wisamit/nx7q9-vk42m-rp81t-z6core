@@ -136,11 +136,11 @@ export default async function PhlebotomyPage({
       <div className="table-toolbar">
         <div><h2>{tr(locale, "Collection Queue", "قائمة انتظار السحب")}</h2><span>{tr(locale, "Branch-scoped planned specimens", "عينات مخططة ضمن نطاق الفرع")}</span></div>
         <form className="inline-search queue-filters" action="/phlebotomy" method="get">
-          <input name="q" defaultValue={q} placeholder={tr(locale, "Barcode, accession, patient…", "باركود، طلب، مريض…")} autoFocus />
-          <select name="branch" defaultValue={selectedBranchId}>
+          <input type="search" name="q" aria-label={tr(locale, "Find barcode, accession or patient", "بحث الباركود أو الطلب أو المريض")} defaultValue={q} placeholder={tr(locale, "Barcode, accession, patient…", "باركود، طلب، مريض…")} autoFocus />
+          <select name="branch" aria-label={tr(locale, "Collection branch", "فرع سحب العينات")} defaultValue={selectedBranchId}>
             {branches.map(branch => <option value={branch.id} key={branch.id}>{branch.code} — {localizedName(branch)}</option>)}
           </select>
-          <button className="secondary-button"><SystemIcon name="search" size={15} />{tr(locale, "Filter", "تصفية")}</button>
+          <button type="submit" className="secondary-button"><SystemIcon name="search" size={15} />{tr(locale, "Filter", "تصفية")}</button>
           {(q || requestedSpecimenId) && <Link className="secondary-link" href={selectedBranchId ? `/phlebotomy?branch=${selectedBranchId}` : "/phlebotomy"}>{tr(locale, "Clear", "مسح")}</Link>}
         </form>
       </div>
