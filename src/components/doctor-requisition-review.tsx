@@ -3,7 +3,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { CrudModal } from "@/components/crud-modal";
-type Row={id:string;status:string;submittedAt:string;patient:string;
+import { SystemDateText } from "@/components/system-date-text";
+type Row={id:string;status:string;submittedAt:string;branchTimeZone:string;patient:string;
   branch:string;doctor:string;priority:string;tests:string[];
   diagnosis:string|null;clinicalNotes:string|null;fulfilledOrderId:string|null;
   resolutionReason:string|null};
@@ -45,7 +46,7 @@ export function DoctorRequisitionReview({locale,rows}:{locale:"ar"|"en";rows:Row
       <td>{r.tests.join(", ")}
         <small className="table-subtext">{r.priority} · {r.diagnosis||"—"}</small>
         {r.clinicalNotes&&<small className="table-subtext">{r.clinicalNotes}</small>}</td>
-      <td>{r.status}<small className="table-subtext">{r.submittedAt.slice(0,16)}</small>
+      <td>{r.status}<small className="table-subtext"><SystemDateText value={r.submittedAt} timeZone={r.branchTimeZone} /></small>
         {r.resolutionReason&&<small className="table-subtext">{r.resolutionReason}</small>}</td>
       <td>{r.status==="SUBMITTED"&&<>
         <Link className="secondary-link" href={`/orders?doctorRequisitionId=${r.id}`}>
