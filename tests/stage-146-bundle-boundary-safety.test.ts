@@ -52,7 +52,7 @@ test("Stage 146 rejects four private identities in all three tariff input shapes
 test("Stage 146 refuses broad/private tariff scope and source-data smuggling", () => {
   assert.throws(() => review("PRICE_LIST_ITEM", {
     ...price, priceList: { ...priceList, scopeType: "CLIENT" },
-  }), /bundle_private_tariff_scope_forbidden/);
+  }), /bundle_price_scope_requires_separate_governance/);
   assert.throws(() => review("PRICE_LIST", {
     id, ...priceList, scopeType: "ORGANIZATION", branchId: branch,
   }), /bundle_tariff_branch_mismatch/);

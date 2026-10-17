@@ -63,7 +63,7 @@ function tariff(value: Record<string, unknown>) {
   if (privateIds.some(field => value[field] != null))
     throw new BundleSourceBoundaryError("bundle_private_tariff_link_forbidden", 403);
   if (value.scopeType !== "ORGANIZATION" && value.scopeType !== "BRANCH")
-    throw new BundleSourceBoundaryError("bundle_private_tariff_scope_forbidden", 403);
+    throw new BundleSourceBoundaryError("bundle_price_scope_requires_separate_governance", 403);
   if ((value.scopeType === "ORGANIZATION" && value.branchId != null) ||
       (value.scopeType === "BRANCH" && value.branchId == null))
     throw new BundleSourceBoundaryError("bundle_tariff_branch_mismatch");
