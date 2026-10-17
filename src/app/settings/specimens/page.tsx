@@ -35,6 +35,7 @@ export default async function SpecimenSettingsPage() {
         nameAr: item.nameAr,
         sortOrder: item.sortOrder,
         status: item.status,
+        updatedAt: item.updatedAt.toISOString(),
       }))}
     />
   </main>;
