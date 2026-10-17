@@ -22,26 +22,28 @@ export default function SetupPage() {
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setState("saving");
-    setMessage("");
+    if (state === "saving") return;
     const form = new FormData(event.currentTarget);
     const payload = Object.fromEntries(form.entries());
-
-    const response = await fetch("/api/setup", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-
-    if (response.ok) {
-      router.replace("/login?setup=complete");
-      return;
+    setState("saving");
+    setMessage("");
+    try {
+      const response = await fetch("/api/setup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (response.ok) {
+        router.replace("/login?setup=complete");
+        return;
+      }
+      const data = await response.json().catch(() => ({}));
+      setMessage(data.error === "setup_already_completed"
+        ? tr("The system has already been configured.", "تم إعداد النظام مسبقًا.")
+        : tr("Could not save setup. Check the fields and try again.", "تعذر حفظ الإعدادات. تحقق من الحقول وحاول مجددًا."));
+    } catch {
+      setMessage(tr("Connection failed. Check your network and retry safely.", "فشل الاتصال. تحقق من الشبكة وأعد المحاولة بأمان."));
     }
-
-    const data = await response.json().catch(() => ({}));
-    setMessage(data.error === "setup_already_completed"
-      ? tr("The system has already been configured.", "تم إعداد النظام مسبقًا.")
-      : tr("Could not save setup. Check the fields and try again.", "تعذر حفظ الإعدادات. تحقق من الحقول وحاول مجددًا."));
     setState("error");
   }
 

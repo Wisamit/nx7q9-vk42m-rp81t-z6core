@@ -58,6 +58,7 @@ export default async function ClinicalCommentRevisionsPage({
         <h2>{tr(locale, "Prepare an immutable clinical revision", "إعداد نسخة سريرية جديدة محفوظة")}</h2>
         <CommentRevisionEditor locale={locale} sources={page.map(row => ({
           id: row.id, code: row.code, revisionNumber: row.revisionNumber,
+          createdAt: row.createdAt.toISOString(),
           scope: row.scope,
           target: row.component ? `${row.test?.code || "?"} / ${row.component.code}` :
             row.test?.code || tr(locale, "Organization", "المؤسسة"),

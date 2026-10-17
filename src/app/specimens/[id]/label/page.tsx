@@ -6,6 +6,7 @@ import { prisma } from "@/lib/db";
 import { specimenRequirementSnapshotFromDetails } from "@/lib/specimen-requirement-engine";
 import { getUiLocale, tr } from "@/lib/ui-i18n";
 import { SpecimenLabelPrintButton } from "@/components/specimen-label-print-button";
+import { SystemDateText } from "@/components/system-date-text";
 
 export const dynamic = "force-dynamic";
 
@@ -128,6 +129,7 @@ export default async function SpecimenLabelPage({
       <Link className="secondary-link" href="/specimens/scan">{tr(locale, "Scan Station", "محطة المسح")}</Link>
     </div>
 
+    <p className="no-print muted">{tr(locale, "Verify specimen identity before printing", "تحقق من هوية العينة قبل الطباعة")}: <strong>{specimen.barcode}</strong> · {tr(locale, "Patient DOB", "تاريخ ميلاد المريض")}: {dob === "—" ? "—" : <SystemDateText value={dob} kind="calendar" />}</p>
     <div className="no-print specimen-label-size-links">
       {(["50x30","50x25","40x25"] as const).map(item =>
         <Link key={item} className={item === labelSize ? "primary-button" : "secondary-link"} href={`/specimens/${specimen.id}/label?size=${item}`}>{item}</Link>)}

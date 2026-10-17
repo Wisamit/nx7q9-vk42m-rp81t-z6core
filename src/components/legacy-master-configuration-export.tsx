@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { CrudModal } from "@/components/crud-modal";
+import { SystemDateText } from "@/components/system-date-text";
 
 type Kind="REFERRER"|"SOURCE"|"ORGANISM"|"ANTIBIOTIC"|"CLIENT"|"COMMENT_TEMPLATE";
 type CsvPart={partNumber:number;rowCount:number;firstCode:string;lastCode:string;
@@ -92,6 +93,7 @@ export function LegacyMasterConfigurationExport({locale,kinds}:{
     {notice&&<p role="status" className="form-warning">{notice}</p>}
     {archive&&<div className="detail-section">
       <p><strong>{tr("Organization","المؤسسة")}:</strong> {archive.organizationId}</p>
+      <p><strong>{tr("Exported at (UTC)","وقت التصدير (UTC)")}:</strong> <SystemDateText value={archive.exportedAt} timeZone="UTC" /></p>
       <p><strong>{tr("Active rows","السجلات النشطة")}:</strong> {archive.totalRows} ·
         <strong> {tr("CSV parts","أجزاء CSV")}:</strong> {archive.partCount}</p>
       <p style={{overflowWrap:"anywhere"}}><strong>{tr("SHA-256 checksum","بصمة SHA-256")}:</strong> <code>{archive.integritySha256}</code></p>

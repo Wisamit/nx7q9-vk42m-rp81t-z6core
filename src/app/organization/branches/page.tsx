@@ -19,6 +19,10 @@ export default async function OrganizationBranchesPage() {
           "إدارة هوية الفروع وساعات العمل المحلية والأقسام ومحطات العمل. تبقى رموز الفروع والأقسام ثابتة لحماية السجلات التاريخية.")}</p>
       </div>
     </header>
+    <div className="header-actions">
+      {allowed.has("users.view") && <a className="secondary-link" href="/users">{tr(locale, "Branch-scoped users", "المستخدمون حسب الفرع")}</a>}
+      {allowed.has("roles.view") && <a className="secondary-link" href="/roles">{tr(locale, "Roles & permissions", "الأدوار والصلاحيات")}</a>}
+    </div>
     <OrganizationStructureManager locale={locale} canManage={allowed.has("branches.manage")} />
   </main>;
 }

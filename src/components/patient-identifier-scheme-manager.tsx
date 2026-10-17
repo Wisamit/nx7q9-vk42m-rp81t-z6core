@@ -3,6 +3,7 @@
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CrudModal } from "@/components/crud-modal";
+import { SystemDateText } from "@/components/system-date-text";
 
 type Scheme = {
   id: string;
@@ -12,6 +13,7 @@ type Scheme = {
   identifierType: "NATIONAL_ID" | "PASSPORT" | "OTHER";
   requiresIssuingCountry: boolean;
   status: "ACTIVE" | "INACTIVE";
+  updatedAt: string;
 };
 
 export function PatientIdentifierSchemeManager({
@@ -125,6 +127,7 @@ export function PatientIdentifierSchemeManager({
           <th>{tr("Base type", "النوع الأساسي")}</th>
           <th>{tr("Issuing country", "بلد الإصدار")}</th>
           <th>{tr("Status", "الحالة")}</th>
+          <th>{tr("Updated", "آخر تحديث")}</th>
           <th>{tr("Action", "الإجراء")}</th>
         </tr></thead>
         <tbody>{schemes.map(scheme => <tr key={scheme.id}>
@@ -133,6 +136,7 @@ export function PatientIdentifierSchemeManager({
           <td>{scheme.identifierType}</td>
           <td>{scheme.requiresIssuingCountry ? tr("Required", "مطلوب") : tr("Optional", "اختياري")}</td>
           <td>{scheme.status}</td>
+            <td><SystemDateText value={scheme.updatedAt} /></td>
           <td>{scheme.identifierType === "OTHER" && scheme.code !== "LEGACY_OTHER" && scheme.status === "ACTIVE"
             ? <button type="button" className="secondary-button" disabled={Boolean(busy)}
                 onClick={() => openDeactivation(scheme)}>

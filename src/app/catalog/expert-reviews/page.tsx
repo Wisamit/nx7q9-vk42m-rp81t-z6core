@@ -24,6 +24,7 @@ export default async function CatalogExpertReviewsPage() {
         </Link>
       </div>
     </header>
+    <p className="muted">{tr(locale, "Recorded review timestamps below are shown in UTC for audit consistency.", "تُعرض أوقات تسجيل المراجعات أدناه بتوقيت UTC لتتبع التدقيق.")}</p>
     <CatalogExpertReviewQueue locale={locale} />
     <CatalogPolicyDraftReviewQueue locale={locale} />
   </main>;
