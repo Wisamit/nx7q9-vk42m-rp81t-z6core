@@ -68,7 +68,7 @@ test("Stage 146 MariaDB: public review identity resolves no private, foreign or 
       ]);
     }
     const predicate = genericCatalogPriceScope([branch]);
-    assert.deepEqual(predicate.OR[1].branchId.in, [branch]);
+    assert.deepEqual(predicate.OR[1].branchId, { in: [branch] });
     const sql = "SELECT id FROM price_lists WHERE organization_id=? " +
       "AND source_id IS NULL AND referrer_id IS NULL AND client_id IS NULL " +
       "AND contract_id IS NULL AND ((scope_type='ORGANIZATION' AND branch_id IS NULL) " +
