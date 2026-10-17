@@ -79,7 +79,7 @@ export default async function EqaPage({searchParams}:{
   if(branchFilter)nextParams.set("branch",branchFilter);
   if(query)nextParams.set("q",query);
   if(last)nextParams.set("after",last.createdAt.toISOString()+"|"+last.id);
-  return <main className="catalog-shell">
+  return <main className="catalog-shell filter-workspace">
     <header className="page-header">
       <div>
         <p className="eyebrow">{tr(locale,"Quality Management / External Proficiency","إدارة الجودة / اختبارات الكفاءة الخارجية")}</p>
@@ -93,7 +93,7 @@ export default async function EqaPage({searchParams}:{
     <section className="detail-section">
       <article className="table-card">
         <h2>{tr(locale,"Scope and program search","نطاق العرض والبحث عن البرامج")}</h2>
-        <form method="get" className="settings-grid">
+        <form method="get" className="settings-grid filter-grid">
           <label>{tr(locale,"Branch","الفرع")}<select name="branch" defaultValue={branchFilter||""}>
             <option value="">{tr(locale,"All my branches","كل الفروع المصرّح بها")}</option>
             {branches.map(branch=><option key={branch.id} value={branch.id}>
