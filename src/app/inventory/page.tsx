@@ -1,3 +1,4 @@
+import { TableEmptyState } from "@/components/table-empty-state";
 import Link from "next/link";
 import { permissionSet, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
@@ -108,7 +109,7 @@ export default async function InventoryPage() {
         <div className="table-toolbar"><h2>{tr(locale, "Branch Stock", "مخزون الفروع")}</h2><span>{branchStocks.length} {tr(locale, "balances", "رصيد")}</span></div>
         <div className="table-wrap"><table>
           <thead><tr><th>{tr(locale, "Branch", "الفرع")}</th><th>{tr(locale, "Item", "الصنف")}</th><th>{tr(locale, "Type", "النوع")}</th><th>{tr(locale, "On hand", "المتاح فعلياً")}</th><th>{tr(locale, "Reserved", "المحجوز")}</th><th>{tr(locale, "Minimum", "الحد الأدنى")}</th><th>{tr(locale, "Status", "الحالة")}</th></tr></thead>
-          <tbody>{branchStocks.length === 0 ? <tr><td colSpan={7} className="empty-state">{tr(locale, "No stock posted yet.", "لا توجد حركات مخزون بعد.")}</td></tr> : branchStocks.map(stock => <tr key={stock.id}>
+          <tbody>{branchStocks.length === 0 ? <tr><td colSpan={7} className="empty-state"><TableEmptyState title={tr(locale, "No stock posted yet.", "لا توجد حركات مخزون بعد.")} description={tr(locale, "No branch stock balances appear in this view. Confirm the authorized branch and recorded inventory receipts.", "لا تظهر أرصدة مخزون الفروع في هذا العرض. تحقق من الفرع المصرح به واستلامات المخزون المسجلة.")} /></td></tr> : branchStocks.map(stock => <tr key={stock.id}>
             <td>{stock.branch.code} — {localizedName(stock.branch)}</td>
             <td><strong>{stock.item.code}</strong><br/><small>{localizedName(stock.item)}</small></td>
             <td>{itemTypeLabel(stock.item.itemType)}</td>
@@ -124,7 +125,7 @@ export default async function InventoryPage() {
         <div className="table-toolbar"><h2>{tr(locale, "FEFO Lots", "تشغيلات FEFO")}</h2><span>{fefoLots.length} {tr(locale, "positive balances", "أرصدة موجبة")}</span></div>
         <div className="table-wrap"><table>
           <thead><tr><th>{tr(locale, "Expiry", "الانتهاء")}</th><th>{tr(locale, "Branch", "الفرع")}</th><th>{tr(locale, "Item", "الصنف")}</th><th>{tr(locale, "Lot", "التشغيلة")}</th><th>{tr(locale, "Supplier", "المورد")}</th><th>{tr(locale, "On hand", "المتاح فعلياً")}</th></tr></thead>
-          <tbody>{fefoLots.length === 0 ? <tr><td colSpan={6} className="empty-state">{tr(locale, "No lot stock available.", "لا يوجد مخزون تشغيلات متاح.")}</td></tr> : fefoLots.map(stock => <tr key={stock.id}>
+          <tbody>{fefoLots.length === 0 ? <tr><td colSpan={6} className="empty-state"><TableEmptyState title={tr(locale, "No lot stock available.", "لا يوجد مخزون تشغيلات متاح.")} description={tr(locale, "No lots with available balance appear in the current inventory scope. Lot and expiry traceability remains required.", "لا تظهر تشغيلات ذات رصيد متاح ضمن نطاق المخزون الحالي. يظل تتبع التشغيلات والصلاحية إلزامياً.")} /></td></tr> : fefoLots.map(stock => <tr key={stock.id}>
             <td>{stock.lot.expiryDate?.toISOString().slice(0,10) || tr(locale, "No expiry", "بدون انتهاء")}</td>
             <td>{stock.branch.code} — {localizedName(stock.branch)}</td>
             <td><strong>{stock.lot.item.code}</strong><br/><small>{localizedName(stock.lot.item)}</small></td>
@@ -140,7 +141,7 @@ export default async function InventoryPage() {
       <div className="table-toolbar"><h2>{tr(locale, "Recent Goods Receipts", "أحدث استلامات البضاعة")}</h2><span>{receipts.length} {tr(locale, "shown", "معروضة")}</span></div>
       <div className="table-wrap"><table>
         <thead><tr><th>{tr(locale, "Receipt", "الاستلام")}</th><th>{tr(locale, "Branch", "الفرع")}</th><th>{tr(locale, "Supplier", "المورد")}</th><th>{tr(locale, "Status", "الحالة")}</th><th>{tr(locale, "Received", "تاريخ الاستلام")}</th><th>{tr(locale, "Lines", "البنود")}</th></tr></thead>
-        <tbody>{receipts.length === 0 ? <tr><td colSpan={6} className="empty-state">{tr(locale, "No goods receipts yet.", "لا توجد استلامات بضاعة بعد.")}</td></tr> : receipts.map(receipt => <tr key={receipt.id}>
+        <tbody>{receipts.length === 0 ? <tr><td colSpan={6} className="empty-state"><TableEmptyState title={tr(locale, "No goods receipts yet.", "لا توجد استلامات بضاعة بعد.")} description={tr(locale, "No recent goods receipts are displayed. Stock increases must be recorded through approved receipt operations.", "لا تظهر استلامات بضائع حديثة. يجب تسجيل زيادات المخزون عبر عمليات الاستلام المعتمدة.")} /></td></tr> : receipts.map(receipt => <tr key={receipt.id}>
           <td><strong>{receipt.receiptNumber}</strong><br/><small>{receipt.supplierReference || "—"}</small></td>
           <td>{receipt.branch.code} — {localizedName(receipt.branch)}</td>
           <td>{localizedName(receipt.supplier)}</td>

@@ -1,3 +1,4 @@
+import { TableEmptyState } from "@/components/table-empty-state";
 import { SystemDateText } from "@/components/system-date-text";
 import Link from "next/link";
 import type { Prisma } from "../../../generated/prisma/client";
@@ -407,7 +408,7 @@ export default async function WorklistsPage({
         <table>
           <thead><tr><th>{tr(locale, "Accession", "رقم الطلب")}</th><th>{tr(locale, "Patient", "المريض")}</th><th>{tr(locale, "Test", "الفحص")}</th><th>{tr(locale, "Priority", "الأولوية")}</th><th>{tr(locale, "Department", "القسم")}</th><th>{tr(locale, "Specimen", "العينة")}</th><th>{tr(locale, "Location", "الموقع")}</th><th>{tr(locale, "Analyzer", "جهاز التحليل")}</th><th>{tr(locale, "TAT / Due", "زمن الإنجاز / الاستحقاق")}</th><th>{tr(locale, "Result", "النتيجة")}</th><th>{tr(locale, "Validation", "التحقق")}</th><th>{tr(locale, "Flags", "الإشارات")}</th><th></th></tr></thead>
           <tbody>
-            {visibleItems.length === 0 ? <tr><td colSpan={13} className="empty-state">{tr(locale, "No received specimens are waiting for laboratory work.", "لا توجد عينات مستلمة بانتظار العمل المخبري.")}</td></tr> :
+            {visibleItems.length === 0 ? <tr><td colSpan={13} className="empty-state"><TableEmptyState title={tr(locale, "No received specimens are waiting for laboratory work.", "لا توجد عينات مستلمة بانتظار العمل المخبري.")} description={tr(locale, "No eligible received or in-process specimens match these filters. Review branch, department, priority, analyzer and specimen state.", "لا توجد عينات مستلمة أو قيد العمل مؤهلة تطابق الفلاتر. راجع الفرع والقسم والأولوية والجهاز وحالة العينة.")} action={{ href: "/worklists", label: tr(locale, "Clear filters", "مسح الفلاتر") }} /></td></tr> :
               visibleItems.map(item => {
                 const readySpecimen = item.specimenLinks.map(link => link.specimen).find(specimen =>
                   ["RECEIVED","IN_PROCESS"].includes(specimen.status) &&

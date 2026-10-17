@@ -1,3 +1,4 @@
+import { TableEmptyState } from "@/components/table-empty-state";
 import Link from "next/link";
 import { permissionSet, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
@@ -143,7 +144,7 @@ export default async function CatalogPage() {
           <table>
             <thead><tr><th>{tr(locale, "Code", "الرمز")}</th><th>{tr(locale, "Name", "الاسم")}</th><th>{tr(locale, "Tests", "الفحوصات")}</th>{canReviewPrices && <th>{tr(locale, "Latest configured price", "آخر سعر مهيأ")}</th>}<th>{tr(locale, "Status", "الحالة")}</th></tr></thead>
             <tbody>
-              {packages.length === 0 ? <tr><td colSpan={canReviewPrices ? 5 : 4} className="empty-state">{tr(locale, "No commercial packages configured.", "لا توجد باقات تجارية مهيأة.")}</td></tr> :
+              {packages.length === 0 ? <tr><td colSpan={canReviewPrices ? 5 : 4} className="empty-state"><TableEmptyState title={tr(locale, "No commercial packages configured.", "لا توجد باقات تجارية مهيأة.")} description={tr(locale, "No commercial packages appear in this catalog view. Define packages from approved test components and effective prices.", "لا تظهر باقات تجارية في عرض الدليل. أنشئ الباقات من مكونات فحوص معتمدة وأسعار نافذة.")} /></td></tr> :
                 packages.map(pkg => {
                   const price = pkg.priceListItems[0];
                   return <tr key={pkg.id}>
@@ -165,7 +166,7 @@ export default async function CatalogPage() {
           <table>
             <thead><tr><th>{tr(locale, "Code", "الرمز")}</th><th>{tr(locale, "English name", "الاسم بالإنجليزية")}</th><th>{tr(locale, "Arabic name", "الاسم بالعربية")}</th><th>{tr(locale, "Department", "القسم")}</th><th>{tr(locale, "Specimen", "العينة")}</th><th>{tr(locale, "Components", "المكونات")}</th><th>{tr(locale, "Status", "الحالة")}</th></tr></thead>
             <tbody>
-              {tests.length === 0 ? <tr><td colSpan={7} className="empty-state">{tr(locale, "No tests configured yet.", "لا توجد فحوصات مهيأة بعد.")}</td></tr> :
+              {tests.length === 0 ? <tr><td colSpan={7} className="empty-state"><TableEmptyState title={tr(locale, "No tests configured yet.", "لا توجد فحوصات مهيأة بعد.")} description={tr(locale, "No laboratory tests appear in this catalog view. Configure approved tests and required components before accepting orders.", "لا تظهر فحوصات مخبرية في عرض الدليل. هيّئ الفحوص والمكونات المعتمدة قبل استقبال الطلبات.")} /></td></tr> :
                 tests.map(test => <tr key={test.id}>
                   <td><Link className="table-link" href={`/catalog/tests/${test.id}`}><strong>{test.code}</strong></Link></td>
                   <td><Link className="table-link" href={`/catalog/tests/${test.id}`}>{test.nameEn}</Link></td>

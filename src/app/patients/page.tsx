@@ -1,3 +1,4 @@
+import { TableEmptyState } from "@/components/table-empty-state";
 import { SystemDateText } from "@/components/system-date-text";
 import Link from "next/link";
 import { permissionSet, requirePermission } from "@/lib/auth";
@@ -86,7 +87,7 @@ export default async function PatientsPage({
         <table>
           <thead><tr><th>{tr(locale, "Patient #", "رقم المريض")}</th><th>{tr(locale, "Name", "الاسم")}</th><th>{tr(locale, "Date of birth", "تاريخ الميلاد")}</th><th>{tr(locale, "Sex", "الجنس")}</th><th>{tr(locale, "Phone", "الهاتف")}</th><th>{tr(locale, "National ID", "الرقم القومي")}</th><th>{tr(locale, "Status", "الحالة")}</th></tr></thead>
           <tbody>
-            {patients.length === 0 ? <tr><td colSpan={7} className="empty-state">{tr(locale, "No matching patients.", "لا يوجد مرضى مطابقون.")}</td></tr> :
+            {patients.length === 0 ? <tr><td colSpan={7} className="empty-state"><TableEmptyState title={tr(locale, "No matching patients.", "لا يوجد مرضى مطابقون.")} description={tr(locale, "No patients match this organization-wide identity search. Clear the query or check the patient identifiers before creating a new record.", "لا يوجد مرضى يطابقون البحث الموحد لهوية المؤسسة. امسح البحث أو تحقق من المعرّفات قبل إنشاء سجل جديد.")} action={{ href: "/patients", label: tr(locale, "Clear filters", "مسح الفلاتر") }} /></td></tr> :
               patients.map(patient => <tr key={patient.id}>
                 <td><Link className="table-link" href={`/patients/${patient.id}`}><strong>{patient.patientNumber}</strong></Link></td>
                 <td><Link className="table-link" href={`/patients/${patient.id}`}>{patient.fullNameEn}</Link>{patient.fullNameAr ? <><br/><small dir="rtl">{patient.fullNameAr}</small></> : null}</td>

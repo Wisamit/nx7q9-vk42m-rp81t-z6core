@@ -1,3 +1,4 @@
+import { TableEmptyState } from "@/components/table-empty-state";
 import { SystemDateText } from "@/components/system-date-text";
 import Link from "next/link";
 import { permissionSet, requirePermission } from "@/lib/auth";
@@ -257,7 +258,7 @@ export default async function BillingPage() {
         <table>
           <thead><tr><th>{tr(locale, "Invoice", "الفاتورة")}</th><th>{tr(locale, "Order", "الطلب")}</th><th>{tr(locale, "Patient / Client", "المريض / العميل")}</th><th>{tr(locale, "Branch", "الفرع")}</th><th>{tr(locale, "Subtotal", "الإجمالي قبل الخصم")}</th><th>{tr(locale, "Discount", "الخصم")}</th><th>{tr(locale, "Credited", "الدائن")}</th><th>{tr(locale, "Tax", "الضريبة")}</th><th>{tr(locale, "Total", "الإجمالي")}</th><th>{tr(locale, "Net paid", "صافي المدفوع")}</th><th>{tr(locale, "Balance", "الرصيد")}</th><th>{tr(locale, "Status", "الحالة")}</th></tr></thead>
           <tbody>
-            {invoices.length === 0 ? <tr><td colSpan={12} className="empty-state">{tr(locale, "No invoices yet.", "لا توجد فواتير بعد.")}</td></tr> :
+            {invoices.length === 0 ? <tr><td colSpan={12} className="empty-state"><TableEmptyState title={tr(locale, "No invoices yet.", "لا توجد فواتير بعد.")} description={tr(locale, "No invoices appear in this authorized billing view. Invoices are issued through the governed order-billing workflow.", "لا تظهر فواتير في عرض الفوترة المصرح به. تصدر الفواتير عبر دورة فوترة الطلبات المعتمدة.")} /></td></tr> :
               invoices.map(invoice => <tr key={invoice.id}>
                 <td><strong>{invoice.invoiceNumber}</strong><br/><small>{<SystemDateText value={invoice.issuedAt.toISOString()} timeZone={invoice.branch.timezone} />}</small></td>
                 <td>{invoice.order?.accessionNumber || "—"}</td>
@@ -284,7 +285,7 @@ export default async function BillingPage() {
         <table>
           <thead><tr><th>{tr(locale, "Date", "التاريخ")}</th><th>{tr(locale, "Invoice(s)", "الفاتورة/الفواتير")}</th><th>{tr(locale, "Original amount", "المبلغ الأصلي")}</th><th>{tr(locale, "Refunded", "المسترد")}</th><th>{tr(locale, "Net", "الصافي")}</th><th>{tr(locale, "Method", "الطريقة")}</th><th>{tr(locale, "Reference", "المرجع")}</th><th>{tr(locale, "Cashier", "أمين الصندوق")}</th><th>{tr(locale, "Status", "الحالة")}</th></tr></thead>
           <tbody>
-            {recentPayments.length === 0 ? <tr><td colSpan={9} className="empty-state">{tr(locale, "No payments posted yet.", "لا توجد مدفوعات مسجلة بعد.")}</td></tr> :
+            {recentPayments.length === 0 ? <tr><td colSpan={9} className="empty-state"><TableEmptyState title={tr(locale, "No payments posted yet.", "لا توجد مدفوعات مسجلة بعد.")} description={tr(locale, "No posted payments are displayed. Payments must be recorded against real invoices with their original currency.", "لا تظهر دفعات مسجلة. يجب تسجيل الدفعات مقابل فواتير فعلية مع الحفاظ على عملتها الأصلية.")} /></td></tr> :
               recentPayments.map(payment => <tr key={payment.id}>
                 <td>{<SystemDateText value={payment.receivedAt.toISOString()} timeZone={payment.branch.timezone} />}</td>
                 <td>{payment.allocations.map(a => a.invoice.invoiceNumber).join(", ") || "—"}</td>
@@ -306,7 +307,7 @@ export default async function BillingPage() {
       <div className="table-toolbar"><h2>{tr(locale, "Credit Notes", "الإشعارات الدائنة")}</h2><span>{creditNotes.length} {tr(locale, "shown", "معروضة")}</span></div>
       <div className="table-wrap"><table>
         <thead><tr><th>{tr(locale, "Date", "التاريخ")}</th><th>{tr(locale, "Credit note", "الإشعار الدائن")}</th><th>{tr(locale, "Invoice", "الفاتورة")}</th><th>{tr(locale, "Branch", "الفرع")}</th><th>{tr(locale, "Amount", "المبلغ")}</th><th>{tr(locale, "Tax reversed", "ضريبة معكوسة")}</th><th>{tr(locale, "Reason", "السبب")}</th><th>{tr(locale, "Issued by", "أصدره")}</th><th>{tr(locale, "Status", "الحالة")}</th></tr></thead>
-        <tbody>{creditNotes.length === 0 ? <tr><td colSpan={9} className="empty-state">{tr(locale, "No credit notes issued yet.", "لا توجد إشعارات دائنة صادرة بعد.")}</td></tr> :
+        <tbody>{creditNotes.length === 0 ? <tr><td colSpan={9} className="empty-state"><TableEmptyState title={tr(locale, "No credit notes issued yet.", "لا توجد إشعارات دائنة صادرة بعد.")} description={tr(locale, "No issued credit notes are displayed. Credit adjustments require their governed billing workflow.", "لا تظهر إشعارات دائنة صادرة. تتطلب التسويات الدائنة اتباع دورة الفوترة المعتمدة.")} /></td></tr> :
           creditNotes.map(note => <tr key={note.id}>
             <td>{<SystemDateText value={note.issuedAt.toISOString()} timeZone={note.branch.timezone} />}</td>
             <td><strong>{note.creditNoteNumber}</strong></td>
@@ -326,7 +327,7 @@ export default async function BillingPage() {
       <div className="table-toolbar"><h2>{tr(locale, "Refunds", "الاستردادات")}</h2><span>{recentRefunds.length} {tr(locale, "shown", "معروضة")}</span></div>
       <div className="table-wrap"><table>
         <thead><tr><th>{tr(locale, "Date", "التاريخ")}</th><th>{tr(locale, "Refund", "الاسترداد")}</th><th>{tr(locale, "Invoice", "الفاتورة")}</th><th>{tr(locale, "Method", "الطريقة")}</th><th>{tr(locale, "Branch", "الفرع")}</th><th>{tr(locale, "Amount", "المبلغ")}</th><th>{tr(locale, "Reason", "السبب")}</th><th>{tr(locale, "Reference", "المرجع")}</th><th>{tr(locale, "Processed by", "نفذه")}</th><th>{tr(locale, "Status", "الحالة")}</th></tr></thead>
-        <tbody>{recentRefunds.length === 0 ? <tr><td colSpan={10} className="empty-state">{tr(locale, "No refunds posted yet.", "لا توجد عمليات استرداد مسجلة بعد.")}</td></tr> :
+        <tbody>{recentRefunds.length === 0 ? <tr><td colSpan={10} className="empty-state"><TableEmptyState title={tr(locale, "No refunds posted yet.", "لا توجد عمليات استرداد مسجلة بعد.")} description={tr(locale, "No recorded refunds are displayed. Refunds require the approved financial workflow and audit trail.", "لا تظهر استردادات مسجلة. تتطلب الاستردادات دورة العمل المالية المعتمدة وسجل التدقيق.")} /></td></tr> :
           recentRefunds.map(refund => <tr key={refund.id}>
             <td>{<SystemDateText value={refund.processedAt.toISOString()} timeZone={refund.branch.timezone} />}</td>
             <td><strong>{refund.refundNumber}</strong></td>

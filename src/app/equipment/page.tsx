@@ -1,3 +1,4 @@
+import { TableEmptyState } from "@/components/table-empty-state";
 import Link from "next/link";
 import { permissionSet, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
@@ -100,7 +101,7 @@ export default async function EquipmentPage() {
       <div className="table-toolbar"><h2>{tr(locale, "Equipment Register", "سجل المعدات")}</h2><span>{equipment.length} {tr(locale, "assets", "أصل")}</span></div>
       <div className="table-wrap"><table>
         <thead><tr><th>{tr(locale, "Asset", "الأصل")}</th><th>{tr(locale, "Branch", "الفرع")}</th><th>{tr(locale, "Department", "القسم")}</th><th>{tr(locale, "Analyzer", "الجهاز")}</th><th>{tr(locale, "Status", "الحالة")}</th><th>{tr(locale, "Maintenance", "الصيانة")}</th><th>{tr(locale, "Calibration", "المعايرة")}</th><th>{tr(locale, "Documents", "الوثائق")}</th><th>{tr(locale, "Downtime", "التوقف")}</th></tr></thead>
-        <tbody>{equipment.length === 0 ? <tr><td colSpan={9} className="empty-state">{tr(locale, "No equipment registered.", "لا توجد معدات مسجلة.")}</td></tr> : equipment.map(item => <tr key={item.id}>
+        <tbody>{equipment.length === 0 ? <tr><td colSpan={9} className="empty-state"><TableEmptyState title={tr(locale, "No equipment registered.", "لا توجد معدات مسجلة.")} description={tr(locale, "No equipment records appear in this branch scope. Register instruments with the correct branch before scheduling service or calibration.", "لا تظهر سجلات معدات ضمن نطاق الفرع. سجّل الأجهزة في فرعها الصحيح قبل جدولة الصيانة أو المعايرة.")} /></td></tr> : equipment.map(item => <tr key={item.id}>
           <td><strong>{item.assetId}</strong><br/><small>{item.name}{item.serialNumber ? " · " + item.serialNumber : ""}</small></td>
           <td>{item.branch.code} — {localizedName(item.branch)}</td>
           <td>{item.department ? localizedName(item.department) : "—"}</td>

@@ -626,3 +626,19 @@ html[data-density="compact"] :where(.detail-card,.dashboard-panel,.settings-card
  .filter-workspace .filter-grid>.primary-button,.filter-workspace .filter-grid>.secondary-button,.filter-workspace .filter-grid>.secondary-link{width:100%}
  .filter-workspace .table-toolbar:has(> .queue-filters){gap:11px}
 }
+
+
+/* Source-audited bilingual empty table states across clinical, financial and admin workspaces. */
+td.empty-state:has(> .table-empty-content){padding:24px 20px;white-space:normal;min-width:0}
+.table-empty-content{max-width:620px;min-width:0;margin:0 auto;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:9px;padding:20px 12px;text-align:center;overflow-wrap:anywhere}
+.table-empty-symbol{display:grid;place-items:center;flex:none;width:42px;height:42px;border-radius:12px;border:1px solid var(--fl-border);background:var(--fl-surface-soft);color:var(--fl-muted);font-size:21px;font-weight:700;line-height:1}
+.table-empty-title{font-size:15px;line-height:1.45;color:var(--fl-text);font-weight:800;white-space:normal}
+.table-empty-description{margin:0;max-width:560px;font-size:12px;line-height:1.75;color:var(--fl-muted);white-space:normal;overflow-wrap:anywhere}
+.table-empty-action{margin-top:5px;max-width:100%;font-size:12px;text-align:center;white-space:normal}
+.table-empty-action:focus-visible{outline:2px solid var(--fl-primary);outline-offset:3px}
+@media(max-width:760px){
+ td.empty-state:has(> .table-empty-content){padding:14px 11px}
+ .table-empty-content{padding:16px 8px;gap:8px}
+ .table-empty-title{font-size:14px}
+ .table-empty-action{width:100%;justify-content:center}
+}
