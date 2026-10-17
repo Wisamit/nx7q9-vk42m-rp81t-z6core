@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { SystemDateText } from "@/components/system-date-text";
 
 type Entry = {
   flagEventId: string; batchId: string; rowNumber: number;
@@ -148,6 +149,7 @@ export function CatalogExpertReviewQueue({ locale }: { locale: "ar" | "en" }) {
           <th>{tr("Category", "الفئة")}</th>
           <th>{tr("Type", "النوع")}</th>
           <th>{tr("Reason", "السبب")}</th>
+          <th>{tr("Flagged at (UTC)", "وقت تسجيل الملاحظة (UTC)")}</th>
           <th>{tr("Independent review disposition", "قرار المراجعة المستقلة")}</th>
         </tr></thead>
         <tbody>{entries.map(entry => <tr key={entry.flagEventId}>
@@ -156,6 +158,7 @@ export function CatalogExpertReviewQueue({ locale }: { locale: "ar" | "en" }) {
             : tr("Financial", "مالي")}</td>
           <td>{entry.entityType}</td>
           <td>{entry.reasonCode}</td>
+          <td><SystemDateText value={entry.flaggedAt} timeZone="UTC" /></td>
           <td>
             <button type="button" className="secondary-button"
               disabled={busy || decisionId !== null ||
