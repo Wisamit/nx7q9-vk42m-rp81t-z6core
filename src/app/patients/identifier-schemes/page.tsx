@@ -27,6 +27,6 @@ export default async function PatientIdentifierSchemesPage() {
       </div>
       <div className="header-actions"><Link className="secondary-link" href="/patients">{tr(locale, "Back to Patients", "العودة للمرضى")}</Link></div>
     </header>
-    <PatientIdentifierSchemeManager schemes={schemes} locale={locale} />
+    <PatientIdentifierSchemeManager schemes={schemes.map(item => ({...item, updatedAt: item.updatedAt.toISOString()}))} locale={locale} />
   </main>;
 }
