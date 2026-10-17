@@ -326,7 +326,7 @@ export default async function WorklistsPage({
     }];
   });
 
-  return <main className="catalog-shell">
+  return <main className="catalog-shell filter-workspace">
     <header className="page-header">
       <div>
         <p className="eyebrow">{tr(locale, "Laboratory Operations", "عمليات المختبر")}</p>
@@ -355,7 +355,7 @@ export default async function WorklistsPage({
     <section className="table-card">
       <div className="table-toolbar">
         <div><h2>{tr(locale, "Laboratory Work Queue", "قائمة عمل المختبر")}</h2><span>{visibleItems.length} {tr(locale, "item(s) on this page", "عنصر بهذه الصفحة")}{worklistWindow.hasNext ? " · +" : ""}</span></div>
-        <form className="inline-search" action="/worklists" method="get">
+        <form className="inline-search queue-filters" action="/worklists" method="get">
           <input name="q" defaultValue={q} placeholder={tr(locale, "Barcode, accession, patient, test…", "باركود، رقم طلب، مريض، فحص…")} />
           <select name="branch" defaultValue={branchId}>
             <option value="">{tr(locale, "All authorized branches", "كل الفروع المصرح بها")}</option>
