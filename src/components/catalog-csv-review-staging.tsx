@@ -1,6 +1,7 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
+import { ReviewFileUploadDialog } from "@/components/review-file-upload-dialog";
 import { useRouter } from "next/navigation";
 import { catalogReviewXlsx } from "@/lib/catalog-review-xlsx";
 
@@ -12,7 +13,6 @@ const priceListTemplate = "entityType,legacyKey,code,nameEn,nameAr,scopeType,bra
 
 export function CatalogCsvReviewStaging({ locale, canStagePricing, canStageRanges }: { locale: "ar" | "en"; canStagePricing: boolean; canStageRanges: boolean }) {
   const router = useRouter();
-  const fileInput = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const tr = (en: string, ar: string) => locale === "ar" ? ar : en;
@@ -39,12 +39,12 @@ export function CatalogCsvReviewStaging({ locale, canStagePricing, canStageRange
     }
   }
 
-  async function stage(file: File) {
-    if (busy) return;
+  async function stage(file: File): Promise<boolean> {
+    if (busy) return false;
     const isXlsx = file.name.toLowerCase().endsWith(".xlsx");
     if (!isXlsx && !file.name.toLowerCase().endsWith(".csv") || file.size === 0 || file.size > 2 * 1024 * 1024) {
       setError(tr("Select a non-empty CSV or XLSX up to 2 MB.", "اختر CSV أو XLSX غير فارغ بحجم لا يتجاوز 2 ميغابايت."));
-      return;
+      return false;
     }
     setBusy(true);
     setError("");
@@ -61,12 +61,13 @@ export function CatalogCsvReviewStaging({ locale, canStagePricing, canStageRange
       if (!response.ok || !result.id) throw new Error(result.error || "csv_stage_failed");
       router.push("/catalog/imports/" + encodeURIComponent(result.id));
       router.refresh();
+      return true;
     } catch (caught) {
       const code = caught instanceof Error ? caught.message : "csv_stage_failed";
       setError(tr("CSV/XLSX staging failed: ", "فشل تجهيز ملف CSV/XLSX: ") + code);
+      return false;
     } finally {
       setBusy(false);
-      if (fileInput.current) fileInput.current.value = "";
     }
   }
 
@@ -92,13 +93,15 @@ export function CatalogCsvReviewStaging({ locale, canStagePricing, canStageRange
       "Pricing templates require the pricing.manage permission; other review-only templates remain available.",
       "قوالب الأسعار تتطلب صلاحية pricing.manage، والقوالب الأخرى للمراجعة فقط.",
     )}</p>}
-    <input ref={fileInput} type="file" hidden accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-      onChange={event => { const f = event.target.files?.[0]; if (f) void stage(f); }} />
     <div className="review-actions">
-      <button type="button" className="secondary-button" disabled={busy}
-        onClick={() => fileInput.current?.click()}>
-        {busy ? tr("Validating…", "جارٍ التحقق…") : tr("Stage CSV / XLSX for review", "تجهيز CSV / XLSX للمراجعة")}
-      </button>
+      <ReviewFileUploadDialog locale={locale} busy={busy} error={error}
+        onResetError={() => setError("")}
+        title={tr("Review clinical and price spreadsheet", "مراجعة جدول الإعدادات السريرية والأسعار")}
+        description={tr("Select a canonical CSV or single-sheet XLSX and confirm controlled draft staging.", "اختر ملف CSV أو XLSX بورقة واحدة ثم أكد تجهيز المسودة للمراجعة.")}
+        triggerLabel={tr("Stage CSV / XLSX for review", "تجهيز CSV / XLSX للمراجعة")}
+        accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        fileHint={tr("CSV or XLSX, maximum 2 MB. Reference intervals and prices still need their own approvals.", "ملف CSV أو XLSX بحد أقصى 2 ميغابايت؛ تظل الأسعار والمديات المرجعية بحاجة لاعتماد مستقل.")}
+        onStage={stage} />
       <button type="button" className="secondary-button" disabled={busy}
         onClick={() => saveTemplate("master", "xlsx")}>
         {tr("Download Excel tests / units / panels / packages template", "تنزيل قالب Excel للفحوصات والوحدات والمجموعات والباقات")}

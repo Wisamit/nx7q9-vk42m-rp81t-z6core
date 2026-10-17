@@ -1,6 +1,7 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
+import { ReviewFileUploadDialog } from "@/components/review-file-upload-dialog";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { statusLabel } from "@/lib/ui-i18n";
@@ -9,12 +10,16 @@ type Batch={id:string;sourceName:string;sourceType:string;status:string;rows:num
 
 export function LegacyImportBatches({batches,locale}:{batches:Batch[];locale:"ar"|"en"}){
  const router=useRouter();
- const input=useRef<HTMLInputElement>(null);
  const [busy,setBusy]=useState(false);
  const [message,setMessage]=useState("");
  const tr=<T,>(en:T,ar:T)=>locale==="ar"?ar:en;
 
- async function stage(file:File){
+ async function stage(file:File):Promise<boolean>{
+  if(busy)return false;
+  if(!file.name.toLowerCase().endsWith(".json") || !file.size || file.size>32*1024*1024){
+   setMessage(tr("Choose a non-empty JSON file no larger than 32 MB.","اختر ملف JSON غير فارغ لا يتجاوز 32 ميغابايت."));
+   return false;
+  }
   setBusy(true);setMessage("");
   try{
    const payload=JSON.parse(await file.text());
@@ -26,11 +31,12 @@ export function LegacyImportBatches({batches,locale}:{batches:Batch[];locale:"ar
     `تم تجهيز ${body.summary.total} صفًا: ${body.summary.VALID||0} صالح، ${body.summary.WARNING||0} تحذيرات، ${body.summary.ERROR||0} أخطاء.`
    ));
    router.refresh();
+   return true;
   }catch{
    setMessage(tr("Could not validate or stage the export.","تعذر التحقق من ملف التصدير أو تجهيزه."));
+   return false;
   }finally{
    setBusy(false);
-   if(input.current)input.current.value="";
   }
  }
 
@@ -41,8 +47,14 @@ export function LegacyImportBatches({batches,locale}:{batches:Batch[];locale:"ar
     <span>{tr("Controlled staging from the cleaned Family Lab MDB. Nothing is written directly into the live catalog.","تجهيز مضبوط للبيانات القادمة من ملف Family Lab MDB المنظف، من دون الكتابة مباشرة في دليل النظام الفعلي.")}</span>
    </div>
    <div className="import-actions">
-    <input ref={input} hidden type="file" accept=".json,application/json" onChange={e=>{const f=e.target.files?.[0];if(f)void stage(f)}}/>
-    <button className="secondary-button" disabled={busy} onClick={()=>input.current?.click()}>{busy?tr("Validating…","جارٍ التحقق…"):tr("Stage MDB Export","تجهيز تصدير MDB")}</button>
+    <ReviewFileUploadDialog locale={locale} busy={busy} error={message}
+        onResetError={() => setMessage("")}
+      title={tr("Stage legacy catalog source", "تجهيز مصدر الدليل القديم")}
+      description={tr("Upload only a cleaned JSON master-data export. No raw MDB or patient records.", "ارفع ملف JSON منظّف للبيانات الرئيسية فقط، دون ملفات MDB الأصلية أو بيانات المرضى.")}
+      triggerLabel={tr("Stage MDB Export", "تجهيز تصدير MDB")}
+      accept=".json,application/json"
+      fileHint={tr("JSON only, maximum 32 MB. Inspect the staged rows before any governed commit.", "ملف JSON فقط بحد أقصى 32 ميغابايت. راجع الصفوف قبل أي اعتماد مضبوط.")}
+      onStage={stage} />
     <span className="status-pill">{batches.length} {tr("batch(es)","دفعة")}</span>
    </div>
   </div>
