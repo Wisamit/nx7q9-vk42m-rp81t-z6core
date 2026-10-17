@@ -1,4 +1,5 @@
 import Image from "next/image";
+import Link from "next/link";
 import { PortalLoginForm } from "@/components/portal-login-form";
 import { getSingleActiveOrganizationSystemSettings } from "@/lib/system-settings";
 
@@ -20,6 +21,7 @@ export default async function PortalLoginPage() {
       <h1>{tr("Portal Sign In", "تسجيل دخول البوابة")}</h1>
       <p className="muted">{tr("Secure access for patients, doctors and corporate clients.", "دخول آمن للمرضى والأطباء والعملاء من الشركات.")}</p>
       <PortalLoginForm locale={locale} />
+      <p className="muted">{tr("Laboratory staff?", "أحد موظفي المختبر؟")} <Link className="secondary-link" href="/login">{tr("Staff sign in", "تسجيل دخول الموظفين")}</Link></p>
     </section>
   </main>;
 }
