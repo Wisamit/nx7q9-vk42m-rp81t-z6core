@@ -177,8 +177,8 @@ export default async function SpecimensPage({
       <div className="table-toolbar">
         <div><h2>{tr(locale, "Specimen Work Queue", "قائمة عمل العينات")}</h2><span>{specimens.length} {tr(locale, "shown", "معروضة")}</span></div>
         <form className="inline-search queue-filters" action="/specimens" method="get">
-          <input name="q" defaultValue={q} placeholder={tr(locale, "Scan barcode or search order / patient…", "امسح الباركود أو ابحث بالطلب / المريض…")} autoFocus />
-          <select name="status" defaultValue={status}>
+          <input type="search" name="q" aria-label={tr(locale, "Find specimen barcode, order or patient", "بحث باركود العينة أو الطلب أو المريض")} defaultValue={q} placeholder={tr(locale, "Scan barcode or search order / patient…", "امسح الباركود أو ابحث بالطلب / المريض…")} autoFocus />
+          <select name="status" aria-label={tr(locale, "Specimen state", "حالة العينة")} defaultValue={status}>
             <option value="">{tr(locale, "All statuses", "كل الحالات")}</option>
             <option value="PLANNED">{statusLabel(locale, "PLANNED")}</option>
             <option value="COLLECTION_FAILED">{statusLabel(locale, "COLLECTION_FAILED")}</option>
@@ -188,7 +188,7 @@ export default async function SpecimensPage({
             <option value="IN_PROCESS">{statusLabel(locale, "IN_PROCESS")}</option>
             <option value="REJECTED">{statusLabel(locale, "REJECTED")}</option>
           </select>
-          <button className="secondary-button"><SystemIcon name="search" size={15} />{tr(locale, "Search", "بحث")}</button>
+          <button type="submit" className="secondary-button"><SystemIcon name="search" size={15} />{tr(locale, "Search", "بحث")}</button>
           {(q || status) && <Link className="secondary-link" href="/specimens">{tr(locale, "Clear", "مسح")}</Link>}
         </form>
       </div>
