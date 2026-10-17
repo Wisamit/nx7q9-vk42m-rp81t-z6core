@@ -1,5 +1,6 @@
 import { catalogExportTypes, type CatalogExportType } from "./catalog-configuration-export.ts";
 import { CompositeBundleError, parseCompositeBundleRow } from "./catalog-composite-bundle.ts";
+import { BundleSourceBoundaryError, validateBundleSourceBoundary } from "./catalog-bundle-source-boundary.ts";
 
 export const BUNDLE_REVIEW_SOURCE = "CONFIG_BUNDLE_REVIEW";
 export const BUNDLE_REVIEW_MAX_BYTES = 4 * 1024 * 1024;
@@ -139,6 +140,13 @@ export function parseCatalogBundleForReview(
         throw new CatalogBundleReviewError("bundle_too_many_rows", 413);
       }
       const source = record(raw);
+      try {
+        validateBundleSourceBoundary(entityType as CatalogExportType, source);
+      } catch (error) {
+        if (error instanceof BundleSourceBoundaryError)
+          throw new CatalogBundleReviewError(error.code, error.status);
+        throw error;
+      }
       const id = requiredId(source.id);
       // Never silently accept the same master more than once in this review.
       if (seenIds.has(entityType + ":" + id)) {

@@ -8,6 +8,7 @@ import {
   CatalogBundleAttestationError, catalogBundleSigningSecret, verifyCatalogBundleAttestation,
 } from "@/lib/catalog-bundle-attestation";
 import { clinicalImportTestWhere, resolveClinicalImportScope } from "@/lib/catalog-clinical-import-scope";
+import { genericCatalogPriceScope } from "@/lib/catalog-generic-price-scope";
 import {
   BUNDLE_REVIEW_MAX_BYTES, BUNDLE_REVIEW_SOURCE,
   CatalogBundleReviewError, parseCatalogBundleForReview,
@@ -175,12 +176,11 @@ export async function POST(request: Request) {
   const panelIds = [...new Set(parsed.ids.panels)];
   const packageIds = [...new Set([...parsed.ids.packages, ...parsed.ids.pricedPackages])];
   const packagePriceIds = [...new Set(parsed.ids.packagePrices)];
+  // Import review must use the identical private-tariff boundary as export.
+  // Neither a signed nor an unsigned source bundle can widen this policy.
   const permittedPriceList = {
     organizationId: scope.organizationId,
-    OR: [
-      { scopeType: "ORGANIZATION" as const, branchId: null },
-      { scopeType: "BRANCH" as const, branchId: { in: [...activeBranches] } },
-    ],
+    ...genericCatalogPriceScope([...activeBranches]),
   };
   const [tests, units, containers, components, intervals, lists, prices] = await Promise.all([
     tx.labTest.findMany({ where: { ...testWhere, id: { in: testIds } },
@@ -223,8 +223,7 @@ export async function POST(request: Request) {
     } }),
     tx.priceListPackageItem.findMany({ where: {
       id: { in: packagePriceIds },
-      priceList: { ...permittedPriceList, sourceId: null, referrerId: null,
-        clientId: null, contractId: null },
+      priceList: permittedPriceList,
       package: { organizationId: scope.organizationId,
         items: { some: { test: testWhere }, every: { test: testWhere } } },
     }, select: {

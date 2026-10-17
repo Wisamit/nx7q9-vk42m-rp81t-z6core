@@ -87,7 +87,7 @@ test("Stage 117 never routes review batches to live commit; checks membership/pr
   const index = readFileSync("src/app/catalog/page.tsx", "utf8");
   assert.match(route, /sameCompositeMembership/);
   assert.match(route, /items:\s*\{\s*some: \{ test: testWhere \}, every: \{ test: testWhere \}/);
-  assert.match(route, /sourceId: null, referrerId: null/);
+  assert.match(route, /genericCatalogPriceScope\(\[\.\.\.activeBranches\]\)/);
   assert.match(route, /new Prisma.Decimal\(n.unitPrice as string\)\.equals/);
   assert.match(route, /bundle_import_permission_changed/);
   assert.match(route, /sourceType: BUNDLE_REVIEW_SOURCE/);
