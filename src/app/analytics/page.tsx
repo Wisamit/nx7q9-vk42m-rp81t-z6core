@@ -586,7 +586,8 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
       </select></label>
       <label>{tr(locale, "From", "من")}<SystemDateField name="from" defaultValue={first(params.from) || ""} /></label>
       <label>{tr(locale, "To", "إلى")}<SystemDateField name="to" defaultValue={first(params.to) || ""} /></label>
-      <button className="secondary-button" type="submit">{tr(locale, "Apply", "تطبيق")}</button>
+      <button className="primary-button" type="submit">{tr(locale, "Apply", "تطبيق")}</button>
+      <Link className="secondary-link" href="/analytics?period=30d">{tr(locale, "Reset to 30 days", "إعادة ضبط لآخر 30 يوماً")}</Link>
       <span className="muted">{periodLabel}</span>
     </form>
 
