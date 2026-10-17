@@ -12,6 +12,7 @@ export default async function RetainedSpecimensPage() {
   const permissions = permissionSet(session);
   const branchId = session.activeBranchId;
   const organizationId = session.user.organizationId;
+  const branchTimeZone = session.user.branchScopes.find(scope => scope.branchId === branchId)?.branch.timezone;
   const authorized = branchId && session.user.branchScopes.some(scope =>
     scope.branchId === branchId && scope.branch.status === "ACTIVE" &&
     scope.branch.organizationId === organizationId);
@@ -51,7 +52,7 @@ export default async function RetainedSpecimensPage() {
       </div>
       <Link className="secondary-link" href="/specimens">{tr(locale, "Back to specimens", "العودة إلى العينات")}</Link>
     </header>
-    <SpecimenRetentionManager locale={locale}
+    <SpecimenRetentionManager locale={locale} branchTimeZone={branchTimeZone}
       policies={policies.map(p => ({ ...p, createdAt: p.createdAt.toISOString(),
         approvedAt: p.approvedAt?.toISOString() || null }))}
       cases={cases.map(c => ({ ...c, retentionDueAt: c.retentionDueAt.toISOString() }))}
