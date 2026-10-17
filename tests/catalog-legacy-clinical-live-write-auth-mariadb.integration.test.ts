@@ -34,7 +34,7 @@ test("MariaDB clinical legacy write scope: current role, branch, department and 
       [user,org,branch]);
     return rows.length===1;
   }
-  async function liveDeptIds():Promise<ReturnType<typeof readDeptRow>>{
+  async function liveDeptIds():Promise<ReturnType<typeof readDeptRow>[]> {
     const [rows]=await observer.execute<mysql.RowDataPacket[]>(
       "SELECT uds.department_id,d.organization_id,d.branch_id,d.status "+
       "FROM user_department_scopes uds JOIN departments d ON d.id=uds.department_id "+
