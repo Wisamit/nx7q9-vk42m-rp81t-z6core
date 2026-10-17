@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { SystemDateField } from "@/components/system-date-field";
 
 type BranchOption = { id: string; code: string; name: string };
 type SecondaryOption = { value: string; label: string };
@@ -181,13 +182,9 @@ export function PhlebotomyCollectionCard({
           <label>{tr("Second identifier", "المعرّف الثاني")}<select value={secondaryType} onChange={event => setSecondaryType(event.target.value)} required>
             {specimen.secondaryOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
           </select></label>
-          <label className="form-span">{tr("Enter second identifier", "أدخل المعرّف الثاني")}<input
-            name="secondaryVerificationValue"
-            type={secondaryType === "DATE_OF_BIRTH" ? "date" : "text"}
-            autoComplete="off"
-            maxLength={160}
-            required
-          /></label>
+          <label className="form-span">{tr("Enter second identifier", "أدخل المعرّف الثاني")}{secondaryType === "DATE_OF_BIRTH"
+            ? <SystemDateField name="secondaryVerificationValue" required />
+            : <input name="secondaryVerificationValue" type="text" autoComplete="off" maxLength={160} required />}</label>
         </div>
       </fieldset>
 
