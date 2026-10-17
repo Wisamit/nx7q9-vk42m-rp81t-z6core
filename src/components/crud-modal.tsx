@@ -18,8 +18,8 @@ const FOCUSABLE_SELECTOR = [
 // useSyncExternalStore supplies the server null snapshot, then attaches the
 // body overlay after hydration without an effect that synchronously sets state.
 const subscribePortalRoot = () => () => {};
-const getClientPortalRoot = () => document.body;
-const getServerPortalRoot = () => null;
+const getClientPortalRoot = (): HTMLElement | null => document.body;
+const getServerPortalRoot = (): HTMLElement | null => null;
 
 type CrudModalProps = {
   open: boolean;
