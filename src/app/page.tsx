@@ -8,6 +8,8 @@ export default async function Home() {
   const session = await getCurrentSession();
   if (session) redirect("/dashboard");
 
-  const hasUsers = (await prisma.user.count()) > 0;
-  redirect(hasUsers ? "/login" : "/setup");
+  // The root is a redirect-only manifest route: never render a public admin setup link
+  // once any staff identity exists, and never bypass the authenticated dashboard.
+  const firstUser = await prisma.user.findFirst({ select: { id: true } });
+  redirect(firstUser ? "/login" : "/setup");
 }
