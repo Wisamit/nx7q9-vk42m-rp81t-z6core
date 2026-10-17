@@ -3,6 +3,7 @@
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CrudModal } from "@/components/crud-modal";
+import { SystemDateText } from "@/components/system-date-text";
 
 type CreditClientOption = { id: string; code: string; name: string };
 type CreditPolicyRow = {
@@ -142,7 +143,7 @@ export function ClientCreditLimitManager({
           <td>{policy.mode === "BLOCK" ? tr("Block", "منع") : policy.mode === "WARN" ? tr("Warn", "تحذير") : tr("Disabled", "معطل")}</td>
           <td>{policy.limitAmount}</td><td>{policy.exposure}</td>
           <td><strong>{policy.remaining}</strong>{policy.utilizationExceeded && <small className="table-subtext">{tr("Limit exceeded", "الحد متجاوز")}</small>}</td>
-          <td>{policy.updatedAt.slice(0, 16).replace("T", " ")}</td>
+          <td><SystemDateText value={policy.updatedAt} /></td>
           <td><button type="button" className="secondary-button compact-action" onClick={() => edit(policy)}>{tr("Edit", "تعديل")}</button></td>
         </tr>)}</tbody>
       </table></div>
