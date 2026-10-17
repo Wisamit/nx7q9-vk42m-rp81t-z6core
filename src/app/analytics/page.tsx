@@ -89,7 +89,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
     (fromParam && toParam && fromParam > toParam) ||
     (!fromParam && !toParam)
   )) {
-    return <main className="catalog-shell" dir={locale === "ar" ? "rtl" : "ltr"}>
+    return <main className="catalog-shell filter-workspace" dir={locale === "ar" ? "rtl" : "ltr"}>
       <section className="detail-card" role="alert">
         <h1>{tr(locale, "Invalid analytics date range", "فترة التحليلات غير صالحة")}</h1>
         <p>{tr(locale, "Enter valid From/To dates, with From not after To.", "أدخل تاريخَي بداية ونهاية صحيحين بحيث لا تتجاوز البداية النهاية.")}</p>
@@ -347,7 +347,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
   });
   if (truncatedCollections.length > 0) {
     // Do not publish falsely complete management totals from take-limited queries.
-    return <main className="catalog-shell" dir={locale === "ar" ? "rtl" : "ltr"}>
+    return <main className="catalog-shell filter-workspace" dir={locale === "ar" ? "rtl" : "ltr"}>
       <section className="detail-card" role="alert">
         <h1>{tr(locale, "Analytics dataset exceeds safe report limit", "بيانات التحليلات تجاوزت حد التقرير الآمن")}</h1>
         <p>{tr(locale,
@@ -561,7 +561,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
         {end ? <SystemDateText value={end.toISOString().slice(0, 10)} kind="calendar" /> : tr(locale, "Now", "الآن")}</>
     : tr(locale, "All time", "كل الوقت");
 
-  return <main className="catalog-shell">
+  return <main className="catalog-shell filter-workspace">
     <header className="page-header">
       <div>
         <p className="eyebrow">{tr(locale, "Analytics & Management", "التحليلات والإدارة")}</p>
@@ -571,7 +571,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
       <div className="result-actions"><Link className="secondary-link" href="/dashboard">{tr(locale, "Back to Dashboard", "العودة إلى لوحة التحكم")}</Link></div>
     </header>
 
-    <form className="filter-bar" method="get">
+    <form className="filter-bar filter-grid" method="get">
       <label>{tr(locale, "Period", "الفترة")}<select name="period" defaultValue={period}>
         <option value="7d">{tr(locale, "Last 7 days", "آخر 7 أيام")}</option>
         <option value="30d">{tr(locale, "Last 30 days", "آخر 30 يوماً")}</option>
