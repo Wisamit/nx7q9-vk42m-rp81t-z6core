@@ -1,4 +1,5 @@
 import Image from "next/image";
+import Link from "next/link";
 import { StaffLoginForm } from "@/components/staff-login-form";
 import { getSingleActiveOrganizationSystemSettings } from "@/lib/system-settings";
 
@@ -21,6 +22,7 @@ export default async function LoginPage() {
       <h1>{tr("Sign in", "تسجيل الدخول")}</h1>
       <p className="muted">{tr("Multi-branch Laboratory Information System", "نظام معلومات المختبر متعدد الفروع")}</p>
       <StaffLoginForm locale={locale} />
+      <p className="muted">{tr("Patient, physician or corporate client?", "مريض أو طبيب أو عميل شركة؟")} <Link className="secondary-link" href="/portal/login">{tr("Sign in to the portal", "الدخول إلى البوابة")}</Link></p>
     </section>
   </main>;
 }
