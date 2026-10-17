@@ -77,8 +77,8 @@ export default async function PatientsPage({
       <div className="table-toolbar">
         <div><h2>{tr(locale, "Patient Search", "البحث عن المرضى")}</h2><span>{patients.length} {tr(locale, "shown", "ظاهر")}</span></div>
         <form className="inline-search queue-filters" action="/patients" method="get">
-          <input name="q" defaultValue={query} placeholder={tr(locale, "Patient #, name, phone, ID…", "رقم المريض، الاسم، الهاتف، الهوية…")} />
-          <button className="secondary-button"><SystemIcon name="search" size={15} />{tr(locale, "Search", "بحث")}</button>
+          <input type="search" name="q" aria-label={tr(locale, "Search by patient identity, name or phone", "البحث برقم المريض أو الاسم أو الهاتف")} defaultValue={query} placeholder={tr(locale, "Patient #, name, phone, ID…", "رقم المريض، الاسم، الهاتف، الهوية…")} />
+          <button type="submit" className="secondary-button"><SystemIcon name="search" size={15} />{tr(locale, "Search", "بحث")}</button>
           {query && <Link className="secondary-link" href="/patients">{tr(locale, "Clear", "مسح")}</Link>}
         </form>
       </div>
