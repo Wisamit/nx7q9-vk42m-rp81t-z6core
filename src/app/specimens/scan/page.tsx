@@ -292,6 +292,7 @@ export default async function SpecimenScanPage({
           childBarcode: item.childSpecimen?.barcode || null,
           usedByName: locale === "ar" ? item.usedBy.displayNameAr || item.usedBy.displayNameEn : item.usedBy.displayNameEn,
           branchCode: item.branch.code,
+          branchTimeZone: item.branch.timezone,
         }))}
         canManage={canAliquot}
         canPrintLabels={canCollect}
