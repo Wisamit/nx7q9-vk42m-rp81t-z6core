@@ -42,6 +42,7 @@ export function PatientEditForm({ patient, locale }: { patient: PatientEditValue
   const router = useRouter();
   const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
   const [busy, setBusy] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const [recordedAgeUnit, setRecordedAgeUnit] = useState<string>(patient.recordedAgeUnit || "YEAR");
   const [message, setMessage] = useState("");
   const [duplicateReview, setDuplicateReview] = useState<{ payload: PatientPayload; candidates: DuplicateCandidate[] } | null>(null);
@@ -94,6 +95,7 @@ export function PatientEditForm({ patient, locale }: { patient: PatientEditValue
       setDuplicateReview(null);
       setDuplicateReason("");
       setConfirmDuplicate(false);
+      setEditOpen(false);
       router.refresh();
     } else if (body.error === "possible_duplicates" && body.candidates?.length) {
       setConfirmDuplicate(false);
@@ -161,12 +163,19 @@ export function PatientEditForm({ patient, locale }: { patient: PatientEditValue
       : tr("Same phone", "نفس رقم الهاتف");
 
   return <section className="detail-card">
-    <h2>{tr("Edit Patient Master", "تعديل بيانات المريض")}</h2>
+    <div className="section-title-row"><h2>{tr("Patient master details", "بيانات سجل المريض")}</h2>
+      <button type="button" className="primary-button" disabled={busy} onClick={() => { setMessage(""); setEditOpen(true); }}>
+        {tr("Edit Patient Master", "تعديل بيانات المريض")}
+      </button>
+    </div>
     <p className="muted">{tr(
       "Changes affect the current patient master only. Already issued diagnostic reports keep their immutable patient snapshots.",
       "تؤثر التغييرات على سجل المريض الحالي فقط. التقارير التشخيصية الصادرة مسبقاً تحتفظ بلقطة بيانات المريض التاريخية.",
     )}</p>
-    <form className="catalog-form" onSubmit={submit}>
+    <CrudModal open={editOpen} onClose={() => { if (!updating.current && !busy) setEditOpen(false); }} size="compact"
+      title={tr("Edit Patient Master", "تعديل بيانات المريض")}
+      description={tr("State the reason for each audited patient change. Historical released reports retain their original identity.", "اذكر سبب كل تعديل موثق على بيانات المريض؛ وتحتفظ التقارير الصادرة بهويتها الأصلية.")}>
+    {editOpen && <form className="catalog-form" onSubmit={submit}>
       <label>{tr("Full name (English)", "الاسم الكامل بالإنجليزية")}<input name="fullNameEn" required maxLength={220} defaultValue={patient.fullNameEn} /></label>
       <label>{tr("Full name (Arabic)", "الاسم الكامل بالعربية")}<input name="fullNameAr" maxLength={220} dir="rtl" defaultValue={patient.fullNameAr || ""} /></label>
       <label>{tr("Date of birth (optional)", "تاريخ الميلاد (اختياري)")}<SystemDateField name="dateOfBirth" defaultValue={patient.dateOfBirth || ""} /></label>
@@ -181,10 +190,10 @@ export function PatientEditForm({ patient, locale }: { patient: PatientEditValue
       <label>{tr("Clinical information", "المعلومات السريرية")}<textarea name="clinicalInformation" maxLength={4000} rows={3} defaultValue={patient.clinicalInformation || ""} /></label>
       <label>{tr("Notes", "ملاحظات")}<textarea name="notes" maxLength={4000} rows={3} defaultValue={patient.notes || ""} /></label>
       <label className="form-span">{tr("Change reason", "سبب التعديل")}<textarea name="changeReason" required maxLength={1000} rows={2} /></label>
-      <button className="primary-button form-span" disabled={busy}>{busy ? tr("Saving…", "جارٍ الحفظ…") : tr("Save Patient Changes", "حفظ تعديلات المريض")}</button>
-    </form>
+      <div className="crud-modal-actions form-span"><button type="submit" className="primary-button" disabled={busy}>{busy ? tr("Saving…", "جارٍ الحفظ…") : tr("Save Patient Changes", "حفظ تعديلات المريض")}</button></div>
+    </form>}
 
-    {duplicateReview && <div className="detail-section">
+    {editOpen && duplicateReview && <div className="detail-section">
       <h3>{tr("Duplicate Review Required", "مراجعة التكرار مطلوبة")}</h3>
       <div className="summary-list">{duplicateReview.candidates.map(candidate => <div key={candidate.id}>
         <span>
@@ -198,6 +207,8 @@ export function PatientEditForm({ patient, locale }: { patient: PatientEditValue
         {tr("Reviewed — Save Changes", "تمت المراجعة — حفظ التغييرات")}
       </button>
     </div>}
+    {editOpen && message && <p className={duplicateReview ? "form-warning" : "form-error"} role="alert">{message}</p>}
+    </CrudModal>
 
     <CrudModal open={confirmDuplicate} onClose={() => { if (!updating.current) setConfirmDuplicate(false); }}
       size="compact"
@@ -217,6 +228,6 @@ export function PatientEditForm({ patient, locale }: { patient: PatientEditValue
         {busy ? tr("Saving…", "جارٍ الحفظ…") : tr("Confirm Reviewed Distinction", "تأكيد مراجعة اختلاف الهوية")}
       </button>
     </CrudModal>
-    {message && <p className={duplicateReview ? "form-warning" : "muted"} role="status">{message}</p>}
+    {!editOpen && message && <p className="muted" role="status">{message}</p>}
   </section>;
 }

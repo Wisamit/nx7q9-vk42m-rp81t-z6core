@@ -1,6 +1,7 @@
 "use client";
 import {useRef,useState} from "react";
 import {useRouter} from "next/navigation";
+import { CrudModal } from "@/components/crud-modal";
 
 export function StaffReportHandover({
   reportVersionId,locale,
@@ -10,6 +11,7 @@ export function StaffReportHandover({
   const [method,setMethod]=useState("PHOTO_ID_AND_PATIENT_NUMBER");
   const [attested,setAttested]=useState(false);
   const [busy,setBusy]=useState(false);
+  const [open,setOpen]=useState(false);
   const [recorded,setRecorded]=useState(false);
   const [message,setMessage]=useState("");
   const requestId=useRef<{id:string;payload:string}|null>(null);
@@ -51,6 +53,8 @@ export function StaffReportHandover({
         return;
       }
       setRecorded(true);
+      setOpen(false);
+      setAttested(false);
       setMessage(tr("Staff attestation recorded in the immutable delivery log. No independent patient acknowledgement has been obtained.",
         "تم تسجيل إقرار الموظف في سجل التسليم. لم يتم الحصول على إقرار استلام مستقل من المريض."));
       router.refresh();
@@ -65,7 +69,14 @@ export function StaffReportHandover({
       "Only use after physically handing the current final/amended report to the patient. This is a staff statement, not a patient signature or independently verified proof of receipt. Do not enter ID document numbers.",
       "استخدمه فقط بعد تسليم الإصدار النهائي/المعدل الحالي للمريض شخصياً. هذا إقرار من الموظف، وليس توقيع المريض أو دليلاً مستقلاً على الاستلام. لا تُدخل أرقام وثائق الهوية.",
     )}</p>
-    <form className="catalog-form" onSubmit={e=>void submit(e)}>
+    {!recorded && <button type="button" className="primary-button" disabled={busy}
+      onClick={() => { setMessage(""); setAttested(false); setOpen(true); }}>
+      {tr("Record in-person handover", "تسجيل التسليم الحضوري")}
+    </button>}
+    <CrudModal open={open} onClose={() => { if(!busy) {setOpen(false);setAttested(false);} }} size="compact"
+      title={tr("Verify patient identity before attestation", "تحقق من هوية المريض قبل تسجيل الإقرار")}
+      description={tr("Record this only after the current final report was physically handed to the patient. Staff attestation is not a patient signature.", "سجّل هذا فقط بعد تسليم التقرير النهائي الحالي للمريض حضورياً. إقرار الموظف ليس توقيعاً من المريض.")}>
+    {open && <form className="catalog-form" onSubmit={e=>void submit(e)}>
       <label>{tr("Confirm patient number printed on this report","أكد رقم المريض المطبوع على هذا التقرير")}
         <input required maxLength={50} value={patientNumber}
           autoComplete="off" onChange={e=>setPatientNumber(e.target.value)}
@@ -88,12 +99,14 @@ export function StaffReportHandover({
         {tr("I personally handed this current report to the patient and performed the selected identity check.",
           "أقرّ بأنني سلّمت هذا الإصدار الحالي للمريض شخصياً وتحققت من هويته بالطريقة المحددة.")}
       </label>
-      <button className="primary-button" disabled={busy||recorded||!attested||!patientNumber.trim()} type="submit">
+      <div className="crud-modal-actions form-span"><button className="primary-button" disabled={busy||recorded||!attested||!patientNumber.trim()} type="submit">
         {busy?tr("Recording…","جارٍ التسجيل…"):recorded?
           tr("Attestation recorded","تم تسجيل الإقرار"):
           tr("Record staff handover attestation","تسجيل إقرار التسليم")}
-      </button>
-      {message&&<p role="status" aria-live="polite">{message}</p>}
-    </form>
+      </button></div>
+      {message&&<p className="form-error form-span" role="alert">{message}</p>}
+    </form>}
+    </CrudModal>
+    {!open && message&&<p role="status" aria-live="polite">{message}</p>}
   </section>;
 }

@@ -17,6 +17,7 @@ export function RoleManagement({ locale, canManageDiscountLimits, canManageCashi
   const [message, setMessage] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<Role | null>(null);
+  const [permissionQuery, setPermissionQuery] = useState("");
   const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
 
   async function load() {
@@ -33,6 +34,13 @@ export function RoleManagement({ locale, canManageDiscountLimits, canManageCashi
       .catch(() => undefined);
     return () => { cancelled = true; };
   }, []);
+
+  const visiblePermission = (permission: Permission) => {
+    const query = permissionQuery.trim().toLowerCase();
+    return !query || [permission.module, permission.code, permission.description || ""]
+      .some(value => value.toLowerCase().includes(query));
+  };
+  const matches = data.permissions.filter(visiblePermission).length;
 
   const grouped = useMemo(() => {
     const map = new Map<string, Permission[]>();
@@ -153,7 +161,7 @@ export function RoleManagement({ locale, canManageDiscountLimits, canManageCashi
   return <div className="admin-grid">
     <div className="admin-page-actions">
       {message && !isError && <span className="crud-success-toast" role="status">{message}</span>}
-      <button type="button" className="primary-button" disabled={busy} onClick={() => { setIsError(false); setMessage(""); setCreateOpen(true); }}>
+      <button type="button" className="primary-button" disabled={busy} onClick={() => { setIsError(false); setMessage(""); setPermissionQuery(""); setCreateOpen(true); }}>
         <SystemIcon name="plus" size={16} />{tr("Add Role", "إضافة دور")}
       </button>
     </div>
@@ -163,17 +171,19 @@ export function RoleManagement({ locale, canManageDiscountLimits, canManageCashi
       onClose={() => { if (!inFlight.current) setCreateOpen(false); }}
       title={tr("Create role", "إنشاء دور")}
       description={tr("Choose the permissions this role grants. Staff inherit permissions through assigned roles.", "اختر الصلاحيات التي يمنحها الدور، ثم يُسند الدور للمستخدمين.")}
-      size="xl"
+      size="compact"
     >
       <form className="form-stack modal-form-stack" onSubmit={createRole}>
         <div className="settings-grid"><label>{tr("Role code", "رمز الدور")}<input name="code" required placeholder="LAB_TECH" pattern="[A-Za-z0-9._-]{2,80}" /></label><label>{tr("English name", "الاسم بالإنجليزية")}<input name="nameEn" required /></label><label>{tr("Arabic name", "الاسم بالعربية")}<input name="nameAr" /></label>{canManageDiscountLimits && <label>{tr("Discount limit (%)", "حد الخصم (%)")}<input name="discountLimitPercent" type="number" min="0" max="100" step="0.01" defaultValue="0" required /></label>}</div>
-        <div className="permission-groups">{grouped.map(([module, permissions]) => <fieldset className="permission-group" key={module}><legend>{module}</legend>{permissions.map(permission => {
+        <label className="role-permission-search">{tr("Find permissions", "البحث في الصلاحيات")}<input type="search" data-modal-ui-only="true" value={permissionQuery} onChange={event => setPermissionQuery(event.target.value)} placeholder={tr("Search by module, code or description", "ابحث حسب الوحدة أو الرمز أو الوصف")} /></label>
+        <p className="muted role-permission-count" role="status">{matches} / {data.permissions.length} {tr("permissions shown. Filtering does not change selected grants.", "صلاحية معروضة. لا يغيّر البحث الصلاحيات المحددة.")}</p>
+        <div className="permission-groups">{grouped.map(([module, permissions]) => <fieldset className="permission-group" key={module} style={{display:permissions.some(visiblePermission) ? undefined : "none"}}><legend>{module}</legend>{permissions.map(permission => {
   const protectedFinancialPermission =
     (["billing.discount.approve", "billing.discount.limits.manage"].includes(permission.code) && !canManageDiscountLimits)
     || (["billing.cashier.approve", "billing.cashier.authority.manage"].includes(permission.code) && !canManageCashierAuthority)
     || (permission.code === "billing.credit.limits.manage" && !canManageCreditLimits)
     || (permission.code === "billing.tax.manage" && !canManageTaxRules);
-  return <label key={permission.id}><input type="checkbox" name="permissionIds" value={permission.id} disabled={protectedFinancialPermission} /><span><strong>{permission.code}</strong><small>{permission.description || ""}{protectedFinancialPermission ? ` · ${tr("Financial admin only", "لمدير الصلاحيات المالية فقط")}` : ""}</small></span></label>;
+  return <label key={permission.id} style={{display:visiblePermission(permission) ? undefined : "none"}}><input type="checkbox" name="permissionIds" value={permission.id} disabled={protectedFinancialPermission} /><span><strong>{permission.code}</strong><small>{permission.description || ""}{protectedFinancialPermission ? ` · ${tr("Financial admin only", "لمدير الصلاحيات المالية فقط")}` : ""}</small></span></label>;
 })}</fieldset>)}</div>
         <div className="crud-modal-actions"><button className="primary-button" disabled={busy}>{busy ? tr("Saving…", "جارٍ الحفظ…") : tr("Create role", "إنشاء الدور")}</button></div>
         {message && <div className={isError ? "form-error" : "form-success"} role={isError ? "alert" : "status"}>{message}</div>}
@@ -185,7 +195,7 @@ export function RoleManagement({ locale, canManageDiscountLimits, canManageCashi
       onClose={() => { if (!inFlight.current) setEditing(null); }}
       title={tr("Edit role", "تعديل الدور")}
       description={editing ? editing.code : undefined}
-      size="xl"
+      size="compact"
     >
       {editing && !editing.isSystem && <form className="form-stack modal-form-stack" onSubmit={updateRole}>
         <div className="settings-grid">
@@ -193,14 +203,16 @@ export function RoleManagement({ locale, canManageDiscountLimits, canManageCashi
           <label>{tr("Arabic name", "الاسم بالعربية")}<input name="nameAr" defaultValue={editing.nameAr || ""} /></label>
           {canManageDiscountLimits && <label>{tr("Discount limit (%)", "حد الخصم (%)")}<input name="discountLimitPercent" type="number" min="0" max="100" step="0.01" required defaultValue={editing.discountLimitPercent || "0"} /></label>}
         </div>
-        <div className="permission-groups">{grouped.map(([module, permissions]) => <fieldset className="permission-group" key={module}><legend>{module}</legend>{permissions.map(permission => {
+        <label className="role-permission-search">{tr("Find permissions", "البحث في الصلاحيات")}<input type="search" data-modal-ui-only="true" value={permissionQuery} onChange={event => setPermissionQuery(event.target.value)} placeholder={tr("Search by module, code or description", "ابحث حسب الوحدة أو الرمز أو الوصف")} /></label>
+        <p className="muted role-permission-count" role="status">{matches} / {data.permissions.length} {tr("permissions shown. Filtering does not change selected grants.", "صلاحية معروضة. لا يغيّر البحث الصلاحيات المحددة.")}</p>
+        <div className="permission-groups">{grouped.map(([module, permissions]) => <fieldset className="permission-group" key={module} style={{display:permissions.some(visiblePermission) ? undefined : "none"}}><legend>{module}</legend>{permissions.map(permission => {
   const protectedFinancialPermission =
     (["billing.discount.approve", "billing.discount.limits.manage"].includes(permission.code) && !canManageDiscountLimits)
     || (["billing.cashier.approve", "billing.cashier.authority.manage"].includes(permission.code) && !canManageCashierAuthority)
     || (permission.code === "billing.credit.limits.manage" && !canManageCreditLimits)
     || (permission.code === "billing.tax.manage" && !canManageTaxRules);
   const currentlyGranted = editing.permissionIds.includes(permission.id);
-  return <label key={permission.id}>{protectedFinancialPermission && currentlyGranted && <input type="hidden" name="permissionIds" value={permission.id} />}<input type="checkbox" name="permissionIds" value={permission.id} defaultChecked={currentlyGranted} disabled={protectedFinancialPermission} /><span><strong>{permission.code}</strong><small>{permission.description || ""}{protectedFinancialPermission ? ` · ${tr("Financial admin only", "لمدير الصلاحيات المالية فقط")}` : ""}</small></span></label>;
+  return <label key={permission.id} style={{display:visiblePermission(permission) ? undefined : "none"}}>{protectedFinancialPermission && currentlyGranted && <input type="hidden" name="permissionIds" value={permission.id} />}<input type="checkbox" name="permissionIds" value={permission.id} defaultChecked={currentlyGranted} disabled={protectedFinancialPermission} /><span><strong>{permission.code}</strong><small>{permission.description || ""}{protectedFinancialPermission ? ` · ${tr("Financial admin only", "لمدير الصلاحيات المالية فقط")}` : ""}</small></span></label>;
 })}</fieldset>)}</div>
         <div className="crud-modal-actions"><button className="primary-button" disabled={busy}>{busy ? tr("Saving…", "جارٍ الحفظ…") : tr("Save role", "حفظ الدور")}</button></div>
         {message && isError && <p className="form-error" role="alert">{message}</p>}
@@ -209,7 +221,7 @@ export function RoleManagement({ locale, canManageDiscountLimits, canManageCashi
 
     <section className="table-card admin-table-card">
       <div className="table-toolbar"><div><h2>{tr("Roles", "الأدوار")}</h2><span>{tr("System roles are protected from destructive editing.", "أدوار النظام محمية من التعديل التخريبي.")}</span></div><span>{data.roles.length}</span></div>
-      <div className="table-wrap"><table><thead><tr><th>{tr("Role", "الدور")}</th><th>{tr("Users", "المستخدمون")}</th><th>{tr("Permissions", "الصلاحيات")}</th>{canManageDiscountLimits && <th>{tr("Discount limit", "حد الخصم")}</th>}<th>{tr("Status", "الحالة")}</th><th>{tr("Actions", "إجراءات")}</th></tr></thead><tbody>{data.roles.map(role => <tr key={role.id}><td><strong>{locale === "ar" ? role.nameAr || role.nameEn : role.nameEn}</strong><small className="table-subtext">{role.code}{role.isSystem ? ` · ${tr("System", "نظامي")}` : ""}</small></td><td>{role.userCount}</td><td>{role.permissionIds.length}</td>{canManageDiscountLimits && <td>{Number(role.discountLimitPercent || 0).toFixed(2)}%</td>}<td><span className={"status-badge " + (role.status === "ACTIVE" ? "status-active" : "status-warning")}>{statusLabel(locale, role.status)}</span></td><td>{role.isSystem ? <span className="muted">{tr("Protected", "محمي")}</span> : <div className="inline-actions"><button type="button" className="secondary-button compact-action" disabled={busy} onClick={() => setEditing(role)}>{tr("Edit", "تعديل")}</button><button type="button" className="secondary-button compact-action" disabled={busy} onClick={() => void toggleRole(role)}>{role.status === "ACTIVE" ? tr("Deactivate", "تعطيل") : tr("Activate", "تفعيل")}</button></div>}</td></tr>)}</tbody></table></div>
+      <div className="table-wrap"><table><thead><tr><th>{tr("Role", "الدور")}</th><th>{tr("Users", "المستخدمون")}</th><th>{tr("Permissions", "الصلاحيات")}</th>{canManageDiscountLimits && <th>{tr("Discount limit", "حد الخصم")}</th>}<th>{tr("Status", "الحالة")}</th><th>{tr("Actions", "إجراءات")}</th></tr></thead><tbody>{data.roles.map(role => <tr key={role.id}><td><strong>{locale === "ar" ? role.nameAr || role.nameEn : role.nameEn}</strong><small className="table-subtext">{role.code}{role.isSystem ? ` · ${tr("System", "نظامي")}` : ""}</small></td><td>{role.userCount}</td><td>{role.permissionIds.length}</td>{canManageDiscountLimits && <td>{Number(role.discountLimitPercent || 0).toFixed(2)}%</td>}<td><span className={"status-badge " + (role.status === "ACTIVE" ? "status-active" : "status-warning")}>{statusLabel(locale, role.status)}</span></td><td>{role.isSystem ? <span className="muted">{tr("Protected", "محمي")}</span> : <div className="inline-actions"><button type="button" className="secondary-button compact-action" disabled={busy} onClick={() => { setPermissionQuery(""); setEditing(role); }}>{tr("Edit", "تعديل")}</button><button type="button" className="secondary-button compact-action" disabled={busy} onClick={() => void toggleRole(role)}>{role.status === "ACTIVE" ? tr("Deactivate", "تعطيل") : tr("Activate", "تفعيل")}</button></div>}</td></tr>)}</tbody></table></div>
     </section>
   </div>;
 }

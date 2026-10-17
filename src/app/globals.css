@@ -567,3 +567,26 @@ html[data-density="compact"] :where(.detail-card,.dashboard-panel,.settings-card
  .workflow-page .workflow-review-summary{align-items:flex-start;gap:12px}
  .workflow-page .workflow-empty{min-height:160px;padding:26px 14px}
 }
+
+
+/* Consolidated governed-action dialogs: compact permissions, evidence and confirmation. */
+.crud-modal-compact .role-permission-search{display:grid;gap:7px;font-size:12px;font-weight:750;color:var(--fl-text);min-width:0}
+.crud-modal-compact .role-permission-search input{width:100%;min-width:0;padding:11px 12px;border:1px solid var(--fl-border);border-radius:10px;background:var(--fl-surface);color:var(--fl-text);font:inherit}
+.crud-modal-compact .role-permission-count{margin:0;font-size:12px;line-height:1.5}
+.crud-modal-compact .permission-groups{display:grid;grid-template-columns:minmax(0,1fr);gap:12px}
+.crud-modal-compact .permission-group{min-width:0;max-width:100%;padding:12px;background:var(--fl-bg)}
+.crud-modal-compact .permission-group label{min-width:0;align-items:flex-start;overflow-wrap:anywhere}
+.crud-modal-compact .permission-group label>span{min-width:0}
+.crud-modal-compact .permission-group strong{font-size:11px;overflow-wrap:anywhere}
+.crud-modal-compact .permission-group small{font-size:11px;line-height:1.55;overflow-wrap:anywhere}
+.crud-modal-compact .permission-group input[type="checkbox"]{flex:0 0 auto;margin-top:3px;accent-color:var(--fl-primary)}
+.crud-modal-compact .crud-modal-body :is(input,textarea,select):focus-visible{outline:2px solid var(--fl-primary);outline-offset:2px}
+.crud-modal-compact .crud-modal-actions{flex-wrap:wrap}
+.crud-modal-compact .crud-modal-actions button{min-height:40px}
+@media(max-width:760px){
+ .crud-modal-compact .permission-group{padding:10px}
+ .crud-modal-compact .crud-modal-actions button{width:100%}
+}
+@media(prefers-reduced-motion:reduce){
+ .crud-modal-backdrop,.crud-modal{scroll-behavior:auto;animation:none;transition:none}
+}
