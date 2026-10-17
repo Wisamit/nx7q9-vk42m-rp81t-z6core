@@ -101,7 +101,8 @@ export default async function EqaPage({searchParams}:{
           </select></label>
           <label>{tr(locale,"Program code / provider","رمز البرنامج / الجهة")}
             <input type="search" name="q" defaultValue={query} maxLength={80}/></label>
-          <button className="primary-button">{tr(locale,"Apply filters","تطبيق البحث")}</button>
+          <button type="submit" className="primary-button">{tr(locale,"Apply filters","تطبيق البحث")}</button>
+          <Link className="secondary-link" href="/quality/eqa">{tr(locale,"Reset filters","إعادة ضبط البحث")}</Link>
         </form>
         <p className="muted">{tr(locale,"Visible programs","البرامج المعروضة")}: {programRows.length}
           {" · "}{tr(locale,"Visible rounds on this page","الجولات الظاهرة في الصفحة")}: {shown.length}</p>
