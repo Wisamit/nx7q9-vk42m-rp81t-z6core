@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { SystemIcon } from "@/components/system-icon";
 import { useSyncExternalStore } from "react";
 import { normalizeSystemDateFormat } from "@/lib/system-date";
@@ -45,13 +45,13 @@ export function SystemClock({ locale, timezone, dateFormat, timeFormat, showSeco
     return () => window.clearInterval(interval);
   }, [liveShowSeconds]);
 
-  const time = useMemo(() => new Intl.DateTimeFormat(locale === "ar" ? "ar-AE" : "en-US", {
+  const time = new Intl.DateTimeFormat(locale === "ar" ? "ar-AE" : "en-US", {
     timeZone: liveTimeZone,
     hour: "2-digit",
     minute: "2-digit",
     second: liveShowSeconds ? "2-digit" : undefined,
     hour12: liveTimeFormat === "12",
-  }).format(now), [locale, now, liveShowSeconds, liveTimeFormat, liveTimeZone]);
+  }).format(now);
 
   return <div className="system-clock" title={liveTimeZone}>
     <SystemIcon name="clock" size={16} />
