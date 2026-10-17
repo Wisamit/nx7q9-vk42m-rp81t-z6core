@@ -10,3 +10,9 @@ generated/
 
 # Browser QA artifacts may contain screenshots and account-specific UI content.
 ui-evidence/
+ui-browser-evidence/
+
+# Never commit Playwright staging screenshots, fixture sessions or review artifacts.
+**/ui-browser-evidence/
+**/browser-screenshots/
+.synthetic-ui-storage-state*.json

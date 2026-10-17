@@ -1,0 +1,54 @@
+# A separate, owner-triggered review of isolated SYNTHETIC staging only.
+# This workflow is deliberately unavailable while the repository is PUBLIC.
+# GitHub artifacts can expose screenshots to repository readers: use a private
+# repository with an approved synthetic-staging environment, or run locally.
+name: Private Synthetic UI Browser Review
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: private-ui-browser-review-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  synthetic_browser_review:
+    if: ${{ github.ref == 'refs/heads/main' && github.event.repository.private == true && vars.FL_UI_AUDIT_ENABLE == 'true' && vars.FL_UI_AUDIT_SYNTHETIC_ONLY == 'I_CONFIRM_SYNTHETIC_NONPRODUCTION_DATA' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    environment: ui-synthetic-staging
+    env:
+      FL_UI_AUDIT_STAGING_ORIGIN: ${{ vars.FL_UI_AUDIT_STAGING_ORIGIN }}
+      FL_UI_AUDIT_SYNTHETIC_ONLY: ${{ vars.FL_UI_AUDIT_SYNTHETIC_ONLY }}
+      FL_UI_AUDIT_CONFIG_JSON: ${{ secrets.FL_UI_AUDIT_CONFIG_JSON }}
+      FL_UI_AUDIT_OUTPUT_DIR: ui-browser-evidence
+    steps:
+      - name: Checkout exact main revision
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.18.0'
+      - name: Verify source plan and private synthetic fixture isolation
+        run: |
+          node scripts/ui-browser-evidence.mjs --validate
+          node scripts/ui-browser-evidence.mjs --preflight
+      - name: Install pinned isolated browser
+        run: |
+          npm install --no-save playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Capture all 486 non-mutating browser views
+        run: node scripts/ui-browser-evidence.mjs --run
+      - name: Upload private synthetic browser findings
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: private-synthetic-ui-evidence
+          path: ui-browser-evidence
+          if-no-files-found: warn
+          retention-days: 2
