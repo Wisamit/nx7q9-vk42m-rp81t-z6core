@@ -72,7 +72,8 @@ test("export route requires explicit catalogue and financial permissions and ten
   assert.ok(s.includes('permissions.has("catalog.manage")'));
   assert.ok(s.includes('permissions.has("pricing.manage")'));
   assert.ok(s.includes('item.branch.status === "ACTIVE"'));
-  assert.ok(s.includes('item.department.status === "ACTIVE"'));
+  assert.ok(s.includes("const departmentIds = authorized.departmentIds"));
+  assert.ok(s.includes("const testScope = { ...clinicalImportTestWhere({"));
   assert.ok(s.includes('organizationId: session.user.organizationId') === false); // Uses derived orgId.
   assert.ok(s.includes('const organizationId = session.user.organizationId'));
   assert.ok(s.includes('component: { test: testScope }'));

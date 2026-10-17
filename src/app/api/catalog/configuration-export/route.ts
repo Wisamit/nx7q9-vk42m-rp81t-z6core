@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentSession, permissionSet, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { clinicalImportTestWhere, resolveClinicalImportScope } from "@/lib/catalog-clinical-import-scope";
+import { liveCatalogReviewStagingAuthority } from "@/lib/catalog-review-staging-auth";
+import { clinicalImportTestWhere } from "@/lib/catalog-clinical-import-scope";
 import { genericCatalogPriceScope } from "@/lib/catalog-generic-price-scope";
 import {
   catalogExportNavigation, catalogExportTypes, type CatalogExportType,
@@ -29,26 +30,42 @@ export async function GET(request: NextRequest) {
   const parsed = catalogExportNavigation(parameters.get("cursor"));
   if (!parsed.ok) return NextResponse.json({ error: "invalid_export_cursor" }, { status: 400 });
 
+  // Consistent point-in-time authorization precedes ALL ten export types.
+  // The tenant lock prevents queued exports from using stale grants.
+  return prisma.$transaction(async tx => {
+  const prisma = tx;
   const organizationId = session.user.organizationId;
-  const branchIds = session.user.branchScopes
-    .filter(item => item.branch.status === "ACTIVE")
-    .map(item => item.branchId);
-  if (branchIds.length === 0) return NextResponse.json({ error: "branch_scope_required" }, { status: 403 });
-  const departmentIds = session.user.departmentScopes
-    .filter(item => item.department.status === "ACTIVE")
-    .map(item => item.departmentId);
-  const testScope = {
-    organizationId,
-    ...(departmentIds.length ? { departmentId: { in: departmentIds } } : {}),
-  };
+  const lock = await tx.$queryRaw<Array<{ id: string }>>`
+    SELECT id FROM organizations WHERE id = ${organizationId}
+      AND status = 'ACTIVE' FOR UPDATE
+  `;
+  if (lock.length !== 1)
+    return NextResponse.json({ error: "export_organization_inactive" }, { status: 403 });
+  const authorized = await liveCatalogReviewStagingAuthority(tx, {
+    userId: session.user.id, organizationId,
+    activeBranchId: session.activeBranchId || "",
+    sessionBranchIds: session.user.branchScopes.filter(item =>
+      item.branch.status === "ACTIVE" && item.branch.organizationId === organizationId
+    ).map(item => item.branchId),
+    sessionDepartmentIds: session.user.departmentScopes.map(item => item.departmentId),
+    needsPricing: type.startsWith("PRICE_"),
+    needsRanges: type === "REFERENCE_INTERVAL",
+    needsClinicalScope: true,
+  });
+  if (!authorized)
+    return NextResponse.json({ error: "export_live_scope_or_permission_revoked" }, { status: 403 });
+  const branchIds = authorized.branchIds;
+  const departmentIds = authorized.departmentIds;
+  // All tests, including a paged TEST/COMPONENT/PRICE_LIST_ITEM export, must
+  // obey the active branch and its clinical departments (not just panels).
+  const testScope = { ...clinicalImportTestWhere({
+    organizationId, branchId: session.activeBranchId!, departmentIds,
+  }), status: undefined };
   const isComposite = type === "PANEL" || type === "PACKAGE" ||
     type === "PRICE_LIST_PACKAGE_ITEM";
-  const clinicalScope = isComposite ? resolveClinicalImportScope({
-    organizationId, activeBranchId: session.activeBranchId,
-    activeBranch: session.activeBranch,
-    branchScopes: session.user.branchScopes,
-    departmentScopes: session.user.departmentScopes,
-  }) : null;
+  const clinicalScope = isComposite ? {
+    organizationId, branchId: session.activeBranchId!, departmentIds,
+  } : null;
   if (isComposite && !clinicalScope)
     return NextResponse.json({ error: "active_clinical_export_scope_required" }, { status: 403 });
   const compositeTestScope = clinicalScope
@@ -237,4 +254,5 @@ export async function GET(request: NextRequest) {
     nextCursor,
     hasMore,
   }, { headers: { "Cache-Control": "private, no-store" } });
+  }, { isolationLevel: "RepeatableRead", timeout: 30000 });
 }

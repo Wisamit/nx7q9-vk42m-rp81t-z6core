@@ -12,16 +12,21 @@ const ui = readFileSync("src/components/catalog-configuration-export.tsx", "utf8
 
 test("Stage 50: one repeatable-read transaction encloses live grants, all six queries, audit and bounded response", () => {
   const lock = exporter.indexOf("const orgLock = await tx.$queryRaw");
-  const grants = exporter.indexOf("const liveBranches = await tx.userBranchScope.findMany");
-  const departments = exporter.indexOf("const liveDepartments = await tx.userDepartmentScope.findMany");
+  const live = exporter.indexOf("liveCatalogReviewStagingAuthority(tx,");
   const query = exporter.indexOf('if (type === "TEST")');
   const audit = exporter.indexOf('action: "CATALOG_CONFIGURATION_ATOMIC_BUNDLE_EXPORTED"');
-  assert.ok(lock > 0 && grants > lock && departments > grants && query > departments && audit > query);
+  assert.ok(lock > 0 && live > lock && query > live && audit > query);
+  assert.match(exporter, /needsPricing: requested.some/);
+  assert.match(exporter, /needsRanges: requested.includes/);
+  const authority = readFileSync("src/lib/catalog-review-staging-auth.ts", "utf8");
+  assert.match(authority, /roles: \{ some: \{ role:/);
+  assert.match(authority, /status: "ACTIVE"/);
+  assert.match(authority, /oldBranches.has\(id\)/);
+  assert.match(authority, /intersectLiveLegacyClinicalDepartments/);
   assert.match(exporter, /isolationLevel: "RepeatableRead"/);
   assert.match(exporter, /FOR UPDATE/);
-  assert.match(exporter, /sessionBranches\.has\(id\)/);
-  assert.match(exporter, /sessionDepartments\.has\(item\.departmentId\)/);
-  assert.match(exporter, /restrictedDepartments && currentDepartments\.length === 0/);
+  assert.match(exporter, /const branchIds = authorized\.branchIds/);
+  assert.match(exporter, /departmentIds: authorized\.departmentIds/);
   assert.match(exporter, /resolveClinicalImportScope/);
   assert.match(exporter, /clinicalImportTestWhere\(liveScope\)/);
   assert.match(exporter, /records\.length \+ total > BUNDLE_REVIEW_MAX_ROWS/);
