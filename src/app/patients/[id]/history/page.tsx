@@ -1,3 +1,4 @@
+import { SystemDateText } from "@/components/system-date-text";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
@@ -478,7 +479,7 @@ export default async function PatientHistoryPage({
         <div><span>{tr(locale, "Canonical", "الأساسي")}</span><strong>{canonical.patientNumber}</strong></div>
         {lineage.aliases.map(alias => <div key={alias.id}>
           <span>{tr(locale, "Historical alias", "سجل تاريخي")} · {alias.patientNumber}</span>
-          <strong>{alias.mergedAt ? alias.mergedAt.toISOString().slice(0, 10) : "—"}</strong>
+          <strong>{alias.mergedAt ? <SystemDateText value={alias.mergedAt.toISOString()} kind="instant-date" /> : "—"}</strong>
         </div>)}
       </div>
     </section>}
@@ -496,7 +497,7 @@ export default async function PatientHistoryPage({
           <th>{tr(locale, "Status", "الحالة")}</th>
         </tr></thead>
         <tbody>{orders.length === 0 ? <tr><td colSpan={5} className="empty-state">{tr(locale, "No accessible order history.", "لا يوجد سجل طلبات متاح ضمن صلاحياتك.")}</td></tr> : orders.map(order => <tr key={order.id}>
-          <td>{order.orderedAt.toISOString().replace("T"," ").slice(0,16)}</td>
+          <td>{<SystemDateText value={order.orderedAt.toISOString()} />}</td>
           <td><Link className="table-link" href={"/orders/" + order.id}>{order.accessionNumber}</Link></td>
           <td>{locale === "ar" ? order.orderingBranch.nameAr || order.orderingBranch.nameEn : order.orderingBranch.nameEn}</td>
           <td>{order.items.map(item => locale === "ar" ? item.testNameArSnapshot || item.testNameEnSnapshot : item.testNameEnSnapshot).join(", ") || "—"}</td>
@@ -537,7 +538,7 @@ export default async function PatientHistoryPage({
                 ? (row.referenceLow || "—") + " – " + (row.referenceHigh || "—")
                 : "—");
             return <tr key={row.key}>
-              <td>{row.observedAt.toISOString().replace("T"," ").slice(0,16)}</td>
+              <td>{<SystemDateText value={row.observedAt.toISOString()} />}</td>
               <td>{canViewOrders ? <Link className="table-link" href={"/orders/" + row.orderId}>{row.accessionNumber}</Link> : row.accessionNumber}</td>
               <td>{row.testName}</td>
               <td>{row.componentName}</td>
@@ -565,7 +566,7 @@ export default async function PatientHistoryPage({
             <th>{tr(locale, "Amendment reason", "سبب التعديل")}</th>
           </tr></thead>
           <tbody>{reportVersions.length === 0 ? <tr><td colSpan={6} className="empty-state">{tr(locale, "No report versions are available.", "لا توجد إصدارات تقارير متاحة.")}</td></tr> : reportVersions.map(version => <tr key={version.id}>
-            <td>{version.issuedAt.toISOString().replace("T"," ").slice(0,16)}</td>
+            <td>{<SystemDateText value={version.issuedAt.toISOString()} />}</td>
             <td><Link className="table-link" href={"/reports/" + version.report.order.id}>{version.report.order.accessionNumber}</Link></td>
             <td>v{version.version}</td>
             <td>{statusLabel(locale, version.status)}</td>
@@ -591,7 +592,7 @@ export default async function PatientHistoryPage({
           <th>{tr(locale, "Balance", "الرصيد")}</th>
         </tr></thead>
         <tbody>{invoices.length === 0 ? <tr><td colSpan={9} className="empty-state">{tr(locale, "No accessible financial history.", "لا يوجد سجل مالي متاح ضمن صلاحياتك.")}</td></tr> : invoices.map(invoice => <tr key={invoice.id}>
-          <td>{invoice.issuedAt.toISOString().slice(0,10)}</td>
+          <td>{<SystemDateText value={invoice.issuedAt.toISOString()} kind="instant-date" />}</td>
           <td><strong>{invoice.invoiceNumber}</strong></td>
           <td>{invoice.order?.accessionNumber || "—"}</td>
           <td>{statusLabel(locale, invoice.status)}</td>
@@ -616,7 +617,7 @@ export default async function PatientHistoryPage({
           <th>{tr(locale, "Status", "الحالة")}</th>
         </tr></thead>
         <tbody>{payments.length === 0 ? <tr><td colSpan={8} className="empty-state">{tr(locale, "No allocated payments.", "لا توجد مدفوعات مخصصة.")}</td></tr> : payments.map(payment => <tr key={payment.id + ":" + payment.invoiceNumber}>
-          <td>{payment.receivedAt.toISOString().replace("T"," ").slice(0,16)}</td>
+          <td>{<SystemDateText value={payment.receivedAt.toISOString()} />}</td>
           <td>{payment.invoiceNumber}</td>
           <td>{payment.method}</td>
           <td>{payment.currency}</td>
@@ -639,7 +640,7 @@ export default async function PatientHistoryPage({
           <th>{tr(locale, "Size", "الحجم")}</th>
         </tr></thead>
         <tbody>{attachments.length === 0 ? <tr><td colSpan={5} className="empty-state">{tr(locale, "No accessible attachments.", "لا توجد مرفقات متاحة ضمن صلاحياتك.")}</td></tr> : attachments.map(file => <tr key={file.id}>
-          <td>{file.createdAt.toISOString().replace("T"," ").slice(0,16)}</td>
+          <td>{<SystemDateText value={file.createdAt.toISOString()} />}</td>
           <td>{file.targetType}</td>
           <td><a className="table-link" href={"/api/attachments/" + file.id}>{file.originalName}</a></td>
           <td>{file.contentType}</td>
