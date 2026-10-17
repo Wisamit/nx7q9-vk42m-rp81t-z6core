@@ -71,7 +71,7 @@ function matchingFixturePath(route, actual) {
   const canonical = route.split("/").filter(Boolean);
   const supplied = actual.split("/").filter(Boolean);
   return canonical.length === supplied.length && canonical.every((part, index) =>
-    /^\\[[^/]+\\]$/.test(part)
+    /^\[[^/]+\]$/.test(part)
       ? Boolean(supplied[index] && !supplied[index].includes("[") && !supplied[index].includes("]"))
       : part === supplied[index]
   );
@@ -85,7 +85,7 @@ function assertSyntheticStorageStates(config, base) {
       throw Error("Synthetic browser profile requires inline storageState object: " + profile);
     }
     for (const cookie of storage.cookies) {
-      if (!cookie || cookie.domain?.replace(/^\\./, "") !== expectedHost) {
+      if (!cookie || cookie.domain?.replace(/^\./, "") !== expectedHost) {
         throw Error("Browser profile cookie domain must match staging host: " + profile);
       }
     }
