@@ -4,6 +4,7 @@ import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CrudModal } from "@/components/crud-modal";
+import { SystemDateText } from "@/components/system-date-text";
 
 type ContainerOption = { id: string; code: string; name: string };
 type OrderItemOption = { id: string; code: string; name: string };
@@ -22,6 +23,7 @@ type UsageRow = {
   volumeUsed: string;
   volumeUnit: string;
   usedAt: string;
+  branchTimeZone: string;
   notes: string | null;
   orderItemCode: string | null;
   childBarcode: string | null;
@@ -480,7 +482,7 @@ export function SpecimenAliquotManager({
       <summary>{tr("Volume Usage History", "سجل استخدام الحجم")} ({usageEvents.length})</summary>
       <div className="summary-list">
         {usageEvents.map(item => <div key={item.id}>
-          <span>{item.usedAt.replace("T", " ").slice(0, 19)} · {item.branchCode} · {item.usedByName} · {item.volumeUsed} {item.volumeUnit}</span>
+          <span><SystemDateText value={item.usedAt} timeZone={item.branchTimeZone} /> · {item.branchCode} · {item.usedByName} · {item.volumeUsed} {item.volumeUnit}</span>
           <strong>{usageLabel(item.usageType)}{item.orderItemCode ? ` · ${item.orderItemCode}` : ""}{item.childBarcode ? ` · → ${item.childBarcode}` : ""}</strong>
           {item.notes && <small>{item.notes}</small>}
         </div>)}

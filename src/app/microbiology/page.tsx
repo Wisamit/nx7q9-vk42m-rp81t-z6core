@@ -2,6 +2,7 @@ import Link from "next/link";
 import { authorizedDepartmentIds, permissionSet, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { MicrobiologyManager } from "@/components/microbiology-manager";
+import { SystemDateText } from "@/components/system-date-text";
 import { getUiLocale, statusLabel, tr } from "@/lib/ui-i18n";
 
 export const dynamic = "force-dynamic";
@@ -105,14 +106,15 @@ export default async function MicrobiologyPage() {
     <section className="table-card detail-section">
       <div className="table-toolbar"><h2>{tr(locale, "Microbiology Cases", "حالات الأحياء الدقيقة")}</h2><span>{cases.length} {tr(locale, "shown", "معروضة")}</span></div>
       <div className="table-wrap"><table>
-        <thead><tr><th>{tr(locale, "Accession / Patient", "رقم الطلب / المريض")}</th><th>{tr(locale, "Test", "الفحص")}</th><th>{tr(locale, "Specimen", "العينة")}</th><th>{tr(locale, "Culture", "الزرع")}</th><th>{tr(locale, "Case status", "حالة الحالة")}</th><th>{tr(locale, "Content", "المحتوى")}</th><th>{tr(locale, "Action", "الإجراء")}</th></tr></thead>
-        <tbody>{cases.length === 0 ? <tr><td colSpan={7} className="empty-state">{tr(locale, "No microbiology cases yet.", "لا توجد حالات أحياء دقيقة بعد.")}</td></tr> : cases.map(item => <tr key={item.id}>
+        <thead><tr><th>{tr(locale, "Accession / Patient", "رقم الطلب / المريض")}</th><th>{tr(locale, "Test", "الفحص")}</th><th>{tr(locale, "Specimen", "العينة")}</th><th>{tr(locale, "Culture", "الزرع")}</th><th>{tr(locale, "Case status", "حالة الحالة")}</th><th>{tr(locale, "Content", "المحتوى")}</th><th>{tr(locale, "Updated", "آخر تحديث")}</th><th>{tr(locale, "Action", "الإجراء")}</th></tr></thead>
+        <tbody>{cases.length === 0 ? <tr><td colSpan={8} className="empty-state">{tr(locale, "No microbiology cases yet.", "لا توجد حالات أحياء دقيقة بعد.")}</td></tr> : cases.map(item => <tr key={item.id}>
           <td><strong>{item.orderItem.order.accessionNumber}</strong><br/><small>{patientName(item.orderItem.order.patient)}</small></td>
           <td>{item.orderItem.testCodeSnapshot} — {locale === "ar" ? item.orderItem.testNameArSnapshot || item.orderItem.testNameEnSnapshot : item.orderItem.testNameEnSnapshot}</td>
           <td>{item.specimen.barcode}<br/><small>{localizedName(item.performingBranch)}</small></td>
           <td>{cultureLabel(item.cultureStatus)}</td>
           <td>{statusLabel(locale, item.status)}</td>
           <td>{item._count.observations} {tr(locale, "observation(s)", "ملاحظة")} · {item._count.isolates} {tr(locale, "isolate(s)", "عزلة")}</td>
+            <td><SystemDateText value={item.updatedAt.toISOString()} timeZone={item.performingBranch.timezone} /></td>
           <td><Link className="secondary-link" href={`/microbiology/${item.id}`}>{tr(locale, "Open Case", "فتح الحالة")}</Link></td>
         </tr>)}</tbody>
       </table></div>

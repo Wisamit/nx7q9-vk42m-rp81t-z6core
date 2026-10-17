@@ -4,6 +4,8 @@ import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CrudModal } from "@/components/crud-modal";
 import { AttachmentManager } from "@/components/attachment-manager";
+import { SystemDateText } from "@/components/system-date-text";
+import { SystemDateTimeField } from "@/components/system-date-time-field";
 import { statusLabel as sharedStatusLabel } from "@/lib/ui-i18n";
 
 type Laboratory = { id: string; code: string; nameEn: string; nameAr?: string | null };
@@ -26,6 +28,7 @@ type Referral = {
   id: string;
   status: string;
   branchCode: string;
+  branchTimeZone: string;
   accessionNumber: string;
   patientNumber: string;
   patientName: string;
@@ -149,7 +152,10 @@ export function SendOutManager({
       });
       const body = await response.json().catch(() => ({})) as { error?: string };
       if (!response.ok) {
-        setMessage(body.error || tr("Could not create send-out referral.", "تعذر إنشاء الإحالة الخارجية."));
+        setMessage(body.error === "invalid_or_ambiguous_branch_local_time"
+          ? tr("Enter a valid expected date and time for the selected branch. Clock times skipped or repeated during daylight saving are not accepted.",
+            "أدخل تاريخاً ووقتاً صالحين حسب توقيت الفرع المحدد. لا تُقبل أوقات الساعة غير الموجودة أو المكررة عند تغيير التوقيت الصيفي.")
+          : body.error || tr("Could not create send-out referral.", "تعذر إنشاء الإحالة الخارجية."));
         return;
       }
       setUiEditor("");
@@ -279,7 +285,7 @@ export function SendOutManager({
             {laboratories.map(lab => <option key={lab.id} value={lab.id}>{lab.code} — {labName(lab)}</option>)}
           </select></label>
           <label>{tr("External accession","رقم الطلب الخارجي")}<input name="externalAccession" /></label>
-          <label>{tr("Expected result","موعد النتيجة المتوقع")}<input name="expectedResultAt" type="datetime-local" /></label>
+          <label>{tr("Expected result (selected branch local time)","موعد النتيجة المتوقع (توقيت الفرع المختار)")}<SystemDateTimeField name="expectedResultAt" /></label>
           <label>{tr("Cost","التكلفة")}<input name="costAmount" type="number" min="0" step="0.0001" /></label>
           <label>{tr("Currency","العملة")}<input name="costCurrency" maxLength={3} placeholder="AED" /></label>
           <label className="form-span">{tr("Note","ملاحظة")}<input name="note" /></label>
@@ -308,9 +314,9 @@ export function SendOutManager({
             <div><span>{tr("Branch","الفرع")}</span><strong>{referral.branchCode}</strong></div>
             <div><span>{tr("Specimen","العينة")}</span><strong className="barcode-text">{referral.specimenBarcode || "—"}</strong></div>
             <div><span>{tr("External accession","رقم الطلب الخارجي")}</span><strong>{referral.externalAccession || "—"}</strong></div>
-            <div><span>{tr("Expected result","النتيجة المتوقعة")}</span><strong>{referral.expectedResultAt?.replace("T"," ").slice(0,16) || "—"}</strong></div>
+            <div><span>{tr("Expected result","النتيجة المتوقعة")}</span><strong>{referral.expectedResultAt ? <SystemDateText value={referral.expectedResultAt} timeZone={referral.branchTimeZone} /> : "—"}</strong></div>
             <div><span>{tr("Cost","التكلفة")}</span><strong>{referral.costAmount && referral.costCurrency ? referral.costAmount + " " + referral.costCurrency : "—"}</strong></div>
-            <div><span>{tr("Dispatch","الإرسال")}</span><strong>{referral.dispatchedAt?.replace("T"," ").slice(0,16) || "—"}</strong></div>
+            <div><span>{tr("Dispatch","الإرسال")}</span><strong>{referral.dispatchedAt ? <SystemDateText value={referral.dispatchedAt} timeZone={referral.branchTimeZone} /> : "—"}</strong></div>
           </div>
 
           <div className="sendout-actions">
@@ -351,7 +357,7 @@ export function SendOutManager({
           <details className="specimen-history">
             <summary>{tr("Chain of custody / status history","سلسلة الحيازة / سجل الحالة")} ({referral.events.length})</summary>
             <div className="summary-list">{referral.events.map(event => <div key={event.id}>
-              <span>{event.occurredAt.replace("T"," ").slice(0,19)} · {event.actor}</span>
+              <span><SystemDateText value={event.occurredAt} timeZone={referral.branchTimeZone} /> · {event.actor}</span>
               <strong>{referralStatusLabel(event.fromStatus || "NEW")} → {referralStatusLabel(event.toStatus)}{event.note ? " · " + event.note : ""}</strong>
             </div>)}</div>
           </details>

@@ -3,6 +3,7 @@
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CrudModal } from "@/components/crud-modal";
+import { SystemDateText } from "@/components/system-date-text";
 import { statusLabel } from "@/lib/ui-i18n";
 
 type MethodRow = {
@@ -15,6 +16,7 @@ type MethodRow = {
   sortOrder: number;
   status: string;
   isSettlement: boolean;
+  updatedAt: string;
 };
 
 export function PaymentMethodManager({ methods, locale }: { methods: MethodRow[]; locale: "ar" | "en" }) {
@@ -149,7 +151,7 @@ export function PaymentMethodManager({ methods, locale }: { methods: MethodRow[]
       <div className="table-wrap"><table>
         <thead><tr>
           <th>{tr("Code", "الرمز")}</th><th>{tr("Name", "الاسم")}</th><th>{tr("Accounting base", "الأساس المحاسبي")}</th>
-          <th>{tr("Reference", "المرجع")}</th><th>{tr("Order", "الترتيب")}</th><th>{tr("Status", "الحالة")}</th><th>{tr("Action", "الإجراء")}</th>
+          <th>{tr("Reference", "المرجع")}</th><th>{tr("Order", "الترتيب")}</th><th>{tr("Updated", "آخر تحديث")}</th><th>{tr("Status", "الحالة")}</th><th>{tr("Action", "الإجراء")}</th>
         </tr></thead>
         <tbody>{methods.map(method => <tr key={method.id}>
           <td><strong>{method.code}</strong></td>
@@ -157,6 +159,7 @@ export function PaymentMethodManager({ methods, locale }: { methods: MethodRow[]
           <td>{method.baseMethod}</td>
           <td>{method.requiresReference ? tr("Required", "مطلوب") : tr("Optional", "اختياري")}</td>
           <td>{method.sortOrder}</td>
+          <td><SystemDateText value={method.updatedAt} /></td>
           <td><span className={"status-badge status-" + method.status.toLowerCase()}>{statusLabel(locale, method.status)}</span></td>
           <td>{method.isSettlement
             ? <button className="secondary-button" type="button" disabled={busy} onClick={() => openStatusReview(method)}>

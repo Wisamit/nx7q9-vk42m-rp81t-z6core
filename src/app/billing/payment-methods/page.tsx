@@ -49,6 +49,7 @@ export default async function PaymentMethodsPage() {
         sortOrder: method.sortOrder,
         status: method.status,
         isSettlement: method.isSettlement,
+        updatedAt: method.updatedAt.toISOString(),
       }))}
     />
   </main>;

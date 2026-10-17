@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { PhlebotomyCollectionCard } from "@/components/phlebotomy-collection-card";
+import { SystemDateText } from "@/components/system-date-text";
 import { SystemIcon } from "@/components/system-icon";
 import { getUiLocale, tr } from "@/lib/ui-i18n";
 import { specimenRequirementSnapshotFromDetails } from "@/lib/specimen-requirement-engine";
@@ -28,7 +29,7 @@ export default async function PhlebotomyPage({
       organizationId: session.user.organizationId,
       status: "ACTIVE",
     },
-    select: { id: true, code: true, nameEn: true, nameAr: true },
+    select: { id: true, code: true, nameEn: true, nameAr: true, timezone: true },
     orderBy: { nameEn: "asc" },
   });
   const selectedBranchId = branchIds.includes(params.branch || "")
@@ -213,7 +214,7 @@ export default async function PhlebotomyPage({
           <tbody>
             {recentFailedAttempts.length === 0 ? <tr><td colSpan={6} className="empty-state">{tr(locale, "No failed collection attempts are recorded for this branch.", "لا توجد محاولات سحب فاشلة مسجلة لهذا الفرع.")}</td></tr> :
               recentFailedAttempts.map(attempt => <tr key={attempt.id}>
-                <td>{attempt.attemptedAt.toISOString().replace("T", " ").slice(0, 19)}</td>
+                <td><SystemDateText value={attempt.attemptedAt.toISOString()} timeZone={branches.find(branch => branch.id === attempt.branchId)?.timezone} /></td>
                 <td><strong>{attempt.specimen.order.patient.patientNumber}</strong><br/><small>{patientName(attempt.specimen.order.patient)}</small></td>
                 <td><span className="barcode-text">{attempt.specimen.barcode}</span></td>
                 <td><strong>{attempt.failureReasonCode || "—"}</strong><br/><small>{attempt.failureReasonText || "—"}</small></td>

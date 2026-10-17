@@ -98,7 +98,7 @@ export default async function SpecimensPage({
             orderItem: { select: { testCodeSnapshot: true } },
             childSpecimen: { select: { barcode: true } },
             usedBy: { select: { displayNameEn: true, displayNameAr: true } },
-            branch: { select: { code: true } },
+            branch: { select: { code: true, timezone: true } },
           },
           orderBy: { usedAt: "desc" },
           take: 50,
@@ -354,6 +354,7 @@ export default async function SpecimensPage({
                 childBarcode: item.childSpecimen?.barcode || null,
                 usedByName: userName(item.usedBy),
                 branchCode: item.branch.code,
+                branchTimeZone: item.branch.timezone,
               }))}
               canManage={canAliquot}
               canPrintLabels={canCollect}

@@ -54,6 +54,7 @@ export default async function CashierPage() {
         id: shift.id,
         shiftNumber: shift.shiftNumber,
         branchCode: shift.branch.code,
+        branchTimeZone: shift.branch.timezone,
         branchName: locale === "ar" ? shift.branch.nameAr || shift.branch.nameEn : shift.branch.nameEn,
         cashierName: locale === "ar" ? shift.cashier.displayNameAr || shift.cashier.displayNameEn : shift.cashier.displayNameEn,
         cashierUserId: shift.cashierUserId,
