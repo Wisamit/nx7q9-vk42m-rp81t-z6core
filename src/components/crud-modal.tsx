@@ -39,7 +39,7 @@ function OpenCrudModal({
   title,
   description,
   children,
-  size = "md",
+  size = "compact",
   protectUnsavedChanges = true,
 }: CrudModalProps) {
   const headingId = useId();
@@ -192,8 +192,18 @@ function OpenCrudModal({
       aria-modal="true"
       aria-labelledby={headingId}
       aria-describedby={description ? descriptionId : undefined}
-      onInputCapture={event => { if (!(event.target as Element).closest("[data-modal-ui-only]")) changedRef.current = true; }}
-      onChangeCapture={event => { if (!(event.target as Element).closest("[data-modal-ui-only]")) changedRef.current = true; }}
+      onInputCapture={event => {
+        const target = event.target as Element;
+        // React portal events can bubble through a parent component tree;
+        // editing a nested dialog must not mark the underlying form dirty.
+        if (target.closest("[data-crud-modal='true']") === dialogRef.current &&
+            !target.closest("[data-modal-ui-only]")) changedRef.current = true;
+      }}
+      onChangeCapture={event => {
+        const target = event.target as Element;
+        if (target.closest("[data-crud-modal='true']") === dialogRef.current &&
+            !target.closest("[data-modal-ui-only]")) changedRef.current = true;
+      }}
     >
       <header className="crud-modal-header" aria-hidden={discardOpen ? true : undefined}>
         <div>
