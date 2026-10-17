@@ -1,3 +1,4 @@
+import { TableEmptyState } from "@/components/table-empty-state";
 import Link from "next/link";
 import { permissionSet, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
@@ -193,7 +194,7 @@ export default async function QcPage() {
       <div className="table-toolbar"><h2>{tr(locale, "Recent QC Runs", "أحدث تشغيلات QC")}</h2><span>{recentRuns.length} {tr(locale, "shown", "معروضة")}</span></div>
       <div className="table-wrap"><table>
         <thead><tr><th>{tr(locale, "Run", "التشغيل")}</th><th>{tr(locale, "Analyzer", "الجهاز")}</th><th>{tr(locale, "Control lot", "تشغيلة الضبط")}</th><th>{tr(locale, "Status", "الحالة")}</th><th>{tr(locale, "Results", "النتائج")}</th><th>{tr(locale, "Violations", "المخالفات")}</th><th>{tr(locale, "Operator", "المشغل")}</th></tr></thead>
-        <tbody>{recentRuns.length === 0 ? <tr><td colSpan={7} className="empty-state">{tr(locale, "No QC runs recorded.", "لا توجد تشغيلات QC مسجلة.")}</td></tr> : recentRuns.map(run => <tr key={run.id}>
+        <tbody>{recentRuns.length === 0 ? <tr><td colSpan={7} className="empty-state"><TableEmptyState title={tr(locale, "No QC runs recorded.", "لا توجد تشغيلات QC مسجلة.")} description={tr(locale, "No quality-control runs are displayed. QC observations must be entered from approved control material before policy evaluation.", "لا تظهر تشغيلات ضبط جودة. يجب إدخال مشاهدات QC من مواد ضبط معتمدة قبل تقييم القواعد.")} /></td></tr> : recentRuns.map(run => <tr key={run.id}>
           <td>{run.runAt.toISOString().replace("T"," ").slice(0,19)}</td>
           <td><strong>{run.analyzer.code}</strong><br/><small>{run.analyzer.name}</small></td>
           <td>{[...new Map(run.results.map(result => [
@@ -212,7 +213,7 @@ export default async function QcPage() {
       <div className="table-toolbar"><h2>{tr(locale, "QC Targets", "أهداف QC")}</h2><span>{targets.length} {tr(locale, "shown", "معروضة")}</span></div>
       <div className="table-wrap"><table>
         <thead><tr><th>{tr(locale, "Analyzer", "الجهاز")}</th><th>{tr(locale, "Test", "الفحص")}</th><th>{tr(locale, "Control", "الضبط")}</th><th>{tr(locale, "Mean", "المتوسط")}</th><th>SD</th><th>CV</th><th>{tr(locale, "Valid", "الصلاحية")}</th><th>{tr(locale, "Rules", "القواعد")}</th></tr></thead>
-        <tbody>{targets.length === 0 ? <tr><td colSpan={8} className="empty-state">{tr(locale, "No QC targets configured.", "لا توجد أهداف QC مهيأة.")}</td></tr> : targets.map(target => <tr key={target.id}>
+        <tbody>{targets.length === 0 ? <tr><td colSpan={8} className="empty-state"><TableEmptyState title={tr(locale, "No QC targets configured.", "لا توجد أهداف QC مهيأة.")} description={tr(locale, "No QC targets are configured in this view. Define approved target ranges before relying on release-block policies.", "لا تظهر أهداف ضبط جودة مهيأة في هذا العرض. حدّد المجالات المعتمدة قبل الاعتماد على سياسات حظر الإصدار.")} /></td></tr> : targets.map(target => <tr key={target.id}>
           <td>{target.analyzer.code}</td>
           <td>{target.test.code}{target.component ? " / " + target.component.code : ""}</td>
           <td>{target.qcLot.material.code} · {target.qcLot.material.levelName}<br/><small>{target.qcLot.lotNumber}</small></td>
