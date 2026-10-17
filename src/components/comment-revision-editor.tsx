@@ -3,11 +3,13 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { CrudModal } from "@/components/crud-modal";
+import { SystemDateText } from "@/components/system-date-text";
 
 type Source = {
   id: string;
   code: string;
   revisionNumber: number;
+  createdAt: string;
   scope: "ORGANIZATION" | "TEST" | "COMPONENT";
   target: string;
   nameEn: string;
@@ -100,6 +102,7 @@ export function CommentRevisionEditor({
     </label>
     {current && <div className="form-span">
       <p className="muted">{tr("Scope", "النطاق")}: {current.scope} · {tr("Target", "الهدف")}: {current.target}</p>
+      <p className="muted">{tr("Original revision recorded", "تسجيل النسخة المعتمدة الأصلية")}: <SystemDateText value={current.createdAt} timeZone="UTC" /> UTC</p>
       <strong>{tr("Approved source text (read-only)", "النص المعتمد الحالي (للقراءة فقط)")}</strong>
       <div dir="ltr" style={{ whiteSpace: "pre-wrap" }}>{current.textEn}</div>
       <div dir="rtl" style={{ whiteSpace: "pre-wrap" }}>{current.textAr || "—"}</div>
