@@ -1,3 +1,4 @@
+import { TableEmptyState } from "@/components/table-empty-state";
 import { SystemDateText } from "@/components/system-date-text";
 import { SystemDateField } from "@/components/system-date-field";
 import Link from "next/link";
@@ -187,9 +188,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Sear
             <th>{tr(locale, "Action", "الإجراء")}</th>
           </tr></thead>
           <tbody>
-            {!shown.length ? <tr><td colSpan={9} className="empty-state">
-              {tr(locale, "No reports match the selected filters.", "لا توجد تقارير تطابق معايير البحث.")}
-            </td></tr> : shown.map(({report,version}) => <tr key={version.id}>
+            {!shown.length ? <tr><td colSpan={9} className="empty-state"><TableEmptyState title={tr(locale, "No reports match the selected filters.", "لا توجد تقارير تطابق معايير البحث.")} description={tr(locale, "No released report versions match this authorized search. Review branch, status, print record and date filters before trying again.", "لا توجد إصدارات تقارير صادرة تطابق البحث المصرح به. راجع الفرع والحالة وسجل الطباعة والتواريخ قبل إعادة البحث.")} action={{ href: "/reports", label: tr(locale, "Clear filters", "مسح الفلاتر") }} /></td></tr> : shown.map(({report,version}) => <tr key={version.id}>
               <td><strong>{report.order.accessionNumber}</strong></td>
               <td>{reportQueuePatientIdentity(version.contentSnapshot, locale).patientNumber}<small className="table-subtext">
                 {reportQueuePatientIdentity(version.contentSnapshot, locale).patientName}
