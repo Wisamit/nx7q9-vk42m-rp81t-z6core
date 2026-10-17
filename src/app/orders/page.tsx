@@ -1,3 +1,4 @@
+import { SystemDateText } from "@/components/system-date-text";
 import Link from "next/link";
 import { requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
@@ -192,7 +193,7 @@ export default async function OrdersPage({ searchParams }: {
               orders.map(order => {
                 const invoice = order.invoices[0];
                 return <tr key={order.id}>
-                  <td><Link className="table-link" href={`/orders/${order.id}`}><strong>{order.accessionNumber}</strong></Link><br/><small>{order.orderedAt.toISOString().slice(0,16).replace("T"," ")}</small></td>
+                  <td><Link className="table-link" href={`/orders/${order.id}`}><strong>{order.accessionNumber}</strong></Link><br/><small>{<SystemDateText value={order.orderedAt.toISOString()} timeZone={order.orderingBranch.timezone} />}</small></td>
                   <td>{order.patient.patientNumber}<br/><small>{order.patient.fullNameEn}</small></td>
                   <td>{order.orderingBranch.code}</td>
                   <td>{order.source?.nameEn || tr(locale, "Legacy / unspecified", "قديم / غير محدد")}</td>
