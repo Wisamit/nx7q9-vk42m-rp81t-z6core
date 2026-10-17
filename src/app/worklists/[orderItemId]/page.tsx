@@ -1,3 +1,4 @@
+import { SystemDateText } from "@/components/system-date-text";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { canAccessDepartment, permissionSet, requirePermission } from "@/lib/auth";
@@ -348,7 +349,7 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
         <h2>{tr(locale, "Patient & Order", "المريض والطلب")}</h2>
         <dl>
           <dt>{tr(locale, "Patient", "المريض")}</dt><dd>{item.order.patient.fullNameEn}</dd>
-          <dt>{tr(locale, "Date of birth", "تاريخ الميلاد")}</dt><dd>{item.order.patient.dateOfBirth?.toISOString().slice(0,10) || "—"}</dd>
+          <dt>{tr(locale, "Date of birth", "تاريخ الميلاد")}</dt><dd>{item.order.patient.dateOfBirth ? <SystemDateText value={item.order.patient.dateOfBirth.toISOString().slice(0,10)} kind="calendar" /> : "—"}</dd>
           <dt>{tr(locale, "Sex at birth", "الجنس عند الولادة")}</dt><dd>{sexLabel(locale, item.order.patient.sexAtBirth)}</dd>
           <dt>{tr(locale, "Priority", "الأولوية")}</dt><dd>{tr(locale, item.order.priority, item.order.priority === "STAT" ? "فوري" : item.order.priority === "URGENT" ? "عاجل" : "عادي")}</dd>
           <dt>{tr(locale, "Department", "القسم")}</dt><dd>{locale === "ar" ? item.test.department?.nameAr || item.test.department?.nameEn || tr(locale, "Unassigned", "غير معين") : item.test.department?.nameEn || "Unassigned"}</dd>
@@ -477,7 +478,7 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
         <tbody>{latestResult.deltaReviewEvents.map(event => <tr key={event.id}>
           <td><strong>{event.componentCodeSnapshot}</strong><br/><small>{locale === "ar" ? event.componentNameArSnapshot || event.componentNameEnSnapshot : event.componentNameEnSnapshot}</small></td>
           <td>{event.currentValueSnapshot.toString()}</td>
-          <td>{event.previousValueSnapshot?.toString() || "—"}{event.previousResultAtSnapshot ? <><br/><small>{event.previousResultAtSnapshot.toISOString().slice(0,10)}</small></> : null}</td>
+          <td>{event.previousValueSnapshot?.toString() || "—"}{event.previousResultAtSnapshot ? <><br/><small>{<SystemDateText value={event.previousResultAtSnapshot.toISOString()} kind="instant-date" timeZone={item.order.orderingBranch.timezone} />}</small></> : null}</td>
           <td>{[
             event.deltaAbsoluteSnapshot !== null ? "Δ " + event.deltaAbsoluteSnapshot.toString() : null,
             event.deltaPercentSnapshot !== null ? event.deltaPercentSnapshot.toString() + "%" : null,
@@ -489,8 +490,8 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
           ].filter(Boolean).join(" · ") || tr(locale, "Legacy snapshot", "لقطة تاريخية قديمة")}</td>
           <td>{statusLabel(locale, event.status)}</td>
           <td>{event.acknowledgedBy
-            ? (locale === "ar" ? event.acknowledgedBy.displayNameAr || event.acknowledgedBy.displayNameEn : event.acknowledgedBy.displayNameEn)
-              + (event.acknowledgedAt ? " · " + event.acknowledgedAt.toISOString().replace("T"," ").slice(0,19) : "")
+            ? <>{locale === "ar" ? event.acknowledgedBy.displayNameAr || event.acknowledgedBy.displayNameEn : event.acknowledgedBy.displayNameEn}
+                {event.acknowledgedAt ? <>{" · "}<SystemDateText value={event.acknowledgedAt.toISOString()} timeZone={item.order.orderingBranch.timezone} /></> : null}</>
             : "—"}</td>
         </tr>)}</tbody>
       </table></div>
@@ -501,6 +502,7 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
       <ResultWorkflowActions
         resultId={latestResult.id}
         performingBranchId={latestResult.performingBranchId}
+        performingBranchTimezone={latestResult.performingBranch.timezone}
         resultStatus={latestResult.status}
         validationStage={latestResult.validationStage}
         validationPolicySnapshot={latestResult.validationPolicySnapshot}
@@ -559,12 +561,12 @@ export default async function WorklistResultPage({ params }: { params: Promise<{
         <dt>{tr(locale, "Version", "الإصدار")}</dt><dd>{latestResult.version}</dd>
         <dt>{tr(locale, "Source", "المصدر")}</dt><dd>{latestResult.source}{latestResult.analyzerCodeSnapshot ? " · " + latestResult.analyzerCodeSnapshot + (latestResult.analyzerNameSnapshot ? " — " + latestResult.analyzerNameSnapshot : "") : ""}</dd>
         <dt>{tr(locale, "Entered by", "أُدخل بواسطة")}</dt><dd>{latestResult.enteredBy.displayNameEn}</dd>
-        <dt>{tr(locale, "Entered at", "وقت الإدخال")}</dt><dd>{latestResult.enteredAt.toISOString().replace("T"," ").slice(0,19)}</dd>
+        <dt>{tr(locale, "Entered at", "وقت الإدخال")}</dt><dd>{<SystemDateText value={latestResult.enteredAt.toISOString()} timeZone={latestResult.performingBranch.timezone} />}</dd>
         <dt>{tr(locale, "Verification mode", "طريقة التحقق")}</dt><dd>{latestResult.autoVerified ? "AUTOVERIFICATION" : "MANUAL"}</dd>
         <dt>{tr(locale, "Verified by", "تم التحقق بواسطة")}</dt><dd>{latestResult.autoVerified ? tr(locale, "System policy", "سياسة النظام") : latestResult.verifiedBy?.displayNameEn || "—"}</dd>
-        <dt>{tr(locale, "Verified at", "وقت التحقق")}</dt><dd>{latestResult.verifiedAt?.toISOString().replace("T"," ").slice(0,19) || "—"}</dd>
+        <dt>{tr(locale, "Verified at", "وقت التحقق")}</dt><dd>{latestResult.verifiedAt ? <SystemDateText value={latestResult.verifiedAt.toISOString()} timeZone={latestResult.performingBranch.timezone} /> : "—"}</dd>
         <dt>{tr(locale, "Released by", "تم الإصدار بواسطة")}</dt><dd>{latestResult.releasedBy?.displayNameEn || "—"}</dd>
-        <dt>{tr(locale, "Released at", "وقت الإصدار")}</dt><dd>{latestResult.releasedAt?.toISOString().replace("T"," ").slice(0,19) || "—"}</dd>
+        <dt>{tr(locale, "Released at", "وقت الإصدار")}</dt><dd>{latestResult.releasedAt ? <SystemDateText value={latestResult.releasedAt.toISOString()} timeZone={latestResult.performingBranch.timezone} /> : "—"}</dd>
         <dt>{tr(locale, "Version", "الإصدار")}</dt><dd>{latestResult.version}{latestResult.amendedFromId ? " · " + tr(locale, "amendment", "تعديل") : ""}</dd>
         <dt>{tr(locale, "Amendment reason", "سبب التعديل")}</dt><dd>{latestResult.amendmentReason || "—"}</dd>
       </dl>
