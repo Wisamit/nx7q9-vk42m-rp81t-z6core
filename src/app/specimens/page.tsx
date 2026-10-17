@@ -1,3 +1,4 @@
+import { SystemDateText } from "@/components/system-date-text";
 import Link from "next/link";
 import { permissionSet, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
@@ -224,8 +225,8 @@ export default async function SpecimensPage({
               <div><span>{tr(locale, "Required volume", "الحجم المطلوب")}</span><strong>{specimen.parentRelationType === "ALIQUOT" ? tr(locale, "Derived aliquot", "جزء مشتق") : requirement?.requiredVolume ? `${requirement.requiredVolume} ${requirement.requiredVolumeUnit || ""}` : requirement ? tr(locale, "Not specified", "غير محدد") : tr(locale, "Not finalized", "غير مثبت")}</strong></div>
               <div><span>{tr(locale, "Storage", "التخزين")}</span><strong>{requirement?.storageConditions || "—"}</strong></div>
               <div><span>{tr(locale, "Stability", "الثبات")}</span><strong>{requirement?.stabilityMinutes == null ? "—" : `${requirement.stabilityMinutes} ${tr(locale, "min", "دقيقة")}`}</strong></div>
-              <div><span>{tr(locale, "Collected", "تم الجمع")}</span><strong>{specimen.collectedAt ? specimen.collectedAt.toISOString().replace("T"," ").slice(0,19) : "—"}</strong></div>
-              <div><span>{tr(locale, "Received", "تم الاستلام")}</span><strong>{specimen.receivedAt ? specimen.receivedAt.toISOString().replace("T"," ").slice(0,19) : "—"}</strong></div>
+              <div><span>{tr(locale, "Collected", "تم الجمع")}</span><strong>{specimen.collectedAt ? <SystemDateText value={specimen.collectedAt.toISOString()} timeZone={specimen.order.orderingBranch.timezone} /> : "—"}</strong></div>
+              <div><span>{tr(locale, "Received", "تم الاستلام")}</span><strong>{specimen.receivedAt ? <SystemDateText value={specimen.receivedAt.toISOString()} timeZone={specimen.currentBranch?.timezone || specimen.order.orderingBranch.timezone} /> : "—"}</strong></div>
               <div><span>{tr(locale, specimen.parentRelationType === "ALIQUOT" ? "Initial aliquot volume" : "Collected volume", specimen.parentRelationType === "ALIQUOT" ? "الحجم الابتدائي للجزء" : "الحجم المجموعة")}</span><strong>{specimen.volume ? `${specimen.volume.toFixed(3)} ${specimen.volumeUnit || ""}` : "—"}</strong></div>
               <div><span>{tr(locale, "Available volume", "الحجم المتاح")}</span><strong>{specimen.remainingVolume ? `${specimen.remainingVolume.toFixed(3)} ${specimen.remainingVolumeUnit || ""}` : "—"}</strong></div>
               <div><span>{tr(locale, "Lineage", "التسلسل")}</span><strong>{specimen.parentSpecimen
@@ -248,7 +249,7 @@ export default async function SpecimensPage({
             {specimen.collectionAttempts[0] && <div className={specimen.collectionAttempts[0].outcome === "FAILED" ? "specimen-rejection" : "form-warning"}>
               <strong>{tr(locale, "Latest collection attempt", "آخر محاولة سحب")}</strong>
               <span>
-                {specimen.collectionAttempts[0].attemptedAt.toISOString().replace("T"," ").slice(0,19)}
+                {<SystemDateText value={specimen.collectionAttempts[0].attemptedAt.toISOString()} timeZone={specimen.order.orderingBranch.timezone} />}
                 {" · "}{specimen.collectionAttempts[0].branchCodeSnapshot}
                 {" · "}{locale === "ar" ? specimen.collectionAttempts[0].collectorNameArSnapshot || specimen.collectionAttempts[0].collectorNameEnSnapshot : specimen.collectionAttempts[0].collectorNameEnSnapshot}
                 {" · "}{specimen.collectionAttempts[0].outcome === "SUCCESS" ? tr(locale, "Success", "ناجحة") : tr(locale, "Failed", "فاشلة")}
@@ -260,7 +261,7 @@ export default async function SpecimensPage({
             {specimen.receptionAssessments[0] && <div className="form-warning">
               <strong>{tr(locale, "Latest reception assessment", "آخر تقييم استلام")}</strong>
               <span>
-                {specimen.receptionAssessments[0].receivedAt.toISOString().replace("T"," ").slice(0,19)}
+                {<SystemDateText value={specimen.receptionAssessments[0].receivedAt.toISOString()} timeZone={specimen.receptionAssessments[0].branch.timezone} />}
                 {" · "}{specimen.receptionAssessments[0].branch.code}
                 {" · "}{userName(specimen.receptionAssessments[0].receivedBy)}
                 {" · "}{tr(locale, "Label", "الملصق")}: {specimen.receptionAssessments[0].labelAssessment}
@@ -363,7 +364,7 @@ export default async function SpecimensPage({
               <summary>{tr(locale, "Collection attempt history", "سجل محاولات السحب")} ({specimen.collectionAttempts.length})</summary>
               <div className="summary-list">
                 {specimen.collectionAttempts.map(attempt => <div key={attempt.id}>
-                  <span>{attempt.attemptedAt.toISOString().replace("T"," ").slice(0,19)} · {attempt.branchCodeSnapshot} · {locale === "ar" ? attempt.collectorNameArSnapshot || attempt.collectorNameEnSnapshot : attempt.collectorNameEnSnapshot}</span>
+                  <span>{<SystemDateText value={attempt.attemptedAt.toISOString()} timeZone={specimen.order.orderingBranch.timezone} />} · {attempt.branchCodeSnapshot} · {locale === "ar" ? attempt.collectorNameArSnapshot || attempt.collectorNameEnSnapshot : attempt.collectorNameEnSnapshot}</span>
                   <strong>{attempt.outcome === "SUCCESS" ? tr(locale, "Successful collection", "سحب ناجح") : tr(locale, "Failed collection", "فشل السحب")} · {attempt.collectionLocationType}{attempt.collectionLocationText ? ` · ${attempt.collectionLocationText}` : ""}</strong>
                   <small>{attempt.outcome === "FAILED" ? `${attempt.failureReasonCode || "—"} · ${attempt.failureReasonText || "—"}` : `${attempt.volume?.toFixed(3) || "—"} ${attempt.volumeUnit || ""}`}{attempt.replacementSpecimen ? ` · ${tr(locale, "Recollection", "إعادة السحب")}: ${attempt.replacementSpecimen.barcode}` : ""}</small>
                 </div>)}
@@ -374,7 +375,7 @@ export default async function SpecimensPage({
               <summary>{tr(locale, "Rejection history", "سجل الرفض")} ({specimen.rejectionRecords.length})</summary>
               <div className="summary-list">
                 {specimen.rejectionRecords.map(rejection => <div key={rejection.id}>
-                  <span>{rejection.rejectedAt.toISOString().replace("T"," ").slice(0,19)} · {userName(rejection.rejectedBy)}</span>
+                  <span>{<SystemDateText value={rejection.rejectedAt.toISOString()} timeZone={specimen.order.orderingBranch.timezone} />} · {userName(rejection.rejectedBy)}</span>
                   <strong>{rejection.scope === "WHOLE_SPECIMEN" ? tr(locale, "Whole specimen", "العينة كاملة") : tr(locale, "Selected tests", "فحوصات محددة")} · {locale === "ar" ? rejection.reasonNameArSnapshot || rejection.reasonNameEnSnapshot : rejection.reasonNameEnSnapshot}</strong>
                   <small>{rejection.affectedLinks.map(link => link.orderItem.testCodeSnapshot).join(", ")} · {rejection.reasonDetails}</small>
                 </div>)}
@@ -385,7 +386,7 @@ export default async function SpecimensPage({
               <summary>{tr(locale, "Chain of custody", "سلسلة الحيازة")} ({recentEvents.length} {tr(locale, "recent events", "أحداث حديثة")})</summary>
               <div className="summary-list">
                 {recentEvents.map(event => <div key={event.id}>
-                  <span>{event.occurredAt.toISOString().replace("T"," ").slice(0,19)} · {event.branch?.code || "—"} · {event.actor ? userName(event.actor) : tr(locale, "System", "النظام")}</span>
+                  <span>{<SystemDateText value={event.occurredAt.toISOString()} timeZone={event.branch?.timezone || specimen.order.orderingBranch.timezone} />} · {event.branch?.code || "—"} · {event.actor ? userName(event.actor) : tr(locale, "System", "النظام")}</span>
                   <strong>{eventLabel(event.eventType)}{event.fromStatus || event.toStatus ? ` · ${event.fromStatus ? statusLabel(locale, event.fromStatus) : tr(locale, "New", "جديد")} → ${event.toStatus ? statusLabel(locale, event.toStatus) : "—"}` : ""}</strong>
                 </div>)}
               </div>
