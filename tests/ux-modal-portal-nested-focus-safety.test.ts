@@ -42,7 +42,7 @@ test("global modal overlay portals outside stacking contexts and traps keyboard 
   assert.match(s,/import \{ createPortal \} from "react-dom"/);
   assert.match(s,/useSyncExternalStore\(/);
   assert.match(s,/const getClientPortalRoot = \(\): HTMLElement \| null => document\.body/);
-  assert.match(s,/const getServerPortalRoot = \(\) => null/);
+  assert.match(s,/const getServerPortalRoot = \(\): HTMLElement \| null => null/);
   assert.doesNotMatch(s,/setPortalRoot\(/);
   assert.match(s,/return createPortal\(<div className="crud-modal-backdrop"/);
   assert.match(s,/acquireCrudModalScrollLock\(document\.body\)/);
