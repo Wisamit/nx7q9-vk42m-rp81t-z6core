@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { SystemDateText } from "@/components/system-date-text";
 
 type KindCount={entityType:string;total:number;imported:number;unresolved:number;skipped:number};
 type Finding={code:string;count:number;severity:"BLOCK"|"REVIEW"|"INFO"};
@@ -96,7 +97,7 @@ export function LegacyImportReconciliationLedger({locale}:{locale:"ar"|"en"}){
         <th>{tr("Reconciliation status","حالة المطابقة")}</th><th>{tr("Review","المراجعة")}</th>
       </tr></thead><tbody>{items.map(item=><tr key={item.id}>
         <td><strong>{item.sourceName}</strong><small>{item.sourceType}</small></td>
-        <td>{item.status}<small>{item.createdAt.slice(0,10)}</small></td>
+        <td>{item.status}<small><SystemDateText value={item.createdAt} /></small></td>
         <td>{item.total}</td><td>{item.imported}</td><td>{item.unresolved}</td><td>{item.skipped}</td>
         <td>{item.state==="BLOCKED"?tr("Blocked","محجوبة"):
           item.state==="REVIEW_REQUIRED"?tr("Needs review","تحتاج مراجعة"):tr("Recorded only","مسجّلة فقط")}</td>
