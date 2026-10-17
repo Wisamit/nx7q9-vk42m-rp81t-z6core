@@ -1,3 +1,4 @@
+import { SystemDateText } from "@/components/system-date-text";
 import Link from "next/link";
 import {requirePermission,permissionSet} from "@/lib/auth";
 import {prisma} from "@/lib/db";
@@ -39,7 +40,7 @@ export default async function RecallQualityFollowupPage({searchParams}:{
    orderBy:[{createdAt:"desc"},{id:"desc"}],
    take:200,
    select:{id:true,branchId:true,safetyEventId:true,createdAt:true,note:true,
-     branch:{select:{code:true,nameEn:true,nameAr:true}},
+     branch:{select:{code:true,nameEn:true,nameAr:true,timezone:true}},
      lot:{select:{id:true,lotNumber:true,safetyStatus:true,
        item:{select:{code:true,nameEn:true,nameAr:true}},
        safetyEvents:{where:{organizationId:org},orderBy:[{createdAt:"desc"},{id:"desc"}],
@@ -57,7 +58,7 @@ export default async function RecallQualityFollowupPage({searchParams}:{
      orderBy:[{createdAt:"desc"},{id:"desc"}],
      skip:(page-1)*SIZE,take:SIZE,
      select:{id:true,createdAt:true,lotId:true,branchId:true,safetyEventId:true,
-       branch:{select:{code:true,nameEn:true,nameAr:true}},
+       branch:{select:{code:true,nameEn:true,nameAr:true,timezone:true}},
        lot:{select:{lotNumber:true,safetyStatus:true,
          item:{select:{code:true,nameEn:true,nameAr:true}}}},
        nonconformance:{select:{id:true,caseNumber:true,title:true,status:true,severity:true,
@@ -105,7 +106,7 @@ export default async function RecallQualityFollowupPage({searchParams}:{
       "No actionable unlinked escalations found in recent records.",
       "لا توجد تصعيدات غير مرتبطة قابلة للمتابعة ضمن السجلات الحديثة.")}</td></tr>:
      pending.map(item=><tr key={item.id}>
-      <td>{item.createdAt.toISOString().slice(0,16).replace("T"," ")}</td>
+      <td>{<SystemDateText value={item.createdAt.toISOString()} timeZone={item.branch.timezone} />}</td>
       <td>{item.branch.code} · {local(item.branch)}</td>
       <td><strong>{item.lot.lotNumber}</strong> · {item.lot.item.code}
        <div className="table-subtext">{local(item.lot.item)}</div></td>
@@ -140,7 +141,7 @@ export default async function RecallQualityFollowupPage({searchParams}:{
     <tbody>{rows.length===0?<tr><td colSpan={8} className="empty-state">{tr(locale,
      "No linked recall investigations within your authorized branches.","لا توجد قضايا استدعاء مرتبطة ضمن الفروع المصرح بها.")}</td></tr>:
      rows.map(row=><tr key={row.id}>
-      <td>{row.createdAt.toISOString().slice(0,16).replace("T"," ")}</td>
+      <td>{<SystemDateText value={row.createdAt.toISOString()} timeZone={row.branch.timezone} />}</td>
       <td>{row.branch.code} · {local(row.branch)}</td>
       <td>{row.lot.lotNumber} · {row.lot.item.code} · {local(row.lot.item)}</td>
       <td><strong>{row.nonconformance.caseNumber}</strong>

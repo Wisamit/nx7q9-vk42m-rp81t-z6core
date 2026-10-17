@@ -1,3 +1,4 @@
+import { SystemDateText } from "@/components/system-date-text";
 import Link from "next/link";
 import { permissionSet, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
@@ -111,7 +112,7 @@ export default async function InventoryOperationsPage() {
       <div className="table-wrap"><table>
         <thead><tr><th>{tr(locale, "Time", "الوقت")}</th><th>{tr(locale, "Branch", "الفرع")}</th><th>{tr(locale, "Item", "الصنف")}</th><th>{tr(locale, "Lot", "التشغيلة")}</th><th>{tr(locale, "Type", "النوع")}</th><th>{tr(locale, "Quantity", "الكمية")}</th><th>{tr(locale, "Balance after", "الرصيد بعد الحركة")}</th><th>{tr(locale, "Actor", "المنفذ")}</th><th>{tr(locale, "Reference", "المرجع")}</th></tr></thead>
         <tbody>{movements.length === 0 ? <tr><td colSpan={9} className="empty-state">{tr(locale, "No stock movements yet.", "لا توجد حركات مخزون بعد.")}</td></tr> : movements.map(movement => <tr key={movement.id}>
-          <td>{movement.occurredAt.toISOString().replace("T"," ").slice(0,19)}</td>
+          <td>{<SystemDateText value={movement.occurredAt.toISOString()} timeZone={movement.branch.timezone} />}</td>
           <td>{movement.branch.code}</td>
           <td><strong>{movement.item.code}</strong><br/><small>{localizedName(movement.item)}</small></td>
           <td>{movement.lot?.lotNumber || "—"}</td>

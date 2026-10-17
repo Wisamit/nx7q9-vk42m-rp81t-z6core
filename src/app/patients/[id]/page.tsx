@@ -1,3 +1,4 @@
+import { SystemDateText } from "@/components/system-date-text";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { permissionSet, requirePermission } from "@/lib/auth";
@@ -142,7 +143,7 @@ export default async function PatientDetailPage({ params }: { params: Promise<{ 
         </Link>
       </p>
       {sourceMerge && <p className="muted">
-        {tr(locale, "Merged", "تم الدمج")} {sourceMerge.mergedAt.toISOString().replace("T", " ").slice(0, 19)}
+        {tr(locale, "Merged", "تم الدمج")} {<SystemDateText value={sourceMerge.mergedAt.toISOString()} />}
         {" · "}{tr(locale, "By", "بواسطة")} {locale === "ar" ? sourceMerge.mergedBy.displayNameAr || sourceMerge.mergedBy.displayNameEn : sourceMerge.mergedBy.displayNameEn}
         {" · "}{tr(locale, "Reason", "السبب")}: {sourceMerge.reason}
       </p>}
@@ -155,7 +156,7 @@ export default async function PatientDetailPage({ params }: { params: Promise<{ 
           <dt>{tr(locale, "Patient #", "رقم المريض")}</dt><dd>{patient.patientNumber}</dd>
           <dt>{tr(locale, "English name", "الاسم بالإنجليزية")}</dt><dd>{patient.fullNameEn}</dd>
           <dt>{tr(locale, "Arabic name", "الاسم بالعربية")}</dt><dd dir="rtl">{patient.fullNameAr || "—"}</dd>
-          <dt>{tr(locale, "Date of birth", "تاريخ الميلاد")}</dt><dd>{patient.dateOfBirth ? patient.dateOfBirth.toISOString().slice(0,10) : "—"}</dd>
+          <dt>{tr(locale, "Date of birth", "تاريخ الميلاد")}</dt><dd>{patient.dateOfBirth ? <SystemDateText value={patient.dateOfBirth.toISOString().slice(0,10)} kind="calendar" /> : "—"}</dd>
           <dt>{tr(locale, "Recorded age", "العمر المسجّل")}</dt><dd>{ageLabel}</dd>
           <dt>{tr(locale, "Sex", "الجنس")}</dt><dd>{sexLabel(locale, patient.sexAtBirth)}</dd>
           <dt>{tr(locale, "Phone", "الهاتف")}</dt><dd>{patient.phone || "—"}</dd>
@@ -242,7 +243,7 @@ export default async function PatientDetailPage({ params }: { params: Promise<{ 
       <div className="summary-list">{patient.mergedFrom.map(alias =>
         <div key={alias.id}>
           <span><Link className="table-link" href={"/patients/" + alias.id}>{alias.patientNumber} · {locale === "ar" ? alias.fullNameAr || alias.fullNameEn : alias.fullNameEn}</Link></span>
-          <strong>{alias.mergedAt ? alias.mergedAt.toISOString().slice(0,10) : "—"}</strong>
+          <strong>{alias.mergedAt ? <SystemDateText value={alias.mergedAt.toISOString()} kind="instant-date" /> : "—"}</strong>
         </div>
       )}</div>
     </section>}
@@ -282,7 +283,7 @@ export default async function PatientDetailPage({ params }: { params: Promise<{ 
       <div className="summary-list">{duplicateCandidates.map(candidate =>
         <div key={candidate.id}>
           <span><Link className="table-link" href={"/patients/" + candidate.id}>{candidate.patientNumber} · {candidate.fullNameEn}</Link></span>
-          <strong>{candidate.dateOfBirth ? candidate.dateOfBirth.toISOString().slice(0,10) : tr(locale, "DOB —", "الميلاد —")} · {candidate.phone || tr(locale, "Phone —", "الهاتف —")}</strong>
+          <strong>{candidate.dateOfBirth ? <SystemDateText value={candidate.dateOfBirth.toISOString().slice(0,10)} kind="calendar" /> : tr(locale, "DOB —", "الميلاد —")} · {candidate.phone || tr(locale, "Phone —", "الهاتف —")}</strong>
         </div>
       )}</div>
     </section>}
@@ -297,7 +298,7 @@ export default async function PatientDetailPage({ params }: { params: Promise<{ 
             </Link>
             <small className="table-subtext">{event.reason}</small>
           </span>
-          <strong>{event.mergedAt.toISOString().replace("T"," ").slice(0,19)} · {locale === "ar" ? event.mergedBy.displayNameAr || event.mergedBy.displayNameEn : event.mergedBy.displayNameEn}</strong>
+          <strong>{<SystemDateText value={event.mergedAt.toISOString()} />} · {locale === "ar" ? event.mergedBy.displayNameAr || event.mergedBy.displayNameEn : event.mergedBy.displayNameEn}</strong>
         </div>
       )}</div>
     </section>}

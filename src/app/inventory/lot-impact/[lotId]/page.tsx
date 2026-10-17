@@ -1,3 +1,4 @@
+import { SystemDateText } from "@/components/system-date-text";
 import Link from "next/link";
 import {notFound} from "next/navigation";
 import {requirePermission,permissionSet} from "@/lib/auth";
@@ -53,7 +54,7 @@ export default async function LotImpactPage({params,searchParams}:{
    ]),
    prisma.stockMovement.findMany({where:movementFilter,
      orderBy:[{occurredAt:"desc"},{id:"desc"}],skip:(page-1)*PAGE_SIZE,take:PAGE_SIZE,
-     include:{branch:{select:{code:true}},actor:{select:{displayNameEn:true,displayNameAr:true}}}}),
+     include:{branch:{select:{code:true,timezone:true}},actor:{select:{displayNameEn:true,displayNameAr:true}}}}),
    prisma.inventoryTransferItem.findMany({where:transferFilter,
      include:{transfer:{select:{transferNumber:true,status:true,sourceBranchId:true,
        destinationBranchId:true,requestedAt:true,
@@ -61,7 +62,7 @@ export default async function LotImpactPage({params,searchParams}:{
      orderBy:[{createdAt:"desc"},{id:"desc"}],skip:(page-1)*PAGE_SIZE,take:PAGE_SIZE}),
    prisma.qcResult.findMany({where:{target:{qcLot:{inventoryLotId:lotId,organizationId}},
       run:{organizationId,branchId:{in:allowedBranches}}},
-     include:{run:{select:{runAt:true,status:true,branch:{select:{code:true}}}},
+     include:{run:{select:{runAt:true,status:true,branch:{select:{code:true,timezone:true}}}},
        target:{select:{id:true}}},
      orderBy:[{createdAt:"desc"},{id:"desc"}],skip:(page-1)*PAGE_SIZE,take:PAGE_SIZE}),
  ]);
@@ -116,7 +117,7 @@ const maxPages=Math.max(1,Math.ceil(Math.max(...counts)/PAGE_SIZE));
     <p>{tr(locale,
       "Read-only, branch-scoped evidence. Movement and QC links do not prove which patient or released test used this lot. A qualified quality investigation must verify clinical impact before notifications or report amendments.",
       "أدلة للقراءة فقط ضمن الفروع المصرح بها. حركات المخزون وارتباطات ضبط الجودة لا تثبت أي مريض أو نتيجة استخدمت التشغيلة. يجب على مسؤول الجودة التحقق من الأثر السريري قبل أي إخطار أو تعديل تقرير.")}</p>
-    <p>{tr(locale,"Last safety decision","آخر قرار سلامة")}: {lot.safetyEvents[0]?.nextStatus||"—"} · {lot.safetyEvents[0]?.createdAt.toISOString().slice(0,19)||"—"}</p>
+    <p>{tr(locale,"Last safety decision","آخر قرار سلامة")}: {lot.safetyEvents[0]?.nextStatus||"—"} · {lot.safetyEvents[0]?.createdAt ? <SystemDateText value={lot.safetyEvents[0].createdAt.toISOString()} /> : "—"}</p>
     <p>{tr(locale,"Visible evidence counts","عدد الأدلة الظاهرة")}: {movementTotal} {tr(locale,"movements","حركة")} · {transferTotal} {tr(locale,"transfers","تحويل")} · {qcTotal} QC</p>
   </section>
   <InventoryLotBranchResponse lotId={lotId} safetyEventId={held?latestSafetyEvent:null}
@@ -134,7 +135,7 @@ const maxPages=Math.max(1,Math.ceil(Math.max(...counts)/PAGE_SIZE));
   </section>
   <section className="table-card detail-section"><h2>{tr(locale,"Historical movements","الحركات التاريخية")} ({movementTotal})</h2>
    <div className="table-wrap"><table><thead><tr><th>{tr(locale,"Time","الوقت")}</th><th>{tr(locale,"Branch","الفرع")}</th><th>{tr(locale,"Type","النوع")}</th><th>{tr(locale,"Quantity","الكمية")}</th><th>{tr(locale,"Source reference","مرجع المصدر")}</th></tr></thead>
-   <tbody>{movements.map(x=><tr key={x.id}><td>{x.occurredAt.toISOString().slice(0,19)}</td><td>{x.branch.code}</td><td>{x.movementType}</td><td>{x.quantity.toString()}</td><td>{x.referenceType||"—"} {x.referenceId||""}</td></tr>)}</tbody></table></div>
+   <tbody>{movements.map(x=><tr key={x.id}><td>{<SystemDateText value={x.occurredAt.toISOString()} timeZone={x.branch.timezone} />}</td><td>{x.branch.code}</td><td>{x.movementType}</td><td>{x.quantity.toString()}</td><td>{x.referenceType||"—"} {x.referenceId||""}</td></tr>)}</tbody></table></div>
   </section>
   <section className="table-card detail-section"><h2>{tr(locale,"Transfer custody","سجل نقل التشغيلة")} ({transferTotal})</h2>
    <div className="table-wrap"><table><thead><tr><th>{tr(locale,"Number","الرقم")}</th><th>{tr(locale,"From / to","من / إلى")}</th><th>{tr(locale,"Status","الحالة")}</th><th>{tr(locale,"Dispatched","المرسل")}</th><th>{tr(locale,"Received","المستلم")}</th></tr></thead><tbody>
@@ -143,7 +144,7 @@ const maxPages=Math.max(1,Math.ceil(Math.max(...counts)/PAGE_SIZE));
   </section>
   <section className="table-card detail-section"><h2>{tr(locale,"Linked quality-control results","نتائج ضبط الجودة المرتبطة")} ({qcTotal})</h2>
    <div className="table-wrap"><table><thead><tr><th>{tr(locale,"Run time","وقت التشغيل")}</th><th>{tr(locale,"Branch","الفرع")}</th><th>{tr(locale,"QC status","حالة QC")}</th><th>{tr(locale,"Result","النتيجة")}</th></tr></thead><tbody>
-   {qcResults.map(x=><tr key={x.id}><td>{x.run.runAt.toISOString().slice(0,19)}</td><td>{x.run.branch.code}</td><td>{x.status}</td><td>{x.observedValue.toString()}</td></tr>)}
+   {qcResults.map(x=><tr key={x.id}><td>{<SystemDateText value={x.run.runAt.toISOString()} timeZone={x.run.branch.timezone} />}</td><td>{x.run.branch.code}</td><td>{x.status}</td><td>{x.observedValue.toString()}</td></tr>)}
    </tbody></table></div>
   </section>
   <nav className="inline-actions">

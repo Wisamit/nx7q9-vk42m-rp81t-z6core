@@ -1,3 +1,4 @@
+import { SystemDateText } from "@/components/system-date-text";
 import Link from "next/link";
 import { permissionSet, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
@@ -89,7 +90,7 @@ export default async function PatientsPage({
               patients.map(patient => <tr key={patient.id}>
                 <td><Link className="table-link" href={`/patients/${patient.id}`}><strong>{patient.patientNumber}</strong></Link></td>
                 <td><Link className="table-link" href={`/patients/${patient.id}`}>{patient.fullNameEn}</Link>{patient.fullNameAr ? <><br/><small dir="rtl">{patient.fullNameAr}</small></> : null}</td>
-                <td>{patient.dateOfBirth ? patient.dateOfBirth.toISOString().slice(0,10) : "—"}</td>
+                <td>{patient.dateOfBirth ? <SystemDateText value={patient.dateOfBirth.toISOString().slice(0,10)} kind="calendar" /> : "—"}</td>
                 <td>{sexLabel(locale, patient.sexAtBirth)}</td>
                 <td>{patient.phone || "—"}</td>
                 <td>{patient.identifiers.find(i => i.identifierType === "NATIONAL_ID")?.value || "—"}</td>

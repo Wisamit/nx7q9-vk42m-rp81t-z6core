@@ -1,3 +1,4 @@
+import { SystemDateText } from "@/components/system-date-text";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { canAccessDepartment, permissionSet, requirePermission } from "@/lib/auth";
@@ -96,7 +97,7 @@ export default async function MicrobiologyCasePage({ params }: { params: Promise
         <h2>{tr(locale, "Patient & Order", "المريض والطلب")}</h2>
         <dl>
           <dt>{tr(locale, "Patient", "المريض")}</dt><dd>{locale === "ar" ? microbiologyCase.orderItem.order.patient.fullNameAr || microbiologyCase.orderItem.order.patient.fullNameEn : microbiologyCase.orderItem.order.patient.fullNameEn}</dd>
-          <dt>{tr(locale, "Date of birth", "تاريخ الميلاد")}</dt><dd>{microbiologyCase.orderItem.order.patientDobSnapshot?.toISOString().slice(0,10) || "—"}</dd>
+          <dt>{tr(locale, "Date of birth", "تاريخ الميلاد")}</dt><dd>{microbiologyCase.orderItem.order.patientDobSnapshot ? <SystemDateText value={microbiologyCase.orderItem.order.patientDobSnapshot.toISOString().slice(0,10)} kind="calendar" /> : "—"}</dd>
           <dt>{tr(locale, "Sex at birth", "الجنس عند الولادة")}</dt><dd>{sexLabel(locale, microbiologyCase.orderItem.order.patientSexSnapshot || "UNKNOWN")}</dd>
           <dt>{tr(locale, "Accession", "رقم الطلب")}</dt><dd>{microbiologyCase.orderItem.order.accessionNumber}</dd>
           <dt>{tr(locale, "Ordering branch", "فرع الطلب")}</dt><dd>{microbiologyCase.orderItem.order.orderingBranch.nameEn}</dd>
@@ -141,7 +142,7 @@ export default async function MicrobiologyCasePage({ params }: { params: Promise
         <div className="table-wrap"><table>
           <thead><tr><th>{tr(locale, "Time", "الوقت")}</th><th>{tr(locale, "Type", "النوع")}</th><th>{tr(locale, "Observation", "الملاحظة")}</th><th>{tr(locale, "Entered by", "أُدخل بواسطة")}</th></tr></thead>
           <tbody>{microbiologyCase.observations.length === 0 ? <tr><td colSpan={4} className="empty-state">{tr(locale, "No culture observations recorded.", "لا توجد ملاحظات زرع مسجلة.")}</td></tr> : microbiologyCase.observations.map(item => <tr key={item.id}>
-            <td>{item.observedAt.toISOString().replace("T"," ").slice(0,19)}</td>
+            <td>{<SystemDateText value={item.observedAt.toISOString()} timeZone={microbiologyCase.performingBranch.timezone} />}</td>
             <td>{item.observationType}</td>
             <td>{item.observationText}</td>
             <td>{item.enteredBy.displayNameEn}</td>
@@ -199,7 +200,7 @@ export default async function MicrobiologyCasePage({ params }: { params: Promise
           <p className="muted">{isolate.quantityText || tr(locale, "Quantity not specified", "الكمية غير محددة")}{isolate.colonyNotes ? " · " + isolate.colonyNotes : ""}</p>
           {isolate.susceptibilityTests.length === 0 ? <p className="empty-state">{tr(locale, "No susceptibility panel recorded.", "لا توجد لوحة حساسية مسجلة.")}</p> :
             isolate.susceptibilityTests.map(test => <div className="table-wrap" key={test.id}>
-              <p><strong>{test.method || tr(locale, "Method not specified", "الطريقة غير محددة")}</strong> · {test.testedAt.toISOString().replace("T"," ").slice(0,19)} · {test.enteredBy.displayNameEn}</p>
+              <p><strong>{test.method || tr(locale, "Method not specified", "الطريقة غير محددة")}</strong> · {<SystemDateText value={test.testedAt.toISOString()} timeZone={microbiologyCase.performingBranch.timezone} />} · {test.enteredBy.displayNameEn}</p>
               <table>
                 <thead><tr><th>{tr(locale, "Antibiotic", "المضاد الحيوي")}</th><th>S/I/R</th><th>MIC</th><th>{tr(locale, "Zone", "القطر")}</th><th>{tr(locale, "Breakpoint snapshot", "حد التفسير المحفوظ")}</th></tr></thead>
                 <tbody>{test.results.map(result => <tr key={result.id}>
