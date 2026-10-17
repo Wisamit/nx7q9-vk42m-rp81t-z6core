@@ -13,6 +13,7 @@ type ReviewFileUploadDialogProps = {
   busy: boolean;
   error?: string;
   onStage: (file: File) => Promise<boolean>;
+  onResetError: () => void;
 };
 
 /**
@@ -20,10 +21,11 @@ type ReviewFileUploadDialogProps = {
  * confirm. This does not approve or activate a clinical/financial master.
  */
 export function ReviewFileUploadDialog({
-  locale, title, description, triggerLabel, accept, fileHint, busy, error, onStage,
+  locale, title, description, triggerLabel, accept, fileHint, busy, error, onStage, onResetError,
 }: ReviewFileUploadDialogProps) {
   const [open, setOpen] = useState(false);
   const [file, setFile] = useState<File | null>(null);
+  const [submissionError, setSubmissionError] = useState("");
   const submitting = useRef(false);
   const fieldId = useId();
   const ar = locale === "ar";
@@ -35,12 +37,15 @@ export function ReviewFileUploadDialog({
   async function confirm() {
     if (!file || busy || submitting.current) return;
     submitting.current = true;
+    setSubmissionError("");
     try {
       const succeeded = await onStage(file);
       if (succeeded) {
         setOpen(false);
         setFile(null);
       }
+    } catch {
+      setSubmissionError(ar ? "تعذر تجهيز المراجعة. أعد المحاولة." : "Could not stage the review. Try again.");
     } finally {
       submitting.current = false;
     }
@@ -48,22 +53,22 @@ export function ReviewFileUploadDialog({
 
   return <>
     <button type="button" className="secondary-button" disabled={busy}
-      onClick={() => { setFile(null); setOpen(true); }}>
+      onClick={() => { setFile(null); setSubmissionError(""); onResetError(); setOpen(true); }}>
       {triggerLabel}
     </button>
     <CrudModal open={open} onClose={close} size="compact"
-      protectUnsavedChanges={false} title={title} description={description}>
+      protectUnsavedChanges title={title} description={description}>
       <div className="form-stack">
         <label htmlFor={fieldId}>
           {ar ? "اختر ملف المراجعة" : "Choose a review source file"}
         </label>
         <input id={fieldId} type="file" accept={accept} disabled={busy}
-          onChange={event => setFile(event.currentTarget.files?.[0] ?? null)} />
+          onChange={event => { setFile(event.currentTarget.files?.[0] ?? null); setSubmissionError(""); onResetError(); }} />
         <p className="muted">{fileHint}</p>
         <p className="muted">{ar
           ? "التجهيز لا يعتمد الأسعار أو الحدود المرجعية ولا ينشر نتائج سريرية. سيتم مراجعة البيانات أولاً."
           : "Staging does not approve prices or reference intervals or release clinical results. All source data must be reviewed."}</p>
-        {error && <p role="alert" className="form-error">{error}</p>}
+        {(error || submissionError) && <p role="alert" className="form-error">{error || submissionError}</p>}
         <div className="crud-modal-actions">
           <button type="button" className="secondary-button" disabled={busy} onClick={close}>
             {ar ? "إلغاء" : "Cancel"}
