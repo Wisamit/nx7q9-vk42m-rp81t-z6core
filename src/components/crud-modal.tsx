@@ -164,8 +164,8 @@ function OpenCrudModal({
       aria-modal="true"
       aria-labelledby={headingId}
       aria-describedby={description ? descriptionId : undefined}
-      onInputCapture={() => { changedRef.current = true; }}
-      onChangeCapture={() => { changedRef.current = true; }}
+      onInputCapture={event => { if (!(event.target as Element).closest("[data-modal-ui-only]")) changedRef.current = true; }}
+      onChangeCapture={event => { if (!(event.target as Element).closest("[data-modal-ui-only]")) changedRef.current = true; }}
     >
       <header className="crud-modal-header">
         <div>
