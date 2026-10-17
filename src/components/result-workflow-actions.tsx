@@ -1,4 +1,5 @@
 "use client";
+import { SystemDateText } from "@/components/system-date-text";
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -49,6 +50,7 @@ type ValidationSnapshot = {
 export function ResultWorkflowActions({
   resultId,
   performingBranchId,
+  performingBranchTimezone,
   resultStatus,
   validationStage,
   validationPolicySnapshot,
@@ -71,6 +73,7 @@ export function ResultWorkflowActions({
 }: {
   resultId: string;
   performingBranchId: string;
+  performingBranchTimezone: string;
   resultStatus: string;
   validationStage: string;
   validationPolicySnapshot: unknown;
@@ -444,9 +447,9 @@ export function ResultWorkflowActions({
       {snapshot?.requiresMedicalValidation && <div><span>{tr("Medical validator", "المعتمد الطبي")}</span><strong>{medicalValidatorLabel}</strong></div>}
       <div><span>{tr("Critical values", "القيم الحرجة")}</span><strong>{criticalCount}</strong></div>
       <div><span>{tr("Critical communication", "التواصل بشأن النتيجة الحرجة")}</span><strong>{criticalCount === 0 ? tr("Not required", "غير مطلوب") : criticalStatusLabel(criticalEventStatus)}</strong></div>
-      {criticalCount > 0 && <div><span>{tr("Acknowledgement due", "موعد الإقرار")}</span><strong>{criticalAcknowledgementDueAt ? criticalAcknowledgementDueAt.replace("T"," ").slice(0,19) : tr("No policy", "لا توجد سياسة")}</strong></div>}
+      {criticalCount > 0 && <div><span>{tr("Acknowledgement due", "موعد الإقرار")}</span><strong>{criticalAcknowledgementDueAt ? <SystemDateText value={criticalAcknowledgementDueAt} timeZone={performingBranchTimezone} /> : tr("No policy", "لا توجد سياسة")}</strong></div>}
       {criticalCount > 0 && <div><span>{tr("Escalation level", "مستوى التصعيد")}</span><strong>{criticalEscalationLevel}{criticalMaxEscalationLevel !== null ? " / " + criticalMaxEscalationLevel : ""}</strong></div>}
-      {criticalCount > 0 && <div><span>{tr("Next escalation due", "موعد التصعيد التالي")}</span><strong>{criticalNextEscalationDueAt ? criticalNextEscalationDueAt.replace("T"," ").slice(0,19) : "—"}</strong></div>}
+      {criticalCount > 0 && <div><span>{tr("Next escalation due", "موعد التصعيد التالي")}</span><strong>{criticalNextEscalationDueAt ? <SystemDateText value={criticalNextEscalationDueAt} timeZone={performingBranchTimezone} /> : "—"}</strong></div>}
     </div>
 
     <div className="result-actions">
@@ -533,7 +536,7 @@ export function ResultWorkflowActions({
       <summary>{tr("Validation history", "سجل التحقق")} ({validationReviews.length})</summary>
       <div className="summary-list">
         {validationReviews.map(review => <div key={review.id}>
-          <span>{review.reviewedAt.replace("T"," ").slice(0,19)} · {review.automated ? tr("Automated", "آلي") : (locale === "ar" ? review.reviewerNameAr || review.reviewerNameEn : review.reviewerNameEn) || "—"}</span>
+          <span>{<SystemDateText value={review.reviewedAt} timeZone={performingBranchTimezone} />} · {review.automated ? tr("Automated", "آلي") : (locale === "ar" ? review.reviewerNameAr || review.reviewerNameEn : review.reviewerNameEn) || "—"}</span>
           <strong>{reviewStageLabel(review.stage)} · {reviewOutcomeLabel(review.outcome)}{review.notes ? " · " + review.notes : ""}</strong>
         </div>)}
       </div>
@@ -543,7 +546,7 @@ export function ResultWorkflowActions({
       <summary>{tr("Critical communication history", "سجل التواصل بشأن النتائج الحرجة")} ({communications.length})</summary>
       <div className="summary-list">
         {communications.map(item => <div key={item.id}>
-          <span>{item.communicatedAt.replace("T"," ").slice(0,19)} · {item.communicatedBy} · {methodLabel(item.method)}</span>
+          <span>{<SystemDateText value={item.communicatedAt} timeZone={performingBranchTimezone} />} · {item.communicatedBy} · {methodLabel(item.method)}</span>
           <strong>{outcomeLabel(item.outcome)} · {item.recipientName}{item.recipientRole ? " (" + item.recipientRole + ")" : ""}{item.readBackConfirmed ? " · " + tr("read-back", "إعادة قراءة") : ""}</strong>
         </div>)}
       </div>

@@ -1,3 +1,4 @@
+import { SystemDateText } from "@/components/system-date-text";
 import { Fragment } from "react";
 import Link from "next/link";
 import Image from "next/image";
@@ -571,7 +572,7 @@ export default async function DiagnosticReportPage({ params }: { params: Promise
 
     {latest.deliveries.length > 0 && <section className="table-card report-history no-print">
       <div className="table-toolbar"><h2>{tr(locale, "Delivery History", "سجل التسليم")}</h2><span>{latest.deliveries.length} {tr(locale, "event(s)", "حدث")}</span></div>
-      <div className="table-wrap"><table><thead><tr><th>{tr(locale, "Time", "الوقت")}</th><th>{tr(locale, "Channel", "القناة")}</th><th>{tr(locale, "Status", "الحالة")}</th><th>{tr(locale, "Recipient", "المستلم")}</th><th>{tr(locale, "User", "المستخدم")}</th></tr></thead><tbody>{latest.deliveries.map(event => <tr key={event.id}><td>{event.occurredAt.toISOString().replace("T"," ").slice(0,19)}</td><td>{isStaffHandoverEvent(event.details)
+      <div className="table-wrap"><table><thead><tr><th>{tr(locale, "Time", "الوقت")}</th><th>{tr(locale, "Channel", "القناة")}</th><th>{tr(locale, "Status", "الحالة")}</th><th>{tr(locale, "Recipient", "المستلم")}</th><th>{tr(locale, "User", "المستخدم")}</th></tr></thead><tbody>{latest.deliveries.map(event => <tr key={event.id}><td>{<SystemDateText value={event.occurredAt.toISOString()} />}</td><td>{isStaffHandoverEvent(event.details)
     ? tr(locale, "IN-PERSON / STAFF ATTESTED", "تسليم حضوري / إقرار موظف") : event.channel}</td><td>{isStaffHandoverEvent(event.details)
     ? tr(locale, "STAFF ATTESTATION RECORDED (not independently acknowledged)",
       "إقرار موظف مسجل (دون تأكيد مستقل من المريض)") : event.status}</td><td>{event.recipient && ["EMAIL","SMS","WHATSAPP"].includes(event.channel)
@@ -588,7 +589,7 @@ export default async function DiagnosticReportPage({ params }: { params: Promise
             <td><strong>{version.version}</strong></td>
             <td>{statusLabel(locale, version.status)}</td>
             <td>{version.reportTemplateVersionId ? tr(locale, "Versioned template", "قالب بإصدار محفوظ") : tr(locale, "Legacy/default layout", "تخطيط قديم / افتراضي")}</td>
-            <td>{version.issuedAt.toISOString().replace("T"," ").slice(0,19)}</td>
+            <td>{<SystemDateText value={version.issuedAt.toISOString()} timeZone={version.branch.timezone} />}</td>
             <td>{version.issuedBy.displayNameEn}</td>
             <td>{version.branch.nameEn}</td>
             <td>{version.amendmentReason || "—"}</td>

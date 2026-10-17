@@ -61,6 +61,8 @@ test("Stage 112: branch-local promise is validated before posting and saved with
   assert.match(ui,/name="promisedReportDeliveryLocal"/);
   assert.match(ui,/type="datetime-local"/);
   assert.match(details,/order.promisedReportDeliveryTimezone/);
-  assert.match(details,/order.promisedReportDeliveryAtUtc\?\.toISOString\(\)/);
+  assert.match(details,/order\.promisedReportDeliveryAtUtc\.toISOString\(\)/);
+  assert.match(details,/timeZone="UTC"/);
+  assert.match(details,/order\.promisedReportDeliveryLocal/);
   assert.doesNotMatch(api,/promisedReportDeliveryLocal:\s*.*tatDueAt/);
 });

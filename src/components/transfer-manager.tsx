@@ -1,4 +1,5 @@
 "use client";
+import { SystemDateText } from "@/components/system-date-text";
 
 import { FormEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -291,8 +292,8 @@ export function TransferManager({
               <div><span>{tr("Transport","النقل")}</span><strong>{manifest.transportMode || "—"}</strong></div>
               <div><span>{tr("Courier","شركة النقل / السائق")}</span><strong>{manifest.courierName || "—"}</strong></div>
               <div><span>{tr("Packages","الطرود")}</span><strong>{manifest.packageCount || "—"}</strong></div>
-              <div><span>{tr("Dispatched","تم الإرسال")}</span><strong>{manifest.dispatchedAt ? manifest.dispatchedAt.replace("T"," ").slice(0,19) : "—"}</strong></div>
-              <div><span>{tr("Received","تم الاستلام")}</span><strong>{manifest.receivedAt ? manifest.receivedAt.replace("T"," ").slice(0,19) : "—"}</strong></div>
+              <div><span>{tr("Dispatched","تم الإرسال")}</span><strong>{manifest.dispatchedAt ? <SystemDateText value={manifest.dispatchedAt} /> : "—"}</strong></div>
+              <div><span>{tr("Received","تم الاستلام")}</span><strong>{manifest.receivedAt ? <SystemDateText value={manifest.receivedAt} /> : "—"}</strong></div>
             </div>
 
             <div className="transfer-items">
