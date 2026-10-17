@@ -152,7 +152,10 @@ export function SendOutManager({
       });
       const body = await response.json().catch(() => ({})) as { error?: string };
       if (!response.ok) {
-        setMessage(body.error || tr("Could not create send-out referral.", "تعذر إنشاء الإحالة الخارجية."));
+        setMessage(body.error === "invalid_or_ambiguous_branch_local_time"
+          ? tr("Enter a valid expected date and time for the selected branch. Clock times skipped or repeated during daylight saving are not accepted.",
+            "أدخل تاريخاً ووقتاً صالحين حسب توقيت الفرع المحدد. لا تُقبل أوقات الساعة غير الموجودة أو المكررة عند تغيير التوقيت الصيفي.")
+          : body.error || tr("Could not create send-out referral.", "تعذر إنشاء الإحالة الخارجية."));
         return;
       }
       setUiEditor("");
