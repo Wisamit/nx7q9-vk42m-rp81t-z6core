@@ -48,6 +48,7 @@ export function LegacyImportBatches({batches,locale}:{batches:Batch[];locale:"ar
    </div>
    <div className="import-actions">
     <ReviewFileUploadDialog locale={locale} busy={busy} error={message}
+        onResetError={() => setMessage("")}
       title={tr("Stage legacy catalog source", "تجهيز مصدر الدليل القديم")}
       description={tr("Upload only a cleaned JSON master-data export. No raw MDB or patient records.", "ارفع ملف JSON منظّف للبيانات الرئيسية فقط، دون ملفات MDB الأصلية أو بيانات المرضى.")}
       triggerLabel={tr("Stage MDB Export", "تجهيز تصدير MDB")}
