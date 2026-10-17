@@ -72,7 +72,7 @@ test("browser session cookie and local storage must be isolated to the exact syn
   assert.match(r2.stderr,/localStorage origin must match staging origin/);
 
   const filenameState = valid();
-  (filenameState.profiles.portal_en as unknown) = "/tmp/real-browser-state.json";
+  (filenameState.profiles as Record<string, unknown>).portal_en = "/tmp/real-browser-state.json";
   const r3 = preflight(filenameState);
   assert.notEqual(r3.status,0);
   assert.match(r3.stderr,/inline storageState object/);
