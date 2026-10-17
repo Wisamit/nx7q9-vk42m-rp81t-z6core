@@ -2,33 +2,45 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { CrudModal } from "@/components/crud-modal";
+import { SystemDateText } from "@/components/system-date-text";
+import { SystemDateTimeField } from "@/components/system-date-time-field";
+import { parseBranchExpectedInstant } from "@/lib/branch-wall-clock";
 
 type SelectOption = {id:string;label:string};
 type Grant = {id:string;doctor:string;patient:string;orders:boolean;reports:boolean;requestOrders:boolean;
  from:string;to:string|null;status:string;createdBy:string;reason:string;revokedAt:string|null;revokeReason:string|null};
 export function DoctorPortalAccessManager({
- locale,doctors,patients,grants,
-}:{locale:"ar"|"en";doctors:SelectOption[];patients:SelectOption[];grants:Grant[]}) {
+ locale,doctors,patients,grants,branchTimeZone,
+}:{locale:"ar"|"en";doctors:SelectOption[];patients:SelectOption[];grants:Grant[];branchTimeZone:string}) {
  const t=(en:string,ar:string)=>locale==="ar"?ar:en;
  const router=useRouter();
  const [busy,setBusy]=useState(false),[message,setMessage]=useState("");
  const [doctor,setDoctor]=useState(doctors[0]?.id??""),[patient,setPatient]=useState(patients[0]?.id??"");
  const [orders,setOrders]=useState(true),[reports,setReports]=useState(false);
  const [requestOrders,setRequestOrders]=useState(false);
- const [from,setFrom]=useState(""),[to,setTo]=useState(""),[reason,setReason]=useState("");
+ const [reason,setReason]=useState("");
  const [after,setAfter]=useState("");
  const [grantOpen,setGrantOpen]=useState(false);
  const [revokeId,setRevokeId]=useState<string|null>(null);
  const [revokeReason,setRevokeReason]=useState("");
  async function grant(e:React.FormEvent<HTMLFormElement>) {
    e.preventDefault();if(busy||!doctor||!patient)return;
+   const fields = new FormData(e.currentTarget);
+   const from = String(fields.get("effectiveFrom") || "");
+   const to = String(fields.get("effectiveTo") || "");
+   const effectiveFrom = from ? parseBranchExpectedInstant(from, branchTimeZone) : null;
+   const effectiveTo = to ? parseBranchExpectedInstant(to, branchTimeZone) : null;
+   if ((from && !effectiveFrom) || (to && !effectiveTo)) {
+     setMessage(t("Invalid or ambiguous local time for the selected branch.", "الوقت المحلي غير صالح أو ملتبس بحسب توقيت الفرع المحدد."));
+     return;
+   }
    setBusy(true);setMessage("");
    try {
     const r=await fetch("/api/doctor-portal-access",{method:"POST",headers:{"Content-Type":"application/json"},
       body:JSON.stringify({referrerId:doctor,patientId:patient,canViewOrders:orders,canViewReports:reports,
        canRequestOrders:requestOrders,
-       effectiveFrom:from?new Date(from).toISOString():undefined,
-       effectiveTo:to?new Date(to).toISOString():undefined,reason})});
+       effectiveFrom:effectiveFrom?.toISOString(),
+       effectiveTo:effectiveTo?.toISOString(),reason})});
     const data=await r.json().catch(()=>({})) as {error?:string};
     if(!r.ok)setMessage(t("Grant failed: ","فشل منح الصلاحية: ")+(data.error??"unknown"));
     else{setMessage(t("Access granted and audited.","تم منح الصلاحية وتوثيقها."));setReason("");setGrantOpen(false);router.refresh();}
@@ -81,9 +93,9 @@ export function DoctorPortalAccessManager({
       <label><input type="checkbox" checked={requestOrders} onChange={e=>setRequestOrders(e.target.checked)}/>
        {t("Allow new electronic test requisitions", "السماح بطلب فحوصات إلكترونيًا")}</label>
       <label>{t("Effective from (leave blank for now)","يبدأ السريان (اترك فارغًا للآن)")}
-       <input type="datetime-local" value={from} onChange={e=>setFrom(e.target.value)}/></label>
+       <SystemDateTimeField name="effectiveFrom" /></label>
       <label>{t("Effective until (optional)","ينتهي السريان (اختياري)")}
-       <input type="datetime-local" value={to} onChange={e=>setTo(e.target.value)}/></label>
+       <SystemDateTimeField name="effectiveTo" /></label>
       <label>{t("Authorization reason (10–1000 chars)","سبب التفويض (10–1000 محرف)")}
        <textarea required minLength={10} maxLength={1000} value={reason} onChange={e=>setReason(e.target.value)}/></label>
       <button className="primary-button" disabled={busy||!doctor||!patient||(!orders&&!reports&&!requestOrders)}>
@@ -98,13 +110,13 @@ export function DoctorPortalAccessManager({
    {message&&<p role="status">{message}</p>}
    <div className="table-wrap"><table><thead><tr>
      <th>{t("Doctor / patient","الطبيب / المريض")}</th>
-     <th>{t("Allowed","الصلاحيات")}</th><th>{t("Dates / status","السريان / الحالة")}</th>
+     <th>{t("Allowed","الصلاحيات")}</th><th>{t("Dates / status","السريان / الحالة")}<small className="table-subtext">{branchTimeZone}</small></th>
      <th>{t("Actions","الإجراءات")}</th>
     </tr></thead><tbody>{visible.map(g=><tr key={g.id}>
      <td>{g.doctor}<small className="table-subtext">{g.patient}</small>
       <small className="table-subtext">{g.reason}</small></td>
      <td>{g.orders?t("Orders ","طلبات "):""}{g.reports?t("Reports ","تقارير "):""}{g.requestOrders?t("Electronic requisitions","طلبات إلكترونية"):""}</td>
-     <td>{g.status}<small className="table-subtext">{g.from} — {g.to||"∞"}</small>
+     <td>{g.status}<small className="table-subtext"><SystemDateText value={g.from} timeZone={branchTimeZone} /> — {g.to ? <SystemDateText value={g.to} timeZone={branchTimeZone} /> : "∞"}</small>
       {g.revokeReason&&<small className="table-subtext">{g.revokeReason}</small>}</td>
      <td>{g.status==="ACTIVE"&&<button className="secondary-button" type="button"
        disabled={busy} onClick={()=>{setMessage("");setRevokeReason("");setRevokeId(g.id);}}>{t("Revoke","إلغاء")}</button>}</td>
