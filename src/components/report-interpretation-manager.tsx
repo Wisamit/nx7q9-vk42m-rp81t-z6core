@@ -1,4 +1,5 @@
 "use client";
+import { SystemDateText } from "@/components/system-date-text";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -129,7 +130,7 @@ export function ReportInterpretationManager({orderId,accession,locale,notes,
       <h2>{tr("Pending independent clinical decision","قرار سريري مستقل معلّق")} · v{latest.revisionNumber}</h2>
       <p dir="ltr" style={{whiteSpace:"pre-wrap"}}>{latest.textEn}</p>
       <p dir="rtl" style={{whiteSpace:"pre-wrap"}}>{latest.textAr}</p>
-      <small>{tr("Created by","أنشئ بواسطة")}: {latest.createdBy} · {latest.createdAt}</small>
+      <small>{tr("Created by","أنشئ بواسطة")}: {latest.createdBy} · {<SystemDateText value={latest.createdAt} />}</small>
       {canApprove && latest.createdBy!==currentUserId ? <>
         <div className="inline-actions">
           <button disabled={busy} className="primary-button" type="button"
