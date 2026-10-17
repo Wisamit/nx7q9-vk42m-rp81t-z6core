@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { liveSafeMasterCommitActorWhere } from "@/lib/catalog-import-commit-actor";
 import {
   isSafeMasterTestRow, registerPanelAlias, resolvedPanelMemberships,
 } from "@/lib/catalog-panel-membership";
@@ -31,7 +32,12 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
   if (safeRows.length === 0) {
     return NextResponse.json({ error: "no_pending_safe_master_rows" }, { status: 409 });
   }
-  const results = { imported: 0, skipped: 0, deferred: batch.rows.filter(row => ["REFERENCE_INTERVAL", "COMPONENT", "PRICE_LIST_ITEM", "PRICE_LIST_PACKAGE_ITEM", "PACKAGE"].includes(row.entityType)).length };
+  const deferredKinds = new Set([
+    "REFERENCE_INTERVAL", "COMPONENT", "PRICE_LIST_ITEM",
+    "PRICE_LIST_PACKAGE_ITEM", "PACKAGE",
+  ]);
+  const results = { imported: 0, skipped: 0,
+    deferred: batch.rows.filter(row => deferredKinds.has(row.entityType)).length };
 
   try {
   await prisma.$transaction(async tx => {
@@ -40,7 +46,7 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
     // not just two POSTs targeting the same batch.
     const ownerLock = await tx.$queryRaw<Array<{ id: string }>>`
       SELECT id FROM organizations
-      WHERE id = ${session.user.organizationId} FOR UPDATE
+      WHERE id = ${session.user.organizationId} AND status = 'ACTIVE' FOR UPDATE
     `;
     if (ownerLock.length !== 1) throw new Error("catalog_import_organization_changed");
     const latestBatch = await tx.catalogImportBatch.findFirst({
@@ -55,15 +61,38 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
       isSafeMasterTestRow(row)
     );
     if (safeRows.length === 0) throw new Error("catalog_import_no_safe_rows");
-    results.deferred = latestBatch.rows.filter(row =>
-      ["REFERENCE_INTERVAL", "COMPONENT", "PRICE_LIST_ITEM"].includes(row.entityType)).length;
-    const branch = session.activeBranchId ? await tx.branch.findFirst({
-      where: { id: session.activeBranchId, organizationId: session.user.organizationId, status: "ACTIVE" },
+    results.deferred = latestBatch.rows.filter(row => deferredKinds.has(row.entityType)).length;
+    // Session data may be stale after waiting on the organization lock.
+    // Current ACTIVE user, same-tenant role/permission and exact branch grant
+    // must be checked before any master data is claimed or created.
+    const liveActor = session.activeBranchId ? await tx.user.findFirst({
+      where: liveSafeMasterCommitActorWhere(
+        session.user.id, session.user.organizationId, session.activeBranchId,
+      ),
       select: { id: true },
     }) : null;
-    if (!branch || !session.user.branchScopes.some(grant =>
-      grant.branchId === branch.id && grant.branch.status === "ACTIVE")) {
+    if (!liveActor || !session.user.branchScopes.some(grant =>
+      grant.branchId === session.activeBranchId && grant.branch.status === "ACTIVE")) {
       throw new Error("catalog_import_branch_scope_changed");
+    }
+    // A revoked restricted department grant cannot silently widen a commit
+    // to organization-wide while the request waits on the tenant lock.
+    const liveDepartments = await tx.userDepartmentScope.findMany({
+      where: { userId: session.user.id },
+      select: { departmentId: true, department: {
+        select: { status: true, organizationId: true, branchId: true },
+      } },
+    });
+    const originalDepartments = new Set(session.user.departmentScopes.map(x => x.departmentId));
+    const authorizedDepartment = liveDepartments.some(grant =>
+      grant.department.status === "ACTIVE" &&
+      grant.department.organizationId === session.user.organizationId &&
+      (grant.department.branchId === null || grant.department.branchId === session.activeBranchId) &&
+      (!originalDepartments.size || originalDepartments.has(grant.departmentId))
+    );
+    if ((originalDepartments.size > 0 || liveDepartments.length > 0) &&
+        !authorizedDepartment) {
+      throw new Error("catalog_import_department_scope_changed");
     }
     // Serialize import execution using the batch status row. Competing POSTs
     // can never both import the same master data; rollback releases the claim.
@@ -171,7 +200,7 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
       await tx.testPanelItem.createMany({ data: panelMemberships, skipDuplicates: true });
     }
 
-    await tx.catalogImportBatch.update({ where: { id: batch.id }, data: { summary: { ...(asObject(batch.summary)), safeMasterImport: results } } });
+    await tx.catalogImportBatch.update({ where: { id: batch.id }, data: { summary: { ...(asObject(latestBatch.summary)), safeMasterImport: results } } });
     await tx.auditEvent.create({ data: {
       organizationId: session.user.organizationId, branchId: session.activeBranchId, actorUserId: session.user.id,
       action: "CATALOG_IMPORT_SAFE_MASTER_COMMITTED", entityType: "CatalogImportBatch", entityId: batch.id,
@@ -183,7 +212,9 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
       error.message === "catalog_import_no_safe_rows")) {
       return NextResponse.json({ error: "batch_already_committed" }, { status: 409 });
     }
-    if (error instanceof Error && error.message === "catalog_import_branch_scope_changed") {
+    if (error instanceof Error && (error.message === "catalog_import_branch_scope_changed" ||
+      error.message === "catalog_import_department_scope_changed" ||
+      error.message === "catalog_import_organization_changed")) {
       return NextResponse.json({ error: "branch_forbidden" }, { status: 403 });
     }
     throw error;
