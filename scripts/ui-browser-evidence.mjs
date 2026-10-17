@@ -67,7 +67,37 @@ function stagingOrigin(input) {
   return url.origin;
 }
 
-function loadFixtureConfig(manifest) {
+function matchingFixturePath(route, actual) {
+  const canonical = route.split("/").filter(Boolean);
+  const supplied = actual.split("/").filter(Boolean);
+  return canonical.length === supplied.length && canonical.every((part, index) =>
+    /^\\[[^/]+\\]$/.test(part)
+      ? Boolean(supplied[index] && !supplied[index].includes("[") && !supplied[index].includes("]"))
+      : part === supplied[index]
+  );
+}
+
+function assertSyntheticStorageStates(config, base) {
+  const expectedHost = new URL(base).hostname;
+  for (const [profile, storage] of Object.entries(config.profiles)) {
+    if (!storage || typeof storage !== "object" || Array.isArray(storage) ||
+        !Array.isArray(storage.cookies) || !Array.isArray(storage.origins)) {
+      throw Error("Synthetic browser profile requires inline storageState object: " + profile);
+    }
+    for (const cookie of storage.cookies) {
+      if (!cookie || cookie.domain?.replace(/^\\./, "") !== expectedHost) {
+        throw Error("Browser profile cookie domain must match staging host: " + profile);
+      }
+    }
+    for (const origin of storage.origins) {
+      if (!origin || origin.origin !== base) {
+        throw Error("Browser profile localStorage origin must match staging origin: " + profile);
+      }
+    }
+  }
+}
+
+function loadFixtureConfig(manifest, base) {
   if (process.env.FL_UI_AUDIT_SYNTHETIC_ONLY !== "I_CONFIRM_SYNTHETIC_NONPRODUCTION_DATA") {
     throw Error("Explicit synthetic-only attestation is required.");
   }
@@ -85,6 +115,7 @@ function loadFixtureConfig(manifest) {
       throw Error("Missing synthetic dynamic-route fixture (no production ID fallback): " + row.route);
     }
   }
+  assertSyntheticStorageStates(config, base);
   return config;
 }
 
@@ -97,6 +128,9 @@ function resolveRoute(base, row, config) {
   }
   const resolved = new URL(actual, base);
   if (resolved.origin !== base) throw Error("Off-origin fixture mapping is forbidden.");
+  if (!matchingFixturePath(row.route, resolved.pathname)) {
+    throw Error("Synthetic dynamic-route fixture does not match canonical route: " + row.route);
+  }
   return resolved.toString();
 }
 
@@ -145,7 +179,7 @@ function coverageCases(manifest, base, config) {
 async function screenshotAll() {
   const manifest = readManifest();
   const base = stagingOrigin(process.env.FL_UI_AUDIT_STAGING_ORIGIN);
-  const config = loadFixtureConfig(manifest);
+  const config = loadFixtureConfig(manifest, base);
   const cases = coverageCases(manifest, base, config);
 
   // Playwright is intentionally optional for the default CI source gate.
@@ -193,7 +227,12 @@ async function screenshotAll() {
         responseStatus = response?.status() ?? null;
         await page.waitForLoadState("load", {timeout:12000}).catch(() => {});
         await page.waitForTimeout(180);
-        finalRoute = new URL(page.url()).pathname;
+        const finalUrl = new URL(page.url());
+        finalRoute = finalUrl.pathname;
+        if (finalUrl.origin !== base) {
+          issues.push("REDIRECTED_OFF_STAGING_ORIGIN");
+          throw Error("Browser redirected off isolated staging origin.");
+        }
         // Read-only rendered-surface inspection: counts only, never captures
         // form values, patient names, identifiers, labels or DOM text in JSON.
         const info = await page.evaluate(() => {
@@ -266,9 +305,13 @@ async function screenshotAll() {
         if (documentDirection !== scenario.direction) {
           issues.push("HTML_DIRECTION_MISMATCH");
         }
-        if (finalRoute !== new URL(target).pathname &&
-            finalRoute.startsWith("/login") && !route.includes("login")) {
-          issues.push("REDIRECTED_TO_LOGIN");
+        // A redirected login / portal screen cannot stand as evidence for a protected route.
+        // Redirect-only entry screens are captured but require human adjudication.
+        if (finalRoute !== new URL(target).pathname) {
+          issues.push("ROUTE_REDIRECTED_REVIEW_REQUIRED");
+          if (finalRoute === "/login" || finalRoute === "/portal/login") {
+            issues.push("REDIRECTED_TO_LOGIN");
+          }
         }
         if (pageErrorCount) issues.push("RUNTIME_ERRORS");
         imageName = path.basename(photoFile(images, route, name));
@@ -333,6 +376,12 @@ try {
   readManifest();
   if (process.argv.includes("--validate")) {
     console.log("UI browser harness source gate: 81 canonical routes; six bilingual/responsive scenarios each. Browser evidence NOT_EXECUTED.");
+  } else if (process.argv.includes("--preflight")) {
+    const manifest = readManifest();
+    const base = stagingOrigin(process.env.FL_UI_AUDIT_STAGING_ORIGIN);
+    const config = loadFixtureConfig(manifest, base);
+    const cases = coverageCases(manifest, base, config);
+    console.log("Private synthetic browser preflight PASSED: " + cases.length + " cases for " + manifest.routes.length + " routes; no browser launched, no screenshots created, no acceptance claimed.");
   } else if (process.argv.includes("--run")) {
     await screenshotAll();
   } else {
