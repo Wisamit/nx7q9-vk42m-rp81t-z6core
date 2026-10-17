@@ -56,7 +56,11 @@ test("read-only reconciliation route filters tenant, avoids imported writes and 
   assert.ok(!source.includes("catalogImportRow.update("));
   const commit = readFileSync(new URL("../src/app/api/catalog/imports/[id]/commit/route.ts", import.meta.url), "utf8");
   assert.ok(commit.includes('["UNIT", "CONTAINER", "TEST", "PANEL"]'));
-  assert.ok(commit.includes('["REFERENCE_INTERVAL", "COMPONENT", "PRICE_LIST_ITEM"]'));
+  for (const deferred of ["REFERENCE_INTERVAL", "COMPONENT", "PRICE_LIST_ITEM",
+    "PRICE_LIST_PACKAGE_ITEM", "PACKAGE"]) {
+    assert.ok(commit.includes('"' + deferred + '"'), deferred);
+  }
+  assert.ok(commit.includes("deferredKinds.has(row.entityType)"));;
 });
 
 test("review UI describes informational/non-approval semantics in both languages", () => {

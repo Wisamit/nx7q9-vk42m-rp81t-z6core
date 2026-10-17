@@ -92,7 +92,11 @@ test("export route requires explicit catalogue and financial permissions and ten
 test("existing commit path cannot mutate staged-only components or prices", () => {
   const commit = readFileSync(new URL("../src/app/api/catalog/imports/[id]/commit/route.ts", import.meta.url), "utf8");
   assert.ok(commit.includes('["UNIT", "CONTAINER", "TEST", "PANEL"].includes(row.entityType)'));
-  assert.ok(commit.includes('["REFERENCE_INTERVAL", "COMPONENT", "PRICE_LIST_ITEM"]'));
+  for (const deferred of ["REFERENCE_INTERVAL", "COMPONENT", "PRICE_LIST_ITEM",
+    "PRICE_LIST_PACKAGE_ITEM", "PACKAGE"]) {
+    assert.ok(commit.includes('"' + deferred + '"'), deferred);
+  }
+  assert.ok(commit.includes("deferredKinds.has(row.entityType)"));;
   assert.ok(!commit.includes('row.entityType === "COMPONENT"'));
   assert.ok(!commit.includes('row.entityType === "PRICE_LIST_ITEM"'));
   const importRoute = readFileSync(new URL("../src/app/api/catalog/imports/route.ts", import.meta.url), "utf8");

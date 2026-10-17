@@ -10,7 +10,7 @@ test("Stage 47: safe master commit obtains organization lock before reading muta
  const claim=s.indexOf("const claim = await tx.catalogImportBatch.updateMany");
  const units=s.indexOf("const units = new Map");
  assert.ok(lock>=0&&reread>lock&&newSafe>reread&&claim>newSafe&&units>claim);
- assert.match(s,/WHERE id = \$\{session\.user\.organizationId\} FOR UPDATE/);
+ assert.match(s,/WHERE id = \$\{session\.user\.organizationId\} AND status = 'ACTIVE' FOR UPDATE/);
  assert.match(s,/status: "VALIDATED"/);
  assert.match(s,/latestBatch\.sourceType === "CONFIG_BUNDLE_REVIEW"/);
  assert.match(s,/latestBatch\.sourceType === "CSV_REVIEW"/);
@@ -18,7 +18,8 @@ test("Stage 47: safe master commit obtains organization lock before reading muta
  assert.match(s,/latestBatch\.rows\.filter\(row =>/);
  assert.match(s,/catalog_import_no_safe_rows/);
  assert.match(s,/catalog_import_branch_scope_changed/);
- assert.match(s,/grant\.branchId === branch\.id && grant\.branch\.status === "ACTIVE"/);
+ assert.match(s,/liveSafeMasterCommitActorWhere\(/);
+ assert.match(s,/grant\.branchId === session\.activeBranchId && grant\.branch\.status === "ACTIVE"/);
  assert.match(s,/status: "IMPORTED", importedAt: new Date\(\)/);
  assert.match(s,/sameSafeMasterTestDefinition\(existing,/);
  assert.match(s,/resolvedPanelMemberships\(safeRows, testBySourceRowId, panelMap\)/);
