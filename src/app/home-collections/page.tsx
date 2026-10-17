@@ -120,8 +120,8 @@ export default async function HomeCollectionsBoard({
                 {tr(locale, "Open case", "فتح الحالة")}</Link></td>
             </tr>;
           })}</tbody></table></div>}
-        {next && <p><Link className="secondary-link" href={href(selected || "",requestedStatus || "",next)}>
-          {tr(locale, "Next 100 visits", "المئة زيارة التالية")}</Link></p>}
+        {next && <nav className="workflow-queue-footer" aria-label={tr(locale, "Home collection pages", "صفحات الزيارات المنزلية")}><Link className="secondary-link" rel="next" href={href(selected || "",requestedStatus || "",next)}>
+          {tr(locale, "Next 100 visits", "المئة زيارة التالية")}</Link></nav>}
       </article>
     </section>
   </main>;
