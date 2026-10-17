@@ -176,6 +176,7 @@ jobs:
       - run: node --experimental-strip-types --test tests/stage-140-canonical-config-review-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-141-config-drift-parity-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-142-analyzer-mapping-reviewer-mariadb.integration.test.ts
+      - run: node --experimental-strip-types --test tests/stage-146-bundle-boundary-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/analyzer-bridge-mariadb.integration.test.ts
       - run: npm run test:ui-theme
       - run: npm run test:ui-i18n
