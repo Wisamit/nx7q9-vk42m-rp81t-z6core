@@ -1,3 +1,4 @@
+import { TableEmptyState } from "@/components/table-empty-state";
 import { SystemDateText } from "@/components/system-date-text";
 import { permissionSet, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
@@ -75,7 +76,7 @@ export default async function NotificationsPage() {
       <div className="table-toolbar"><h2>{tr(locale, "My Notifications", "إشعاراتي")}</h2><span>{notifications.length} {tr(locale, "shown", "معروضة")}</span></div>
       <div className="table-wrap"><table>
         <thead><tr><th>{tr(locale, "Time", "الوقت")}</th><th>{tr(locale, "Event", "الحدث")}</th><th>{tr(locale, "Message", "الرسالة")}</th><th>{tr(locale, "Branch", "الفرع")}</th><th>{tr(locale, "Severity", "الشدة")}</th><th>{tr(locale, "Delivery", "التسليم")}</th><th>{tr(locale, "Read", "القراءة")}</th></tr></thead>
-        <tbody>{notifications.length === 0 ? <tr><td colSpan={7} className="empty-state">{tr(locale, "No notifications yet.", "لا توجد إشعارات حتى الآن.")}</td></tr> : notifications.map(item => <tr key={item.id}>
+        <tbody>{notifications.length === 0 ? <tr><td colSpan={7} className="empty-state"><TableEmptyState title={tr(locale, "No notifications yet.", "لا توجد إشعارات حتى الآن.")} description={tr(locale, "No notifications are currently displayed for this account. Alerts will be shown only when authorized events are generated.", "لا تظهر إشعارات حالياً لهذا الحساب. تُعرض التنبيهات عند توليد أحداث مصرح بها فقط.")} /></td></tr> : notifications.map(item => <tr key={item.id}>
           <td>{<SystemDateText value={item.createdAt.toISOString()} timeZone={item.branch?.timezone} />}</td>
           <td><strong>{eventLabel(item.eventCode)}</strong></td>
           <td><strong>{item.title}</strong><br/><small>{item.body}</small></td>
@@ -91,7 +92,7 @@ export default async function NotificationsPage() {
       <div className="table-toolbar"><h2>{tr(locale, "Templates", "القوالب")}</h2><span>{templates.length}</span></div>
       <div className="table-wrap"><table>
         <thead><tr><th>{tr(locale, "Code", "الرمز")}</th><th>{tr(locale, "Event", "الحدث")}</th><th>{tr(locale, "Channel", "القناة")}</th><th>{tr(locale, "Subject", "الموضوع")}</th><th>{tr(locale, "Status", "الحالة")}</th></tr></thead>
-        <tbody>{templates.length === 0 ? <tr><td colSpan={5} className="empty-state">{tr(locale, "No templates configured.", "لا توجد قوالب مهيأة.")}</td></tr> : templates.map(item => <tr key={item.id}>
+        <tbody>{templates.length === 0 ? <tr><td colSpan={5} className="empty-state"><TableEmptyState title={tr(locale, "No templates configured.", "لا توجد قوالب مهيأة.")} description={tr(locale, "No notification templates are configured in this view. Templates require authorized configuration before use.", "لا توجد قوالب إشعارات مهيأة في هذا العرض. تتطلب القوالب إعداداً مصرحاً به قبل الاستخدام.")} /></td></tr> : templates.map(item => <tr key={item.id}>
           <td><strong>{item.code}</strong></td><td>{eventLabel(item.eventCode)}</td><td>{channelLabel(item.channel)}</td><td>{locale === "ar" ? item.subjectAr || item.subjectEn || "—" : item.subjectEn || "—"}</td><td>{item.enabled ? statusLabel(locale, "ACTIVE") : statusLabel(locale, "DISABLED")}</td>
         </tr>)}</tbody>
       </table></div>
