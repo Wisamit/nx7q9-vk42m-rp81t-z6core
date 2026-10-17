@@ -24,7 +24,7 @@ export default async function DoctorRequisitionsPage({searchParams}:{
     skip:(page-1)*50,take:50,
     include:{patient:{select:{patientNumber:true,fullNameEn:true,fullNameAr:true}},
       referrer:{select:{code:true,nameEn:true,nameAr:true}},
-      branch:{select:{code:true,nameEn:true,nameAr:true}},
+      branch:{select:{code:true,nameEn:true,nameAr:true,timezone:true}},
       items:{select:{testCodeSnapshot:true,testNameEnSnapshot:true,testNameArSnapshot:true}}},
   });
   return <main className="catalog-shell" dir={locale==="ar"?"rtl":"ltr"}>
@@ -40,7 +40,7 @@ export default async function DoctorRequisitionsPage({searchParams}:{
       <strong>{total}</strong><small>{tr(locale,"All statuses","كل الحالات")}</small>
     </article></section>
     <DoctorRequisitionReview locale={locale} rows={rows.map(x=>({
-      id:x.id,status:x.status,submittedAt:x.submittedAt.toISOString(),
+      id:x.id,status:x.status,submittedAt:x.submittedAt.toISOString(),branchTimeZone:x.branch.timezone,
       patient:x.patient.patientNumber+" — "+(locale==="ar"?x.patient.fullNameAr||x.patient.fullNameEn:x.patient.fullNameEn),
       branch:x.branch.code+" — "+(locale==="ar"?x.branch.nameAr||x.branch.nameEn:x.branch.nameEn),
       doctor:x.referrer.code+" — "+(locale==="ar"?x.referrer.nameAr||x.referrer.nameEn:x.referrer.nameEn),
