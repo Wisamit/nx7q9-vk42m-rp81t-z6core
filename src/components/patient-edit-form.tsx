@@ -207,7 +207,7 @@ export function PatientEditForm({ patient, locale }: { patient: PatientEditValue
         {tr("Reviewed — Save Changes", "تمت المراجعة — حفظ التغييرات")}
       </button>
     </div>}
-
+    {editOpen && message && <p className={duplicateReview ? "form-warning" : "form-error"} role="alert">{message}</p>}
     </CrudModal>
 
     <CrudModal open={confirmDuplicate} onClose={() => { if (!updating.current) setConfirmDuplicate(false); }}
@@ -228,6 +228,6 @@ export function PatientEditForm({ patient, locale }: { patient: PatientEditValue
         {busy ? tr("Saving…", "جارٍ الحفظ…") : tr("Confirm Reviewed Distinction", "تأكيد مراجعة اختلاف الهوية")}
       </button>
     </CrudModal>
-    {message && <p className={duplicateReview ? "form-warning" : "muted"} role="status">{message}</p>}
+    {!editOpen && message && <p className="muted" role="status">{message}</p>}
   </section>;
 }
