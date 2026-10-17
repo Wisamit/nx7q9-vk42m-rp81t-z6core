@@ -202,7 +202,7 @@ jobs:
   # Browser evidence is intentionally opt-in on the *draft* UI release PR.
   # Do not run against production or with real patient, device or billing data.
   browser_review:
-    if: ${{ github.event_name == 'pull_request' && github.head_ref == 'ui-unified-release-complete-sweep' && github.event.pull_request.head.repo.full_name == github.repository && contains(github.event.pull_request.labels.*.name, 'ui-visual-ready') && vars.FL_UI_AUDIT_ENABLE == 'true' && vars.FL_UI_AUDIT_SYNTHETIC_ONLY == 'I_CONFIRM_SYNTHETIC_NONPRODUCTION_DATA' }}
+    if: ${{ github.event.repository.private == true && github.event_name == 'pull_request' && github.head_ref == 'ui-unified-release-complete-sweep' && github.event.pull_request.head.repo.full_name == github.repository && contains(github.event.pull_request.labels.*.name, 'ui-visual-ready') && vars.FL_UI_AUDIT_ENABLE == 'true' && vars.FL_UI_AUDIT_SYNTHETIC_ONLY == 'I_CONFIRM_SYNTHETIC_NONPRODUCTION_DATA' }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
