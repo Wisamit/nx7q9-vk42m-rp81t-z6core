@@ -40,7 +40,10 @@ test("modal scroll lock supports nested reuse, empty inline values and idempoten
 test("global modal overlay portals outside stacking contexts and traps keyboard and programmatic focus",()=>{
   const s=readFileSync("src/components/crud-modal.tsx","utf8");
   assert.match(s,/import \{ createPortal \} from "react-dom"/);
-  assert.match(s,/setPortalRoot\(document\.body\)/);
+  assert.match(s,/useSyncExternalStore\(/);
+  assert.match(s,/const getClientPortalRoot = \(\) => document\.body/);
+  assert.match(s,/const getServerPortalRoot = \(\) => null/);
+  assert.doesNotMatch(s,/setPortalRoot\(/);
   assert.match(s,/return createPortal\(<div className="crud-modal-backdrop"/);
   assert.match(s,/acquireCrudModalScrollLock\(document\.body\)/);
   assert.match(s,/unlockBody\(\)/);
