@@ -91,45 +91,44 @@ export default async function CommentReviewPage({
     PREDECESSOR_INACTIVE: tr(locale, "Previous approved revision is no longer active", "النسخة المعتمدة السابقة لم تعد فعالة"),
   } as const;
   const next = page.at(-1);
-  return <main className="page-shell">
+  return <main className="page-shell workflow-page">
     <header className="page-header">
       <div>
+        <p className="eyebrow">{tr(locale, "Clinical content governance", "حوكمة المحتوى السريري")}</p>
         <h1>{tr(locale, "Clinical Comment Approval Queue", "قائمة اعتماد التعليقات السريرية")}</h1>
-        <p><Link className="secondary-link" href="/clinical-comments/revisions">{tr(locale, "Prepare comment revision", "إعداد نسخة جديدة من التعليق")}</Link></p>
         <p className="muted">{tr(locale,
           "Review both languages, clinical target and original creator before a second authorized reviewer activates a draft.",
           "راجع النصين العربي والإنجليزي وربط الفحص والمُنشئ قبل اعتماد المسودة من مراجع مستقل.")}</p>
       </div>
-      <Link className="secondary-link" href="/dashboard">
-        {tr(locale, "Back to Dashboard", "العودة إلى لوحة التحكم")}
-      </Link>
+      <Link className="secondary-link" href="/clinical-comments/revisions">{tr(locale, "Prepare comment revision", "إعداد نسخة جديدة من التعليق")}</Link>
     </header>
-    <section className="detail-grid">
-      <article className="detail-card">
+    <section className="workflow-review-summary" aria-label={tr(locale, "Review queue summary", "ملخص قائمة المراجعة")}>
+      <strong>{pendingCount}</strong>
+      <div>
         <h2>{tr(locale, "Inactive templates pending review", "قوالب غير مفعلة بانتظار المراجعة")}</h2>
-        <strong>{pendingCount}</strong>
         <p className="muted">{tr(locale,
-          "Not every inactive template is immediately eligible for approval; blocked items show their reason.",
-          "ليس كل قالب غير مفعّل مؤهلاً للاعتماد؛ يظهر سبب المنع بجانب كل قالب.")}</p>
-      </article>
+          "Every draft still requires independent clinical approval. Blocked items display their specific reason.",
+          "تبقى كل مسودة خاضعة لاعتماد سريري مستقل؛ ويظهر سبب المنع المحدد بجانب العناصر المحجوبة.")}</p>
+      </div>
     </section>
     <section className="detail-section">
-      <article className="table-card">
-        <div className="table-toolbar">
+      <article className="table-card workflow-queue-card">
+        <div className="table-toolbar workflow-toolbar">
           <h2>{tr(locale, "Clinical review worklist", "قائمة عمل المراجعة السريرية")}</h2>
           <span>{page.length} {tr(locale, "shown", "معروضة")}</span>
         </div>
-        <div className="table-wrap"><table>
+        {page.length === 0 ? <div className="workflow-empty" role="status">
+          <h3>{pendingCount === 0 ? tr(locale, "No drafts awaiting review", "لا توجد مسودات بانتظار المراجعة") : tr(locale, "No drafts on this page", "لا توجد مسودات في هذه الصفحة")}</h3>
+          <p>{tr(locale, "The queue only shows inactive clinical comment templates in your organization. Approved originals and released report histories are not changed here.", "تعرض القائمة قوالب التعليقات السريرية غير النشطة في مؤسستك فقط. لا يتم تغيير الأصول المعتمدة أو سجلات التقارير الصادرة من هذه الشاشة.")}</p>
+          <Link className="secondary-link" href="/clinical-comments/revisions">{tr(locale, "Review existing revisions", "مراجعة النسخ السريرية")}</Link>
+        </div> : <div className="table-wrap"><table className="workflow-data-table">
           <thead><tr>
             <th>{tr(locale, "Template / Target", "القالب / الهدف")}</th>
             <th>{tr(locale, "Exact English & Arabic text", "النص الكامل بالإنجليزية والعربية")}</th>
             <th>{tr(locale, "Creation evidence", "توثيق الإنشاء")}</th>
             <th>{tr(locale, "Review decision", "قرار الاعتماد")}</th>
           </tr></thead>
-          <tbody>{page.length === 0
-            ? <tr><td colSpan={4} className="empty-state">{tr(locale,
-              "No templates on this page.", "لا توجد قوالب في هذه الصفحة.")}</td></tr>
-            : page.map(template => {
+          <tbody>{page.map(template => {
               const creator = creatorById.get(template.id);
               const last = latestById.get(template.id);
               const blocker = commentReviewBlocker(template,
@@ -180,13 +179,15 @@ export default async function CommentReviewPage({
               </tr>;
             })}
           </tbody>
-        </table></div>
+        </table></div>}
+        {(hasMore || after) && <nav className="workflow-queue-footer" aria-label={tr(locale, "Comment review pages", "صفحات مراجعة التعليقات")}>
         {hasMore && next && <p><Link className="secondary-link"
           href={`/clinical-comments/review?after=${encodeURIComponent(encodeCommentReviewCursor(next))}`}>
           {tr(locale, "Next 50 drafts →", "المسودات الخمسون التالية ←")}
         </Link></p>}
         {after && <p><Link className="secondary-link" href="/clinical-comments/review">
           {tr(locale, "Start of queue", "بداية القائمة")}</Link></p>}
+        </nav>}
       </article>
     </section>
   </main>;
