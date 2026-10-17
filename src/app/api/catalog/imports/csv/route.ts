@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { permissionSet, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { liveCatalogReviewStagingAuthority } from "@/lib/catalog-review-staging-auth";
 import type { Prisma } from "../../../../../../generated/prisma/client";
 import { normalizeImportRow, rowValidationStatus, validateImportRow } from "@/lib/catalog-import";
 import { CsvStagingError, CSV_STAGE_MAX_BYTES, parseCsvReviewFile } from "@/lib/catalog-review-csv-import";
@@ -126,7 +127,34 @@ export async function POST(request: Request) {
 
   // Always DRAFT, never VALIDATED: this path is for evidence review only.
   // Existing revalidation and commit routes deny CSV_REVIEW at their boundaries.
-  const batch = await prisma.$transaction(async tx => {
+  const outcome = await prisma.$transaction(async tx => {
+    // The user may lose a role/branch/department grant while the upload is
+    // being parsed. Review-only data is still protected and author-private.
+    const owned = await tx.$queryRaw<Array<{ id: string }>>`
+      SELECT id FROM organizations WHERE id = ${session.user.organizationId}
+        AND status = 'ACTIVE' FOR UPDATE
+    `;
+    if (owned.length !== 1)
+      return { error: "catalog_review_organization_inactive", status: 403 } as const;
+    const live = await liveCatalogReviewStagingAuthority(tx, {
+      userId: session.user.id,
+      organizationId: session.user.organizationId,
+      activeBranchId: session.activeBranchId || "",
+      sessionBranchIds: session.user.branchScopes.filter(grant =>
+        grant.branch.organizationId === session.user.organizationId &&
+        grant.branch.status === "ACTIVE").map(grant => grant.branchId),
+      sessionDepartmentIds: session.user.departmentScopes.map(grant => grant.departmentId),
+      needsPricing: inputs.some(row => row.entityType.startsWith("PRICE_")),
+      needsRanges: inputs.some(row => row.entityType === "REFERENCE_INTERVAL"),
+      needsClinicalScope: inputs.some(row => !["UNIT", "CONTAINER"].includes(row.entityType)),
+    });
+    if (!live) return { error: "catalog_review_staging_authority_revoked", status: 403 } as const;
+    const liveBranchIds = new Set(live.branchIds);
+    if (priceLists.some(row => {
+      const normalized = normalizeImportRow(row);
+      return normalized.scopeType === "BRANCH" &&
+        (typeof normalized.branchId !== "string" || !liveBranchIds.has(normalized.branchId));
+    })) return { error: "price_list_branch_scope_forbidden", status: 403 } as const;
     const created = await tx.catalogImportBatch.create({
       data: {
         organizationId: session.user.organizationId,
@@ -162,10 +190,12 @@ export async function POST(request: Request) {
         ipAddress: ctx.ipAddress, userAgent: ctx.userAgent,
       },
     });
-    return created;
+    return { id: created.id };
   }, { timeout: 30000 });
+  if ("error" in outcome)
+    return NextResponse.json({ error: outcome.error }, { status: outcome.status });
   return NextResponse.json({
-    id: batch.id, status: "DRAFT", reviewOnly: true,
+    id: outcome.id, status: "DRAFT", reviewOnly: true,
     summary: { total: prepared.length, ...summary },
   }, { status: 201, headers: { "Cache-Control": "private, no-store" } });
 }
