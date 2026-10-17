@@ -1,6 +1,8 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useMemo, useState, useSyncExternalStore } from "react";
+import { normalizeSystemDateFormat } from "@/lib/system-date";
+import { formatCalendarDisplay } from "@/lib/system-date-display";
 import { useRouter } from "next/navigation";
 import { CrudModal } from "@/components/crud-modal";
 import { statusLabel as sharedStatusLabel } from "@/lib/ui-i18n";
@@ -42,6 +44,10 @@ type Transfer = {
 
 type DraftLine = { lotId: string; requestedQty: string };
 
+const subscribeDateFormat = () => () => {};
+const readDateFormat = () => document.documentElement.dataset.dateFormat || "DD/MM/YYYY";
+const serverDateFormat = () => "DD/MM/YYYY";
+
 export function InventoryTransferManager({
   branches,
   lotStocks,
@@ -54,6 +60,7 @@ export function InventoryTransferManager({
   locale: "ar" | "en";
 }) {
   const router = useRouter();
+  const dateFormat = normalizeSystemDateFormat(useSyncExternalStore(subscribeDateFormat, readDateFormat, serverDateFormat));
   const [sourceBranchId, setSourceBranchId] = useState("");
   const [destinationBranchId, setDestinationBranchId] = useState("");
   const [lines, setLines] = useState<DraftLine[]>([{ lotId: "", requestedQty: "" }]);
@@ -216,7 +223,7 @@ export function InventoryTransferManager({
                 <div className="catalog-form" style={{ flex: 1 }}>
                   <label>{tr("Lot", "التشغيلة")}<select value={line.lotId} required disabled={!sourceBranchId} onChange={event => updateLine(index, "lotId", event.target.value)}>
                     <option value="">{tr("Select lot…", "اختر التشغيلة…")}</option>
-                    {sourceLots.map(stock => <option key={stock.lotId} value={stock.lotId}>{stock.itemCode} — {stock.lotNumber} · {tr("Available", "المتاح")} {stock.availableQty} {stock.stockUnit}{stock.expiryDate ? " · " + tr("Exp", "انتهاء") + " " + stock.expiryDate : ""}</option>)}
+                    {sourceLots.map(stock => <option key={stock.lotId} value={stock.lotId}>{stock.itemCode} — {stock.lotNumber} · {tr("Available", "المتاح")} {stock.availableQty} {stock.stockUnit}{stock.expiryDate ? " · " + tr("Exp", "انتهاء") + " " + formatCalendarDisplay(stock.expiryDate, dateFormat) : ""}</option>)}
                   </select></label>
                   <label>{tr("Requested quantity", "الكمية المطلوبة")}<input type="number" min="0.0001" step="0.0001" value={line.requestedQty} required onChange={event => updateLine(index, "requestedQty", event.target.value)} /></label>
                   {selected && <small className="muted">{selected.itemName} · {tr("Available", "المتاح")} {selected.availableQty} {selected.stockUnit}</small>}
