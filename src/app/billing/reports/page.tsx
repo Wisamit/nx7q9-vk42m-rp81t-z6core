@@ -384,7 +384,8 @@ export default async function FinancialReportsPage({ searchParams }: { searchPar
         <label>{tr(locale, "Currency", "العملة")}<input name="currency" maxLength={3} defaultValue={currency} placeholder={tr(locale, "All", "الكل")} /></label>
         <label>{tr(locale, "From", "من")}<SystemDateField name="from" defaultValue={period.from || ""} /></label>
         <label>{tr(locale, "To", "إلى")}<SystemDateField name="to" defaultValue={period.to || ""} /></label>
-        <button className="primary-button form-span" type="submit">{tr(locale, "Apply Report", "تطبيق التقرير")}</button>
+        <button className="primary-button" type="submit">{tr(locale, "Apply Report", "تطبيق التقرير")}</button>
+        <Link className="secondary-link" href="/billing/reports">{tr(locale, "Reset filters", "إعادة ضبط الفلاتر")}</Link>
       </form>
       <div className="form-warning">
         {tr(
