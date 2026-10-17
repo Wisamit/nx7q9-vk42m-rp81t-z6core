@@ -1,5 +1,6 @@
 import { doctorAccessWhere } from "@/lib/doctor-portal-access";
 import { Fragment } from "react";
+import { SystemDateText } from "@/components/system-date-text";
 import { notFound } from "next/navigation";
 import { requirePortalSession } from "@/lib/portal-auth";
 import { prisma } from "@/lib/db";
@@ -43,7 +44,7 @@ export default async function PortalReportPage({ params }: { params: Promise<{ v
   const locale = getUiLocale(account.preferredLocale);
   const version = await prisma.diagnosticReportVersion.findUnique({
     where: { id: versionId },
-    include: { report: { include: { order: true } } },
+    include: { branch: { select: { timezone: true } }, report: { include: { order: true } } },
   });
   if (!version || version.report.order.organizationId !== account.organizationId) notFound();
 
@@ -138,7 +139,7 @@ export default async function PortalReportPage({ params }: { params: Promise<{ v
       <div>
         <p className="eyebrow">{tr(locale, "Diagnostic Report", "التقرير التشخيصي")} · v{version.version}</p>
         <h1>{locale === "ar" ? snapshot.organization?.nameAr || snapshot.organization?.nameEn || "Family Lab" : snapshot.organization?.nameEn || "Family Lab"}</h1>
-        <p className="muted">{locale === "ar" ? snapshot.branch?.nameAr || snapshot.branch?.nameEn || "" : snapshot.branch?.nameEn || ""} · {statusLabel(locale, version.status)} · {tr(locale, "Issued", "صدر")} {version.issuedAt.toISOString().replace("T"," ").slice(0,16)}</p>
+        <p className="muted">{locale === "ar" ? snapshot.branch?.nameAr || snapshot.branch?.nameEn || "" : snapshot.branch?.nameEn || ""} · {statusLabel(locale, version.status)} · {tr(locale, "Issued", "صدر")} <SystemDateText value={version.issuedAt.toISOString()} timeZone={version.branch.timezone} /></p>
       </div>
       <a className="secondary-link" href="/portal">{tr(locale, "Back to Portal", "العودة للبوابة")}</a>
     </header>
