@@ -9,7 +9,12 @@ test("review uploads use one-third, accessible dialog and explicit confirm not i
   assert.match(modal,/<CrudModal open=\{open\} onClose=\{close\} size="compact"/);
   assert.match(modal,/onStage: \(file: File\) => Promise<boolean>/);
   assert.match(modal,/const \[file, setFile\] = useState<File \| null>\(null\)/);
-  assert.match(modal,/onChange=\{event => setFile\(event\.currentTarget\.files\?\.\[0\] \?\? null\)\}/);
+  assert.match(modal,/onChange=\\{event => \\{ setFile\\(event\\.currentTarget\\.files\\?\\.\\[0\\] \\?\\? null\\)/);
+  assert.match(modal,/protectUnsavedChanges title=\\{title\\}/);
+  assert.match(modal,/onResetError: \\(\\) => void/);
+  assert.match(modal,/onResetError\\(\\)/);
+  assert.match(modal,/setSubmissionError\\(\\"\\"\\)/);
+  assert.match(modal,/catch \\{/);
   assert.match(modal,/disabled=\{busy \|\| !file\} onClick=\{\(\) => void confirm\(\)\}/);
   assert.match(modal,/if \(!file \|\| busy \|\| submitting\.current\) return/);
   assert.match(modal,/if \(busy \|\| submitting\.current\) return/);
@@ -32,6 +37,7 @@ test("all three catalog-source upload actions moved inside the reusable modal",(
     const source=read(file);
     assert.match(source,/<ReviewFileUploadDialog/);
     assert.match(source,/onStage=\{stage\}/);
+    assert.match(source,/onResetError=\{\(\) => set(?:Error|Message)\(""\)\}/);
     assert.match(source,/Promise<boolean>/);
     assert.match(source,/return true/);
     assert.match(source,/return false/);
