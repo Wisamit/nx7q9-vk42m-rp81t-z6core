@@ -95,6 +95,7 @@ export function CatalogCsvReviewStaging({ locale, canStagePricing, canStageRange
     )}</p>}
     <div className="review-actions">
       <ReviewFileUploadDialog locale={locale} busy={busy} error={error}
+        onResetError={() => setError("")}
         title={tr("Review clinical and price spreadsheet", "مراجعة جدول الإعدادات السريرية والأسعار")}
         description={tr("Select a canonical CSV or single-sheet XLSX and confirm controlled draft staging.", "اختر ملف CSV أو XLSX بورقة واحدة ثم أكد تجهيز المسودة للمراجعة.")}
         triggerLabel={tr("Stage CSV / XLSX for review", "تجهيز CSV / XLSX للمراجعة")}
