@@ -34,7 +34,7 @@ export default async function DoctorPortalAccessPage() {
     "Explicit patient authorization, independently scoped orders and reports, effective dates and audited immediate revocation.",
     "تفويض واضح لكل مريض وصلاحيات مستقلة للطلبات والتقارير مع تواريخ السريان والإلغاء الموثّق والفوري.")}</p>
   </div><Link className="secondary-link" href="/digital-services">{tr(locale,"Digital Services","الخدمات الرقمية")}</Link></header>
-  <DoctorPortalAccessManager locale={locale}
+  <DoctorPortalAccessManager locale={locale} branchTimeZone={session.user.branchScopes.find(s=>s.branchId===branchId)!.branch.timezone}
    doctors={accounts.filter(x=>x.referrer).map(x=>({id:x.referrerId!,
      label:x.referrer!.code+" — "+(locale==="ar"?x.referrer!.nameAr||x.referrer!.nameEn:x.referrer!.nameEn)}))}
    patients={patients.map(x=>({id:x.id,
