@@ -45,7 +45,7 @@ test("MariaDB: safe-master commit denies revoked branch, role, permission and in
         [id,org,"CMA"+key+marker,"Synthetic Lab Branch"],
         "DELETE FROM branches WHERE id=?",[id]);
     }
-    await seed("INSERT INTO users(id,organization_id,username,display_name_en,updated_at) VALUES(?,?,?,?,NOW(3))",
+    await seed("INSERT INTO users(id,organization_id,username,display_name_en,status,updated_at) VALUES(?,?,?,?,'ACTIVE',NOW(3))",
       [user,org,"cma"+key,"Synthetic Catalog User"],
       "DELETE FROM users WHERE id=?",[user]);
     await seed("INSERT INTO roles(id,organization_id,code,name_en,updated_at) VALUES(?,?,?,?,NOW(3))",
