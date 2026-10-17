@@ -80,7 +80,7 @@ export default async function CriticalResultsPage({
   const events = queue.rows;
 
 
-  return <main className="catalog-shell">
+  return <main className="catalog-shell workflow-page">
     <header className="page-header">
       <div>
         <p className="eyebrow">{tr(locale, "Critical Result Escalation", "تصعيد النتائج الحرجة")}</p>
@@ -90,19 +90,22 @@ export default async function CriticalResultsPage({
       <Link className="secondary-link" href="/dashboard">{tr(locale, "Back to Dashboard", "العودة للوحة التحكم")}</Link>
     </header>
 
-    <section className="table-card">
-      <div className="table-toolbar"><h2>{tr(locale, "Active critical events", "الأحداث الحرجة النشطة")}</h2>
+    <section className="table-card workflow-queue-card">
+      <div className="table-toolbar workflow-toolbar"><h2>{tr(locale, "Active critical events", "الأحداث الحرجة النشطة")}</h2>
         <span>{tr(locale, "Open", "مفتوحة")}: {totalOpen} · {tr(locale, "Overdue", "متأخرة")}: {totalOverdue} · {tr(locale, "Shown", "المعروضة")}: {events.length}</span>
       </div>
-      <nav className="result-actions no-print" aria-label={tr(locale, "Critical queue filters", "فلاتر قائمة النتائج الحرجة")}>
-        <Link className="secondary-link" href="/critical-results?filter=all">{tr(locale, "All open events", "كل الأحداث المفتوحة")}</Link>
-        <Link className="secondary-link" href="/critical-results?filter=overdue">{tr(locale, "Overdue only", "المتأخرة فقط")}</Link>
-        <span>{filter === "overdue" ? tr(locale, "Overdue filter", "فلتر المتأخرة") : tr(locale, "All open", "جميع المفتوحة")}</span>
+      <nav className="workflow-filter-tabs no-print" aria-label={tr(locale, "Critical queue filters", "فلاتر قائمة النتائج الحرجة")}>
+        <Link className="secondary-link" aria-current={filter === "all" ? "page" : undefined} href="/critical-results?filter=all">{tr(locale, "All open events", "كل الأحداث المفتوحة")}</Link>
+        <Link className="secondary-link" aria-current={filter === "overdue" ? "page" : undefined} href="/critical-results?filter=overdue">{tr(locale, "Overdue only", "المتأخرة فقط")}</Link>
       </nav>
       {invalidCursor && <p role="status" className="muted">{tr(locale, "Invalid or outdated page marker; showing first page.", "مؤشر الصفحة غير صالح أو قديم؛ تُعرض الصفحة الأولى.")}</p>}
-      <div className="table-wrap"><table>
+      {events.length === 0 ? <div className="workflow-empty" role="status">
+        <h3>{filter === "overdue" ? tr(locale, "No overdue critical results", "لا توجد نتائج حرجة متأخرة") : tr(locale, "No open critical results", "لا توجد نتائج حرجة مفتوحة")}</h3>
+        <p>{tr(locale, "There are no matching open critical result events within your authorized branches and departments. Escalation and acknowledgement requirements remain enforced for any future events.", "لا توجد أحداث حرجة مفتوحة مطابقة ضمن الفروع والأقسام المصرح بها. ستظل متطلبات الإقرار والتصعيد مطبّقة على أي أحداث جديدة.")}</p>
+        {filter === "overdue" && <Link className="secondary-link" href="/critical-results?filter=all">{tr(locale, "View all open events", "عرض جميع الأحداث المفتوحة")}</Link>}
+      </div> : <div className="table-wrap"><table className="workflow-data-table">
         <thead><tr><th>{tr(locale, "Patient / Order", "المريض / الطلب")}</th><th>{tr(locale, "Test", "الفحص")}</th><th>{tr(locale, "Critical value(s)", "القيم الحرجة")}</th><th>{tr(locale, "Branch", "الفرع")}</th><th>{tr(locale, "Detected", "تم الاكتشاف")}</th><th>{tr(locale, "Acknowledgement due", "موعد الإقرار")}</th><th>{tr(locale, "Escalation", "التصعيد")}</th><th>{tr(locale, "Last communication", "آخر تواصل")}</th><th>{tr(locale, "Action", "الإجراء")}</th></tr></thead>
-        <tbody>{events.length === 0 ? <tr><td colSpan={9} className="empty-state">{tr(locale, "No open critical result events in your authorized branches.", "لا توجد نتائج حرجة مفتوحة ضمن الفروع المصرح لك بها.")}</td></tr> : events.map(event => {
+        <tbody>{events.map(event => {
           const overdue = Boolean(event.acknowledgementDueAt && event.acknowledgementDueAt < now);
           const last = event.communications[0];
           const criticalSnapshot = Array.isArray(event.criticalValueSnapshot)
@@ -125,17 +128,17 @@ export default async function CriticalResultsPage({
               return <div key={index}><strong>{component}: {display}</strong>{optionCode ? <><br/><small>{optionCode} · {String(value.flag || "")}</small></> : <><br/><small>{String(value.flag || "")}</small></>}</div>;
             })}</td>
             <td>{event.result.performingBranch.nameEn}</td>
-            <td>{<SystemDateText value={event.detectedAt.toISOString()} />}</td>
+            <td><SystemDateText value={event.detectedAt.toISOString()} timeZone={event.result.performingBranch.timezone} /></td>
             <td>{event.acknowledgementDueAt
-              ? <strong className={overdue ? "delta-exceeded" : ""}>{<SystemDateText value={event.acknowledgementDueAt.toISOString()} />}{overdue ? " · " + tr(locale, "OVERDUE", "متأخر") : ""}</strong>
+              ? <strong className={overdue ? "delta-exceeded" : ""}><SystemDateText value={event.acknowledgementDueAt.toISOString()} timeZone={event.result.performingBranch.timezone} />{overdue ? " · " + tr(locale, "OVERDUE", "متأخر") : ""}</strong>
               : tr(locale, "No policy", "لا توجد سياسة")}</td>
-            <td>{tr(locale, "Level", "المستوى")} {event.escalationLevel}{event.maxEscalationLevelSnapshot !== null ? ` / ${event.maxEscalationLevelSnapshot}` : ""}<br/><small>{event.nextEscalationDueAt ? <>{tr(locale, "Next", "التالي") + ": "}<SystemDateText value={event.nextEscalationDueAt.toISOString()} /></> : "—"}</small></td>
-            <td>{last ? <><strong>{last.outcome}</strong><br/><small>{<SystemDateText value={last.communicatedAt.toISOString()} />} · {last.recipientName}</small></> : tr(locale, "No communication yet", "لا يوجد تواصل بعد")}</td>
+            <td>{tr(locale, "Level", "المستوى")} {event.escalationLevel}{event.maxEscalationLevelSnapshot !== null ? ` / ${event.maxEscalationLevelSnapshot}` : ""}<br/><small>{event.nextEscalationDueAt ? <>{tr(locale, "Next", "التالي") + ": "}<SystemDateText value={event.nextEscalationDueAt.toISOString()} timeZone={event.result.performingBranch.timezone} /></> : "—"}</small></td>
+            <td>{last ? <><strong>{last.outcome}</strong><br/><small><SystemDateText value={last.communicatedAt.toISOString()} timeZone={event.result.performingBranch.timezone} /> · {last.recipientName}</small></> : tr(locale, "No communication yet", "لا يوجد تواصل بعد")}</td>
             <td><Link className="secondary-link" href={`/worklists/${event.result.orderItemId}`}>{tr(locale, "Open Result", "فتح النتيجة")}</Link></td>
           </tr>;
         })}</tbody>
-      </table></div>
-      <nav className="result-actions no-print" aria-label={tr(locale, "Critical results pages", "صفحات النتائج الحرجة")}>
+      </table></div>}
+      <nav className="workflow-queue-footer no-print" aria-label={tr(locale, "Critical results pages", "صفحات النتائج الحرجة")}>
         <span>{tr(locale, "Up to 50 events per page; oldest acknowledgement deadlines first. Events without a due date appear last.", "حتى 50 حدثًا بالصفحة؛ مواعيد الإقرار الأقدم أولاً، والأحداث دون موعد في النهاية.")}</span>
         {params.after && <Link className="secondary-link" href={`/critical-results?filter=${filter}`}>{tr(locale, "Back to first page", "العودة لأول صفحة")}</Link>}
         {queue.hasNext && queue.nextCursor && <Link className="secondary-link" rel="next"
