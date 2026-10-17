@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { parseBranchExpectedInstant } from "@/lib/branch-wall-clock";
 
 function text(value: unknown, max = 1000) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -28,9 +29,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "cost_and_currency_must_be_provided_together" }, { status: 400 });
   }
   const expectedResultAtText = text(body.expectedResultAt, 40);
-  const expectedResultAt = expectedResultAtText ? new Date(expectedResultAtText) : null;
-  if (expectedResultAt && Number.isNaN(expectedResultAt.getTime())) {
-    return NextResponse.json({ error: "invalid_expected_result_at" }, { status: 400 });
+  const branch = await prisma.branch.findFirst({
+    where: { id: branchId, organizationId: session.user.organizationId, status: "ACTIVE" },
+    select: { timezone: true },
+  });
+  if (!branch) return NextResponse.json({ error: "branch_not_available" }, { status: 403 });
+  const expectedResultAt = expectedResultAtText
+    ? parseBranchExpectedInstant(expectedResultAtText, branch.timezone)
+    : null;
+  if (expectedResultAtText && !expectedResultAt) {
+    return NextResponse.json({ error: "invalid_or_ambiguous_branch_local_time" }, { status: 400 });
   }
 
   const [orderItem, laboratory] = await Promise.all([
