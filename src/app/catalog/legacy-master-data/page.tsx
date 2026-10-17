@@ -34,6 +34,7 @@ export default async function LegacyMasterDataPage() {
       </div>
       <Link className="secondary-link" href="/catalog">{tr(locale, "Back to Catalog", "العودة للدليل")}</Link>
     </header>
+    <p className="muted">{tr(locale, "Export audit timestamps are presented in UTC; signed manifests and imported source records remain unchanged.", "تُعرض أوقات التصدير بتوقيت UTC؛ لا تُعدّل ملفات التصدير الموقعة أو السجلات المصدرية.")}</p>
     <LegacyMasterConfigurationExport locale={locale} kinds={kinds}/>
     <LegacyMasterDataImport locale={locale} availableKinds={kinds}/>
   </main>;
