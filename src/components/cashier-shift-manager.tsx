@@ -3,6 +3,7 @@
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CrudModal } from "@/components/crud-modal";
+import { SystemDateText } from "@/components/system-date-text";
 import { statusLabel } from "@/lib/ui-i18n";
 
 type BranchOption = { id: string; code: string; name: string; defaultCurrency: string };
@@ -10,6 +11,7 @@ type ShiftRow = {
   id: string;
   shiftNumber: string;
   branchCode: string;
+  branchTimeZone: string;
   branchName: string;
   cashierName: string;
   cashierUserId: string;
@@ -177,7 +179,7 @@ export function CashierShiftManager({
           const own = shift.cashierUserId === currentUserId;
           const closure = shift.latestClosure;
           return <tr key={shift.id}>
-            <td><strong>{shift.shiftNumber}</strong><small className="table-subtext">{shift.openedAt.slice(0,16).replace("T"," ")}</small></td>
+            <td><strong>{shift.shiftNumber}</strong><small className="table-subtext"><SystemDateText value={shift.openedAt} timeZone={shift.branchTimeZone} /></small></td>
             <td>{shift.cashierName}</td><td>{shift.branchCode} — {shift.branchName}</td><td>{shift.currency}</td><td>{shift.openingCash}</td>
             <td>{closure?.expectedCash || "—"}</td><td>{closure?.actualCash || "—"}</td><td>{closure?.differenceAmount || "—"}</td>
             <td><span className={"status-badge status-" + shift.status.toLowerCase().replaceAll("_","-")}>{statusLabel(locale, shift.status)}</span></td>
