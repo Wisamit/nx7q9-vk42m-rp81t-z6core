@@ -180,12 +180,14 @@ export default async function CommentReviewPage({
             })}
           </tbody>
         </table></div>}
+        {(hasMore || after) && <nav className="workflow-queue-footer" aria-label={tr(locale, "Comment review pages", "صفحات مراجعة التعليقات")}>
         {hasMore && next && <p><Link className="secondary-link"
           href={`/clinical-comments/review?after=${encodeURIComponent(encodeCommentReviewCursor(next))}`}>
           {tr(locale, "Next 50 drafts →", "المسودات الخمسون التالية ←")}
         </Link></p>}
         {after && <p><Link className="secondary-link" href="/clinical-comments/review">
           {tr(locale, "Start of queue", "بداية القائمة")}</Link></p>}
+        </nav>}
       </article>
     </section>
   </main>;
