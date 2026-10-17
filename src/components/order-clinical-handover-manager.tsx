@@ -1,4 +1,5 @@
 "use client";
+import { SystemDateText } from "@/components/system-date-text";
 import { useState } from "react";
 import { useRouter } from "next/navigation"
 import { CrudModal } from "@/components/crud-modal";
@@ -162,7 +163,7 @@ export function OrderClinicalHandoverManager({locale,orderId,notes,currentUserId
      {notes.map(note=><div key={note.id} className="detail-section">
        <strong>{tr(categoryNames[note.category]?.[0]||note.category,categoryNames[note.category]?.[1]||note.category)}
          {" · "}v{note.revisionNumber} · {note.status}</strong>
-       <small className="table-subtext">{note.authorName} · {note.createdAt.replace("T"," ").slice(0,19)}</small>
+       <small className="table-subtext">{note.authorName} · {<SystemDateText value={note.createdAt} />}</small>
        <p dir={note.language==="ar"?"rtl":"ltr"} style={{whiteSpace:"pre-wrap"}}>{note.body}</p>
        {note.correctionReason&&<small className="table-subtext">
          {tr("Correction reason","سبب التصحيح")}: {note.correctionReason}</small>}
