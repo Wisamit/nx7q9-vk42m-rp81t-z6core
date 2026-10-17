@@ -1,3 +1,4 @@
+import { SystemDateText } from "@/components/system-date-text";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { canAccessBranch, permissionSet, requirePermission } from "@/lib/auth";
@@ -93,13 +94,13 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         <dl>
           <dt>{tr(locale, "Status", "الحالة")}</dt><dd>{statusLabel(locale, order.status)}</dd>
           <dt>{tr(locale, "Priority", "الأولوية")}</dt><dd>{priorityLabel(locale, order.priority)}</dd>
-          <dt>{tr(locale, "Ordered", "تاريخ الطلب")}</dt><dd>{order.orderedAt.toISOString().replace("T"," ").slice(0,19)}</dd>
+          <dt>{tr(locale, "Ordered", "تاريخ الطلب")}</dt><dd>{<SystemDateText value={order.orderedAt.toISOString()} timeZone={order.orderingBranch.timezone} />}</dd>
           <dt>{tr(locale, "Promised report delivery (recorded at registration)", "موعد تسليم التقرير المتفق عليه (محفوظ عند التسجيل)")}</dt>
           <dd>{order.promisedReportDeliveryLocal && order.promisedReportDeliveryTimezone
             ? order.promisedReportDeliveryLocal.replace("T"," ") + " (" + order.promisedReportDeliveryTimezone + ")"
             : tr(locale, "Not specified", "غير محدد")}</dd>
           <dt>{tr(locale, "Delivery commitment (UTC)", "موعد التسليم (UTC)")}</dt>
-          <dd>{order.promisedReportDeliveryAtUtc?.toISOString().replace("T"," ").slice(0,19) || "—"}</dd>
+          <dd>{order.promisedReportDeliveryAtUtc ? <SystemDateText value={order.promisedReportDeliveryAtUtc.toISOString()} timeZone="UTC" /> : "—"}</dd>
 
           <dt>{tr(locale, "Referrer", "المحيل")}</dt><dd>{order.referrer?.nameEn || "—"}</dd>
           <dt>{tr(locale, "Client", "العميل")}</dt><dd>{order.client?.nameEn || tr(locale, "Patient / walk-in", "مريض / حضور مباشر")}</dd>
@@ -167,12 +168,12 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
             ? answer.selectedOptionTextArSnapshot || answer.selectedOptionTextEnSnapshot || answer.selectedOptionSnapshot
             : answer.selectedOptionTextEnSnapshot || answer.selectedOptionSnapshot;
           const dateTimeAnswer = answer.answerDateTimeLocalSnapshot
-            ? answer.answerDateTimeLocalSnapshot.replace("T", " ") + (answer.answerTimeZoneSnapshot ? " · " + answer.answerTimeZoneSnapshot : "")
-            : answer.answerDateTime?.toISOString().replace("T"," ").slice(0,19) || null;
+            ? <><SystemDateText kind="calendar" value={answer.answerDateTimeLocalSnapshot.slice(0,10)} />{" " + answer.answerDateTimeLocalSnapshot.slice(11,16)}{answer.answerTimeZoneSnapshot ? " · " + answer.answerTimeZoneSnapshot : ""}</>
+            : answer.answerDateTime ? <SystemDateText value={answer.answerDateTime.toISOString()} timeZone={order.orderingBranch.timezone} /> : null;
           const displayAnswer = answer.answerText
             ?? answer.answerNumeric?.toString()
             ?? (answer.answerBoolean === null ? null : answer.answerBoolean ? tr(locale, "Yes", "نعم") : tr(locale, "No", "لا"))
-            ?? answer.answerDate?.toISOString().slice(0,10)
+            ?? (answer.answerDate ? <SystemDateText value={answer.answerDate.toISOString().slice(0,10)} kind="calendar" /> : null)
             ?? dateTimeAnswer
             ?? selectedOption
             ?? "—";
@@ -180,7 +181,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
             <td><strong>{item.testCodeSnapshot}</strong></td>
             <td>{answer.questionTextEnSnapshot}{answer.questionTextArSnapshot && <><br/><small dir="rtl">{answer.questionTextArSnapshot}</small></>}<br/><small>{answer.questionCodeSnapshot} · v{answer.questionVersionSnapshot}</small></td>
             <td><strong>{displayAnswer}</strong>{answer.selectedOptionCodeSnapshot ? <><br/><small>{answer.selectedOptionCodeSnapshot}</small></> : null}</td>
-            <td>{answer.recordedAt.toISOString().replace("T"," ").slice(0,19)}</td>
+            <td>{<SystemDateText value={answer.recordedAt.toISOString()} timeZone={order.orderingBranch.timezone} />}</td>
           </tr>;
         }))}</tbody>
       </table></div>
@@ -230,7 +231,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       <article className="detail-card">
         <h2>{tr(locale, "Status History", "سجل الحالات")}</h2>
         <div className="summary-list">{order.statusHistory.map(entry => <div key={entry.id}>
-          <span>{entry.changedAt.toISOString().replace("T"," ").slice(0,19)} · {entry.changedBy.displayNameEn}</span>
+          <span>{<SystemDateText value={entry.changedAt.toISOString()} timeZone={order.orderingBranch.timezone} />} · {entry.changedBy.displayNameEn}</span>
           <strong>{entry.fromStatus ? statusLabel(locale, entry.fromStatus) : tr(locale, "NEW", "جديد")} → {statusLabel(locale, entry.toStatus)}</strong>
         </div>)}</div>
       </article>
