@@ -68,7 +68,7 @@ test("MariaDB: legacy JSON stage/revalidate live permissions, owner and optimist
       "status,created_by_user_id,updated_at) "+
       "VALUES(?,?,'LEGACY_MDB_EXPORT','synthetic.json','DRAFT',?,NOW(3))",
       [batch,org,user],"DELETE FROM catalog_import_batches WHERE id=?",[batch]);
-    await seed("INSERT INTO catalog_import_rows(id,batch_id,row_number,entity_type,status,"+
+    await seed("INSERT INTO catalog_import_rows(id,batch_id,`row_number`,entity_type,status,"+
       "source_data,updated_at) VALUES(?,?,1,'TEST','PENDING',?,NOW(3))",
       [row,batch,JSON.stringify({code:"LV1",nameEn:"Synthetic test"})],
       "DELETE FROM catalog_import_rows WHERE id=?",[row]);
