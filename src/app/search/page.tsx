@@ -1,3 +1,4 @@
+import { SystemDateText } from "@/components/system-date-text";
 import Link from "next/link";
 import { permissionSet, requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
@@ -178,7 +179,7 @@ export default async function GlobalSearchPage({
           <td><strong>{order.accessionNumber}</strong></td>
           <td>{order.patient.patientNumber}<br/><small>{patientName(order.patient)}</small></td>
           <td>{order.orderingBranch.code}</td>
-          <td>{order.orderedAt.toISOString().replace("T"," ").slice(0,16)}</td>
+          <td>{<SystemDateText value={order.orderedAt.toISOString()} />}</td>
           <td><span className={"status-badge status-"+order.status.toLowerCase().replaceAll("_","-")}>{statusLabel(locale, order.status)}</span></td>
           <td><Link className="secondary-link" href={"/orders/"+order.id}>{tr(locale, "Open", "فتح")}</Link></td>
         </tr>)}</tbody>
