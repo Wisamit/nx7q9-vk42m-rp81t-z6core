@@ -133,7 +133,7 @@ export default async function TestDetailPage({ params }: { params: Promise<{ id:
               <br/><small>{tr(locale, "Max level", "أقصى مستوى")}: {policy.maxEscalationLevel}{policy.escalationRepeatMinutes ? " · " + tr(locale, "repeat", "تكرار") + " " + policy.escalationRepeatMinutes + " " + tr(locale, "min", "دقيقة") : ""}</small>
               <br/><small>{tr(locale, "Recipients", "المستلمون")}: {policy.escalationPermissionCode || "—"}</small>
             </>}</td>
-            <td>{<SystemDateText value={policy.effectiveFrom.toISOString().slice(0,10)} kind="calendar" />{" → "}{policy.effectiveTo ? <SystemDateText value={policy.effectiveTo.toISOString().slice(0,10)} kind="calendar" /> : tr(locale, "current", "حالي")}</td>
+            <td><SystemDateText value={policy.effectiveFrom.toISOString().slice(0,10)} kind="calendar" />{" → "}{policy.effectiveTo ? <SystemDateText value={policy.effectiveTo.toISOString().slice(0,10)} kind="calendar" /> : tr(locale, "current", "حالي")}</td>
             <td>
               <strong>{referenceApprovalLabel(policy.approvalStatus)}</strong>
               <br/><small>{tr(locale, "Created by", "أُنشئ بواسطة")}: {actorName(policy.createdBy)}</small>
@@ -181,7 +181,7 @@ export default async function TestDetailPage({ params }: { params: Promise<{ id:
                    {range.populationCode ? ` · ${tr(locale, "Population", "المجموعة")}: ${range.populationCode}` : ""}
                  </td>
                 <td>{[range.criticalLow?.toString(),range.criticalHigh?.toString()].filter(Boolean).join(" / ")||"—"}</td>
-                <td>{<SystemDateText value={range.effectiveFrom.toISOString().slice(0,10)} kind="calendar" />{" → "}{range.effectiveTo ? <SystemDateText value={range.effectiveTo.toISOString().slice(0,10)} kind="calendar" /> : tr(locale, "current", "حالي")}</td>
+                <td><SystemDateText value={range.effectiveFrom.toISOString().slice(0,10)} kind="calendar" />{" → "}{range.effectiveTo ? <SystemDateText value={range.effectiveTo.toISOString().slice(0,10)} kind="calendar" /> : tr(locale, "current", "حالي")}</td>
                 <td>
                   <strong>{referenceApprovalLabel(range.approvalStatus)}</strong>
                   {range.source ? <><br/><small>{tr(locale, "Source", "المصدر")}: {range.source}</small></> : null}
