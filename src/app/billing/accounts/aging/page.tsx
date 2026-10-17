@@ -229,7 +229,7 @@ export default async function AccountsReceivableAgingPage({
   const hasUnclassified = rows.some(row => row.bucket === null && row.receivable !== "0.0000");
   const selectedBranchValue = useAllBranches ? "ALL" : selectedScope?.branchId || "";
 
-  return <main className="catalog-shell">
+  return <main className="catalog-shell filter-workspace">
     <header className="page-header">
       <div>
         <p className="eyebrow">{tr(locale, "Billing", "الفوترة")}</p>
@@ -244,7 +244,7 @@ export default async function AccountsReceivableAgingPage({
 
     <section className="table-card">
       <div className="table-toolbar"><div><h2>{tr(locale, "Aging Filters", "مرشحات أعمار الذمم")}</h2><span>{tr(locale, "Amounts are never combined across currencies.", "لا يتم جمع المبالغ بين العملات المختلفة.")}</span></div></div>
-      <form className="catalog-form" action="/billing/accounts/aging" method="get">
+      <form className="catalog-form filter-grid" action="/billing/accounts/aging" method="get">
         <label>{tr(locale, "Branch scope", "نطاق الفرع")}
           <select name="branch" defaultValue={selectedBranchValue}>
             {hasAllBranches && <option value="ALL">{tr(locale, "All organization branches", "جميع فروع المؤسسة")}</option>}
