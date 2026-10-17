@@ -117,6 +117,7 @@ export default async function SendOutsPage() {
         id: referral.id,
         status: referral.status,
         branchCode: referral.branch.code,
+        branchTimeZone: referral.branch.timezone,
         accessionNumber: referral.orderItem.order.accessionNumber,
         patientNumber: referral.orderItem.order.patient.patientNumber,
         patientName: patientName(referral.orderItem.order.patient),
