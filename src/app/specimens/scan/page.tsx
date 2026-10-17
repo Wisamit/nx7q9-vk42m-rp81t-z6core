@@ -2,6 +2,7 @@ import Link from "next/link";
 import { permissionSet, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { SpecimenActions } from "@/components/specimen-actions";
+import { SystemDateText } from "@/components/system-date-text";
 import { SpecimenAliquotManager } from "@/components/specimen-aliquot-manager";
 import { specimenRequirementSnapshotFromDetails } from "@/lib/specimen-requirement-engine";
 import { getUiLocale, statusLabel, tr } from "@/lib/ui-i18n";
@@ -65,6 +66,7 @@ export default async function SpecimenScanPage({
           orderBy: { rejectedAt: "desc" },
           take: 20,
           include: {
+            branch: true,
             rejectedBy: true,
             affectedLinks: { include: { orderItem: true } },
           },
@@ -89,7 +91,7 @@ export default async function SpecimenScanPage({
             orderItem: { select: { testCodeSnapshot: true } },
             childSpecimen: { select: { barcode: true } },
             usedBy: { select: { displayNameEn: true, displayNameAr: true } },
-            branch: { select: { code: true } },
+            branch: { select: { code: true, timezone: true } },
           },
           orderBy: { usedAt: "desc" },
           take: 50,
@@ -164,7 +166,7 @@ export default async function SpecimenScanPage({
       {specimen.collectionAttempts[0] && <div className={specimen.collectionAttempts[0].outcome === "FAILED" ? "specimen-rejection" : "form-warning"}>
         <strong>{tr(locale, "Latest collection attempt", "آخر محاولة سحب")}</strong>
         <span>
-          {specimen.collectionAttempts[0].attemptedAt.toISOString().replace("T"," ").slice(0,19)}
+          <SystemDateText value={specimen.collectionAttempts[0].attemptedAt.toISOString()} timeZone={specimen.collectionAttempts[0].branch.timezone} />
           {" · "}{specimen.collectionAttempts[0].branchCodeSnapshot}
           {" · "}{locale === "ar" ? specimen.collectionAttempts[0].collectorNameArSnapshot || specimen.collectionAttempts[0].collectorNameEnSnapshot : specimen.collectionAttempts[0].collectorNameEnSnapshot}
           {" · "}{specimen.collectionAttempts[0].outcome === "SUCCESS" ? tr(locale, "Success", "ناجحة") : tr(locale, "Failed", "فاشلة")}
@@ -176,7 +178,7 @@ export default async function SpecimenScanPage({
       {specimen.receptionAssessments[0] && <div className="form-warning">
         <strong>{tr(locale, "Latest reception assessment", "آخر تقييم استلام")}</strong>
         <span>
-          {specimen.receptionAssessments[0].receivedAt.toISOString().replace("T"," ").slice(0,19)}
+          <SystemDateText value={specimen.receptionAssessments[0].receivedAt.toISOString()} timeZone={specimen.receptionAssessments[0].branch.timezone} />
           {" · "}{specimen.receptionAssessments[0].branch.code}
           {" · "}{locale === "ar" ? specimen.receptionAssessments[0].receivedBy.displayNameAr || specimen.receptionAssessments[0].receivedBy.displayNameEn : specimen.receptionAssessments[0].receivedBy.displayNameEn}
           {" · "}{tr(locale, "Label", "الملصق")}: {specimen.receptionAssessments[0].labelAssessment}
@@ -228,7 +230,7 @@ export default async function SpecimenScanPage({
         <summary>{tr(locale, "Collection attempt history", "سجل محاولات السحب")} ({specimen.collectionAttempts.length})</summary>
         <div className="summary-list">
           {specimen.collectionAttempts.map(attempt => <div key={attempt.id}>
-            <span>{attempt.attemptedAt.toISOString().replace("T"," ").slice(0,19)} · {attempt.branchCodeSnapshot} · {locale === "ar" ? attempt.collectorNameArSnapshot || attempt.collectorNameEnSnapshot : attempt.collectorNameEnSnapshot}</span>
+            <span><SystemDateText value={attempt.attemptedAt.toISOString()} timeZone={attempt.branch.timezone} /> · {attempt.branchCodeSnapshot} · {locale === "ar" ? attempt.collectorNameArSnapshot || attempt.collectorNameEnSnapshot : attempt.collectorNameEnSnapshot}</span>
             <strong>{attempt.outcome === "SUCCESS" ? tr(locale, "Successful collection", "سحب ناجح") : tr(locale, "Failed collection", "فشل السحب")} · {attempt.collectionLocationType}{attempt.collectionLocationText ? ` · ${attempt.collectionLocationText}` : ""}</strong>
             <small>{attempt.outcome === "FAILED" ? `${attempt.failureReasonCode || "—"} · ${attempt.failureReasonText || "—"}` : `${attempt.volume?.toFixed(3) || "—"} ${attempt.volumeUnit || ""}`}{attempt.replacementSpecimen ? ` · ${tr(locale, "Recollection", "إعادة السحب")}: ${attempt.replacementSpecimen.barcode}` : ""}</small>
           </div>)}
@@ -239,7 +241,7 @@ export default async function SpecimenScanPage({
         <summary>{tr(locale, "Rejection history", "سجل الرفض")} ({specimen.rejectionRecords.length})</summary>
         <div className="summary-list">
           {specimen.rejectionRecords.map(rejection => <div key={rejection.id}>
-            <span>{rejection.rejectedAt.toISOString().replace("T"," ").slice(0,19)} · {locale === "ar" ? rejection.rejectedBy.displayNameAr || rejection.rejectedBy.displayNameEn : rejection.rejectedBy.displayNameEn}</span>
+            <span><SystemDateText value={rejection.rejectedAt.toISOString()} timeZone={rejection.branch.timezone} /> · {locale === "ar" ? rejection.rejectedBy.displayNameAr || rejection.rejectedBy.displayNameEn : rejection.rejectedBy.displayNameEn}</span>
             <strong>{rejection.scope === "WHOLE_SPECIMEN" ? tr(locale, "Whole specimen", "العينة كاملة") : tr(locale, "Selected tests", "فحوصات محددة")} · {locale === "ar" ? rejection.reasonNameArSnapshot || rejection.reasonNameEnSnapshot : rejection.reasonNameEnSnapshot}</strong>
             <small>{rejection.affectedLinks.map(link => link.orderItem.testCodeSnapshot).join(", ")} · {rejection.reasonDetails}</small>
           </div>)}
