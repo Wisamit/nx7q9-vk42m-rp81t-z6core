@@ -9,12 +9,12 @@ test("review uploads use one-third, accessible dialog and explicit confirm not i
   assert.match(modal,/<CrudModal open=\{open\} onClose=\{close\} size="compact"/);
   assert.match(modal,/onStage: \(file: File\) => Promise<boolean>/);
   assert.match(modal,/const \[file, setFile\] = useState<File \| null>\(null\)/);
-  assert.match(modal,/onChange=\\{event => \\{ setFile\\(event\\.currentTarget\\.files\\?\\.\\[0\\] \\?\\? null\\)/);
-  assert.match(modal,/protectUnsavedChanges title=\\{title\\}/);
-  assert.match(modal,/onResetError: \\(\\) => void/);
-  assert.match(modal,/onResetError\\(\\)/);
-  assert.match(modal,/setSubmissionError\\(\\"\\"\\)/);
-  assert.match(modal,/catch \\{/);
+  assert.match(modal,/onChange=\{event => \{ setFile\(event\.currentTarget\.files\?\.\[0\] \?\? null\)/);
+  assert.match(modal,/protectUnsavedChanges title=\{title\}/);
+  assert.match(modal,/onResetError: \(\) => void/);
+  assert.match(modal,/onResetError\(\)/);
+  assert.match(modal,/setSubmissionError\(\"\"\)/);
+  assert.match(modal,/catch \{/);
   assert.match(modal,/disabled=\{busy \|\| !file\} onClick=\{\(\) => void confirm\(\)\}/);
   assert.match(modal,/if \(!file \|\| busy \|\| submitting\.current\) return/);
   assert.match(modal,/if \(busy \|\| submitting\.current\) return/);
