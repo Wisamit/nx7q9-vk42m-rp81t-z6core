@@ -52,6 +52,7 @@ export function CatalogBundleReviewStaging({ locale }: { locale: "ar" | "en" }) 
     )}</p>
     <div className="review-actions">
       <ReviewFileUploadDialog locale={locale} busy={busy} error={message}
+        onResetError={() => setMessage("")}
         title={tr("Review signed catalog JSON bundle", "مراجعة حزمة إعدادات المختبر")}
         description={tr("Select a previously exported JSON bundle and confirm draft-only review.", "اختر حزمة JSON مُصدَّرة سابقاً وأكد تجهيزها للمراجعة فقط.")}
         triggerLabel={tr("Stage JSON bundle for review", "تجهيز ملف JSON للمراجعة")}
