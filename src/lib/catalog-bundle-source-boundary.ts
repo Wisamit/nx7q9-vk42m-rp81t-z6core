@@ -2,7 +2,13 @@ import type { CatalogExportType } from "./catalog-configuration-export.ts";
 
 /** Bound all fields persisted from caller-controlled review-only source bundles. */
 export class BundleSourceBoundaryError extends Error {
-  constructor(readonly code: string, readonly status = 400) { super(code); }
+  readonly code: string;
+  readonly status: number;
+  constructor(code: string, status = 400) {
+    super(code);
+    this.code = code;
+    this.status = status;
+  }
 }
 const common = ["id", "createdAt", "updatedAt", "deactivatedAt"];
 const named = ["code", "nameEn", "nameAr", "status"];
