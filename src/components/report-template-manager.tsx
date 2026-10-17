@@ -4,10 +4,11 @@ import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CrudModal } from "@/components/crud-modal";
 import { SystemIcon } from "@/components/system-icon";
+import { SystemDateText } from "@/components/system-date-text";
 import { statusLabel } from "@/lib/ui-i18n";
 
 type Branch = { id:string; code:string; nameEn:string; nameAr:string|null };
-type Template = { id:string; code:string; nameEn:string; nameAr:string|null; branchId:string|null; latestVersion:number|null; latestStatus:string|null; latestVersionId:string|null; latestSubmittedByUserId:string|null };
+type Template = { id:string; code:string; nameEn:string; nameAr:string|null; branchId:string|null; latestVersion:number|null; latestStatus:string|null; latestVersionId:string|null; latestSubmittedByUserId:string|null; latestCreatedAt:string|null; latestTimeZone:string|null };
 
 export function ReportTemplateManager({ branches, templates, locale, currentUserId, canManage }: { branches:Branch[]; templates:Template[]; locale:"ar"|"en"; currentUserId:string; canManage:boolean }) {
   const router=useRouter();
@@ -196,8 +197,8 @@ export function ReportTemplateManager({ branches, templates, locale, currentUser
     <article className="table-card">
       <div className="table-toolbar"><h2>{tr("Template Versions","نسخ القوالب")}</h2><span>{templates.length} {tr("templates","قوالب")}</span></div>
       <p className="muted">{tr("A different authorized user must approve a draft before immediate activation. Past released reports and retired template intervals remain unchanged.", "يجب أن يعتمد المسودة مستخدم مخوّل آخر قبل تفعيلها فوراً. تبقى التقارير الصادرة وفترات القوالب السابقة محفوظة.")}</p>
-      <div className="table-wrap"><table><thead><tr><th>{tr("Template","القالب")}</th><th>{tr("Scope","النطاق")}</th><th>{tr("Latest","الأحدث")}</th><th>{tr("Status","الحالة")}</th><th></th></tr></thead><tbody>
-        {templates.map(t=><tr key={t.id}><td><strong>{t.code}</strong><br/><small>{templateName(t)}</small></td><td>{t.branchId?tr("Branch","فرع"):tr("Organization","المؤسسة")}</td><td>{t.latestVersion??"—"}</td><td>{t.latestStatus?statusLabel(locale,t.latestStatus):tr("No version","لا توجد نسخة")}</td><td>{canManage&&t.latestVersion&&t.latestStatus==="DRAFT"&&t.latestSubmittedByUserId!==currentUserId?
+      <div className="table-wrap"><table><thead><tr><th>{tr("Template","القالب")}</th><th>{tr("Scope","النطاق")}</th><th>{tr("Latest","الأحدث")}</th><th>{tr("Version created","تاريخ إنشاء النسخة")}</th><th>{tr("Status","الحالة")}</th><th></th></tr></thead><tbody>
+        {templates.map(t=><tr key={t.id}><td><strong>{t.code}</strong><br/><small>{templateName(t)}</small></td><td>{t.branchId?tr("Branch","فرع"):tr("Organization","المؤسسة")}</td><td>{t.latestVersion??"—"}</td><td>{t.latestCreatedAt?<SystemDateText value={t.latestCreatedAt} timeZone={t.latestTimeZone||undefined} />:"—"}</td><td>{t.latestStatus?statusLabel(locale,t.latestStatus):tr("No version","لا توجد نسخة")}</td><td>{canManage&&t.latestVersion&&t.latestStatus==="DRAFT"&&t.latestSubmittedByUserId!==currentUserId?
           <button className="secondary-button" type="button" disabled={!!busy}
             onClick={()=>{const version=t.latestVersionId;if(version)reviewVersion(t.id,version,"APPROVE")}}>
             {tr("Approve independently","اعتماد مستقل")}
