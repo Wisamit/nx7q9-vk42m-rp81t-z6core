@@ -31,7 +31,8 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
         include: { rows: { orderBy: { rowNumber: "asc" } } },
       });
       if (!batch) return { error: "batch_not_found", httpStatus: 404 } as const;
-      if (batch.sourceType !== "LEGACY_MDB_EXPORT")
+      if ((batch.sourceType === "CSV_REVIEW" || batch.sourceType === "CONFIG_BUNDLE_REVIEW") ||
+          batch.sourceType !== "LEGACY_MDB_EXPORT")
         return { error: "csv_review_is_not_committable", httpStatus: 409 } as const;
 
       const live = await liveCatalogReviewStagingAuthority(tx, {
@@ -48,6 +49,9 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
       });
       if (!live)
         return { error: "catalog_revalidate_authority_revoked", httpStatus: 403 } as const;
+
+      if (batch.rows.length === 0)
+        return { error: "empty_import_batch", httpStatus: 409 } as const;
 
       // Never reopen imported, skipped or completed catalog/clinical evidence.
       if (batch.status === "IMPORTED" || batch.status === "FAILED" ||
