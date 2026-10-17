@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { liveLegacyClinicalWriteScope } from "@/lib/catalog-legacy-clinical-write-auth";
 import { clinicalImportTestWhere, resolveClinicalImportScope } from "@/lib/catalog-clinical-import-scope";
 import { eligibleLegacyUnitSourceRow, indexLegacyPreparedUnits, legacyPreparedUnitKey, proposedLegacyUnitCode, registerLegacyPreparedUnitAlias, resolveLegacyPreparedUnit } from "@/lib/catalog-legacy-unit-preparation";
 
@@ -38,15 +39,19 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
   let result: { createdUnits: number; assignedTests: number; sourceUnitCount: number; ambiguousUnits: number; unrepresentableUnits: number; unresolvedAssignments: number };
   try {
   result = await prisma.$transaction(async (tx) => {
-    const ownedOrganization = await tx.$queryRaw<Array<{ id: string }>>`SELECT id FROM organizations WHERE id = ${scope.organizationId} FOR UPDATE`;
+    const ownedOrganization = await tx.$queryRaw<Array<{ id: string }>>`SELECT id FROM organizations WHERE id = ${scope.organizationId} AND status = 'ACTIVE' FOR UPDATE`;
     if (ownedOrganization.length !== 1) throw new Error("legacy_unit_scope_changed");
     const ownedBatch = await tx.$queryRaw<Array<{ id: string }>>`SELECT id FROM catalog_import_batches WHERE id = ${id} AND organization_id = ${scope.organizationId} FOR UPDATE`;
     if (ownedBatch.length !== 1) throw new Error("legacy_unit_batch_changed");
-    const currentBranch = await tx.branch.findFirst({
-      where: { id: scope.branchId, organizationId: scope.organizationId, status: "ACTIVE" },
-      select: { id: true },
+    const liveScope = await liveLegacyClinicalWriteScope(tx, {
+      organizationId: scope.organizationId, userId: session.user.id,
+      branchId: scope.branchId,
+      sessionBranchIds: session.user.branchScopes.filter(item =>
+        item.branch.status === "ACTIVE" && item.branch.organizationId === scope.organizationId
+      ).map(item => item.branchId),
+      sessionDepartmentIds: session.user.departmentScopes.map(item => item.departmentId),
     });
-    if (!currentBranch) throw new Error("legacy_unit_scope_changed");
+    if (!liveScope) throw new Error("legacy_unit_scope_changed");
 
     const currentBatch = await tx.catalogImportBatch.findFirst({
       where: { id, organizationId: scope.organizationId },
@@ -64,7 +69,7 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
     const importedIds = [...new Set(testRows.map(row => row.importedEntityId).filter((value): value is string => !!value))];
     if (importedIds.length) {
       const scopedTests = await tx.labTest.findMany({
-        where: { ...clinicalImportTestWhere(scope), id: { in: importedIds }, status: "ACTIVE" },
+        where: { ...clinicalImportTestWhere(liveScope), id: { in: importedIds }, status: "ACTIVE" },
         select: { id: true },
       });
       if (scopedTests.length !== importedIds.length) {
@@ -143,7 +148,7 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
       // CAS: a concurrent clinical catalog update wins without being overwritten.
       // Only current, imported and department/branch-scoped test definitions qualify.
       const claimed = await tx.labTest.updateMany({
-        where: { ...clinicalImportTestWhere(scope), id: row.importedEntityId,
+        where: { ...clinicalImportTestWhere(liveScope), id: row.importedEntityId,
           defaultUnitId: null, status: "ACTIVE" },
         data: { defaultUnitId: unit.unitId },
       });
