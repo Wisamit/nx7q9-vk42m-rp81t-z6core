@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { permissionSet, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { OrderQuestionManager } from "@/components/order-question-manager";
+import { SystemDateText } from "@/components/system-date-text";
 import { ResultLayoutManager } from "@/components/result-layout-manager";
 import { SpecialtyLayoutBatchEditor } from "@/components/specialty-layout-batch-editor";
 import { LegacySpecialtyEvidenceReview } from "@/components/legacy-specialty-evidence-review";
@@ -132,12 +133,12 @@ export default async function TestDetailPage({ params }: { params: Promise<{ id:
               <br/><small>{tr(locale, "Max level", "أقصى مستوى")}: {policy.maxEscalationLevel}{policy.escalationRepeatMinutes ? " · " + tr(locale, "repeat", "تكرار") + " " + policy.escalationRepeatMinutes + " " + tr(locale, "min", "دقيقة") : ""}</small>
               <br/><small>{tr(locale, "Recipients", "المستلمون")}: {policy.escalationPermissionCode || "—"}</small>
             </>}</td>
-            <td>{policy.effectiveFrom.toISOString().slice(0,10)}{policy.effectiveTo ? " → " + policy.effectiveTo.toISOString().slice(0,10) : " → " + tr(locale, "current", "حالي")}</td>
+            <td>{<SystemDateText value={policy.effectiveFrom.toISOString().slice(0,10)} kind="calendar" />{" → "}{policy.effectiveTo ? <SystemDateText value={policy.effectiveTo.toISOString().slice(0,10)} kind="calendar" /> : tr(locale, "current", "حالي")}</td>
             <td>
               <strong>{referenceApprovalLabel(policy.approvalStatus)}</strong>
               <br/><small>{tr(locale, "Created by", "أُنشئ بواسطة")}: {actorName(policy.createdBy)}</small>
-              {policy.approvedAt ? <><br/><small>{tr(locale, "Approved by", "اعتمد بواسطة")}: {actorName(policy.approvedBy)} · {policy.approvedAt.toISOString().replace("T"," ").slice(0,19)}</small></> : null}
-              {policy.retiredAt ? <><br/><small>{tr(locale, "Retired by", "أُوقف بواسطة")}: {actorName(policy.retiredBy)} · {policy.retiredAt.toISOString().replace("T"," ").slice(0,19)}</small></> : null}
+              {policy.approvedAt ? <><br/><small>{tr(locale, "Approved by", "اعتمد بواسطة")}: {actorName(policy.approvedBy)} · <SystemDateText value={policy.approvedAt.toISOString()} timeZone={policy.branch?.timezone} /></small></> : null}
+              {policy.retiredAt ? <><br/><small>{tr(locale, "Retired by", "أُوقف بواسطة")}: {actorName(policy.retiredBy)} · <SystemDateText value={policy.retiredAt.toISOString()} timeZone={policy.branch?.timezone} /></small></> : null}
               {policy.retirementReason ? <><br/><small>{tr(locale, "Reason", "السبب")}: {policy.retirementReason}</small></> : null}
               <br/><small>{tr(locale, "Record", "السجل")}: {statusLabel(locale, policy.status)}</small>
             </td>
@@ -180,13 +181,13 @@ export default async function TestDetailPage({ params }: { params: Promise<{ id:
                    {range.populationCode ? ` · ${tr(locale, "Population", "المجموعة")}: ${range.populationCode}` : ""}
                  </td>
                 <td>{[range.criticalLow?.toString(),range.criticalHigh?.toString()].filter(Boolean).join(" / ")||"—"}</td>
-                <td>{range.effectiveFrom.toISOString().slice(0,10)}{range.effectiveTo ? ` → ${range.effectiveTo.toISOString().slice(0,10)}` : ` → ${tr(locale, "current", "حالي")}`}</td>
+                <td>{<SystemDateText value={range.effectiveFrom.toISOString().slice(0,10)} kind="calendar" />{" → "}{range.effectiveTo ? <SystemDateText value={range.effectiveTo.toISOString().slice(0,10)} kind="calendar" /> : tr(locale, "current", "حالي")}</td>
                 <td>
                   <strong>{referenceApprovalLabel(range.approvalStatus)}</strong>
                   {range.source ? <><br/><small>{tr(locale, "Source", "المصدر")}: {range.source}</small></> : null}
                   <br/><small>{tr(locale, "Created by", "أُنشئ بواسطة")}: {actorName(range.createdBy)}</small>
-                  {range.approvedAt ? <><br/><small>{tr(locale, "Approved by", "اعتمد بواسطة")}: {actorName(range.approvedBy)} · {range.approvedAt.toISOString().replace("T"," ").slice(0,19)}</small></> : null}
-                  {range.retiredAt ? <><br/><small>{tr(locale, "Retired by", "أُوقف بواسطة")}: {actorName(range.retiredBy)} · {range.retiredAt.toISOString().replace("T"," ").slice(0,19)}</small></> : null}
+                  {range.approvedAt ? <><br/><small>{tr(locale, "Approved by", "اعتمد بواسطة")}: {actorName(range.approvedBy)} · <SystemDateText value={range.approvedAt.toISOString()} timeZone={range.branch?.timezone} /></small></> : null}
+                  {range.retiredAt ? <><br/><small>{tr(locale, "Retired by", "أُوقف بواسطة")}: {actorName(range.retiredBy)} · <SystemDateText value={range.retiredAt.toISOString()} timeZone={range.branch?.timezone} /></small></> : null}
                   {range.retirementReason ? <><br/><small>{tr(locale, "Reason", "السبب")}: {range.retirementReason}</small></> : null}
                 </td>
                 {permissions.has("catalog.reference_ranges.approve") && <td><ReferenceIntervalGovernanceActions id={range.id} approvalStatus={range.approvalStatus} locale={locale} /></td>}
@@ -225,7 +226,7 @@ export default async function TestDetailPage({ params }: { params: Promise<{ id:
               <td>{responseTypeLabel(question.responseType)}</td>
               <td>{question.required ? tr(locale, "Yes", "نعم") : tr(locale, "No", "لا")}</td>
               <td>{options.length ? options.map(option => locale === "ar" ? option.valueAr || option.valueEn : option.valueEn).join(" · ") : "—"}</td>
-              <td>{question.effectiveFrom.toISOString().slice(0,10)} → {question.effectiveTo?.toISOString().slice(0,10) || tr(locale, "current", "حالي")}</td>
+              <td><SystemDateText value={question.effectiveFrom.toISOString().slice(0,10)} kind="calendar" /> → {question.effectiveTo ? <SystemDateText value={question.effectiveTo.toISOString().slice(0,10)} kind="calendar" /> : tr(locale, "current", "حالي")}</td>
               <td>{statusLabel(locale, question.status)}</td>
             </tr>;
           })}
