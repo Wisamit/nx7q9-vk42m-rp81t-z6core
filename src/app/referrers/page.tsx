@@ -1,3 +1,4 @@
+import { TableEmptyState } from "@/components/table-empty-state";
 import Link from "next/link";
 import { permissionSet, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
@@ -84,7 +85,7 @@ export default async function ReferrersPage({
         <div className="table-wrap">
           <table>
             <thead><tr><th>{tr(locale, "Code", "الرمز")}</th><th>{tr(locale, "Name", "الاسم")}</th><th>{tr(locale, "Type", "النوع")}</th><th>{tr(locale, "Terms", "الشروط")}</th><th>{tr(locale, "Updated", "آخر تحديث")}</th><th>{tr(locale, "Status", "الحالة")}</th></tr></thead>
-            <tbody>{clients.length === 0 ? <tr><td colSpan={6} className="empty-state">{tr(locale, "No clients.", "لا يوجد عملاء.")}</td></tr> : clients.map(client =>
+            <tbody>{clients.length === 0 ? <tr><td colSpan={6} className="empty-state"><TableEmptyState title={tr(locale, "No clients.", "لا يوجد عملاء.")} description={tr(locale, "No client accounts appear yet in this organization view. Use the authorized client-management tools to configure commercial relationships.", "لا تظهر حسابات عملاء في عرض المؤسسة. استخدم أدوات إدارة العملاء المصرح بها لتهيئة العلاقات التجارية.")} /></td></tr> : clients.map(client =>
               <tr key={client.id}><td><strong>{client.code}</strong></td><td>{localizedName(client)}{locale !== "ar" && client.nameAr ? <><br/><small dir="rtl">{client.nameAr}</small></> : null}</td><td>{clientTypeLabel(client.type)}</td><td>{client.paymentTermsDays == null ? "—" : `${client.paymentTermsDays} ${tr(locale, "days", "يوم")}`}</td><td><SystemDateText value={client.updatedAt.toISOString()} /></td><td>{statusLabel(locale, client.status)}</td></tr>
             )}</tbody>
           </table>
@@ -96,7 +97,7 @@ export default async function ReferrersPage({
         <div className="table-wrap">
           <table>
             <thead><tr><th>{tr(locale, "Code", "الرمز")}</th><th>{tr(locale, "Name", "الاسم")}</th><th>{tr(locale, "Type", "النوع")}</th><th>{tr(locale, "License", "الترخيص")}</th><th>{tr(locale, "Client", "العميل")}</th><th>{tr(locale, "Updated", "آخر تحديث")}</th></tr></thead>
-            <tbody>{referrers.length === 0 ? <tr><td colSpan={6} className="empty-state">{tr(locale, "No referrers.", "لا يوجد محيلون.")}</td></tr> : referrers.map(referrer =>
+            <tbody>{referrers.length === 0 ? <tr><td colSpan={6} className="empty-state"><TableEmptyState title={tr(locale, "No referrers.", "لا يوجد محيلون.")} description={tr(locale, "No referrers are displayed. Register referring doctors or facilities through the authorized configuration workflow.", "لا يظهر محيلون. سجّل الأطباء أو الجهات المحيلة عبر دورة الإعداد المصرح بها.")} /></td></tr> : referrers.map(referrer =>
               <tr key={referrer.id}><td><strong>{referrer.code}</strong></td><td>{localizedName(referrer)}{locale !== "ar" && referrer.nameAr ? <><br/><small dir="rtl">{referrer.nameAr}</small></> : null}</td><td>{referrerTypeLabel(referrer.type)}</td><td>{referrer.licenseNumber || "—"}</td><td>{referrer.client?.nameEn || "—"}</td><td><SystemDateText value={referrer.updatedAt.toISOString()} /></td></tr>
             )}</tbody>
           </table>
@@ -108,7 +109,7 @@ export default async function ReferrersPage({
       <div className="table-toolbar"><h2>{tr(locale, "Order Sources", "مصادر الطلبات")}</h2><span>{sources.length} {tr(locale, "shown", "معروض")}</span></div>
       <div className="table-wrap"><table>
         <thead><tr><th>{tr(locale, "Code", "الرمز")}</th><th>{tr(locale, "Name", "الاسم")}</th><th>{tr(locale, "Category", "الفئة")}</th><th>{tr(locale, "Status", "الحالة")}</th></tr></thead>
-        <tbody>{sources.length === 0 ? <tr><td colSpan={4} className="empty-state">{tr(locale, "No order sources.", "لا توجد مصادر طلبات.")}</td></tr> : sources.map(source =>
+        <tbody>{sources.length === 0 ? <tr><td colSpan={4} className="empty-state"><TableEmptyState title={tr(locale, "No order sources.", "لا توجد مصادر طلبات.")} description={tr(locale, "No order sources are displayed. Source codes can be configured for consistent order attribution and reporting.", "لا تظهر مصادر طلبات. يمكن تهيئة رموز المصادر لربط الطلبات والتقارير بصورة متسقة.")} /></td></tr> : sources.map(source =>
           <tr key={source.id}>
             <td><strong>{source.code}</strong></td>
             <td>{localizedName(source)}{locale !== "ar" && source.nameAr ? <><br/><small dir="rtl">{source.nameAr}</small></> : null}</td>
