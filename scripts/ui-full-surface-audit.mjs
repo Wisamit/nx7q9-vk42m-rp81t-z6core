@@ -50,6 +50,25 @@ function modalAncestor(node, tree) {
 
 const sourceCache = new Map();
 
+// These are explicit UNRESOLVED clinical/auth interface design decisions,
+// not exemptions or claims of browser/clinical acceptance.
+const decisionRequiredInlineForms = new Map([
+  ["src/components/bulk-result-entry.tsx", "Time-sensitive multi-result entry: qualified clinical workflow and safe-modal decision required"],
+  ["src/components/phlebotomy-collection-card.tsx", "Active specimen collection: qualified identity/barcode workflow and owner decision required"],
+  ["src/components/portal-contact-verification.tsx", "Security identity challenge: privacy and user-experience decision required"],
+  ["src/components/result-entry-form.tsx", "Time-critical clinical result entry: owner and clinical lead must approve interaction pattern"],
+  ["src/components/staff-login-form.tsx", "Authentication is intentionally distinct from an operational CRUD mutation; confirm product exception"],
+  ["src/components/portal-login-form.tsx", "Public identity entry is distinct from operational CRUD; confirm accessibility/owner exception"],
+  ["src/components/portal-change-password-form.tsx", "Mandatory initial password protection requires security review"],
+]);
+
+function inlineDecision(pathname, classification) {
+  if (classification !== "REVIEW_INLINE_FORM") return null;
+  const reason = decisionRequiredInlineForms.get(pathname);
+  return reason ? {status: "OWNER_DECISION_REQUIRED", reason} :
+    {status: "MANUAL_DOM_CONTAINMENT_REVIEW_REQUIRED", reason: "Could be nested in a parent dialog or an inline mutation; assess actual rendered flow"};
+}
+
 function inspect(file) {
   const pathname = rel(file);
   const cached = sourceCache.get(pathname);
@@ -89,6 +108,7 @@ function inspect(file) {
           action: action || null,
           classification: clearlyGet ? "NAVIGATION_FILTER" :
             insideModal ? "MODAL_FORM" : "REVIEW_INLINE_FORM",
+          reviewDecision: inlineDecision(pathname, clearlyGet ? "NAVIGATION_FILTER" : insideModal ? "MODAL_FORM" : "REVIEW_INLINE_FORM"),
         });
       }
       if (tag === "CrudModal") {
@@ -237,6 +257,9 @@ export function createFullUiAudit() {
     componentsUnreferencedByRouteGraph: unreferencedComponents,
     sourceFilesInspected: sources.length,
     uniquePotentialInlineForms: new Set(routeRows.flatMap(row => row.candidateInlineMutations.map(f => f.file + ":" + f.line))).size,
+    ownerDecisionCandidates: [...new Map(routeRows.flatMap(row => row.candidateInlineMutations)
+      .filter(form => form.reviewDecision?.status === "OWNER_DECISION_REQUIRED")
+      .map(form => [form.file + ":" + form.line, {file: form.file, line: form.line, reason: form.reviewDecision.reason}])).values()],
     uniqueNonCompactDialogs: new Set(routeRows.flatMap(row => row.nonCompactModals.map(m => m.file + ":" + m.line))).size,
     uniqueNativeDialogCalls: new Set(routeRows.flatMap(row => row.nativeDialogs.map(m => m.file + ":" + m.line))).size,
     uniqueDateTimeCallsites: new Set(routeRows.flatMap(row => row.dateTimeCallsites.map(m => m.file + ":" + m.line))).size,
@@ -257,6 +280,8 @@ function markdown(audit) {
     "; components in repository: " + audit.totalUiComponents +
     "; recursively found components: " + audit.componentsFoundByRouteGraph +
     "; unreferenced components: " + audit.componentsUnreferencedByRouteGraph.length + ".",
+    "",
+    "Unresolved owner/clinical/security design decisions among inline candidates: " + audit.ownerDecisionCandidates.length + ".",
     "",
     "Distinct possible inline forms: " + audit.uniquePotentialInlineForms +
     "; non-compact dialogs: " + audit.uniqueNonCompactDialogs +
@@ -289,6 +314,10 @@ function markdown(audit) {
           " — route(s) needing review"]))).values()];
       return ["### " + heading, "", ...entries, ""];
     }),
+    "## Owner decision REQUIRED (not an approved design exception)",
+    "",
+    ...audit.ownerDecisionCandidates.map(form => "- `" + form.file + ":" + form.line + "` — " + form.reason),
+    "",
     "## Components without a reachable page import",
     "",
     ...audit.componentsUnreferencedByRouteGraph.map(file => "- \`" + file + "\` (separate review required)"),
