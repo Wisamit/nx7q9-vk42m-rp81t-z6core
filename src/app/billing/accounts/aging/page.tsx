@@ -259,7 +259,8 @@ export default async function AccountsReceivableAgingPage({
         </label>
         <label>{tr(locale, "Currency", "العملة")}<input name="currency" maxLength={3} defaultValue={currency} placeholder={tr(locale, "All", "الكل")} /></label>
         <label>{tr(locale, "As of date", "كما في تاريخ")}<SystemDateField name="asOf" defaultValue={asOfDate} required /></label>
-        <button className="primary-button form-span">{tr(locale, "Apply Aging", "تطبيق أعمار الذمم")}</button>
+        <button className="primary-button" type="submit">{tr(locale, "Apply Aging", "تطبيق أعمار الذمم")}</button>
+        <Link className="secondary-link" href="/billing/accounts/aging">{tr(locale, "Reset filters", "إعادة ضبط الفلاتر")}</Link>
       </form>
     </section>
 
