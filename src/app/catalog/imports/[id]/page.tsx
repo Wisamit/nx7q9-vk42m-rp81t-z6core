@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { permissionSet, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { SafeImportButton } from "@/components/safe-import-button";
+import { SystemDateText } from "@/components/system-date-text";
 import { RevalidateImportButton } from "@/components/revalidate-import-button";
 import { ReferenceRangeImportButton } from "@/components/reference-range-import-button";
 import { ComponentImportReconciliation } from "@/components/component-import-reconciliation";
@@ -305,6 +306,7 @@ export default async function ImportBatchPage({
       <div>
         <p className="eyebrow">{tr(locale, "Legacy Migration Review", "مراجعة ترحيل النظام القديم")}</p>
         <h1>{batch.sourceName}</h1>
+        <p className="muted">{tr(locale, "Batch recorded (UTC)", "وقت تسجيل الدفعة (UTC)")}: <SystemDateText value={batch.createdAt.toISOString()} timeZone="UTC" /></p>
         <p className="muted">{tr(locale, "Source rows are preserved separately from normalized candidates. Resolve errors before live import.", "يتم حفظ صفوف المصدر منفصلة عن البيانات المرشحة بعد التطبيع. يجب معالجة الأخطاء قبل الاستيراد إلى البيانات الحية.")}</p>
       </div>
       <Link className="secondary-link" href="/catalog">{tr(locale, "Back to Test Catalog", "العودة إلى دليل الفحوصات")}</Link>
