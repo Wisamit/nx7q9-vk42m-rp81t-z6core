@@ -148,7 +148,7 @@ export default async function SpecimensPage({
   const received = specimens.filter(item => ["RECEIVED","IN_PROCESS"].includes(item.status)).length;
   const rejected = specimens.filter(item => item.status === "REJECTED").length;
 
-  return <main className="catalog-shell">
+  return <main className="catalog-shell filter-workspace">
     <header className="page-header">
       <div>
         <p className="eyebrow">{tr(locale, "Pre-Analytical Workflow", "مرحلة ما قبل التحليل")}</p>
@@ -176,7 +176,7 @@ export default async function SpecimensPage({
     <section className="table-card">
       <div className="table-toolbar">
         <div><h2>{tr(locale, "Specimen Work Queue", "قائمة عمل العينات")}</h2><span>{specimens.length} {tr(locale, "shown", "معروضة")}</span></div>
-        <form className="inline-search" action="/specimens" method="get">
+        <form className="inline-search queue-filters" action="/specimens" method="get">
           <input name="q" defaultValue={q} placeholder={tr(locale, "Scan barcode or search order / patient…", "امسح الباركود أو ابحث بالطلب / المريض…")} autoFocus />
           <select name="status" defaultValue={status}>
             <option value="">{tr(locale, "All statuses", "كل الحالات")}</option>
