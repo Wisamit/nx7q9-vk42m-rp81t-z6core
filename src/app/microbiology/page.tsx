@@ -1,3 +1,4 @@
+import { TableEmptyState } from "@/components/table-empty-state";
 import Link from "next/link";
 import { authorizedDepartmentIds, permissionSet, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
@@ -107,7 +108,7 @@ export default async function MicrobiologyPage() {
       <div className="table-toolbar"><h2>{tr(locale, "Microbiology Cases", "حالات الأحياء الدقيقة")}</h2><span>{cases.length} {tr(locale, "shown", "معروضة")}</span></div>
       <div className="table-wrap"><table>
         <thead><tr><th>{tr(locale, "Accession / Patient", "رقم الطلب / المريض")}</th><th>{tr(locale, "Test", "الفحص")}</th><th>{tr(locale, "Specimen", "العينة")}</th><th>{tr(locale, "Culture", "الزرع")}</th><th>{tr(locale, "Case status", "حالة الحالة")}</th><th>{tr(locale, "Content", "المحتوى")}</th><th>{tr(locale, "Updated", "آخر تحديث")}</th><th>{tr(locale, "Action", "الإجراء")}</th></tr></thead>
-        <tbody>{cases.length === 0 ? <tr><td colSpan={8} className="empty-state">{tr(locale, "No microbiology cases yet.", "لا توجد حالات أحياء دقيقة بعد.")}</td></tr> : cases.map(item => <tr key={item.id}>
+        <tbody>{cases.length === 0 ? <tr><td colSpan={8} className="empty-state"><TableEmptyState title={tr(locale, "No microbiology cases yet.", "لا توجد حالات أحياء دقيقة بعد.")} description={tr(locale, "No culture or susceptibility cases appear in the authorized queue. Cases originate from ordered microbiology tests and valid specimens.", "لا تظهر حالات زرع أو حساسية في القائمة المصرح بها. تنشأ الحالات من فحوص الأحياء الدقيقة المطلوبة والعينات الصحيحة.")} /></td></tr> : cases.map(item => <tr key={item.id}>
           <td><strong>{item.orderItem.order.accessionNumber}</strong><br/><small>{patientName(item.orderItem.order.patient)}</small></td>
           <td>{item.orderItem.testCodeSnapshot} — {locale === "ar" ? item.orderItem.testNameArSnapshot || item.orderItem.testNameEnSnapshot : item.orderItem.testNameEnSnapshot}</td>
           <td>{item.specimen.barcode}<br/><small>{localizedName(item.performingBranch)}</small></td>
