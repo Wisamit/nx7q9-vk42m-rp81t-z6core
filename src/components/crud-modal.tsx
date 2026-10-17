@@ -1,7 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
 import { SystemIcon } from "@/components/system-icon";
+import { createPortal } from "react-dom";
+import { acquireCrudModalScrollLock } from "@/lib/crud-modal-scroll-lock";
 
 const FOCUSABLE_SELECTOR = [
   "a[href]",
@@ -11,6 +13,13 @@ const FOCUSABLE_SELECTOR = [
   "textarea:not([disabled])",
   "[tabindex]:not([tabindex='-1'])",
 ].join(", ");
+
+// A server-rendered dialog must not reach for document during hydration.
+// useSyncExternalStore supplies the server null snapshot, then attaches the
+// body overlay after hydration without an effect that synchronously sets state.
+const subscribePortalRoot = () => () => {};
+const getClientPortalRoot = (): HTMLElement | null => document.body;
+const getServerPortalRoot = (): HTMLElement | null => null;
 
 type CrudModalProps = {
   open: boolean;
@@ -37,7 +46,7 @@ function OpenCrudModal({
   title,
   description,
   children,
-  size = "md",
+  size = "compact",
   protectUnsavedChanges = true,
 }: CrudModalProps) {
   const headingId = useId();
@@ -51,6 +60,11 @@ function OpenCrudModal({
   const closeRef = useRef(onClose);
   const changedRef = useRef(false);
   const discardOpenRef = useRef(false);
+  // Portal dialogs to the document body so page grids/transforms/overflow
+  // cannot clip the overlay or place it beneath an unrelated panel.
+  const portalRoot = useSyncExternalStore(
+    subscribePortalRoot, getClientPortalRoot, getServerPortalRoot,
+  );
   const [discardOpen, setDiscardOpen] = useState(false);
   const [discardArabic, setDiscardArabic] = useState(false);
 
@@ -100,8 +114,8 @@ function OpenCrudModal({
   useEffect(() => {
     const previouslyFocused = document.activeElement instanceof HTMLElement
       ? document.activeElement : null;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    if (!portalRoot) return;
+    const unlockBody = acquireCrudModalScrollLock(document.body);
     const frame = requestAnimationFrame(() => dialogRef.current?.focus({ preventScroll: true }));
 
     function onKey(event: KeyboardEvent) {
@@ -143,16 +157,38 @@ function OpenCrudModal({
       }
     }
 
+    function onFocusIn(event: FocusEvent) {
+      const dialog = dialogRef.current;
+      if (!dialog) return;
+      const dialogs = document.querySelectorAll<HTMLElement>("[data-crud-modal='true']");
+      if (dialogs[dialogs.length - 1] !== dialog) return;
+      const trap = discardOpenRef.current ? discardRef.current : dialog;
+      if (!trap || !(event.target instanceof Node) || trap.contains(event.target)) return;
+      // Programmatic focus, mouse clicks, and third-party widgets must not
+      // escape the active modal or the unsaved-change confirmation.
+      const first = Array.from(trap.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR))
+        .find(element => element.getClientRects().length > 0 &&
+          getComputedStyle(element).visibility !== "hidden");
+      (first || trap).focus({ preventScroll: true });
+    }
+
     document.addEventListener("keydown", onKey, true);
+    document.addEventListener("focusin", onFocusIn, true);
     return () => {
       cancelAnimationFrame(frame);
       document.removeEventListener("keydown", onKey, true);
-      document.body.style.overflow = previousOverflow;
-      if (previouslyFocused?.isConnected) previouslyFocused.focus({ preventScroll: true });
+      document.removeEventListener("focusin", onFocusIn, true);
+      unlockBody();
+      // Restore focus after the closing portal has left the stack. Restoring
+      // synchronously can be intercepted by its own topmost focus boundary.
+      requestAnimationFrame(() => {
+        if (previouslyFocused?.isConnected) previouslyFocused.focus({ preventScroll: true });
+      });
     };
-  }, [requestClose, cancelDiscard]);
+  }, [requestClose, cancelDiscard, portalRoot]);
 
-  return <div className="crud-modal-backdrop" role="presentation" onMouseDown={event => {
+  if (!portalRoot) return null;
+  return createPortal(<div className="crud-modal-backdrop" role="presentation" onMouseDown={event => {
     if (event.target === event.currentTarget) requestClose();
   }}>
     <section
@@ -164,10 +200,20 @@ function OpenCrudModal({
       aria-modal="true"
       aria-labelledby={headingId}
       aria-describedby={description ? descriptionId : undefined}
-      onInputCapture={event => { if (!(event.target as Element).closest("[data-modal-ui-only]")) changedRef.current = true; }}
-      onChangeCapture={event => { if (!(event.target as Element).closest("[data-modal-ui-only]")) changedRef.current = true; }}
+      onInputCapture={event => {
+        const target = event.target as Element;
+        // React portal events can bubble through a parent component tree;
+        // editing a nested dialog must not mark the underlying form dirty.
+        if (target.closest("[data-crud-modal='true']") === dialogRef.current &&
+            !target.closest("[data-modal-ui-only]")) changedRef.current = true;
+      }}
+      onChangeCapture={event => {
+        const target = event.target as Element;
+        if (target.closest("[data-crud-modal='true']") === dialogRef.current &&
+            !target.closest("[data-modal-ui-only]")) changedRef.current = true;
+      }}
     >
-      <header className="crud-modal-header">
+      <header className="crud-modal-header" aria-hidden={discardOpen ? true : undefined}>
         <div>
           <h2 id={headingId}>{title}</h2>
           {description && <p id={descriptionId}>{description}</p>}
@@ -176,7 +222,7 @@ function OpenCrudModal({
           <SystemIcon name="close" size={18} />
         </button>
       </header>
-      <div className="crud-modal-body">{children}</div>
+      <div className="crud-modal-body" aria-hidden={discardOpen ? true : undefined}>{children}</div>
       {discardOpen && <div className="crud-modal-discard-shade" role="presentation">
         <div
           className="crud-modal-discard-panel"
@@ -207,5 +253,5 @@ function OpenCrudModal({
         </div>
       </div>}
     </section>
-  </div>;
+  </div>, portalRoot);
 }
