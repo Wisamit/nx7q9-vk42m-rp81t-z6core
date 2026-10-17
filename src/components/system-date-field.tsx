@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { subscribeRootDatePreferences } from "@/lib/root-date-preferences";
+import { createSystemDateDraft, resolveSystemDateDraft, type SystemDateDraft } from "@/lib/system-date-draft";
 import { SystemIcon } from "@/components/system-icon";
 import {
   dateInputExample, formatSystemDate, normalizeSystemDateFormat,
@@ -19,7 +21,7 @@ type SystemDateFieldProps = {
   className?: string;
 };
 
-const subscribeToRootDateFormat = () => () => {};
+const subscribeToRootDateFormat = subscribeRootDatePreferences;
 const readRootDateFormat = (): SystemDateFormat =>
   normalizeSystemDateFormat(document.documentElement.dataset.dateFormat);
 const serverDateFormat = (): SystemDateFormat => "DD/MM/YYYY";
@@ -34,13 +36,10 @@ export function SystemDateField({
 }: SystemDateFieldProps) {
   const initialIso = parseSystemDateInput(defaultValue || "", "YYYY-MM-DD") || "";
   const format = useSyncExternalStore(subscribeToRootDateFormat, readRootDateFormat, serverDateFormat);
-  const [draft, setDraft] = useState<string | null>(null);
-  const text = draft ?? formatSystemDate(initialIso, format);
+  const [draft, setDraft] = useState<SystemDateDraft | null>(null);
+  const { text, validIso } = resolveSystemDateDraft(initialIso, draft, format, min, max);
   const inputRef = useRef<HTMLInputElement>(null);
   const calendarRef = useRef<HTMLInputElement>(null);
-  const iso = parseSystemDateInput(text, format) || "";
-  const outsideRange = Boolean(iso && ((min && iso < min) || (max && iso > max)));
-  const validIso = outsideRange ? "" : iso;
 
   useEffect(() => {
     const form = inputRef.current?.form;
@@ -61,12 +60,13 @@ export function SystemDateField({
   }, [text, validIso]);
 
   function changeText(next: string, element: HTMLInputElement) {
-    setDraft(next);
-    const parsed = parseSystemDateInput(next, format);
-    const outOfRange = Boolean(parsed && ((min && parsed < min) || (max && parsed > max)));
-    onIsoChange?.(parsed && !outOfRange ? parsed : "");
-    element.setCustomValidity(!next || (parsed && !outOfRange)
-      ? "" : "Invalid date for the selected system format / تاريخ غير صالح حسب تنسيق النظام");
+    const candidate = createSystemDateDraft(next, format);
+    setDraft(candidate);
+    const resolved = resolveSystemDateDraft(initialIso, candidate, format, min, max);
+    onIsoChange?.(resolved.validIso);
+    element.setCustomValidity(resolved.invalid
+      ? "Invalid date for the selected system format / تاريخ غير صالح حسب تنسيق النظام"
+      : "");
   }
 
   function openPicker() {
@@ -110,7 +110,8 @@ export function SystemDateField({
       disabled={disabled}
       onChange={event => {
         const next = event.target.value;
-        setDraft(next ? formatSystemDate(next, format) : "");
+        const selected = next ? formatSystemDate(next, format) : "";
+        setDraft(createSystemDateDraft(selected, format));
         onIsoChange?.(next);
         inputRef.current?.setCustomValidity("");
       }}

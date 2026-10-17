@@ -2,6 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { SystemIcon } from "@/components/system-icon";
+import { useSyncExternalStore } from "react";
+import { normalizeSystemDateFormat } from "@/lib/system-date";
+import { readRootDatePreferences, serializedRootDatePreferences, subscribeRootDatePreferences } from "@/lib/root-date-preferences";
 
 type Props = {
   locale: "ar" | "en";
@@ -27,25 +30,34 @@ function formatDate(value: Date, locale: "ar" | "en", timezone: string, format: 
 }
 
 export function SystemClock({ locale, timezone, dateFormat, timeFormat, showSeconds }: Props) {
+  const settings = useSyncExternalStore(
+    subscribeRootDatePreferences,
+    readRootDatePreferences,
+    () => serializedRootDatePreferences({ dateFormat, timezone, timeFormat, showSeconds }),
+  ).split("|");
+  const liveDateFormat = normalizeSystemDateFormat(settings[0]);
+  const liveTimeZone = settings[1] || timezone;
+  const liveTimeFormat = settings[2] === "12" ? "12" : "24";
+  const liveShowSeconds = settings[3] === "true";
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
-    const interval = window.setInterval(() => setNow(new Date()), showSeconds ? 1000 : 30000);
+    const interval = window.setInterval(() => setNow(new Date()), liveShowSeconds ? 1000 : 30000);
     return () => window.clearInterval(interval);
-  }, [showSeconds]);
+  }, [liveShowSeconds]);
 
   const time = useMemo(() => new Intl.DateTimeFormat(locale === "ar" ? "ar-AE" : "en-US", {
-    timeZone: timezone,
+    timeZone: liveTimeZone,
     hour: "2-digit",
     minute: "2-digit",
-    second: showSeconds ? "2-digit" : undefined,
-    hour12: timeFormat === "12",
-  }).format(now), [locale, now, showSeconds, timeFormat, timezone]);
+    second: liveShowSeconds ? "2-digit" : undefined,
+    hour12: liveTimeFormat === "12",
+  }).format(now), [locale, now, liveShowSeconds, liveTimeFormat, liveTimeZone]);
 
-  return <div className="system-clock" title={timezone}>
+  return <div className="system-clock" title={liveTimeZone}>
     <SystemIcon name="clock" size={16} />
     <div>
       <strong>{time}</strong>
-      <small>{formatDate(now, locale, timezone, dateFormat)}</small>
+      <small>{formatDate(now, locale, liveTimeZone, liveDateFormat)}</small>
     </div>
   </div>;
 }
