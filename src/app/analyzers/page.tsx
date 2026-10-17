@@ -1,3 +1,4 @@
+import { TableEmptyState } from "@/components/table-empty-state";
 import Link from "next/link";
 import { permissionSet, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
@@ -148,7 +149,7 @@ export default async function AnalyzersPage() {
       <div className="table-toolbar"><h2>{tr(locale, "Analyzer Registry", "سجل أجهزة التحليل")}</h2><span>{analyzers.length} {tr(locale, "analyzer(s)", "جهاز")}</span></div>
       <div className="table-wrap"><table>
         <thead><tr><th>{tr(locale, "Analyzer", "الجهاز")}</th><th>{tr(locale, "Branch", "الفرع")}</th><th>{tr(locale, "Protocol", "البروتوكول")}</th><th>{tr(locale, "Transport", "وسيلة الاتصال")}</th><th>{tr(locale, "Credentials", "بيانات الاعتماد")}</th><th>{tr(locale, "Mappings", "الربط")}</th><th>{tr(locale, "Status", "الحالة")}</th></tr></thead>
-        <tbody>{analyzers.length === 0 ? <tr><td colSpan={7} className="empty-state">{tr(locale, "No analyzers registered.", "لا توجد أجهزة تحليل مسجلة.")}</td></tr> : analyzers.map(item => <tr key={item.id}>
+        <tbody>{analyzers.length === 0 ? <tr><td colSpan={7} className="empty-state"><TableEmptyState title={tr(locale, "No analyzers registered.", "لا توجد أجهزة تحليل مسجلة.")} description={tr(locale, "No analyzer devices are registered in this organization view. Configure a device and its branch before mapping interface codes.", "لا توجد أجهزة تحليل مسجلة في عرض المؤسسة. هيّئ الجهاز وفرعه قبل ربط رموز الواجهة.")} /></td></tr> : analyzers.map(item => <tr key={item.id}>
           <td><strong>{item.code} — {item.name}</strong><br/><small>{[item.manufacturer, item.model, item.serialNumber].filter(Boolean).join(" · ") || tr(locale, "No device metadata", "لا توجد بيانات للجهاز")}</small></td>
           <td>{localizedName(item.branch)}{item.department ? " · " + localizedName(item.department) : ""}</td>
           <td>{item.protocol}</td>
@@ -168,7 +169,7 @@ export default async function AnalyzersPage() {
       )}</p>
       <div className="table-wrap"><table>
         <thead><tr><th>{tr(locale,"Created","التاريخ")}</th><th>{tr(locale,"Analyzer","الجهاز")}</th><th>{tr(locale,"Accession","رقم الطلب")}</th><th>{tr(locale,"Barcode","الباركود")}</th><th>{tr(locale,"Test mapping","رمز الفحص في الجهاز")}</th><th>{tr(locale,"Status","الحالة")}</th><th>{tr(locale,"Attempts","المحاولات")}</th><th>{tr(locale,"Next retry","المحاولة التالية")}</th><th>{tr(locale,"Error / ACK","الخطأ / التأكيد")}</th></tr></thead>
-        <tbody>{workOrders.length === 0 ? <tr><td colSpan={9} className="empty-state">{tr(locale,"No outbound analyzer work orders have been queued.","لم تُنشأ أي أوامر تحليل صادرة للأجهزة.")}</td></tr> : workOrders.map(item => <tr key={item.id}>
+        <tbody>{workOrders.length === 0 ? <tr><td colSpan={9} className="empty-state"><TableEmptyState title={tr(locale,"No outbound analyzer work orders have been queued.","لم تُنشأ أي أوامر تحليل صادرة للأجهزة.")} description={tr(locale, "No outbound analyzer work orders are present. Work orders require eligible authorized specimen and instrument context.", "لا توجد أوامر عمل مرسلة لأجهزة التحليل. تتطلب الأوامر سياقاً صالحاً ومصرحاً به للعينة والجهاز.")} /></td></tr> : workOrders.map(item => <tr key={item.id}>
           <td>{item.createdAt.toISOString().replace("T"," ").slice(0,19)}</td>
           <td>{item.analyzer.code} — {item.analyzer.name}</td>
           <td>{item.accessionNumberSnapshot}</td>
@@ -186,7 +187,7 @@ export default async function AnalyzersPage() {
       <div className="table-toolbar"><h2>{tr(locale, "Raw Message Inbox", "صندوق الرسائل الخام")}</h2><span>{messages.length} {tr(locale, "recent", "حديثة")}</span></div>
       <div className="table-wrap"><table>
         <thead><tr><th>{tr(locale, "Received", "الاستلام")}</th><th>{tr(locale, "Analyzer", "الجهاز")}</th><th>{tr(locale, "Bridge message", "رسالة الجسر")}</th><th>{tr(locale, "Protocol", "البروتوكول")}</th><th>{tr(locale, "Status", "الحالة")}</th><th>{tr(locale, "Attempts", "المحاولات")}</th><th>{tr(locale, "Error", "الخطأ")}</th><th>{tr(locale, "Payload hash", "بصمة الحمولة")}</th><th>{tr(locale, "Action", "الإجراء")}</th></tr></thead>
-        <tbody>{messages.length === 0 ? <tr><td colSpan={9} className="empty-state">{tr(locale, "No analyzer messages received.", "لم يتم استلام رسائل من أجهزة التحليل.")}</td></tr> : messages.map(item => <tr key={item.id}>
+        <tbody>{messages.length === 0 ? <tr><td colSpan={9} className="empty-state"><TableEmptyState title={tr(locale, "No analyzer messages received.", "لم يتم استلام رسائل من أجهزة التحليل.")} description={tr(locale, "No inbound analyzer messages are present. Review the separate analyzer bridge connection and instrument configuration if data is expected.", "لا توجد رسائل واردة من أجهزة التحليل. راجع اتصال جسر الأجهزة المنفصل وإعداد الجهاز إذا كانت البيانات متوقعة.")} /></td></tr> : messages.map(item => <tr key={item.id}>
           <td>{item.receivedAt.toISOString().replace("T"," ").slice(0,19)}</td>
           <td>{item.analyzer.code} — {item.analyzer.name}</td>
           <td>{item.bridgeMessageId}</td>
@@ -219,7 +220,7 @@ export default async function AnalyzersPage() {
       <div className="table-toolbar"><h2>{tr(locale, "Normalized Result Staging", "مرحلة تهيئة النتائج الموحّدة")}</h2><span>{resultImports.length} {tr(locale, "recent", "حديثة")}</span></div>
       <div className="table-wrap"><table>
         <thead><tr><th>{tr(locale, "Created", "تاريخ الإنشاء")}</th><th>{tr(locale, "Analyzer", "الجهاز")}</th><th>{tr(locale, "Observation", "المشاهدة")}</th><th>{tr(locale, "Barcode", "الباركود")}</th><th>{tr(locale, "Analyzer code", "رمز الجهاز")}</th><th>{tr(locale, "LIS target", "هدف LIS")}</th><th>{tr(locale, "Raw value", "القيمة الخام")}</th><th>{tr(locale, "Status", "الحالة")}</th><th>{tr(locale, "Error", "الخطأ")}</th><th>{tr(locale, "Clinical result", "النتيجة السريرية")}</th></tr></thead>
-        <tbody>{resultImports.length === 0 ? <tr><td colSpan={10} className="empty-state">{tr(locale, "No normalized analyzer observations staged.", "لا توجد مشاهدات أجهزة مهيأة للاستيراد.")}</td></tr> : resultImports.map(item => <tr key={item.id}>
+        <tbody>{resultImports.length === 0 ? <tr><td colSpan={10} className="empty-state"><TableEmptyState title={tr(locale, "No normalized analyzer observations staged.", "لا توجد مشاهدات أجهزة مهيأة للاستيراد.")} description={tr(locale, "No staged analyzer observations are present. Analyzer data is retained for controlled review before result verification.", "لا توجد مشاهدات أجهزة في مرحلة المراجعة. تُحفظ بيانات الجهاز للمراجعة المنضبطة قبل التحقق من النتائج.")} /></td></tr> : resultImports.map(item => <tr key={item.id}>
           <td>{item.createdAt.toISOString().replace("T"," ").slice(0,19)}</td>
           <td>{item.analyzer.code}</td>
           <td>{item.bridgeObservationId}</td>
@@ -239,7 +240,7 @@ export default async function AnalyzersPage() {
         <div className="table-toolbar"><h2>{item.code} {tr(locale, "Mappings", "عمليات الربط")}</h2><span>{item.mappings.length} {tr(locale, "shown", "معروضة")}</span></div>
         <div className="table-wrap"><table>
           <thead><tr><th>{tr(locale, "Analyzer code", "رمز الجهاز")}</th><th>{tr(locale, "LIS target", "هدف LIS")}</th><th>{tr(locale, "Unit mapping", "ربط الوحدة")}</th><th>{tr(locale, "Effective", "السريان")}</th><th>{tr(locale, "Lifecycle", "دورة الحياة")}</th><th>{tr(locale, "Governance evidence", "دليل الحوكمة")}</th><th>{tr(locale, "Action", "الإجراء")}</th></tr></thead>
-          <tbody>{item.mappings.length === 0 ? <tr><td colSpan={7} className="empty-state">{tr(locale, "No mappings configured.", "لا توجد عمليات ربط مهيأة.")}</td></tr> : item.mappings.map(mapping => {
+          <tbody>{item.mappings.length === 0 ? <tr><td colSpan={7} className="empty-state"><TableEmptyState title={tr(locale, "No mappings configured.", "لا توجد عمليات ربط مهيأة.")} description={tr(locale, "No mappings appear for this analyzer. Mapping codes requires an authorized catalog and interface configuration.", "لا تظهر روابط رموز لهذا الجهاز. يتطلب الربط دليلاً وواجهة مُهيأين بصلاحية مناسبة.")} /></td></tr> : item.mappings.map(mapping => {
             const currentUnit = mapping.componentId ? mapping.component?.unit || null : mapping.test.defaultUnit;
             const lisUnit = mapping.lisUnitSymbolSnapshot || currentUnit?.symbol || "—";
             const creator = mapping.createdBy ? (locale === "ar" ? mapping.createdBy.displayNameAr || mapping.createdBy.displayNameEn : mapping.createdBy.displayNameEn) : tr(locale, "Legacy / unknown", "قديم / غير معروف");
