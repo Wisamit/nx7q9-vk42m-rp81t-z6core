@@ -26,7 +26,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Sear
     .map(scope => scope.branchId))];
   const parsed = parseReportQueueFilters(await searchParams, authorizedBranchIds);
   if (!parsed.ok) {
-    return <main className="catalog-shell">
+    return <main className="catalog-shell filter-workspace">
       <header className="page-header">
         <div><h1>{tr(locale, "Invalid report queue filter", "تصفية طابور التقارير غير صالحة")}</h1>
           <p role="alert" className="form-error">{parsed.error === "branch_forbidden"
@@ -114,7 +114,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Sear
   });
   const dateLabels = { from: filters.from, to: filters.to };
 
-  return <main className="catalog-shell">
+  return <main className="catalog-shell filter-workspace">
     <header className="page-header">
       <div>
         <p className="eyebrow">{tr(locale, "Reporting", "التقارير")}</p>
@@ -131,7 +131,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Sear
         <h2>{tr(locale, "Find reports", "البحث عن التقارير")}</h2>
         <Link className="secondary-link" href="/reports">{tr(locale, "Clear filters", "مسح التصفية")}</Link>
       </div>
-      <form className="catalog-form" method="get" action="/reports">
+      <form className="catalog-form filter-grid" method="get" action="/reports">
         <label>{tr(locale, "Branch", "الفرع")}
           <select name="branchId" defaultValue={filters.branchId}>
             <option value="">{tr(locale, "All authorized branches", "جميع الفروع المسموح بها")}</option>

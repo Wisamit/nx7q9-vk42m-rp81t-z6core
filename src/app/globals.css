@@ -590,3 +590,39 @@ html[data-density="compact"] :where(.detail-card,.dashboard-panel,.settings-card
 @media(prefers-reduced-motion:reduce){
  .crud-modal-backdrop,.crud-modal{scroll-behavior:auto;animation:none;transition:none}
 }
+
+
+/* Search and filter release gate: ten branch-scoped operational / reporting workspaces. */
+.filter-workspace{min-width:0}
+.filter-workspace .filter-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,205px),1fr));gap:13px 14px;align-items:end;min-width:0;margin:0;padding:16px;background:var(--fl-surface)}
+.filter-workspace .filter-grid>label{display:grid;align-content:start;gap:7px;min-width:0;margin:0;color:var(--fl-text);font-size:12px;font-weight:750;line-height:1.5}
+.filter-workspace .filter-grid :is(input,select,textarea){box-sizing:border-box;min-width:0;width:100%;max-width:100%;min-height:41px;margin:0;padding:9px 11px;border:1px solid var(--fl-border);border-radius:10px;background:var(--fl-surface);color:var(--fl-text);font:inherit;font-size:13px;font-weight:550}
+.filter-workspace .filter-grid :is(input,select,textarea):focus-visible,.filter-workspace .queue-filters :is(input,select):focus-visible{outline:2px solid var(--fl-primary);outline-offset:2px}
+.filter-workspace .filter-grid>.primary-button,.filter-workspace .filter-grid>.secondary-button,.filter-workspace .filter-grid>.secondary-link{min-height:41px;align-self:end;max-width:100%;white-space:normal;text-align:center}
+.filter-workspace .filter-grid>.form-span{grid-column:1/-1}
+.filter-workspace .filter-grid>.muted{align-self:center;min-width:0;font-size:12px;line-height:1.5}
+.filter-workspace .table-card>.filter-grid{border-top:1px solid var(--fl-border)}
+.filter-workspace .filter-grid:is(.filter-bar){border:1px solid var(--fl-border);border-radius:var(--fl-radius);box-shadow:var(--fl-shadow);margin-bottom:16px}
+.filter-workspace .table-toolbar:has(> .queue-filters){display:grid;grid-template-columns:minmax(170px,1fr) minmax(0,3fr);gap:12px 18px;align-items:center}
+.filter-workspace .table-toolbar>div:first-child{min-width:0}
+.filter-workspace .queue-filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,162px),1fr));align-items:end;gap:9px;min-width:0;max-width:none;width:100%}
+.filter-workspace .queue-filters>input[name="q"]{grid-column:span 2;min-width:0}
+.filter-workspace .queue-filters :is(input,select){box-sizing:border-box;min-width:0;width:100%;max-width:100%;min-height:39px;border:1px solid var(--fl-border);border-radius:9px;background:var(--fl-surface);color:var(--fl-text);padding:9px 11px;font-size:12px}
+.filter-workspace .queue-filters :is(button,.secondary-link){min-height:39px;max-width:100%;width:100%;white-space:normal;text-align:center}
+.filter-workspace .table-card,.filter-workspace .detail-card{min-width:0}
+.filter-workspace .table-wrap{max-width:100%;min-width:0;overflow-x:auto;overscroll-behavior-inline:contain}
+.filter-workspace .table-wrap table{min-width:max-content}
+.filter-workspace .table-wrap :is(th,td){vertical-align:top}
+.filter-workspace .table-wrap :is(th,td):first-child{position:relative}
+.filter-workspace .filter-results-footer{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;padding:13px 16px;border-top:1px solid var(--fl-border)}
+@media(max-width:1180px){
+ .filter-workspace .table-toolbar:has(> .queue-filters){grid-template-columns:minmax(0,1fr)}
+}
+@media(max-width:760px){
+ .filter-workspace .filter-grid{grid-template-columns:minmax(0,1fr);padding:13px}
+ .filter-workspace .filter-grid>.form-span{grid-column:1}
+ .filter-workspace .queue-filters{grid-template-columns:minmax(0,1fr)}
+ .filter-workspace .queue-filters>input[name="q"]{grid-column:1}
+ .filter-workspace .filter-grid>.primary-button,.filter-workspace .filter-grid>.secondary-button,.filter-workspace .filter-grid>.secondary-link{width:100%}
+ .filter-workspace .table-toolbar:has(> .queue-filters){gap:11px}
+}

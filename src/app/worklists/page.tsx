@@ -326,7 +326,7 @@ export default async function WorklistsPage({
     }];
   });
 
-  return <main className="catalog-shell">
+  return <main className="catalog-shell filter-workspace">
     <header className="page-header">
       <div>
         <p className="eyebrow">{tr(locale, "Laboratory Operations", "عمليات المختبر")}</p>
@@ -355,50 +355,50 @@ export default async function WorklistsPage({
     <section className="table-card">
       <div className="table-toolbar">
         <div><h2>{tr(locale, "Laboratory Work Queue", "قائمة عمل المختبر")}</h2><span>{visibleItems.length} {tr(locale, "item(s) on this page", "عنصر بهذه الصفحة")}{worklistWindow.hasNext ? " · +" : ""}</span></div>
-        <form className="inline-search" action="/worklists" method="get">
-          <input name="q" defaultValue={q} placeholder={tr(locale, "Barcode, accession, patient, test…", "باركود، رقم طلب، مريض، فحص…")} />
-          <select name="branch" defaultValue={branchId}>
+        <form className="inline-search queue-filters" action="/worklists" method="get">
+          <input type="search" name="q" aria-label={tr(locale, "Find barcode, accession, patient or test", "بحث باركود أو طلب أو مريض أو فحص")} defaultValue={q} placeholder={tr(locale, "Barcode, accession, patient, test…", "باركود، رقم طلب، مريض، فحص…")} />
+          <select name="branch" aria-label={tr(locale, "Performing branch", "فرع التنفيذ")} defaultValue={branchId}>
             <option value="">{tr(locale, "All authorized branches", "كل الفروع المصرح بها")}</option>
             {authorizedBranches
               .slice()
               .sort((a, b) => localizedName(a).localeCompare(localizedName(b)))
               .map(branch => <option key={branch.id} value={branch.id}>{branch.code} — {localizedName(branch)}</option>)}
           </select>
-          <select name="priority" defaultValue={priority}>
+          <select name="priority" aria-label={tr(locale, "Order priority", "أولوية الطلب")} defaultValue={priority}>
             <option value="">{tr(locale, "All priorities", "كل الأولويات")}</option>
             <option value="ROUTINE">{priorityLabel("ROUTINE")}</option>
             <option value="URGENT">{priorityLabel("URGENT")}</option>
             <option value="STAT">{priorityLabel("STAT")}</option>
           </select>
-          <select name="specimenStatus" defaultValue={specimenStatus}>
+          <select name="specimenStatus" aria-label={tr(locale, "Specimen state", "حالة العينة")} defaultValue={specimenStatus}>
             <option value="">{tr(locale, "All ready specimen states", "كل حالات العينات الجاهزة")}</option>
             <option value="RECEIVED">{statusLabel(locale, "RECEIVED")}</option>
             <option value="IN_PROCESS">{statusLabel(locale, "IN_PROCESS")}</option>
           </select>
-          <select name="department" defaultValue={departmentId}>
+          <select name="department" aria-label={tr(locale, "Department", "القسم")} defaultValue={departmentId}>
             <option value="">{tr(locale, "All departments", "كل الأقسام")}</option>
             {departments.map(department => <option key={department.id} value={department.id}>{department.code} — {localizedName(department)}</option>)}
           </select>
-          <select name="analyzer" defaultValue={analyzer}>
+          <select name="analyzer" aria-label={tr(locale, "Analyzer", "جهاز التحليل")} defaultValue={analyzer}>
             <option value="">{tr(locale, "All analyzers", "كل أجهزة التحليل")}</option>
             <option value="UNASSIGNED">{tr(locale, "Unassigned analyzer", "بدون جهاز معيّن")}</option>
             {analyzers.map(item => <option key={item.id} value={item.id}>{item.code} — {item.name}</option>)}
           </select>
-          <select name="due" defaultValue={due}>
+          <select name="due" aria-label={tr(locale, "TAT / due status", "حالة زمن الإنجاز")} defaultValue={due}>
             <option value="">{tr(locale, "All TAT states", "كل حالات زمن الإنجاز")}</option>
             <option value="OVERDUE">{tr(locale, "Overdue", "متأخر")}</option>
             <option value="DUE_SOON">{tr(locale, "Due soon / SLA alert", "قارب الاستحقاق / تنبيه SLA")}</option>
             <option value="PENDING">{tr(locale, "Pending within TAT", "ضمن زمن الإنجاز")}</option>
             <option value="NO_TAT">{tr(locale, "No TAT snapshot", "بدون لقطة زمن إنجاز")}</option>
           </select>
-          <select name="status" defaultValue={status}>
+          <select name="status" aria-label={tr(locale, "Worklist result state", "حالة نتيجة العمل")} defaultValue={status}>
             <option value="">{tr(locale, "All statuses", "كل الحالات")}</option>
             <option value="COLLECTED">{statusLabel(locale, "COLLECTED")}</option>
             <option value="IN_PROGRESS">{statusLabel(locale, "IN_PROGRESS")}</option>
             <option value="RESULTED">{statusLabel(locale, "RESULTED")}</option>
             <option value="VERIFIED">{statusLabel(locale, "VERIFIED")}</option>
           </select>
-          <button className="secondary-button"><SystemIcon name="search" size={15} />{tr(locale, "Filter", "تصفية")}</button>
+          <button type="submit" className="secondary-button"><SystemIcon name="search" size={15} />{tr(locale, "Filter", "تصفية")}</button>
           {(q || status || departmentId || branchId || priority || specimenStatus || due || analyzer) && <Link className="secondary-link" href="/worklists">{tr(locale, "Clear", "مسح")}</Link>}
         </form>
       </div>

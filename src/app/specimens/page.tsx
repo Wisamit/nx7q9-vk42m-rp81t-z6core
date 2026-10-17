@@ -148,7 +148,7 @@ export default async function SpecimensPage({
   const received = specimens.filter(item => ["RECEIVED","IN_PROCESS"].includes(item.status)).length;
   const rejected = specimens.filter(item => item.status === "REJECTED").length;
 
-  return <main className="catalog-shell">
+  return <main className="catalog-shell filter-workspace">
     <header className="page-header">
       <div>
         <p className="eyebrow">{tr(locale, "Pre-Analytical Workflow", "مرحلة ما قبل التحليل")}</p>
@@ -176,9 +176,9 @@ export default async function SpecimensPage({
     <section className="table-card">
       <div className="table-toolbar">
         <div><h2>{tr(locale, "Specimen Work Queue", "قائمة عمل العينات")}</h2><span>{specimens.length} {tr(locale, "shown", "معروضة")}</span></div>
-        <form className="inline-search" action="/specimens" method="get">
-          <input name="q" defaultValue={q} placeholder={tr(locale, "Scan barcode or search order / patient…", "امسح الباركود أو ابحث بالطلب / المريض…")} autoFocus />
-          <select name="status" defaultValue={status}>
+        <form className="inline-search queue-filters" action="/specimens" method="get">
+          <input type="search" name="q" aria-label={tr(locale, "Find specimen barcode, order or patient", "بحث باركود العينة أو الطلب أو المريض")} defaultValue={q} placeholder={tr(locale, "Scan barcode or search order / patient…", "امسح الباركود أو ابحث بالطلب / المريض…")} autoFocus />
+          <select name="status" aria-label={tr(locale, "Specimen state", "حالة العينة")} defaultValue={status}>
             <option value="">{tr(locale, "All statuses", "كل الحالات")}</option>
             <option value="PLANNED">{statusLabel(locale, "PLANNED")}</option>
             <option value="COLLECTION_FAILED">{statusLabel(locale, "COLLECTION_FAILED")}</option>
@@ -188,7 +188,7 @@ export default async function SpecimensPage({
             <option value="IN_PROCESS">{statusLabel(locale, "IN_PROCESS")}</option>
             <option value="REJECTED">{statusLabel(locale, "REJECTED")}</option>
           </select>
-          <button className="secondary-button"><SystemIcon name="search" size={15} />{tr(locale, "Search", "بحث")}</button>
+          <button type="submit" className="secondary-button"><SystemIcon name="search" size={15} />{tr(locale, "Search", "بحث")}</button>
           {(q || status) && <Link className="secondary-link" href="/specimens">{tr(locale, "Clear", "مسح")}</Link>}
         </form>
       </div>

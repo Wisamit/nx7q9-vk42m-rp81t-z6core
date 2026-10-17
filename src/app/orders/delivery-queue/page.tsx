@@ -39,7 +39,7 @@ export default async function DeliveryQueuePage({searchParams}:{searchParams:Sea
     .filter(scope=>scope.branch.organizationId===organizationId)
     .map(scope=>scope.branchId))];
   const parsed=parseDeliveryFollowupFilters(await searchParams,branchIds);
-  if(!parsed.ok)return <main className="catalog-shell">
+  if(!parsed.ok)return <main className="catalog-shell filter-workspace">
     <header className="page-header">
       <div><h1>{tr(locale,"Invalid delivery follow-up filter","تصفية متابعة التسليم غير صالحة")}</h1>
         <p role="alert">{parsed.error==="branch_forbidden"?
@@ -75,7 +75,7 @@ export default async function DeliveryQueuePage({searchParams}:{searchParams:Sea
     paged.ids.sql,...paged.ids.params):[];
 
   const statusText=(status:DeliveryFollowupStatus)=>tr(locale,labels[status].en,labels[status].ar);
-  return <main className="catalog-shell">
+  return <main className="catalog-shell filter-workspace">
     <header className="page-header">
       <div>
         <p className="eyebrow">{tr(locale,"Orders / Patient commitments","الطلبات / المواعيد المتفق عليها")}</p>
@@ -91,7 +91,7 @@ export default async function DeliveryQueuePage({searchParams}:{searchParams:Sea
         <h2>{tr(locale,"Filter commitments","تصفية المواعيد")}</h2>
         <Link className="secondary-link" href="/orders/delivery-queue">{tr(locale,"Reset","إعادة ضبط")}</Link>
       </div>
-      <form className="catalog-form" method="get" action="/orders/delivery-queue">
+      <form className="catalog-form filter-grid" method="get" action="/orders/delivery-queue">
         <label>{tr(locale,"Branch","الفرع")}
           <select name="branchId" defaultValue={filters.branchId}>
             <option value="">{tr(locale,"All authorized branches","جميع الفروع المسموح بها")}</option>
