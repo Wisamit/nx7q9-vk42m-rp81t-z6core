@@ -17,15 +17,17 @@ test("safe-master batch claim changes VALIDATED to IMPORTED inside the data tran
 test("revalidation cannot erase released import provenance, even during concurrent commits", () => {
   const source = route("revalidate");
   assert.match(source, /batch\.status === "IMPORTED"/);
-  assert.match(source, /row\.status === "IMPORTED" \|\| row\.status === "SKIPPED"/);
+  assert.match(source, /row\.status === "IMPORTED"/);
+  assert.match(source, /row\.status === "SKIPPED"/);
   assert.match(source, /row\.importedEntityId !== null/);
   assert.match(source, /status: \{ in: \["DRAFT", "VALIDATED"\] \}/);
   assert.match(source, /updatedAt: batch\.updatedAt/);
   assert.match(source, /status: \{ notIn: \["IMPORTED", "SKIPPED"\] \}, importedEntityId: null/);
   assert.match(source, /claimed\.count !== 1/);
   assert.match(source, /processed_import_batch_immutable/);
-  assert.ok(source.indexOf("const batchClaim = await tx.catalogImportBatch.updateMany") <
+  assert.ok(source.indexOf("const claim = await tx.catalogImportBatch.updateMany") <
     source.indexOf("const claimed = await tx.catalogImportRow.updateMany"));
+  assert.match(source,/updatedAt: item\.row\.updatedAt/);
 });
 test("reference range claims staged row before touching clinical definition and remains inactive/draft", () => {
   const source = route("reference-ranges");
