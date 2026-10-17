@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentSession, permissionSet, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { liveCatalogReviewStagingAuthority } from "@/lib/catalog-review-staging-auth";
 import { attestCatalogBundle, catalogBundleSigningSecret } from "@/lib/catalog-bundle-attestation";
 import { clinicalImportTestWhere, resolveClinicalImportScope } from "@/lib/catalog-clinical-import-scope";
 import { genericCatalogPriceScope } from "@/lib/catalog-generic-price-scope";
@@ -52,38 +53,28 @@ export async function GET(request: NextRequest) {
     // Prevent same-tenant coordinated changes before live authorization checks.
     const orgLock = await tx.$queryRaw<Array<{ id: string }>>`SELECT id FROM organizations WHERE id = ${organizationId} AND status = 'ACTIVE' FOR UPDATE`;
     if (orgLock.length !== 1) return { error: "export_organization_inactive", httpStatus: 403 } as const;
-    const liveBranch = await tx.branch.findFirst({
-      where: { id: scope.branchId, organizationId, status: "ACTIVE" },
-      select: { id: true, organizationId: true, status: true },
+    // Same transaction-time role, branch and department authorization as
+    // paged exports and CSV/XLSX review staging. Check AFTER the tenant lock
+    // so a queued download cannot succeed after permission revocation.
+    const authorized = await liveCatalogReviewStagingAuthority(tx, {
+      userId: session.user.id, organizationId,
+      activeBranchId: scope.branchId,
+      sessionBranchIds: session.user.branchScopes.filter(item =>
+        item.branch.organizationId === organizationId && item.branch.status === "ACTIVE"
+      ).map(item => item.branchId),
+      sessionDepartmentIds: session.user.departmentScopes.map(item => item.departmentId),
+      needsPricing: requested.some(type => type.startsWith("PRICE_")),
+      needsRanges: requested.includes("REFERENCE_INTERVAL"),
+      needsClinicalScope: true,
     });
-    const liveBranches = await tx.userBranchScope.findMany({
-      where: { userId: session.user.id, branch: { organizationId, status: "ACTIVE" } },
-      select: { branchId: true },
-    });
-    const sessionBranches = new Set(session.user.branchScopes.filter(item =>
-      item.branch.organizationId === organizationId && item.branch.status === "ACTIVE"
-    ).map(item => item.branchId));
-    const branchIds = liveBranches.map(item => item.branchId).filter(id => sessionBranches.has(id));
-    const liveDepartments = await tx.userDepartmentScope.findMany({
-      where: { userId: session.user.id },
-      select: { departmentId: true, department: {
-        select: { organizationId: true, branchId: true, status: true },
-      } },
-    });
-    const sessionDepartments = new Set(session.user.departmentScopes.map(item => item.departmentId));
-    const restrictedDepartments = session.user.departmentScopes.length > 0;
-    const currentDepartments = restrictedDepartments
-      ? liveDepartments.filter(item => sessionDepartments.has(item.departmentId))
-      : liveDepartments;
-    if (restrictedDepartments && currentDepartments.length === 0) {
-      return { error: "export_department_scope_changed", httpStatus: 403 } as const;
-    }
-    const liveScope = resolveClinicalImportScope({
-      organizationId, activeBranchId: scope.branchId, activeBranch: liveBranch,
-      branchScopes: branchIds.map(branchId => ({ branchId, branch: { status: "ACTIVE" } })),
-      departmentScopes: currentDepartments,
-    });
-    if (!liveScope) return { error: "export_clinical_scope_changed", httpStatus: 403 } as const;
+    if (!authorized) return {
+      error: "bundle_export_live_scope_or_permission_revoked", httpStatus: 403,
+    } as const;
+    const branchIds = authorized.branchIds;
+    const liveScope = {
+      organizationId, branchId: scope.branchId,
+      departmentIds: authorized.departmentIds,
+    };
 
     // The same repeatable-read snapshot covers all selected groups. Subordinate
     // masters do not need to participate in the organization locking convention.
