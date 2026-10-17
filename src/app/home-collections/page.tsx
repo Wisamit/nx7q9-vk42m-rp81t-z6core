@@ -62,7 +62,7 @@ export default async function HomeCollectionsBoard({
       ...(branch ? { branch } : {}), ...(status ? { status } : {}),
       ...(after ? { after } : {}),
     }).toString();
-  return <main className="page-shell">
+  return <main className="page-shell workflow-page">
     <header className="page-header">
       <div>
         <p className="eyebrow">{tr(locale, "Home Collection Dispatch", "إدارة السحب المنزلي")}</p>
@@ -75,32 +75,34 @@ export default async function HomeCollectionsBoard({
         "Scheduling console", "إدارة المواعيد")}</Link>
     </header>
     <section className="detail-section">
-      <form method="get" className="inline-search">
-        <select name="branch" defaultValue={selected || ""}>
+      <form method="get" className="workflow-filters">
+        <label className="workflow-filter-field"><span>{tr(locale, "Branch", "الفرع")}</span><select name="branch" defaultValue={selected || ""}>
           <option value="">{tr(locale, "All my branches", "كل الفروع المسموحة")}</option>
           {branches.map(b=><option key={b.id} value={b.id}>{b.code} — {
             locale === "ar" ? b.nameAr || b.nameEn : b.nameEn}</option>)}
-        </select>
-        <select name="status" defaultValue={requestedStatus || ""}>
+        </select></label>
+        <label className="workflow-filter-field"><span>{tr(locale, "Visit status", "حالة الزيارة")}</span><select name="status" defaultValue={requestedStatus || ""}>
           <option value="">{tr(locale, "All states", "جميع الحالات")}</option>
           {visibleStatus.map(st=><option key={st} value={st}>{st}</option>)}
-        </select>
-        <button className="secondary-button">{tr(locale, "Filter", "تصفية")}</button>
+        </select></label>
+        <button type="submit" className="secondary-button">{tr(locale, "Filter", "تصفية")}</button>
+        {(selected || requestedStatus) && <Link className="secondary-link" href="/home-collections">{tr(locale, "Clear filters", "مسح الفلاتر")}</Link>}
       </form>
-      <article className="table-card">
-        <div className="table-toolbar">
+      <article className="table-card workflow-queue-card">
+        <div className="table-toolbar workflow-toolbar">
           <h2>{tr(locale, "Home collection cases", "حالات السحب المنزلي")}</h2>
           <span>{visible.length} {tr(locale, "shown", "معروضة")}</span>
         </div>
-        <div className="table-wrap"><table><thead><tr>
+        {visible.length === 0 ? <div className="workflow-empty" role="status">
+          <h3>{tr(locale, "No matching home collection visits", "لا توجد زيارات سحب منزلي مطابقة")}</h3>
+          <p>{tr(locale, "No home collection cases are visible in your authorized branches for these filters. Check the selected branch and status, or open scheduling to review bookings.", "لا تظهر حالات سحب منزلي ضمن الفروع المخوّلة بهذه الفلاتر. تحقق من الفرع والحالة أو افتح المواعيد لمراجعة الحجوزات.")}</p>
+          {(selected || requestedStatus) && <Link className="secondary-link" href="/home-collections">{tr(locale, "View all permitted visits", "عرض جميع الزيارات المسموحة")}</Link>}
+        </div> : <div className="table-wrap"><table className="workflow-data-table"><thead><tr>
           <th>{tr(locale, "Booking / time", "الحجز / الوقت")}</th>
           <th>{tr(locale, "Patient", "المريض")}</th><th>{tr(locale, "Branch / collector", "الفرع / المُجمّع")}</th>
           <th>{tr(locale, "Accession / invoice", "الطلب / الفاتورة")}</th>
           <th>{tr(locale, "Status", "الحالة")}</th><th>{tr(locale, "Workflow", "سير العمل")}</th>
-        </tr></thead><tbody>{visible.length === 0 ?
-          <tr><td colSpan={6} className="empty-state">{tr(locale,
-            "No home collections for this filter.", "لا توجد زيارات منزلية مطابقة.")}</td></tr>
-          : visible.map(visit => {
+        </tr></thead><tbody>{visible.map(visit => {
             const patient = visit.appointment.patient;
             const collector = visit.assignedCollector;
             return <tr key={visit.id}>
@@ -117,7 +119,7 @@ export default async function HomeCollectionsBoard({
               <td><Link className="secondary-link" href={`/home-collections/${visit.id}`}>
                 {tr(locale, "Open case", "فتح الحالة")}</Link></td>
             </tr>;
-          })}</tbody></table></div>
+          })}</tbody></table></div>}
         {next && <p><Link className="secondary-link" href={href(selected || "",requestedStatus || "",next)}>
           {tr(locale, "Next 100 visits", "المئة زيارة التالية")}</Link></p>}
       </article>
