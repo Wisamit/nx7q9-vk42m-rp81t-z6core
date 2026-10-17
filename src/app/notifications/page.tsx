@@ -1,3 +1,4 @@
+import { SystemDateText } from "@/components/system-date-text";
 import { permissionSet, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { NotificationCenterActions } from "@/components/notification-center-actions";
@@ -75,13 +76,13 @@ export default async function NotificationsPage() {
       <div className="table-wrap"><table>
         <thead><tr><th>{tr(locale, "Time", "الوقت")}</th><th>{tr(locale, "Event", "الحدث")}</th><th>{tr(locale, "Message", "الرسالة")}</th><th>{tr(locale, "Branch", "الفرع")}</th><th>{tr(locale, "Severity", "الشدة")}</th><th>{tr(locale, "Delivery", "التسليم")}</th><th>{tr(locale, "Read", "القراءة")}</th></tr></thead>
         <tbody>{notifications.length === 0 ? <tr><td colSpan={7} className="empty-state">{tr(locale, "No notifications yet.", "لا توجد إشعارات حتى الآن.")}</td></tr> : notifications.map(item => <tr key={item.id}>
-          <td>{item.createdAt.toISOString().replace("T"," ").slice(0,19)}</td>
+          <td>{<SystemDateText value={item.createdAt.toISOString()} timeZone={item.branch?.timezone} />}</td>
           <td><strong>{eventLabel(item.eventCode)}</strong></td>
           <td><strong>{item.title}</strong><br/><small>{item.body}</small></td>
           <td>{item.branch?.code || tr(locale, "ORG", "المؤسسة")}</td>
           <td><span className={"status-badge notification-" + item.severity.toLowerCase()}>{severityLabel(item.severity)}</span></td>
           <td>{item.deliveries.map(delivery => channelLabel(delivery.channel) + ": " + statusLabel(locale, delivery.status)).join(" · ") || "—"}</td>
-          <td>{item.readAt ? item.readAt.toISOString().replace("T"," ").slice(0,16) : tr(locale, "Unread", "غير مقروء")}</td>
+          <td>{item.readAt ? <SystemDateText value={item.readAt.toISOString()} timeZone={item.branch?.timezone} /> : tr(locale, "Unread", "غير مقروء")}</td>
         </tr>)}</tbody>
       </table></div>
     </section>
