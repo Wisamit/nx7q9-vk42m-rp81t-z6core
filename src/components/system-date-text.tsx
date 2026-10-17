@@ -3,6 +3,7 @@
 import { useSyncExternalStore } from "react";
 import { formatCalendarDisplay, formatInstantDisplay, formatInstantDateDisplay } from "@/lib/system-date-display";
 import { normalizeSystemDateFormat } from "@/lib/system-date";
+import { DEFAULT_ROOT_DATE_PREFERENCES, readRootDatePreferences, subscribeRootDatePreferences } from "@/lib/root-date-preferences";
 
 type Props = {
   value: string;
@@ -10,21 +11,12 @@ type Props = {
   timeZone?: string;
 };
 
-const subscribe = () => () => {};
-const currentSettings = () => {
-  const root = document.documentElement;
-  return [
-    root.dataset.dateFormat || "DD/MM/YYYY",
-    root.dataset.timezone || "UTC",
-    root.dataset.timeFormat || "24",
-    root.dataset.showSeconds || "false",
-  ].join("|");
-};
-const initialSettings = () => "DD/MM/YYYY|UTC|24|false";
+const currentSettings = readRootDatePreferences;
+const initialSettings = () => DEFAULT_ROOT_DATE_PREFERENCES;
 
 /** Preserve original ISO in datetime/title while displaying configured date and timezone. */
 export function SystemDateText({ value, kind = "instant", timeZone }: Props) {
-  const settings = useSyncExternalStore(subscribe, currentSettings, initialSettings).split("|");
+  const settings = useSyncExternalStore(subscribeRootDatePreferences, currentSettings, initialSettings).split("|");
   const dateFormat = normalizeSystemDateFormat(settings[0]);
   const zone = timeZone || settings[1] || "UTC";
   const preferences = {
