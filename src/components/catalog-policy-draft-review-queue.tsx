@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { SystemDateText } from "@/components/system-date-text";
 import { policyKeys, type CatalogPolicyProposal, type CatalogPolicyKey } from "@/lib/catalog-policy-options";
 
 type Domain = "CLINICAL" | "FINANCIAL";
@@ -191,10 +192,10 @@ export function CatalogPolicyDraftReviewQueue({ locale }: { locale: "ar" | "en" 
         : tr("No eligible current policy drafts on this page.",
           "لا توجد مسودات سياسة حالية قابلة للمراجعة في هذه الصفحة.")}</p>
       : <div className="table-wrap"><table>
-        <thead><tr><th>{tr("Revision", "النسخة")}</th>
+        <thead><tr><th>{tr("Revision", "النسخة")}</th><th>{tr("Recorded at (UTC)", "وقت التسجيل (UTC)")}</th>
           <th>{tr("Domain review", "المراجعة المتخصصة")}</th></tr></thead>
         <tbody>{entries.map(entry => <tr key={entry.draftEventId}>
-          <td>{entry.revision}</td><td>{entry.domains.map(domain =>
+          <td>{entry.revision}</td><td><SystemDateText value={entry.recordedAt} timeZone="UTC" /></td><td>{entry.domains.map(domain =>
             <button type="button" className="secondary-button" disabled={busy}
               key={domain} onClick={() => void inspect(entry, domain)}>
               {domain === "CLINICAL" ? tr("Inspect clinical policy", "فحص السياسة الطبية")
