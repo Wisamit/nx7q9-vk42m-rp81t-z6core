@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { permissionSet, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { CommentTemplateStatusButton } from "@/components/comment-template-status-button";
+import { SystemDateText } from "@/components/system-date-text";
 import {
   commentReviewBlocker, decodeCommentReviewCursor, encodeCommentReviewCursor,
 } from "@/lib/comment-template-review-queue";
@@ -165,7 +166,7 @@ export default async function CommentReviewPage({
                       ? tr(locale, "Revised clinical draft", "مسودة تصحيح سريرية")
                     : creator ? tr(locale, "Manual draft", "مسودة يدوية")
                       : tr(locale, "No creation audit", "لا يوجد سجل إنشاء")}</small></div>
-                  <small>{creator?.occurredAt.toISOString().slice(0, 19).replace("T", " ") || "—"} UTC</small>
+                  <small>{creator ? <SystemDateText value={creator.occurredAt.toISOString()} timeZone="UTC" /> : "—"} UTC</small>
                   {last && <div><small>{tr(locale, "Previous decision", "القرار السابق")}: {last.action}<br/>
                     {last.reason || tr(locale, "No reason recorded", "لا يوجد سبب مدون")}</small></div>}
                 </td>
