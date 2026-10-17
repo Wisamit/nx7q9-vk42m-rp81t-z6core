@@ -79,13 +79,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     // state, tenant and performing department before overwriting an alias.
     if (mappingType === "TEST_ALIAS") {
       const target = await tx.labTest.findFirst({
-        where: { ...clinicalImportTestWhere(liveScope), id: targetTestId, status: "ACTIVE" },
+        where: { ...clinicalImportTestWhere(liveScope), id: targetId, status: "ACTIVE" },
         select: { id: true },
       });
       if (!target) throw new Error("legacy_mapping_target_changed");
     } else {
       const target = await tx.unit.findFirst({
-        where: { id: targetUnitId, organizationId: liveScope.organizationId, status: "ACTIVE" },
+        where: { id: targetId, organizationId: liveScope.organizationId, status: "ACTIVE" },
         select: { id: true },
       });
       if (!target) throw new Error("legacy_mapping_target_changed");
