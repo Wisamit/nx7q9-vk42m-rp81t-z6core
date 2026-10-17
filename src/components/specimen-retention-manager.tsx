@@ -3,6 +3,7 @@
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CrudModal } from "@/components/crud-modal";
+import { SystemDateText } from "@/components/system-date-text";
 
 type Policy = {
   id: string; specimenTypeId: string; minimumDays: number; rationale: string;
@@ -17,9 +18,9 @@ type Case = {
 type SpecimenType = { id: string; code: string; nameEn: string; nameAr: string | null };
 
 export function SpecimenRetentionManager({
-  locale, policies, cases, specimenTypes, mayConfigure, mayRequest, mayAuthorize,
+  locale, policies, cases, specimenTypes, mayConfigure, mayRequest, mayAuthorize, branchTimeZone,
 }: {
-  locale: "ar" | "en"; policies: Policy[]; cases: Case[];
+  locale: "ar" | "en"; policies: Policy[]; cases: Case[]; branchTimeZone?: string;
   specimenTypes: SpecimenType[]; mayConfigure: boolean; mayRequest: boolean; mayAuthorize: boolean;
 }) {
   const tr = (en: string, ar: string) => locale === "ar" ? ar : en;
@@ -139,6 +140,7 @@ export function SpecimenRetentionManager({
           <strong>{specimenTypes.find(t => t.id === policy.specimenTypeId)?.code || policy.specimenTypeId}</strong>
           <p>{tr("Minimum days", "الحد الأدنى بالأيام")}: {policy.minimumDays} · {policy.status}</p>
           <p>{policy.rationale}</p>
+          <p>{tr("Created", "تاريخ الإنشاء")}: <SystemDateText value={policy.createdAt} timeZone={branchTimeZone} />{policy.approvedAt && <> · {tr("Approved", "تاريخ الاعتماد")}: <SystemDateText value={policy.approvedAt} timeZone={branchTimeZone} /></>}</p>
           {mayAuthorize && policy.status === "DRAFT" &&
             <button className="secondary-link" type="button" disabled={busy || reviewEvidence.trim().length < 30}
               onClick={() => void submit("/api/specimens/retention-policies", "PATCH", { id: policy.id, action: "APPROVE", reason: reviewEvidence })}>
@@ -184,7 +186,7 @@ export function SpecimenRetentionManager({
         {cases.length === 0 && <p className="muted">{tr("No disposal requests for this branch.", "لا توجد طلبات إتلاف لهذا الفرع.")}</p>}
         {cases.map(item => <article key={item.id} className="detail-card">
           <strong>{item.specimen.barcode} — {item.status}</strong>
-          <p>{tr("Retention due", "انتهاء الحد الأدنى للاحتفاظ")}: {new Date(item.retentionDueAt).toLocaleString(locale === "ar" ? "ar" : "en")}</p>
+          <p>{tr("Retention due", "انتهاء الحد الأدنى للاحتفاظ")}: <SystemDateText value={item.retentionDueAt} timeZone={branchTimeZone} /></p>
           <p>{tr("Minimum days", "أيام الاحتفاظ")}: {item.policy.minimumDays} · {tr("Sample state", "حالة العينة")}: {item.specimen.status}</p>
           <p>{item.reason}</p>
           {mayAuthorize && item.status === "REQUESTED" &&
