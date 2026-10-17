@@ -108,7 +108,7 @@ export default async function PhlebotomyPage({
   const patientName = (item: { fullNameEn: string; fullNameAr?: string | null }) =>
     locale === "ar" ? item.fullNameAr || item.fullNameEn : item.fullNameEn;
 
-  return <main className="catalog-shell">
+  return <main className="catalog-shell filter-workspace">
     <header className="page-header">
       <div>
         <p className="eyebrow">{tr(locale, "Pre-Analytical Workflow", "مرحلة ما قبل التحليل")}</p>
@@ -135,7 +135,7 @@ export default async function PhlebotomyPage({
     <section className="table-card">
       <div className="table-toolbar">
         <div><h2>{tr(locale, "Collection Queue", "قائمة انتظار السحب")}</h2><span>{tr(locale, "Branch-scoped planned specimens", "عينات مخططة ضمن نطاق الفرع")}</span></div>
-        <form className="inline-search" action="/phlebotomy" method="get">
+        <form className="inline-search queue-filters" action="/phlebotomy" method="get">
           <input name="q" defaultValue={q} placeholder={tr(locale, "Barcode, accession, patient…", "باركود، طلب، مريض…")} autoFocus />
           <select name="branch" defaultValue={selectedBranchId}>
             {branches.map(branch => <option value={branch.id} key={branch.id}>{branch.code} — {localizedName(branch)}</option>)}
