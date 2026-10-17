@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { liveLegacyClinicalWriteScope } from "@/lib/catalog-legacy-clinical-write-auth";
 import { clinicalImportTestWhere, resolveClinicalImportScope, type ClinicalImportScope } from "@/lib/catalog-clinical-import-scope";
 
 function object(value: unknown): Record<string, unknown> {
@@ -336,7 +337,29 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
     if (item.test?.components.length === 1) componentByTestId.set(item.test.id, item.test.components[0]);
   }
 
+  try {
   await prisma.$transaction(async (tx) => {
+    // The preview may predate a role, branch or department revocation.
+    // Serialize by active tenant and reauthorize before ANY row claim.
+    const tenant = await tx.$queryRaw<Array<{ id: string }>>`
+      SELECT id FROM organizations WHERE id = ${scope.organizationId}
+        AND status = 'ACTIVE' FOR UPDATE
+    `;
+    if (tenant.length !== 1) throw new Error("legacy_range_write_scope_changed");
+    const liveScope = await liveLegacyClinicalWriteScope(tx, {
+      organizationId: scope.organizationId, userId: session.user.id,
+      branchId: scope.branchId,
+      sessionBranchIds: session.user.branchScopes.filter(item =>
+        item.branch.status === "ACTIVE" && item.branch.organizationId === scope.organizationId
+      ).map(item => item.branchId),
+      sessionDepartmentIds: session.user.departmentScopes.map(item => item.departmentId),
+    });
+    if (!liveScope) throw new Error("legacy_range_write_scope_changed");
+    const liveBatch = await tx.catalogImportBatch.findFirst({
+      where: { id: batch.id, organizationId: scope.organizationId, sourceType: "LEGACY_MDB_EXPORT" },
+      select: { id: true },
+    });
+    if (!liveBatch) throw new Error("legacy_range_batch_changed");
     for (const item of analysis.safe) {
       if (!item.test || !item.mappedUnit || !item.mappedSex) continue;
       // Claim the *source row* before creating any clinical definition.
@@ -346,10 +369,15 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
       // Re-authorize the performing test within the transaction; preview data
       // is not a permission token and may become stale before a POST executes.
       const currentTest = await tx.labTest.findFirst({
-        where: { ...clinicalImportTestWhere(scope), id: item.test.id, status: "ACTIVE" },
+        where: { ...clinicalImportTestWhere(liveScope), id: item.test.id, status: "ACTIVE" },
         select: { id: true, defaultUnitId: true },
       });
       if (!currentTest) throw new Error("clinical_import_test_scope_changed");
+      const currentUnit = await tx.unit.findFirst({
+        where: { id: item.mappedUnit.id, organizationId: liveScope.organizationId, status: "ACTIVE" },
+        select: { id: true },
+      });
+      if (!currentUnit) throw new Error("legacy_range_write_scope_changed");
       const claim = await tx.catalogImportRow.updateMany({
         where: {
           id: item.row.id, batchId: batch.id,
@@ -421,6 +449,13 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
       },
     });
   }, { timeout: 60000 });
+  } catch (error) {
+    if (error instanceof Error && error.message === "legacy_range_write_scope_changed")
+      return NextResponse.json({ error: "active_clinical_import_scope_required" }, { status: 403 });
+    if (error instanceof Error && error.message === "legacy_range_batch_changed")
+      return NextResponse.json({ error: "csv_review_is_not_clinical_import" }, { status: 409 });
+    throw error;
+  }
 
   return NextResponse.json({ status: "ok", total: analysis.total, imported, review: analysis.review.length, reasons: analysis.reasons });
 }

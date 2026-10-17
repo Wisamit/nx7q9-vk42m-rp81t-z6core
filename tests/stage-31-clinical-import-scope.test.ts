@@ -63,7 +63,7 @@ test("import API and review routing use the same active branch/department limits
   for (const route of [range,unit,mapping]) {
     assert.match(route,/resolveClinicalImportScope\(/);
     assert.match(route,/active_clinical_import_scope_required/);
-    assert.match(route,/clinicalImportTestWhere\(scope\)/);
+    assert.match(route,/clinicalImportTestWhere\((?:scope|liveScope)\)/);
   }
   assert.match(range,/prisma\.labTest\.findMany\(\{ where: clinicalImportTestWhere\(scope\)/);
   assert.equal((range.match(/const scope = resolveClinicalImportScope/g) || []).length,2,

@@ -74,7 +74,8 @@ test("Stage 45: the handler serializes identity discovery and CAS writes under t
   const src=readFileSync("src/app/api/catalog/imports/[id]/prepare-units/route.ts","utf8");
   assert.match(src,/resolveClinicalImportScope\(/);
   assert.match(src,/active_clinical_import_scope_required/);
-  assert.match(src,/WHERE id = \$\{scope\.organizationId\} FOR UPDATE/);
+  assert.match(src,/WHERE id = \$\{scope\.organizationId\} AND status = 'ACTIVE' FOR UPDATE/);
+  assert.match(src,/await liveLegacyClinicalWriteScope\(tx,/);
   assert.match(src,/AND organization_id = \$\{scope\.organizationId\} FOR UPDATE/);
   assert.match(src,/const currentBatch = await tx\.catalogImportBatch\.findFirst/);
   assert.match(src,/const eligibleRows = currentBatch\.rows\.filter\(eligibleLegacyUnitSourceRow\)/);
