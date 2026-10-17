@@ -1,3 +1,4 @@
+import { TableEmptyState } from "@/components/table-empty-state";
 import { SystemDateText } from "@/components/system-date-text";
 import Link from "next/link";
 import { requirePermission } from "@/lib/auth";
@@ -189,7 +190,7 @@ export default async function OrdersPage({ searchParams }: {
         <table>
           <thead><tr><th>{tr(locale, "Accession", "رقم الطلب")}</th><th>{tr(locale, "Patient", "المريض")}</th><th>{tr(locale, "Branch", "الفرع")}</th><th>{tr(locale, "Source", "المصدر")}</th><th>{tr(locale, "Priority", "الأولوية")}</th><th>{tr(locale, "Tests", "الفحوصات")}</th><th>{tr(locale, "Client / Referrer", "العميل / المحيل")}</th><th>{tr(locale, "Invoice", "الفاتورة")}</th><th>{tr(locale, "Status", "الحالة")}</th></tr></thead>
           <tbody>
-            {orders.length === 0 ? <tr><td colSpan={9} className="empty-state">{tr(locale, "No orders registered yet.", "لا توجد طلبات مسجلة بعد.")}</td></tr> :
+            {orders.length === 0 ? <tr><td colSpan={9} className="empty-state"><TableEmptyState title={tr(locale, "No orders registered yet.", "لا توجد طلبات مسجلة بعد.")} description={tr(locale, "This recent-order view has no matching entries. Register an authorized order using the action above when appropriate.", "لا توجد سجلات مطابقة في عرض الطلبات الحديثة. سجّل طلباً مصرحاً به من الإجراء أعلاه عند الحاجة.")} /></td></tr> :
               orders.map(order => {
                 const invoice = order.invoices[0];
                 return <tr key={order.id}>
