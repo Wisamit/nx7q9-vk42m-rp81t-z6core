@@ -40,7 +40,8 @@ test("catalog-only staff cannot stage financial JSON or see package price/price 
   const json = readFileSync("src/app/api/catalog/imports/route.ts","utf8");
   const page = readFileSync("src/app/catalog/page.tsx","utf8");
   assert.match(json,/permissionSet\(session\)\.has\("pricing\.manage"\)/);
-  assert.match(json,/row\.entityType==="PRICE_LIST_ITEM"/);
+  assert.match(json,/row\.entityType\.startsWith\("PRICE_"\)/);
+  assert.match(json,/needsPricing:payload\.rows!\.some/);
   assert.match(page,/canReviewPrices = permissions\.has\("catalog\.manage"\) && permissions\.has\("pricing\.manage"\)/);
   assert.match(page,/scopeType: \{ in: \["ORGANIZATION", "BRANCH"\] \}/);
   assert.match(page,/branchId: \{ in: activeBranches \}/);
