@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
 import { SystemIcon } from "@/components/system-icon";
 import { createPortal } from "react-dom";
 import { acquireCrudModalScrollLock } from "@/lib/crud-modal-scroll-lock";
@@ -13,6 +13,13 @@ const FOCUSABLE_SELECTOR = [
   "textarea:not([disabled])",
   "[tabindex]:not([tabindex='-1'])",
 ].join(", ");
+
+// A server-rendered dialog must not reach for document during hydration.
+// useSyncExternalStore supplies the server null snapshot, then attaches the
+// body overlay after hydration without an effect that synchronously sets state.
+const subscribePortalRoot = () => () => {};
+const getClientPortalRoot = () => document.body;
+const getServerPortalRoot = () => null;
 
 type CrudModalProps = {
   open: boolean;
@@ -55,11 +62,12 @@ function OpenCrudModal({
   const discardOpenRef = useRef(false);
   // Portal dialogs to the document body so page grids/transforms/overflow
   // cannot clip the overlay or place it beneath an unrelated panel.
-  const [portalRoot, setPortalRoot] = useState<HTMLElement | null>(null);
+  const portalRoot = useSyncExternalStore(
+    subscribePortalRoot, getClientPortalRoot, getServerPortalRoot,
+  );
   const [discardOpen, setDiscardOpen] = useState(false);
   const [discardArabic, setDiscardArabic] = useState(false);
 
-  useEffect(() => { setPortalRoot(document.body); }, []);
   useEffect(() => { closeRef.current = onClose; }, [onClose]);
   useEffect(() => { discardOpenRef.current = discardOpen; }, [discardOpen]);
 
