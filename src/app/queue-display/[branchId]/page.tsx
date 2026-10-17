@@ -2,6 +2,7 @@ import Image from "next/image";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { OrganizationThemeOverride } from "@/components/organization-theme-override";
+import { SystemDateText } from "@/components/system-date-text";
 import { getOrganizationSystemSettings } from "@/lib/system-settings";
 import { tr } from "@/lib/ui-i18n";
 
@@ -59,6 +60,7 @@ export default async function QueueDisplayPage({ params }: { params: Promise<{ b
         {settings.logoDataUrl && <Image className="public-brand-logo" src={settings.logoDataUrl} alt={settings.systemNameEn} width={180} height={80} unoptimized priority />}
         <p className="eyebrow">{tr(locale, "Queue Display", "شاشة الانتظار")}</p>
         <h1>{branchName}</h1>
+        <p className="muted">{tr(locale, "Queue date", "تاريخ الانتظار")}: <SystemDateText kind="calendar" value={queueDate.toISOString().slice(0, 10)} /></p>
         <p className="muted">{locale === "ar" ? branch.nameEn : branch.nameAr || settings.systemNameAr} · {tr(locale, "Current called/serving tickets only", "التذاكر المناداة أو قيد الخدمة حاليًا فقط")}</p>
       </div>
     </header>

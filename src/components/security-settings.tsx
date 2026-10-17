@@ -4,6 +4,7 @@ import Image from "next/image";
 import { ChangeEvent, FormEvent, useState } from "react";
 import { SystemIcon } from "@/components/system-icon";
 import { CrudModal } from "@/components/crud-modal";
+import { SystemDateText } from "@/components/system-date-text";
 
 type Enrollment = {
   secret: string;
@@ -327,7 +328,7 @@ export function SecuritySettings({
         "TOTP MFA works with standard authenticator apps. The MFA secret is encrypted at rest.",
         "تعمل المصادقة TOTP مع تطبيقات المصادقة القياسية، ويتم تشفير المفتاح السري أثناء التخزين."
       )}</p>
-      {mfaEnabled && mfaConfirmedAt && <p className="muted">{tr("Confirmed", "تم التأكيد")}: {new Date(mfaConfirmedAt).toLocaleString(locale === "ar" ? "ar-EG" : "en-GB")}</p>}
+      {mfaEnabled && mfaConfirmedAt && <p className="muted">{tr("Confirmed", "تم التأكيد")}: <SystemDateText value={mfaConfirmedAt} /></p>}
       <button type="button" className={mfaEnabled ? "secondary-button" : "primary-button"} disabled={busy}
         onClick={() => { setMessage(""); setMfaOpen(true); }}>
         {mfaEnabled ? tr("Manage MFA / Disable", "إدارة المصادقة / تعطيل")

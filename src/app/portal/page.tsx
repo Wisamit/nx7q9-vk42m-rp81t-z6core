@@ -3,6 +3,7 @@ import Link from "next/link";
 import { requirePortalSession } from "@/lib/portal-auth";
 import { prisma } from "@/lib/db";
 import { PortalLogoutButton } from "@/components/portal-logout-button";
+import { SystemDateText } from "@/components/system-date-text";
 import { PortalBookingForm } from "@/components/portal-booking-form";
 import { DoctorRequisitionForm } from "@/components/doctor-requisition-form";
 import { PortalContactVerification } from "@/components/portal-contact-verification";
@@ -87,14 +88,14 @@ export default async function PortalPage() {
     account.type === "PATIENT"
       ? prisma.invoice.findMany({
           where: { organizationId: account.organizationId, order: { patientId: account.patientId! } },
-          include: { order: true },
+          include: { order: true, branch: true },
           orderBy: { issuedAt: "desc" },
           take: 100,
         })
       : account.type === "CORPORATE"
         ? prisma.invoice.findMany({
             where: { organizationId: account.organizationId, clientId: account.clientId! },
-            include: { order: true },
+            include: { order: true, branch: true },
             orderBy: { issuedAt: "desc" },
             take: 100,
           })
@@ -234,7 +235,7 @@ export default async function PortalPage() {
           <td><strong>{order.accessionNumber}</strong></td>
           {account.type !== "PATIENT" && <td>{order.patient.fullNameEn}<br/><small>{order.patient.patientNumber}</small></td>}
           <td>{order.orderingBranch.nameEn}</td>
-          <td>{order.orderedAt.toISOString().replace("T"," ").slice(0,16)}</td>
+          <td><SystemDateText value={order.orderedAt.toISOString()} timeZone={order.orderingBranch.timezone} /></td>
           <td>{statusLabel(locale, order.status)}</td>
           <td>{order.items.map(item => item.testCodeSnapshot).join(", ")}</td>
         </tr>)}</tbody>
@@ -250,7 +251,7 @@ export default async function PortalPage() {
           {account.type !== "PATIENT" && <td>{report.report.order.patient.fullNameEn}</td>}
           <td>v{report.version}</td>
           <td>{statusLabel(locale, report.status)}</td>
-          <td>{report.issuedAt.toISOString().replace("T"," ").slice(0,16)}</td>
+          <td><SystemDateText value={report.issuedAt.toISOString()} timeZone={report.branch.timezone} /></td>
           <td><Link className="secondary-link" href={"/portal/reports/" + report.id}>{tr(locale, "View", "عرض")}</Link></td>
         </tr>)}</tbody>
       </table></div>
@@ -265,7 +266,7 @@ export default async function PortalPage() {
           {account.type === "CORPORATE" && <td>{item.patient.fullNameEn}</td>}
           <td>{item.branch.nameEn}</td>
           <td>{item.mode}</td>
-          <td>{item.scheduledStart.toISOString().replace("T"," ").slice(0,16)}</td>
+          <td><SystemDateText value={item.scheduledStart.toISOString()} timeZone={item.branch.timezone} /></td>
           <td>{statusLabel(locale, item.homeCollectionVisit ? item.homeCollectionVisit.status : item.status)}</td>
         </tr>)}</tbody>
       </table></div>
@@ -277,7 +278,7 @@ export default async function PortalPage() {
         <thead><tr><th>{tr(locale, "Invoice", "الفاتورة")}</th><th>{tr(locale, "Issued", "تاريخ الإصدار")}</th><th>{tr(locale, "Status", "الحالة")}</th><th>{tr(locale, "Total", "الإجمالي")}</th><th>{tr(locale, "Paid", "المدفوع")}</th><th>{tr(locale, "Balance", "الرصيد")}</th></tr></thead>
         <tbody>{invoices.length === 0 ? <tr><td colSpan={6} className="empty-state">{tr(locale, "No invoices in portal scope.", "لا توجد فواتير ضمن صلاحية البوابة.")}</td></tr> : invoices.map(invoice => <tr key={invoice.id}>
           <td>{invoice.invoiceNumber}</td>
-          <td>{invoice.issuedAt.toISOString().slice(0,10)}</td>
+          <td><SystemDateText value={invoice.issuedAt.toISOString()} timeZone={invoice.branch.timezone} kind="instant-date" /></td>
           <td>{statusLabel(locale, invoice.status)}</td>
           <td>{invoice.total.toString()} {invoice.currency}</td>
           <td>{invoice.paidAmount.toString()} {invoice.currency}</td>

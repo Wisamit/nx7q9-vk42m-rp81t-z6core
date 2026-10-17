@@ -3,6 +3,7 @@
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CrudModal } from "@/components/crud-modal";
+import { SystemDateText } from "@/components/system-date-text";
 
 type Reason = {
   id: string;
@@ -11,6 +12,7 @@ type Reason = {
   nameAr: string | null;
   sortOrder: number;
   status: "ACTIVE" | "INACTIVE";
+  updatedAt: string;
 };
 
 export function SpecimenRejectionReasonManager({
@@ -104,16 +106,18 @@ export function SpecimenRejectionReasonManager({
           <th>{tr("Arabic name", "الاسم بالعربية")}</th>
           <th>{tr("Sort order", "ترتيب العرض")}</th>
           <th>{tr("Status", "الحالة")}</th>
+          <th>{tr("Updated", "آخر تحديث")}</th>
           <th>{tr("Action", "الإجراء")}</th>
         </tr></thead>
         <tbody>{reasons.length === 0
-          ? <tr><td colSpan={6} className="empty-state">{tr("No reasons configured.", "لا توجد أسباب مهيأة.")}</td></tr>
+          ? <tr><td colSpan={7} className="empty-state">{tr("No reasons configured.", "لا توجد أسباب مهيأة.")}</td></tr>
           : reasons.map(reason => <tr key={reason.id}>
             <td><strong>{reason.code}</strong></td>
             <td>{reason.nameEn}</td>
             <td>{reason.nameAr || "—"}</td>
             <td>{reason.sortOrder}</td>
             <td>{reason.status === "ACTIVE" ? tr("Active", "فعال") : tr("Inactive", "غير فعال")}</td>
+            <td><SystemDateText value={reason.updatedAt} /></td>
             <td><button type="button" className="secondary-button" disabled={busy}
               onClick={() => openEditor(reason.id)}>{tr("Edit", "تعديل")}</button></td>
           </tr>)}

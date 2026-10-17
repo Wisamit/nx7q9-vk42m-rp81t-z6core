@@ -2,6 +2,7 @@ import Image from "next/image";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { OrganizationThemeOverride } from "@/components/organization-theme-override";
+import { SystemDateText } from "@/components/system-date-text";
 import { getOrganizationSystemSettings } from "@/lib/system-settings";
 import { statusLabel, tr } from "@/lib/ui-i18n";
 
@@ -52,7 +53,7 @@ export default async function VerifyReportPage({ params }: { params: Promise<{ t
         <dt>{tr(locale, "Patient", "المريض")}</dt><dd>{initials(snapshot.patient?.fullNameEn || "")} · {snapshot.patient?.patientNumber || "—"}</dd>
         <dt>{tr(locale, "Report version", "إصدار التقرير")}</dt><dd>{version.version}</dd>
         <dt>{tr(locale, "Report status", "حالة التقرير")}</dt><dd>{statusLabel(locale, version.status)}</dd>
-        <dt>{tr(locale, "Issued at", "وقت الإصدار")}</dt><dd>{version.issuedAt.toISOString().replace("T"," ").slice(0,19)} UTC</dd>
+        <dt>{tr(locale, "Issued at", "وقت الإصدار")}</dt><dd><SystemDateText value={version.issuedAt.toISOString()} timeZone="UTC" /> UTC</dd>
         <dt>{tr(locale, "Issued by", "صدر بواسطة")}</dt><dd>{version.issuedBy.displayNameEn}</dd>
       </dl>
 
