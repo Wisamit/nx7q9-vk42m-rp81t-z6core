@@ -1,6 +1,7 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
+import { LegacyEvidenceReviewDialog } from "@/components/legacy-evidence-review-dialog";
 
 type Finding = {
   tableName:string;target:string;mode:string;present:boolean;
@@ -17,7 +18,6 @@ type Review = {
 const MAX_BYTES = 64 * 1024;
 export function LegacySourceCoverageReview({locale}:{locale:"ar"|"en"}) {
   const tr = (en:string,ar:string) => locale==="ar"?ar:en;
-  const input = useRef<HTMLInputElement>(null);
   const [result,setResult] = useState<Review|null>(null);
   const [loading,setLoading] = useState(false);
   const [error,setError] = useState("");
@@ -43,12 +43,12 @@ export function LegacySourceCoverageReview({locale}:{locale:"ar"|"en"}) {
       "العدد متطابق، لكن هوية كل صف واعتماده غير مثبتين",
     ],
   };
-  async function review(file:File) {
-    if(loading)return;
+  async function review(file:File): Promise<boolean> {
+    if(loading)return false;
     setError("");setResult(null);
     if(!file.name.toLowerCase().endsWith(".json")||file.size===0||file.size>MAX_BYTES) {
       setError(tr("Choose a source coverage JSON (max 64 KB).","اختر ملف مطابقة المصدر JSON بحد أقصى 64 كيلوبايت."));
-      return;
+      return false;
     }
     setLoading(true);
     try {
@@ -57,15 +57,19 @@ export function LegacySourceCoverageReview({locale}:{locale:"ar"|"en"}) {
         body:file,cache:"no-store",
       });
       const parsed=await response.json() as Review;
-      if(!response.ok||parsed.status!=="REVIEW_ONLY"||parsed.rowParityCertified!==false)
+      if(!response.ok||parsed.status!=="REVIEW_ONLY"||parsed.rowParityCertified!==false||
+         parsed.clinicalApproved!==false||parsed.financialApproved!==false||
+         parsed.cutoverApproved!==false||parsed.sourceIndependentlyVerified!==false||
+         !Array.isArray(parsed.coverage))
         throw Error(parsed.error||"source_coverage_review_failed");
       setResult(parsed);
+      return true;
     } catch(e) {
       setError(tr("Unable to review Access evidence: ","تعذرت مراجعة مصدر Access: ")+
         (e instanceof Error?e.message:"source_coverage_review_failed"));
+      return false;
     } finally {
       setLoading(false);
-      if(input.current)input.current.value="";
     }
   }
   return <section className="detail-section" dir={locale==="ar"?"rtl":"ltr"}>
@@ -78,13 +82,20 @@ export function LegacySourceCoverageReview({locale}:{locale:"ar"|"en"}) {
       "Comparison is limited to same-filename staging batches created by your account; other operators' and direct CSV master imports cannot be certified by these counts. Matching counts never certify clinical or financial migration.",
       "المقارنة تقتصر على دفعات التجهيز المطابقة لاسم الملف والمنشأة بحسابك، ولا تثبت استيرادات المستخدمين الآخرين أو البيانات المرجعية المباشرة. تطابق الأعداد لا يعني اعتماد الترحيل السريري أو المالي.",
     )}</p>
-    <input ref={input} type="file" hidden accept=".json,application/json"
-      onChange={event=>{const file=event.target.files?.[0];if(file)void review(file);}}/>
-    <button className="secondary-button" type="button" disabled={loading}
-      onClick={()=>input.current?.click()}>
-      {loading?tr("Reviewing source coverage…","جارٍ فحص تغطية المصدر…"):
-        tr("Review source coverage JSON","مراجعة ملف تغطية المصدر")}
-    </button>
+    <LegacyEvidenceReviewDialog locale={locale} busy={loading}
+      triggerLabel={tr("Review source coverage JSON","مراجعة ملف تغطية المصدر")}
+      title={tr("Review Access source coverage evidence","مراجعة أدلة تغطية مصدر Access")}
+      description={tr(
+        "This is a comparison of 15-table deidentified metadata, not an MDB upload, source identity verification, row-level parity certificate or clinical/financial approval. A review audit record is stored.",
+        "هذه مقارنة بيانات وصفية مجهولة الهوية لـ15 جدولاً، وليست رفعاً لقاعدة Access أو توثيقاً لهوية المصدر أو مطابقة صفوف أو اعتماداً سريرياً/مالياً. يُسجل حدث تدقيق للمراجعة.",
+      )}
+      fileHint={tr(
+        "Local JSON metadata manifest only, maximum 64 KiB. Never select an MDB database, patient exports or raw clinical reference values.",
+        "ملف أدلة وصفية JSON محلي فقط، بحد أقصى 64 كيلوبايت. لا تختر قاعدة MDB أو بيانات المرضى أو قيم المديات المرجعية الخام.",
+      )}
+      maxBytes={MAX_BYTES} error={error} onReview={file => review(file)}
+      onResetError={() => setError("")} />
+    {loading&&<p role="status">{tr("Reviewing source coverage…","جارٍ مراجعة تغطية المصدر…")}</p>}
     {error&&<p role="alert">{error}</p>}
     {result&&<div className="detail-section">
       <h3>{tr("Source review evidence","أدلة مراجعة المصدر")}</h3>
