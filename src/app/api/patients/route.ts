@@ -4,6 +4,9 @@ import { requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { patientDuplicateEvidence, sortDuplicateCandidates } from "@/lib/patient-duplicate-review";
 import { normalizePatientIdentifier, normalizePatientName, normalizePatientPhone } from "@/lib/patient-normalization";
+import {
+  evaluatePatientCreationReplay, patientCreationPayloadHash, patientCreationSubmissionKey,
+} from "@/lib/patient-creation-idempotency";
 
 function text(value: unknown, max = 220) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -18,7 +21,45 @@ export async function POST(request: Request) {
   const session = await requirePermission("patients.manage");
   const ctx = await requestContext();
   const body = await request.json().catch(() => null);
-  if (!body) return NextResponse.json({ error: "invalid_request" }, { status: 400 });
+  if (!body || typeof body !== "object" || Array.isArray(body))
+    return NextResponse.json({ error: "invalid_request" }, { status: 400 });
+  const submission = patientCreationSubmissionKey(request.headers.get("x-family-lab-patient-key"));
+  if (!submission.valid)
+    return NextResponse.json({ error: "invalid_patient_submission_key" }, { status: 400 });
+  // This fingerprint contains no logged PII. Keyed retries must reproduce
+  // the *exact* original intent, including duplicate-review authorization.
+  const payloadHash = submission.key ? patientCreationPayloadHash(body) : null;
+  const replayResponse = async (): Promise<NextResponse | null> => {
+    if (!submission.key || !payloadHash) return null;
+    const prior = await prisma.patient.findFirst({
+      where: {
+        organizationId: session.user.organizationId,
+        creationRequestUserId: session.user.id,
+        creationSubmissionKey: submission.key,
+      },
+      select: {
+        id: true, patientNumber: true, fullNameEn: true,
+        status: true, mergedIntoPatientId: true, creationPayloadHash: true,
+      },
+    });
+    const decision = evaluatePatientCreationReplay(prior, payloadHash);
+    if (decision.kind === "new") return null;
+    if (decision.kind === "conflict") return NextResponse.json({
+      error: "patient_creation_submission_conflict",
+    }, { status: 409, headers: { "Cache-Control": "private, no-store" } });
+    if (decision.kind === "record_changed") return NextResponse.json({
+      error: "patient_creation_record_changed",
+    }, { status: 409, headers: { "Cache-Control": "private, no-store" } });
+    // No second patient/identifier/audit event, even after a lost 201 response.
+    return NextResponse.json({
+      status: "ok", replayed: true,
+      patient: { id: prior!.id, patientNumber: prior!.patientNumber, fullNameEn: prior!.fullNameEn },
+    }, { status: 200, headers: { "Cache-Control": "private, no-store" } });
+  };
+  // Replay MUST precede duplicate detection: the original patient might now
+  // be one of the candidates, and must not trigger an override/new identity.
+  const replay = await replayResponse();
+  if (replay) return replay;
 
   const fullNameEn = text(body.fullNameEn);
   const fullNameAr = text(body.fullNameAr);
@@ -227,7 +268,9 @@ export async function POST(request: Request) {
     }
   }
 
-  const created = await prisma.$transaction(async (tx) => {
+  let created;
+  try {
+    created = await prisma.$transaction(async (tx) => {
     let patientNumber = newPatientNumber();
     while (await tx.patient.findUnique({ where: { organizationId_patientNumber: { organizationId: session.user.organizationId, patientNumber } } })) {
       patientNumber = newPatientNumber();
@@ -256,6 +299,9 @@ export async function POST(request: Request) {
         notes: notes || null,
         clinicalInformation: clinicalInformation || null,
         creationBranchId: session.activeBranchId || null,
+        creationRequestUserId: submission.key ? session.user.id : null,
+        creationSubmissionKey: submission.key,
+        creationPayloadHash: payloadHash,
       },
     });
 
@@ -334,7 +380,18 @@ export async function POST(request: Request) {
     }
 
     return patient;
-  });
+    });
+  } catch (error) {
+    // Concurrent identical POSTs are serialized by MariaDB's unique key.
+    // The loser may only recover the *same* committed submission and actor;
+    // unrelated unique conflicts must retain their existing failure behavior.
+    if (error && typeof error === "object" && "code" in error && error.code === "P2002") {
+      const prior = await replayResponse();
+      if (prior) return prior;
+    }
+    throw error;
+  }
 
-  return NextResponse.json({ status: "ok", patient: created }, { status: 201 });
+  return NextResponse.json({ status: "ok", patient: created },
+    { status: 201, headers: { "Cache-Control": "private, no-store" } });
 }
