@@ -11,12 +11,13 @@ import { CatalogBundleReviewStaging } from "@/components/catalog-bundle-review-s
 import { CommercialPackageManager } from "@/components/commercial-package-manager";
 import { statusLabel, tr } from "@/lib/ui-i18n";
 import { resolveClinicalImportScope } from "@/lib/catalog-clinical-import-scope";
-import { privateSpreadsheetBatchScope } from "@/lib/catalog-import-list-privacy";
+import { catalogImportPageBounds, catalogImportVisibilityWhere, requestedCatalogImportPage } from "@/lib/catalog-import-pagination";
 
 export const dynamic = "force-dynamic";
 
-export default async function CatalogPage() {
+export default async function CatalogPage({ searchParams }: { searchParams: Promise<{ importPage?: string }> }) {
   const session = await requirePermission("catalog.view");
+  const { importPage } = await searchParams;
   const permissions = permissionSet(session);
   const locale = session.user.preferredLocale === "ar" ? "ar" : "en";
   const canReviewPrices = permissions.has("catalog.manage") && permissions.has("pricing.manage");
@@ -27,7 +28,7 @@ export default async function CatalogPage() {
       activeBranchId: session.activeBranchId, activeBranch: session.activeBranch,
       branchScopes: session.user.branchScopes, departmentScopes: session.user.departmentScopes,
     }) !== null;
-  const [tests, departments, specimens, containers, methods, units, analyzers, panels, packages, importBatches] = await Promise.all([
+  const [tests, departments, specimens, containers, methods, units, analyzers, panels, packages] = await Promise.all([
     prisma.labTest.findMany({
       where: { organizationId: session.user.organizationId },
       include: { department: true, specimenType: true, components: { include: { unit: true, referenceIntervals: { orderBy: { effectiveFrom: "desc" }, take: 1 } }, orderBy: { displayOrder: "asc" } } },
@@ -53,30 +54,31 @@ export default async function CatalogPage() {
       orderBy: { effectiveFrom: "desc" }, take: 1,
       include: { priceList: true },
     } }, orderBy: { nameEn: "asc" } }),
-    prisma.catalogImportBatch.findMany({ where: {
-      organizationId: session.user.organizationId,
-      AND: [{
-        OR: [
-          { sourceType: { not: "CSV_REVIEW" } },
-          { rows: { none: { entityType: "REFERENCE_INTERVAL" } } },
-          ...(canReviewCsvRanges ? [{ createdByUserId: session.user.id }] : []),
-        ],
-      }, {
-        // A CSV/XLSX or signed-bundle review batch is private to its author.
-        // Its filename, row count and even existence are not a team-wide
-        // catalog index; the detail page already applies the same author lock.
-        ...privateSpreadsheetBatchScope(session.user.id),
-      }],
-      ...(permissions.has("catalog.manage") ? {
-        OR: [
-          { AND: [{ rows: { none: { entityType: "PRICE_LIST_ITEM" } } },
-            { rows: { none: { entityType: "PRICE_LIST" } } },
-            { rows: { none: { entityType: "PRICE_LIST_PACKAGE_ITEM" } } }] },
-          ...(permissions.has("pricing.manage") ? [{ createdByUserId: session.user.id }] : []),
-        ],
-      } : { id: "00000000-0000-0000-0000-000000000000" }),
-    }, include: { _count: { select: { rows: true } } }, orderBy: { createdAt: "desc" }, take: 10 }),
+
   ]);
+
+  // Keep count and discovery under one consistent MariaDB snapshot with the
+  // same organization, author, clinical and price visibility predicate.
+  const importWhere = catalogImportVisibilityWhere({
+    organizationId: session.user.organizationId,
+    authorId: session.user.id,
+    canManage: permissions.has("catalog.manage"),
+    canReviewRanges: canReviewCsvRanges,
+    canManagePricing: permissions.has("pricing.manage"),
+  });
+  const importListing = permissions.has("catalog.manage")
+    ? await prisma.$transaction(async tx => {
+        const total = await tx.catalogImportBatch.count({ where: importWhere });
+        const bounds = catalogImportPageBounds(requestedCatalogImportPage(importPage), total);
+        const batches = await tx.catalogImportBatch.findMany({
+          where: importWhere,
+          include: { _count: { select: { rows: true } } },
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          skip: bounds.skip, take: bounds.take,
+        });
+        return { batches, total, ...bounds };
+      }, { isolationLevel: "RepeatableRead", timeout: 30000 })
+    : null;
 
   return (
     <main className="catalog-shell">
@@ -136,7 +138,7 @@ export default async function CatalogPage() {
             "Open controlled master import", "فتح الاستيراد المرجعي المضبوط")}</Link>
         </section>}
 
-      {permissions.has("catalog.manage") && <LegacyImportBatches locale={locale} batches={importBatches.map(batch => ({ id: batch.id, sourceName: batch.sourceName, sourceType: batch.sourceType, status: batch.status, rows: batch._count.rows, createdAt: batch.createdAt.toISOString() }))} />}
+      {importListing && <LegacyImportBatches locale={locale} page={importListing.page} totalPages={importListing.totalPages} totalVisible={importListing.total} batches={importListing.batches.map(batch => ({ id: batch.id, sourceName: batch.sourceName, sourceType: batch.sourceType, status: batch.status, rows: batch._count.rows, createdAt: batch.createdAt.toISOString() }))} />}
 
       <section className="table-card detail-section">
         <div className="table-toolbar"><h2>{tr(locale, "Commercial Packages", "الباقات التجارية")}</h2><span>{tr(locale, "Commercial groupings are separate from clinical panels.", "الباقات التجارية مستقلة عن الباقات السريرية.")}</span></div>

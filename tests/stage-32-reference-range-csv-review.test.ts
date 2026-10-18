@@ -78,7 +78,10 @@ test("CSV range route demands independent clinical role/scope, author-only discl
   assert.match(detail,/batch\.createdByUserId !== session\.user\.id/);
   assert.match(detail,/catalog\.reference_ranges\.manage/);
   assert.match(index,/canReviewCsvRanges/);
-  assert.match(index,/rows: \{ none: \{ entityType: "REFERENCE_INTERVAL" \} \}/);
+  const visibility=readFileSync("src/lib/catalog-import-pagination.ts","utf8");
+  assert.match(index,/catalogImportVisibilityWhere\(\{/);
+  assert.match(visibility,/rows: \{ none: \{ entityType: "REFERENCE_INTERVAL" \} \}/);
+  assert.match(index,/where: importWhere,/);
   assert.match(button,/canStageRanges/);
   assert.match(button,/saveTemplate\("range", "xlsx"\)/);
   assert.match(button,/"-review-template\."/);
