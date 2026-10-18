@@ -4,6 +4,7 @@ import { Prisma } from "../../../../../../generated/prisma/client";
 import { sameCompositeMembership, type CompositeMember } from "@/lib/catalog-composite-bundle";
 import { permissionSet, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { catalogStageSubmissionKey, lookupCatalogStageReplay } from "@/lib/catalog-stage-idempotency";
 import {
   CatalogBundleAttestationError, catalogBundleSigningSecret, verifyCatalogBundleAttestation,
 } from "@/lib/catalog-bundle-attestation";
@@ -16,6 +17,8 @@ import {
 
 export async function POST(request: Request) {
   const session = await requirePermission("catalog.manage");
+  const requestKey = catalogStageSubmissionKey(request.headers.get("x-family-lab-staging-key"));
+  if (!requestKey.valid) return NextResponse.json({ error: "invalid_catalog_staging_key" }, { status: 400 });
   const perms = permissionSet(session);
   const scope = resolveClinicalImportScope({
     organizationId: session.user.organizationId,
@@ -313,9 +316,18 @@ export async function POST(request: Request) {
     if (!consistent) return { error: "bundle_master_mapping_mismatch", httpStatus: 409 } as const;
   }
 
+    const replay = await lookupCatalogStageReplay(tx, {
+      organizationId: scope.organizationId, authorId: session.user.id,
+      sourceType: BUNDLE_REVIEW_SOURCE, sourceName, checksum,
+      submissionKey: requestKey.key, expectedStatus: "DRAFT",
+    });
+    if (replay.kind === "conflict")
+      return { error: "catalog_staging_key_reused", httpStatus: 409 } as const;
+    if (replay.kind === "replay") return { id: replay.id, replayed: true } as const;
     const created = await tx.catalogImportBatch.create({ data: {
       organizationId: scope.organizationId, sourceType: BUNDLE_REVIEW_SOURCE,
-      sourceName, sourceChecksum: checksum, status: "DRAFT", validatedAt: null,
+      sourceName, sourceChecksum: checksum, submissionKey: requestKey.key,
+      status: "DRAFT", validatedAt: null,
       createdByUserId: session.user.id,
       summary: { total: references.length, WARNING: references.length, reviewOnly: true,
         format: "family-lab-catalog-bundle", consistency: parsed.consistency,
@@ -347,10 +359,11 @@ export async function POST(request: Request) {
       newValues: { total: references.length, reviewOnly: true, attestationStatus, counts: parsed.counts },
       ipAddress: ctx.ipAddress, userAgent: ctx.userAgent,
     } });
-    return created;
+    return { id: created.id, replayed: false };
   }, { timeout: 30000 });
   if ("error" in outcome) return NextResponse.json({ error: outcome.error }, { status: outcome.httpStatus });
   return NextResponse.json({ id: outcome.id, status: "DRAFT", reviewOnly: true,
+    replayed: outcome.replayed,
     summary: { total: references.length, WARNING: references.length, counts: parsed.counts } },
-  { status: 201, headers: { "Cache-Control": "private, no-store" } });
+  { status: outcome.replayed ? 200 : 201, headers: { "Cache-Control": "private, no-store" } });
 }
