@@ -157,7 +157,11 @@ export function ReferenceRangeImportButton({ batchId, locale }: { batchId: strin
     } finally {
       setBusy(false);
       setResolving(false);
-    async function saveMapping(mappingType: "TEST_ALIAS" | "UNIT_ALIAS", sourceValue: string) {
+      inFlight.current = false;
+    }
+  }
+
+  async function saveMapping(mappingType: "TEST_ALIAS" | "UNIT_ALIAS", sourceValue: string) {
     const mapKey = `${mappingType}:${sourceValue}`;
     if (inFlight.current || mappingInFlight.current || busy || resolving || reviewAction) return;
     const targetId = mappingTargets[mapKey];
@@ -165,7 +169,6 @@ export function ReferenceRangeImportButton({ batchId, locale }: { batchId: strin
       setMessage(tr("Select a target before saving the mapping.", "اختر الهدف قبل حفظ الربط."));
       return;
     }
-
     mappingInFlight.current = true;
     setMappingBusy(mapKey);
     setMessage("");
@@ -175,7 +178,7 @@ export function ReferenceRangeImportButton({ batchId, locale }: { batchId: strin
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mappingType, sourceValue, targetId }),
       });
-      const body = await response.json().catch(() => ({}));
+      await response.json().catch(() => ({}));
       if (!response.ok) {
         setMessage(tr("Could not save mapping. Review the batch and try again.", "تعذر حفظ الربط. راجع الدفعة قبل المحاولة مجدداً."));
         return;
@@ -193,11 +196,6 @@ export function ReferenceRangeImportButton({ batchId, locale }: { batchId: strin
       mappingInFlight.current = false;
       setMappingBusy("");
     }
-  }
-
-."));
-    }
-    setMappingBusy("");
   }
 
   if (!preview) return <span className="muted">{tr("Analyzing reference ranges…", "جارٍ تحليل المديات المرجعية…")}</span>;
