@@ -27,7 +27,10 @@ test("Issue #265: role creation and branch-security permission changes retain re
   assert.doesNotMatch(ui, /event\.currentTarget\.reset\(\)/);
   assert.equal(count(ui, /inFlight\.current = false;/g), 3);
   assert.match(ui, /if \(!editing \|\| editing\.isSystem \|\| inFlight\.current\) return;/);
-  assert.match(ui, /if \(role\.isSystem \|\| inFlight\.current\) return;/);
+  assert.match(ui, /if \(!role \|\| role\.isSystem \|\| inFlight\.current\) return;/);
+  assert.match(ui, /latest\.isSystem/);
+  assert.match(ui, /latest\.status !== role\.status/);
+  assert.match(ui, /onSubmit=\{confirmRoleStatus\}/);
   assert.match(ui, /if \(!inFlight\.current\) setEditing\(null\)/);
   assert.match(ui, /protectedFinancialPermission && currentlyGranted && <input type="hidden"/);
   assert.match(ui, /role=\{isError \? "alert" : "status"\}/);

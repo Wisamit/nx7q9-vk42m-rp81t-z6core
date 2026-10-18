@@ -12,7 +12,7 @@ test("Issue #265: existing administrative, billing and analyzer CRUD dialogs sha
     "patient-create-modal": 1,
     "payment-create-modal": 1,
     "pricing-manager": 4,
-    "user-management": 3,
+    "user-management": 4,
   };
   let total = 0;
   for (const [name, expected] of Object.entries(components)) {
@@ -23,7 +23,7 @@ test("Issue #265: existing administrative, billing and analyzer CRUD dialogs sha
       name + " must have centered compact dialogs for every CRUD editor");
     total += expected;
   }
-  assert.equal(total, 22);
+  assert.equal(total, 23);
 });
 
 test("Issue #265: compact dialog width remains responsive without clipping long records or access tables", () => {
