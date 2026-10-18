@@ -18,7 +18,8 @@ test("Issue #265: inventory, equipment and integration forms have explicit compa
     const source = read("src/components/" + moduleName + ".tsx");
     assert.ok(source.includes('import { CrudModal } from "@/components/crud-modal";'), moduleName);
     assert.equal((source.match(/<CrudModal\b/g) || []).length,
-      handlers.length + (moduleName === "digital-services-console" ? 1 : 0));
+      handlers.length + (moduleName === "digital-services-console" ? 1 : 0) +
+      (moduleName === "integration-manager" ? 1 : 0));
     for (const handler of handlers) {
       const tag = '<form className="catalog-form" onSubmit={' + handler + '}>';
       const formStart = source.indexOf(tag);
@@ -38,6 +39,12 @@ test("Issue #265: inventory, equipment and integration forms have explicit compa
   const integration = read("src/components/integration-manager.tsx");
   assert.ok(integration.includes('uiDialog === "key" && secret'));
   assert.ok(integration.includes('secret will not be displayed by the server again.'));
+  const dispatchForm = integration.indexOf('<form className="catalog-form" onSubmit={dispatch}>');
+  const dispatchModal = integration.lastIndexOf("<CrudModal", dispatchForm);
+  assert.ok(dispatchForm > 0 && dispatchModal > 0);
+  assert.ok(integration.slice(dispatchModal, dispatchForm).includes('open={dispatchOpen}'));
+  assert.ok(integration.slice(dispatchModal, dispatchForm).includes('size="compact"'));
+  assert.ok(integration.includes('Confirm external dispatch'));
 });
 
 test("Issue #265: sensitive customer actions never use browser-native prompt/confirm", () => {
