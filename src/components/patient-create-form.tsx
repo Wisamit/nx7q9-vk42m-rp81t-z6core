@@ -144,8 +144,8 @@ export function PatientCreateForm({
     }
     } catch {
       setMessage(tr(
-        "Connection interrupted. Keep these details unchanged to safely retry the same request; search the central patient registry before starting a different registration.",
-        "انقطع الاتصال. أبقِ البيانات دون تغيير لإعادة المحاولة بأمان بنفس الطلب؛ وابحث في سجل المرضى المركزي قبل بدء تسجيل مختلف.",
+        "Connection interrupted. Search patient records before retrying. Keep these details unchanged to safely retry the same request; check the central registry before starting a different registration.",
+        "انقطع الاتصال. ابحث في سجلات المرضى قبل إعادة المحاولة. أبقِ البيانات دون تغيير عند إعادة نفس الطلب بأمان، وتحقق من السجل المركزي قبل بدء تسجيل مختلف.",
       ));
     } finally {
       inFlight.current = false;
