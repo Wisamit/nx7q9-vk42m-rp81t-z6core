@@ -44,7 +44,7 @@ export function LegacyEvidenceReviewDialog({
     setOpen(false);
     reset();
   }
-  async function confirm() {
+  async function submitEvidence() {
     if (busy || submitting.current || !file || (sourceTables && !selectedTable)) return;
     if (!file.name.toLowerCase().endsWith(".json") || file.size === 0 || file.size > maxBytes) {
       setLocalError(tr(
@@ -113,7 +113,7 @@ export function LegacyEvidenceReviewDialog({
           </button>
           <button type="button" className="primary-button"
             disabled={busy || !file || Boolean(sourceTables && !selectedTable)}
-            onClick={() => void confirm()}>
+            onClick={() => void submitEvidence()}>
             {busy ? tr("Reviewing…", "جارٍ المراجعة…") : tr("Confirm evidence review", "تأكيد مراجعة الأدلة")}
           </button>
         </div>

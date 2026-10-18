@@ -10,13 +10,12 @@ const specialty=read("src/components/legacy-specialty-evidence-review.tsx");
 test("both Access evidence uploads require explicit compact modal confirmation, not file-selection POST",()=>{
   assert.equal((dialog.match(/<CrudModal\b/g)||[]).length,1);
   assert.ok(dialog.includes('size="compact" protectUnsavedChanges'));
-  assert.ok(dialog.includes('aria')===false || dialog.includes('fileId')); // form controls use stable labels
   assert.ok(dialog.includes('const fileId = useId()'));
   assert.ok(dialog.includes('const tableId = useId()'));
   assert.ok(dialog.includes('htmlFor={fileId}'));
   assert.ok(dialog.includes('htmlFor={tableId}'));
   assert.ok(dialog.includes('setFile(event.currentTarget.files?.[0] ?? null)'));
-  assert.ok(dialog.includes('onClick={() => void confirm()}'));
+  assert.ok(dialog.includes('onClick={() => void submitEvidence()}'));
   assert.ok(dialog.includes('const ok = await onReview(file, selectedTable)'));
   assert.ok(dialog.includes('if (ok) {'));
   assert.ok(dialog.includes('submitting.current = true'));
