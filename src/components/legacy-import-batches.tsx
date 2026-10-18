@@ -11,7 +11,7 @@ import { statusLabel } from "@/lib/ui-i18n";
 
 type Batch={id:string;sourceName:string;sourceType:string;status:string;rows:number;createdAt:string};
 
-export function LegacyImportBatches({batches,locale}:{batches:Batch[];locale:"ar"|"en"}){
+export function LegacyImportBatches({batches,locale,page,totalPages,totalVisible}:{batches:Batch[];locale:"ar"|"en";page:number;totalPages:number;totalVisible:number}){
  const router=useRouter();
  const [busy,setBusy]=useState(false);
  const [message,setMessage]=useState("");
@@ -87,7 +87,7 @@ export function LegacyImportBatches({batches,locale}:{batches:Batch[];locale:"ar
   }
  }
 
- return <section className="table-card import-card">
+ return <section id="catalog-import-batches" className="table-card import-card">
   <div className="table-toolbar">
    <div>
     <h2>{tr("Legacy Catalog Migration","ترحيل دليل النظام القديم")}</h2>
@@ -102,7 +102,7 @@ export function LegacyImportBatches({batches,locale}:{batches:Batch[];locale:"ar
       accept=".json,application/json"
       fileHint={tr("JSON only, maximum 32 MB. Inspect the staged rows before any governed commit.", "ملف JSON فقط بحد أقصى 32 ميغابايت. راجع الصفوف قبل أي اعتماد مضبوط.")}
       onStage={stage} />
-    <span className="status-pill">{batches.length} {tr("batch(es)","دفعة")}</span>
+    <span className="status-pill">{totalVisible} {tr("accessible batch(es)","دفعة متاحة")}</span>
    </div>
   </div>
   {message&&<p className="import-message" role={stageId?"status":"alert"}>{message}</p>}
@@ -117,5 +117,10 @@ export function LegacyImportBatches({batches,locale}:{batches:Batch[];locale:"ar
   {batches.length===0?
    <div className="import-empty"><strong>{tr("Import staging is ready.","تجهيز الاستيراد جاهز.")}</strong><p>{tr("Export the legacy master data, stage the JSON here, then review warnings before committing anything to the live catalog.","صدّر البيانات الرئيسية من النظام القديم، جهّز ملف JSON هنا، ثم راجع التحذيرات قبل اعتماد أي بيانات في الدليل الفعلي.")}</p></div>:
    <div className="table-wrap"><table><thead><tr><th>{tr("Source","المصدر")}</th><th>{tr("Type","النوع")}</th><th>{tr("Rows","الصفوف")}</th><th>{tr("Status","الحالة")}</th><th>{tr("Created","تاريخ الإنشاء")}</th></tr></thead><tbody>{batches.map(b=><tr key={b.id}><td><Link className="table-link" href={`/catalog/imports/${b.id}`}><strong>{b.sourceName}</strong></Link></td><td>{b.sourceType}</td><td>{b.rows}</td><td>{statusLabel(locale,b.status)}</td><td><SystemDateText value={b.createdAt} kind="instant-date" /></td></tr>)}</tbody></table></div>}
+  {totalPages>1&&<nav className="pagination-nav" aria-label={tr("Import batch pages","صفحات دفعات الاستيراد")}>
+   {page>1?<Link className="secondary-link" href={`/catalog?importPage=${page-1}#catalog-import-batches`}>{tr("Previous","السابق")}</Link>:<span className="muted">{tr("Previous","السابق")}</span>}
+   <span aria-live="polite">{tr(`Page ${page} of ${totalPages}`,`الصفحة ${page} من ${totalPages}`)}</span>
+   {page<totalPages?<Link className="secondary-link" href={`/catalog?importPage=${page+1}#catalog-import-batches`}>{tr("Next","التالي")}</Link>:<span className="muted">{tr("Next","التالي")}</span>}
+  </nav>}
  </section>;
 }
