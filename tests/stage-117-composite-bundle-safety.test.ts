@@ -94,5 +94,7 @@ test("Stage 117 never routes review batches to live commit; checks membership/pr
   assert.match(route, /reviewOnly: true/);
   assert.match(commit, /sourceType === "CONFIG_BUNDLE_REVIEW"/);
   assert.match(page, /candidate.entityType === "PRICE_LIST_PACKAGE_ITEM"/);
-  assert.match(index, /entityType: "PRICE_LIST_PACKAGE_ITEM"/);
+  const visibility = readFileSync("src/lib/catalog-import-pagination.ts", "utf8");
+  assert.match(index, /catalogImportVisibilityWhere\(\{/);
+  assert.match(visibility, /entityType: "PRICE_LIST_PACKAGE_ITEM"/);
 });
