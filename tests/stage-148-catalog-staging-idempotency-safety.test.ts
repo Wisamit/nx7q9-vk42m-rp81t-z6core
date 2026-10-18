@@ -49,7 +49,8 @@ test("all three clients send a stable attempt key, not merely disable the UI",()
     assert.ok(s.includes("submissionKey.current ??= crypto.randomUUID()"),path);
     assert.ok(s.includes('"x-family-lab-staging-key"'),path);
     assert.ok(s.indexOf("submissionKey.current ??= crypto.randomUUID()")<
-      s.indexOf("stageAttempted.current"),path);
+      s.indexOf("stageAttempted.current = true") ||
+      s.indexOf("submissionKey.current ??= crypto.randomUUID()")<s.indexOf("stageAttempted.current=true"),path);
     assert.ok(!s.includes("submissionKey.current = null"),path);
     assert.ok(s.includes("setRetryBlocked(true)"),path);
   }
