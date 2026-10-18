@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { permissionSet, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { liveCatalogReviewStagingAuthority } from "@/lib/catalog-review-staging-auth";
+import { catalogStageSubmissionKey, lookupCatalogStageReplay } from "@/lib/catalog-stage-idempotency";
 import {
   LegacyCatalogJsonIntakeError, legacyCatalogSourceNameValid, readLegacyCatalogJson,
 } from "@/lib/legacy-catalog-json-intake";
@@ -11,6 +12,8 @@ import { allowedImportEntities, normalizeImportRow, rowValidationStatus, validat
 
 export async function POST(request:Request){
  const session=await requirePermission("catalog.manage"); const ctx=await requestContext();
+ const requestKey=catalogStageSubmissionKey(request.headers.get("x-family-lab-staging-key"));
+ if(!requestKey.valid)return NextResponse.json({error:"invalid_catalog_staging_key"},{status:400});
  let raw: unknown;
  try { raw = await readLegacyCatalogJson(request); }
  catch(error) {
@@ -46,11 +49,19 @@ export async function POST(request:Request){
     needsClinicalScope:payload.rows!.some(row=>!["UNIT","CONTAINER"].includes(row.entityType)),
   });
   if(!live)return {error:"catalog_import_staging_authority_revoked",httpStatus:403} as const;
-  const b=await tx.catalogImportBatch.create({data:{organizationId:session.user.organizationId,sourceType:"LEGACY_MDB_EXPORT",sourceName:payload.sourceName as string,sourceChecksum:checksum,status:counts.ERROR?"DRAFT":"VALIDATED",validatedAt:counts.ERROR?null:new Date(),createdByUserId:session.user.id,summary:{total:payload.rows!.length,...counts}}});
+  const stagedStatus=counts.ERROR?"DRAFT":"VALIDATED";
+  const replay=await lookupCatalogStageReplay(tx,{
+    organizationId:org,authorId:session.user.id,sourceType:"LEGACY_MDB_EXPORT",
+    sourceName:payload.sourceName as string,checksum,submissionKey:requestKey.key,
+    expectedStatus:stagedStatus,
+  });
+  if(replay.kind==="conflict")return {error:"catalog_staging_key_reused",httpStatus:409} as const;
+  if(replay.kind==="replay")return {batch:{id:replay.id,status:stagedStatus},replayed:true} as const;
+  const b=await tx.catalogImportBatch.create({data:{organizationId:session.user.organizationId,sourceType:"LEGACY_MDB_EXPORT",sourceName:payload.sourceName as string,sourceChecksum:checksum,submissionKey:requestKey.key,status:counts.ERROR?"DRAFT":"VALIDATED",validatedAt:counts.ERROR?null:new Date(),createdByUserId:session.user.id,summary:{total:payload.rows!.length,...counts}}});
   await tx.catalogImportRow.createMany({data:normalized.map(({row,index,n,v,status})=>({batchId:b.id,rowNumber:index+1,entityType:row.entityType,legacyKey:row.legacyKey||null,status,sourceData:row.data,normalizedData:n,validationIssues:v as Prisma.InputJsonArray}))});
   await tx.auditEvent.create({data:{organizationId:session.user.organizationId,branchId:session.activeBranchId,actorUserId:session.user.id,action:"CATALOG_IMPORT_STAGED",entityType:"CatalogImportBatch",entityId:b.id,newValues:{sourceName:payload.sourceName as string,total:payload.rows!.length,...counts},ipAddress:ctx.ipAddress,userAgent:ctx.userAgent}});
-  return {batch:b};
+  return {batch:b,replayed:false};
  },{timeout:30000});
  if("error" in result)return NextResponse.json({error:result.error},{status:result.httpStatus});
- return NextResponse.json({id:result.batch.id,status:result.batch.status,summary:{total:payload.rows.length,...counts}},{status:201});
+ return NextResponse.json({id:result.batch.id,status:result.batch.status,summary:{total:payload.rows.length,...counts},replayed:result.replayed},{status:result.replayed?200:201});
 }
