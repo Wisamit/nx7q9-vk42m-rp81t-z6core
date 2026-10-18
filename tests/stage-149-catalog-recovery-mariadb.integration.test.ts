@@ -55,7 +55,7 @@ test("Stage 149 MariaDB: recovery key is author, tenant and source isolated", {
       return rows.map(row => row.id as string);
     }
     assert.deepEqual(await lookup(orgA, author, "CSV_REVIEW", key), [original]);
-    assert.deepEqual(await lookup(orgA, peer, "CSV_REVIEW", key) === [original], false);
+    assert.notDeepEqual(await lookup(orgA, peer, "CSV_REVIEW", key), [original]);
     assert.deepEqual(await lookup(orgA, author, "CSV_REVIEW", randomUUID()), []);
     assert.deepEqual(await lookup(orgB, author, "CSV_REVIEW", key), []);
     assert.deepEqual(await lookup(orgA, author, "LEGACY_MDB_EXPORT", key), []);
