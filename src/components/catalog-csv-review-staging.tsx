@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { validateReviewStageReceipt } from "@/lib/catalog-review-stage-receipt";
 import { ReviewFileUploadDialog } from "@/components/review-file-upload-dialog";
 import { useRouter } from "next/navigation";
 import { catalogReviewXlsx } from "@/lib/catalog-review-xlsx";
@@ -15,6 +16,9 @@ export function CatalogCsvReviewStaging({ locale, canStagePricing, canStageRange
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [retryBlocked, setRetryBlocked] = useState(false);
+  const stageAttempted = useRef(false);
+  const inFlight = useRef(false);
   const tr = (en: string, ar: string) => locale === "ar" ? ar : en;
 
   function saveTemplate(kind: "component-price" | "range" | "master" | "package-price" | "price-list", format: "csv" | "xlsx" = "csv") {
@@ -40,33 +44,53 @@ export function CatalogCsvReviewStaging({ locale, canStagePricing, canStageRange
   }
 
   async function stage(file: File): Promise<boolean> {
-    if (busy) return false;
-    const isXlsx = file.name.toLowerCase().endsWith(".xlsx");
-    if (!isXlsx && !file.name.toLowerCase().endsWith(".csv") || file.size === 0 || file.size > 2 * 1024 * 1024) {
-      setError(tr("Select a non-empty CSV or XLSX up to 2 MB.", "اختر CSV أو XLSX غير فارغ بحجم لا يتجاوز 2 ميغابايت."));
-      return false;
-    }
+    if (busy || inFlight.current || stageAttempted.current || retryBlocked) return false;
+    inFlight.current = true;
     setBusy(true);
     setError("");
     try {
-      const response = await fetch("/api/catalog/imports/csv?sourceName=" + encodeURIComponent(file.name), {
-        method: "POST",
-        headers: { "Content-Type": isXlsx
-          ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-          : "text/csv;charset=utf-8" },
-        body: file,
-        cache: "no-store",
-      });
-      const result = await response.json() as { id?: string; error?: string };
-      if (!response.ok || !result.id) throw new Error(result.error || "csv_stage_failed");
-      router.push("/catalog/imports/" + encodeURIComponent(result.id));
+      const isXlsx = file.name.toLowerCase().endsWith(".xlsx");
+      if ((!isXlsx && !file.name.toLowerCase().endsWith(".csv")) ||
+          file.size === 0 || file.size > 2 * 1024 * 1024) {
+        setError(tr("Select a non-empty CSV or XLSX up to 2 MB.",
+          "اختر CSV أو XLSX غير فارغ بحجم لا يتجاوز 2 ميغابايت."));
+        return false;
+      }
+      // This endpoint creates a fresh private DRAFT batch per POST. A lost
+      // response must not lead to an unreviewed second creation.
+      stageAttempted.current = true;
+      setRetryBlocked(true);
+      const response = await fetch("/api/catalog/imports/csv?sourceName=" +
+        encodeURIComponent(file.name), {
+          method: "POST", credentials: "same-origin",
+          headers: { "Content-Type": isXlsx
+            ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            : "text/csv;charset=utf-8" },
+          body: file, cache: "no-store",
+        });
+      const body: unknown = await response.json().catch(() => null);
+      const receipt = response.ok ? validateReviewStageReceipt(body, "CSV") : null;
+      if (!receipt) {
+        const reason = body && typeof body === "object" && !Array.isArray(body) &&
+          "error" in body && typeof body.error === "string" ? body.error : "";
+        setError(tr(
+          "Staging outcome not confirmed. A draft may already exist; check the private review batch list and audit before reloading and trying again.",
+          "لم تتأكد نتيجة التجهيز؛ قد تكون المسودة أُنشئت بالفعل. افحص دفعات المراجعة الخاصة وسجل التدقيق قبل إعادة التحميل والمحاولة مجدداً.",
+        ) + (reason ? " (" + reason + ")" : ""));
+        return false;
+      }
+      router.push("/catalog/imports/" + encodeURIComponent(receipt.id));
       router.refresh();
       return true;
-    } catch (caught) {
-      const code = caught instanceof Error ? caught.message : "csv_stage_failed";
-      setError(tr("CSV/XLSX staging failed: ", "فشل تجهيز ملف CSV/XLSX: ") + code);
+    } catch {
+      setError(stageAttempted.current ? tr(
+        "Connection interrupted after review submission. A DRAFT may already exist. Check the private import ledger and audit before any retry.",
+        "انقطع الاتصال بعد إرسال المراجعة. قد تكون هناك مسودة بالفعل؛ افحص سجل الاستيراد الخاص والتدقيق قبل إعادة المحاولة.",
+      ) : tr("Could not prepare the local spreadsheet; no staging request was sent.",
+        "تعذر إعداد الملف المحلي ولم يُرسل طلب تجهيز."));
       return false;
     } finally {
+      inFlight.current = false;
       setBusy(false);
     }
   }
@@ -94,7 +118,7 @@ export function CatalogCsvReviewStaging({ locale, canStagePricing, canStageRange
       "قوالب الأسعار تتطلب صلاحية pricing.manage، والقوالب الأخرى للمراجعة فقط.",
     )}</p>}
     <div className="review-actions">
-      <ReviewFileUploadDialog locale={locale} busy={busy} error={error}
+      <ReviewFileUploadDialog locale={locale} busy={busy} retryBlocked={retryBlocked} error={error}
         onResetError={() => setError("")}
         title={tr("Review clinical and price spreadsheet", "مراجعة جدول الإعدادات السريرية والأسعار")}
         description={tr("Select a canonical CSV or single-sheet XLSX and confirm controlled draft staging.", "اختر ملف CSV أو XLSX بورقة واحدة ثم أكد تجهيز المسودة للمراجعة.")}
@@ -140,5 +164,9 @@ export function CatalogCsvReviewStaging({ locale, canStagePricing, canStageRange
       </button>}
     </div>
     {error && <p role="alert">{error}</p>}
+    {retryBlocked && <p className="form-warning" role="status">{tr(
+      "Before another CSV/XLSX staging attempt, review the existing private batches and audit, then reload the page.",
+      "قبل رفع CSV/XLSX مرة أخرى، راجع الدفعات الخاصة الموجودة وسجل التدقيق، ثم أعد تحميل الصفحة.",
+    )}</p>}
   </section>;
 }
