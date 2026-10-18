@@ -3,6 +3,7 @@
 import { FormEvent, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CrudModal } from "@/components/crud-modal";
+import { summarizeWebhookDispatch } from "@/lib/webhook-dispatch-outcome";
 
 type Branch = { id: string; code: string; nameEn: string; nameAr?: string | null };
 type Test = { id: string; code: string; nameEn: string; nameAr?: string | null; components: Array<{ id: string; code: string; nameEn: string; nameAr?: string | null }> };
@@ -33,6 +34,9 @@ export function IntegrationManager({
   const [uiDialog, setUiDialog] = useState("");
   const [secret, setSecret] = useState("");
   const [testId, setTestId] = useState("");
+  const [dispatchOpen, setDispatchOpen] = useState(false);
+  const [dispatchUncertain, setDispatchUncertain] = useState(false);
+  const [dispatchError, setDispatchError] = useState("");
   const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
   const localizedName = (item: { nameEn: string; nameAr?: string | null }) => locale === "ar" ? item.nameAr || item.nameEn : item.nameEn;
 
@@ -123,8 +127,60 @@ export function IntegrationManager({
     }, "subscription", "Webhook subscription enabled.", "تم تفعيل اشتراك Webhook.");
   }
 
-  async function dispatch() {
-    await post("/api/integrations/webhooks/dispatch", {}, "dispatch", "Webhook dispatch run completed.", "اكتملت عملية إرسال Webhook.");
+  async function dispatch(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!canReplay || !dispatchOpen || dispatchUncertain || submitting.current || busy) return;
+    // A lost reply can follow successful external transmission. Prevent
+    // blind replay of this batch until a full reload of current queue state.
+    submitting.current = true;
+    setDispatchUncertain(true);
+    setBusy("dispatch");
+    setIsError(false);
+    setMessage("");
+    setDispatchError("");
+    try {
+      const response = await fetch("/api/integrations/webhooks/dispatch", {
+        method: "POST",
+        credentials: "same-origin",
+        cache: "no-store",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const body: unknown = await response.json().catch(() => null);
+      const outcome = response.ok ? summarizeWebhookDispatch(body) : { kind: "invalid" as const };
+      if (outcome.kind === "invalid") {
+        throw new Error(tr(
+          "The dispatch outcome is unconfirmed. Some external deliveries may already have occurred. Inspect the queue and audit log, then reload before another dispatch.",
+          "نتيجة الإرسال غير مؤكدة. قد تكون بعض الرسائل وصلت خارجياً. افحص قائمة الإرسال وسجل التدقيق ثم أعد تحميل الصفحة قبل محاولة جديدة.",
+        ));
+      }
+      setDispatchOpen(false);
+      router.refresh();
+      if (outcome.kind === "empty") {
+        setMessage(tr(
+          "No due webhook deliveries were attempted. Inspect the refreshed queue before starting another run.",
+          "لم تُنفذ أي محاولة إرسال مستحقة. افحص القائمة المحدّثة قبل تشغيل دفعة أخرى.",
+        ));
+      } else {
+        const summary = tr(
+          `Run finished: ${outcome.attempted} attempted; ${outcome.httpAccepted} HTTP-accepted; ${outcome.failed} failed, ${outcome.deadLetter} dead-letter, ${outcome.errors} dispatch errors, ${outcome.skipped} skipped. Provider processing/clinical receipt is NOT verified by an HTTP response.`,
+          `اكتمل تشغيل الدفعة: ${outcome.attempted} محاولة؛ ${outcome.httpAccepted} قبول HTTP؛ ${outcome.failed} فاشلة، ${outcome.deadLetter} نهائية غير قابلة للإرسال، ${outcome.errors} أخطاء تشغيل، ${outcome.skipped} متجاوزة. استجابة HTTP لا تثبت معالجة المستلم أو استلامه السريري.`,
+        );
+        setMessage(summary);
+      }
+      setIsError(outcome.kind === "partial");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : tr(
+        "Dispatch may have sent external messages. Inspect the queue and audit history; reload before retrying.",
+        "ربما أرسل التشغيل رسائل خارجية. افحص القائمة وسجل التدقيق وأعد التحميل قبل تكرار المحاولة.",
+      );
+      setDispatchError(message);
+      setIsError(true);
+      setMessage(message);
+    } finally {
+      submitting.current = false;
+      setBusy("");
+    }
   }
 
   const selectedTest = tests.find(test => test.id === testId);
@@ -234,7 +290,40 @@ export function IntegrationManager({
     {canReplay && <article className="detail-card">
       <h2>{tr("Outbound Retry Queue", "قائمة إعادة محاولة الإرسال")}</h2>
       <p className="muted">{tr("Dispatches due queued/failed webhook deliveries. Result release is never repeated.", "تعيد إرسال عمليات Webhook المستحقة أو الفاشلة. إصدار النتيجة نفسه لا يُكرر أبدًا.")}</p>
-      <button className="secondary-button" type="button" disabled={busy !== ""} onClick={() => void dispatch()}>{busy === "dispatch" ? tr("Dispatching…", "جارٍ الإرسال…") : tr("Dispatch Due Webhooks", "إرسال Webhooks المستحقة")}</button>
+      <button className="secondary-button" type="button" disabled={busy !== "" || dispatchUncertain}
+        onClick={() => { if (!submitting.current && !dispatchUncertain) { setDispatchError(""); setDispatchOpen(true); } }}>
+        {busy === "dispatch" ? tr("Dispatching…", "جارٍ الإرسال…") : tr("Review Due Webhook Dispatch", "مراجعة إرسال Webhooks المستحقة")}
+      </button>
+      {dispatchUncertain && !dispatchOpen && <p role="status" className="muted">{tr(
+        "Review the updated queue and reload this page before another manual dispatch. A second run is not automatic.",
+        "افحص قائمة الإرسال المحدّثة وأعد تحميل الصفحة قبل تشغيل دفعة يدوية أخرى. لن يُعاد الإرسال تلقائياً.",
+      )}</p>}
+      <CrudModal open={dispatchOpen} onClose={() => { if (!submitting.current && !busy) setDispatchOpen(false); }}
+        size="compact"
+        title={tr("Review external webhook dispatch", "مراجعة إرسال إشعارات Webhook الخارجية")}
+        description={tr(
+          "This sends due queued/failed events to external configured endpoints. It does not re-release or amend a laboratory result. HTTP acceptance is not proof of clinical receipt.",
+          "يرسل هذا الإجراء الأحداث المستحقة أو الفاشلة إلى نقاط التكامل الخارجية المهيأة. لا يعيد إصدار النتائج أو تعديلها، وقبول HTTP لا يثبت الاستلام السريري.",
+        )}>
+        {dispatchOpen && <form className="catalog-form" onSubmit={dispatch}>
+          <p className="form-span">{tr(
+            "Up to 20 due deliveries may be claimed in one run across authorized branches; results depend on live queue state. An external receiver may see an at-least-once retry. The receiver must deduplicate by x-family-lab-delivery-id.",
+            "قد تُطلب معالجة حتى 20 رسالة مستحقة في الدفعة ضمن الفروع المصرّح بها حسب حالة القائمة الحالية. قد يتلقى المستلم محاولة مكررة وفق سياسة التسليم مرة واحدة على الأقل، وعليه إزالة التكرار باستخدام x-family-lab-delivery-id.",
+          )}</p>
+          <p className="form-span muted">{tr(
+            "Recheck the outgoing endpoints, recipients and payload governance before confirming. A lost network response may follow successful transmission; never blindly run the same action again.",
+            "تحقق من نقاط التكامل والمستلمين وحوكمة محتوى الإرسال قبل التأكيد. قد تضيع استجابة الشبكة بعد وصول الرسالة؛ لا تكرر التشغيل دون فحص.",
+          )}</p>
+          {dispatchError && <p role="alert" className="form-error form-span">{dispatchError}</p>}
+          <div className="crud-modal-actions form-span">
+            <button type="button" className="secondary-button" disabled={Boolean(busy)}
+              onClick={() => setDispatchOpen(false)}>{tr("Cancel", "إلغاء")}</button>
+            <button type="submit" className="primary-button" disabled={Boolean(busy) || dispatchUncertain}>
+              {busy === "dispatch" ? tr("Dispatching…", "جارٍ الإرسال…") : tr("Confirm external dispatch", "تأكيد الإرسال الخارجي")}
+            </button>
+          </div>
+        </form>}
+      </CrudModal>
     </article>}
 
     {message && <div className={(isError ? "form-error" : "form-success") + " form-span"} role={isError ? "alert" : "status"}>{message}</div>}
