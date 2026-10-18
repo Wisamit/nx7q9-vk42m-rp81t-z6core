@@ -1409,6 +1409,7 @@ model User {
   approvedAnalyzerTestMappings AnalyzerTestMapping[] @relation("AnalyzerTestMappingApprover")
   retiredAnalyzerTestMappings AnalyzerTestMapping[] @relation("AnalyzerTestMappingRetirer")
   createdCatalogImportMappings CatalogImportMapping[] @relation("CatalogImportMappingCreator")
+  createdPatientRegistrationRequests Patient[] @relation("PatientCreationRequestActor")
   createdOrders LabOrder[] @relation("OrderCreator")
   recordedOrderAnswers OrderAnswer[] @relation("OrderAnswerRecorder")
   createdInvoices Invoice[] @relation("InvoiceCreator")
@@ -2404,6 +2405,9 @@ model Patient {
   notes                String?      @db.Text
   clinicalInformation  String?      @map("clinical_information") @db.Text
   creationBranchId     String?      @map("creation_branch_id") @db.Char(36)
+  creationRequestUserId String?     @map("creation_request_user_id") @db.Char(36)
+  creationSubmissionKey String?     @map("creation_submission_key") @db.Char(36)
+  creationPayloadHash String?       @map("creation_payload_hash") @db.Char(64)
   status               RecordStatus @default(ACTIVE)
   mergedIntoPatientId  String?      @map("merged_into_patient_id") @db.Char(36)
   mergedAt             DateTime?    @map("merged_at") @db.DateTime(3)
@@ -2413,6 +2417,7 @@ model Patient {
 
   organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   creationBranch Branch?            @relation("PatientCreationBranch", fields: [creationBranchId], references: [id], onDelete: Restrict)
+  creationRequestActor User?        @relation("PatientCreationRequestActor", fields: [creationRequestUserId], references: [id], onDelete: Restrict)
   mergedInto   Patient?            @relation("PatientMergeLineage", fields: [mergedIntoPatientId], references: [id], onDelete: Restrict)
   mergedFrom   Patient[]           @relation("PatientMergeLineage")
   mergeEventsAsSource PatientMergeEvent[] @relation("PatientMergeSource")
@@ -2426,6 +2431,7 @@ model Patient {
   corporatePortalAccess CorporatePortalPatientAccess[]
 
   @@unique([organizationId, patientNumber])
+  @@unique([organizationId, creationRequestUserId, creationSubmissionKey], map: "patient_creation_request_key_uq")
   @@index([organizationId, normalizedName])
   @@index([organizationId, normalizedPhone])
   @@index([organizationId, dateOfBirth])
