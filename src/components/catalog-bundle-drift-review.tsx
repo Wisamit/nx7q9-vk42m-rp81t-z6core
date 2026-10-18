@@ -81,7 +81,8 @@ export function CatalogBundleDriftReview({ batchId, locale }: {
   }
 
   async function load(after: number, previousCursors: number[]) {
-    if (busy || flagging !== null) return;
+    // A successful referral refreshes its source page while flagging is still set.
+    if (busy) return;
     setPendingReferral(null);
     setBusy(true);
     setError("");
