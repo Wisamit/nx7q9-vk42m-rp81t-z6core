@@ -1,0 +1,17 @@
+# Stage 154 — Patient identifier and merge serialization
+
+## Source-verified defect
+Stage 152/153 made patient creation and demographic editing share an ACTIVE organization `SELECT ... FOR UPDATE` lock, yet adding and deactivating patient identifiers read patient state and identifier ownership outside their transactions. Patient merge read both source/target identities, active identifier snapshots and eligibility before taking that shared organization lock. A concurrent merge/identifier update could therefore commit a new or removed identifier against a newly merged source alias or record an inaccurate immutable merge identity snapshot; concurrent primary retirement/creation could also select conflicting primary identifiers.
+
+## Safety changes
+- `POST /api/patients/[id]/identifiers` takes the active tenant row lock before reading the live unmerged patient, active scheme, issuing-country requirements, identifier uniqueness and primary count. Create+audit remain atomic and restricted to the submitting staff actor and organization. The original unique (organization, scheme, normalizedValue) still prevents recycling **inactive** historical IDs; an outside-lock unique race becomes an explicit 409 rather than an unhandled server error.
+- `PATCH /api/patients/[id]/identifiers` takes the same lock before reading the live unmerged patient and active identifier. It performs deactivation, deterministic primary promotion (only if no other live primary exists), and a reasoned audit in one transaction. The audit records the ID of a promoted replacement where applicable. Missing/merged/inactive patient or retired identifier fails closed without new writes.
+- `POST /api/patients/[id]/merge` acquires the **same lock before reading source/target identities and active identifier snapshots**, performing eligibility, one-time step-up proof, merge snapshots, status transition, portal alias linkage, immutable merge event and audit. Existing SERIALIZABLE isolation is preserved, and a disabled organization is rejected.
+- All three flows retain historical patient/identifier/report records and organization-wide identity with original branch audit context. No automatic patient merge, no identifier reassignment, no weakened step-up requirement, no new database migrations or master-scope removal.
+
+## Tests and release
+- Source guards insist on the lock-first order in both identifier API methods and merge before any identity reads or clinical snapshot. Previous source-based tests and merge lineage checks remain in CI.
+- Real two-session MariaDB test holds the organization's lock across merge/identifier edits; proves another session cannot enter the same tenant, unrelated tenant is independent, merged source is no longer eligible, primary retirement deterministically promotes the remaining identifier and inactive values cannot be reused.
+- Mandatory CI: Prisma migrations/status/generate, TypeScript, lint, full safety suite, cross-module MariaDB, AR/EN/RTL/theme and Next.js production build; merge only on same SHA SUCCESS and independent main CI SUCCESS.
+- Boundary: direct SQL or unreviewed integrations that bypass this tenant serialization are outside the first-party route guarantee and require separate safeguards.
+- Final comprehensive Issue #265 interactive 81-route visual review remains OPEN/NOT_EXECUTED. Issue #250 qualified human/finance/device/Hostinger restore final GO/NO-GO remains OPEN/NO_GO. User confirmed Hostinger deployed previous SHA `454e44d5`, but this Stage154 is not deployed until the user confirms its own SHA.

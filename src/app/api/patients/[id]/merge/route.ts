@@ -76,6 +76,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   try {
     const merged = await prisma.$transaction(async tx => {
+      // The same ACTIVE tenant lock as patient create, master update, and
+      // identifier mutation MUST precede the source/target identity snapshots.
+      // Without it, an identifier can be created or retired while a merge
+      // reviews eligibility and then silently misstate the merge evidence.
+      const locked = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM organizations
+        WHERE id = ${session.user.organizationId} AND status = 'ACTIVE'
+        FOR UPDATE
+      `;
+      if (locked.length !== 1) throw new PatientMergeError("organization_unavailable");
       const [source, target] = await Promise.all([
         tx.patient.findFirst({
           where: { id: sourcePatientId, organizationId: session.user.organizationId },
@@ -257,7 +267,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         reparentedAliasCount: reparentedAliases.count,
         portalAccountMoved,
       };
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 30000 });
 
     return NextResponse.json({ status: "merged", ...merged }, { status: 201 });
   } catch (error) {
@@ -265,7 +275,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: error.code }, { status: error.statusCode });
     }
     if (error instanceof PatientMergeError) {
-      const status = error.code === "patient_not_found" ? 404 : 409;
+      const status = error.code === "organization_unavailable" ? 403 : error.code === "patient_not_found" ? 404 : 409;
       return NextResponse.json({ error: error.code }, { status });
     }
     throw error;
