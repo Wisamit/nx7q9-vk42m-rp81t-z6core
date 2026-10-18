@@ -45,5 +45,9 @@ test("catalog-only staff cannot stage financial JSON or see package price/price 
   assert.match(page,/canReviewPrices = permissions\.has\("catalog\.manage"\) && permissions\.has\("pricing\.manage"\)/);
   assert.match(page,/scopeType: \{ in: \["ORGANIZATION", "BRANCH"\] \}/);
   assert.match(page,/branchId: \{ in: activeBranches \}/);
-  assert.match(page,/rows: \{ none: \{ entityType: "PRICE_LIST_ITEM" \} \}/);
+  const visibility = readFileSync("src/lib/catalog-import-pagination.ts","utf8");
+  assert.match(page,/catalogImportVisibilityWhere\(\{/);
+  assert.match(visibility,/rows: \{ none: \{ entityType: "PRICE_LIST_ITEM" \} \}/);
+  assert.match(page,/tx\.catalogImportBatch\.count\(\{ where: importWhere \}\)/);
+  assert.match(page,/where: importWhere,/);
 });
