@@ -17,7 +17,7 @@ test("Stage 148 MariaDB: same actor and same source request cannot create two st
     user:decodeURIComponent(url.username),password:decodeURIComponent(url.password),
     database:url.pathname.slice(1),
   });
-  const orgA=randomUUID(),orgB=randomUUID(),userA=randomUUID(),userB=randomUUID();
+  const orgA=randomUUID(),orgB=randomUUID(),userA=randomUUID(),userB=randomUUID(),userOutside=randomUUID();
   const code=orgA.slice(0,8);
   const key=randomUUID(),otherKey=randomUUID();
   const batches:string[]=[];
@@ -34,19 +34,11 @@ test("Stage 148 MariaDB: same actor and same source request cannot create two st
       await execute("INSERT INTO organizations(id,code,name_en,updated_at) VALUES(?,?,?,NOW(3))",
         [org,"S148-"+code+suffix,"Stage 148 synthetic"]);
     }
-    for(const [actor,org,suffix] of [[userA,orgA,"A"],[userB,orgA,"B"],[randomUUID(),orgB,"C"]]){
-      if(suffix==="C")continue;
+    for(const [actor,org,suffix] of [
+      [userA,orgA,"A"],[userB,orgA,"B"],[userOutside,orgB,"C"],
+    ]){
       await execute("INSERT INTO users(id,organization_id,username,display_name_en,updated_at) VALUES(?,?,?,?,NOW(3))",
         [actor,org,"s148-"+code+suffix,"Stage 148 reviewer"]);
-    }
-    const [usersB] = await conn.query<mysql.RowDataPacket[]>(
-      "SELECT id FROM users WHERE organization_id=? ORDER BY id LIMIT 1",[orgB]);
-    let userOutside:string;
-    if(usersB.length) userOutside=usersB[0].id as string;
-    else{
-      userOutside=randomUUID();
-      await execute("INSERT INTO users(id,organization_id,username,display_name_en,updated_at) VALUES(?,?,?,?,NOW(3))",
-        [userOutside,orgB,"s148-"+code+"C","Stage 148 reviewer"]);
     }
     const first=await insert(orgA,userA,"CSV_REVIEW",key,"canonical.csv");
     await assert.rejects(()=>insert(orgA,userA,"CSV_REVIEW",key,"duplicate.csv"),
