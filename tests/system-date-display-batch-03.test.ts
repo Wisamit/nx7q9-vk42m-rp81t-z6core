@@ -66,6 +66,9 @@ test("UI batch 03: ten additional routes use preference-aware date display, not 
     assert.ok(layout.includes(attribute), attribute);
   }
   assert.ok(client.includes("useSyncExternalStore("));
-  assert.ok(client.includes('dateTime={value}'));
+  assert.ok(client.includes('dateTime={kind === "calendar-record" ? (calendarRecord || "") : value}'),
+    "actual instants preserve their original ISO, but UTC-midnight SQL calendar dates expose the canonical day");
+  assert.ok(client.includes('title={kind === "calendar-record" ? (calendarRecord || value)'),
+    "calendar-only dates use the same stable day for hover context, while instants retain the timezone");
   assert.ok(client.includes("timeZone: zone"));
 });
