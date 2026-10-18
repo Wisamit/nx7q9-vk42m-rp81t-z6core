@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { SystemDateText } from "@/components/system-date-text";
 import { validateLegacyStageReceipt } from "@/lib/legacy-stage-receipt";
 import { ReviewFileUploadDialog } from "@/components/review-file-upload-dialog";
+import { CatalogStageRecoveryButton } from "@/components/catalog-stage-recovery-button";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { statusLabel } from "@/lib/ui-i18n";
@@ -106,6 +107,7 @@ export function LegacyImportBatches({batches,locale}:{batches:Batch[];locale:"ar
   {stageId&&<p><Link className="table-link" href={`/catalog/imports/${stageId}`}>
     {tr("Open the newly staged batch for validation review","افتح الدفعة الجديدة لمراجعة التحقق")}
   </Link></p>}
+  {retryBlocked&&!stageId&&<CatalogStageRecoveryButton locale={locale} sourceType="LEGACY_MDB_EXPORT" submissionKey={submissionKey.current} />}
   {retryBlocked&&!stageId&&<p className="form-warning" role="alert">{tr(
     "Do not repeat this upload without checking the latest batch and audit. Reload after review.",
     "لا تكرر رفع الملف قبل مراجعة أحدث دفعة وسجل التدقيق. أعد تحميل الصفحة بعد التحقق.",
