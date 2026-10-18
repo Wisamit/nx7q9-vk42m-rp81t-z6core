@@ -74,12 +74,18 @@ export function ReferenceRangeImportButton({ batchId, locale }: { batchId: strin
   }, [batchId]);
 
   function openReview(action: "RESOLVE" | "IMPORT") {
+    if (reviewRetryBlocked) {
+      setMessage(tr(
+        "A previous submission may have partially committed. Reload this page and inspect the batch history before any new import.",
+        "قد تكون العملية السابقة حُفظت جزئياً. أعد تحميل الصفحة وافحص سجل الدفعة قبل أي استيراد جديد.",
+      ));
+      return;
+    }
     if (!preview || busy || resolving || mappingBusy || mappingInFlight.current || inFlight.current) return;
     if (action === "IMPORT" && preview.safe < 1) return;
     if (action === "RESOLVE" && preview.safe < 1 && !(preview.generatedTestsRemaining || 0)) return;
     setReviewSnapshot(preview);
     setReviewError("");
-    setReviewRetryBlocked(false);
     setReviewAction(action);
     setMessage("");
   }
