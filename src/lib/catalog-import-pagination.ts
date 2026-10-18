@@ -1,5 +1,5 @@
 import type { Prisma } from "../../generated/prisma/client";
-import { privateSpreadsheetBatchScope } from "./catalog-import-list-privacy";
+import { privateSpreadsheetBatchScope } from "./catalog-import-list-privacy.ts";
 
 export const CATALOG_IMPORT_PAGE_SIZE = 10;
 
