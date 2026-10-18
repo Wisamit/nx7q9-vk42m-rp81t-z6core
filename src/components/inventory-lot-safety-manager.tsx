@@ -3,6 +3,7 @@ import {useMemo,useState} from "react";
 import {useRouter} from "next/navigation";
 import Link from "next/link"
 import {CrudModal} from "@/components/crud-modal";
+import { SystemDateText } from "@/components/system-date-text";
 
 type SafetyStatus="AVAILABLE"|"QUARANTINED"|"RECALLED";
 type Action="QUARANTINE"|"RECALL"|"RELEASE";
@@ -65,7 +66,7 @@ export function InventoryLotSafetyManager({lots,history,locale,canManage}:{
      <tbody>{lots.length===0?<tr><td colSpan={4}>{tr("No scoped inventory lots.","لا توجد تشغيلات ضمن صلاحياتك.")}</td></tr>:
        lots.map(lot=><tr key={lot.id}>
          <td><strong>{lot.lotNumber}</strong><small> · {lot.itemCode} — {lot.itemName}</small> <Link href={"/inventory/lot-impact/"+lot.id}>{tr("Investigate impact","تحقيق الأثر")}</Link></td>
-         <td>{label(lot.safetyStatus)}</td><td>{lot.branches.join(" · ")}</td><td>{lot.expiryDate||"—"}</td>
+         <td>{label(lot.safetyStatus)}</td><td>{lot.branches.join(" · ")}</td><td>{lot.expiryDate ? <SystemDateText value={lot.expiryDate} kind="calendar" /> : "—"}</td>
        </tr>)}</tbody>
    </table></div>
    {canManage&&lots.length>0&&<button type="button" className="primary-button"
@@ -105,7 +106,7 @@ export function InventoryLotSafetyManager({lots,history,locale,canManage}:{
      <thead><tr><th>{tr("Time","الوقت")}</th><th>{tr("Lot","التشغيلة")}</th>
        <th>{tr("Transition","الانتقال")}</th><th>{tr("Actor","المسؤول")}</th><th>{tr("Reason","السبب")}</th></tr></thead>
      <tbody>{history.length===0?<tr><td colSpan={5}>{tr("No safety events yet.","لا توجد قرارات مسجلة بعد.")}</td></tr>:
-       history.map(e=><tr key={e.id}><td>{e.at.slice(0,19).replace("T"," ")}</td>
+       history.map(e=><tr key={e.id}><td><SystemDateText value={e.at} /></td>
          <td>{e.lotNumber}</td><td>{label(e.priorStatus)} → {label(e.nextStatus)}</td>
          <td>{e.actor}</td><td>{e.reason}</td></tr>)}</tbody>
    </table></div>

@@ -1,6 +1,7 @@
 "use client";
 
 import { SystemDateField } from "@/components/system-date-field";
+import { SystemDateText } from "@/components/system-date-text";
 
 import { FormEvent, useMemo, useRef, useState } from "react";
 import Link from "next/link";
@@ -240,7 +241,7 @@ export function ClientAccountManager({
           <table>
             <thead><tr><th>{tr("Invoice", "الفاتورة")}</th><th>{tr("Branch", "الفرع")}</th><th>{tr("Date", "التاريخ")}</th><th>{tr("Balance", "الرصيد")}</th><th>{tr("Allocate", "التخصيص")}</th></tr></thead>
             <tbody>{paymentClientId && paymentCurrency && paymentInvoices.length === 0 ? <tr><td colSpan={5} className="empty-state">{tr("No open invoices for this client, branch and currency.", "لا توجد فواتير مفتوحة لهذا العميل والفرع والعملة.")}</td></tr> : paymentInvoices.map(invoice => <tr key={invoice.id}>
-              <td><strong>{invoice.invoiceNumber}</strong></td><td>{invoice.branchCode}</td><td>{invoice.issuedAt.slice(0,10)}</td><td>{invoice.balanceAmount} {invoice.currency}</td>
+              <td><strong>{invoice.invoiceNumber}</strong></td><td>{invoice.branchCode}</td><td><SystemDateText value={invoice.issuedAt} kind="instant-date" /></td><td>{invoice.balanceAmount} {invoice.currency}</td>
               <td><input aria-label={tr("Allocation amount", "مبلغ التخصيص")} type="number" min="0" max={invoice.balanceAmount} step="0.0001" value={allocations[invoice.id] || ""} onChange={event => setAllocations(current => ({ ...current, [invoice.id]: event.target.value }))} /></td>
             </tr>)}</tbody>
           </table>
@@ -255,8 +256,8 @@ export function ClientAccountManager({
       <div className="table-wrap"><table>
         <thead><tr><th>{tr("Statement", "الكشف")}</th><th>{tr("Client", "العميل")}</th><th>{tr("Scope", "النطاق")}</th><th>{tr("Period", "الفترة")}</th><th>{tr("Opening", "الافتتاحي")}</th><th>{tr("Charges", "الرسوم")}</th><th>{tr("Credits", "الدائن")}</th><th>{tr("Payments", "المدفوعات")}</th><th>{tr("Refunds", "الاستردادات")}</th><th>{tr("Closing", "الختامي")}</th><th>{tr("Status", "الحالة")}</th></tr></thead>
         <tbody>{statements.length === 0 ? <tr><td colSpan={11} className="empty-state">{tr("No statements issued yet.", "لا توجد كشوف حساب صادرة بعد.")}</td></tr> : statements.map(statement => <tr key={statement.id}>
-          <td><Link href={"/billing/accounts/statements/" + statement.id}><strong>{statement.statementNumber}</strong></Link><small className="table-subtext">{statement.generatedAt.slice(0,16).replace("T"," ")}</small></td>
-          <td>{statement.clientCode} — {statement.clientName}</td><td>{statement.branchLabel}</td><td>{statement.periodStart} → {statement.periodEnd}</td>
+          <td><Link href={"/billing/accounts/statements/" + statement.id}><strong>{statement.statementNumber}</strong></Link><small className="table-subtext"><SystemDateText value={statement.generatedAt} /></small></td>
+          <td>{statement.clientCode} — {statement.clientName}</td><td>{statement.branchLabel}</td><td><SystemDateText value={statement.periodStart} kind="calendar" /> → <SystemDateText value={statement.periodEnd} kind="calendar" /></td>
           <td>{statement.openingBalance} {statement.currency}</td><td>{statement.invoiceCharges} {statement.currency}</td><td>{statement.creditNotes} {statement.currency}</td><td>{statement.payments} {statement.currency}</td><td>{statement.refunds} {statement.currency}</td><td><strong>{statement.closingBalance} {statement.currency}</strong></td>
           <td><span className={"status-badge status-" + statement.status.toLowerCase()}>{statusLabel(locale, statement.status)}</span></td>
         </tr>)}</tbody>

@@ -1,6 +1,7 @@
 "use client";
 
 import { SystemDateField } from "@/components/system-date-field";
+import { SystemDateText } from "@/components/system-date-text";
 
 import { FormEvent, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -701,7 +702,7 @@ export function QualityManagementConsole({
         <thead><tr><th>CAPA</th><th>{tr("Title","العنوان")}</th><th>{tr("Owner","المسؤول")}</th><th>{tr("Status","الحالة")}</th><th>{tr("Due","الاستحقاق")}</th><th>{tr("Effectiveness","الفعالية")}</th><th>{tr("Actions","الإجراءات")}</th><th>{tr("Controls","التحكم")}</th></tr></thead>
         <tbody>{capas.length === 0 ? <tr><td colSpan={8} className="empty-state">{tr("No CAPA records.","لا توجد سجلات CAPA.")}</td></tr> : capas.map(item => <tr key={item.id}>
           <td><strong>{item.capaNumber}</strong>{item.nonconformanceCase && <><br/><small>{item.nonconformanceCase}</small></>}</td>
-          <td>{item.title}<br/><small>{item.branch}</small></td><td>{item.owner}</td><td>{qmsStatusLabel(item.status)}</td><td>{item.dueDate?.slice(0,10) || "—"}</td><td>{effectivenessLabel(item.effectiveness)}</td>
+          <td>{item.title}<br/><small>{item.branch}</small></td><td>{item.owner}</td><td>{qmsStatusLabel(item.status)}</td><td>{item.dueDate ? <SystemDateText value={item.dueDate} kind="calendar-record" /> : "—"}</td><td>{effectivenessLabel(item.effectiveness)}</td>
           <td>{item.actions.length === 0 ? "—" : item.actions.map(action => <div key={action.id}><small>{actionTypeLabel(action.actionType)} · {qmsStatusLabel(action.status)} · {action.description}</small>{permissions.capa && action.status !== "COMPLETED" && action.status !== "CANCELLED" && <button type="button" className="table-action" onClick={() => void completeCapaAction(item.id,action.id)}>{tr("Complete","إكمال")}</button>}</div>)}</td>
           <td>{permissions.capa && !["CLOSED","CANCELLED"].includes(item.status) && <div className="result-actions"><button type="button" className="secondary-button" onClick={() => void addCapaAction(item)}>{tr("Add Action","إضافة إجراء")}</button><button type="button" className="secondary-button" onClick={() => void reviewCapa(item)}>{tr("Review","مراجعة")}</button></div>}</td>
         </tr>)}</tbody>
@@ -740,7 +741,7 @@ export function QualityManagementConsole({
           return <tr key={document.id}>
             <td><strong>{document.code}</strong><br/><small>{documentTypeLabel(document.documentType)} · {locale === "ar" ? document.titleAr || document.titleEn : document.titleEn}</small></td>
             <td>{document.branch}</td><td>{document.currentEffectiveVersion ? "v" + document.currentEffectiveVersion : tr("None","لا يوجد")}</td>
-            <td>{document.versions.slice(0,4).map(version => <div key={version.id}><small>v{version.version} · {qmsStatusLabel(version.status)}{version.reviewDueAt ? " · " + tr("review","مراجعة") + " " + version.reviewDueAt.slice(0,10) : ""}</small></div>)}</td>
+            <td>{document.versions.slice(0,4).map(version => <div key={version.id}><small>v{version.version} · {qmsStatusLabel(version.status)}{version.reviewDueAt ? <> · {tr("review","مراجعة")} <SystemDateText value={version.reviewDueAt} kind="calendar-record" /></> : null}</small></div>)}</td>
             <td>{permissions.documents && latest && <div className="result-actions">
               {latest.status === "DRAFT" && <button type="button" className="secondary-button" onClick={() => void documentWorkflow(latest.id,"SUBMIT_REVIEW")}>{tr("Submit Review","إرسال للمراجعة")}</button>}
               {latest.status === "IN_REVIEW" && <button type="button" className="secondary-button" onClick={() => void documentWorkflow(latest.id,"COMPLETE_REVIEW")}>{tr("Complete Review","إكمال المراجعة")}</button>}
@@ -828,11 +829,11 @@ export function QualityManagementConsole({
       <div className="table-toolbar"><h2>{tr("Training & Competency","التدريب والكفاءة")}</h2><span>{trainingRecords.length} {tr("training","تدريب")} · {competencies.length} {tr("assessments","تقييم")}</span></div>
       <div className="table-wrap"><table>
         <thead><tr><th>{tr("User","المستخدم")}</th><th>{tr("Training","التدريب")}</th><th>{tr("Status","الحالة")}</th><th>{tr("Analyzer / Document","الجهاز / الوثيقة")}</th><th>{tr("Dates","التواريخ")}</th></tr></thead>
-        <tbody>{trainingRecords.length === 0 ? <tr><td colSpan={5} className="empty-state">{tr("No training records.","لا توجد سجلات تدريب.")}</td></tr> : trainingRecords.map(item => <tr key={item.id}><td>{item.user}</td><td>{item.title}</td><td>{qmsStatusLabel(item.status)}</td><td>{item.analyzer || item.document || "—"}</td><td>{item.assignedAt.slice(0,10)}{item.expiresAt ? " → " + item.expiresAt.slice(0,10) : ""}</td></tr>)}</tbody>
+        <tbody>{trainingRecords.length === 0 ? <tr><td colSpan={5} className="empty-state">{tr("No training records.","لا توجد سجلات تدريب.")}</td></tr> : trainingRecords.map(item => <tr key={item.id}><td>{item.user}</td><td>{item.title}</td><td>{qmsStatusLabel(item.status)}</td><td>{item.analyzer || item.document || "—"}</td><td><SystemDateText value={item.assignedAt} kind="instant-date" />{item.expiresAt ? <> → <SystemDateText value={item.expiresAt} kind="calendar-record" /></> : null}</td></tr>)}</tbody>
       </table></div>
       <div className="table-wrap"><table>
         <thead><tr><th>{tr("User","المستخدم")}</th><th>{tr("Competency","الكفاءة")}</th><th>{tr("Analyzer","الجهاز")}</th><th>{tr("Result","النتيجة")}</th><th>{tr("Assessed","تاريخ التقييم")}</th><th>{tr("Next due","الاستحقاق التالي")}</th></tr></thead>
-        <tbody>{competencies.length === 0 ? <tr><td colSpan={6} className="empty-state">{tr("No competency assessments.","لا توجد تقييمات كفاءة.")}</td></tr> : competencies.map(item => <tr key={item.id}><td>{item.user}</td><td>{item.competencyName}</td><td>{item.analyzer || "—"}</td><td>{competencyResultLabel(item.result)}</td><td>{item.assessedAt.slice(0,10)}</td><td>{item.nextDueAt?.slice(0,10) || "—"}</td></tr>)}</tbody>
+        <tbody>{competencies.length === 0 ? <tr><td colSpan={6} className="empty-state">{tr("No competency assessments.","لا توجد تقييمات كفاءة.")}</td></tr> : competencies.map(item => <tr key={item.id}><td>{item.user}</td><td>{item.competencyName}</td><td>{item.analyzer || "—"}</td><td>{competencyResultLabel(item.result)}</td><td><SystemDateText value={item.assessedAt} kind="calendar-record" /></td><td>{item.nextDueAt ? <SystemDateText value={item.nextDueAt} kind="calendar-record" /> : "—"}</td></tr>)}</tbody>
       </table></div>
     </section>
 
@@ -840,7 +841,7 @@ export function QualityManagementConsole({
       <div className="table-toolbar"><h2>{tr("Analyzer Authorizations","صلاحيات استخدام الأجهزة")}</h2><span>{authorizations.length} {tr("shown","معروضة")}</span></div>
       <div className="table-wrap"><table>
         <thead><tr><th>{tr("User","المستخدم")}</th><th>{tr("Analyzer","الجهاز")}</th><th>{tr("Status","الحالة")}</th><th>{tr("Authorized","تاريخ التفويض")}</th><th>{tr("Expires","الانتهاء")}</th><th>{tr("Approved by","اعتمد بواسطة")}</th><th>{tr("Action","الإجراء")}</th></tr></thead>
-        <tbody>{authorizations.length === 0 ? <tr><td colSpan={7} className="empty-state">{tr("No analyzer authorizations.","لا توجد صلاحيات أجهزة.")}</td></tr> : authorizations.map(item => <tr key={item.id}><td>{item.user}</td><td>{item.analyzer}</td><td>{qmsStatusLabel(item.status)}</td><td>{item.authorizedAt.slice(0,10)}</td><td>{item.expiresAt?.slice(0,10) || "—"}</td><td>{item.approvedBy}</td><td>{permissions.training && item.status === "ACTIVE" && <button type="button" className="secondary-button" onClick={() => void revokeAuthorization(item)}>{tr("Revoke","إلغاء الصلاحية")}</button>}</td></tr>)}</tbody>
+        <tbody>{authorizations.length === 0 ? <tr><td colSpan={7} className="empty-state">{tr("No analyzer authorizations.","لا توجد صلاحيات أجهزة.")}</td></tr> : authorizations.map(item => <tr key={item.id}><td>{item.user}</td><td>{item.analyzer}</td><td>{qmsStatusLabel(item.status)}</td><td><SystemDateText value={item.authorizedAt} kind="instant-date" /></td><td>{item.expiresAt ? <SystemDateText value={item.expiresAt} kind="calendar-record" /> : "—"}</td><td>{item.approvedBy}</td><td>{permissions.training && item.status === "ACTIVE" && <button type="button" className="secondary-button" onClick={() => void revokeAuthorization(item)}>{tr("Revoke","إلغاء الصلاحية")}</button>}</td></tr>)}</tbody>
       </table></div>
     </section>
 
@@ -874,7 +875,7 @@ export function QualityManagementConsole({
         <tbody>{indicators.length === 0 ? <tr><td colSpan={6} className="empty-state">{tr("No quality indicators.","لا توجد مؤشرات جودة.")}</td></tr> : indicators.map(item => {
           const latest = item.measurements[0];
           const target = item.direction === "TARGET_RANGE" ? `${item.targetMin || "—"}–${item.targetMax || "—"}` : item.direction === "LOWER_IS_BETTER" ? `≤ ${item.targetMax || "—"}` : `≥ ${item.targetMin || "—"}`;
-          return <tr key={item.id}><td><strong>{item.code}</strong><br/><small>{locale === "ar" ? item.nameAr || item.nameEn : item.nameEn}</small></td><td>{item.branch}</td><td>{directionLabel(item.direction)}</td><td>{target} {item.unit || ""}</td><td>{latest ? latest.value + " " + (item.unit || "") + " · " + latest.periodEnd.slice(0,10) : "—"}</td><td>{permissions.indicators && <button type="button" className="secondary-button" onClick={() => void addMeasurement(item)}>{tr("Add Measurement","إضافة قياس")}</button>}</td></tr>;
+          return <tr key={item.id}><td><strong>{item.code}</strong><br/><small>{locale === "ar" ? item.nameAr || item.nameEn : item.nameEn}</small></td><td>{item.branch}</td><td>{directionLabel(item.direction)}</td><td>{target} {item.unit || ""}</td><td>{latest ? <>{latest.value} {item.unit || ""} · <SystemDateText value={latest.periodEnd} kind="calendar-record" /></> : "—"}</td><td>{permissions.indicators && <button type="button" className="secondary-button" onClick={() => void addMeasurement(item)}>{tr("Add Measurement","إضافة قياس")}</button>}</td></tr>;
         })}</tbody>
       </table></div>
     </section>
@@ -903,7 +904,7 @@ export function QualityManagementConsole({
       <div className="table-wrap"><table>
         <thead><tr><th>{tr("Audit","التدقيق")}</th><th>{tr("Scope","النطاق")}</th><th>{tr("Branch","الفرع")}</th><th>{tr("Status","الحالة")}</th><th>{tr("Lead","المدقق الرئيسي")}</th><th>{tr("Scheduled","المجدول")}</th><th>{tr("Findings","الملاحظات")}</th><th>{tr("Controls","التحكم")}</th></tr></thead>
         <tbody>{audits.length === 0 ? <tr><td colSpan={8} className="empty-state">{tr("No internal audits.","لا توجد عمليات تدقيق داخلي.")}</td></tr> : audits.map(audit => <tr key={audit.id}>
-          <td><strong>{audit.auditNumber}</strong><br/><small>{audit.title}</small></td><td>{audit.scope}</td><td>{audit.branch}</td><td>{qmsStatusLabel(audit.status)}</td><td>{audit.leadAuditor}</td><td>{audit.scheduledAt.slice(0,10)}</td>
+          <td><strong>{audit.auditNumber}</strong><br/><small>{audit.title}</small></td><td>{audit.scope}</td><td>{audit.branch}</td><td>{qmsStatusLabel(audit.status)}</td><td>{audit.leadAuditor}</td><td><SystemDateText value={audit.scheduledAt} kind="calendar-record" /></td>
           <td>{audit.findings.length === 0 ? "—" : audit.findings.map(finding => <div key={finding.id}><small>{finding.findingNumber} · {severityLabel(finding.severity)} · {qmsStatusLabel(finding.status)}{finding.capaNumber ? " · " + finding.capaNumber : ""}</small>{permissions.audits && finding.status !== "CLOSED" && <button type="button" className="table-action" onClick={() => void closeFinding(audit.id,finding.id)}>{tr("Close","إغلاق")}</button>}</div>)}</td>
           <td>{permissions.audits && !["COMPLETED","CANCELLED"].includes(audit.status) && <div className="result-actions"><button type="button" className="secondary-button" onClick={() => void addFinding(audit)}>{tr("Add Finding","إضافة ملاحظة")}</button><button type="button" className="secondary-button" onClick={() => void completeAudit(audit)}>{tr("Complete","إكمال")}</button></div>}</td>
         </tr>)}</tbody>
