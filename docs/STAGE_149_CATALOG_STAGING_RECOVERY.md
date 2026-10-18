@@ -4,7 +4,7 @@
 Stage 148 / PR #308 already guarantees one durable batch per (organization, author, source, UUID submission key). The three clients still fail closed when a POST response is lost, but the user could not find the exact committed batch using that key while remaining on the page.
 
 ## Delivery
-- `GET /api/catalog/imports/recovery?sourceType=...&key=...` is **read-only** and returns only the id of a previously created batch.
+- `GET /api/catalog/imports/recovery?sourceType=...` with the original `x-family-lab-staging-key` header is **read-only** and returns only the id of a previously created batch. The UUID key is not exposed in the query string.
 - A UUID is required. Exactly the three existing source types are accepted. The SQL/ORM predicate includes **organization, author, source type, submission key**.
 - The organization lock, active user/branch/department intersection and live conditional pricing/range permissions are required before disclosing even the batch id. The batch detail page independently validates row-specific disclosure scope.
 - The bilingual recovery action appears only after an attempted staging POST and explicitly checks the same key, without resubmitting source bytes or generating a replacement key.
