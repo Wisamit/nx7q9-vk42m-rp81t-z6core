@@ -17,6 +17,7 @@ export function RoleManagement({ locale, canManageDiscountLimits, canManageCashi
   const [message, setMessage] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<Role | null>(null);
+  const [statusReview, setStatusReview] = useState<Role | null>(null);
   const [permissionQuery, setPermissionQuery] = useState("");
   const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
 
@@ -130,8 +131,18 @@ export function RoleManagement({ locale, canManageDiscountLimits, canManageCashi
     }
   }
 
-  async function toggleRole(role: Role) {
-    if (role.isSystem || inFlight.current) return;
+  async function confirmRoleStatus(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const role = statusReview;
+    if (!role || role.isSystem || inFlight.current) return;
+    const latest = data.roles.find(item => item.id === role.id);
+    if (!latest || latest.isSystem || latest.status !== role.status) {
+      setIsError(true);
+      setMessage(tr("Role state changed. Reload before reviewing again.",
+        "تغيّرت حالة الدور. أعد التحميل قبل المراجعة من جديد."));
+      setStatusReview(null);
+      return;
+    }
     inFlight.current = true;
     setBusy(true);
     setMessage("");
@@ -143,9 +154,12 @@ export function RoleManagement({ locale, canManageDiscountLimits, canManageCashi
       });
       if (!response.ok) {
         setIsError(true);
-        setMessage(tr("Unable to update role.", "تعذر تحديث الدور."));
+        setMessage(tr("Unable to update role. Verify its current state.", "تعذر تحديث الدور. تحقق من حالته الحالية."));
+      } else {
+        await load();
+        setStatusReview(null);
+        setMessage(tr("Role status updated.", "تم تحديث حالة الدور."));
       }
-      await load();
     } catch {
       setIsError(true);
       setMessage(tr(
@@ -219,9 +233,44 @@ export function RoleManagement({ locale, canManageDiscountLimits, canManageCashi
       </form>}
     </CrudModal>
 
+    <CrudModal open={statusReview !== null}
+      onClose={() => { if (!inFlight.current) setStatusReview(null); }}
+      title={statusReview?.status === "ACTIVE"
+        ? tr("Deactivate Staff Role", "تعطيل دور الموظفين")
+        : tr("Activate Staff Role", "تفعيل دور الموظفين")}
+      description={tr(
+        "A role status change may affect every assigned staff member across authorized branches. System roles are protected; only the server can authorize the change.",
+        "قد يؤثر تغيير حالة الدور على كل الموظفين المرتبطين به في الفروع المسموح بها. أدوار النظام محمية، والخادم وحده يجيز التغيير.",
+      )}
+      size="compact">
+      {statusReview && !statusReview.isSystem && <form className="catalog-form" onSubmit={confirmRoleStatus}>
+        <p className="form-span"><strong>{tr("Role", "الدور")}:</strong>{" "}
+          {locale === "ar" ? statusReview.nameAr || statusReview.nameEn : statusReview.nameEn}
+          {" · " + statusReview.code}</p>
+        <p className="form-span">{tr("Assigned staff accounts", "حسابات الموظفين المرتبطة")}:{" "}
+          <strong>{statusReview.userCount}</strong></p>
+        <p className="form-span">{tr("Current status", "الحالة الحالية")}:{" "}
+          <strong>{statusLabel(locale, statusReview.status)}</strong></p>
+        <p className="form-span">{tr("Requested status", "الحالة المطلوبة")}:{" "}
+          <strong>{statusLabel(locale, statusReview.status === "ACTIVE" ? "INACTIVE" : "ACTIVE")}</strong></p>
+        <p className="muted form-span">{tr(
+          "Confirm only after reviewing dependent staff access. Existing audit, results, invoices and historical permissions are not deleted.",
+          "أكد فقط بعد مراجعة وصول الموظفين المتأثرين. لا تُحذف سجلات التدقيق أو النتائج أو الفواتير أو الصلاحيات التاريخية.",
+        )}</p>
+        {message && isError && <p role="alert" className="form-error form-span">{message}</p>}
+        <div className="crud-modal-actions form-span">
+          <button type="button" className="secondary-button" disabled={busy}
+            onClick={() => setStatusReview(null)}>{tr("Cancel", "إلغاء")}</button>
+          <button type="submit" className="primary-button" disabled={busy}>
+            {busy ? tr("Saving…", "جارٍ الحفظ…") : tr("Confirm status change", "تأكيد تغيير الحالة")}
+          </button>
+        </div>
+      </form>}
+    </CrudModal>
+
     <section className="table-card admin-table-card">
       <div className="table-toolbar"><div><h2>{tr("Roles", "الأدوار")}</h2><span>{tr("System roles are protected from destructive editing.", "أدوار النظام محمية من التعديل التخريبي.")}</span></div><span>{data.roles.length}</span></div>
-      <div className="table-wrap"><table><thead><tr><th>{tr("Role", "الدور")}</th><th>{tr("Users", "المستخدمون")}</th><th>{tr("Permissions", "الصلاحيات")}</th>{canManageDiscountLimits && <th>{tr("Discount limit", "حد الخصم")}</th>}<th>{tr("Status", "الحالة")}</th><th>{tr("Actions", "إجراءات")}</th></tr></thead><tbody>{data.roles.map(role => <tr key={role.id}><td><strong>{locale === "ar" ? role.nameAr || role.nameEn : role.nameEn}</strong><small className="table-subtext">{role.code}{role.isSystem ? ` · ${tr("System", "نظامي")}` : ""}</small></td><td>{role.userCount}</td><td>{role.permissionIds.length}</td>{canManageDiscountLimits && <td>{Number(role.discountLimitPercent || 0).toFixed(2)}%</td>}<td><span className={"status-badge " + (role.status === "ACTIVE" ? "status-active" : "status-warning")}>{statusLabel(locale, role.status)}</span></td><td>{role.isSystem ? <span className="muted">{tr("Protected", "محمي")}</span> : <div className="inline-actions"><button type="button" className="secondary-button compact-action" disabled={busy} onClick={() => { setPermissionQuery(""); setEditing(role); }}>{tr("Edit", "تعديل")}</button><button type="button" className="secondary-button compact-action" disabled={busy} onClick={() => void toggleRole(role)}>{role.status === "ACTIVE" ? tr("Deactivate", "تعطيل") : tr("Activate", "تفعيل")}</button></div>}</td></tr>)}</tbody></table></div>
+      <div className="table-wrap"><table><thead><tr><th>{tr("Role", "الدور")}</th><th>{tr("Users", "المستخدمون")}</th><th>{tr("Permissions", "الصلاحيات")}</th>{canManageDiscountLimits && <th>{tr("Discount limit", "حد الخصم")}</th>}<th>{tr("Status", "الحالة")}</th><th>{tr("Actions", "إجراءات")}</th></tr></thead><tbody>{data.roles.map(role => <tr key={role.id}><td><strong>{locale === "ar" ? role.nameAr || role.nameEn : role.nameEn}</strong><small className="table-subtext">{role.code}{role.isSystem ? ` · ${tr("System", "نظامي")}` : ""}</small></td><td>{role.userCount}</td><td>{role.permissionIds.length}</td>{canManageDiscountLimits && <td>{Number(role.discountLimitPercent || 0).toFixed(2)}%</td>}<td><span className={"status-badge " + (role.status === "ACTIVE" ? "status-active" : "status-warning")}>{statusLabel(locale, role.status)}</span></td><td>{role.isSystem ? <span className="muted">{tr("Protected", "محمي")}</span> : <div className="inline-actions"><button type="button" className="secondary-button compact-action" disabled={busy} onClick={() => { setPermissionQuery(""); setEditing(role); }}>{tr("Edit", "تعديل")}</button><button type="button" className="secondary-button compact-action" disabled={busy} onClick={() => { setIsError(false); setMessage(""); setStatusReview(role); }}>{role.status === "ACTIVE" ? tr("Deactivate", "تعطيل") : tr("Activate", "تفعيل")}</button></div>}</td></tr>)}</tbody></table></div>
     </section>
   </div>;
 }
