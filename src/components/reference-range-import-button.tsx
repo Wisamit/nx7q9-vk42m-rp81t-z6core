@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
+import { CrudModal } from "@/components/crud-modal";
 import { useRouter } from "next/navigation";
 
 type TestSuggestion = { id: string; code: string; nameEn: string; nameAr?: string | null; score: number };
@@ -33,6 +34,11 @@ export function ReferenceRangeImportButton({ batchId, locale }: { batchId: strin
   const [mappingSearch, setMappingSearch] = useState<Record<string, string>>({});
   const [message, setMessage] = useState("");
   const [resolving, setResolving] = useState(false);
+  const [reviewAction, setReviewAction] = useState<"RESOLVE" | "IMPORT" | null>(null);
+  const [reviewSnapshot, setReviewSnapshot] = useState<Preview | null>(null);
+  const [reviewError, setReviewError] = useState("");
+  const [reviewRetryBlocked, setReviewRetryBlocked] = useState(false);
+  const inFlight = useRef(false);
   const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
   const testName = (test: { nameEn: string; nameAr?: string | null }) => locale === "ar" ? test.nameAr || test.nameEn : test.nameEn;
   const reasonLabel = (value: string) => ({
@@ -65,50 +71,95 @@ export function ReferenceRangeImportButton({ batchId, locale }: { batchId: strin
     return () => { active = false; };
   }, [batchId]);
 
-  async function resolveSafeLegacy() {
-    if (!preview) return;
-    setResolving(true);
+  function openReview(action: "RESOLVE" | "IMPORT") {
+    if (!preview || busy || resolving || mappingBusy || inFlight.current) return;
+    if (action === "IMPORT" && preview.safe < 1) return;
+    if (action === "RESOLVE" && preview.safe < 1 && !(preview.generatedTestsRemaining || 0)) return;
+    setReviewSnapshot(preview);
+    setReviewError("");
+    setReviewRetryBlocked(false);
+    setReviewAction(action);
     setMessage("");
+  }
+
+  async function confirmReview(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const action = reviewAction;
+    const snapshot = reviewSnapshot;
+    if (!action || !snapshot || inFlight.current || busy || resolving || mappingBusy || reviewRetryBlocked) return;
+    inFlight.current = true;
+    setBusy(true);
+    if (action === "RESOLVE") setResolving(true);
+    setReviewError("");
+    let mutationStarted = false;
     try {
-      if ((preview.generatedTestsRemaining || 0) > 0) {
-        const masters = await fetch(`/api/catalog/imports/${batchId}/commit`, { method: "POST" });
-        const masterBody = await masters.json().catch(() => ({}));
-        if (!masters.ok) throw new Error(tr("Safe master recovery failed.", "فشل استرجاع البيانات الأساسية الآمنة."));
+      // The preview is not a transaction lock. Refuse a changed estimate and
+      // require a fresh explicit review before any server-side mutation.
+      const response = await fetch(`/api/catalog/imports/${batchId}/reference-ranges`, { cache: "no-store" });
+      if (!response.ok) throw new Error(tr("Could not recheck the live import preview.", "تعذر التحقق من معاينة الاستيراد الحالية."));
+      const live = await response.json() as Preview;
+      const counts = (value: Preview) => [
+        value.total, value.safe, value.review, value.generatedTestsRemaining ?? 0,
+      ];
+      const valid = (value: Preview) => counts(value).every(n => Number.isSafeInteger(n) && n >= 0);
+      if (!valid(live) || !valid(snapshot)) {
+        throw new Error(tr("Invalid import preview. No changes submitted.", "معاينة الاستيراد غير صالحة؛ لم تُرسل تغييرات."));
       }
+      if (counts(snapshot).some((count, index) => count !== counts(live)[index])) {
+        setPreview(live);
+        setReviewSnapshot(live);
+        setReviewError(tr(
+          "The import preview changed. Review the updated counts, then explicitly confirm again.",
+          "تغيرت معاينة الاستيراد. راجع الأعداد الجديدة ثم أكد من جديد.",
+        ));
+        return;
+      }
+      if (action === "IMPORT" && live.safe < 1) return;
+      if (action === "RESOLVE" && live.safe < 1 && !(live.generatedTestsRemaining || 0)) return;
 
-      const units = await fetch(`/api/catalog/imports/${batchId}/prepare-units`, { method: "POST" });
-      const unitBody = await units.json().catch(() => ({}));
-      if (!units.ok) throw new Error(tr("Legacy unit preparation failed.", "فشل تجهيز وحدات النظام القديم."));
-
-      const ranges = await fetch(`/api/catalog/imports/${batchId}/reference-ranges`, { method: "POST" });
-      const rangeBody = await ranges.json().catch(() => ({}));
-      if (!ranges.ok) throw new Error(tr("Reference range resolution failed.", "فشل حل المديات المرجعية."));
-
-      setMessage(tr(`Resolved ${rangeBody.imported || 0} additional inactive reference intervals; ${rangeBody.review || 0} remain for manual review.`, `تم حل ${rangeBody.imported || 0} مدى مرجعي إضافي بحالة غير نشطة؛ بقي ${rangeBody.review || 0} للمراجعة اليدوية.`));
+      if (action === "RESOLVE") {
+        if ((live.generatedTestsRemaining || 0) > 0) {
+          mutationStarted = true;
+          const masters = await fetch(`/api/catalog/imports/${batchId}/commit`, { method: "POST" });
+          if (!masters.ok) throw new Error(tr("Safe master recovery failed.", "فشل استرجاع البيانات الأساسية الآمنة."));
+        }
+        mutationStarted = true;
+        const units = await fetch(`/api/catalog/imports/${batchId}/prepare-units`, { method: "POST" });
+        if (!units.ok) throw new Error(tr("Legacy unit preparation failed.", "فشل تجهيز وحدات النظام القديم."));
+        const ranges = await fetch(`/api/catalog/imports/${batchId}/reference-ranges`, { method: "POST" });
+        const body = await ranges.json().catch(() => ({})) as { imported?: number; review?: number };
+        if (!ranges.ok) throw new Error(tr("Reference interval preparation failed.", "فشل تجهيز المديات المرجعية."));
+        setMessage(tr(
+          `Resolved ${body.imported || 0} additional inactive reference intervals; ${body.review || 0} remain for clinical mapping review.`,
+          `تم تجهيز ${body.imported || 0} مدى مرجعي إضافي غير نشط؛ بقي ${body.review || 0} للمراجعة السريرية.`,
+        ));
+      } else {
+        mutationStarted = true;
+        const result = await fetch(`/api/catalog/imports/${batchId}/reference-ranges`, { method: "POST" });
+        const body = await result.json().catch(() => ({})) as { imported?: number; review?: number };
+        if (!result.ok) throw new Error(tr("Reference interval import failed.", "فشل استيراد المديات المرجعية."));
+        setMessage(tr(
+          `Imported ${body.imported || 0} inactive reference intervals pending clinical approval; ${body.review || 0} remain for mapping review.`,
+          `تم استيراد ${body.imported || 0} مدى مرجعي غير نشط بانتظار الاعتماد السريري؛ بقي ${body.review || 0} لمراجعة الربط.`,
+        ));
+      }
+      setReviewAction(null);
       await loadPreview();
       router.refresh();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : tr("Safe legacy resolution failed.", "فشل حل عناصر النظام القديم الآمنة."));
+      // Network failures may occur AFTER a POST reached the server, and safe
+      // recovery is a multi-endpoint sequence, not one atomic transaction.
+      if (mutationStarted) setReviewRetryBlocked(true);
+      setReviewError((error instanceof Error ? error.message : tr("Import failed.", "تعذر الاستيراد.")) +
+        (mutationStarted ? tr(
+          " Some changes may already have been saved. Check batch history and refresh before opening a new review; do not retry this submission blindly.",
+          " قد تكون بعض التغييرات حُفظت بالفعل. تحقق من سجل الدفعة وحدّث الصفحة قبل بدء مراجعة جديدة؛ لا تكرر الإرسال دون تحقق.",
+        ) : ""));
     } finally {
+      setBusy(false);
       setResolving(false);
+      inFlight.current = false;
     }
-  }
-
-  async function run() {
-    if (!preview?.safe) return;
-    if (!confirm(tr(`Import ${preview.safe} reference intervals with exact test/unit/context mapping as INACTIVE records pending clinical approval? ${preview.review} rows will remain for manual review.`, `هل تريد استيراد ${preview.safe} مدى مرجعي ذي مطابقة دقيقة للفحص/الوحدة/السياق كسجلات غير نشطة بانتظار الاعتماد السريري؟ سيبقى ${preview.review} صفاً للمراجعة اليدوية.`))) return;
-    setBusy(true);
-    setMessage("");
-    const response = await fetch(`/api/catalog/imports/${batchId}/reference-ranges`, { method: "POST" });
-    const body = await response.json().catch(() => ({}));
-    if (response.ok) {
-      setMessage(tr(`Imported ${body.imported} inactive reference intervals pending clinical approval; ${body.review} remain for mapping review.`, `تم استيراد ${body.imported} مدى مرجعي غير نشط بانتظار الاعتماد السريري؛ بقي ${body.review} لمراجعة الربط.`));
-      await loadPreview();
-      router.refresh();
-    } else {
-      setMessage(tr("Reference range import failed.", "فشل استيراد المديات المرجعية."));
-    }
-    setBusy(false);
   }
 
   async function saveMapping(mappingType: "TEST_ALIAS" | "UNIT_ALIAS", sourceValue: string) {
@@ -147,9 +198,37 @@ export function ReferenceRangeImportButton({ batchId, locale }: { batchId: strin
       <span>{preview.review} {tr("review","للمراجعة")}</span>
     </div>
 
-    {((preview.generatedTestsRemaining || 0) > 0 || preview.safe > 0) && <button className="primary-button" disabled={busy || resolving} onClick={resolveSafeLegacy}>{resolving ? tr("Resolving…","جارٍ الحل…") : tr("Resolve Safe Legacy Items","حل عناصر النظام القديم الآمنة")}</button>}
-    {preview.safe > 0 && <button className="secondary-button" disabled={busy || resolving} onClick={run}>{busy ? tr("Importing ranges…","جارٍ استيراد المديات…") : tr("Import Safe Reference Ranges","استيراد المديات المرجعية الآمنة")}</button>}
-    {message && <span className="range-import-message">{message}</span>}
+    {((preview.generatedTestsRemaining || 0) > 0 || preview.safe > 0) && <button type="button" className="primary-button" disabled={busy || resolving || Boolean(mappingBusy)} onClick={() => openReview("RESOLVE")}>{resolving ? tr("Resolving…","جارٍ الحل…") : tr("Resolve Safe Legacy Items","حل عناصر النظام القديم الآمنة")}</button>}
+    {preview.safe > 0 && <button type="button" className="secondary-button" disabled={busy || resolving || Boolean(mappingBusy)} onClick={() => openReview("IMPORT")}>{busy && !resolving ? tr("Importing ranges…","جارٍ استيراد المديات…") : tr("Import Safe Reference Ranges","استيراد المديات المرجعية الآمنة")}</button>}
+    {message && <span className="range-import-message" role="status">{message}</span>}
+    <CrudModal open={reviewAction !== null} onClose={() => { if (!inFlight.current && !busy) setReviewAction(null); }}
+      size="compact" title={reviewAction === "RESOLVE" ? tr("Review Safe Legacy Resolution", "مراجعة حل عناصر النظام القديم") : tr("Review Reference Interval Import", "مراجعة استيراد المديات المرجعية")}
+      description={tr(
+        "Clinical legacy import operations require deliberate authorization. Imported reference intervals are inactive pending independent clinical approval.",
+        "يتطلب استيراد بيانات المختبر القديمة مراجعة واعية. المديات المرجعية المستوردة تبقى غير نشطة بانتظار اعتماد سريري مستقل.",
+      )}>
+      {reviewAction && reviewSnapshot && <form className="catalog-form" onSubmit={confirmReview}>
+        <p className="form-span">{tr("Import batch", "دفعة الاستيراد")}: <code>{batchId}</code></p>
+        <p>{tr("Exact-match intervals", "مديات بمطابقة دقيقة")}: <strong>{reviewSnapshot.safe}</strong></p>
+        <p>{tr("Manual-review rows", "صفوف للمراجعة اليدوية")}: <strong>{reviewSnapshot.review}</strong></p>
+        <p>{tr("Total candidate rows", "إجمالي الصفوف المرشحة")}: <strong>{reviewSnapshot.total}</strong></p>
+        {reviewAction === "RESOLVE" && <p className="form-span">{tr(
+          `This sequence may import up to ${reviewSnapshot.generatedTestsRemaining || 0} pending master test records, prepare unit mappings, then add eligible reference intervals. Completed steps cannot be rolled back as a single operation.`,
+          `قد تستورد هذه السلسلة حتى ${reviewSnapshot.generatedTestsRemaining || 0} سجلاً أساسياً للفحوص، وتجهز روابط الوحدات، ثم تضيف المديات المؤهلة. الخطوات المكتملة لا تُلغى كعملية واحدة.`,
+        )}</p>}
+        <p className="form-span muted">{tr(
+          "No reference interval is approved or applied to released results by this action. Ambiguous test/unit/context rows remain for expert review.",
+          "لا يعتمد هذا الإجراء أي مدى مرجعي ولا يطبقه على نتائج صادرة. تبقى الصفوف الملتبسة في الفحوص أو الوحدات أو السياق للمراجعة المتخصصة.",
+        )}</p>
+        {reviewError && <p role="alert" className="form-error form-span">{reviewError}</p>}
+        <div className="crud-modal-actions form-span">
+          <button type="button" className="secondary-button" disabled={busy} onClick={() => setReviewAction(null)}>{tr("Cancel", "إلغاء")}</button>
+          <button type="submit" className="primary-button" disabled={busy || reviewRetryBlocked || (reviewAction === "IMPORT" && reviewSnapshot.safe < 1) || (reviewAction === "RESOLVE" && reviewSnapshot.safe < 1 && !(reviewSnapshot.generatedTestsRemaining || 0))}>
+            {busy ? tr("Submitting…", "جارٍ الإرسال…") : tr("Confirm reviewed import action", "تأكيد إجراء الاستيراد المراجع")}
+          </button>
+        </div>
+      </form>}
+    </CrudModal>
 
     {preview.review > 0 && Object.keys(preview.reasons || {}).length > 0 && <div className="range-review-reasons">
       <strong>{tr("Review reasons","أسباب المراجعة")}</strong>
