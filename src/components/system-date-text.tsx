@@ -1,13 +1,13 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-import { formatCalendarDisplay, formatInstantDisplay, formatInstantDateDisplay } from "@/lib/system-date-display";
+import { formatCalendarDisplay, formatInstantDisplay, formatInstantDateDisplay, parseUtcCalendarRecord } from "@/lib/system-date-display";
 import { normalizeSystemDateFormat } from "@/lib/system-date";
 import { DEFAULT_ROOT_DATE_PREFERENCES, readRootDatePreferences, subscribeRootDatePreferences } from "@/lib/root-date-preferences";
 
 type Props = {
   value: string;
-  kind?: "calendar" | "instant" | "instant-date";
+  kind?: "calendar" | "calendar-record" | "instant" | "instant-date";
   timeZone?: string;
 };
 
@@ -25,7 +25,10 @@ export function SystemDateText({ value, kind = "instant", timeZone }: Props) {
     timeZone: zone,
     showSeconds: settings[3] === "true",
   };
-  const display = kind === "calendar"
+  const calendarRecord = kind === "calendar-record" ? parseUtcCalendarRecord(value) : null;
+  const display = kind === "calendar-record"
+    ? calendarRecord ? formatCalendarDisplay(calendarRecord, dateFormat) : "—"
+    : kind === "calendar"
     ? formatCalendarDisplay(value, dateFormat)
     : kind === "instant-date"
     ? formatInstantDateDisplay(value, preferences)
@@ -35,7 +38,7 @@ export function SystemDateText({ value, kind = "instant", timeZone }: Props) {
   return <time
     className="system-date-text"
     dir="ltr"
-    dateTime={value}
-    title={kind === "calendar" ? value : value + " · " + zone}
+    dateTime={kind === "calendar-record" ? (calendarRecord || "") : value}
+    title={kind === "calendar-record" ? (calendarRecord || value) : kind === "calendar" ? value : value + " · " + zone}
   >{display}</time>;
 }

@@ -56,3 +56,13 @@ export function formatInstantDateDisplay(value: string, preferences: SystemDateD
     return "—";
   }
 }
+
+/** SQL calendar dates serialized at midnight UTC are NOT instants for UI purposes.
+ * Reject arbitrary timestamps rather than silently shifting a due/expiry date
+ * into a different calendar day when organization timezone changes.
+ */
+export function parseUtcCalendarRecord(value: string): string | null {
+  if (!/^\d{4}-\d{2}-\d{2}T00:00:00(?:\.000)?Z$/.test(value)) return null;
+  const date = value.slice(0, 10);
+  return parseSystemDateInput(date, "YYYY-MM-DD") ? date : null;
+}
