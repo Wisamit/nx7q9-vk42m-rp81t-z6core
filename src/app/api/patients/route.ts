@@ -265,6 +265,31 @@ export async function POST(request: Request) {
           id: prior.id, patientNumber: prior.patientNumber, fullNameEn: prior.fullNameEn,
         } } as const;
     }
+    // Scheme preflight outside this transaction is not authoritative. A
+    // concurrent admin may soft-deactivate a custom scheme before we lock.
+    // Recheck every identifier scheme under the SAME active tenant lock that
+    // serializes scheme lifecycle mutations. Historical identifiers are not
+    // touched when a scheme is disabled.
+    if (identifierChecks.length > 0) {
+      const liveSchemes = await tx.patientIdentifierScheme.findMany({
+        where: {
+          organizationId: session.user.organizationId,
+          status: "ACTIVE",
+          id: { in: [...new Set(identifierChecks.map(item => item.schemeId))] },
+        },
+        select: { id: true, code: true, identifierType: true, requiresIssuingCountry: true },
+      });
+      const currentById = new Map(liveSchemes.map(item => [item.id, item]));
+      for (const identifier of identifierChecks) {
+        const scheme = currentById.get(identifier.schemeId);
+        if (!scheme || scheme.code !== identifier.schemeCode ||
+            scheme.identifierType !== identifier.identifierType ||
+            (scheme.requiresIssuingCountry && !identifier.issuingCountry)) {
+          return { kind: "identifier_scheme_changed",
+            schemeCode: identifier.schemeCode } as const;
+        }
+      }
+    }
     const duplicateRows = duplicateOr.length > 0
       ? await tx.patient.findMany({
           where: {
@@ -463,6 +488,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "duplicate_review_reason_required" }, { status: 400 });
   if (outcome.kind === "duplicate_review_candidates_changed")
     return NextResponse.json({ error: "duplicate_review_candidates_changed" }, { status: 409 });
+  if (outcome.kind === "identifier_scheme_changed")
+    return NextResponse.json({
+      error: "identifier_scheme_changed", schemeCode: outcome.schemeCode,
+    }, { status: 409, headers: { "Cache-Control": "private, no-store" } });
   if (outcome.kind === "identifier_already_used")
     return NextResponse.json({
       error: "identifier_already_used",
