@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { validateReviewStageReceipt } from "@/lib/catalog-review-stage-receipt";
 import { ReviewFileUploadDialog } from "@/components/review-file-upload-dialog";
+import { CatalogStageRecoveryButton } from "@/components/catalog-stage-recovery-button";
 import { useRouter } from "next/navigation";
 
 const MAX_BYTES = 4 * 1024 * 1024;
@@ -15,6 +16,7 @@ export function CatalogBundleReviewStaging({ locale }: { locale: "ar" | "en" }) 
   const [retryBlocked, setRetryBlocked] = useState(false);
   const stageAttempted = useRef(false);
   const submissionKey = useRef<string | null>(null);
+  const [submittedKey, setSubmittedKey] = useState<string | null>(null);
   const inFlight = useRef(false);
   const tr = (en: string, ar: string) => locale === "ar" ? ar : en;
 
@@ -32,6 +34,7 @@ export function CatalogBundleReviewStaging({ locale }: { locale: "ar" | "en" }) 
       // Once a POST is attempted, a lost response is ambiguous; each
       // success creates a fresh private draft. Never blindly re-submit.
       submissionKey.current ??= crypto.randomUUID();
+      setSubmittedKey(submissionKey.current);
       stageAttempted.current = true;
       setRetryBlocked(true);
       const result = await fetch("/api/catalog/imports/bundle?sourceName=" +
@@ -86,6 +89,7 @@ export function CatalogBundleReviewStaging({ locale }: { locale: "ar" | "en" }) 
         onStage={stage} />
     </div>
     {message && <p role="alert">{message}</p>}
+    {retryBlocked && <CatalogStageRecoveryButton locale={locale} sourceType="CONFIG_BUNDLE_REVIEW" submissionKey={submittedKey} />}
     {retryBlocked && <p className="form-warning" role="status">{tr(
       "Check existing private configuration review batches and audit before another upload; reload after review.",
       "راجع دفعات مراجعة الإعدادات الخاصة وسجل التدقيق قبل أي رفع جديد، ثم أعد تحميل الصفحة.",

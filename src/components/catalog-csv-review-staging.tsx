@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { validateReviewStageReceipt } from "@/lib/catalog-review-stage-receipt";
 import { ReviewFileUploadDialog } from "@/components/review-file-upload-dialog";
+import { CatalogStageRecoveryButton } from "@/components/catalog-stage-recovery-button";
 import { useRouter } from "next/navigation";
 import { catalogReviewXlsx } from "@/lib/catalog-review-xlsx";
 
@@ -19,6 +20,7 @@ export function CatalogCsvReviewStaging({ locale, canStagePricing, canStageRange
   const [retryBlocked, setRetryBlocked] = useState(false);
   const stageAttempted = useRef(false);
   const submissionKey = useRef<string | null>(null);
+  const [submittedKey, setSubmittedKey] = useState<string | null>(null);
   const inFlight = useRef(false);
   const tr = (en: string, ar: string) => locale === "ar" ? ar : en;
 
@@ -60,6 +62,7 @@ export function CatalogCsvReviewStaging({ locale, canStagePricing, canStageRange
       // This endpoint creates a fresh private DRAFT batch per POST. A lost
       // response must not lead to an unreviewed second creation.
       submissionKey.current ??= crypto.randomUUID();
+      setSubmittedKey(submissionKey.current);
       stageAttempted.current = true;
       setRetryBlocked(true);
       const response = await fetch("/api/catalog/imports/csv?sourceName=" +
@@ -167,6 +170,7 @@ export function CatalogCsvReviewStaging({ locale, canStagePricing, canStageRange
       </button>}
     </div>
     {error && <p role="alert">{error}</p>}
+    {retryBlocked && <CatalogStageRecoveryButton locale={locale} sourceType="CSV_REVIEW" submissionKey={submittedKey} />}
     {retryBlocked && <p className="form-warning" role="status">{tr(
       "Before another CSV/XLSX staging attempt, review the existing private batches and audit, then reload the page.",
       "قبل رفع CSV/XLSX مرة أخرى، راجع الدفعات الخاصة الموجودة وسجل التدقيق، ثم أعد تحميل الصفحة.",
