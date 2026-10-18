@@ -38,7 +38,7 @@ test("patient POST locks same active organization BEFORE fresh duplicate evidenc
   assert.ok(route.includes('kind: "duplicate_review_candidates_changed"'));
   assert.ok(route.includes("tx.patientIdentifier.findUnique({"));
   assert.ok(route.includes("PATIENT_DUPLICATE_REVIEW_OVERRIDE"));
-  assert.ok(route.includes("reviewedCandidateIds: overrideReason ? reviewedCandidateIds : undefined"));
+  assert.ok(form.includes("reviewedCandidateIds: overrideReason ? reviewedCandidateIds : undefined"));
   assert.ok(form.includes("duplicateReview.candidates.map(candidate => candidate.id)"));
   assert.ok(form.includes('body.error === "duplicate_review_candidates_changed"'));
   assert.ok(form.includes("setDuplicateReview(null)"));
