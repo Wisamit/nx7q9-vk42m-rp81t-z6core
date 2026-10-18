@@ -267,7 +267,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         reparentedAliasCount: reparentedAliases.count,
         portalAccountMoved,
       };
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted, timeout: 30000 });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 30000 });
 
     return NextResponse.json({ status: "merged", ...merged }, { status: 201 });
   } catch (error) {
