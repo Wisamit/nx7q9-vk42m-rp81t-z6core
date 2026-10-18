@@ -23,7 +23,7 @@ test("read-only recovery is locked, live-authorized and actor/tenant/source/key 
     'export async function GET(request: Request)',
     'requirePermission("catalog.manage")',
     'isRecoverableStageSource(sourceType)',
-    'catalogStageSubmissionKey(params.get("key"))',
+    'catalogStageSubmissionKey(request.headers.get("x-family-lab-staging-key"))',
     'if (!isRecoverableStageSource(sourceType) || !key.valid || !key.key)',
     "FOR UPDATE", "catalogImportBatch.findFirst",
     "organizationId: session.user.organizationId",
