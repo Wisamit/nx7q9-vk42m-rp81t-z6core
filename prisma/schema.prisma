@@ -2417,7 +2417,7 @@ model Patient {
 
   organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   creationBranch Branch?            @relation("PatientCreationBranch", fields: [creationBranchId], references: [id], onDelete: Restrict)
-  creationRequestActor User?        @relation("PatientCreationRequestActor", fields: [creationRequestUserId], references: [id], onDelete: Restrict)
+  creationRequestActor User?        @relation("PatientCreationRequestActor", fields: [creationRequestUserId], references: [id], onDelete: Restrict, map: "patients_creation_request_user_fk")
   mergedInto   Patient?            @relation("PatientMergeLineage", fields: [mergedIntoPatientId], references: [id], onDelete: Restrict)
   mergedFrom   Patient[]           @relation("PatientMergeLineage")
   mergeEventsAsSource PatientMergeEvent[] @relation("PatientMergeSource")
