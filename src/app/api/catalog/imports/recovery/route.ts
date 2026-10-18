@@ -16,7 +16,7 @@ export async function GET(request: Request) {
   const session = await requirePermission("catalog.manage");
   const params = new URL(request.url).searchParams;
   const sourceType = params.get("sourceType");
-  const key = catalogStageSubmissionKey(params.get("key"));
+  const key = catalogStageSubmissionKey(request.headers.get("x-family-lab-staging-key"));
   if (!isRecoverableStageSource(sourceType) || !key.valid || !key.key)
     return NextResponse.json({ error: "invalid_staging_recovery_request" },
       { status: 400, headers: noStore });
