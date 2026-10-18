@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { validateReviewStageReceipt } from "@/lib/catalog-review-stage-receipt";
 import { ReviewFileUploadDialog } from "@/components/review-file-upload-dialog";
+import { CatalogStageRecoveryButton } from "@/components/catalog-stage-recovery-button";
 import { useRouter } from "next/navigation";
 
 const MAX_BYTES = 4 * 1024 * 1024;
@@ -86,6 +87,7 @@ export function CatalogBundleReviewStaging({ locale }: { locale: "ar" | "en" }) 
         onStage={stage} />
     </div>
     {message && <p role="alert">{message}</p>}
+    {retryBlocked && <CatalogStageRecoveryButton locale={locale} sourceType="CONFIG_BUNDLE_REVIEW" submissionKey={submissionKey.current} />}
     {retryBlocked && <p className="form-warning" role="status">{tr(
       "Check existing private configuration review batches and audit before another upload; reload after review.",
       "راجع دفعات مراجعة الإعدادات الخاصة وسجل التدقيق قبل أي رفع جديد، ثم أعد تحميل الصفحة.",
