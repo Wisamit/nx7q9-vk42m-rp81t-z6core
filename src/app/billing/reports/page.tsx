@@ -1,5 +1,6 @@
 import { TableEmptyState } from "@/components/table-empty-state";
 import { SystemDateField } from "@/components/system-date-field";
+import { SystemDateText } from "@/components/system-date-text";
 import Link from "next/link";
 import type { Prisma } from "../../../../generated/prisma/client";
 import { requirePermission } from "@/lib/auth";
@@ -433,7 +434,7 @@ export default async function FinancialReportsPage({ searchParams }: { searchPar
           <th>{tr(locale, "Current balance", "الرصيد الحالي")}</th>
         </tr></thead>
         <tbody>{invoices.length === 0 ? <tr><td colSpan={12} className="empty-state"><TableEmptyState title={tr(locale, "No invoices match the selected invoice filters.", "لا توجد فواتير تطابق مرشحات الفواتير المحددة.")} description={tr(locale, "No invoices match this report view. Review the reporting period and authorized branch before interpreting totals.", "لا توجد فواتير تطابق عرض التقرير. راجع الفترة وفرعك المصرح به قبل تفسير الإجماليات.")} action={{ href: "/billing/reports", label: tr(locale, "Clear filters", "مسح الفلاتر") }} /></td></tr> : invoices.slice(0, 1000).map(item => <tr key={item.id}>
-          <td>{item.issuedAt.toISOString().replace("T", " ").slice(0, 19)}</td>
+          <td><SystemDateText value={item.issuedAt.toISOString()} timeZone={reportTimeZone} /></td>
           <td><strong>{item.invoiceNumber}</strong><br/><small>{item.currency}</small></td>
           <td>{item.order?.accessionNumber || "—"}</td>
           <td>{item.order?.source ? item.order.source.code + " — " + localizedName(item.order.source) : "—"}</td>
@@ -455,7 +456,7 @@ export default async function FinancialReportsPage({ searchParams }: { searchPar
       <div className="table-wrap"><table>
         <thead><tr><th>{tr(locale, "Received", "الاستلام")}</th><th>{tr(locale, "Invoice", "الفاتورة")}</th><th>{tr(locale, "Method", "الطريقة")}</th><th>{tr(locale, "Cashier", "أمين الصندوق")}</th><th>{tr(locale, "Amount", "المبلغ")}</th></tr></thead>
         <tbody>{paymentAllocations.length === 0 ? <tr><td colSpan={5} className="empty-state"><TableEmptyState title={tr(locale, "No collection allocations match the selected filters.", "لا توجد تخصيصات تحصيل تطابق المرشحات المحددة.")} description={tr(locale, "No allocated collections match these filters. Payment method and cashier filters affect collection/refund metrics only.", "لا توجد تحصيلات مخصصة تطابق الفلاتر. تؤثر طريقة الدفع وأمين الصندوق على التحصيل والاسترداد فقط.")} action={{ href: "/billing/reports", label: tr(locale, "Clear filters", "مسح الفلاتر") }} /></td></tr> : paymentAllocations.slice(0, 1000).map((item, index) => <tr key={item.payment.id + ":" + item.invoice.invoiceNumber + ":" + index}>
-          <td>{item.payment.receivedAt.toISOString().replace("T", " ").slice(0, 19)}</td>
+          <td><SystemDateText value={item.payment.receivedAt.toISOString()} timeZone={reportTimeZone} /></td>
           <td>{item.invoice.invoiceNumber}</td>
           <td>{locale === "ar" ? item.payment.paymentMethodNameArSnapshot || item.payment.paymentMethodNameEnSnapshot : item.payment.paymentMethodNameEnSnapshot}</td>
           <td>{locale === "ar" ? item.payment.cashier.displayNameAr || item.payment.cashier.displayNameEn : item.payment.cashier.displayNameEn}</td>
@@ -470,7 +471,7 @@ export default async function FinancialReportsPage({ searchParams }: { searchPar
         <div className="table-wrap"><table>
           <thead><tr><th>{tr(locale, "Issued", "الإصدار")}</th><th>{tr(locale, "Credit note", "الإشعار")}</th><th>{tr(locale, "Invoice", "الفاتورة")}</th><th>{tr(locale, "Amount", "المبلغ")}</th><th>{tr(locale, "Reason", "السبب")}</th></tr></thead>
           <tbody>{creditNotes.length === 0 ? <tr><td colSpan={5} className="empty-state"><TableEmptyState title={tr(locale, "No credit notes match.", "لا توجد إشعارات دائنة مطابقة.")} description={tr(locale, "No credit notes match the selected report scope. Credit notes remain dated at their original issuance time.", "لا توجد إشعارات دائنة ضمن نطاق التقرير المحدد. تحتفظ الإشعارات بتاريخ إصدارها الأصلي.")} action={{ href: "/billing/reports", label: tr(locale, "Clear filters", "مسح الفلاتر") }} /></td></tr> : creditNotes.slice(0, 500).map(item => <tr key={item.id}>
-            <td>{item.issuedAt.toISOString().replace("T", " ").slice(0, 19)}</td><td>{item.creditNoteNumber}</td><td>{item.invoice.invoiceNumber}</td><td>{item.amount.toFixed(4)} {item.currency}</td><td>{item.reason}</td>
+            <td><SystemDateText value={item.issuedAt.toISOString()} timeZone={reportTimeZone} /></td><td>{item.creditNoteNumber}</td><td>{item.invoice.invoiceNumber}</td><td>{item.amount.toFixed(4)} {item.currency}</td><td>{item.reason}</td>
           </tr>)}</tbody>
         </table></div>
       </article>
@@ -480,7 +481,7 @@ export default async function FinancialReportsPage({ searchParams }: { searchPar
         <div className="table-wrap"><table>
           <thead><tr><th>{tr(locale, "Processed", "التنفيذ")}</th><th>{tr(locale, "Refund", "الاسترداد")}</th><th>{tr(locale, "Invoice", "الفاتورة")}</th><th>{tr(locale, "Method", "الطريقة")}</th><th>{tr(locale, "Original cashier", "أمين الصندوق الأصلي")}</th><th>{tr(locale, "Amount", "المبلغ")}</th></tr></thead>
           <tbody>{refunds.length === 0 ? <tr><td colSpan={6} className="empty-state"><TableEmptyState title={tr(locale, "No refunds match.", "لا توجد استردادات مطابقة.")} description={tr(locale, "No refunds match the current report filters. Refund evidence remains in the original financial transaction history.", "لا توجد استردادات تطابق الفلاتر الحالية. تبقى أدلة الاسترداد ضمن سجل الحركات المالية الأصلي.")} action={{ href: "/billing/reports", label: tr(locale, "Clear filters", "مسح الفلاتر") }} /></td></tr> : refunds.slice(0, 500).map(item => <tr key={item.id}>
-            <td>{item.processedAt.toISOString().replace("T", " ").slice(0, 19)}</td><td>{item.refundNumber}</td><td>{item.invoice.invoiceNumber}</td><td>{locale === "ar" ? item.paymentMethodNameArSnapshot || item.paymentMethodNameEnSnapshot : item.paymentMethodNameEnSnapshot}</td><td>{locale === "ar" ? item.payment.cashier.displayNameAr || item.payment.cashier.displayNameEn : item.payment.cashier.displayNameEn}</td><td>{item.amount.toFixed(4)} {item.currency}</td>
+            <td><SystemDateText value={item.processedAt.toISOString()} timeZone={reportTimeZone} /></td><td>{item.refundNumber}</td><td>{item.invoice.invoiceNumber}</td><td>{locale === "ar" ? item.paymentMethodNameArSnapshot || item.paymentMethodNameEnSnapshot : item.paymentMethodNameEnSnapshot}</td><td>{locale === "ar" ? item.payment.cashier.displayNameAr || item.payment.cashier.displayNameEn : item.payment.cashier.displayNameEn}</td><td>{item.amount.toFixed(4)} {item.currency}</td>
           </tr>)}</tbody>
         </table></div>
       </article>

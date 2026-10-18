@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SystemDateText } from "@/components/system-date-text";
 import { permissionSet, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { ProcurementManager } from "@/components/procurement-manager";
@@ -92,7 +93,7 @@ export default async function ProcurementPage() {
         <div className="table-wrap"><table>
           <thead><tr><th>{tr(locale, "Request", "الطلب")}</th><th>{tr(locale, "Branch", "الفرع")}</th><th>{tr(locale, "Status", "الحالة")}</th><th>{tr(locale, "Requested by", "مقدم الطلب")}</th><th>{tr(locale, "Items", "الأصناف")}</th><th>{tr(locale, "Approval", "الموافقة")}</th></tr></thead>
           <tbody>{purchaseRequests.length === 0 ? <tr><td colSpan={6} className="empty-state">{tr(locale, "No purchase requests.", "لا توجد طلبات شراء.")}</td></tr> : purchaseRequests.map(request => <tr key={request.id}>
-            <td><strong>{request.requestNumber}</strong><br/><small>{request.requestedAt.toISOString().slice(0,10)}</small></td>
+            <td><strong>{request.requestNumber}</strong><br/><small><SystemDateText value={request.requestedAt.toISOString()} kind="instant-date" timeZone={request.branch.timezone} /></small></td>
             <td>{request.branch.code}</td>
             <td>{statusLabel(locale, request.status)}</td>
             <td>{userName(request.requestedBy)}</td>

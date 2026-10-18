@@ -1,5 +1,6 @@
 import { TableEmptyState } from "@/components/table-empty-state";
 import Link from "next/link";
+import { SystemDateText } from "@/components/system-date-text";
 import { permissionSet, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { EquipmentManager } from "@/components/equipment-manager";
@@ -109,9 +110,9 @@ export default async function EquipmentPage() {
           <td>{statusLabel(locale, item.status)}</td>
           <td>
             {item.maintenanceEvents[0] ? maintenanceTypeLabel(item.maintenanceEvents[0].maintenanceType) + " · " + equipmentStatusLabel(item.maintenanceEvents[0].status) : "—"}
-            {item.maintenancePlans[0] ? <><br/><small>{tr(locale, "Next", "التالي")}: {item.maintenancePlans[0].nextDueAt.toISOString().slice(0,10)}</small></> : null}
+            {item.maintenancePlans[0] ? <><br/><small>{tr(locale, "Next", "التالي")}: <SystemDateText value={item.maintenancePlans[0].nextDueAt.toISOString()} kind="calendar-record" /></small></> : null}
           </td>
-          <td>{item.calibrationEvents[0] ? equipmentStatusLabel(item.calibrationEvents[0].status) + (item.calibrationEvents[0].performedAt ? " · " + item.calibrationEvents[0].performedAt.toISOString().slice(0,10) : "") : "—"}</td>
+          <td>{item.calibrationEvents[0] ? <>{equipmentStatusLabel(item.calibrationEvents[0].status)}{item.calibrationEvents[0].performedAt ? <> · <SystemDateText value={item.calibrationEvents[0].performedAt.toISOString()} kind="instant-date" timeZone={item.branch.timezone} /></> : null}</> : "—"}</td>
           <td>{item.documents.length}</td>
           <td>{item.downtimeEvents[0]?.status === "OPEN" ? <strong className="critical-text">{tr(locale, "OPEN", "مفتوح")}</strong> : "—"}</td>
         </tr>)}</tbody>

@@ -1,5 +1,6 @@
 import { TableEmptyState } from "@/components/table-empty-state";
 import Link from "next/link";
+import { SystemDateText } from "@/components/system-date-text";
 import { permissionSet, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { QcManager } from "@/components/qc-manager";
@@ -76,6 +77,7 @@ export default async function QcPage() {
       },
       include: {
         analyzer: true,
+        branch: { select: { timezone: true } },
         operator: true,
         results: {
           include: {
@@ -195,7 +197,7 @@ export default async function QcPage() {
       <div className="table-wrap"><table>
         <thead><tr><th>{tr(locale, "Run", "التشغيل")}</th><th>{tr(locale, "Analyzer", "الجهاز")}</th><th>{tr(locale, "Control lot", "تشغيلة الضبط")}</th><th>{tr(locale, "Status", "الحالة")}</th><th>{tr(locale, "Results", "النتائج")}</th><th>{tr(locale, "Violations", "المخالفات")}</th><th>{tr(locale, "Operator", "المشغل")}</th></tr></thead>
         <tbody>{recentRuns.length === 0 ? <tr><td colSpan={7} className="empty-state"><TableEmptyState title={tr(locale, "No QC runs recorded.", "لا توجد تشغيلات QC مسجلة.")} description={tr(locale, "No quality-control runs are displayed. QC observations must be entered from approved control material before policy evaluation.", "لا تظهر تشغيلات ضبط جودة. يجب إدخال مشاهدات QC من مواد ضبط معتمدة قبل تقييم القواعد.")} /></td></tr> : recentRuns.map(run => <tr key={run.id}>
-          <td>{run.runAt.toISOString().replace("T"," ").slice(0,19)}</td>
+          <td><SystemDateText value={run.runAt.toISOString()} timeZone={run.branch.timezone} /></td>
           <td><strong>{run.analyzer.code}</strong><br/><small>{run.analyzer.name}</small></td>
           <td>{[...new Map(run.results.map(result => [
             result.target.qcLotId,

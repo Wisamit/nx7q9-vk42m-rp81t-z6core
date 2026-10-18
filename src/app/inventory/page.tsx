@@ -1,5 +1,6 @@
 import { TableEmptyState } from "@/components/table-empty-state";
 import Link from "next/link";
+import { SystemDateText } from "@/components/system-date-text";
 import { permissionSet, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { InventoryManager } from "@/components/inventory-manager";
@@ -126,7 +127,7 @@ export default async function InventoryPage() {
         <div className="table-wrap"><table>
           <thead><tr><th>{tr(locale, "Expiry", "الانتهاء")}</th><th>{tr(locale, "Branch", "الفرع")}</th><th>{tr(locale, "Item", "الصنف")}</th><th>{tr(locale, "Lot", "التشغيلة")}</th><th>{tr(locale, "Supplier", "المورد")}</th><th>{tr(locale, "On hand", "المتاح فعلياً")}</th></tr></thead>
           <tbody>{fefoLots.length === 0 ? <tr><td colSpan={6} className="empty-state"><TableEmptyState title={tr(locale, "No lot stock available.", "لا يوجد مخزون تشغيلات متاح.")} description={tr(locale, "No lots with available balance appear in the current inventory scope. Lot and expiry traceability remains required.", "لا تظهر تشغيلات ذات رصيد متاح ضمن نطاق المخزون الحالي. يظل تتبع التشغيلات والصلاحية إلزامياً.")} /></td></tr> : fefoLots.map(stock => <tr key={stock.id}>
-            <td>{stock.lot.expiryDate?.toISOString().slice(0,10) || tr(locale, "No expiry", "بدون انتهاء")}</td>
+            <td>{stock.lot.expiryDate ? <SystemDateText value={stock.lot.expiryDate.toISOString()} kind="calendar-record" /> : tr(locale, "No expiry", "بدون انتهاء")}</td>
             <td>{stock.branch.code} — {localizedName(stock.branch)}</td>
             <td><strong>{stock.lot.item.code}</strong><br/><small>{localizedName(stock.lot.item)}</small></td>
             <td>{stock.lot.lotNumber}</td>
@@ -146,7 +147,7 @@ export default async function InventoryPage() {
           <td>{receipt.branch.code} — {localizedName(receipt.branch)}</td>
           <td>{localizedName(receipt.supplier)}</td>
           <td>{statusLabel(locale, receipt.status)}</td>
-          <td>{receipt.receivedAt.toISOString().replace("T"," ").slice(0,16)}</td>
+          <td><SystemDateText value={receipt.receivedAt.toISOString()} timeZone={receipt.branch.timezone} /></td>
           <td>{receipt.items.length}</td>
         </tr>)}</tbody>
       </table></div>
