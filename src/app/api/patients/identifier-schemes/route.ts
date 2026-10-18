@@ -28,7 +28,15 @@ export async function POST(request: Request) {
   }
 
   try {
-    const scheme = await prisma.$transaction(async tx => {
+    const outcome = await prisma.$transaction(async tx => {
+      // Same active organization lock as patient create/identifier add/merge.
+      // Scheme lifecycle transitions and registrations must serialize.
+      const tenant = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM organizations
+        WHERE id = ${session.user.organizationId} AND status = 'ACTIVE'
+        FOR UPDATE
+      `;
+      if (tenant.length !== 1) return { kind: "organization_unavailable" } as const;
       const created = await tx.patientIdentifierScheme.create({
         data: {
           organizationId: session.user.organizationId,
@@ -60,10 +68,12 @@ export async function POST(request: Request) {
         },
       });
 
-      return created;
-    });
+      return { kind: "created", scheme: created } as const;
+    }, { timeout: 30000 });
 
-    return NextResponse.json({ status: "ok", scheme }, { status: 201 });
+    if (outcome.kind === "organization_unavailable")
+      return NextResponse.json({ error: "organization_unavailable" }, { status: 403 });
+    return NextResponse.json({ status: "ok", scheme: outcome.scheme }, { status: 201 });
   } catch (error) {
     if (error && typeof error === "object" && "code" in error && error.code === "P2002") {
       return NextResponse.json({ error: "identifier_scheme_code_exists" }, { status: 409 });
@@ -82,25 +92,32 @@ export async function PATCH(request: Request) {
   const reason = text(body.reason, 1000);
   if (!id || !reason) return NextResponse.json({ error: "id_and_reason_required" }, { status: 400 });
 
-  const scheme = await prisma.patientIdentifierScheme.findFirst({
-    where: { id, organizationId: session.user.organizationId },
-  });
-  if (!scheme) return NextResponse.json({ error: "identifier_scheme_not_found" }, { status: 404 });
-  if (scheme.identifierType !== "OTHER" || scheme.code === "LEGACY_OTHER") {
-    return NextResponse.json({ error: "standard_identifier_scheme_cannot_be_deactivated" }, { status: 409 });
-  }
-  if (scheme.status !== "ACTIVE") {
-    return NextResponse.json({ error: "identifier_scheme_already_inactive" }, { status: 409 });
-  }
-
   const deactivatedAt = new Date();
-  const updated = await prisma.$transaction(async tx => {
+  const outcome = await prisma.$transaction(async tx => {
+    // Lock BEFORE checking lifecycle and type. No last-moment scheme
+    // deactivation may race a patient registration using this scheme.
+    const tenant = await tx.$queryRaw<Array<{ id: string }>>`
+      SELECT id FROM organizations
+      WHERE id = ${session.user.organizationId} AND status = 'ACTIVE'
+      FOR UPDATE
+    `;
+    if (tenant.length !== 1) return { kind: "organization_unavailable" } as const;
+    const scheme = await tx.patientIdentifierScheme.findFirst({
+      where: { id, organizationId: session.user.organizationId },
+    });
+    if (!scheme) return { kind: "identifier_scheme_not_found" } as const;
+    if (scheme.identifierType !== "OTHER" || scheme.code === "LEGACY_OTHER")
+      return { kind: "standard_identifier_scheme_cannot_be_deactivated" } as const;
+    if (scheme.status !== "ACTIVE")
+      return { kind: "identifier_scheme_already_inactive" } as const;
+
     const changed = await tx.patientIdentifierScheme.updateMany({
-      where: { id: scheme.id, status: "ACTIVE" },
+      where: {
+        id: scheme.id, organizationId: session.user.organizationId, status: "ACTIVE",
+      },
       data: { status: "INACTIVE", deactivatedAt },
     });
-    if (changed.count !== 1) return null;
-
+    if (changed.count !== 1) return { kind: "identifier_scheme_state_changed" } as const;
     await tx.auditEvent.create({
       data: {
         organizationId: session.user.organizationId,
@@ -116,10 +133,17 @@ export async function PATCH(request: Request) {
         userAgent: ctx.userAgent,
       },
     });
+    const current = await tx.patientIdentifierScheme.findUniqueOrThrow({
+      where: { id: scheme.id },
+    });
+    return { kind: "deactivated", scheme: current } as const;
+  }, { timeout: 30000 });
 
-    return tx.patientIdentifierScheme.findUniqueOrThrow({ where: { id: scheme.id } });
-  });
-
-  if (!updated) return NextResponse.json({ error: "identifier_scheme_state_changed" }, { status: 409 });
-  return NextResponse.json({ status: "ok", scheme: updated });
+  if (outcome.kind === "organization_unavailable")
+    return NextResponse.json({ error: "organization_unavailable" }, { status: 403 });
+  if (outcome.kind !== "deactivated") {
+    return NextResponse.json({ error: outcome.kind },
+      { status: outcome.kind === "identifier_scheme_not_found" ? 404 : 409 });
+  }
+  return NextResponse.json({ status: "ok", scheme: outcome.scheme });
 }
