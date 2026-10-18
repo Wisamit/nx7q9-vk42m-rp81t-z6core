@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { CrudModal } from "@/components/crud-modal";
 import { useRouter } from "next/navigation";
 
 type Kind = "REFERRER" | "SOURCE" | "ORGANISM" | "ANTIBIOTIC" | "CLIENT" | "COMMENT_TEMPLATE";
@@ -53,11 +54,32 @@ export function LegacyMasterDataImport({
   const [working, setWorking] = useState<"PREVIEW" | "APPLY" | "">("");
   const [message, setMessage] = useState("");
   const [importId, setImportId] = useState("");
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [commitOpen, setCommitOpen] = useState(false);
+  const inFlight = useRef(false);
+
+  function dismissEditor() {
+    if (working || inFlight.current) return;
+    setEditorOpen(false);
+    // Closing via the modal discard path must actually discard any unsaved CSV.
+    setCsv("");
+    setSourceName("");
+    setPreview(null);
+    setConfirmed(false);
+  }
+
+  function dismissCommit() {
+    if (working || inFlight.current) return;
+    setCommitOpen(false);
+    setConfirmed(false);
+  }
 
   async function send(mode: "PREVIEW" | "APPLY") {
-    if (working) return;
+    if (working || inFlight.current) return;
     if (mode === "APPLY" && (!preview || preview.kind !== kind ||
-      preview.conflicts.length > 0 || !confirmed)) return;
+      preview.conflicts.length > 0 || !confirmed || !commitOpen)) return;
+    if (mode === "PREVIEW" && !editorOpen) return;
+    inFlight.current = true;
     setWorking(mode);
     setMessage("");
     try {
@@ -78,10 +100,11 @@ export function LegacyMasterDataImport({
       };
       if (!response.ok) {
         setMessage(data.error || tr("Import request failed.", "فشل طلب الاستيراد."));
-        if (mode === "APPLY") { setPreview(null); setConfirmed(false); }
+        if (mode === "APPLY") { setPreview(null); setConfirmed(false); setCommitOpen(false); }
         return;
       }
       if (mode === "PREVIEW") {
+        setEditorOpen(false);
         setPreview(data);
         setConfirmed(false);
         setImportId("");
@@ -90,6 +113,7 @@ export function LegacyMasterDataImport({
           "راجع السجلات الجديدة والمكررة. لم يتم استيراد أي بيانات بعد.",
         ));
       } else {
+        setCommitOpen(false);
         setImportId(data.importId || "");
         setPreview(null);
         setConfirmed(false);
@@ -104,7 +128,9 @@ export function LegacyMasterDataImport({
       setMessage(tr("Connection failed; check import status before retrying.", "فشل الاتصال؛ تحقق من حالة الاستيراد قبل إعادة المحاولة."));
       setPreview(null);
       setConfirmed(false);
+      if (mode === "APPLY") setCommitOpen(false);
     } finally {
+      inFlight.current = false;
       setWorking("");
     }
   }
@@ -123,7 +149,17 @@ export function LegacyMasterDataImport({
       "Import normalized UTF-8 CSV exported or mapped from Access. Preview is read-only; approval creates NEW records only. Existing codes are never overwritten.",
       "استورد CSV بترميز UTF-8 بعد تحويل أعمدة Access للتنسيق المحدد. المعاينة للقراءة فقط؛ الاعتماد ينشئ السجلات الجديدة دون تعديل الأكواد الموجودة.",
     )}</p>
-    <div className="catalog-form">
+    <button type="button" className="primary-button" disabled={Boolean(working) || availableKinds.length === 0}
+      onClick={() => { setMessage(""); setEditorOpen(true); }}>
+      {tr("Prepare CSV import", "تحضير استيراد CSV")}
+    </button>
+    <CrudModal open={editorOpen} onClose={dismissEditor} size="compact"
+      title={tr("Prepare legacy master CSV", "تحضير CSV للبيانات القديمة")}
+      description={tr(
+        "Enter one governed data class and preview every source row before committing. Closing an unsaved editor discards its CSV draft.",
+        "أدخل فئة بيانات واحدة وعاين جميع صفوف المصدر قبل الاعتماد. إغلاق المحرر دون حفظ يلغي مسودة CSV.",
+      )}>
+      {editorOpen && <div className="catalog-form">
       <label>{tr("Data class", "نوع البيانات")}
         <select value={kind} disabled={Boolean(working)} onChange={e => {
           setKind(e.target.value as Kind); setPreview(null); setConfirmed(false); setMessage("");
@@ -161,7 +197,8 @@ export function LegacyMasterDataImport({
         onClick={() => send("PREVIEW")}>
         {working === "PREVIEW" ? tr("Reviewing…", "جارٍ الفحص…") : tr("1. Preview and check duplicates", "1. معاينة وفحص التكرار")}
       </button>
-    </div>
+      </div>}
+    </CrudModal>
     {message && <p role="status" className="muted">{message}</p>}
     {importId && <p className="muted">{tr("Audit import ID", "معرّف عملية الاستيراد")}: <code>{importId}</code></p>}
     {preview && <div className="detail-section">
@@ -177,10 +214,37 @@ export function LegacyMasterDataImport({
       {preview.conflicts.length ? <p className="form-warning" role="alert">{tr(
         "Import is blocked. Resolve the listed existing codes and preview again. No rows can be overwritten or skipped silently.",
         "الاستيراد محظور حتى معالجة الأكواد الموجودة وإعادة المعاينة. لا يتم تعديل أو تجاوز أي صف تلقائيًا.",
-      )}</p> : <>
-        <label className="checkbox-label">
+      )}</p> : <>        <button type="button" className="primary-button" disabled={Boolean(working)}
+          onClick={() => { setConfirmed(false); setCommitOpen(true); }}>
+          {tr("2. Review and approve master import", "2. مراجعة واعتماد استيراد البيانات")}
+        </button>
+      </>}
+    </div>}
+    <CrudModal open={commitOpen && preview !== null && preview.conflicts.length === 0}
+      onClose={dismissCommit} size="compact"
+      title={tr("Approve new legacy master records", "اعتماد السجلات المرجعية القديمة الجديدة")}
+      description={tr(
+        "The approved fingerprint binds exactly the displayed source rows and data class. Existing codes must not be changed. These writes are audited.",
+        "ترتبط الموافقة ببصمة الصفوف المعروضة وفئة البيانات المحددة. لا يجوز تعديل الرموز الموجودة. جميع عمليات الإنشاء مسجلة بالتدقيق.",
+      )}>
+      {commitOpen && preview && preview.conflicts.length === 0 && <div className="catalog-form">
+        <p className="form-span">{tr("Data class", "نوع البيانات")}: <strong>{label[kind]}</strong></p>
+        <p>{tr("New rows", "صفوف جديدة")}: <strong>{preview.eligible}</strong></p>
+        <p>{tr("Total rows", "إجمالي الصفوف")}: <strong>{preview.total}</strong></p>
+        <p className="form-span">{tr("Existing-code conflicts", "تعارضات الرموز الموجودة")}: <strong>{preview.conflicts.length}</strong></p>
+        <p className="form-span muted">{kind === "CLIENT" ? tr(
+          "Only new client records and payment terms; no contracts, price lists, financial balances or automatic referrer linking.",
+          "فقط سجلات العملاء الجدد وشروط الدفع، دون عقود أو قوائم أسعار أو أرصدة مالية أو ربط تلقائي بالجهات المحيلة.",
+        ) : kind === "COMMENT_TEMPLATE" ? tr(
+          "Only INACTIVE clinical comment templates. They cannot appear on results or reports until separately approved.",
+          "فقط قوالب تعليقات سريرية غير نشطة؛ لا تظهر بالنتائج أو التقارير حتى اعتمادها بشكل مستقل.",
+        ) : tr(
+          "Only new master records, without overwriting existing codes or released clinical/financial history.",
+          "السجلات المرجعية الجديدة فقط، دون تعديل الرموز الموجودة أو التاريخ السريري والمالي الصادر.",
+        )}</p>
+        <label className="checkbox-label form-span">
           <input type="checkbox" checked={confirmed} disabled={Boolean(working)}
-            onChange={e => setConfirmed(e.target.checked)}/>
+            onChange={e => setConfirmed(e.target.checked)} />
           {tr(
             kind === "CLIENT"
               ? "I explicitly approve ONLY new client master records and displayed payment terms. No contracts, prices, balances or automatic referrer linking will be imported."
@@ -194,11 +258,15 @@ export function LegacyMasterDataImport({
               : "أوافق على إنشاء هذه السجلات المرجعية الجديدة فقط، مع تسجيل عملية تدقيق لكل سجل.",
           )}
         </label>
-        <button type="button" className="primary-button"
-          disabled={Boolean(working) || !confirmed} onClick={() => send("APPLY")}>
-          {working === "APPLY" ? tr("Importing…", "جارٍ الاستيراد…") : tr("2. Approve and create records", "2. اعتماد وإنشاء السجلات")}
-        </button>
-      </>}
-    </div>}
+        <div className="crud-modal-actions form-span">
+          <button type="button" className="secondary-button" disabled={Boolean(working)}
+            onClick={dismissCommit}>{tr("Cancel", "إلغاء")}</button>
+          <button type="button" className="primary-button" disabled={Boolean(working) || !confirmed || preview.eligible === 0}
+            onClick={() => void send("APPLY")}>
+            {working === "APPLY" ? tr("Importing…", "جارٍ الاستيراد…") : tr("2. Approve and create records", "2. اعتماد وإنشاء السجلات")}
+          </button>
+        </div>
+      </div>}
+    </CrudModal>
   </section>;
 }
