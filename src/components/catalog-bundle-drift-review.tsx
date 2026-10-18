@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { CrudModal } from "@/components/crud-modal";
 
 type DriftRow = {
   rowNumber: number; entityType: string;
@@ -35,11 +36,15 @@ export function CatalogBundleDriftReview({ batchId, locale }: {
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
   const [flagging, setFlagging] = useState<number | null>(null);
+  const [pendingReferral, setPendingReferral] = useState<DriftRow | null>(null);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
 
   async function flag(row: DriftRow) {
-    if (busy || flagging !== null || row.finding.canRefer !== true) return;
+    if (busy || flagging !== null || !pendingReferral ||
+        pendingReferral.rowNumber !== row.rowNumber ||
+        pendingReferral.observationToken !== row.observationToken ||
+        row.finding.canRefer !== true) return;
     setFlagging(row.rowNumber);
     setNotice("");
     setError("");
@@ -62,11 +67,13 @@ export function CatalogBundleDriftReview({ batchId, locale }: {
           result.liveWrites !== false) {
         throw new Error(result.error || "triage_rejected");
       }
+      setPendingReferral(null);
       setNotice(tr("Expert review requested. No configuration approved or changed.",
         "تمت إحالة السجل للمراجعة المختصة، دون اعتماد أو تغيير أي إعداد."));
       // The next comparison uses a fresh read and displays latest immutable evidence.
       await load(cursor, history);
     } catch (caught) {
+      setPendingReferral(null);
       setError(caught instanceof Error ? caught.message : "triage_failed");
     } finally {
       setFlagging(null);
@@ -74,7 +81,9 @@ export function CatalogBundleDriftReview({ batchId, locale }: {
   }
 
   async function load(after: number, previousCursors: number[]) {
+    // A successful referral refreshes its source page while flagging is still set.
     if (busy) return;
+    setPendingReferral(null);
     setBusy(true);
     setError("");
     try {
@@ -128,7 +137,7 @@ export function CatalogBundleDriftReview({ batchId, locale }: {
           "مقارنة للقراءة فقط لأنواع إعدادات المختبر الستة. تعيد فحص صلاحيات الفروع والأقسام والإعدادات الطبية والمالية. تعرض أسماء الحقول المختلفة فقط، ولا تعتمد أو تفعّل أو تستبدل أي بيانات."
         )}</p>
       </div>
-      <button type="button" className="secondary-button" disabled={busy}
+      <button type="button" className="secondary-button" disabled={busy || flagging !== null || pendingReferral !== null}
         onClick={() => void load(0, [])}>
         {busy ? tr("Comparing…", "جارٍ المقارنة…") : loaded
           ? tr("Restart comparison", "إعادة المقارنة")
@@ -137,6 +146,37 @@ export function CatalogBundleDriftReview({ batchId, locale }: {
     </div>
     {notice && <p role="status" className="muted">{notice}</p>}
     {error && <p role="alert">{tr("Comparison unavailable: ", "تعذرت المقارنة: ")}{error}</p>}
+    <CrudModal open={pendingReferral !== null}
+      onClose={() => { if (!busy && flagging === null) setPendingReferral(null); }}
+      size="compact" protectUnsavedChanges={false}
+      title={tr("Confirm referral to expert", "تأكيد الإحالة للمراجع المختص")}
+      description={tr(
+        "This creates a review flag only. Nothing is approved, released or changed in the live catalog.",
+        "يسجل هذا الإجراء إحالة للمراجعة فقط، دون اعتماد أو نشر أو تعديل إعدادات الدليل الفعلي."
+      )}>
+      {pendingReferral && <div className="form-stack">
+        <p><strong>{tr("Row", "السجل")}:</strong> {pendingReferral.rowNumber} · {pendingReferral.entityType}</p>
+        <p><strong>{tr("Comparison", "المقارنة")}:</strong> {pendingReferral.disposition === "DRIFTED"
+          ? tr("Differences found", "وُجدت اختلافات")
+          : tr("Requires independent assessment", "تحتاج إلى تقييم مستقل")}</p>
+        <p><strong>{tr("Field names only", "أسماء الحقول فقط")}:</strong> {
+          pendingReferral.changedFields.length ? pendingReferral.changedFields.join(", ") : "—"}</p>
+        <p className="muted">{tr(
+          "The observation token and current permissions are checked again by the server when you confirm.",
+          "يعيد الخادم فحص بصمة الملاحظة والصلاحيات الحالية عند تأكيد الإحالة."
+        )}</p>
+        {error && <p role="alert" className="form-error">{error}</p>}
+        <div className="crud-modal-actions">
+          <button type="button" className="secondary-button" disabled={busy || flagging !== null}
+            onClick={() => setPendingReferral(null)}>{tr("Cancel", "إلغاء")}</button>
+          <button type="button" className="primary-button" disabled={busy || flagging !== null ||
+            !pendingReferral.finding.canRefer} onClick={() => void flag(pendingReferral)}>
+            {flagging !== null ? tr("Recording…", "جارٍ التسجيل…")
+              : tr("Record expert referral", "تسجيل الإحالة")}
+          </button>
+        </div>
+      </div>}
+    </CrudModal>
     {loaded && <>
       <p className="muted">{sourceVerified
         ? tr("Signed source verified at original staging; this comparison is not an approval.",
@@ -178,8 +218,8 @@ export function CatalogBundleDriftReview({ batchId, locale }: {
                 {row.latestFlag && <p className="muted">{tr("Previously flagged: ", "إحالة سابقة: ")}
                   {row.latestFlag.category} · {row.latestFlag.reasonCode}</p>}
                 <button type="button" className="secondary-button"
-                  disabled={busy || flagging !== null || !row.finding.canRefer}
-                  onClick={() => void flag(row)}>
+                  disabled={busy || flagging !== null || pendingReferral !== null || !row.finding.canRefer}
+                  onClick={() => { setError(""); setPendingReferral(row); }}>
                   {flagging === row.rowNumber
                     ? tr("Recording…", "جارٍ التسجيل…")
                     : row.finding.status === "STALE_REVIEW_REQUIRED"

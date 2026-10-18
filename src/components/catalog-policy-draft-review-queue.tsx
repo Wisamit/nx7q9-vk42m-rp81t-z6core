@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { CrudModal } from "@/components/crud-modal";
 import { SystemDateText } from "@/components/system-date-text";
 import { policyKeys, type CatalogPolicyProposal, type CatalogPolicyKey } from "@/lib/catalog-policy-options";
 
@@ -58,6 +59,7 @@ export function CatalogPolicyDraftReviewQueue({ locale }: { locale: "ar" | "en" 
   const [disposition, setDisposition] = useState<Disposition>("RETURN_FOR_REVISION");
   const [reason, setReason] = useState("CLINICAL_AUTHORITY_UNCLEAR");
   const [busy, setBusy] = useState(false);
+  const recording = useRef(false);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -133,7 +135,8 @@ export function CatalogPolicyDraftReviewQueue({ locale }: { locale: "ar" | "en" 
     } finally { setBusy(false); }
   }
   async function record() {
-    if (!selected || busy) return;
+    if (!selected || busy || recording.current) return;
+    recording.current = true;
     setBusy(true); setError(""); setNotice("");
     try {
       const body = {
@@ -167,7 +170,7 @@ export function CatalogPolicyDraftReviewQueue({ locale }: { locale: "ar" | "en" 
       ).filter(entry => entry.domains.length > 0));
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "policy_review_record_rejected");
-    } finally { setBusy(false); }
+    } finally { recording.current = false; setBusy(false); }
   }
   return <section className="table-card no-print">
     <div className="table-toolbar">
@@ -216,8 +219,15 @@ export function CatalogPolicyDraftReviewQueue({ locale }: { locale: "ar" | "en" 
         {tr("Next", "التالي")}
       </button>
     </div>}
-    {selected && <div className="table-card">
-      <h3>{tr("Draft proposal review — no signatory authority", "مراجعة المسودة — دون صلاحية توقيع")}</h3>
+    <CrudModal open={selected !== null}
+      onClose={() => { if (!busy && !recording.current) setSelected(null); }}
+      size="compact" protectUnsavedChanges
+      title={tr("Draft proposal review — no signatory authority", "مراجعة المسودة — دون صلاحية توقيع")}
+      description={tr(
+        "Only an independent procedural audit comment is recorded. No policy is signed, approved or activated.",
+        "يُسجل تعليق تنظيمي مستقل في سجل التدقيق فقط؛ دون توقيع أو اعتماد أو تفعيل للسياسة."
+      )}>
+      {selected && <div className="form-stack">
       <p>{tr("Revision", "النسخة")}: {selected.detail.revision} · {
         selected.domain === "CLINICAL" ? tr("Clinical", "طبي") : tr("Financial", "مالي")}</p>
       <div className="table-wrap"><table>
@@ -245,9 +255,15 @@ export function CatalogPolicyDraftReviewQueue({ locale }: { locale: "ar" | "en" 
         "Saving a comment preserves the signed-off=false draft history. Actual approval and application remain disabled.",
         "حفظ الملاحظة يُبقي المسودة غير معتمدة ويحفظ تاريخها. الاعتماد والتطبيق الفعلي معطّلان.",
       )}</p>
-      <button type="button" className="secondary-button" disabled={busy}
-        onClick={() => void record()}>{tr("Record nonbinding review in Audit",
-          "تسجيل مراجعة غير ملزمة في Audit")}</button>
+      {error && <p role="alert" className="form-error">{error}</p>}
+      <div className="crud-modal-actions">
+        <button type="button" className="secondary-button" disabled={busy}
+          onClick={() => setSelected(null)}>{tr("Cancel", "إلغاء")}</button>
+        <button type="button" className="primary-button" disabled={busy}
+          onClick={() => void record()}>{busy ? tr("Recording…", "جارٍ التسجيل…")
+            : tr("Record nonbinding review in Audit", "تسجيل مراجعة غير ملزمة في Audit")}</button>
+      </div>
     </div>}
+    </CrudModal>
   </section>;
 }
