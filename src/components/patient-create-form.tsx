@@ -44,6 +44,8 @@ export function PatientCreateForm({
   const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
   const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
+  const creationKey = useRef<string | null>(null);
+  const inFlight = useRef(false);
   const [busy, setBusy] = useState(false);
   const [recordedAgeUnit, setRecordedAgeUnit] = useState<string>("YEAR");
   const [message, setMessage] = useState("");
@@ -79,13 +81,17 @@ export function PatientCreateForm({
   }
 
   async function createPatient(payload: PatientPayload, overrideReason = "") {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    creationKey.current ??= crypto.randomUUID();
     setBusy(true);
     setMessage("");
 
     try {
     const response = await fetch("/api/patients", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json",
+        "x-family-lab-patient-key": creationKey.current! },
       body: JSON.stringify({
         ...payload,
         duplicateReviewOverride: Boolean(overrideReason),
@@ -96,10 +102,14 @@ export function PatientCreateForm({
       error?: string;
       patient?: { patientNumber?: string; fullNameEn?: string };
       candidates?: DuplicateCandidate[];
+      replayed?: boolean;
     };
 
     if (response.ok) {
-      const success = `${tr("Patient created", "تم إنشاء المريض")}: ${body.patient?.patientNumber || ""}`;
+      const success = `${body.replayed
+        ? tr("Previous registration confirmed", "تم تأكيد التسجيل السابق")
+        : tr("Patient created", "تم إنشاء المريض")}: ${body.patient?.patientNumber || ""}`;
+      creationKey.current = null;
       setMessage(success);
       setDuplicateReview(null);
       setConfirmSeparate(false);
@@ -109,24 +119,36 @@ export function PatientCreateForm({
       router.refresh();
       onSuccess?.(success);
     } else if (body.error === "possible_duplicates" && body.candidates?.length) {
+      // A clinically reviewed override is a DIFFERENT intentional request.
+      creationKey.current = null;
       setDuplicateReview({ payload, candidates: body.candidates });
       setMessage(tr(
         "Potential duplicate identities require review before creating a separate patient.",
         "توجد هويات مريض محتملة التكرار ويجب مراجعتها قبل إنشاء مريض مستقل.",
       ));
+    } else if (body.error === "patient_creation_submission_conflict" ||
+        body.error === "patient_creation_record_changed") {
+      setMessage(tr(
+        "This request key belongs to a different or changed registration. Find the previous patient in the central registry before starting a fresh attempt.",
+        "مفتاح الطلب يعود إلى تسجيل مختلف أو تغيّرت هويته. ابحث عن المريض السابق في السجل المركزي قبل بدء طلب جديد.",
+      ));
     } else if (body.error === "identifier_already_used") {
+      creationKey.current = null;
       setMessage(`${tr("Identifier already belongs to another patient", "المعرّف مستخدم لمريض آخر")}: ${body.patient?.patientNumber || ""} ${body.patient?.fullNameEn || ""}`);
     } else if (body.error === "duplicate_review_reason_required") {
+      creationKey.current = null;
       setMessage(tr("A review reason is required to create a separate patient.", "سبب المراجعة مطلوب لإنشاء مريض مستقل."));
     } else {
+      if (response.status >= 400 && response.status < 500) creationKey.current = null;
       setMessage(body.error || tr("Patient creation failed.", "تعذر إنشاء المريض."));
     }
     } catch {
       setMessage(tr(
-        "Connection interrupted. Search patient records before retrying: the patient may have been created.",
-        "انقطع الاتصال. ابحث في سجلات المرضى قبل إعادة المحاولة؛ فقد تكون الهوية أُنشئت بالفعل.",
+        "Connection interrupted. Keep these details unchanged to safely retry the same request; search the central patient registry before starting a different registration.",
+        "انقطع الاتصال. أبقِ البيانات دون تغيير لإعادة المحاولة بأمان بنفس الطلب؛ وابحث في سجل المرضى المركزي قبل بدء تسجيل مختلف.",
       ));
     } finally {
+      inFlight.current = false;
       setBusy(false);
     }
   }
