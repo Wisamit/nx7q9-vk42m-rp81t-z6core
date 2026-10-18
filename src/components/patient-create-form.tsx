@@ -133,6 +133,15 @@ export function PatientCreateForm({
         "This request key belongs to a different or changed registration. Find the previous patient in the central registry before starting a fresh attempt.",
         "مفتاح الطلب يعود إلى تسجيل مختلف أو تغيّرت هويته. ابحث عن المريض السابق في السجل المركزي قبل بدء طلب جديد.",
       ));
+    } else if (body.error === "identifier_scheme_changed") {
+      creationKey.current = null;
+      setDuplicateReview(null);
+      setConfirmSeparate(false);
+      setDuplicateReason("");
+      setMessage(tr(
+        "This identifier type was changed or deactivated while registering. No patient was created. Refresh the patient form and select a currently active identifier type.",
+        "تغيّر نوع المعرّف أو تم تعطيله أثناء التسجيل. لم يتم إنشاء المريض. حدّث النموذج واختر نوع معرّف نشط حالياً.",
+      ));
     } else if (body.error === "identifier_already_used") {
       creationKey.current = null;
       setMessage(`${tr("Identifier already belongs to another patient", "المعرّف مستخدم لمريض آخر")}: ${body.patient?.patientNumber || ""} ${body.patient?.fullNameEn || ""}`);
