@@ -63,6 +63,9 @@ test("live no-cache preview recheck must precede each chain of mutating API call
   assert.ok(ui.includes('inFlight.current = true'));
   assert.ok(ui.includes('inFlight.current = false'));
   assert.ok(ui.includes('if (mutationStarted) setReviewRetryBlocked(true)'));
+  assert.ok(ui.includes('if (reviewRetryBlocked)'));
+  assert.ok(!ui.includes('setReviewRetryBlocked(false)'),
+    "closing/reopening a dialog must not bypass the partial-commit retry fence");
   assert.ok(ui.includes('Some changes may already have been saved'));
   assert.ok(ui.includes('catch (error)'));
   assert.ok(ui.includes('finally {'));
