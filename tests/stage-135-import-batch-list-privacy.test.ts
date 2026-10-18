@@ -14,12 +14,15 @@ test("Stage 135: CSV/XLSX and signed config-bundle batch names are author-only i
   });
   assert.throws(() => privateSpreadsheetBatchScope(""), /catalog_import_author_required/);
   const page = readFileSync("src/app/catalog/page.tsx", "utf8");
-  assert.match(page, /prisma\.catalogImportBatch\.findMany\(\{ where:/);
-  assert.match(page, /\.\.\.privateSpreadsheetBatchScope\(session\.user\.id\)/);
-  assert.ok(page.indexOf("...privateSpreadsheetBatchScope(session.user.id)") <
-    page.indexOf('include: { _count: { select: { rows: true } } }'), "author scope belongs in SQL/Prisma WHERE, not post-filter");
-  assert.match(page, /rows: \{ none: \{ entityType: "REFERENCE_INTERVAL" \} \}/);
-  assert.match(page, /rows: \{ none: \{ entityType: "PRICE_LIST_PACKAGE_ITEM" \} \}/);
+  const policy = readFileSync("src/lib/catalog-import-pagination.ts", "utf8");
+  assert.ok(page.includes("catalogImportVisibilityWhere({"));
+  assert.ok(page.includes("tx.catalogImportBatch.count({ where: importWhere })"));
+  assert.ok(page.includes("tx.catalogImportBatch.findMany({"));
+  assert.ok(page.includes("where: importWhere,"));
+  assert.ok(page.includes('isolationLevel: "RepeatableRead"'));
+  assert.ok(policy.includes("privateSpreadsheetBatchScope(input.authorId)"));
+  assert.ok(policy.includes('rows: { none: { entityType: "REFERENCE_INTERVAL" } }'));
+  assert.ok(policy.includes('rows: { none: { entityType: "PRICE_LIST_PACKAGE_ITEM" } }'));
   const detail = readFileSync("src/app/catalog/imports/[id]/page.tsx", "utf8");
   assert.match(detail, /batch\.sourceType === "CSV_REVIEW"/);
   assert.match(detail, /batch\.createdByUserId !== session\.user\.id/);
