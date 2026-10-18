@@ -1,7 +1,7 @@
 "use client";
 
-import { useRef, useState } from "react";
-import type { ChangeEvent } from "react";
+import { useState } from "react";
+import { LegacyEvidenceReviewDialog } from "@/components/legacy-evidence-review-dialog";
 
 type PairReview={
   prefix:string;lowColumn:string;highColumn:string;observationCount:number;
@@ -26,20 +26,20 @@ const MAX_BYTES=6*1024*1024;
 const LEGACY_TABLES=["cbcn","coagn","fertn","Glycosen","kidnyn","lipidn","livern",
   "Thyroidn","TORCHn","Tumern"] as const;
 export function LegacySpecialtyEvidenceReview({testId,locale}:{testId:string;locale:"ar"|"en"}){
-  const input=useRef<HTMLInputElement>(null);
   const [busy,setBusy]=useState(false);
-  const [selectedTable,setSelectedTable]=useState("");
   const [error,setError]=useState("");
   const [review,setReview]=useState<Review|null>(null);
   const tr=(en:string,ar:string)=>locale==="ar"?ar:en;
-  async function load(event:ChangeEvent<HTMLInputElement>){
-    const file=event.target.files?.[0];
-    if(!file)return;
-    if(!selectedTable){setError(tr("Select the source table first.","اختر جدول المصدر أولاً."));return;}
+  async function reviewEvidence(file:File,selectedTable:string):Promise<boolean>{
+    if(busy)return false;
+    if(!LEGACY_TABLES.some(table=>table===selectedTable)){
+      setError(tr("Select the source table first.","اختر جدول المصدر أولاً."));
+      return false;
+    }
     setReview(null);setError("");
     if(!file.name.toLowerCase().endsWith(".json")||file.size===0||file.size>MAX_BYTES){
       setError(tr("Choose a JSON evidence export up to 6 MB.","اختر ملف أدلة JSON بحجم لا يزيد عن 6 ميغابايت."));
-      return;
+      return false;
     }
     setBusy(true);
     try{
@@ -49,11 +49,20 @@ export function LegacySpecialtyEvidenceReview({testId,locale}:{testId:string;loc
         body:JSON.stringify({testId,evidence,selectedTable}),cache:"no-store",
       });
       const result=await response.json() as Review & {error?:string};
-      if(!response.ok||result.status!=="review_only")
+      if(!response.ok||result.status!=="review_only"||
+         result.selectedTable!==selectedTable||
+         result.clinicalMappingConfirmed!==false||
+         result.sourceSnapshotVerified!==false||
+         result.layoutApplied!==false||
+         result.referenceIntervalsImported!==false||
+         !Array.isArray(result.tables))
         throw Error(result.error||"legacy_specialty_review_failed");
       setReview(result);
-    }catch(e){setError(tr("Review failed: ","فشلت المراجعة: ")+(e instanceof Error?e.message:"invalid_json"));}
-    finally{setBusy(false);if(input.current)input.current.value="";}
+      return true;
+    }catch(e){
+      setError(tr("Review failed: ","فشلت المراجعة: ")+(e instanceof Error?e.message:"invalid_json"));
+      return false;
+    }finally{setBusy(false);}
   }
   return <article className="detail-card detail-section" dir={locale==="ar"?"rtl":"ltr"}>
     <h3>{tr("Legacy Specialty Reference Evidence (Review Only)","مراجعة أدلة المديات المتخصصة القديمة (للمراجعة فقط)")}</h3>
@@ -65,22 +74,20 @@ export function LegacySpecialtyEvidenceReview({testId,locale}:{testId:string;loc
       "The local extractor requires Microsoft Access Database Engine (ACE). The review performs no import and never approves or saves clinical reference values.",
       "تحتاج أداة الاستخراج المحلية إلى Microsoft Access Database Engine (ACE). المعاينة لا تستورد ولا تعتمد أو تحفظ أي قيمة مرجعية طبية."
     )}</p>
-    <label>{tr("Which Access specialty reference table are you reviewing for this test?",
-      "أي جدول مديات تخصصية من Access تريد مراجعته مع هذا الفحص؟")}
-      <select value={selectedTable} disabled={busy}
-        onChange={event=>{setSelectedTable(event.target.value);setReview(null);setError("");}}>
-        <option value="">{tr("Select one legacy table — no automatic mapping","اختر جدولاً قديماً — بدون ربط تلقائي")}</option>
-        {LEGACY_TABLES.map(name=><option key={name} value={name}>{name}</option>)}
-      </select>
-    </label>
-    <p className="muted">{tr(
-      "This explicit table choice only limits structural comparison. It is not a clinically approved relationship between this test and an Access table.",
-      "اختيار الجدول يحدد نطاق المقارنة البنيوية فقط، ولا يعني اعتماد ربط طبي بين الفحص وجدول Access."
-    )}</p>
-    <label>{tr("Specialty evidence JSON","ملف أدلة التخصصات JSON")}
-      <input ref={input} type="file" accept=".json,application/json" disabled={busy||!selectedTable}
-        onChange={e=>void load(e)}/>
-    </label>
+    <LegacyEvidenceReviewDialog locale={locale} busy={busy}
+      triggerLabel={tr("Review specialty evidence JSON","مراجعة ملف أدلة التخصصات")}
+      title={tr("Review Access specialty reference evidence","مراجعة أدلة المديات التخصصية من Access")}
+      description={tr(
+        "Choose one Access source table for structural comparison and confirm the JSON evidence file. The table choice does not establish a clinically approved test mapping.",
+        "اختر جدول مصدر واحداً من Access للمقارنة البنيوية ثم أكد ملف أدلة JSON. اختيار الجدول لا يُنشئ ربطاً سريرياً معتمداً بالفحص.",
+      )}
+      fileHint={tr(
+        "Locally extracted specialty reference evidence only, maximum 6 MiB. Do not upload an MDB, patient data, orders or released reports.",
+        "ملف أدلة المديات التخصصية المستخرجة محلياً فقط، بحد أقصى 6 ميغابايت. لا ترفع MDB أو بيانات مرضى أو طلبات أو تقارير صادرة.",
+      )}
+      maxBytes={MAX_BYTES} sourceTables={LEGACY_TABLES}
+      error={error} onReview={reviewEvidence}
+      onResetError={() => {setError("");setReview(null);}} />
     {busy&&<p role="status">{tr("Validating source evidence…","جارٍ التحقق من أدلة المصدر…")}</p>}
     {error&&<p role="alert" className="form-warning">{error}</p>}
     {review&&<div className="detail-section">

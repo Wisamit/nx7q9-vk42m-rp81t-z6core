@@ -107,7 +107,11 @@ test("Stage 119: review route rechecks live clinical scope without writes or ful
   assert.match(route,/private, no-store/);
   assert.doesNotMatch(route,/tx\.(?:referenceInterval|testComponent|labTest|labOrder|laboratoryResult|invoice)\.(?:create|update|upsert|delete|createMany|updateMany)\(/);
   assert.match(ui,/selectedTable/);
-  assert.match(ui,/no automatic mapping/);
+  const modal=readFileSync("src/components/legacy-evidence-review-dialog.tsx","utf8");
+  assert.match(ui,/<LegacyEvidenceReviewDialog/);
+  assert.match(ui,/sourceTables=\{LEGACY_TABLES\}/);
+  assert.match(modal,/not an approved clinical mapping/);
+  assert.match(modal,/does not associate an Access table with a laboratory test/);
   assert.match(ui,/notRepresentedBySourceRangePairs/);
   assert.match(ui,/dir=\{locale==="ar"\?"rtl":"ltr"\}/);
 });
