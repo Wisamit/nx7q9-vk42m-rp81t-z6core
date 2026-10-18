@@ -240,6 +240,31 @@ export async function POST(request: Request) {
       FOR UPDATE
     `;
     if (tenantLock.length !== 1) return { kind: "organization_unavailable" } as const;
+    // Stage 151 request replay must ALSO run after the organization lock.
+    // Otherwise concurrent identical keyed requests would see each other as
+    // new potential duplicate patients rather than returning the prior 201.
+    if (submission.key && payloadHash) {
+      const prior = await tx.patient.findFirst({
+        where: {
+          organizationId: session.user.organizationId,
+          creationRequestUserId: session.user.id,
+          creationSubmissionKey: submission.key,
+        },
+        select: {
+          id: true, patientNumber: true, fullNameEn: true,
+          status: true, mergedIntoPatientId: true, creationPayloadHash: true,
+        },
+      });
+      const decision = evaluatePatientCreationReplay(prior, payloadHash);
+      if (decision.kind === "conflict")
+        return { kind: "replay_conflict" } as const;
+      if (decision.kind === "record_changed")
+        return { kind: "replay_record_changed" } as const;
+      if (decision.kind === "replay" && prior)
+        return { kind: "replayed", patient: {
+          id: prior.id, patientNumber: prior.patientNumber, fullNameEn: prior.fullNameEn,
+        } } as const;
+    }
     const duplicateRows = duplicateOr.length > 0
       ? await tx.patient.findMany({
           where: {
@@ -418,6 +443,15 @@ export async function POST(request: Request) {
 
   // Domain responses are emitted after rollback/commit, not from a partially
   // written transaction. In particular, a stale review creates no audit.
+  if (outcome.kind === "replay_conflict")
+    return NextResponse.json({ error: "patient_creation_submission_conflict" },
+      { status: 409, headers: { "Cache-Control": "private, no-store" } });
+  if (outcome.kind === "replay_record_changed")
+    return NextResponse.json({ error: "patient_creation_record_changed" },
+      { status: 409, headers: { "Cache-Control": "private, no-store" } });
+  if (outcome.kind === "replayed")
+    return NextResponse.json({ status: "ok", replayed: true, patient: outcome.patient },
+      { status: 200, headers: { "Cache-Control": "private, no-store" } });
   if (outcome.kind === "organization_unavailable")
     return NextResponse.json({ error: "organization_unavailable" }, { status: 403 });
   if (outcome.kind === "duplicate_overflow")
