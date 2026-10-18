@@ -19,6 +19,7 @@ export function LegacyImportBatches({batches,locale}:{batches:Batch[];locale:"ar
  const [retryBlocked,setRetryBlocked]=useState(false);
  const stageAttempted=useRef(false);
  const submissionKey=useRef<string|null>(null);
+ const [submittedKey,setSubmittedKey]=useState<string|null>(null);
  const processing=useRef(false);
  const tr=<T,>(en:T,ar:T)=>locale==="ar"?ar:en;
 
@@ -45,6 +46,7 @@ export function LegacyImportBatches({batches,locale}:{batches:Batch[];locale:"ar
    const raw=JSON.stringify(payload);
    // Each successful POST creates a new batch. A response can be lost after commit.
    submissionKey.current ??= crypto.randomUUID();
+   setSubmittedKey(submissionKey.current);
    stageAttempted.current=true;
    setRetryBlocked(true);
    const response=await fetch("/api/catalog/imports",{
@@ -107,7 +109,7 @@ export function LegacyImportBatches({batches,locale}:{batches:Batch[];locale:"ar
   {stageId&&<p><Link className="table-link" href={`/catalog/imports/${stageId}`}>
     {tr("Open the newly staged batch for validation review","افتح الدفعة الجديدة لمراجعة التحقق")}
   </Link></p>}
-  {retryBlocked&&!stageId&&<CatalogStageRecoveryButton locale={locale} sourceType="LEGACY_MDB_EXPORT" submissionKey={submissionKey.current} />}
+  {retryBlocked&&!stageId&&<CatalogStageRecoveryButton locale={locale} sourceType="LEGACY_MDB_EXPORT" submissionKey={submittedKey} />}
   {retryBlocked&&!stageId&&<p className="form-warning" role="alert">{tr(
     "Do not repeat this upload without checking the latest batch and audit. Reload after review.",
     "لا تكرر رفع الملف قبل مراجعة أحدث دفعة وسجل التدقيق. أعد تحميل الصفحة بعد التحقق.",
