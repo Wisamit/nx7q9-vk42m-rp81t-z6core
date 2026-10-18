@@ -8,7 +8,7 @@ Baseline is owner-confirmed Hostinger deployment of `main` `83a41c877337449120b9
 
 The same page now provides distinct **compact, centered, bilingual review dialogs** for both actions:
 - exact batch identity and the total, eligible, and manual-review row counts;
-- for safe legacy resolution, the count of generated master tests still pending;
+- for safe legacy resolution, the count of generated master tests still pending and disclosure that safe master commit may create UNIT, CONTAINER, TEST (which may be active/branch-available), and INACTIVE PANEL records; master test creation is not a clinical sign-off;
 - explanation that master test recovery / unit preparation / interval staging may create real catalog records and that separate calls are NOT one atomic transaction;
 - explicit `onSubmit` confirmation, disabled while submitting; cancellation never posts;
 - refreshed GET preview recheck before any POST, with an independently tested, fail-closed pure integer-count comparison. Changed counts cause a new review prompt rather than an implicit submit;

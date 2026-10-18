@@ -43,6 +43,8 @@ test("both reference interval import and safe legacy resolution require a compac
   assert.ok(ui.includes('setReviewAction(null)'));
   assert.ok(ui.includes('role="alert"'));
   assert.ok(ui.includes('pending independent clinical approval'));
+  assert.ok(ui.includes('New tests may be active and available to the scoped branch'));
+  assert.ok(ui.includes('UNIT, CONTAINER, TEST and inactive PANEL'));
   assert.ok(ui.includes('لا يعتمد هذا الإجراء أي مدى مرجعي'));
   assert.doesNotMatch(ui, /\b(?:window\.)?(?:confirm|prompt)\s*\(/);
   assert.doesNotMatch(ui, /onClick=\{(?:run|resolveSafeLegacy)\}/);

@@ -229,8 +229,8 @@ export function ReferenceRangeImportButton({ batchId, locale }: { batchId: strin
         <p>{tr("Manual-review rows", "صفوف للمراجعة اليدوية")}: <strong>{reviewSnapshot.review}</strong></p>
         <p>{tr("Total candidate rows", "إجمالي الصفوف المرشحة")}: <strong>{reviewSnapshot.total}</strong></p>
         {reviewAction === "RESOLVE" && <p className="form-span">{tr(
-          `This sequence may import up to ${reviewSnapshot.generatedTestsRemaining || 0} pending master test records, prepare unit mappings, then add eligible reference intervals. Completed steps cannot be rolled back as a single operation.`,
-          `قد تستورد هذه السلسلة حتى ${reviewSnapshot.generatedTestsRemaining || 0} سجلاً أساسياً للفحوص، وتجهز روابط الوحدات، ثم تضيف المديات المؤهلة. الخطوات المكتملة لا تُلغى كعملية واحدة.`,
+          `The master commit can create UNIT, CONTAINER, TEST and inactive PANEL records. New tests may be active and available to the scoped branch under existing server rules. ${reviewSnapshot.generatedTestsRemaining || 0} generated test rows are currently pending. Unit preparation and inactive reference interval staging follow as separate, non-atomic steps.`,
+          `قد ينشئ استيراد البيانات الأساسية سجلات UNIT وCONTAINER وTEST وPANEL غير نشطة للأخيرة. قد تصبح الفحوص الجديدة نشطة ومتاحة ضمن الفرع المصرّح وفق قواعد الخادم القائمة. يوجد ${reviewSnapshot.generatedTestsRemaining || 0} صف فحص مُولّد بانتظار المعالجة. تحضير الوحدات والحدود المرجعية غير النشطة خطوات مستقلة وغير ذرية.`,
         )}</p>}
         <p className="form-span muted">{tr(
           "No reference interval is approved or applied to released results by this action. Ambiguous test/unit/context rows remain for expert review.",
