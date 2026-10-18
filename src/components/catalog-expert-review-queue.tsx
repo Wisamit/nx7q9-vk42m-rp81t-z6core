@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { CrudModal } from "@/components/crud-modal";
 import { SystemDateText } from "@/components/system-date-text";
 
 type Entry = {
@@ -20,6 +21,7 @@ export function CatalogExpertReviewQueue({ locale }: { locale: "ar" | "en" }) {
   const [entries, setEntries] = useState<Entry[]>([]);
   const [busy, setBusy] = useState(false);
   const [decisionId, setDecisionId] = useState<string | null>(null);
+  const [pending, setPending] = useState<{ entry: Entry; disposition: Decision } | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -27,6 +29,7 @@ export function CatalogExpertReviewQueue({ locale }: { locale: "ar" | "en" }) {
 
   async function refresh() {
     setInspections({});
+    setPending(null);
     setBusy(true);
     setError("");
     try {
@@ -53,7 +56,7 @@ export function CatalogExpertReviewQueue({ locale }: { locale: "ar" | "en" }) {
   }
 
   async function inspect(entry: Entry) {
-    if (busy || decisionId) return;
+    if (busy || decisionId || pending) return;
     setError("");
     setNotice("");
     setInspections(previous => ({ ...previous, [entry.flagEventId]: "CHECKING" }));
@@ -92,7 +95,8 @@ export function CatalogExpertReviewQueue({ locale }: { locale: "ar" | "en" }) {
   }
 
   async function decide(entry: Entry, disposition: Decision) {
-    if (busy || decisionId || inspections[entry.flagEventId] !== "READY") return;
+    if (busy || decisionId || !pending || pending.entry.flagEventId !== entry.flagEventId ||
+        pending.disposition !== disposition || inspections[entry.flagEventId] !== "READY") return;
     // PUT independently validates all scopes and current HMAC after this preview.
     setDecisionId(entry.flagEventId);
     setError("");
@@ -114,10 +118,13 @@ export function CatalogExpertReviewQueue({ locale }: { locale: "ar" | "en" }) {
         throw new Error(result.error || "expert_decision_rejected");
       }
       setInspections({});
+      setPending(null);
       setNotice(tr("Review disposition recorded. No configuration was approved or activated.",
         "تم تسجيل قرار المراجعة، دون اعتماد أو تفعيل أي إعداد."));
       await refresh();
     } catch (caught) {
+      setPending(null);
+      setInspections(previous => ({ ...previous, [entry.flagEventId]: "CONFLICT" }));
       setError(caught instanceof Error ? caught.message : "expert_decision_rejected");
     } finally {
       setDecisionId(null);
@@ -134,12 +141,44 @@ export function CatalogExpertReviewQueue({ locale }: { locale: "ar" | "en" }) {
         )}</p>
       </div>
       <button type="button" className="secondary-button" onClick={() => void refresh()}
-        disabled={busy || decisionId !== null}>
+        disabled={busy || decisionId !== null || pending !== null}>
         {busy ? tr("Checking…", "جارٍ الفحص…") : tr("Refresh pending findings", "تحديث الإحالات المعلقة")}
       </button>
     </div>
     {notice && <p role="status" className="muted">{notice}</p>}
     {error && <p role="alert">{tr("Review unavailable: ", "تعذرت المراجعة: ")}{error}</p>}
+    <CrudModal open={pending !== null}
+      onClose={() => { if (!busy && decisionId === null) setPending(null); }}
+      size="compact" protectUnsavedChanges={false}
+      title={tr("Confirm independent review record", "تأكيد تسجيل المراجعة المستقلة")}
+      description={tr(
+        "This is an audit disposition only; no clinical or financial master is approved.",
+        "هذا قرار مراجعة يُسجل في التدقيق فقط، ولا يعتمد بيانات طبية أو مالية."
+      )}>
+      {pending && <div className="form-stack">
+        <p><strong>{tr("Row", "السجل")}:</strong> {pending.entry.rowNumber} · {pending.entry.entityType}</p>
+        <p><strong>{tr("Domain", "الاختصاص")}:</strong> {pending.entry.category === "CLINICAL"
+          ? tr("Clinical", "طبي") : tr("Financial", "مالي")}</p>
+        <p><strong>{tr("Finding", "الملاحظة")}:</strong> {pending.entry.reasonCode}</p>
+        <p><strong>{tr("Decision", "القرار")}:</strong> {pending.disposition === "CONFIRM_FINDING"
+          ? tr("Confirm finding (NOT approval)", "تأكيد الملاحظة (ليس اعتماداً)")
+          : tr("Return for correction", "إعادة للتصحيح")}</p>
+        <p className="muted">{tr(
+          "The server rechecks current evidence and reviewer independence before recording. No settings are activated.",
+          "يعيد الخادم فحص الدليل الحالي واستقلال المراجع قبل التسجيل، ولا يتم تفعيل أي إعدادات."
+        )}</p>
+        {error && <p className="form-error" role="alert">{error}</p>}
+        <div className="crud-modal-actions">
+          <button type="button" className="secondary-button" disabled={decisionId !== null || busy}
+            onClick={() => setPending(null)}>{tr("Cancel", "إلغاء")}</button>
+          <button type="button" className="primary-button" disabled={decisionId !== null || busy ||
+            inspections[pending.entry.flagEventId] !== "READY"}
+            onClick={() => void decide(pending.entry, pending.disposition)}>
+            {decisionId !== null ? tr("Recording…", "جارٍ التسجيل…") : tr("Record audit decision", "تسجيل قرار المراجعة")}
+          </button>
+        </div>
+      </div>}
+    </CrudModal>
     {loaded && (entries.length === 0
       ? <p className="muted">{tr("No accessible pending findings for this branch.",
           "لا توجد إحالات معلقة مصرح بها ضمن هذا الفرع.")}</p>
@@ -186,13 +225,13 @@ export function CatalogExpertReviewQueue({ locale }: { locale: "ar" | "en" }) {
             <button type="button" className="secondary-button"
               disabled={busy || decisionId !== null ||
                 inspections[entry.flagEventId] !== "READY"}
-              onClick={() => void decide(entry, "CONFIRM_FINDING")}>
+              onClick={() => { setError(""); setPending({ entry, disposition: "CONFIRM_FINDING" }); }}>
               {tr("Confirm finding (not approval)", "تأكيد الملاحظة (ليس اعتماداً)")}
             </button>{" "}
             <button type="button" className="secondary-button"
               disabled={busy || decisionId !== null ||
                 inspections[entry.flagEventId] !== "READY"}
-              onClick={() => void decide(entry, "RETURN_FOR_CORRECTION")}>
+              onClick={() => { setError(""); setPending({ entry, disposition: "RETURN_FOR_CORRECTION" }); }}>
               {tr("Return for correction", "إعادة للتصحيح")}
             </button>
           </td>
