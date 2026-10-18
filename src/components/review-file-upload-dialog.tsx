@@ -11,6 +11,7 @@ type ReviewFileUploadDialogProps = {
   accept: string;
   fileHint: string;
   busy: boolean;
+  retryBlocked?: boolean;
   error?: string;
   onStage: (file: File) => Promise<boolean>;
   onResetError: () => void;
@@ -21,7 +22,8 @@ type ReviewFileUploadDialogProps = {
  * confirm. This does not approve or activate a clinical/financial master.
  */
 export function ReviewFileUploadDialog({
-  locale, title, description, triggerLabel, accept, fileHint, busy, error, onStage, onResetError,
+  locale, title, description, triggerLabel, accept, fileHint, busy, retryBlocked = false,
+  error, onStage, onResetError,
 }: ReviewFileUploadDialogProps) {
   const [open, setOpen] = useState(false);
   const [file, setFile] = useState<File | null>(null);
@@ -35,7 +37,7 @@ export function ReviewFileUploadDialog({
     setFile(null);
   }
   async function confirm() {
-    if (!file || busy || submitting.current) return;
+    if (!file || busy || retryBlocked || submitting.current) return;
     submitting.current = true;
     setSubmissionError("");
     try {
@@ -52,7 +54,7 @@ export function ReviewFileUploadDialog({
   }
 
   return <>
-    <button type="button" className="secondary-button" disabled={busy}
+    <button type="button" className="secondary-button" disabled={busy || retryBlocked}
       onClick={() => { setFile(null); setSubmissionError(""); onResetError(); setOpen(true); }}>
       {triggerLabel}
     </button>
@@ -62,9 +64,13 @@ export function ReviewFileUploadDialog({
         <label htmlFor={fieldId}>
           {ar ? "اختر ملف المراجعة" : "Choose a review source file"}
         </label>
-        <input id={fieldId} type="file" accept={accept} disabled={busy}
+        <input id={fieldId} type="file" accept={accept} disabled={busy || retryBlocked}
           onChange={event => { setFile(event.currentTarget.files?.[0] ?? null); setSubmissionError(""); onResetError(); }} />
         <p className="muted">{fileHint}</p>
+        {retryBlocked && <p role="alert" className="form-warning">
+          {ar ? "أوقف النظام إعادة الرفع. ربما أُنشئت دفعة بالفعل. راجع أحدث دفعة وسجل التدقيق، ثم أعد تحميل الصفحة."
+            : "Re-upload blocked: a batch may already exist. Check latest imports and audit, then reload the page."}
+        </p>}
         <p className="muted">{ar
           ? "التجهيز لا يعتمد الأسعار أو الحدود المرجعية ولا ينشر نتائج سريرية. سيتم مراجعة البيانات أولاً."
           : "Staging does not approve prices or reference intervals or release clinical results. All source data must be reviewed."}</p>
@@ -74,7 +80,7 @@ export function ReviewFileUploadDialog({
             {ar ? "إلغاء" : "Cancel"}
           </button>
           <button type="button" className="primary-button"
-            disabled={busy || !file} onClick={() => void confirm()}>
+            disabled={busy || retryBlocked || !file} onClick={() => void confirm()}>
             {busy ? (ar ? "جارٍ تجهيز المراجعة…" : "Staging for review…")
               : (ar ? "تأكيد تجهيز الملف" : "Confirm review staging")}
           </button>

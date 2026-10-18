@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { SystemDateText } from "@/components/system-date-text";
+import { validateLegacyStageReceipt } from "@/lib/legacy-stage-receipt";
 import { ReviewFileUploadDialog } from "@/components/review-file-upload-dialog";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -12,30 +14,69 @@ export function LegacyImportBatches({batches,locale}:{batches:Batch[];locale:"ar
  const router=useRouter();
  const [busy,setBusy]=useState(false);
  const [message,setMessage]=useState("");
+ const [stageId,setStageId]=useState("");
+ const [retryBlocked,setRetryBlocked]=useState(false);
+ const stageAttempted=useRef(false);
+ const processing=useRef(false);
  const tr=<T,>(en:T,ar:T)=>locale==="ar"?ar:en;
 
  async function stage(file:File):Promise<boolean>{
-  if(busy)return false;
-  if(!file.name.toLowerCase().endsWith(".json") || !file.size || file.size>32*1024*1024){
-   setMessage(tr("Choose a non-empty JSON file no larger than 32 MB.","اختر ملف JSON غير فارغ لا يتجاوز 32 ميغابايت."));
-   return false;
-  }
-  setBusy(true);setMessage("");
+  if(processing.current || busy || stageAttempted.current || retryBlocked)return false;
+  processing.current=true;
+  setBusy(true);
+  setMessage("");
+  setStageId("");
   try{
-   const payload=JSON.parse(await file.text());
-   const r=await fetch("/api/catalog/imports",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
-   const body=await r.json();
-   if(!r.ok)throw new Error("stage_failed");
+   if(!file.name.toLowerCase().endsWith(".json") || !file.size || file.size>32*1024*1024){
+    setMessage(tr("Choose a non-empty JSON file no larger than 32 MB.","اختر ملف JSON غير فارغ لا يتجاوز 32 ميغابايت."));
+    return false;
+   }
+   const payload:unknown=JSON.parse(await file.text());
+   if(!payload || typeof payload!=="object" || Array.isArray(payload) ||
+      !("rows" in payload) || !Array.isArray(payload.rows) ||
+      payload.rows.length===0 || payload.rows.length>20000) {
+    setMessage(tr("The JSON source must contain 1–20,000 rows. Nothing was sent.",
+      "يجب أن يحتوي مصدر JSON على 1 إلى 20,000 صف. لم يُرسل أي طلب."));
+    return false;
+   }
+   const expectedRows=payload.rows.length;
+   const raw=JSON.stringify(payload);
+   // Each successful POST creates a new batch. A response can be lost after commit.
+   stageAttempted.current=true;
+   setRetryBlocked(true);
+   const response=await fetch("/api/catalog/imports",{
+    method:"POST",credentials:"same-origin",cache:"no-store",
+    headers:{"Content-Type":"application/json"},body:raw,
+   });
+   const body:unknown=await response.json().catch(()=>null);
+   const receipt=response.ok?validateLegacyStageReceipt(body,expectedRows):null;
+   if(!receipt){
+    const serverError=body && typeof body==="object" && !Array.isArray(body) &&
+      "error" in body && typeof body.error==="string" ? body.error : "";
+    setMessage(tr(
+      "Staging was not confirmed. The server may already have created a batch. Review current imports and audit, then reload before attempting again.",
+      "لم تتأكد نتيجة التجهيز؛ ربما أنشأ الخادم دفعة بالفعل. افحص الدفعات الحالية وسجل التدقيق ثم أعد تحميل الصفحة قبل أي محاولة جديدة.",
+    )+(serverError?" ("+serverError+")":""));
+    return false;
+   }
+   setStageId(receipt.id);
    setMessage(tr(
-    `Staged ${body.summary.total} rows: ${body.summary.VALID||0} valid, ${body.summary.WARNING||0} warnings, ${body.summary.ERROR||0} errors.`,
-    `تم تجهيز ${body.summary.total} صفًا: ${body.summary.VALID||0} صالح، ${body.summary.WARNING||0} تحذيرات، ${body.summary.ERROR||0} أخطاء.`
+    `Staged ${receipt.total} rows: ${receipt.valid} valid, ${receipt.warning} warnings, ${receipt.error} errors. Review batch before any commit.`,
+    `تم تجهيز ${receipt.total} صفاً: ${receipt.valid} صالح، ${receipt.warning} تحذير، ${receipt.error} خطأ. راجع الدفعة قبل أي اعتماد.`,
    ));
    router.refresh();
    return true;
   }catch{
-   setMessage(tr("Could not validate or stage the export.","تعذر التحقق من ملف التصدير أو تجهيزه."));
+   setMessage(stageAttempted.current ? tr(
+    "Connection or response interrupted after staging request. The batch may already exist. Check the import list and audit, then reload; do not blindly re-upload.",
+    "انقطع الاتصال أو الرد بعد طلب التجهيز. ربما الدفعة موجودة بالفعل. افحص الدفعات والتدقيق ثم أعد التحميل؛ لا ترفع الملف مرة أخرى بشكل أعمى.",
+   ) : tr(
+    "Could not read or parse JSON. No staging request was sent.",
+    "تعذّرت قراءة ملف JSON أو تحليله. لم يُرسل طلب تجهيز.",
+   ));
    return false;
   }finally{
+   processing.current=false;
    setBusy(false);
   }
  }
@@ -47,7 +88,7 @@ export function LegacyImportBatches({batches,locale}:{batches:Batch[];locale:"ar
     <span>{tr("Controlled staging from the cleaned Family Lab MDB. Nothing is written directly into the live catalog.","تجهيز مضبوط للبيانات القادمة من ملف Family Lab MDB المنظف، من دون الكتابة مباشرة في دليل النظام الفعلي.")}</span>
    </div>
    <div className="import-actions">
-    <ReviewFileUploadDialog locale={locale} busy={busy} error={message}
+    <ReviewFileUploadDialog locale={locale} busy={busy} retryBlocked={retryBlocked} error={message}
         onResetError={() => setMessage("")}
       title={tr("Stage legacy catalog source", "تجهيز مصدر الدليل القديم")}
       description={tr("Upload only a cleaned JSON master-data export. No raw MDB or patient records.", "ارفع ملف JSON منظّف للبيانات الرئيسية فقط، دون ملفات MDB الأصلية أو بيانات المرضى.")}
@@ -58,9 +99,16 @@ export function LegacyImportBatches({batches,locale}:{batches:Batch[];locale:"ar
     <span className="status-pill">{batches.length} {tr("batch(es)","دفعة")}</span>
    </div>
   </div>
-  {message&&<p className="import-message">{message}</p>}
+  {message&&<p className="import-message" role={stageId?"status":"alert"}>{message}</p>}
+  {stageId&&<p><Link className="table-link" href={`/catalog/imports/${stageId}`}>
+    {tr("Open the newly staged batch for validation review","افتح الدفعة الجديدة لمراجعة التحقق")}
+  </Link></p>}
+  {retryBlocked&&!stageId&&<p className="form-warning" role="alert">{tr(
+    "Do not repeat this upload without checking the latest batch and audit. Reload after review.",
+    "لا تكرر رفع الملف قبل مراجعة أحدث دفعة وسجل التدقيق. أعد تحميل الصفحة بعد التحقق.",
+  )}</p>}
   {batches.length===0?
    <div className="import-empty"><strong>{tr("Import staging is ready.","تجهيز الاستيراد جاهز.")}</strong><p>{tr("Export the legacy master data, stage the JSON here, then review warnings before committing anything to the live catalog.","صدّر البيانات الرئيسية من النظام القديم، جهّز ملف JSON هنا، ثم راجع التحذيرات قبل اعتماد أي بيانات في الدليل الفعلي.")}</p></div>:
-   <div className="table-wrap"><table><thead><tr><th>{tr("Source","المصدر")}</th><th>{tr("Type","النوع")}</th><th>{tr("Rows","الصفوف")}</th><th>{tr("Status","الحالة")}</th><th>{tr("Created","تاريخ الإنشاء")}</th></tr></thead><tbody>{batches.map(b=><tr key={b.id}><td><Link className="table-link" href={`/catalog/imports/${b.id}`}><strong>{b.sourceName}</strong></Link></td><td>{b.sourceType}</td><td>{b.rows}</td><td>{statusLabel(locale,b.status)}</td><td>{b.createdAt.slice(0,10)}</td></tr>)}</tbody></table></div>}
+   <div className="table-wrap"><table><thead><tr><th>{tr("Source","المصدر")}</th><th>{tr("Type","النوع")}</th><th>{tr("Rows","الصفوف")}</th><th>{tr("Status","الحالة")}</th><th>{tr("Created","تاريخ الإنشاء")}</th></tr></thead><tbody>{batches.map(b=><tr key={b.id}><td><Link className="table-link" href={`/catalog/imports/${b.id}`}><strong>{b.sourceName}</strong></Link></td><td>{b.sourceType}</td><td>{b.rows}</td><td>{statusLabel(locale,b.status)}</td><td><SystemDateText value={b.createdAt} kind="instant-date" /></td></tr>)}</tbody></table></div>}
  </section>;
 }

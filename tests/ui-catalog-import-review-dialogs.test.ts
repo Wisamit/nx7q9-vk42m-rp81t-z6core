@@ -15,10 +15,12 @@ test("review uploads use one-third, accessible dialog and explicit confirm not i
   assert.match(modal,/onResetError\(\)/);
   assert.match(modal,/setSubmissionError\(\"\"\)/);
   assert.match(modal,/catch \{/);
-  assert.match(modal,/disabled=\{busy \|\| !file\} onClick=\{\(\) => void confirm\(\)\}/);
-  assert.match(modal,/if \(!file \|\| busy \|\| submitting\.current\) return/);
+  assert.match(modal,/disabled=\{busy \|\| retryBlocked \|\| !file\} onClick=\{\(\) => void confirm\(\)\}/);
+  assert.match(modal,/if \(!file \|\| busy \|\| retryBlocked \|\| submitting\.current\) return/);
   assert.match(modal,/if \(busy \|\| submitting\.current\) return/);
   assert.match(modal,/if \(succeeded\) \{/);
+  assert.match(modal,/retryBlocked\?: boolean/);
+  assert.match(modal,/Re-upload blocked: a batch may already exist/);
   assert.match(modal,/setOpen\(false\)/);
   assert.match(modal,/role="alert"/);
   assert.match(modal,/htmlFor=\{fieldId\}/);
