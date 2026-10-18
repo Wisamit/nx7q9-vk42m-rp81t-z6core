@@ -55,7 +55,8 @@ test("all three original POST clients expose only an explicit read-only recovery
     const ui = source(path);
     assert.ok(ui.includes('<CatalogStageRecoveryButton'), path);
     assert.ok(ui.includes('sourceType="' + expected + '"'), path);
-    assert.ok(ui.includes('submissionKey={submissionKey.current}'), path);
+    assert.ok(ui.includes('submissionKey={submittedKey}'), path);
+    assert.ok(ui.includes("setSubmittedKey(submissionKey.current)"), path);
     assert.ok(ui.includes("retryBlocked"), path);
     assert.ok(ui.includes("setRetryBlocked(true)"), path);
     assert.ok(!ui.includes("setRetryBlocked(false)"), path);
