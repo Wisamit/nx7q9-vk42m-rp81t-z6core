@@ -54,7 +54,9 @@ test("active organization lock and fresh authority precede all staged batch and 
   assert.match(s,/sourceType: "CSV_REVIEW"/);
   assert.match(s,/CATALOG_XLSX_REVIEW_STAGED/);
   assert.match(s,/CATALOG_CSV_REVIEW_STAGED/);
-  assert.match(s,/status: 201, headers: \{ "Cache-Control": "private, no-store" \}/);
+  assert.match(s,/status: outcome\.replayed \? 200 : 201, headers: \{ "Cache-Control": "private, no-store" \}/);
+  assert.match(s,/lookupCatalogStageReplay\(tx,/);
+  assert.match(s,/catalog_staging_key_reused/);
 });
 
 test("live stage auth enforces current branch and department scope and no new privileges", () => {
