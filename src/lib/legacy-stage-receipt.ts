@@ -26,9 +26,11 @@ export function validateLegacyStageReceipt(value: unknown, expectedRows: number)
       !obj.summary || typeof obj.summary !== "object" || Array.isArray(obj.summary)) return null;
   const summary = obj.summary as Record<string, unknown>;
   const total = count(summary.total);
-  const valid = count(summary.VALID ?? 0);
-  const warning = count(summary.WARNING ?? 0);
-  const error = count(summary.ERROR ?? 0);
+  // Missing categories are zero in legacy staging output; explicit null is
+  // malformed evidence and must not silently become zero.
+  const valid = count(summary.VALID === undefined ? 0 : summary.VALID);
+  const warning = count(summary.WARNING === undefined ? 0 : summary.WARNING);
+  const error = count(summary.ERROR === undefined ? 0 : summary.ERROR);
   if (total !== expectedRows || valid === null || warning === null || error === null ||
       valid + warning + error !== expectedRows ||
       (error > 0 && obj.status !== "DRAFT") ||
