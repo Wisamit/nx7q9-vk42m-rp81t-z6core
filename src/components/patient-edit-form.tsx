@@ -70,7 +70,7 @@ export function PatientEditForm({ patient, locale }: { patient: PatientEditValue
     };
   }
 
-  async function updatePatient(payload: PatientPayload, overrideReason = "") {
+  async function updatePatient(payload: PatientPayload, overrideReason = "", reviewedCandidateIds: string[] = []) {
     if (updating.current) return;
     updating.current = true;
     setBusy(true);
@@ -83,6 +83,7 @@ export function PatientEditForm({ patient, locale }: { patient: PatientEditValue
         ...payload,
         duplicateReviewOverride: Boolean(overrideReason),
         duplicateReviewReason: overrideReason || undefined,
+        reviewedCandidateIds: overrideReason ? reviewedCandidateIds : undefined,
       }),
     });
     const body = await response.json().catch(() => ({})) as {
@@ -106,7 +107,13 @@ export function PatientEditForm({ patient, locale }: { patient: PatientEditValue
       ));
     } else {
       setConfirmDuplicate(false);
+      if (body.error === "duplicate_review_candidates_changed" || body.error === "duplicate_review_overflow") {
+        setDuplicateReview(null);
+        setDuplicateReason("");
+      }
       const errors: Record<string, string> = {
+        duplicate_review_candidates_changed: tr("The matching patient list changed. Search the central registry and review the current identities before attempting a new update.", "تغيّرت قائمة المرضى المتشابهين. ابحث في السجل المركزي وراجع الهويات الحالية قبل محاولة تعديل جديدة."),
+        duplicate_review_overflow: tr("More than ten possible matches require supervised identity reconciliation. No change was saved.", "يوجد أكثر من عشر حالات تشابه تحتاج مراجعة هوية إشرافية؛ لم يُحفظ أي تعديل."),
         patient_state_changed: tr("The patient changed in another session. Refresh before editing again.", "تغير سجل المريض في جلسة أخرى. حدّث الصفحة قبل التعديل من جديد."),
         patient_not_editable: tr("Merged or inactive patient records cannot be edited.", "لا يمكن تعديل سجلات المرضى المدمجة أو غير النشطة."),
         change_reason_required: tr("A change reason is required.", "سبب التعديل مطلوب."),
@@ -154,7 +161,7 @@ export function PatientEditForm({ patient, locale }: { patient: PatientEditValue
       setMessage(tr("Explain why these are separate identities.", "اشرح لماذا الهويتان منفصلتان."));
       return;
     }
-    await updatePatient(duplicateReview.payload, reason);
+    await updatePatient(duplicateReview.payload, reason, duplicateReview.candidates.map(candidate => candidate.id));
   }
 
   const evidenceLabel = (code: DuplicateCandidate["evidence"][number]) =>
