@@ -2,6 +2,7 @@
 
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { CrudModal } from "@/components/crud-modal";
+import { compareReferenceImportPreview } from "@/lib/reference-import-preview-guard";
 import { useRouter } from "next/navigation";
 
 type TestSuggestion = { id: string; code: string; nameEn: string; nameAr?: string | null; score: number };
@@ -99,14 +100,11 @@ export function ReferenceRangeImportButton({ batchId, locale }: { batchId: strin
       const response = await fetch(`/api/catalog/imports/${batchId}/reference-ranges`, { cache: "no-store" });
       if (!response.ok) throw new Error(tr("Could not recheck the live import preview.", "تعذر التحقق من معاينة الاستيراد الحالية."));
       const live = await response.json() as Preview;
-      const counts = (value: Preview) => [
-        value.total, value.safe, value.review, value.generatedTestsRemaining ?? 0,
-      ];
-      const valid = (value: Preview) => counts(value).every(n => Number.isSafeInteger(n) && n >= 0);
-      if (!valid(live) || !valid(snapshot)) {
+      const comparison = compareReferenceImportPreview(snapshot, live);
+      if (comparison === "invalid") {
         throw new Error(tr("Invalid import preview. No changes submitted.", "معاينة الاستيراد غير صالحة؛ لم تُرسل تغييرات."));
       }
-      if (counts(snapshot).some((count, index) => count !== counts(live)[index])) {
+      if (comparison === "changed") {
         setPreview(live);
         setReviewSnapshot(live);
         setReviewError(tr(
