@@ -22,7 +22,7 @@ test("Stage 155: identifier scheme lifecycle locks tenant before state and audit
   assert.ok(!patch.slice(0,patch.indexOf("await prisma.$transaction")).includes("prisma.patientIdentifierScheme.findFirst"));
   assert.ok(patch.includes('scheme.identifierType !== "OTHER" || scheme.code === "LEGACY_OTHER"'));
   assert.ok(patch.includes('status: "INACTIVE", deactivatedAt'));
-  assert.ok(patch.includes('where: { id: scheme.id, organizationId: session.user.organizationId'));
+  assert.match(patch, /where:\\s*\\{\\s*id: scheme\\.id,\\s*organizationId: session\\.user\\.organizationId,\\s*status: "ACTIVE"/);
   assert.ok(post.includes('action: "PATIENT_IDENTIFIER_SCHEME_CREATED"'));
   const regLock = registration.indexOf("SELECT id FROM organizations");
   const lockedSchemes = registration.indexOf("const liveSchemes = await tx.patientIdentifierScheme.findMany",regLock);
