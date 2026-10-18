@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { permissionSet, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { liveCatalogReviewStagingAuthority } from "@/lib/catalog-review-staging-auth";
+import { catalogStageSubmissionKey, lookupCatalogStageReplay } from "@/lib/catalog-stage-idempotency";
 import type { Prisma } from "../../../../../../generated/prisma/client";
 import { normalizeImportRow, rowValidationStatus, validateImportRow } from "@/lib/catalog-import";
 import { CsvStagingError, CSV_STAGE_MAX_BYTES, parseCsvReviewFile } from "@/lib/catalog-review-csv-import";
@@ -13,6 +14,8 @@ import { resolveClinicalImportScope } from "@/lib/catalog-clinical-import-scope"
 
 export async function POST(request: Request) {
   const session = await requirePermission("catalog.manage");
+  const requestKey = catalogStageSubmissionKey(request.headers.get("x-family-lab-staging-key"));
+  if (!requestKey.valid) return NextResponse.json({ error: "invalid_catalog_staging_key" }, { status: 400 });
   const permissions = permissionSet(session);
   if (!session.user.branchScopes.some(scope => scope.branch.status === "ACTIVE")) {
     return NextResponse.json({ error: "active_branch_scope_required" }, { status: 403 });
@@ -155,10 +158,19 @@ export async function POST(request: Request) {
       return normalized.scopeType === "BRANCH" &&
         (typeof normalized.branchId !== "string" || !liveBranchIds.has(normalized.branchId));
     })) return { error: "price_list_branch_scope_forbidden", status: 403 } as const;
+    const replay = await lookupCatalogStageReplay(tx, {
+      organizationId: session.user.organizationId, authorId: session.user.id,
+      sourceType: "CSV_REVIEW", sourceName, checksum,
+      submissionKey: requestKey.key, expectedStatus: "DRAFT",
+    });
+    if (replay.kind === "conflict")
+      return { error: "catalog_staging_key_reused", status: 409 } as const;
+    if (replay.kind === "replay") return { id: replay.id, replayed: true } as const;
     const created = await tx.catalogImportBatch.create({
       data: {
         organizationId: session.user.organizationId,
         sourceType: "CSV_REVIEW", sourceName, sourceChecksum: checksum,
+        submissionKey: requestKey.key,
         status: "DRAFT", validatedAt: null, createdByUserId: session.user.id,
         summary: { total: prepared.length, ...summary, reviewOnly: true,
           uploadedFormat: isXlsx ? "XLSX" : "CSV" },
@@ -190,12 +202,12 @@ export async function POST(request: Request) {
         ipAddress: ctx.ipAddress, userAgent: ctx.userAgent,
       },
     });
-    return { id: created.id };
+    return { id: created.id, replayed: false };
   }, { timeout: 30000 });
   if ("error" in outcome)
     return NextResponse.json({ error: outcome.error }, { status: outcome.status });
   return NextResponse.json({
-    id: outcome.id, status: "DRAFT", reviewOnly: true,
+    id: outcome.id, status: "DRAFT", reviewOnly: true, replayed: outcome.replayed,
     summary: { total: prepared.length, ...summary },
-  }, { status: 201, headers: { "Cache-Control": "private, no-store" } });
+  }, { status: outcome.replayed ? 200 : 201, headers: { "Cache-Control": "private, no-store" } });
 }

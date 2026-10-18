@@ -17,6 +17,7 @@ export function LegacyImportBatches({batches,locale}:{batches:Batch[];locale:"ar
  const [stageId,setStageId]=useState("");
  const [retryBlocked,setRetryBlocked]=useState(false);
  const stageAttempted=useRef(false);
+ const submissionKey=useRef<string|null>(null);
  const processing=useRef(false);
  const tr=<T,>(en:T,ar:T)=>locale==="ar"?ar:en;
 
@@ -42,11 +43,13 @@ export function LegacyImportBatches({batches,locale}:{batches:Batch[];locale:"ar
    const expectedRows=payload.rows.length;
    const raw=JSON.stringify(payload);
    // Each successful POST creates a new batch. A response can be lost after commit.
+   submissionKey.current ??= crypto.randomUUID();
    stageAttempted.current=true;
    setRetryBlocked(true);
    const response=await fetch("/api/catalog/imports",{
     method:"POST",credentials:"same-origin",cache:"no-store",
-    headers:{"Content-Type":"application/json"},body:raw,
+    headers:{"Content-Type":"application/json",
+      "x-family-lab-staging-key":submissionKey.current},body:raw,
    });
    const body:unknown=await response.json().catch(()=>null);
    const receipt=response.ok?validateLegacyStageReceipt(body,expectedRows):null;

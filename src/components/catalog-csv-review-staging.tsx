@@ -18,6 +18,7 @@ export function CatalogCsvReviewStaging({ locale, canStagePricing, canStageRange
   const [error, setError] = useState("");
   const [retryBlocked, setRetryBlocked] = useState(false);
   const stageAttempted = useRef(false);
+  const submissionKey = useRef<string | null>(null);
   const inFlight = useRef(false);
   const tr = (en: string, ar: string) => locale === "ar" ? ar : en;
 
@@ -58,12 +59,14 @@ export function CatalogCsvReviewStaging({ locale, canStagePricing, canStageRange
       }
       // This endpoint creates a fresh private DRAFT batch per POST. A lost
       // response must not lead to an unreviewed second creation.
+      submissionKey.current ??= crypto.randomUUID();
       stageAttempted.current = true;
       setRetryBlocked(true);
       const response = await fetch("/api/catalog/imports/csv?sourceName=" +
         encodeURIComponent(file.name), {
           method: "POST", credentials: "same-origin",
-          headers: { "Content-Type": isXlsx
+          headers: { "x-family-lab-staging-key": submissionKey.current,
+            "Content-Type": isXlsx
             ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             : "text/csv;charset=utf-8" },
           body: file, cache: "no-store",

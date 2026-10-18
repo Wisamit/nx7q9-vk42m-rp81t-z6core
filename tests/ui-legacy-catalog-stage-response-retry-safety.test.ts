@@ -91,7 +91,8 @@ test("original staging API remains audit- and branch-scoped and never writes a l
     'catalogImportRow.createMany',
     'CATALOG_IMPORT_STAGED',
     'return NextResponse.json({id:result.batch.id,status:result.batch.status',
-    '{status:201}',
+    '{status:result.replayed?200:201}',
+    'catalog_staging_key_reused',
   ]) assert.ok(api.includes(invariant),invariant);
   for(const absent of [
     'tx.labTest.create(', 'tx.priceListItem.create(',

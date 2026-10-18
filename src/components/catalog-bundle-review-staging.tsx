@@ -14,6 +14,7 @@ export function CatalogBundleReviewStaging({ locale }: { locale: "ar" | "en" }) 
   const [message, setMessage] = useState("");
   const [retryBlocked, setRetryBlocked] = useState(false);
   const stageAttempted = useRef(false);
+  const submissionKey = useRef<string | null>(null);
   const inFlight = useRef(false);
   const tr = (en: string, ar: string) => locale === "ar" ? ar : en;
 
@@ -30,12 +31,14 @@ export function CatalogBundleReviewStaging({ locale }: { locale: "ar" | "en" }) 
       }
       // Once a POST is attempted, a lost response is ambiguous; each
       // success creates a fresh private draft. Never blindly re-submit.
+      submissionKey.current ??= crypto.randomUUID();
       stageAttempted.current = true;
       setRetryBlocked(true);
       const result = await fetch("/api/catalog/imports/bundle?sourceName=" +
         encodeURIComponent(file.name), {
           method: "POST", credentials: "same-origin",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json",
+            "x-family-lab-staging-key": submissionKey.current },
           body: file, cache: "no-store",
         });
       const body: unknown = await result.json().catch(() => null);

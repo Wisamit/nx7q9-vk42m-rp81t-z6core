@@ -2314,6 +2314,7 @@ model CatalogImportBatch {
   sourceType     String            @map("source_type") @db.VarChar(40)
   sourceName     String            @map("source_name") @db.VarChar(255)
   sourceChecksum String?           @map("source_checksum") @db.Char(64)
+  submissionKey  String?           @map("submission_key") @db.Char(36)
   status         ImportBatchStatus @default(DRAFT)
   summary        Json?
   createdByUserId String           @map("created_by_user_id") @db.Char(36)
@@ -2325,6 +2326,7 @@ model CatalogImportBatch {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   rows         CatalogImportRow[]
 
+  @@unique([organizationId, createdByUserId, sourceType, submissionKey], map: "catalog_staging_actor_request_uq")
   @@index([organizationId, createdAt])
   @@map("catalog_import_batches")
 }
