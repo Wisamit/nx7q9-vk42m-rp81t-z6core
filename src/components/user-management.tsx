@@ -30,6 +30,7 @@ export function UserManagement({ locale, canManageDiscountLimits, canResetPasswo
   const [editing, setEditing] = useState<UserRow | null>(null);
   const [resetting, setResetting] = useState<UserRow | null>(null);
   const [resetError, setResetError] = useState("");
+  const [statusReview, setStatusReview] = useState<{ user: UserRow; status: "ACTIVE" | "SUSPENDED" } | null>(null);
   const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
 
   function localizedRoleNames(user: UserRow) {
@@ -213,8 +214,19 @@ export function UserManagement({ locale, canManageDiscountLimits, canResetPasswo
     } finally { inFlight.current = false; setBusy(false); }
   }
 
-  async function setStatus(user: UserRow, status: "ACTIVE" | "SUSPENDED") {
-    if (inFlight.current) return;
+  async function confirmStatus(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const review = statusReview;
+    if (!review || inFlight.current) return;
+    const { user, status } = review;
+    const latest = data.users.find(item => item.id === user.id);
+    if (!latest || latest.status !== user.status || latest.status === status) {
+      setIsError(true);
+      setMessage(tr("The account state has changed. Reload before reviewing again.",
+        "تغيرت حالة الحساب. أعد التحميل قبل المراجعة من جديد."));
+      setStatusReview(null);
+      return;
+    }
     inFlight.current = true;
     setBusy(true);
     setMessage("");
@@ -224,14 +236,17 @@ export function UserManagement({ locale, canManageDiscountLimits, canResetPasswo
         method: "PATCH", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status }),
       });
-      const body = await response.json().catch(() => ({}));
+      const body = await response.json().catch(() => ({})) as { error?: string };
       if (!response.ok) {
         setIsError(true);
         setMessage(body.error === "last_system_admin"
           ? tr("The last system administrator cannot be disabled.", "لا يمكن تعطيل آخر مدير للنظام.")
-          : tr("Unable to update user.", "تعذر تحديث المستخدم."));
+          : tr("Unable to update user. Verify account status before retrying.", "تعذر تحديث المستخدم. تحقق من حالة الحساب قبل إعادة المحاولة."));
+      } else {
+        await load();
+        setStatusReview(null);
+        setMessage(tr("Staff account status updated.", "تم تحديث حالة حساب الموظف."));
       }
-      await load();
     } catch {
       setIsError(true);
       setMessage(tr(
@@ -320,13 +335,47 @@ export function UserManagement({ locale, canManageDiscountLimits, canResetPasswo
       </form>}
     </CrudModal>
 
+    <CrudModal open={statusReview !== null}
+      onClose={() => { if (!inFlight.current) setStatusReview(null); }}
+      title={statusReview?.status === "SUSPENDED"
+        ? tr("Suspend Staff Account", "تعليق حساب الموظف")
+        : tr("Activate Staff Account", "تفعيل حساب الموظف")}
+      description={tr(
+        "Review this exact staff identity and access state before committing. The server rechecks administrator authority and the last-admin safeguard.",
+        "راجع هوية الموظف وحالة الوصول قبل التنفيذ. يعيد الخادم التحقق من صلاحية المدير وحماية آخر مدير للنظام.",
+      )}
+      size="compact">
+      {statusReview && <form className="catalog-form" onSubmit={confirmStatus}>
+        <p className="form-span"><strong>{tr("Staff account", "حساب الموظف")}:</strong>{" "}
+          {locale === "ar" ? statusReview.user.displayNameAr || statusReview.user.displayNameEn : statusReview.user.displayNameEn}
+          {" · @" + statusReview.user.username}</p>
+        <p className="form-span">{tr("Current status", "الحالة الحالية")}:{" "}
+          <strong>{statusLabel(locale, statusReview.user.status)}</strong></p>
+        <p className="form-span">{tr("Requested status", "الحالة المطلوبة")}:{" "}
+          <strong>{statusLabel(locale, statusReview.status)}</strong></p>
+        <p className="muted form-span">{statusReview.status === "SUSPENDED"
+          ? tr("Suspension restricts access and may revoke staff sessions according to server policy. It does not delete clinical or financial history.",
+            "يقيّد التعليق الوصول وقد يلغي الجلسات وفق سياسة الخادم؛ لا يحذف السجلات السريرية أو المالية.")
+          : tr("Activation restores account eligibility; roles and branch permissions remain subject to server checks.",
+            "يعيد التفعيل أهلية الحساب؛ وتبقى الأدوار وصلاحيات الفروع خاضعة لتحقق الخادم.")}</p>
+        {message && isError && <p role="alert" className="form-error form-span">{message}</p>}
+        <div className="crud-modal-actions form-span">
+          <button type="button" className="secondary-button" disabled={busy}
+            onClick={() => setStatusReview(null)}>{tr("Cancel", "إلغاء")}</button>
+          <button type="submit" className="primary-button" disabled={busy}>
+            {busy ? tr("Saving…", "جارٍ الحفظ…") : tr("Confirm status change", "تأكيد تغيير الحالة")}
+          </button>
+        </div>
+      </form>}
+    </CrudModal>
+
     <section className="table-card admin-table-card">
       <div className="table-toolbar"><div><h2>{tr("Staff users", "المستخدمون")}</h2><span>{tr("Roles, branches, MFA and account state", "الأدوار والفروع وMFA وحالة الحساب")}</span></div><span>{data.users.length}</span></div>
       <div className="table-wrap">{loading ? <div className="empty-state">{tr("Loading…", "جارٍ التحميل…")}</div> : <table><thead><tr><th>{tr("User", "المستخدم")}</th><th>{tr("Roles", "الأدوار")}</th><th>{tr("Branches", "الفروع")}</th><th>{tr("Departments", "الأقسام")}</th>{canManageDiscountLimits && <th>{tr("Discount limit", "حد الخصم")}</th>}<th>{tr("MFA", "المصادقة متعددة العوامل")}</th><th>{tr("Status", "الحالة")}</th><th>{tr("Actions", "إجراءات")}</th></tr></thead>
       <tbody>{data.users.map(user => <tr key={user.id}><td><strong>{locale === "ar" ? user.displayNameAr || user.displayNameEn : user.displayNameEn}</strong><small className="table-subtext">@{user.username}{user.email ? " · " + user.email : ""}</small></td><td>{localizedRoleNames(user)}</td><td>{localizedBranchNames(user)}</td><td>{localizedDepartmentNames(user)}</td>{canManageDiscountLimits && <td>{Number(user.effectiveDiscountLimitPercent || 0).toFixed(2)}%{user.discountLimitPercent !== null ? <small className="table-subtext">{tr("User override", "تجاوز مستخدم")}</small> : <small className="table-subtext">{tr("Inherited", "موروث")}</small>}</td>}<td><span className={"status-badge " + (user.mfaEnabled ? "status-active" : "status-draft")}>{user.mfaEnabled ? tr("ON", "مفعلة") : tr("OFF", "غير مفعلة")}</span></td><td><span className={"status-badge " + (user.status === "ACTIVE" ? "status-active" : "status-warning")}>{statusLabel(locale, user.status)}</span></td><td><div className="inline-actions">
   <button type="button" className="secondary-button compact-action" disabled={busy} onClick={() => setEditing(user)}>{tr("Edit access", "تعديل الصلاحيات")}</button>
   {canResetPasswords && user.id !== currentUserId && user.status === "ACTIVE" && <button type="button" className="secondary-button compact-action" disabled={busy} onClick={() => { setResetError(""); setResetting(user); }}>{tr("Reset password", "إعادة تعيين كلمة المرور")}</button>}
-  {user.status === "ACTIVE" ? <button type="button" className="secondary-button compact-action" disabled={busy} onClick={() => void setStatus(user, "SUSPENDED")}>{tr("Suspend", "تعليق")}</button> : <button type="button" className="secondary-button compact-action" disabled={busy} onClick={() => void setStatus(user, "ACTIVE")}>{tr("Activate", "تفعيل")}</button>}
+  {user.status === "ACTIVE" ? <button type="button" className="secondary-button compact-action" disabled={busy} onClick={() => { setMessage(""); setIsError(false); setStatusReview({ user, status: "SUSPENDED" }); }}>{tr("Suspend", "تعليق")}</button> : <button type="button" className="secondary-button compact-action" disabled={busy} onClick={() => { setMessage(""); setIsError(false); setStatusReview({ user, status: "ACTIVE" }); }}>{tr("Activate", "تفعيل")}</button>}
 </div></td></tr>)}</tbody></table>}</div>
     </section>
   </div>;
