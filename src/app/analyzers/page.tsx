@@ -1,5 +1,6 @@
 import { TableEmptyState } from "@/components/table-empty-state";
 import Link from "next/link";
+import { SystemDateText } from "@/components/system-date-text";
 import { permissionSet, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { AnalyzerManager } from "@/components/analyzer-manager";
@@ -68,14 +69,14 @@ export default async function AnalyzersPage() {
     }),
     prisma.analyzerMessage.findMany({
       where: { branchId: { in: branchIds } },
-      include: { analyzer: true },
+      include: { analyzer: { include: { branch: { select: { timezone: true } } } } },
       orderBy: { receivedAt: "desc" },
       take: 100,
     }),
     prisma.analyzerResultImport.findMany({
       where: { analyzer: { branchId: { in: branchIds } } },
       include: {
-        analyzer: true,
+        analyzer: { include: { branch: { select: { timezone: true } } } },
         mapping: { include: { test: true, component: true } },
         orderItem: true,
       },
@@ -87,7 +88,7 @@ export default async function AnalyzersPage() {
         organizationId: session.user.organizationId,
         branchId: { in: branchIds },
       },
-      include: { analyzer: { select: { code: true, name: true } } },
+      include: { analyzer: { select: { code: true, name: true, branch: { select: { timezone: true } } } } },
       orderBy: { createdAt: "desc" },
       take: 100,
     }),
@@ -170,14 +171,14 @@ export default async function AnalyzersPage() {
       <div className="table-wrap"><table>
         <thead><tr><th>{tr(locale,"Created","التاريخ")}</th><th>{tr(locale,"Analyzer","الجهاز")}</th><th>{tr(locale,"Accession","رقم الطلب")}</th><th>{tr(locale,"Barcode","الباركود")}</th><th>{tr(locale,"Test mapping","رمز الفحص في الجهاز")}</th><th>{tr(locale,"Status","الحالة")}</th><th>{tr(locale,"Attempts","المحاولات")}</th><th>{tr(locale,"Next retry","المحاولة التالية")}</th><th>{tr(locale,"Error / ACK","الخطأ / التأكيد")}</th></tr></thead>
         <tbody>{workOrders.length === 0 ? <tr><td colSpan={9} className="empty-state"><TableEmptyState title={tr(locale,"No outbound analyzer work orders have been queued.","لم تُنشأ أي أوامر تحليل صادرة للأجهزة.")} description={tr(locale, "No outbound analyzer work orders are present. Work orders require eligible authorized specimen and instrument context.", "لا توجد أوامر عمل مرسلة لأجهزة التحليل. تتطلب الأوامر سياقاً صالحاً ومصرحاً به للعينة والجهاز.")} /></td></tr> : workOrders.map(item => <tr key={item.id}>
-          <td>{item.createdAt.toISOString().replace("T"," ").slice(0,19)}</td>
+          <td><SystemDateText value={item.createdAt.toISOString()} timeZone={item.analyzer.branch.timezone} /></td>
           <td>{item.analyzer.code} — {item.analyzer.name}</td>
           <td>{item.accessionNumberSnapshot}</td>
           <td><strong>{item.barcodeSnapshot}</strong></td>
           <td>{item.analyzerTestCodeSnapshot}</td>
           <td>{statusLabel(locale, item.status)}</td>
           <td>{item.attemptCount}/{item.maxAttempts}</td>
-          <td>{item.nextAttemptAt?.toISOString().replace("T"," ").slice(0,19) || "—"}</td>
+          <td>{item.nextAttemptAt ? <SystemDateText value={item.nextAttemptAt.toISOString()} timeZone={item.analyzer.branch.timezone} /> : "—"}</td>
           <td>{item.lastError || item.acknowledgement || "—"}</td>
         </tr>)}</tbody>
       </table></div>
@@ -188,7 +189,7 @@ export default async function AnalyzersPage() {
       <div className="table-wrap"><table>
         <thead><tr><th>{tr(locale, "Received", "الاستلام")}</th><th>{tr(locale, "Analyzer", "الجهاز")}</th><th>{tr(locale, "Bridge message", "رسالة الجسر")}</th><th>{tr(locale, "Protocol", "البروتوكول")}</th><th>{tr(locale, "Status", "الحالة")}</th><th>{tr(locale, "Attempts", "المحاولات")}</th><th>{tr(locale, "Error", "الخطأ")}</th><th>{tr(locale, "Payload hash", "بصمة الحمولة")}</th><th>{tr(locale, "Action", "الإجراء")}</th></tr></thead>
         <tbody>{messages.length === 0 ? <tr><td colSpan={9} className="empty-state"><TableEmptyState title={tr(locale, "No analyzer messages received.", "لم يتم استلام رسائل من أجهزة التحليل.")} description={tr(locale, "No inbound analyzer messages are present. Review the separate analyzer bridge connection and instrument configuration if data is expected.", "لا توجد رسائل واردة من أجهزة التحليل. راجع اتصال جسر الأجهزة المنفصل وإعداد الجهاز إذا كانت البيانات متوقعة.")} /></td></tr> : messages.map(item => <tr key={item.id}>
-          <td>{item.receivedAt.toISOString().replace("T"," ").slice(0,19)}</td>
+          <td><SystemDateText value={item.receivedAt.toISOString()} timeZone={item.analyzer.branch.timezone} /></td>
           <td>{item.analyzer.code} — {item.analyzer.name}</td>
           <td>{item.bridgeMessageId}</td>
           <td>{item.protocol}</td>
@@ -221,7 +222,7 @@ export default async function AnalyzersPage() {
       <div className="table-wrap"><table>
         <thead><tr><th>{tr(locale, "Created", "تاريخ الإنشاء")}</th><th>{tr(locale, "Analyzer", "الجهاز")}</th><th>{tr(locale, "Observation", "المشاهدة")}</th><th>{tr(locale, "Barcode", "الباركود")}</th><th>{tr(locale, "Analyzer code", "رمز الجهاز")}</th><th>{tr(locale, "LIS target", "هدف LIS")}</th><th>{tr(locale, "Raw value", "القيمة الخام")}</th><th>{tr(locale, "Status", "الحالة")}</th><th>{tr(locale, "Error", "الخطأ")}</th><th>{tr(locale, "Clinical result", "النتيجة السريرية")}</th></tr></thead>
         <tbody>{resultImports.length === 0 ? <tr><td colSpan={10} className="empty-state"><TableEmptyState title={tr(locale, "No normalized analyzer observations staged.", "لا توجد مشاهدات أجهزة مهيأة للاستيراد.")} description={tr(locale, "No staged analyzer observations are present. Analyzer data is retained for controlled review before result verification.", "لا توجد مشاهدات أجهزة في مرحلة المراجعة. تُحفظ بيانات الجهاز للمراجعة المنضبطة قبل التحقق من النتائج.")} /></td></tr> : resultImports.map(item => <tr key={item.id}>
-          <td>{item.createdAt.toISOString().replace("T"," ").slice(0,19)}</td>
+          <td><SystemDateText value={item.createdAt.toISOString()} timeZone={item.analyzer.branch.timezone} /></td>
           <td>{item.analyzer.code}</td>
           <td>{item.bridgeObservationId}</td>
           <td><strong>{item.barcodeSnapshot || "—"}</strong></td>
@@ -250,9 +251,9 @@ export default async function AnalyzersPage() {
               <td><strong>{mapping.analyzerTestCode}</strong></td>
               <td>{mapping.test.code}{mapping.component ? " · " + mapping.component.code : ""}</td>
               <td>{mapping.analyzerUnitCode || tr(locale, "Unitless", "بدون وحدة")} → <strong>{lisUnit}</strong>{mapping.lisUnitUcumCodeSnapshot ? <><br/><small>{tr(locale, "UCUM", "UCUM")}: {mapping.lisUnitUcumCodeSnapshot}</small></> : null}</td>
-              <td>{mapping.effectiveFrom.toISOString().slice(0,10)} → {mapping.effectiveTo?.toISOString().slice(0,10) || tr(locale, "Open", "مفتوح")}</td>
+              <td><SystemDateText value={mapping.effectiveFrom.toISOString()} kind="calendar-record" /> → {mapping.effectiveTo ? <SystemDateText value={mapping.effectiveTo.toISOString()} timeZone={item.branch.timezone} /> : tr(locale, "Open", "مفتوح")}</td>
               <td><strong>{mapping.approvalStatus === "APPROVED" ? tr(locale, "Approved", "معتمد") : mapping.approvalStatus === "RETIRED" ? tr(locale, "Retired", "موقوف") : tr(locale, "Draft", "مسودة")}</strong><br/><small>{statusLabel(locale, mapping.status)}</small></td>
-              <td><small>{tr(locale, "Created by", "أنشأه")}: {creator}{mapping.approvedAt ? <><br/>{tr(locale, "Approved by", "اعتمده")}: {approver || "—"} · {mapping.approvedAt.toISOString().replace("T"," ").slice(0,19)}</> : null}{mapping.retiredAt ? <><br/>{tr(locale, "Retired by", "أوقفه")}: {retirer || "—"} · {mapping.retiredAt.toISOString().replace("T"," ").slice(0,19)}{mapping.retirementReason ? " · " + mapping.retirementReason : ""}</> : null}</small></td>
+              <td><small>{tr(locale, "Created by", "أنشأه")}: {creator}{mapping.approvedAt ? <><br/>{tr(locale, "Approved by", "اعتمده")}: {approver || "—"} · <SystemDateText value={mapping.approvedAt.toISOString()} timeZone={item.branch.timezone} /></> : null}{mapping.retiredAt ? <><br/>{tr(locale, "Retired by", "أوقفه")}: {retirer || "—"} · <SystemDateText value={mapping.retiredAt.toISOString()} timeZone={item.branch.timezone} />{mapping.retirementReason ? " · " + mapping.retirementReason : ""}</> : null}</small></td>
               <td><AnalyzerMappingGovernanceButton analyzerId={item.id} id={mapping.id} approvalStatus={mapping.approvalStatus} canApprove={permissions.has("analyzers.mappings.approve")}
                 authorId={mapping.createdByUserId} actorId={session.user.id} locale={locale} /></td>
             </tr>;
