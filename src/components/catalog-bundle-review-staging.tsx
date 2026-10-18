@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { validateReviewStageReceipt } from "@/lib/catalog-review-stage-receipt";
 import { ReviewFileUploadDialog } from "@/components/review-file-upload-dialog";
 import { useRouter } from "next/navigation";
 
@@ -11,35 +12,56 @@ export function CatalogBundleReviewStaging({ locale }: { locale: "ar" | "en" }) 
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [retryBlocked, setRetryBlocked] = useState(false);
+  const stageAttempted = useRef(false);
+  const inFlight = useRef(false);
   const tr = (en: string, ar: string) => locale === "ar" ? ar : en;
 
   async function stage(file: File): Promise<boolean> {
-    if (busy) return false;
-    if (!file.name.toLowerCase().endsWith(".json") || !file.size || file.size > MAX_BYTES) {
-      setMessage(tr("Select a JSON configuration export up to 4 MB.",
-        "اختر ملف JSON من تصدير الإعدادات بحجم لا يتجاوز 4 ميغابايت."));
-      return false;
-    }
+    if (busy || inFlight.current || stageAttempted.current || retryBlocked) return false;
+    inFlight.current = true;
     setBusy(true);
     setMessage("");
     try {
-      const result = await fetch("/api/catalog/imports/bundle?sourceName=" + encodeURIComponent(file.name), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: file, cache: "no-store",
-      });
-      const body = await result.json() as { id?: string; error?: string; reviewOnly?: boolean };
-      if (!result.ok || !body.id || body.reviewOnly !== true) {
-        throw new Error(body.error || "bundle_review_staging_failed");
+      if (!file.name.toLowerCase().endsWith(".json") || !file.size || file.size > MAX_BYTES) {
+        setMessage(tr("Select a JSON configuration export up to 4 MB.",
+          "اختر ملف JSON من تصدير الإعدادات بحجم لا يتجاوز 4 ميغابايت."));
+        return false;
       }
-      router.push("/catalog/imports/" + encodeURIComponent(body.id));
+      // Once a POST is attempted, a lost response is ambiguous; each
+      // success creates a fresh private draft. Never blindly re-submit.
+      stageAttempted.current = true;
+      setRetryBlocked(true);
+      const result = await fetch("/api/catalog/imports/bundle?sourceName=" +
+        encodeURIComponent(file.name), {
+          method: "POST", credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: file, cache: "no-store",
+        });
+      const body: unknown = await result.json().catch(() => null);
+      const receipt = result.ok ? validateReviewStageReceipt(body, "BUNDLE") : null;
+      if (!receipt || !body || typeof body !== "object" ||
+          !("reviewOnly" in body) || body.reviewOnly !== true) {
+        const reason = body && typeof body === "object" && !Array.isArray(body) &&
+          "error" in body && typeof body.error === "string" ? body.error : "";
+        setMessage(tr(
+          "Bundle review result unconfirmed. A DRAFT may already exist. Inspect your private batch ledger and audit, then reload before any retry.",
+          "نتيجة مراجعة الحزمة غير مؤكدة. قد تكون المسودة موجودة بالفعل. راجع الدفعات الخاصة وسجل التدقيق ثم أعد تحميل الصفحة قبل المحاولة مجدداً.",
+        ) + (reason ? " (" + reason + ")" : ""));
+        return false;
+      }
+      router.push("/catalog/imports/" + encodeURIComponent(receipt.id));
       router.refresh();
       return true;
-    } catch (error) {
-      setMessage(tr("Configuration review failed: ", "تعذر تجهيز مراجعة الإعدادات: ") +
-        (error instanceof Error ? error.message : "bundle_review_staging_failed"));
+    } catch {
+      setMessage(stageAttempted.current ? tr(
+        "Connection interrupted after bundle submission. The review draft may exist already. Check your private import ledger and audit before re-upload.",
+        "انقطع الاتصال بعد إرسال الحزمة؛ ربما مسودة المراجعة موجودة بالفعل. افحص سجل الاستيراد الخاص والتدقيق قبل إعادة الرفع.",
+      ) : tr("Could not prepare local bundle; no request was submitted.",
+        "تعذر إعداد الحزمة محلياً ولم يُرسل طلب."));
       return false;
     } finally {
+      inFlight.current = false;
       setBusy(false);
     }
   }
@@ -51,7 +73,7 @@ export function CatalogBundleReviewStaging({ locale }: { locale: "ar" | "en" }) 
       "ارفع ملف JSON الأصلي بتسع فئات، بما فيها عضويات الفحوص والباقات وأسعار الباقات. يتم التحقق من هوية المصدر وصلاحيات الفروع والأقسام والأسعار والقيم العشرية الأصلية. تبقى جميع الصفوف مسودة للمراجعة فقط، ولا يتم تفعيل أو استعادة أو تعديل أي إعداد سريري أو مالي.",
     )}</p>
     <div className="review-actions">
-      <ReviewFileUploadDialog locale={locale} busy={busy} error={message}
+      <ReviewFileUploadDialog locale={locale} busy={busy} retryBlocked={retryBlocked} error={message}
         onResetError={() => setMessage("")}
         title={tr("Review signed catalog JSON bundle", "مراجعة حزمة إعدادات المختبر")}
         description={tr("Select a previously exported JSON bundle and confirm draft-only review.", "اختر حزمة JSON مُصدَّرة سابقاً وأكد تجهيزها للمراجعة فقط.")}
@@ -61,5 +83,9 @@ export function CatalogBundleReviewStaging({ locale }: { locale: "ar" | "en" }) 
         onStage={stage} />
     </div>
     {message && <p role="alert">{message}</p>}
+    {retryBlocked && <p className="form-warning" role="status">{tr(
+      "Check existing private configuration review batches and audit before another upload; reload after review.",
+      "راجع دفعات مراجعة الإعدادات الخاصة وسجل التدقيق قبل أي رفع جديد، ثم أعد تحميل الصفحة.",
+    )}</p>}
   </section>;
 }
