@@ -39,6 +39,7 @@ export function ReferenceRangeImportButton({ batchId, locale }: { batchId: strin
   const [reviewError, setReviewError] = useState("");
   const [reviewRetryBlocked, setReviewRetryBlocked] = useState(false);
   const inFlight = useRef(false);
+  const mappingInFlight = useRef(false);
   const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
   const testName = (test: { nameEn: string; nameAr?: string | null }) => locale === "ar" ? test.nameAr || test.nameEn : test.nameEn;
   const reasonLabel = (value: string) => ({
@@ -72,7 +73,7 @@ export function ReferenceRangeImportButton({ batchId, locale }: { batchId: strin
   }, [batchId]);
 
   function openReview(action: "RESOLVE" | "IMPORT") {
-    if (!preview || busy || resolving || mappingBusy || inFlight.current) return;
+    if (!preview || busy || resolving || mappingBusy || mappingInFlight.current || inFlight.current) return;
     if (action === "IMPORT" && preview.safe < 1) return;
     if (action === "RESOLVE" && preview.safe < 1 && !(preview.generatedTestsRemaining || 0)) return;
     setReviewSnapshot(preview);
@@ -86,7 +87,7 @@ export function ReferenceRangeImportButton({ batchId, locale }: { batchId: strin
     event.preventDefault();
     const action = reviewAction;
     const snapshot = reviewSnapshot;
-    if (!action || !snapshot || inFlight.current || busy || resolving || mappingBusy || reviewRetryBlocked) return;
+    if (!action || !snapshot || inFlight.current || mappingInFlight.current || busy || resolving || mappingBusy || reviewRetryBlocked) return;
     inFlight.current = true;
     setBusy(true);
     if (action === "RESOLVE") setResolving(true);
@@ -158,32 +159,45 @@ export function ReferenceRangeImportButton({ batchId, locale }: { batchId: strin
     } finally {
       setBusy(false);
       setResolving(false);
-      inFlight.current = false;
-    }
-  }
-
-  async function saveMapping(mappingType: "TEST_ALIAS" | "UNIT_ALIAS", sourceValue: string) {
+    async function saveMapping(mappingType: "TEST_ALIAS" | "UNIT_ALIAS", sourceValue: string) {
     const mapKey = `${mappingType}:${sourceValue}`;
+    if (inFlight.current || mappingInFlight.current || busy || resolving || reviewAction) return;
     const targetId = mappingTargets[mapKey];
     if (!targetId) {
       setMessage(tr("Select a target before saving the mapping.", "اختر الهدف قبل حفظ الربط."));
       return;
     }
 
+    mappingInFlight.current = true;
     setMappingBusy(mapKey);
     setMessage("");
-    const response = await fetch(`/api/catalog/imports/${batchId}/mappings`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mappingType, sourceValue, targetId }),
-    });
-    const body = await response.json().catch(() => ({}));
-    if (response.ok) {
-      setMessage(tr(`Saved reviewed mapping for "${sourceValue}". Re-analyzed remaining ranges.`, `تم حفظ الربط المراجع للقيمة "${sourceValue}" وإعادة تحليل المديات المتبقية.`));
+    try {
+      const response = await fetch(`/api/catalog/imports/${batchId}/mappings`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mappingType, sourceValue, targetId }),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setMessage(tr("Could not save mapping. Review the batch and try again.", "تعذر حفظ الربط. راجع الدفعة قبل المحاولة مجدداً."));
+        return;
+      }
+      setMessage(tr(`Saved reviewed mapping for "${sourceValue}". Re-analyzed remaining ranges.`,
+        `تم حفظ الربط المراجع للقيمة "${sourceValue}" وإعادة تحليل المديات المتبقية.`));
       await loadPreview();
       router.refresh();
-    } else {
-      setMessage(tr("Could not save mapping.", "تعذر حفظ الربط."));
+    } catch {
+      setMessage(tr(
+        "Connection interrupted; mapping may have been saved. Refresh and inspect the row before submitting again.",
+        "انقطع الاتصال؛ ربما تم حفظ الربط. حدّث السجلات وتحقق من الصف قبل إعادة الإرسال.",
+      ));
+    } finally {
+      mappingInFlight.current = false;
+      setMappingBusy("");
+    }
+  }
+
+."));
     }
     setMappingBusy("");
   }
@@ -266,7 +280,7 @@ export function ReferenceRangeImportButton({ batchId, locale }: { batchId: strin
                 setMappingTargets(v => ({ ...v, [mapKey]: match?.id || "" }));
               }}
             />
-            <button className="secondary-button" disabled={mappingBusy === mapKey} onClick={() => void saveMapping("TEST_ALIAS", item.value)}>{mappingBusy === mapKey ? tr("Saving…","جارٍ الحفظ…") : tr("Save","حفظ")}</button>
+            <button className="secondary-button" disabled={busy || resolving || Boolean(mappingBusy) || reviewAction !== null} onClick={() => void saveMapping("TEST_ALIAS", item.value)}>{mappingBusy === mapKey ? tr("Saving…","جارٍ الحفظ…") : tr("Save","حفظ")}</button>
           </div>;
         })}
       </section>
@@ -298,7 +312,7 @@ export function ReferenceRangeImportButton({ batchId, locale }: { batchId: strin
                 setMappingTargets(v => ({ ...v, [mapKey]: match?.id || "" }));
               }}
             />
-            <button className="secondary-button" disabled={mappingBusy === mapKey} onClick={() => void saveMapping("UNIT_ALIAS", item.value)}>{mappingBusy === mapKey ? tr("Saving…","جارٍ الحفظ…") : tr("Save","حفظ")}</button>
+            <button className="secondary-button" disabled={busy || resolving || Boolean(mappingBusy) || reviewAction !== null} onClick={() => void saveMapping("UNIT_ALIAS", item.value)}>{mappingBusy === mapKey ? tr("Saving…","جارٍ الحفظ…") : tr("Save","حفظ")}</button>
           </div>;
         })}
       </section>
