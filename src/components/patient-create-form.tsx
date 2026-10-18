@@ -80,7 +80,7 @@ export function PatientCreateForm({
     };
   }
 
-  async function createPatient(payload: PatientPayload, overrideReason = "") {
+  async function createPatient(payload: PatientPayload, overrideReason = "", reviewedCandidateIds: string[] = []) {
     if (inFlight.current) return;
     inFlight.current = true;
     creationKey.current ??= crypto.randomUUID();
@@ -96,6 +96,7 @@ export function PatientCreateForm({
         ...payload,
         duplicateReviewOverride: Boolean(overrideReason),
         duplicateReviewReason: overrideReason || undefined,
+        reviewedCandidateIds: overrideReason ? reviewedCandidateIds : undefined,
       }),
     });
     const body = await response.json().catch(() => ({})) as {
@@ -135,6 +136,15 @@ export function PatientCreateForm({
     } else if (body.error === "identifier_already_used") {
       creationKey.current = null;
       setMessage(`${tr("Identifier already belongs to another patient", "المعرّف مستخدم لمريض آخر")}: ${body.patient?.patientNumber || ""} ${body.patient?.fullNameEn || ""}`);
+    } else if (body.error === "duplicate_review_candidates_changed" || body.error === "duplicate_review_overflow") {
+      creationKey.current = null;
+      setDuplicateReview(null);
+      setConfirmSeparate(false);
+      setDuplicateReason("");
+      setMessage(tr(
+        "Patient matches changed while the form was open, or more than 10 matches require supervised review. Search the central registry and review the current identities before a new request.",
+        "تغيّرت قائمة المرضى المتشابهين أثناء فتح النموذج، أو تجاوزت 10 حالات وتحتاج مراجعة إشرافية. ابحث بالسجل المركزي وراجع الهويات الحالية قبل طلب جديد.",
+      ));
     } else if (body.error === "duplicate_review_reason_required") {
       creationKey.current = null;
       setMessage(tr("A review reason is required to create a separate patient.", "سبب المراجعة مطلوب لإنشاء مريض مستقل."));
@@ -168,7 +178,7 @@ export function PatientCreateForm({
       setMessage(tr("Explain why this is a different patient.", "اشرح لماذا هذا مريض مختلف."));
       return;
     }
-    await createPatient(duplicateReview.payload, reason);
+    await createPatient(duplicateReview.payload, reason, duplicateReview.candidates.map(candidate => candidate.id));
   }
 
   const evidenceLabel = (code: DuplicateCandidate["evidence"][number]) =>
