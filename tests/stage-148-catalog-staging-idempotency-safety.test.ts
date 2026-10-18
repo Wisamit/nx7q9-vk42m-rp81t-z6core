@@ -30,11 +30,9 @@ test("author/tenant/source lookups return prior identity only with matching immu
   assert.deepEqual(await lookupCatalogStageReplay(tx,{...fields,checksum:"b".repeat(64)}),{kind:"conflict"});
   assert.deepEqual(await lookupCatalogStageReplay(tx,{...fields,sourceName:"different.csv"}),{kind:"conflict"});
   assert.deepEqual(await lookupCatalogStageReplay(tx,{...fields,expectedStatus:"VALIDATED"}),{kind:"conflict"});
-  const mutated={catalogImportBatch:{findFirst:async()=>({...source,importedAt:new Date()})}} as unknown
-    as Parameters<typeof lookupCatalogStageReplay>[0];
+  const mutated={catalogImportBatch:{findFirst:async()=>({...source,importedAt:new Date()})}} as unknown as Parameters<typeof lookupCatalogStageReplay>[0];
   assert.deepEqual(await lookupCatalogStageReplay(mutated,fields),{kind:"conflict"});
-  const noPrior={catalogImportBatch:{findFirst:async()=>null}} as unknown
-    as Parameters<typeof lookupCatalogStageReplay>[0];
+  const noPrior={catalogImportBatch:{findFirst:async()=>null}} as unknown as Parameters<typeof lookupCatalogStageReplay>[0];
   assert.deepEqual(await lookupCatalogStageReplay(noPrior,fields),{kind:"new"});
   assert.deepEqual(await lookupCatalogStageReplay(noPrior,{...fields,submissionKey:null}),{kind:"new"});
 });
