@@ -48,5 +48,5 @@ test("Stage154: patient merge locks before taking source/target snapshots and st
   assert.ok(route.includes("organization_unavailable"));
   assert.ok(route.includes('"PATIENT_MERGED"'));
   assert.ok(route.includes('"PATIENT_MERGE_RECEIVED"'));
-  assert.ok(route.includes("PatientMergeEvent"));
+  assert.ok(route.includes("tx.patientMergeEvent.create"));
 });
