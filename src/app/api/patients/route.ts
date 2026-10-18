@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { patientDuplicateEvidence, sortDuplicateCandidates } from "@/lib/patient-duplicate-review";
+import { PATIENT_DUPLICATE_REVIEW_MAX_CANDIDATES, patientCandidateReviewIsCurrent, patientReviewedCandidateIds } from "@/lib/patient-registration-review-guard";
 import { normalizePatientIdentifier, normalizePatientName, normalizePatientPhone } from "@/lib/patient-normalization";
 import {
   evaluatePatientCreationReplay, patientCreationPayloadHash, patientCreationSubmissionKey,
@@ -89,6 +90,7 @@ export async function POST(request: Request) {
   const clinicalInformation = text(body.clinicalInformation, 4000);
   const duplicateReviewOverride = body.duplicateReviewOverride === true;
   const duplicateReviewReason = text(body.duplicateReviewReason, 1000);
+  const reviewedCandidateIds = duplicateReviewOverride ? patientReviewedCandidateIds(body.reviewedCandidateIds) : [];
   const customIdentifierInput = Array.isArray(body.customIdentifiers) ? body.customIdentifiers.slice(0, 10) : [];
 
   if (!fullNameEn) return NextResponse.json({ error: "name_required" }, { status: 400 });
@@ -109,50 +111,8 @@ export async function POST(request: Request) {
     ...(dob ? [{ normalizedName: nameKey, dateOfBirth: dob }] : []),
     ...(phoneKey ? [{ normalizedPhone: phoneKey }] : []),
   ];
-  const duplicateRows = duplicateOr.length > 0
-    ? await prisma.patient.findMany({
-        where: {
-          organizationId: session.user.organizationId,
-          status: "ACTIVE",
-          mergedIntoPatientId: null,
-          OR: duplicateOr,
-        },
-        select: {
-          id: true,
-          patientNumber: true,
-          fullNameEn: true,
-          fullNameAr: true,
-          normalizedName: true,
-          dateOfBirth: true,
-          phone: true,
-          normalizedPhone: true,
-        },
-        take: 10,
-      })
-    : [];
-  const duplicateCandidates = sortDuplicateCandidates(
-    duplicateRows
-      .map(candidate => ({
-        id: candidate.id,
-        patientNumber: candidate.patientNumber,
-        fullNameEn: candidate.fullNameEn,
-        fullNameAr: candidate.fullNameAr,
-        dateOfBirth: candidate.dateOfBirth,
-        phone: candidate.phone,
-        evidence: patientDuplicateEvidence(
-          { normalizedName: nameKey, dateOfBirth: dob, normalizedPhone: phoneKey },
-          candidate,
-        ),
-      }))
-      .filter(candidate => candidate.evidence.length > 0),
-  );
-
-  if (duplicateCandidates.length > 0 && !duplicateReviewOverride) {
-    return NextResponse.json({ error: "possible_duplicates", candidates: duplicateCandidates }, { status: 409 });
-  }
-  if (duplicateCandidates.length > 0 && duplicateReviewOverride && !duplicateReviewReason) {
-    return NextResponse.json({ error: "duplicate_review_reason_required" }, { status: 400 });
-  }
+  // The authoritative duplicate search happens after the organization write lock.
+  // An unlocked preflight can race a second registration with a different key.
 
   const schemes = await prisma.patientIdentifierScheme.findMany({
     where: { organizationId: session.user.organizationId, status: "ACTIVE" },
@@ -268,9 +228,98 @@ export async function POST(request: Request) {
     }
   }
 
-  let created;
+  let outcome;
   try {
-    created = await prisma.$transaction(async (tx) => {
+    outcome = await prisma.$transaction(async (tx) => {
+    // First transaction operation: locking read (not an MVCC snapshot).
+    // Different request keys and different staff sessions for this same
+    // organization must serialize before duplicate evidence is rechecked.
+    const tenantLock = await tx.$queryRaw<Array<{ id: string }>>`
+      SELECT id FROM organizations
+      WHERE id = ${session.user.organizationId} AND status = 'ACTIVE'
+      FOR UPDATE
+    `;
+    if (tenantLock.length !== 1) return { kind: "organization_unavailable" } as const;
+    // Stage 151 request replay must ALSO run after the organization lock.
+    // Otherwise concurrent identical keyed requests would see each other as
+    // new potential duplicate patients rather than returning the prior 201.
+    if (submission.key && payloadHash) {
+      const prior = await tx.patient.findFirst({
+        where: {
+          organizationId: session.user.organizationId,
+          creationRequestUserId: session.user.id,
+          creationSubmissionKey: submission.key,
+        },
+        select: {
+          id: true, patientNumber: true, fullNameEn: true,
+          status: true, mergedIntoPatientId: true, creationPayloadHash: true,
+        },
+      });
+      const decision = evaluatePatientCreationReplay(prior, payloadHash);
+      if (decision.kind === "conflict")
+        return { kind: "replay_conflict" } as const;
+      if (decision.kind === "record_changed")
+        return { kind: "replay_record_changed" } as const;
+      if (decision.kind === "replay" && prior)
+        return { kind: "replayed", patient: {
+          id: prior.id, patientNumber: prior.patientNumber, fullNameEn: prior.fullNameEn,
+        } } as const;
+    }
+    const duplicateRows = duplicateOr.length > 0
+      ? await tx.patient.findMany({
+          where: {
+            organizationId: session.user.organizationId,
+            status: "ACTIVE", mergedIntoPatientId: null, OR: duplicateOr,
+          },
+          select: {
+            id: true, patientNumber: true, fullNameEn: true, fullNameAr: true,
+            normalizedName: true, dateOfBirth: true, phone: true, normalizedPhone: true,
+          },
+          take: PATIENT_DUPLICATE_REVIEW_MAX_CANDIDATES + 1,
+        }) : [];
+    // Never allow an override based on a truncated or stale candidate list.
+    if (duplicateRows.length > PATIENT_DUPLICATE_REVIEW_MAX_CANDIDATES)
+      return { kind: "duplicate_overflow" } as const;
+    const duplicateCandidates = sortDuplicateCandidates(duplicateRows.map(candidate => ({
+      id: candidate.id,
+      patientNumber: candidate.patientNumber,
+      fullNameEn: candidate.fullNameEn,
+      fullNameAr: candidate.fullNameAr,
+      dateOfBirth: candidate.dateOfBirth,
+      phone: candidate.phone,
+      evidence: patientDuplicateEvidence(
+        { normalizedName: nameKey, dateOfBirth: dob, normalizedPhone: phoneKey },
+        candidate,
+      ),
+    })).filter(candidate => candidate.evidence.length > 0));
+    if (duplicateCandidates.length > 0 && !duplicateReviewOverride) {
+      return { kind: "possible_duplicates", candidates: duplicateCandidates } as const;
+    }
+    if (duplicateReviewOverride) {
+      if (!duplicateReviewReason)
+        return { kind: "duplicate_review_reason_required" } as const;
+      if (!patientCandidateReviewIsCurrent(reviewedCandidateIds,
+            duplicateCandidates.map(candidate => candidate.id)) || !duplicateCandidates.length)
+        return { kind: "duplicate_review_candidates_changed" } as const;
+    }
+    // A preflight identifier lookup cannot substitute for checking inside the
+    // same serialized transaction. DB unique keys also remain a last guard.
+    for (const identifier of identifierChecks) {
+      const existingId = await tx.patientIdentifier.findUnique({
+        where: { organizationId_schemeId_normalizedValue: {
+          organizationId: session.user.organizationId,
+          schemeId: identifier.schemeId,
+          normalizedValue: identifier.normalizedValue,
+        } },
+        include: { patient: { select: { id: true, patientNumber: true, fullNameEn: true } } },
+      });
+      if (existingId) return {
+        kind: "identifier_already_used",
+        identifierType: identifier.identifierType,
+        schemeCode: identifier.schemeCode,
+        patient: existingId.patient,
+      } as const;
+    }
     let patientNumber = newPatientNumber();
     while (await tx.patient.findUnique({ where: { organizationId_patientNumber: { organizationId: session.user.organizationId, patientNumber } } })) {
       patientNumber = newPatientNumber();
@@ -379,8 +428,8 @@ export async function POST(request: Request) {
       });
     }
 
-    return patient;
-    });
+    return { kind: "created", patient } as const;
+    }, { timeout: 30000 });
   } catch (error) {
     // Concurrent identical POSTs are serialized by MariaDB's unique key.
     // The loser may only recover the *same* committed submission and actor;
@@ -392,6 +441,35 @@ export async function POST(request: Request) {
     throw error;
   }
 
-  return NextResponse.json({ status: "ok", patient: created },
+  // Domain responses are emitted after rollback/commit, not from a partially
+  // written transaction. In particular, a stale review creates no audit.
+  if (outcome.kind === "replay_conflict")
+    return NextResponse.json({ error: "patient_creation_submission_conflict" },
+      { status: 409, headers: { "Cache-Control": "private, no-store" } });
+  if (outcome.kind === "replay_record_changed")
+    return NextResponse.json({ error: "patient_creation_record_changed" },
+      { status: 409, headers: { "Cache-Control": "private, no-store" } });
+  if (outcome.kind === "replayed")
+    return NextResponse.json({ status: "ok", replayed: true, patient: outcome.patient },
+      { status: 200, headers: { "Cache-Control": "private, no-store" } });
+  if (outcome.kind === "organization_unavailable")
+    return NextResponse.json({ error: "organization_unavailable" }, { status: 403 });
+  if (outcome.kind === "duplicate_overflow")
+    return NextResponse.json({ error: "duplicate_review_overflow" }, { status: 409 });
+  if (outcome.kind === "possible_duplicates")
+    return NextResponse.json({ error: "possible_duplicates", candidates: outcome.candidates },
+      { status: 409, headers: { "Cache-Control": "private, no-store" } });
+  if (outcome.kind === "duplicate_review_reason_required")
+    return NextResponse.json({ error: "duplicate_review_reason_required" }, { status: 400 });
+  if (outcome.kind === "duplicate_review_candidates_changed")
+    return NextResponse.json({ error: "duplicate_review_candidates_changed" }, { status: 409 });
+  if (outcome.kind === "identifier_already_used")
+    return NextResponse.json({
+      error: "identifier_already_used",
+      identifierType: outcome.identifierType,
+      schemeCode: outcome.schemeCode,
+      patient: outcome.patient,
+    }, { status: 409 });
+  return NextResponse.json({ status: "ok", patient: outcome.patient },
     { status: 201, headers: { "Cache-Control": "private, no-store" } });
 }
