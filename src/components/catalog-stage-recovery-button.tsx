@@ -27,9 +27,10 @@ export function CatalogStageRecoveryButton({
     setBusy(true);
     setMessage("");
     try {
-      const query = new URLSearchParams({ sourceType, key: submissionKey });
+      const query = new URLSearchParams({ sourceType });
       const response = await fetch("/api/catalog/imports/recovery?" + query, {
         method: "GET", credentials: "same-origin", cache: "no-store",
+        headers: { "x-family-lab-staging-key": submissionKey },
       });
       const body: unknown = await response.json().catch(() => null);
       const id = response.ok ? validateCatalogStageRecovery(body) : null;
