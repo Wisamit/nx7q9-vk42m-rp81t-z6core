@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { SystemDateText } from "@/components/system-date-text";
 import { useMemo, useState } from "react";
 import type { TrendSeries } from "@/lib/patient-history";
 
@@ -114,7 +115,7 @@ export function PatientResultTrends({
           <th>{tr("Result version", "إصدار النتيجة")}</th>
         </tr></thead>
         <tbody>{[...selected.points].reverse().map(point => <tr key={point.observedAt + ":" + point.accessionNumber}>
-          <td>{point.observedAt.replace("T", " ").slice(0, 19)}</td>
+          <td><SystemDateText value={point.observedAt} /></td>
           <td>{canViewOrders
             ? <Link className="table-link" href={"/orders/" + point.orderId}>{point.accessionNumber}</Link>
             : point.accessionNumber}</td>

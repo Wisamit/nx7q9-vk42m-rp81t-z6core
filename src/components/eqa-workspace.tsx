@@ -1,5 +1,6 @@
 "use client";
 import { SystemDateTimeField } from "@/components/system-date-time-field";
+import { SystemDateText } from "@/components/system-date-text";
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CrudModal } from "@/components/crud-modal";
@@ -68,7 +69,6 @@ export function EqaWorkspace({locale,actorId,branches,programs,rounds,components
     finally{setBusy(false);}
   }
   const availablePrograms=programs.filter(p=>p.status==="ACTIVE"&&p.branchId===currentBranch);
-  const date=(value:string|null)=>value?new Date(value).toLocaleString(locale==="ar"?"ar-EG":"en-GB"):"—";
   return <div className="detail-grid">
     {message&&<article className="detail-card"><p role="status" className="form-warning">{message}</p></article>}
     {canManage&&<article className="detail-card">
@@ -174,7 +174,7 @@ export function EqaWorkspace({locale,actorId,branches,programs,rounds,components
           <td>{r.program.branch.code}<small className="table-subtext">{r.program.providerName}</small></td>
           <td><strong>{r.program.code} / {r.roundCode}</strong>
             <small className="table-subtext">{tr("Sample","العينة")}: {r.sampleCode}</small></td>
-          <td>{r.status}<small className="table-subtext">{date(r.dueAt)}</small></td>
+          <td>{r.status}<small className="table-subtext">{r.dueAt ? <SystemDateText value={r.dueAt} /> : "—"}</small></td>
           <td><strong>{r.observations.length}</strong>
             <small className="table-subtext">{r.observations.filter(o=>o.assessment!==null).length} {tr("assessed","مُقيّمة")}</small></td>
           <td>

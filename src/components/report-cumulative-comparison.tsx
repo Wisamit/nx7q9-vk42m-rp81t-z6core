@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SystemDateText } from "@/components/system-date-text";
 import type { CumulativeComparison, ReportReading } from "@/lib/report-cumulative";
 
 type Locale = "ar" | "en";
@@ -79,7 +80,7 @@ export function ReportCumulativeComparison({
             <td>{row.previous ? reference(row.previous, locale) + " · " + row.previous.flag : "—"}</td>
             <td>{row.previous ? <>
               <Link className="table-link" href={"/reports/" + row.previous.orderId}>{row.previous.accessionNumber}</Link>
-              <small> · {row.previous.issuedAt.replace("T", " ").slice(0, 16)} · v{row.previous.resultVersion}</small>
+              <small> · <SystemDateText value={row.previous.issuedAt} /> · v{row.previous.resultVersion}</small>
             </> : "—"}</td>
           </tr>)}</tbody>
       </table>

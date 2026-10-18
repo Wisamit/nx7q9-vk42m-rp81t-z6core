@@ -1,6 +1,7 @@
 "use client";
 
 import { SystemDateField } from "@/components/system-date-field";
+import { SystemDateText } from "@/components/system-date-text";
 
 import { FormEvent, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -441,7 +442,7 @@ export function DigitalServicesConsole({
         <thead><tr><th>{tr("Client", "العميل")}</th><th>{tr("Patient", "المريض")}</th><th>{tr("Employee #", "رقم الموظف")}</th><th>{tr("Booking", "الحجز")}</th><th>{tr("Reports", "التقارير")}</th><th>{tr("Effective", "السريان")}</th><th>{tr("Status", "الحالة")}</th></tr></thead>
         <tbody>{corporateAccess.length === 0 ? <tr><td colSpan={7} className="empty-state">{tr("No corporate patient access configured.", "لا توجد صلاحيات وصول لمرضى الشركات.")}</td></tr> : corporateAccess.map(item => <tr key={item.id}>
           <td>{item.client}</td><td>{item.patient}</td><td>{item.employeeNumber || "—"}</td><td>{item.canBook ? tr("YES", "نعم") : tr("NO", "لا")}</td><td>{item.canViewReports ? tr("YES", "نعم") : tr("NO", "لا")}</td>
-          <td>{item.effectiveFrom.slice(0,10)} → {item.effectiveTo?.slice(0,10) || tr("Open", "مفتوح")}</td><td>{statusLabel(item.status)}</td>
+          <td><SystemDateText value={item.effectiveFrom} kind="calendar-record" /> → {item.effectiveTo ? <SystemDateText value={item.effectiveTo} kind="calendar-record" /> : tr("Open", "مفتوح")}</td><td>{statusLabel(item.status)}</td>
         </tr>)}</tbody>
       </table></div>
     </article>
@@ -451,7 +452,7 @@ export function DigitalServicesConsole({
       <div className="table-wrap"><table>
         <thead><tr><th>{tr("Booking", "الحجز")}</th><th>{tr("Patient", "المريض")}</th><th>{tr("Branch", "الفرع")}</th><th>{tr("Mode", "النمط")}</th><th>{tr("Scheduled", "الموعد")}</th><th>{tr("Status", "الحالة")}</th><th>{tr("Actions", "الإجراءات")}</th></tr></thead>
         <tbody>{appointments.length === 0 ? <tr><td colSpan={7} className="empty-state">{tr("No appointments.", "لا توجد مواعيد.")}</td></tr> : appointments.map(item => <tr key={item.id}>
-          <td>{item.appointmentNumber}</td><td>{item.patient}</td><td>{item.branch}</td><td>{modeLabel(item.mode)}</td><td>{item.scheduledStart.replace("T"," ").slice(0,16)}</td><td>{statusLabel(item.status)}</td>
+          <td>{item.appointmentNumber}</td><td>{item.patient}</td><td>{item.branch}</td><td>{modeLabel(item.mode)}</td><td><SystemDateText value={item.scheduledStart} /></td><td>{statusLabel(item.status)}</td>
           <td className="result-actions">
             {permissions.appointments && item.status === "REQUESTED" && <button className="secondary-button" onClick={() => void changeAppointmentStatus(item.id,"CONFIRMED")}>{tr("Confirm", "تأكيد")}</button>}
             {permissions.appointments && item.status === "CONFIRMED" && <button className="secondary-button" onClick={() => void changeAppointmentStatus(item.id,"CHECKED_IN")}>{tr("Check in", "تسجيل الحضور")}</button>}
@@ -467,7 +468,7 @@ export function DigitalServicesConsole({
       <div className="table-wrap"><table>
         <thead><tr><th>{tr("Booking", "الحجز")}</th><th>{tr("Patient", "المريض")}</th><th>{tr("Branch", "الفرع")}</th><th>{tr("Scheduled", "الموعد")}</th><th>{tr("Collector", "موظف السحب")}</th><th>{tr("Status", "الحالة")}</th><th>{tr("Next", "التالي")}</th></tr></thead>
         <tbody>{homeCollections.length === 0 ? <tr><td colSpan={7} className="empty-state">{tr("No home collection visits.", "لا توجد زيارات سحب منزلي.")}</td></tr> : homeCollections.map(item => <tr key={item.id}>
-          <td><Link className="table-link" href={`/home-collections/${item.id}`}>{item.appointmentNumber}</Link></td><td>{item.patient}</td><td>{item.branch}</td><td>{item.scheduledStart.replace("T"," ").slice(0,16)}</td><td>{item.collector || tr("Unassigned", "غير معين")}</td><td>{statusLabel(item.status)}</td>
+          <td><Link className="table-link" href={`/home-collections/${item.id}`}>{item.appointmentNumber}</Link></td><td>{item.patient}</td><td>{item.branch}</td><td><SystemDateText value={item.scheduledStart} /></td><td>{item.collector || tr("Unassigned", "غير معين")}</td><td>{statusLabel(item.status)}</td>
           <td>{permissions.homeCollection && <>
             {item.status === "SCHEDULED" && <div className="result-actions">
               <select value={collectorByVisit[item.id] || ""} onChange={event => setCollectorByVisit(current => ({ ...current, [item.id]: event.target.value }))}>

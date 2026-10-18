@@ -2,6 +2,7 @@
 import {useState} from "react";
 import {useRouter} from "next/navigation"
 import {CrudModal} from "@/components/crud-modal";
+import { SystemDateText } from "@/components/system-date-text";
 
 export function InventoryLotBranchResponse({lotId,safetyEventId,activeBranchCode,locale,
   canRespond,records}:{
@@ -77,7 +78,7 @@ export function InventoryLotBranchResponse({lotId,safetyEventId,activeBranchCode
      {records.map(r=><tr key={r.id}><td>{r.action==="NOTICE_RECEIVED"?tr("Received","استلام"):
        r.action==="STOCK_ISOLATED"?tr("Operator-confirmed isolation","عزل مؤكد من الموظف"):
        tr("Quality escalation","تصعيد للجودة")}</td><td>{r.actorName}</td>
-       <td>{r.at.slice(0,19).replace("T"," ")}</td><td>{r.note}</td></tr>)}
+       <td><SystemDateText value={r.at} /></td><td>{r.note}</td></tr>)}
      {records.length===0&&<tr><td colSpan={4}>{tr("No branch responses recorded for this decision.",
        "لا توجد استجابات مسجلة لهذا القرار من الفرع.")}</td></tr>}
    </tbody></table></div>
