@@ -7,6 +7,7 @@ import { clinicalImportTestWhere, resolveClinicalImportScope } from "@/lib/catal
 import { genericCatalogPriceScope } from "@/lib/catalog-generic-price-scope";
 import { BUNDLE_REVIEW_MAX_BYTES, BUNDLE_REVIEW_MAX_ROWS } from "@/lib/catalog-bundle-review";
 import { catalogExportTypes, type CatalogExportType } from "@/lib/catalog-configuration-export";
+import { bundleFieldContract, verifyBundleFieldContract } from "@/lib/catalog-bundle-field-contract";
 
 export const dynamic = "force-dynamic";
 
@@ -243,7 +244,15 @@ export async function GET(request: NextRequest) {
       exportedAt: new Date().toISOString(),
       consistency: "transactional-consistent-read",
       groups,
+      fieldContract: bundleFieldContract(groups.map(group => group.entityType)),
     };
+    try {
+      verifyBundleFieldContract(payload);
+    } catch {
+      // Never sign a "complete" export when any selected source field is
+      // missing. Fail closed rather than generate misleading audit evidence.
+      return { error: "bundle_export_field_projection_incomplete", httpStatus: 409 } as const;
+    }
     // Same 4 MiB intake limit as the native JSON review endpoint.
     const serialized = JSON.stringify(attestCatalogBundle(JSON.parse(JSON.stringify(payload)), signingSecret));
     if (Buffer.byteLength(serialized, "utf8") > BUNDLE_REVIEW_MAX_BYTES) {

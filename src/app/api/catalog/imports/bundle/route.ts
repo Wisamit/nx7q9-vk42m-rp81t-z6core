@@ -10,6 +10,7 @@ import {
 } from "@/lib/catalog-bundle-attestation";
 import { clinicalImportTestWhere, resolveClinicalImportScope } from "@/lib/catalog-clinical-import-scope";
 import { genericCatalogPriceScope } from "@/lib/catalog-generic-price-scope";
+import { BundleFieldContractError, verifyBundleFieldContract, type BundleFieldContractStatus } from "@/lib/catalog-bundle-field-contract";
 import {
   BUNDLE_REVIEW_MAX_BYTES, BUNDLE_REVIEW_SOURCE,
   CatalogBundleReviewError, parseCatalogBundleForReview,
@@ -61,12 +62,17 @@ export async function POST(request: Request) {
   }
   let parsed: ReturnType<typeof parseCatalogBundleForReview>;
   let attestationStatus: "VERIFIED" | "UNVERIFIED";
+  let fieldContractStatus: BundleFieldContractStatus;
   try {
     parsed = parseCatalogBundleForReview(payload, scope.organizationId, {
       pricing: perms.has("pricing.manage"), ranges: perms.has("catalog.reference_ranges.manage"),
     });
     attestationStatus = verifyCatalogBundleAttestation(payload, catalogBundleSigningSecret(process.env));
+    fieldContractStatus = verifyBundleFieldContract(payload);
   } catch (error) {
+    if (error instanceof BundleFieldContractError) {
+      return NextResponse.json({ error: error.code }, { status: 409 });
+    }
     if (error instanceof CatalogBundleReviewError || error instanceof CatalogBundleAttestationError) {
       return NextResponse.json({ error: error.code }, { status: error.status });
     }
@@ -331,7 +337,7 @@ export async function POST(request: Request) {
       createdByUserId: session.user.id,
       summary: { total: references.length, WARNING: references.length, reviewOnly: true,
         format: "family-lab-catalog-bundle", consistency: parsed.consistency,
-        attestationStatus, exportedAt: parsed.exportedAt, counts: parsed.counts },
+        attestationStatus, fieldContractStatus, exportedAt: parsed.exportedAt, counts: parsed.counts },
     }, select: { id: true } });
     await tx.catalogImportRow.createMany({ data: references.map((row, index) => ({
       batchId: created.id, rowNumber: index + 1, entityType: row.entityType,
@@ -341,6 +347,10 @@ export async function POST(request: Request) {
       validationIssues: [
         { severity: "WARNING", code: "CONFIGURATION_BUNDLE_REVIEW_ONLY",
           message: "Source snapshot only. Approval, mapping and effective-date reconciliation are required; no configuration is applied." },
+        ...(fieldContractStatus !== "COMPLETE_SOURCE_FIELD_PROJECTION" ? [{
+          severity: "WARNING", code: "SOURCE_FIELD_CONTRACT_NOT_PROVEN",
+          message: "This legacy source did not declare a complete signed field projection. Do not infer round-trip parity or approval.",
+        }] : []),
         ...(parsed.consistency === "paged-live-not-atomic" ? [{
           severity: "WARNING", code: "PAGED_NON_ATOMIC_EXPORT",
           message: "Source export was paged and not transactionally consistent.",
@@ -356,7 +366,7 @@ export async function POST(request: Request) {
       organizationId: scope.organizationId, branchId: scope.branchId,
       actorUserId: session.user.id, action: "CATALOG_CONFIG_BUNDLE_REVIEW_STAGED",
       entityType: "CatalogImportBatch", entityId: created.id,
-      newValues: { total: references.length, reviewOnly: true, attestationStatus, counts: parsed.counts },
+      newValues: { total: references.length, reviewOnly: true, attestationStatus, fieldContractStatus, counts: parsed.counts },
       ipAddress: ctx.ipAddress, userAgent: ctx.userAgent,
     } });
     return { id: created.id, replayed: false };
@@ -364,6 +374,6 @@ export async function POST(request: Request) {
   if ("error" in outcome) return NextResponse.json({ error: outcome.error }, { status: outcome.httpStatus });
   return NextResponse.json({ id: outcome.id, status: "DRAFT", reviewOnly: true,
     replayed: outcome.replayed,
-    summary: { total: references.length, WARNING: references.length, counts: parsed.counts } },
+    summary: { total: references.length, WARNING: references.length, counts: parsed.counts, fieldContractStatus } },
   { status: outcome.replayed ? 200 : 201, headers: { "Cache-Control": "private, no-store" } });
 }
