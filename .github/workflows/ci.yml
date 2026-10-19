@@ -36,7 +36,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22.18.0'
-      - run: npm install
+      - run: npm ci
       - run: npx prisma migrate deploy
       - run: npx prisma migrate status
       - run: npx prisma generate
@@ -257,7 +257,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22.18.0'
-      - run: npm install
+      - run: npm ci
       - run: npm install --no-save playwright@1.56.1
       - run: npx playwright install --with-deps chromium
       - run: node scripts/ui-browser-evidence.mjs --run

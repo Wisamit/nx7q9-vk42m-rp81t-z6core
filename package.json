@@ -44,6 +44,16 @@
   },
   "overrides": {
     "mysql2": "3.23.1",
-    "deepmerge-ts": "8.0.0"
+    "deepmerge-ts": "8.0.0",
+    "@typescript-eslint/type-utils": "8.71.2",
+    "@typescript-eslint/parser": "8.71.2",
+    "@typescript-eslint/eslint-plugin": "8.71.2",
+    "@typescript-eslint/typescript-estree": "8.71.2",
+    "@typescript-eslint/utils": "8.71.2",
+    "@typescript-eslint/scope-manager": "8.71.2",
+    "@typescript-eslint/visitor-keys": "8.71.2",
+    "@typescript-eslint/project-service": "8.71.2",
+    "@typescript-eslint/tsconfig-utils": "8.71.2",
+    "typescript-eslint": "8.71.2"
   }
 }
