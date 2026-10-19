@@ -18,7 +18,7 @@ const priceList = [...common, ...named, "scopeType", "branchId", ...privateIds,
 const priceItem = [...common, "priceListId", "unitPrice", "effectiveFrom",
   "effectiveTo", "status", "priceList"];
 
-const allowed: Record<CatalogExportType, readonly string[]> = {
+export const catalogBundleAllowedSourceFields: Record<CatalogExportType, readonly string[]> = {
   TEST: [...common, ...named, "abbreviation", "departmentId", "specimenTypeId",
     "containerId", "methodId", "defaultUnitId", "resultType", "workflowType",
     "resultEntryLayout", "decimalPrecision", "minimumVolume",
@@ -76,7 +76,7 @@ function tariff(value: Record<string, unknown>) {
 export function validateBundleSourceBoundary(
   type: CatalogExportType, source: Record<string, unknown>,
 ): void {
-  keys(source, allowed[type]);
+  keys(source, catalogBundleAllowedSourceFields[type]);
   if (type === "COMPONENT") {
     relation(source.test, ["code"]);
     relation(source.unit, ["code", "symbol"], true);
