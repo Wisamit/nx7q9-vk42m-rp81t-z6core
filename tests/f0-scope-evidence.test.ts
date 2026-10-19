@@ -43,7 +43,7 @@ test("Missing phase, accountable owner or required P1 risk fails closed",()=>{
   const a=copy();
   a.triagedRisks[0].owner="";
   a.triagedRisks[1].phase="";
-  a.triagedRisks=a.triagedRisks.filter(x=>x.id!=="LAB-075");
+  a.triagedRisks=a.triagedRisks.filter((x: { id: string })=>x.id!=="LAB-075");
   const errors=f0ScopeGate({ledger:a}).errors;
   assert.ok(errors.some(e=>/Untriaged risk/.test(e)));
   assert.ok(errors.some(e=>/Required P1/.test(e)));
