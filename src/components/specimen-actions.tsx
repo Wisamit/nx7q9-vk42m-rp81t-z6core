@@ -56,6 +56,7 @@ export function SpecimenActions({
   const [rejectionScope, setRejectionScope] = useState<"WHOLE_SPECIMEN" | "SELECTED_TESTS">("WHOLE_SPECIMEN");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [messageIsError, setMessageIsError] = useState(false);
 
   function actionError(body: Record<string, unknown>) {
     const code = typeof body.error === "string" ? body.error : "";
@@ -94,6 +95,7 @@ export function SpecimenActions({
       only_rejected_specimens_disposable: tr("Only rejected specimens can be disposed of in this workflow.", "يسمح مسار التخلص هذا بالعينات المرفوضة فقط."),
       specimen_state_changed_or_active_children: tr("Specimen changed or has unresolved active aliquots.", "تغيرت حالة العينة أو توجد أجزاء مشتقة فعالة لم تُعالج."),
       specimen_preanalytical_state_changed: tr("Specimen state changed concurrently. Refresh and review before retrying.", "تغيرت حالة العينة بالتزامن. حدّث الصفحة وراجعها قبل إعادة المحاولة."),
+      specimen_order_not_active: tr("This order was cancelled or completed. Specimen reception was not recorded; review the order and custody history.", "الطلب ملغى أو مكتمل. لم يُسجل استلام العينة؛ راجع حالة الطلب وسجل الحيازة."),
       completed_order_requires_result_amendment_workflow: tr("The order is already completed. Use the controlled result/amendment workflow.", "الطلب مكتمل بالفعل. استخدم مسار النتائج/التعديل المنضبط."),
       order_cancelled: tr("The order is cancelled.", "الطلب ملغى."),
       rejection_branch_must_match_specimen_location: tr("Rejection must be recorded at the specimen's current custody branch.", "يجب تسجيل الرفض في فرع الحيازة الحالي للعينة."),
@@ -107,6 +109,7 @@ export function SpecimenActions({
     const form = new FormData(event.currentTarget);
     setBusy(true);
     setMessage("");
+    setMessageIsError(false);
 
     try {
     const isReject = mode === "REJECT";
@@ -162,9 +165,12 @@ export function SpecimenActions({
       setRejectionScope("WHOLE_SPECIMEN");
       router.refresh();
     } else {
+      setMessageIsError(true);
       setMessage(actionError(body));
+      if (response.status === 409) router.refresh();
     }
     } catch {
+      setMessageIsError(true);
       setMessage(tr(
         "Connection interrupted. Review specimen custody state before retrying.",
         "انقطع الاتصال. راجع حالة العينة وسلسلة الحيازة قبل إعادة المحاولة.",
@@ -190,7 +196,7 @@ export function SpecimenActions({
     {canCollect && !specimenTypeConfigured && status === "PLANNED" && <p className="form-error">{tr("Collection blocked: specimen type is not configured for this test.", "تعذر جمع العينة لأن نوع العينة غير مهيأ لهذا الفحص.")}</p>}
     {requirementsFinalized && requiredVolume && status === "PLANNED" && <p className="muted"><strong>{tr("Minimum required volume", "الحد الأدنى المطلوب")}: {requiredVolume} {requiredVolumeUnit || ""}</strong></p>}
     {requirementsFinalized && collectionInstructions.length > 0 && status === "PLANNED" && <div className="muted"><strong>{tr("Collection instructions", "تعليمات الجمع")}:</strong> {collectionInstructions.join(" · ")}</div>}
-    {message && <p className="form-success">{message}</p>}
+    {message && <p className={messageIsError ? "form-error" : "form-success"} role={messageIsError ? "alert" : "status"}>{message}</p>}
 
     <CrudModal open={mode !== null}
       onClose={() => { if (!busy) { setMode(null); setRejectionScope("WHOLE_SPECIMEN"); } }}
