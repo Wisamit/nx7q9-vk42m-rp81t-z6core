@@ -1,14 +1,22 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 
-export type TriageClass = "CLINICAL" | "FINANCIAL" | "CATALOG";
+export type TriageClass = "CLINICAL" | "FINANCIAL" | "CROSS_DOMAIN" | "CATALOG";
 export type TriageReason = "SOURCE_VALUE_CHANGED" | "REQUIRES_DOMAIN_ASSESSMENT" | "FOLLOW_UP_REQUIRED";
 
 const TOKEN = /^[a-f0-9]{64}$/;
 const PURPOSE = "family-lab/catalog-drift-observation/v1\n";
 
+/**
+ * Every native export class must be triageable. Category identifies which
+ * existing management grants permit *review only*, never who may authorize
+ * clinical or financial configuration to become effective.
+ */
 export function bundleTriageClass(entityType: string): TriageClass | null {
-  if (["REFERENCE_INTERVAL", "TEST", "COMPONENT", "UNIT"].includes(entityType)) return "CLINICAL";
-  if (entityType === "PRICE_LIST" || entityType === "PRICE_LIST_ITEM") return "FINANCIAL";
+  if (entityType === "PANEL" || entityType === "PACKAGE") return "CROSS_DOMAIN";
+  if (["REFERENCE_INTERVAL", "TEST", "COMPONENT", "UNIT", "CONTAINER"].includes(entityType))
+    return "CLINICAL";
+  if (["PRICE_LIST", "PRICE_LIST_ITEM", "PRICE_LIST_PACKAGE_ITEM"].includes(entityType))
+    return "FINANCIAL";
   return null;
 }
 
@@ -43,5 +51,9 @@ export function triagePermissionScope(
   if (!permissions.has("catalog.manage")) return false;
   if (category === "CLINICAL") return permissions.has("catalog.reference_ranges.manage");
   if (category === "FINANCIAL") return permissions.has("pricing.manage");
-  return true;
+  // Composite memberships affect clinically performed tests and commercial
+  // packaging. Review requires BOTH present grants until policy is signed.
+  if (category === "CROSS_DOMAIN") return permissions.has("catalog.reference_ranges.manage") &&
+    permissions.has("pricing.manage");
+  return category === "CATALOG";
 }
