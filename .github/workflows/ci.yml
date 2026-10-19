@@ -190,6 +190,7 @@ jobs:
       - run: node --experimental-strip-types --test tests/release-closure-result-order-lock-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/release-closure-specimen-order-guard-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/release-closure-transfer-order-dispatch-mariadb.integration.test.ts
+      - run: node --experimental-strip-types --test tests/release-closure-report-outbound-consent-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/catalog-safe-master-commit-live-auth-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/catalog-legacy-clinical-live-write-auth-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/catalog-review-live-staging-authorization-mariadb.integration.test.ts
