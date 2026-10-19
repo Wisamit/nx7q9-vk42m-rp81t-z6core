@@ -27,7 +27,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   if (!canAccessBranch(session, referral.branchId)) return NextResponse.json({ error: "branch_forbidden" }, { status: 403 });
 
   let nextStatus: "DISPATCHED" | "RESULT_RECEIVED" | "VERIFIED" | "COMPLETED" | "CANCELLED";
-  let update: Prisma.SendOutReferralUncheckedUpdateInput = {};
+  let update: Prisma.SendOutReferralUncheckedUpdateManyInput = {};
   let eventMetadata: Record<string, unknown> = {};
 
   if (action === "DISPATCH") {
@@ -80,8 +80,56 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   }
 
   const note = text(body?.note, 1000) || null;
-  const updated = await prisma.$transaction(async tx => {
-    const saved = await tx.sendOutReferral.update({ where: { id: referral.id }, data: update });
+  // The UI already requires a documented cancellation; the API must enforce
+  // the same audit invariant for direct clients and automated integrations.
+  if (action === "CANCEL" && !note) {
+    return NextResponse.json({ error: "cancellation_reason_required" }, { status: 400 });
+  }
+  const outcome = await prisma.$transaction(async tx => {
+    // A stale UI action must not overwrite a newer transition or append a false
+    // custody/verification event. InnoDB serializes this conditional update.
+    const claimed = await tx.sendOutReferral.updateMany({
+      where: {
+        id: referral.id,
+        organizationId: session.user.organizationId,
+        branchId: referral.branchId,
+        status: referral.status,
+      },
+      data: update,
+    });
+    if (claimed.count !== 1) return { kind: "changed" } as const;
+    const saved = await tx.sendOutReferral.findUniqueOrThrow({ where: { id: referral.id } });
+    if (action === "DISPATCH") {
+      const currentItem = await tx.orderItem.findFirst({
+        where: { id: referral.orderItemId, order: { organizationId: session.user.organizationId } },
+        select: { status: true, order: { select: { status: true } } },
+      });
+      if (!currentItem || ["CANCELLED", "VERIFIED"].includes(currentItem.status) ||
+          ["CANCELLED", "COMPLETED"].includes(currentItem.order.status)) {
+        throw new Error("SENDOUT_ORDER_NO_LONGER_ACTIVE");
+      }
+    }
+    if (action === "DISPATCH" && referral.specimenId) {
+      // Claim current specimen custody before emitting a dispatch event.
+      // Quarantined, transferred, rejected or unlinked samples cannot be
+      // represented as physically dispatched from the referral branch.
+      const rows = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM specimens WHERE id = ${referral.specimenId} FOR UPDATE
+      `;
+      const specimen = rows.length === 1 ? await tx.specimen.findFirst({
+        where: {
+          id: referral.specimenId,
+          organizationId: session.user.organizationId,
+          orderId: referral.orderItem.orderId,
+          orderItems: { some: { orderItemId: referral.orderItemId, status: "ACTIVE" } },
+        },
+        select: { currentBranchId: true, status: true },
+      }) : null;
+      if (!specimen || specimen.currentBranchId !== referral.branchId ||
+          !["COLLECTED", "RECEIVED", "IN_PROCESS"].includes(specimen.status)) {
+        throw new Error("SENDOUT_SPECIMEN_CUSTODY_CHANGED");
+      }
+    }
     await tx.sendOutEvent.create({
       data: {
         referralId: referral.id,
@@ -130,8 +178,26 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         userAgent: ctx.userAgent,
       },
     });
-    return saved;
+    return { kind: "updated", referral: saved } as const;
+  }).catch(error => {
+    // Throw inside the transaction to roll back the status claim itself.
+    if (error instanceof Error && error.message === "SENDOUT_SPECIMEN_CUSTODY_CHANGED") {
+      return { kind: "specimen_changed" } as const;
+    }
+    if (error instanceof Error && error.message === "SENDOUT_ORDER_NO_LONGER_ACTIVE") {
+      return { kind: "order_changed" } as const;
+    }
+    throw error;
   });
 
-  return NextResponse.json({ status: "ok", referral: updated });
+  if (outcome.kind === "order_changed") {
+    return NextResponse.json({ error: "sendout_order_no_longer_active" }, { status: 409 });
+  }
+  if (outcome.kind === "specimen_changed") {
+    return NextResponse.json({ error: "sendout_specimen_custody_changed" }, { status: 409 });
+  }
+  if (outcome.kind === "changed") {
+    return NextResponse.json({ error: "sendout_state_changed" }, { status: 409 });
+  }
+  return NextResponse.json({ status: "ok", referral: outcome.referral });
 }

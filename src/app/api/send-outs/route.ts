@@ -73,6 +73,22 @@ export async function POST(request: Request) {
       SELECT id FROM order_items WHERE id = ${orderItemId} FOR UPDATE
     `;
     if (locked.length !== 1) return { kind: "order_item_changed" } as const;
+    // Recheck authoritative order/item eligibility under the item lock; a
+    // candidate list rendered before cancellation is not a commit-time gate.
+    const currentItem = await tx.orderItem.findFirst({
+      where: { id: orderItemId, order: { organizationId: session.user.organizationId } },
+      select: {
+        orderId: true,
+        status: true,
+        order: { select: { status: true, orderingBranchId: true } },
+      },
+    });
+    if (!currentItem ||
+        ["CANCELLED", "VERIFIED"].includes(currentItem.status) ||
+        ["CANCELLED", "COMPLETED"].includes(currentItem.order.status) ||
+        !canAccessBranch(session, currentItem.order.orderingBranchId)) {
+      return { kind: "order_item_changed" } as const;
+    }
     const active = await tx.sendOutReferral.findFirst({
       where: {
         organizationId: session.user.organizationId,
@@ -82,17 +98,42 @@ export async function POST(request: Request) {
       select: { id: true },
     });
     if (active) return { kind: "active_exists", referralId: active.id } as const;
-    if (selectedSpecimen && selectedSpecimen.status !== "IN_PROCESS") {
-      const claimed = await tx.specimen.updateMany({
+    if (specimenId) {
+      // Lock current physical custody before writing the referral. A previous
+      // candidate selection cannot authorize a transfer, rejection or an
+      // unrelated branch/specimen discovered after this request began.
+      const specimenLock = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM specimens WHERE id = ${specimenId} FOR UPDATE
+      `;
+      if (specimenLock.length !== 1) return { kind: "specimen_state_changed" } as const;
+      const currentSpecimen = await tx.specimen.findFirst({
         where: {
-          id: selectedSpecimen.id,
-          status: selectedSpecimen.status,
-          preanalyticalVersion: selectedSpecimen.preanalyticalVersion,
+          id: specimenId,
+          organizationId: session.user.organizationId,
+          orderId: currentItem.orderId,
           orderItems: { some: { orderItemId, status: "ACTIVE" } },
         },
-        data: { preanalyticalVersion: { increment: 1 } },
+        select: { id: true, status: true, currentBranchId: true, preanalyticalVersion: true },
       });
-      if (claimed.count !== 1) throw new Error("SPECIMEN_PREANALYTICAL_STATE_CHANGED");
+      if (!currentSpecimen || currentSpecimen.currentBranchId !== branchId ||
+          !["COLLECTED", "RECEIVED", "IN_PROCESS"].includes(currentSpecimen.status)) {
+        return { kind: "specimen_state_changed" } as const;
+      }
+      if (currentSpecimen.status !== "IN_PROCESS") {
+        const claimed = await tx.specimen.updateMany({
+          where: {
+            id: currentSpecimen.id,
+            organizationId: session.user.organizationId,
+            orderId: currentItem.orderId,
+            currentBranchId: branchId,
+            status: currentSpecimen.status,
+            preanalyticalVersion: currentSpecimen.preanalyticalVersion,
+            orderItems: { some: { orderItemId, status: "ACTIVE" } },
+          },
+          data: { preanalyticalVersion: { increment: 1 } },
+        });
+        if (claimed.count !== 1) throw new Error("SPECIMEN_PREANALYTICAL_STATE_CHANGED");
+      }
     }
 
     const referral = await tx.sendOutReferral.create({

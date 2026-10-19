@@ -182,7 +182,21 @@ export function SendOutManager({
       });
       const body = await response.json().catch(() => ({})) as { error?: string };
       if (!response.ok) {
-        setActionError(body.error || tr("Send-out action failed.", "فشل إجراء الإحالة الخارجية."));
+        const conflictMessage = body.error === "sendout_state_changed"
+          ? tr("Referral status changed. Review its current state before another action.",
+            "تغيّرت حالة الإحالة. راجع الحالة الحالية قبل اتخاذ إجراء آخر.")
+          : body.error === "sendout_specimen_custody_changed"
+          ? tr("Specimen custody or status changed. Check its barcode and current branch before dispatch.",
+            "تغيّرت حيازة العينة أو حالتها. تحقّق من الباركود والفرع الحالي قبل الإرسال.")
+          : body.error === "sendout_order_no_longer_active"
+          ? tr("The order or test is closed. Dispatch was not recorded.",
+            "الطلب أو الفحص مغلق. لم يتم تسجيل إرسال العينة.")
+          : body.error === "cancellation_reason_required"
+          ? tr("A documented cancellation reason is required.", "يجب توثيق سبب الإلغاء.")
+          : "";
+        setActionError(conflictMessage || body.error ||
+          tr("Send-out action failed.", "فشل إجراء الإحالة الخارجية."));
+        if (response.status === 409) router.refresh();
         return false;
       }
       setMessage(tr("Send-out updated.", "تم تحديث الإحالة الخارجية."));

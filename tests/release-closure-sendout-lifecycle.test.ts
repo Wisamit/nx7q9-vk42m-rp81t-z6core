@@ -1,0 +1,62 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+
+test("Send-out state changes use a conditional claim before ANY immutable event/audit write", () => {
+  const src = readFileSync("src/app/api/send-outs/[id]/actions/route.ts", "utf8");
+  const transaction = src.indexOf("const outcome = await prisma.$transaction(async tx =>");
+  const claim = src.indexOf("tx.sendOutReferral.updateMany", transaction);
+  const statusPredicate = src.indexOf("status: referral.status", claim);
+  const conditionalExit = src.indexOf('if (claimed.count !== 1) return { kind: "changed" }', statusPredicate);
+  const event = src.indexOf("tx.sendOutEvent.create", conditionalExit);
+  const audit = src.indexOf("tx.auditEvent.create", event);
+  assert.ok(transaction >= 0 && claim > transaction);
+  assert.ok(statusPredicate > claim && conditionalExit > statusPredicate);
+  assert.ok(event > conditionalExit && audit > event);
+  assert.ok(src.includes('error: "sendout_state_changed"'));
+  assert.ok(!src.includes("tx.sendOutReferral.update({ where: { id: referral.id }"));
+  const physicalLock = src.indexOf("SELECT id FROM specimens", conditionalExit);
+  const custody = src.indexOf("specimen.currentBranchId !== referral.branchId", physicalLock);
+  const eventAfterCustody = src.indexOf("tx.sendOutEvent.create", custody);
+  assert.ok(physicalLock > conditionalExit && custody > physicalLock && eventAfterCustody > custody);
+  assert.ok(src.includes("SENDOUT_SPECIMEN_CUSTODY_CHANGED"));
+  assert.ok(src.includes('error: "sendout_specimen_custody_changed"'));
+  assert.ok(src.includes("SENDOUT_ORDER_NO_LONGER_ACTIVE"));
+  assert.ok(src.includes('error: "sendout_order_no_longer_active"'));
+  assert.ok(src.includes('action === "CANCEL" && !note'));
+  assert.ok(src.includes('error: "cancellation_reason_required"'));
+});
+
+test("Send-out creation rechecks order closure, specimen linkage, location and custody under row locks", () => {
+  const src = readFileSync("src/app/api/send-outs/route.ts", "utf8");
+  const transaction = src.indexOf("const outcome = await prisma.$transaction(async tx =>");
+  const itemLock = src.indexOf("SELECT id FROM order_items", transaction);
+  const freshItem = src.indexOf("const currentItem = await tx.orderItem.findFirst", itemLock);
+  const duplicate = src.indexOf("const active = await tx.sendOutReferral.findFirst", freshItem);
+  const specimenLock = src.indexOf("SELECT id FROM specimens", duplicate);
+  const freshSpecimen = src.indexOf("const currentSpecimen = await tx.specimen.findFirst", specimenLock);
+  const claim = src.indexOf("tx.specimen.updateMany", freshSpecimen);
+  const referral = src.indexOf("tx.sendOutReferral.create", claim);
+  assert.ok(itemLock > transaction && freshItem > itemLock && duplicate > freshItem);
+  assert.ok(specimenLock > duplicate && freshSpecimen > specimenLock && claim > freshSpecimen && referral > claim);
+  for (const predicate of [
+    '["CANCELLED", "VERIFIED"].includes(currentItem.status)',
+    '["CANCELLED", "COMPLETED"].includes(currentItem.order.status)',
+    'currentSpecimen.currentBranchId !== branchId',
+    'orderItems: { some: { orderItemId, status: "ACTIVE" } }',
+    'organizationId: session.user.organizationId',
+  ]) assert.ok(src.includes(predicate), predicate);
+  assert.ok(!src.includes("id: selectedSpecimen.id,\n          status: selectedSpecimen.status"));
+});
+
+test("Bilingual send-out conflict handling preserves explicit recheck after stale actions", () => {
+  const ui = readFileSync("src/components/send-out-manager.tsx", "utf8");
+  for (const code of [
+    "sendout_state_changed", "sendout_specimen_custody_changed",
+    "sendout_order_no_longer_active", "cancellation_reason_required",
+  ]) assert.ok(ui.includes(code), code);
+  assert.ok(ui.includes("Referral status changed. Review its current state"));
+  assert.ok(ui.includes("تغيّرت حالة الإحالة"));
+  assert.ok(ui.includes("if (response.status === 409) router.refresh()"));
+  assert.ok(ui.includes("Connection interrupted. Recheck the custody and referral status before retrying."));
+});

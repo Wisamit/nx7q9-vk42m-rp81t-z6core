@@ -186,6 +186,7 @@ jobs:
       - run: node --experimental-strip-types --test tests/stage-154-patient-identifier-merge-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-155-patient-scheme-lifecycle-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/release-closure-sendout-serialization-mariadb.integration.test.ts
+      - run: node --experimental-strip-types --test tests/release-closure-sendout-lifecycle-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/catalog-safe-master-commit-live-auth-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/catalog-legacy-clinical-live-write-auth-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/catalog-review-live-staging-authorization-mariadb.integration.test.ts
