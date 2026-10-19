@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { Prisma } from "../../../../generated/prisma/client";
 import { canAccessBranch, canAccessDepartment, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { lockResultOrderState, ResultOrderStateChanged } from "@/lib/result-order-state";
 import { numericFlag, referencePatientSex, resolveReferenceInterval } from "@/lib/result-reference";
 import { evaluateDelta } from "@/lib/delta-check";
 import { syncDeltaReviewEvents } from "@/lib/delta-review";
@@ -471,26 +472,12 @@ export async function POST(request: Request) {
   const entryValidationStage = complete ? "TECHNICAL_REVIEW" as const : "ENTRY" as const;
 
   const saved = await prisma.$transaction(async (tx) => {
-    // Before mutating any specimen, draft, order item or audit record, lock
-    // the authoritative order and item states. A candidate loaded before a
-    // cancellation must never resurrect a cancelled clinical order or test.
-    // Keep order -> item -> specimen lock order for this write transaction.
-    const currentOrder = await tx.$queryRaw<Array<{ status: string }>>`
-      SELECT status FROM orders
-      WHERE id = ${orderItem.orderId} AND organization_id = ${session.user.organizationId}
-      FOR UPDATE
-    `;
-    const currentItem = await tx.$queryRaw<Array<{ status: string }>>`
-      SELECT status FROM order_items
-      WHERE id = ${orderItemId} AND order_id = ${orderItem.orderId}
-      FOR UPDATE
-    `;
-    if (currentOrder.length !== 1 || currentItem.length !== 1 ||
-        !["REGISTERED", "COLLECTED", "IN_PROGRESS"].includes(currentOrder[0].status) ||
-        !["ORDERED", "COLLECTED", "IN_PROGRESS", "RESULTED"].includes(currentItem[0].status)) {
-      throw new Error("ORDER_RESULT_ENTRY_CLOSED");
-    }
-    const currentOrderStatus = currentOrder[0].status;
+    const { orderStatus: currentOrderStatus } = await lockResultOrderState(tx, {
+      organizationId: session.user.organizationId,
+      orderId: orderItem.orderId,
+      orderItemId,
+      mode: "ENTRY",
+    });
     if (specimen.status === "RECEIVED") {
       const claimed = await tx.specimen.updateMany({
         where: {
@@ -985,7 +972,8 @@ export async function POST(request: Request) {
   }, { timeout: 30000 }).catch(error => {
     if (error instanceof Error && error.message === "SPECIMEN_PREANALYTICAL_STATE_CHANGED") return null;
     if (error instanceof Error && error.message === "RESULT_STATE_CHANGED") return "RESULT_STATE_CHANGED" as const;
-    if (error instanceof Error && error.message === "ORDER_RESULT_ENTRY_CLOSED") return "ORDER_RESULT_ENTRY_CLOSED" as const;
+    if (error instanceof ResultOrderStateChanged ||
+        (error instanceof Error && error.message === "ORDER_RESULT_ENTRY_CLOSED")) return "ORDER_RESULT_ENTRY_CLOSED" as const;
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
       return "RESULT_STATE_CHANGED" as const;
     }
