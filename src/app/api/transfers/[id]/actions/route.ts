@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { lockActiveTransferOrders, TransferOrderNoLongerActive } from "@/lib/transfer-order-activity";
 
 function text(value: unknown, max = 500) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -48,6 +49,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     }
 
     const dispatched = await prisma.$transaction(async (tx) => {
+      // A saved DRAFT is not authority to dispatch after cancellation.
+      // Order locks are acquired in stable order before manifest and specimen
+      // state claims. Previously dispatched specimens remain receivable.
+      await lockActiveTransferOrders(
+        tx, session.user.organizationId, manifest.items.map(item => item.specimen.orderId),
+      );
       const dispatchedAt = new Date();
 
       const claimedManifest = await tx.specimenTransferManifest.updateMany({
@@ -70,9 +77,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         const moved = await tx.specimen.updateMany({
           where: {
             id: item.specimenId,
+            organizationId: session.user.organizationId,
             status: item.specimen.status,
             currentBranchId: manifest.sourceBranchId,
             preanalyticalVersion: item.specimen.preanalyticalVersion,
+            order: { status: { notIn: ["CANCELLED", "COMPLETED"] } },
           },
           data: {
             status: "IN_TRANSIT",
@@ -124,10 +133,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       });
       return true;
     }, { timeout: 30000 }).catch(error => {
+      if (error instanceof TransferOrderNoLongerActive) return "ORDER_CLOSED" as const;
       if (error instanceof Error && error.message === "SPECIMEN_PREANALYTICAL_STATE_CHANGED") return null;
       throw error;
     });
 
+    if (dispatched === "ORDER_CLOSED") {
+      return NextResponse.json({ error: "transfer_order_not_active" }, { status: 409 });
+    }
     if (!dispatched) {
       return NextResponse.json({ error: "specimen_preanalytical_state_changed" }, { status: 409 });
     }
