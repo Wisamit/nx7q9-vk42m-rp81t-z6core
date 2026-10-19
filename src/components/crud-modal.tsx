@@ -62,7 +62,7 @@ function OpenCrudModal({
   const closeRef = useRef(onClose);
   // Keep the latest in-flight state without resetting the focus trap effect.
   const dismissalBlockedRef = useRef(dismissalBlocked);
-  dismissalBlockedRef.current = dismissalBlocked;
+  useEffect(() => { dismissalBlockedRef.current = dismissalBlocked; }, [dismissalBlocked]);
   const changedRef = useRef(false);
   const discardOpenRef = useRef(false);
   // Portal dialogs to the document body so page grids/transforms/overflow
