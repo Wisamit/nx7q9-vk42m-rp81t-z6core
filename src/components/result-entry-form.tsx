@@ -259,6 +259,10 @@ export function ResultEntryForm({
     } else if (body.error === "specimen_preanalytical_state_changed") {
       setMessage(tr("The specimen's clinical status or location changed. Reload the specimen before continuing.", "تغيرت حالة العينة السريرية أو موقعها. أعد تحميل العينة قبل المتابعة."));
       router.refresh();
+    } else if (body.error === "order_or_test_not_open_for_results") {
+      setMessage(tr("This order or test is closed. The result was not saved. Refresh and review the order before continuing.",
+        "الطلب أو الفحص مغلق. لم تُحفظ النتيجة. حدّث الصفحة وراجع حالة الطلب قبل المتابعة."));
+      router.refresh();
     } else {
       setMessage(body.error || tr("Result could not be saved.", "تعذر حفظ النتيجة."));
     }
