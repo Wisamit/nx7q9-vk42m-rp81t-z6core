@@ -325,6 +325,10 @@ export function ResultEntryForm({
     } else if (body.error === "result_state_changed_retry") {
       setMessage(tr("This result or specimen changed during technical review. Refresh the current data before retrying.", "تغيرت النتيجة أو حالة العينة أثناء المراجعة الفنية. حدّث البيانات قبل إعادة المحاولة."));
       router.refresh();
+    } else if (body.error === "order_or_test_not_open_for_results") {
+      setMessage(tr("The order or test has closed. Technical review was not completed. Reload the current record.",
+        "الطلب أو الفحص مغلق. لم تُستكمل المراجعة الفنية. أعد تحميل السجل الحالي."));
+      router.refresh();
     } else if (body.error === "reflex_review_required") {
       setMessage(tr("Technical review blocked: review all pending reflex recommendations first.", "المراجعة الفنية محظورة: راجع أولاً جميع توصيات الفحوص الانعكاسية المعلقة."));
     } else if (body.error === "validation_hold_review_required") {
