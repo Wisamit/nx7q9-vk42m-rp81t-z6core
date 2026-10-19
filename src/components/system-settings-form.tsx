@@ -95,9 +95,14 @@ export function SystemSettingsForm({ initial, locale, onSavePendingChange }: {
       });
       const body = await response.json().catch(() => ({})) as { error?: string };
       if (!response.ok) {
-        setMessage(body.error === "invalid_image"
-          ? tr("Logo or favicon is invalid.", "اللوغو أو الأيقونة غير صالحة.")
-          : tr("Unable to save settings.", "تعذر حفظ الإعدادات."));
+        setMessage(body.error === "settings_revision_conflict"
+          ? tr(
+            "Another session changed organization settings. Your edits were not applied. Copy them before reloading to review the latest configuration.",
+            "تم تعديل إعدادات المؤسسة من جلسة أخرى. لم يتم تطبيق تعديلاتك. انسخها قبل إعادة تحميل الصفحة لمراجعة الإعدادات الأحدث.",
+          )
+          : body.error === "invalid_image"
+            ? tr("Logo or favicon is invalid.", "اللوغو أو الأيقونة غير صالحة.")
+            : tr("Unable to save settings.", "تعذر حفظ الإعدادات."));
         return;
       }
       // Remain locked until the successful settings change reloads the UI.
