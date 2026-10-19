@@ -121,6 +121,7 @@ jobs:
       - run: node --experimental-strip-types --test tests/stage-55-catalog-finding-lifecycle-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-56-catalog-expert-preflight-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-57-catalog-governance-readiness-mariadb.integration.test.ts
+      - run: node --experimental-strip-types --test tests/f2-ten-class-review-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-58-signatory-planning-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-59-signatory-policy-draft-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-60-policy-draft-review-mariadb.integration.test.ts
