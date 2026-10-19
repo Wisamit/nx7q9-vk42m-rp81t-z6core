@@ -20,7 +20,10 @@ export async function POST(request: Request) {
   const effectiveFromText = text(body.effectiveFrom, 30);
   const effectiveToText = text(body.effectiveTo, 30);
 
-  if (!priceListId || !packageId || amount === null || !effectiveFromText) {
+  if (amount === null) {
+    return NextResponse.json({ error: "invalid_exact_price" }, { status: 400 });
+  }
+  if (!priceListId || !packageId || !effectiveFromText) {
     return NextResponse.json({ error: "invalid_fields" }, { status: 400 });
   }
 
