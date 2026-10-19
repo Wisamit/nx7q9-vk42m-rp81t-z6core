@@ -31,7 +31,7 @@ test("F2 MariaDB: ten staged review classes survive tenant-locked reading withou
     for (const entityType of catalogExportTypes) {
       number++;
       const source={id:randomUUID(),entityType,note:"synthetic no-PHI source"};
-      await run("INSERT INTO catalog_import_rows(id,batch_id,row_number,entity_type,status,source_data,normalized_data,updated_at) VALUES(?,?,?,?,'WARNING',?,?,NOW(3))",
+      await run("INSERT INTO catalog_import_rows(id,batch_id,`row_number`,entity_type,status,source_data,normalized_data,updated_at) VALUES(?,?,?,?,'WARNING',?,?,NOW(3))",
         [rowIds[number-1],batch,number,entityType,JSON.stringify(source),JSON.stringify(source)]);
     }
     await reader.execute("SET SESSION innodb_lock_wait_timeout=8");
@@ -40,7 +40,7 @@ test("F2 MariaDB: ten staged review classes survive tenant-locked reading withou
       "SELECT id FROM organizations WHERE id=? AND status='ACTIVE' FOR UPDATE",[org]);
     assert.equal(tenant.length,1);
     const [staged]=await reader.execute<mysql.RowDataPacket[]>(
-      "SELECT r.row_number,r.entity_type,r.status,r.imported_entity_id,b.status AS batch_status FROM catalog_import_rows r JOIN catalog_import_batches b ON b.id=r.batch_id WHERE b.organization_id=? AND b.id=? ORDER BY r.row_number",
+      "SELECT r.`row_number`,r.entity_type,r.status,r.imported_entity_id,b.status AS batch_status FROM catalog_import_rows r JOIN catalog_import_batches b ON b.id=r.batch_id WHERE b.organization_id=? AND b.id=? ORDER BY r.`row_number`",
       [org,batch]);
     assert.equal(staged.length,10);
     for(const row of staged) {
