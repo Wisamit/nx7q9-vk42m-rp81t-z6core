@@ -33,7 +33,7 @@ const empty = (): GovernanceCount => ({
  */
 export function summarizeCatalogGovernance(rows: readonly GovernanceRow[], sourceAttested: boolean) {
   const byCategory: Record<TriageClass, GovernanceCount> = {
-    CLINICAL: empty(), FINANCIAL: empty(), CATALOG: empty(),
+    CLINICAL: empty(), FINANCIAL: empty(), CROSS_DOMAIN: empty(), CATALOG: empty(),
   };
   const totals = empty();
   for (const row of rows) {
