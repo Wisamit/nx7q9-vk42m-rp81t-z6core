@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { catalogBundleAllowedSourceFields } from "../src/lib/catalog-bundle-source-boundary.ts";
+import { catalogBundleAllowedSourceFields, catalogBundleNestedSourceProjections, type BundleNestedProjection } from "../src/lib/catalog-bundle-source-boundary.ts";
 import {
   BundleFieldContractError, bundleFieldContract, verifyBundleFieldContract,
 } from "../src/lib/catalog-bundle-field-contract.ts";
@@ -15,8 +15,17 @@ const ALL = [
 ] as const;
 const SECRET="synthetic-nonproduction-f2-bundle-secret-length-over-32-bytes";
 
-function syntheticRecord(type: CatalogExportType) {
-  return Object.fromEntries(catalogBundleAllowedSourceFields[type].map(name=>[name,null]));
+function syntheticNested(shape: BundleNestedProjection): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(shape).map(([name, child]) => [
+    name, child === true ? null : Array.isArray(child)
+      ? [syntheticNested(child[0])] : syntheticNested(child as BundleNestedProjection),
+  ]));
+}
+function syntheticRecord(type: CatalogExportType): Record<string, unknown> {
+  return {
+    ...Object.fromEntries(catalogBundleAllowedSourceFields[type].map(name=>[name,null])),
+    ...syntheticNested(catalogBundleNestedSourceProjections[type]),
+  };
 }
 function exampleBundle(types: readonly CatalogExportType[]=ALL) {
   return {
@@ -59,6 +68,46 @@ test("F2: deleted/renamed/additional source keys cannot masquerade as a complete
     row[first]=null;
     row.__extraField=null;
     assert.throws(()=>verifyBundleFieldContract(payload),/bundle_field_contract_incomplete_source/,kind);
+  }
+});
+test("F2: nested fields are exact for every linked entity and every composite member",()=>{
+  const affected = [
+    ["COMPONENT","test"],["COMPONENT","unit"],["PANEL","items"],
+    ["PACKAGE","items"],["REFERENCE_INTERVAL","component"],
+    ["PRICE_LIST_ITEM","priceList"],["PRICE_LIST_ITEM","test"],
+    ["PRICE_LIST_PACKAGE_ITEM","priceList"],["PRICE_LIST_PACKAGE_ITEM","package"],
+  ] as const;
+  for (const [kind,relation] of affected) {
+    const payload=exampleBundle([kind]);
+    const row=payload.groups[0].records[0];
+    const original=row[relation];
+    row[relation]=null;
+    assert.throws(()=>verifyBundleFieldContract(payload),
+      /bundle_field_contract_incomplete_nested_source/,kind+"."+relation);
+    row[relation]=original;
+  }
+  // One explicitly nullable Prisma relation is allowed, unlike an omitted key.
+  const nullable=exampleBundle(["COMPONENT"]);
+  nullable.groups[0].records[0].unit=null;
+  assert.equal(verifyBundleFieldContract(nullable),"COMPLETE_SOURCE_FIELD_PROJECTION");
+});
+test("F2: nested missing/extra fields, partial member and price linkage are not attested as complete",()=>{
+  const cases=[
+    ["COMPONENT",(r: Record<string, unknown>)=>{delete (r.test as Record<string, unknown>).code;}],
+    ["REFERENCE_INTERVAL",(r: Record<string, unknown>)=>{delete ((r.component as Record<string, unknown>).test as Record<string, unknown>).code;}],
+    ["PANEL",(r: Record<string, unknown>)=>{delete (((r.items as Record<string, unknown>[])[0]).test as Record<string, unknown>).code;}],
+    ["PACKAGE",(r: Record<string, unknown>)=>{(r.items as Record<string, unknown>[])[0].extraneous="no";}],
+    ["PRICE_LIST_ITEM",(r: Record<string, unknown>)=>{delete (r.priceList as Record<string, unknown>).currency;}],
+    ["PRICE_LIST_PACKAGE_ITEM",(r: Record<string, unknown>)=>{delete (r.priceList as Record<string, unknown>).contractId;}],
+  ] as const;
+  for(const [kind,mutate] of cases){
+    const payload=exampleBundle([kind]);
+    mutate(payload.groups[0].records[0]);
+    // Even a server with the HMAC key must not sign an incomplete source.
+    const signed=attestCatalogBundle(payload,SECRET);
+    assert.equal(verifyCatalogBundleAttestation(signed,SECRET),"VERIFIED");
+    assert.throws(()=>verifyBundleFieldContract(signed),
+      /bundle_field_contract_incomplete_nested_source/,kind);
   }
 });
 test("F2: source contract fails closed on reordered, missing and invented classes",()=>{
