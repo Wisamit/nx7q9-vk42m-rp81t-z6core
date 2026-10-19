@@ -17,6 +17,8 @@ const contentSecurityPolicy = [
 ].join("; ");
 
 const nextConfig: NextConfig = {
+  // Bound page-data workers on Hostinger to avoid process/thread exhaustion during build.
+  experimental: { cpus: 2 },
   poweredByHeader: false,
   async headers() {
     const headers = [
