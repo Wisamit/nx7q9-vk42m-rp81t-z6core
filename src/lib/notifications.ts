@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { safeOutboundUrl } from "@/lib/webhook-delivery";
+import { currentReportRecipientAuthorized } from "@/lib/report-outbound-authorization";
 import {
   NotificationChannel,
   NotificationDeliveryStatus,
@@ -279,7 +280,9 @@ export async function dispatchPendingNotifications(db: PrismaClient, organizatio
           id: delivery.reportDeliveryEvent!.reportVersionId,
           report: { organizationId },
         },
-        include: { report: { select: { currentVersion: true } } },
+        include: { report: { select: { currentVersion: true,
+          order: { select: { patientId: true } },
+        } } },
       });
       if (!version || version.status === "RETRACTED" || version.version !== version.report.currentVersion) {
         const settled = await finalizeNotificationClaim(db, delivery, organizationId, token, attempt, {
@@ -291,6 +294,39 @@ export async function dispatchPendingNotifications(db: PrismaClient, organizatio
         if (settled) results.push({
           id: delivery.id, status: NotificationDeliveryStatus.SKIPPED,
           error: "report_version_superseded_or_retracted",
+        });
+        continue;
+      }
+
+      // Revoked portal verification, changed destination, disabled account or
+      // withdrawn corporate patient access must stop a queued report link
+      // before contacting any external provider. This is a fresh send-time
+      // authorization check, independent of the enqueue-time transaction.
+      const recipientType = delivery.notification.recipientType;
+      const referenceId = delivery.notification.recipientReferenceId;
+      const supported = recipientType === NotificationRecipientType.PATIENT ||
+        recipientType === NotificationRecipientType.REFERRER ||
+        recipientType === NotificationRecipientType.CLIENT;
+      const eligible = supported && referenceId && delivery.destination
+        ? await currentReportRecipientAuthorized(db, {
+            organizationId,
+            recipientType,
+            recipientId: referenceId,
+            patientId: version!.report.order.patientId,
+            channel: delivery.channel as "EMAIL" | "SMS" | "WHATSAPP",
+            destination: delivery.destination,
+          })
+        : false;
+      if (!eligible) {
+        const settled = await finalizeNotificationClaim(db, delivery, organizationId, token, attempt, {
+          status: NotificationDeliveryStatus.SKIPPED,
+          attemptCount: attempt,
+          lastError: "report_recipient_authorization_revoked_or_changed",
+          nextAttemptAt: null,
+        }, { status: "FAILED" });
+        if (settled) results.push({
+          id: delivery.id, status: NotificationDeliveryStatus.SKIPPED,
+          error: "report_recipient_authorization_revoked_or_changed",
         });
         continue;
       }
