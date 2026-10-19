@@ -5,7 +5,8 @@ import { readFileSync } from "node:fs";
 const source = readFileSync("src/components/system-settings-form.tsx", "utf8");
 
 test("UI #265: organization settings form keeps changes and recovers from network failures", () => {
-  assert.ok(source.includes('if (busy) return;'));
+  assert.ok(source.includes('if (submitting.current) return;'),
+    "A synchronous ref must block duplicate submits before React rerenders busy state");
   assert.ok(source.includes('fetch("/api/settings"'));
   assert.ok(source.includes('method: "PUT"'));
   assert.ok(source.includes('body: JSON.stringify(value)'));
