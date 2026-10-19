@@ -29,6 +29,7 @@ type CrudModalProps = {
   children: React.ReactNode;
   size?: "sm" | "md" | "lg" | "xl" | "full" | "compact";
   protectUnsavedChanges?: boolean;
+  dismissalBlocked?: boolean;
 };
 
 /**
@@ -48,6 +49,7 @@ function OpenCrudModal({
   children,
   size = "compact",
   protectUnsavedChanges = true,
+  dismissalBlocked = false,
 }: CrudModalProps) {
   const headingId = useId();
   const descriptionId = useId();
@@ -58,6 +60,9 @@ function OpenCrudModal({
   const keepEditingRef = useRef<HTMLButtonElement>(null);
   const focusBeforeDiscardRef = useRef<HTMLElement | null>(null);
   const closeRef = useRef(onClose);
+  // Keep the latest in-flight state without resetting the focus trap effect.
+  const dismissalBlockedRef = useRef(dismissalBlocked);
+  dismissalBlockedRef.current = dismissalBlocked;
   const changedRef = useRef(false);
   const discardOpenRef = useRef(false);
   // Portal dialogs to the document body so page grids/transforms/overflow
@@ -72,7 +77,7 @@ function OpenCrudModal({
   useEffect(() => { discardOpenRef.current = discardOpen; }, [discardOpen]);
 
   const requestClose = useCallback(() => {
-    if (discardOpenRef.current) return;
+    if (dismissalBlockedRef.current || discardOpenRef.current) return;
     if (protectUnsavedChanges && changedRef.current) {
       focusBeforeDiscardRef.current = document.activeElement instanceof HTMLElement
         ? document.activeElement : null;
@@ -218,7 +223,7 @@ function OpenCrudModal({
           <h2 id={headingId}>{title}</h2>
           {description && <p id={descriptionId}>{description}</p>}
         </div>
-        <button type="button" className="icon-button" aria-label="Close / إغلاق" onClick={requestClose}>
+        <button type="button" className="icon-button" aria-label="Close / إغلاق" disabled={dismissalBlocked} onClick={requestClose}>
           <SystemIcon name="close" size={18} />
         </button>
       </header>
