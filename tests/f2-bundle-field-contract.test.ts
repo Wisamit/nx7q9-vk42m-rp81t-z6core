@@ -21,11 +21,10 @@ function syntheticNested(shape: BundleNestedProjection): Record<string, unknown>
       ? [syntheticNested(child[0])] : syntheticNested(child as BundleNestedProjection),
   ]));
 }
-function syntheticRecord(type: CatalogExportType): Record<string, unknown> {
-  return {
-    ...Object.fromEntries(catalogBundleAllowedSourceFields[type].map(name=>[name,null])),
-    ...syntheticNested(catalogBundleNestedSourceProjections[type]),
-  };
+function syntheticRecord(type: CatalogExportType) {
+  const record=Object.fromEntries(catalogBundleAllowedSourceFields[type].map(name=>[name,null]));
+  Object.assign(record,syntheticNested(catalogBundleNestedSourceProjections[type]));
+  return record;
 }
 function exampleBundle(types: readonly CatalogExportType[]=ALL) {
   return {
