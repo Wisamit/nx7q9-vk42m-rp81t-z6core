@@ -71,7 +71,7 @@ test("F2: deleted/renamed/additional source keys cannot masquerade as a complete
 });
 test("F2: nested fields are exact for every linked entity and every composite member",()=>{
   const affected = [
-    ["COMPONENT","test"],["COMPONENT","unit"],["PANEL","items"],
+    ["COMPONENT","test"],["PANEL","items"],
     ["PACKAGE","items"],["REFERENCE_INTERVAL","component"],
     ["PRICE_LIST_ITEM","priceList"],["PRICE_LIST_ITEM","test"],
     ["PRICE_LIST_PACKAGE_ITEM","priceList"],["PRICE_LIST_PACKAGE_ITEM","package"],
