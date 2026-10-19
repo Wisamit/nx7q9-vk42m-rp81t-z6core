@@ -21,6 +21,10 @@ test("Send-out state changes use a conditional claim before ANY immutable event/
   assert.ok(physicalLock > conditionalExit && custody > physicalLock && eventAfterCustody > custody);
   assert.ok(src.includes("SENDOUT_SPECIMEN_CUSTODY_CHANGED"));
   assert.ok(src.includes('error: "sendout_specimen_custody_changed"'));
+  assert.ok(src.includes("SENDOUT_ORDER_NO_LONGER_ACTIVE"));
+  assert.ok(src.includes('error: "sendout_order_no_longer_active"'));
+  assert.ok(src.includes('action === "CANCEL" && !note'));
+  assert.ok(src.includes('error: "cancellation_reason_required"'));
 });
 
 test("Send-out creation rechecks order closure, specimen linkage, location and custody under row locks", () => {
