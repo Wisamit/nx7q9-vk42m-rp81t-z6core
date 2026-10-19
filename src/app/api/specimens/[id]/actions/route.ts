@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { requireActiveSpecimenOrder, SpecimenOrderNoLongerActive } from "@/lib/specimen-order-activity";
 import { specimenActionError } from "@/lib/clinical-safety";
 import { receptionAssessmentError, receptionAcceptanceError } from "@/lib/specimen-reception-policy";
 import { specimenRequirementSnapshotFromDetails } from "@/lib/specimen-requirement-engine";
@@ -42,6 +43,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const specimen = await prisma.specimen.findFirst({
     where: { id, organizationId: session.user.organizationId },
     include: {
+      order: { select: { status: true } },
       container: true,
       events: { where: { eventType: "CREATED" }, orderBy: { occurredAt: "asc" } },
     },
@@ -58,6 +60,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
 
   if (body.action === "RECEIVE") {
+    if (["CANCELLED", "COMPLETED"].includes(specimen.order.status)) {
+      return NextResponse.json({ error: "specimen_order_not_active" }, { status: 409 });
+    }
     if (specimen.currentBranchId !== branchId) {
       return NextResponse.json({ error: "specimen_reception_branch_must_match_current_location" }, { status: 409 });
     }
@@ -93,6 +98,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       // An unacceptable reception creates a persistent, fail-closed clinical
       // hold. It cannot silently return to reception or analytical processing.
       const quarantined = await prisma.$transaction(async tx => {
+        await requireActiveSpecimenOrder(tx, session.user.organizationId, specimen.orderId);
         const claimed = await tx.specimen.updateMany({
           where: {
             id: specimen.id,
@@ -100,6 +106,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
             currentBranchId: branchId,
             status: specimen.status,
             preanalyticalVersion: specimen.preanalyticalVersion,
+            order: { status: { notIn: ["CANCELLED", "COMPLETED"] } },
           },
           data: {
             status: "QUARANTINED",
@@ -145,7 +152,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           },
         });
         return true;
+      }).catch(error => {
+        if (error instanceof SpecimenOrderNoLongerActive) return "ORDER_CLOSED" as const;
+        throw error;
       });
+      if (quarantined === "ORDER_CLOSED") {
+        return NextResponse.json({ error: "specimen_order_not_active" }, { status: 409 });
+      }
       if (!quarantined) {
         return NextResponse.json({ error: "specimen_preanalytical_state_changed" }, { status: 409 });
       }
@@ -153,6 +166,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     }
 
     const result = await prisma.$transaction(async (tx) => {
+      await requireActiveSpecimenOrder(tx, session.user.organizationId, specimen.orderId);
       const changed = await tx.specimen.updateMany({
         where: {
           id: specimen.id,
@@ -160,6 +174,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           currentBranchId: branchId,
           status: specimen.status,
           preanalyticalVersion: specimen.preanalyticalVersion,
+          order: { status: { notIn: ["CANCELLED", "COMPLETED"] } },
         },
         data: {
           status: "RECEIVED",
@@ -237,8 +252,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       });
 
       return updated;
+    }).catch(error => {
+      if (error instanceof SpecimenOrderNoLongerActive) return "ORDER_CLOSED" as const;
+      if (error instanceof Error && error.message === "SPECIMEN_STATE_CHANGED") return null;
+      throw error;
     });
-
+    if (result === "ORDER_CLOSED") {
+      return NextResponse.json({ error: "specimen_order_not_active" }, { status: 409 });
+    }
+    if (!result) {
+      return NextResponse.json({ error: "specimen_preanalytical_state_changed" }, { status: 409 });
+    }
     return NextResponse.json({ status: "ok", specimen: result });
   }
 

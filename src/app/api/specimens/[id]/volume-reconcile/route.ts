@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { requireActiveSpecimenOrder, SpecimenOrderNoLongerActive } from "@/lib/specimen-order-activity";
 import { reconciledVolumeError, reconciliationUsageFloorError } from "@/lib/specimen-volume-policy";
 
 function text(value: unknown, max: number) {
@@ -20,10 +21,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const specimen = await prisma.specimen.findFirst({
     where: { id, organizationId: session.user.organizationId },
+    include: { order: { select: { status: true } } },
   });
   if (!specimen) return NextResponse.json({ error: "specimen_not_found" }, { status: 404 });
   if (!specimen.currentBranchId || !canAccessBranch(session, specimen.currentBranchId)) {
     return NextResponse.json({ error: "branch_forbidden" }, { status: 403 });
+  }
+  if (["CANCELLED", "COMPLETED"].includes(specimen.order.status)) {
+    return NextResponse.json({ error: "specimen_order_not_active" }, { status: 409 });
   }
 
   const policyError = reconciledVolumeError({
@@ -39,6 +44,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   let result: boolean | null;
   try {
   result = await prisma.$transaction(async tx => {
+    await requireActiveSpecimenOrder(tx, session.user.organizationId, specimen.orderId);
     const changed = await tx.specimen.updateMany({
       where: {
         id: specimen.id,
@@ -47,6 +53,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         currentBranchId: specimen.currentBranchId,
         updatedAt: specimen.updatedAt,
         preanalyticalVersion: specimen.preanalyticalVersion,
+        order: { status: { notIn: ["CANCELLED", "COMPLETED"] } },
       },
       data: {
         remainingVolume: availableVolume,
@@ -110,6 +117,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return true;
   });
   } catch (error) {
+    if (error instanceof SpecimenOrderNoLongerActive) {
+      return NextResponse.json({ error: "specimen_order_not_active" }, { status: 409 });
+    }
     if (error instanceof Error && ["reconciliation_would_restore_consumed_volume", "reconciliation_original_volume_required_after_usage"].includes(error.message)) {
       return NextResponse.json({ error: error.message }, { status: 409 });
     }
