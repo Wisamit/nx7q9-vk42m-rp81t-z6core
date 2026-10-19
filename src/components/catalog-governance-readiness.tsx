@@ -4,7 +4,7 @@ import { useState } from "react";
 import { CatalogPolicyDraftEditor } from "@/components/catalog-policy-draft-editor";
 import type { CatalogPolicyProposal } from "@/lib/catalog-policy-options";
 
-type Category = "CLINICAL" | "FINANCIAL" | "CATALOG";
+type Category = "CLINICAL" | "FINANCIAL" | "CROSS_DOMAIN" | "CATALOG";
 type PublicPolicyDraft = {
   revision: number; proposal: CatalogPolicyProposal; proposalDigest: string;
   state: "UNAPPROVED_DRAFT"; reviewOnly: true; approved: false;
@@ -45,7 +45,7 @@ type GovernanceReport = {
     liveWrites: boolean;
   };
 };
-const categories: Category[] = ["CLINICAL", "FINANCIAL", "CATALOG"];
+const categories: Category[] = ["CLINICAL", "FINANCIAL", "CROSS_DOMAIN", "CATALOG"];
 const knownBlockers = [
   "SIGNATORY_POLICY_UNCONFIGURED", "APPLICATION_WORKFLOW_UNAVAILABLE",
   "SOURCE_NOT_ATTESTED", "DRIFT_NOT_TRIAGED", "EXPERT_REVIEW_PENDING",
@@ -214,6 +214,7 @@ export function CatalogGovernanceReadiness({ batchId, locale }: {
           return <tr key={category}>
             <td>{category === "CLINICAL" ? tr("Clinical", "طبي")
               : category === "FINANCIAL" ? tr("Financial", "مالي")
+              : category === "CROSS_DOMAIN" ? tr("Clinical + Financial review", "مراجعة طبية ومالية")
               : tr("Catalog", "دليل الفحوصات")}</td>
             <td>{count.total}</td><td>{count.drifted}</td>
             <td>{count.driftUnflagged}</td><td>{count.pending}</td>
