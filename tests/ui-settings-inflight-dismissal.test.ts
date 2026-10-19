@@ -20,7 +20,7 @@ test("UI #265: saving settings blocks close, Escape, backdrop and discard until 
   assert.match(dialog, /onClose=\{\(\) => \{ if \(!savingRef\.current\) setOpen\(false\); \}\}/);
   assert.match(dialog, /dismissalBlocked=\{saving\}/);
   assert.match(dialog, /onSavePendingChange=\{onSavePendingChange\}/);
-  assert.match(modal, /dismissalBlockedRef\.current = dismissalBlocked/);
+  assert.match(modal, /useEffect\(\(\) => \{ dismissalBlockedRef\.current = dismissalBlocked; \}, \[dismissalBlocked\]\)/);
   assert.match(modal, /if \(dismissalBlockedRef\.current \|\| discardOpenRef\.current\) return;/);
   assert.match(modal, /disabled=\{dismissalBlocked\}/);
   assert.match(modal, /if \(event\.key === "Escape"\)/);
