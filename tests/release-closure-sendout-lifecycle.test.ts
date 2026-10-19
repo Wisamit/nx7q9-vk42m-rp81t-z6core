@@ -48,3 +48,15 @@ test("Send-out creation rechecks order closure, specimen linkage, location and c
   ]) assert.ok(src.includes(predicate), predicate);
   assert.ok(!src.includes("id: selectedSpecimen.id,\n          status: selectedSpecimen.status"));
 });
+
+test("Bilingual send-out conflict handling preserves explicit recheck after stale actions", () => {
+  const ui = readFileSync("src/components/send-out-manager.tsx", "utf8");
+  for (const code of [
+    "sendout_state_changed", "sendout_specimen_custody_changed",
+    "sendout_order_no_longer_active", "cancellation_reason_required",
+  ]) assert.ok(ui.includes(code), code);
+  assert.ok(ui.includes("Referral status changed. Review its current state"));
+  assert.ok(ui.includes("تغيّرت حالة الإحالة"));
+  assert.ok(ui.includes("if (response.status === 409) router.refresh()"));
+  assert.ok(ui.includes("Connection interrupted. Recheck the custody and referral status before retrying."));
+});
