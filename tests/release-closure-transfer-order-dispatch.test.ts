@@ -57,3 +57,13 @@ test("Already shipped specimen receipt/exception routes retain custody regardles
   assert.ok(receipt.includes('const result = await prisma.$transaction'));
   assert.ok(receipt.includes('status: "IN_TRANSIT"'));
 });
+
+test("Transfer UI explains stale closed-order rejection bilingually without success styling", () => {
+  const ui = readFileSync("src/components/transfer-manager.tsx", "utf8");
+  assert.equal((ui.match(/body.error === "transfer_order_not_active"/g) || []).length, 2);
+  assert.ok(ui.includes("لم يتم إنشاء بيان النقل"));
+  assert.ok(ui.includes("لم تُرسل أي عينة"));
+  assert.ok(ui.includes('messageIsError ? "form-error" : "form-success"'));
+  assert.ok(ui.includes('role={messageIsError ? "alert" : "status"}'));
+  assert.ok(ui.includes("if (response.status === 409) router.refresh()"));
+});
