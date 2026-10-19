@@ -8,6 +8,7 @@ import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { canonicalReportOrigin } from "@/lib/report-origin";
 import { enqueueNotification } from "@/lib/notifications";
+import { currentReportRecipientAuthorized } from "@/lib/report-outbound-authorization";
 import {
   defaultReportReadyMessage,
   maskedDestination,
@@ -20,6 +21,7 @@ import {
 
 class OutboundReportVersionChanged extends Error {}
 class OutboundReportDuplicateDelivery extends Error {}
+class OutboundReportRecipientAuthorizationChanged extends Error {}
 
 function recipientTypeEnum(value: ReportOutboundRecipientType) {
   if (value === "PATIENT") return NotificationRecipientType.PATIENT;
@@ -204,6 +206,18 @@ export async function POST(request: Request, { params }: { params: Promise<{ ver
     if (!current || current.id !== version.id || current.status === "RETRACTED") {
       throw new OutboundReportVersionChanged();
     }
+    // Recheck destination-bound verification and corporate patient report access
+    // under live row locks. A stale preflight consent cannot queue delivery.
+    const authorized = await currentReportRecipientAuthorized(tx, {
+      organizationId: session.user.organizationId,
+      recipientType,
+      recipientId: selected.id,
+      patientId: order.patientId,
+      channel,
+      destination: destination.destination,
+      expectedPortalAccountId: selected.account!.id,
+    }, true);
+    if (!authorized) throw new OutboundReportRecipientAuthorizationChanged();
     // Serialize replays and double clicks while the same parent is locked.
     // A failed terminal delivery may be retried by a new authorized request,
     // but never silently resend a still queued or already sent report.
@@ -299,10 +313,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ ver
 
     return { reportDeliveryId: reportDelivery.id, notificationId: notification.id };
   }).catch(error => {
+    if (error instanceof OutboundReportRecipientAuthorizationChanged) return "RECIPIENT_CHANGED" as const;
     if (error instanceof OutboundReportVersionChanged) return "VERSION_CHANGED" as const;
     if (error instanceof OutboundReportDuplicateDelivery) return "DUPLICATE" as const;
     throw error;
   });
+  if (queued === "RECIPIENT_CHANGED") {
+    return NextResponse.json({ error: "report_recipient_authorization_changed" }, { status: 409 });
+  }
   if (queued === "VERSION_CHANGED") {
     return NextResponse.json({ error: "report_version_changed_retry" }, { status: 409 });
   }
