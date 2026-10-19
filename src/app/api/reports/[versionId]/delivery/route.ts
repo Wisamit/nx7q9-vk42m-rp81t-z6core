@@ -3,6 +3,8 @@ import { Prisma } from "../../../../../../generated/prisma/client";
 import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 
+class ReportDeliveryStateChanged extends Error {}
+
 export async function POST(request: Request, { params }: { params: Promise<{ versionId: string }> }) {
   const session = await requirePermission("reports.deliver");
   const ctx = await requestContext();
@@ -59,8 +61,33 @@ export async function POST(request: Request, { params }: { params: Promise<{ ver
   if (!canAccessBranch(session, version.branchId)) {
     return NextResponse.json({ error: "branch_forbidden" }, { status: 403 });
   }
+  if (version.version !== version.report.currentVersion ||
+      !["PARTIAL", "FINAL", "AMENDED"].includes(version.status)) {
+    return NextResponse.json({ error: "report_version_not_current_or_retracted" }, { status: 409 });
+  }
 
   const event = await prisma.$transaction(async (tx) => {
+    // Report revisions and report deliveries serialize on the same parent.
+    // A withdrawn or superseded report must not produce a new PRINT/PDF event.
+    const currentReport = await tx.$queryRaw<Array<{ currentVersion: number }>>`
+      SELECT current_version AS currentVersion FROM diagnostic_reports
+      WHERE id = ${version.reportId} AND organization_id = ${session.user.organizationId}
+      FOR UPDATE
+    `;
+    if (currentReport.length !== 1 || currentReport[0].currentVersion !== version.version) {
+      throw new ReportDeliveryStateChanged();
+    }
+    // Also lock the exact version row: a retraction that updates only its
+    // status cannot race with this audit event even without a parent lock.
+    const currentVersion = await tx.$queryRaw<Array<{ status: string }>>`
+      SELECT status FROM diagnostic_report_versions
+      WHERE id = ${version.id} AND report_id = ${version.reportId}
+      FOR UPDATE
+    `;
+    if (currentVersion.length !== 1 ||
+        !["PARTIAL", "FINAL", "AMENDED"].includes(currentVersion[0].status)) {
+      throw new ReportDeliveryStateChanged();
+    }
     const created = await tx.reportDeliveryEvent.create({
       data: {
         reportVersionId: version.id,
@@ -94,7 +121,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ ver
       },
     });
     return created;
+  }).catch(error => {
+    if (error instanceof ReportDeliveryStateChanged) return null;
+    throw error;
   });
+  if (!event) {
+    return NextResponse.json({ error: "report_version_not_current_or_retracted" }, { status: 409 });
+  }
 
   return NextResponse.json({ status: "ok", deliveryEventId: event.id }, { status: 201 });
 }
