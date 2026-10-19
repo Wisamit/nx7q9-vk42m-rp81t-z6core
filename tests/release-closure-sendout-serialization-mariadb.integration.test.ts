@@ -14,7 +14,7 @@ test("Release closure MariaDB: two send-out writers serialize same order item, r
     mysql.createConnection(config),mysql.createConnection(config),mysql.createConnection(config),
   ]);
   const ids={org:randomUUID(),branch:randomUUID(),user:randomUUID(),patient:randomUUID(),
-    test:randomUUID(),order:randomUUID(),a:randomUUID(),b:randomUUID(),
+    test:randomUUID(),testB:randomUUID(),order:randomUUID(),a:randomUUID(),b:randomUUID(),
     lab:randomUUID(),referral:randomUUID()};
   const suffix=ids.org.slice(0,8),cleanup:Array<{sql:string;params:string[]}>=[];
   async function put(sql:string,params:string[],undo:string,undoParams:string[]){
@@ -46,12 +46,15 @@ test("Release closure MariaDB: two send-out writers serialize same order item, r
     await put("INSERT INTO lab_tests(id,organization_id,code,name_en,updated_at) VALUES(?,?,?,?,NOW(3))",
       [ids.test,ids.org,"CLOSE"+suffix,"Synthetic lab test"],
       "DELETE FROM lab_tests WHERE id=?",[ids.test]);
+    await put("INSERT INTO lab_tests(id,organization_id,code,name_en,updated_at) VALUES(?,?,?,?,NOW(3))",
+      [ids.testB,ids.org,"CLOSEB"+suffix,"Second synthetic test"],
+      "DELETE FROM lab_tests WHERE id=?",[ids.testB]);
     await put("INSERT INTO orders(id,organization_id,accession_number,ordering_branch_id,patient_id,created_by_user_id,updated_at) VALUES(?,?,?,?,?,?,NOW(3))",
       [ids.order,ids.org,"CLOSE"+suffix,ids.branch,ids.patient,ids.user],
       "DELETE FROM orders WHERE id=?",[ids.order]);
-    for (const [id,n] of [[ids.a,"A"],[ids.b,"B"]]) await put(
+    for (const [id,n,testId] of [[ids.a,"A",ids.test],[ids.b,"B",ids.testB]]) await put(
       "INSERT INTO order_items(id,order_id,test_id,test_code_snapshot,test_name_en_snapshot,currency,updated_at) VALUES(?,?,?,?,?,'AED',NOW(3))",
-      [id,ids.order,ids.test,"CLOSE"+n,"Synthetic test "+n],
+      [id,ids.order,testId,"CLOSE"+n,"Synthetic test "+n],
       "DELETE FROM order_items WHERE id=?",[id]);
     await put(
       "INSERT INTO external_laboratories(id,organization_id,code,name_en,updated_at) VALUES(?,?,?,?,NOW(3))",
