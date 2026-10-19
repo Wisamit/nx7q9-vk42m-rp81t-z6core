@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import ts from "typescript";
-import { catalogBundleAllowedSourceFields } from "../src/lib/catalog-bundle-source-boundary.ts";
+import { catalogBundleAllowedSourceFields, catalogBundleNestedSourceProjections, type BundleNestedProjection } from "../src/lib/catalog-bundle-source-boundary.ts";
 import type { CatalogExportType } from "../src/lib/catalog-configuration-export.ts";
 
 const sourceBundle=readFileSync("src/app/api/catalog/configuration-export/bundle/route.ts","utf8");
@@ -77,6 +77,22 @@ test("F2: source-field allowlist exactly equals actual Prisma atomic exported to
     const allow=[...catalogBundleAllowedSourceFields[kind]].sort();
     assert.deepEqual(direct,allow,
       kind+" requires all fields exported, allowlisted and eligible for live drift");
+  }
+});
+function nestedPaths(schema: BundleNestedProjection, prefix=""): string[] {
+  return Object.entries(schema).flatMap(([name, value])=>{
+    const path=prefix?prefix+"."+name:name;
+    if(value===true)return [path];
+    if(Array.isArray(value))return nestedPaths(value[0],path);
+    return nestedPaths(value as BundleNestedProjection,path);
+  }).sort();
+}
+test("F2: every nested source projection agrees with actual Prisma fields, including membership and tariff relationships",()=>{
+  const exported=projections(sourceBundle);
+  for(const [kind,model] of Object.entries(models) as [CatalogExportType,string][]){
+    const actual=exported.get(model)!.filter(path=>path.includes(".")).sort();
+    assert.deepEqual(actual,nestedPaths(catalogBundleNestedSourceProjections[kind]),
+      kind+" nested HMAC completeness must match Prisma export projection exactly");
   }
 });
 test("F2: export and drift both include nested linked identities and all critical financial fields",()=>{
