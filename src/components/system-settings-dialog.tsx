@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { CrudModal } from "@/components/crud-modal";
 import { SystemIcon } from "@/components/system-icon";
 import { SystemSettingsForm } from "@/components/system-settings-form";
@@ -19,6 +19,12 @@ export function SystemSettingsDialog({
   locale: "ar" | "en";
 }) {
   const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
+  function onSavePendingChange(pending: boolean) {
+    savingRef.current = pending;
+    setSaving(pending);
+  }
   const ar = locale === "ar";
   const label = (en: string, arabic: string) => ar ? arabic : en;
   const themeName = initial.defaultTheme === "SYSTEM"
@@ -54,7 +60,8 @@ export function SystemSettingsDialog({
     </section>
     <CrudModal
       open={open}
-      onClose={() => setOpen(false)}
+      onClose={() => { if (!savingRef.current) setOpen(false); }}
+      dismissalBlocked={saving}
       size="compact"
       title={label("Edit organization settings", "تعديل إعدادات المؤسسة")}
       description={label(
@@ -62,7 +69,7 @@ export function SystemSettingsDialog({
         "الهوية والمنطقة الزمنية وتنسيقات العرض والألوان. تسري التغييرات على المؤسسة.",
       )}
     >
-      {open && <SystemSettingsForm initial={initial} locale={locale} />}
+      {open && <SystemSettingsForm initial={initial} locale={locale} onSavePendingChange={onSavePendingChange} />}
     </CrudModal>
   </>;
 }
