@@ -121,6 +121,7 @@ export function ReportOutboundDelivery({
           retracted_report_cannot_be_delivered: tr("A retracted report cannot be delivered.", "لا يمكن تسليم تقرير مسحوب."),
           superseded_report_cannot_be_delivered: tr("Only the latest report version can be delivered.", "يمكن تسليم أحدث إصدار من التقرير فقط."),
           report_version_changed_retry: tr("The report version changed during queueing. Refresh and review the latest report.", "تغير إصدار التقرير أثناء إضافته للإرسال. حدّث الصفحة وراجع التقرير الأحدث."),
+          report_recipient_authorization_changed: tr("Recipient portal verification or report access changed. Nothing was queued. Refresh and confirm the verified recipient again.", "تغير توثيق جهة اتصال المستلم أو صلاحية الوصول إلى التقرير. لم يُضف أي إشعار إلى قائمة الإرسال. حدّث الصفحة وأعد التحقق من المستلم."),
           report_delivery_already_pending_or_sent: tr("This report is already queued or sent to the selected verified contact.", "هذا التقرير موجود بالفعل في قائمة الإرسال أو تم إرساله إلى جهة الاتصال المحددة."),
         };
         setReviewError(errors[body.error||""]||
