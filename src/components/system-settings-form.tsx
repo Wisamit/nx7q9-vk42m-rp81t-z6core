@@ -4,6 +4,7 @@ import Image from "next/image";
 import { ChangeEvent, FormEvent, useRef, useState } from "react";
 import type { SystemSettings, ThemePalette } from "@/lib/system-settings";
 import { SystemIcon } from "@/components/system-icon";
+import { createSettingsImageSelectionGate, type SettingsImageKey } from "@/lib/settings-image-selection";
 
 const paletteFields: Array<[keyof ThemePalette, string, string]> = [
   ["primary", "Primary", "اللون الرئيسي"],
@@ -42,6 +43,7 @@ function imageToDataUrl(file: File, maxBytes = 1024 * 1024) {
     const reader = new FileReader();
     reader.onload = () => typeof reader.result === "string" ? resolve(reader.result) : reject(new Error("read_failed"));
     reader.onerror = () => reject(new Error("read_failed"));
+    reader.onabort = () => reject(new Error("read_failed"));
     reader.readAsDataURL(file);
   });
 }
@@ -54,6 +56,8 @@ export function SystemSettingsForm({ initial, locale, onSavePendingChange }: {
   const [value, setValue] = useState(initial);
   const [busy, setBusy] = useState(false);
   const submitting = useRef(false);
+  const imageGate = useRef(createSettingsImageSelectionGate());
+  const [uploadingImages, setUploadingImages] = useState(false);
   const [message, setMessage] = useState("");
   const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
 
@@ -65,23 +69,48 @@ export function SystemSettingsForm({ initial, locale, onSavePendingChange }: {
     setValue(current => ({ ...current, [mode]: { ...current[mode], [key]: next } }));
   }
 
-  async function handleImage(event: ChangeEvent<HTMLInputElement>, key: "logoDataUrl" | "faviconDataUrl") {
+  async function handleImage(event: ChangeEvent<HTMLInputElement>, key: SettingsImageKey) {
     const file = event.target.files?.[0];
-    if (!file) return;
+    if (!file || submitting.current) return;
+    const gate = imageGate.current;
+    const version = gate.begin(key);
+    setUploadingImages(true);
     setMessage("");
     try {
-      set(key, await imageToDataUrl(file));
+      const dataUrl = await imageToDataUrl(file);
+      // A later file choice or Remove action invalidates this reader.
+      if (gate.complete(key, version)) set(key, dataUrl);
     } catch (error) {
-      setMessage(error instanceof Error && error.message === "image_too_large"
-        ? tr("Image must be 1 MB or smaller.", "يجب ألا يتجاوز حجم الصورة 1 ميغابايت.")
-        : tr("Use PNG, JPEG, WEBP or ICO.", "استخدم PNG أو JPEG أو WEBP أو ICO."));
+      if (gate.complete(key, version)) {
+        setMessage(error instanceof Error && error.message === "image_too_large"
+          ? tr("Image must be 1 MB or smaller.", "يجب ألا يتجاوز حجم الصورة 1 ميغابايت.")
+          : tr("Use PNG, JPEG, WEBP or ICO.", "استخدم PNG أو JPEG أو WEBP أو ICO."));
+      }
+    } finally {
+      setUploadingImages(gate.hasPending());
     }
+  }
+
+  function removeImage(key: SettingsImageKey) {
+    if (submitting.current) return;
+    imageGate.current.cancel(key);
+    setUploadingImages(imageGate.current.hasPending());
+    set(key, null);
   }
 
   async function submit(event: FormEvent) {
     event.preventDefault();
     // A ref blocks consecutive submits even before React renders busy=true.
     if (submitting.current) return;
+    // Do not save a previous logo/favicon while a newly selected file is
+    // still being read. The check must be synchronous, not state-only.
+    if (imageGate.current.hasPending()) {
+      setMessage(tr(
+        "Finish loading the selected logo or browser icon before saving.",
+        "يجب اكتمال تحميل الشعار أو أيقونة المتصفح المختارة قبل الحفظ.",
+      ));
+      return;
+    }
     submitting.current = true;
     setBusy(true);
     onSavePendingChange?.(true);
@@ -137,14 +166,14 @@ export function SystemSettingsForm({ initial, locale, onSavePendingChange }: {
         <div className="branding-upload">
           <strong>{tr("Logo", "اللوغو")}</strong>
           <div className="branding-preview logo-preview">{value.logoDataUrl ? <Image src={value.logoDataUrl} alt="Family Lab logo preview" width={240} height={110} unoptimized /> : <span>Family Lab</span>}</div>
-          <input type="file" aria-label={tr("Upload center logo", "رفع شعار المركز")} accept="image/png,image/jpeg,image/webp" onChange={e => void handleImage(e, "logoDataUrl")} />
-          {value.logoDataUrl && <button type="button" className="secondary-button" onClick={() => set("logoDataUrl", null)}>{tr("Remove custom logo", "إزالة اللوغو المخصص")}</button>}
+          <input type="file" disabled={busy} aria-label={tr("Upload center logo", "رفع شعار المركز")} accept="image/png,image/jpeg,image/webp" onChange={e => void handleImage(e, "logoDataUrl")} />
+          {value.logoDataUrl && <button type="button" className="secondary-button" disabled={busy} onClick={() => removeImage("logoDataUrl")}>{tr("Remove custom logo", "إزالة اللوغو المخصص")}</button>}
         </div>
         <div className="branding-upload">
           <strong>{tr("Browser icon / favicon", "أيقونة المتصفح / Favicon")}</strong>
           <div className="branding-preview favicon-preview">{value.faviconDataUrl ? <Image src={value.faviconDataUrl} alt="Favicon preview" width={64} height={64} unoptimized /> : <span>FL</span>}</div>
-          <input type="file" aria-label={tr("Upload browser icon", "رفع أيقونة المتصفح")} accept="image/png,image/x-icon,image/vnd.microsoft.icon" onChange={e => void handleImage(e, "faviconDataUrl")} />
-          {value.faviconDataUrl && <button type="button" className="secondary-button" onClick={() => set("faviconDataUrl", null)}>{tr("Remove custom icon", "إزالة الأيقونة المخصصة")}</button>}
+          <input type="file" disabled={busy} aria-label={tr("Upload browser icon", "رفع أيقونة المتصفح")} accept="image/png,image/x-icon,image/vnd.microsoft.icon" onChange={e => void handleImage(e, "faviconDataUrl")} />
+          {value.faviconDataUrl && <button type="button" className="secondary-button" disabled={busy} onClick={() => removeImage("faviconDataUrl")}>{tr("Remove custom icon", "إزالة الأيقونة المخصصة")}</button>}
         </div>
       </div>
     </section>
@@ -179,7 +208,7 @@ export function SystemSettingsForm({ initial, locale, onSavePendingChange }: {
 
     <div className="settings-savebar">
       {message && <span className={message.includes("saved") || message.includes("تم حفظ") ? "form-success" : "form-error"}>{message}</span>}
-      <button className="primary-button" disabled={busy}>{busy ? tr("Saving…", "جارٍ الحفظ…") : tr("Save system settings", "حفظ إعدادات النظام")}</button>
+      <button className="primary-button" disabled={busy || uploadingImages}>{busy ? tr("Saving…", "جارٍ الحفظ…") : uploadingImages ? tr("Loading image…", "جارٍ تحميل الصورة…") : tr("Save system settings", "حفظ إعدادات النظام")}</button>
     </div>
   </form>;
 }
