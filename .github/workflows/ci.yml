@@ -193,6 +193,16 @@ jobs:
       - run: node --experimental-strip-types --test tests/analyzer-bridge-mariadb.integration.test.ts
       - run: npm run test:ui-theme
       - run: npm run test:ui-i18n
+      - run: node scripts/release-closure-evidence.mjs --check
+      - run: node scripts/release-closure-evidence.mjs --json > release-closure-evidence.json
+      - run: node scripts/release-closure-evidence.mjs --markdown > release-closure-evidence.md
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-closure-evidence
+          path: |
+            release-closure-evidence.json
+            release-closure-evidence.md
+          if-no-files-found: error
       - run: node scripts/ui-route-form-inventory.mjs --check
       - run: node scripts/ui-browser-evidence.mjs --validate
       - run: node scripts/ui-full-surface-audit.mjs --check
