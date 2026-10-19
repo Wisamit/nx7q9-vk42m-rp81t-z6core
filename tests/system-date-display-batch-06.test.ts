@@ -70,7 +70,8 @@ test("send-out API enforces chosen authorized active branch timezone without rei
   assert.match(source, /organizationId: session\.user\.organizationId, status: "ACTIVE"/);
   assert.match(source, /parseBranchExpectedInstant\(expectedResultAtText, branch\.timezone\)/);
   assert.ok(source.includes("invalid_or_ambiguous_branch_local_time"));
-  assert.ok(source.includes("costAmount: costAmount === null ? null : costAmount.toFixed(4)"));
+  assert.ok(source.includes("costAmount: cost.amount === null ? null : new Prisma.Decimal(cost.amount).toFixed(4)"));
+  assert.ok(source.includes("parseSendOutCost(body.costAmount, body.costCurrency)"));
 });
 
 test("branch-scoped clinical and finance timestamps use their original operational branch", () => {
