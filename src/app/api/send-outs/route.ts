@@ -64,13 +64,24 @@ export async function POST(request: Request) {
   if (selectedSpecimen && !["COLLECTED","RECEIVED","IN_PROCESS"].includes(selectedSpecimen.status)) {
     return NextResponse.json({ error: "specimen_not_ready_for_sendout", status: selectedSpecimen.status }, { status: 409 });
   }
-  const active = await prisma.sendOutReferral.findFirst({
-    where: { orderItemId, status: { notIn: ["COMPLETED", "CANCELLED"] } },
-    select: { id: true },
-  });
-  if (active) return NextResponse.json({ error: "active_sendout_exists", referralId: active.id }, { status: 409 });
-
-  const created = await prisma.$transaction(async tx => {
+  const outcome = await prisma.$transaction(async tx => {
+    // Serialize independent dispatch requests for this SAME order item. The
+    // pre-transaction lookup was race-prone: both writers could see no active
+    // referral and create parallel send-outs. A locking read precedes the
+    // authoritative active-referral check and every custody/audit write.
+    const locked = await tx.$queryRaw<Array<{ id: string }>>`
+      SELECT id FROM order_items WHERE id = ${orderItemId} FOR UPDATE
+    `;
+    if (locked.length !== 1) return { kind: "order_item_changed" } as const;
+    const active = await tx.sendOutReferral.findFirst({
+      where: {
+        organizationId: session.user.organizationId,
+        orderItemId,
+        status: { notIn: ["COMPLETED", "CANCELLED"] },
+      },
+      select: { id: true },
+    });
+    if (active) return { kind: "active_exists", referralId: active.id } as const;
     if (selectedSpecimen && selectedSpecimen.status !== "IN_PROCESS") {
       const claimed = await tx.specimen.updateMany({
         where: {
@@ -129,14 +140,19 @@ export async function POST(request: Request) {
         userAgent: ctx.userAgent,
       },
     });
-    return referral;
-  }).catch(error => {
-    if (error instanceof Error && error.message === "SPECIMEN_PREANALYTICAL_STATE_CHANGED") return null;
+    return { kind: "created", referral } as const;
+  }, { timeout: 30000 }).catch(error => {
+    if (error instanceof Error && error.message === "SPECIMEN_PREANALYTICAL_STATE_CHANGED")
+      return { kind: "specimen_state_changed" } as const;
     throw error;
   });
 
-  if (!created) {
+  if (outcome.kind === "order_item_changed")
+    return NextResponse.json({ error: "order_item_state_changed" }, { status: 409 });
+  if (outcome.kind === "active_exists")
+    return NextResponse.json({ error: "active_sendout_exists", referralId: outcome.referralId },
+      { status: 409, headers: { "Cache-Control": "private, no-store" } });
+  if (outcome.kind === "specimen_state_changed")
     return NextResponse.json({ error: "specimen_preanalytical_state_changed" }, { status: 409 });
-  }
-  return NextResponse.json({ status: "ok", referral: created }, { status: 201 });
+  return NextResponse.json({ status: "ok", referral: outcome.referral }, { status: 201 });
 }
