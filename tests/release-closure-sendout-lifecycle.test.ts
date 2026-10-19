@@ -15,6 +15,12 @@ test("Send-out state changes use a conditional claim before ANY immutable event/
   assert.ok(event > conditionalExit && audit > event);
   assert.ok(src.includes('error: "sendout_state_changed"'));
   assert.ok(!src.includes("tx.sendOutReferral.update({ where: { id: referral.id }"));
+  const physicalLock = src.indexOf("SELECT id FROM specimens", conditionalExit);
+  const custody = src.indexOf("specimen.currentBranchId !== referral.branchId", physicalLock);
+  const eventAfterCustody = src.indexOf("tx.sendOutEvent.create", custody);
+  assert.ok(physicalLock > conditionalExit && custody > physicalLock && eventAfterCustody > custody);
+  assert.ok(src.includes("SENDOUT_SPECIMEN_CUSTODY_CHANGED"));
+  assert.ok(src.includes('error: "sendout_specimen_custody_changed"'));
 });
 
 test("Send-out creation rechecks order closure, specimen linkage, location and custody under row locks", () => {
