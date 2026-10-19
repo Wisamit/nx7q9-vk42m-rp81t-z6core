@@ -303,7 +303,7 @@ export function PricingManager({
           <input list="pricing-test-options" placeholder={tr("Type test code or name…", "اكتب رمز الفحص أو اسمه…")} value={testSearch} onChange={e => { const value=e.target.value; setTestSearch(value); const match=testOptions.find(x=>x.label===value); setTestId(match?.id || ""); }} required />
           <datalist id="pricing-test-options">{testOptions.map(test => <option key={test.id} value={test.label} />)}</datalist>
         </label>
-        <label>{tr("Unit price", "سعر الوحدة")}<input name="unitPrice" type="text" inputMode="decimal" pattern="(0|[1-9][0-9]{0,13})(\\.[0-9]{1,4})?" maxLength={19} title={tr("Enter a non-negative decimal with at most four digits after the dot (no separators).", "أدخل قيمة غير سالبة وبحد أقصى أربع خانات بعد النقطة، من دون فواصل.")} autoComplete="off" spellCheck={false} required /></label>
+        <label>{tr("Unit price", "سعر الوحدة")}<input name="unitPrice" type="text" inputMode="decimal" pattern="(0|[1-9][0-9]{0,13})([.][0-9]{1,4})?" maxLength={19} title={tr("Enter a non-negative decimal with at most four digits after the dot (no separators).", "أدخل قيمة غير سالبة وبحد أقصى أربع خانات بعد النقطة، من دون فواصل.")} autoComplete="off" spellCheck={false} required /></label>
         <label>{tr("Effective from (select intended local date)", "ساري من (اختر التاريخ المحلي المقصود)")}<SystemDateField name="effectiveFrom" required /></label>
         <label>{tr("Effective to", "ساري حتى")}<SystemDateField name="effectiveTo" /></label>
         <button className="primary-button form-span" disabled={busy === "item"}>{busy === "item" ? tr("Saving…", "جارٍ الحفظ…") : tr("Add Test Price", "إضافة سعر الفحص")}</button>
@@ -318,7 +318,7 @@ export function PricingManager({
           <input list="pricing-package-options" placeholder={tr("Type package code or name…", "اكتب رمز الباقة أو اسمها…")} value={packageSearch} onChange={e => { const value=e.target.value; setPackageSearch(value); const match=packageOptions.find(x=>x.label===value); setPackageId(match?.id || ""); }} required />
           <datalist id="pricing-package-options">{packageOptions.map(pkg => <option key={pkg.id} value={pkg.label} />)}</datalist>
         </label>
-        <label>{tr("Package price", "سعر الباقة")}<input name="unitPrice" type="text" inputMode="decimal" pattern="(0|[1-9][0-9]{0,13})(\\.[0-9]{1,4})?" maxLength={19} title={tr("Enter a non-negative decimal with at most four digits after the dot (no separators).", "أدخل قيمة غير سالبة وبحد أقصى أربع خانات بعد النقطة، من دون فواصل.")} autoComplete="off" spellCheck={false} required /></label>
+        <label>{tr("Package price", "سعر الباقة")}<input name="unitPrice" type="text" inputMode="decimal" pattern="(0|[1-9][0-9]{0,13})([.][0-9]{1,4})?" maxLength={19} title={tr("Enter a non-negative decimal with at most four digits after the dot (no separators).", "أدخل قيمة غير سالبة وبحد أقصى أربع خانات بعد النقطة، من دون فواصل.")} autoComplete="off" spellCheck={false} required /></label>
         <label>{tr("Effective from (select intended local date)", "ساري من (اختر التاريخ المحلي المقصود)")}<SystemDateField name="effectiveFrom" required /></label>
         <label>{tr("Effective to", "ساري حتى")}<SystemDateField name="effectiveTo" /></label>
         <button className="primary-button form-span" disabled={busy === "package"}>{busy === "package" ? tr("Saving…", "جارٍ الحفظ…") : tr("Add Package Price", "إضافة سعر الباقة")}</button>
