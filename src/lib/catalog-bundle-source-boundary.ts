@@ -44,6 +44,36 @@ export const catalogBundleAllowedSourceFields: Record<CatalogExportType, readonl
   PRICE_LIST_ITEM: [...priceItem, "testId", "test"],
   PRICE_LIST_PACKAGE_ITEM: [...priceItem, "packageId", "package"],
 };
+/**
+ * Canonical nested Prisma projection of each exported source class.
+ * Required keys are present even when their JSON values are null.
+ * Legacy snapshots without a field contract remain unproven review evidence.
+ * Array children describe each item, not a separately mutable entity.
+ */
+export type BundleNestedProjection = {
+  readonly [field: string]: true | BundleNestedProjection | readonly [BundleNestedProjection];
+};
+export const catalogBundleNestedSourceProjections: Record<CatalogExportType, BundleNestedProjection> = {
+  TEST: {},
+  COMPONENT: { test: { code: true }, unit: { code: true, symbol: true } },
+  UNIT: {},
+  CONTAINER: {},
+  PANEL: { items: [{ testId: true, displayOrder: true, required: true, test: { code: true } }] },
+  PACKAGE: { items: [{ testId: true, displayOrder: true, test: { code: true } }] },
+  REFERENCE_INTERVAL: { component: { code: true, test: { code: true } } },
+  PRICE_LIST: {},
+  PRICE_LIST_ITEM: {
+    test: { code: true },
+    priceList: { code: true, currency: true, scopeType: true, branchId: true,
+      status: true, sourceId: true, referrerId: true, clientId: true, contractId: true },
+  },
+  PRICE_LIST_PACKAGE_ITEM: {
+    package: { code: true },
+    priceList: { code: true, currency: true, scopeType: true, branchId: true,
+      status: true, sourceId: true, referrerId: true, clientId: true, contractId: true },
+  },
+};
+
 function object(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value))
     throw new BundleSourceBoundaryError("bundle_unexpected_source_structure");
