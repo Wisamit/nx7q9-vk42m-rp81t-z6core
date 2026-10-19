@@ -1,4 +1,4 @@
-import { catalogBundleAllowedSourceFields } from "./catalog-bundle-source-boundary.ts";
+import { catalogBundleAllowedSourceFields, catalogBundleNestedSourceProjections, type BundleNestedProjection } from "./catalog-bundle-source-boundary.ts";
 import type { CatalogExportType } from "./catalog-configuration-export.ts";
 
 const uuidRecord = (value: unknown): value is Record<string, unknown> =>
@@ -31,6 +31,41 @@ export function bundleFieldContract(types: readonly CatalogExportType[]): Bundle
       };
     }),
   };
+}
+
+/**
+ * V1 also requires exact nested Prisma relation shapes, not just top-level
+ * fields. Incomplete related master identities can hide a real source drift.
+ * A null optional COMPONENT.unit is legitimate; no other relation may vanish.
+ */
+function verifyNestedProjection(
+  value: unknown, shape: BundleNestedProjection | readonly [BundleNestedProjection],
+  entityType: CatalogExportType, path: string,
+): void {
+  if (Array.isArray(shape)) {
+    if (!Array.isArray(value)) {
+      throw new BundleFieldContractError("bundle_field_contract_incomplete_nested_source");
+    }
+    for (const item of value) {
+      verifyNestedProjection(item, shape[0], entityType, path + "[]");
+    }
+    return;
+  }
+  if (!uuidRecord(value)) {
+    throw new BundleFieldContractError("bundle_field_contract_incomplete_nested_source");
+  }
+  const projection = shape as BundleNestedProjection;
+  const expectedKeys = Object.keys(projection).sort();
+  if (JSON.stringify(Object.keys(value).sort()) !== JSON.stringify(expectedKeys)) {
+    throw new BundleFieldContractError("bundle_field_contract_incomplete_nested_source");
+  }
+  for (const [field, childShape] of Object.entries(projection)) {
+    if (childShape === true) continue;
+    const childPath = path ? path + "." + field : field;
+    // The component's unit relation is genuinely nullable in Prisma.
+    if (entityType === "COMPONENT" && childPath === "unit" && value[field] === null) continue;
+    verifyNestedProjection(value[field], childShape, entityType, childPath);
+  }
 }
 
 /**
@@ -72,6 +107,12 @@ export function verifyBundleFieldContract(bundle: unknown): BundleFieldContractS
       const actual = Object.keys(item).sort();
       if (JSON.stringify(actual) !== JSON.stringify(fields)) {
         throw new BundleFieldContractError("bundle_field_contract_incomplete_source");
+      }
+      // Assert actual nested related fields for all selected classes. This
+      // prevents a signed but partially projected relation from claiming parity.
+      for (const [name, projection] of Object.entries(catalogBundleNestedSourceProjections[types[i]])) {
+        if (types[i] === "COMPONENT" && name === "unit" && item[name] === null) continue;
+        verifyNestedProjection(item[name], projection as BundleNestedProjection | readonly [BundleNestedProjection], types[i], name);
       }
     }
   }
