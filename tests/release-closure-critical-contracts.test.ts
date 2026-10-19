@@ -81,16 +81,28 @@ test("Org-wide patient search retains branch-scoped clinical, specimen and finan
   assert.ok(page.includes("organizationId: orgId"));
 });
 
-test("Clinical AST susceptibility edit is a compact modal with guarded unsaved state", () => {
+test("Clinical AST multi-row workspace is preserved pending qualified modal decision", () => {
   const ui=readFileSync("src/components/microbiology-case-editor.tsx","utf8");
-  assert.ok(ui.includes('setEditor("susceptibility")'));
-  assert.ok(ui.includes('<CrudModal open={editor === "susceptibility"}'));
-  assert.ok(ui.includes('size="compact"'));
-  assert.ok(ui.includes('{editor === "susceptibility" && <form'));
-  assert.ok(ui.includes('{editor === "susceptibility" && errorMessage'));
-  assert.ok(ui.includes('if (!busy) setEditor(null)'));
+  assert.equal((ui.match(/<CrudModal\\b/g)||[]).length,3);
+  assert.ok(ui.includes('<form className="catalog-form" onSubmit={addSusceptibility}>'));
+  assert.ok(ui.includes("rows.map(row =>"));
+  assert.ok(ui.includes("breakpointSnapshot: row.breakpointSnapshot"));
+  assert.ok(ui.includes('microbiology_result_submitted_withdraw_before_edit'));
+  assert.ok(ui.includes('if (!response.ok)'));
   assert.ok(ui.includes('setRows([emptyRow(1)])'));
-  assert.ok(ui.includes('setEditor(null)'));
-  assert.ok(ui.includes('disabled={busy !== "" || isolates.length === 0 || antibiotics.length === 0}'));
-  assert.ok(!ui.includes('      <form className="catalog-form" onSubmit={addSusceptibility}>'));
+});
+
+test("Send-out creation enforces a locked fresh duplicate lookup before writing", () => {
+  const route=readFileSync("src/app/api/send-outs/route.ts","utf8");
+  const tx=route.indexOf("const outcome = await prisma.$transaction(async tx =>");
+  const lock=route.indexOf("SELECT id FROM order_items",tx);
+  const duplicate=route.indexOf("const active = await tx.sendOutReferral.findFirst",lock);
+  const specimenClaim=route.indexOf("tx.specimen.updateMany",duplicate);
+  const referral=route.indexOf("tx.sendOutReferral.create",specimenClaim);
+  assert.ok(tx>=0 && lock>tx && duplicate>lock && specimenClaim>duplicate && referral>specimenClaim);
+  assert.ok(route.includes("FOR UPDATE"));
+  assert.ok(route.includes('status: { notIn: ["COMPLETED", "CANCELLED"] }'));
+  assert.ok(route.includes('kind: "active_exists"'));
+  assert.ok(route.includes('error: "active_sendout_exists"'));
+  assert.ok(!route.includes("const active = await prisma.sendOutReferral.findFirst"));
 });
