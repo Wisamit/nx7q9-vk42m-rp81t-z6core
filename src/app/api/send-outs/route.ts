@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { parseBranchExpectedInstant } from "@/lib/branch-wall-clock";
+import { parseSendOutCost } from "@/lib/sendout-cost";
+import { Prisma } from "../../../../../generated/prisma/client";
 
 function text(value: unknown, max = 1000) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -22,10 +24,8 @@ export async function POST(request: Request) {
   }
   if (!canAccessBranch(session, branchId)) return NextResponse.json({ error: "branch_forbidden" }, { status: 403 });
 
-  const costText = body.costAmount === null || body.costAmount === undefined || body.costAmount === "" ? "" : String(body.costAmount);
-  const costAmount = costText ? Number(costText) : null;
-  const costCurrency = text(body.costCurrency, 3).toUpperCase() || null;
-  if ((costAmount !== null && (!Number.isFinite(costAmount) || costAmount < 0)) || ((costAmount !== null) !== Boolean(costCurrency))) {
+  const cost = parseSendOutCost(body.costAmount, body.costCurrency);
+  if (cost.kind !== "ok") {
     return NextResponse.json({ error: "cost_and_currency_must_be_provided_together" }, { status: 400 });
   }
   const expectedResultAtText = text(body.expectedResultAt, 40);
@@ -92,8 +92,8 @@ export async function POST(request: Request) {
         specimenId,
         externalLaboratoryId,
         externalAccession: text(body.externalAccession, 120) || null,
-        costAmount: costAmount === null ? null : costAmount.toFixed(4),
-        costCurrency,
+        costAmount: cost.amount === null ? null : new Prisma.Decimal(cost.amount).toFixed(4),
+        costCurrency: cost.currency,
         expectedResultAt,
         createdByUserId: session.user.id,
       },
@@ -122,7 +122,7 @@ export async function POST(request: Request) {
           externalLaboratoryCode: laboratory.code,
           externalAccession: referral.externalAccession,
           costAmount: referral.costAmount?.toString() || null,
-          costCurrency,
+          costCurrency: cost.currency,
           expectedResultAt,
         },
         ipAddress: ctx.ipAddress,
