@@ -27,7 +27,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   if (!canAccessBranch(session, referral.branchId)) return NextResponse.json({ error: "branch_forbidden" }, { status: 403 });
 
   let nextStatus: "DISPATCHED" | "RESULT_RECEIVED" | "VERIFIED" | "COMPLETED" | "CANCELLED";
-  let update: Prisma.SendOutReferralUncheckedUpdateManyMutationInput = {};
+  let update: Prisma.SendOutReferralUncheckedUpdateManyInput = {};
   let eventMetadata: Record<string, unknown> = {};
 
   if (action === "DISPATCH") {
