@@ -94,6 +94,27 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     });
     if (claimed.count !== 1) return { kind: "changed" } as const;
     const saved = await tx.sendOutReferral.findUniqueOrThrow({ where: { id: referral.id } });
+    if (action === "DISPATCH" && referral.specimenId) {
+      // Claim current specimen custody before emitting a dispatch event.
+      // Quarantined, transferred, rejected or unlinked samples cannot be
+      // represented as physically dispatched from the referral branch.
+      const rows = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM specimens WHERE id = ${referral.specimenId} FOR UPDATE
+      `;
+      const specimen = rows.length === 1 ? await tx.specimen.findFirst({
+        where: {
+          id: referral.specimenId,
+          organizationId: session.user.organizationId,
+          orderId: referral.orderItem.orderId,
+          orderItems: { some: { orderItemId: referral.orderItemId, status: "ACTIVE" } },
+        },
+        select: { currentBranchId: true, status: true },
+      }) : null;
+      if (!specimen || specimen.currentBranchId !== referral.branchId ||
+          !["COLLECTED", "RECEIVED", "IN_PROCESS"].includes(specimen.status)) {
+        throw new Error("SENDOUT_SPECIMEN_CUSTODY_CHANGED");
+      }
+    }
     await tx.sendOutEvent.create({
       data: {
         referralId: referral.id,
@@ -143,8 +164,17 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       },
     });
     return { kind: "updated", referral: saved } as const;
+  }).catch(error => {
+    // Throw inside the transaction to roll back the status claim itself.
+    if (error instanceof Error && error.message === "SENDOUT_SPECIMEN_CUSTODY_CHANGED") {
+      return { kind: "specimen_changed" } as const;
+    }
+    throw error;
   });
 
+  if (outcome.kind === "specimen_changed") {
+    return NextResponse.json({ error: "sendout_specimen_custody_changed" }, { status: 409 });
+  }
   if (outcome.kind === "changed") {
     return NextResponse.json({ error: "sendout_state_changed" }, { status: 409 });
   }
