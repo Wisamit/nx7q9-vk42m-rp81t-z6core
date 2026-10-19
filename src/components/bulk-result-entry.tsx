@@ -164,9 +164,16 @@ export function BulkResultEntry({ rows, locale }: { rows: BulkRow[]; locale: "ar
           },
         }));
       } else {
+        const conflict = body.error === "order_or_test_not_open_for_results";
         setStates(current => ({
           ...current,
-          [row.orderItemId]: { status: "error", message: tr("Save failed","فشل الحفظ") },
+          [row.orderItemId]: {
+            status: "error",
+            message: conflict
+              ? tr("Order or test closed; no result saved. Refresh and review the order.",
+                "الطلب أو الفحص مغلق؛ لم تُحفظ النتيجة. حدّث الصفحة وراجع الطلب.")
+              : tr("Save failed","فشل الحفظ"),
+          },
         }));
       }
     }
