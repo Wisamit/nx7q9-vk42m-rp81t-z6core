@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { ChangeEvent, FormEvent, useState } from "react";
+import { ChangeEvent, FormEvent, useRef, useState } from "react";
 import type { SystemSettings, ThemePalette } from "@/lib/system-settings";
 import { SystemIcon } from "@/components/system-icon";
 
@@ -46,9 +46,14 @@ function imageToDataUrl(file: File, maxBytes = 1024 * 1024) {
   });
 }
 
-export function SystemSettingsForm({ initial, locale }: { initial: SystemSettings; locale: "ar" | "en" }) {
+export function SystemSettingsForm({ initial, locale, onSavePendingChange }: {
+  initial: SystemSettings;
+  locale: "ar" | "en";
+  onSavePendingChange?: (pending: boolean) => void;
+}) {
   const [value, setValue] = useState(initial);
   const [busy, setBusy] = useState(false);
+  const submitting = useRef(false);
   const [message, setMessage] = useState("");
   const tr = <T,>(en: T, ar: T) => locale === "ar" ? ar : en;
 
@@ -75,9 +80,13 @@ export function SystemSettingsForm({ initial, locale }: { initial: SystemSetting
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (busy) return;
+    // A ref blocks consecutive submits even before React renders busy=true.
+    if (submitting.current) return;
+    submitting.current = true;
     setBusy(true);
+    onSavePendingChange?.(true);
     setMessage("");
+    let acknowledgedSuccess = false;
     try {
       const response = await fetch("/api/settings", {
         method: "PUT",
@@ -89,19 +98,24 @@ export function SystemSettingsForm({ initial, locale }: { initial: SystemSetting
         setMessage(body.error === "invalid_image"
           ? tr("Logo or favicon is invalid.", "اللوغو أو الأيقونة غير صالحة.")
           : tr("Unable to save settings.", "تعذر حفظ الإعدادات."));
-        setBusy(false);
         return;
       }
+      // Remain locked until the successful settings change reloads the UI.
+      acknowledgedSuccess = true;
       setMessage(tr("Settings saved. Reloading the interface…", "تم حفظ الإعدادات. يتم تحديث الواجهة…"));
       window.setTimeout(() => window.location.reload(), 500);
     } catch {
-      // Never leave the editor permanently disabled after a network failure.
-      // Retain all entered values and allow a deliberate user retry.
+      // Uncertain network outcome: retain edits, do not imply a successful save.
       setMessage(tr(
         "Connection error. The settings were not confirmed as saved. Review and try again.",
         "حدث خطأ في الاتصال. لم يتأكد حفظ الإعدادات؛ راجعها وأعد المحاولة.",
       ));
-      setBusy(false);
+    } finally {
+      if (!acknowledgedSuccess) {
+        submitting.current = false;
+        setBusy(false);
+        onSavePendingChange?.(false);
+      }
     }
   }
 
