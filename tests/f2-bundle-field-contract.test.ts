@@ -43,8 +43,9 @@ test("F2: HMAC covers field contract and every exact source value",()=>{
   const original=attestCatalogBundle(exampleBundle(),SECRET);
   assert.equal(verifyCatalogBundleAttestation(original,SECRET),"VERIFIED");
   assert.equal(verifyBundleFieldContract(original),"COMPLETE_SOURCE_FIELD_PROJECTION");
-  const tampered=structuredClone(original);
-  tampered.fieldContract.classes[0].fields.pop();
+  const tampered=structuredClone(original) as Record<string, unknown>;
+  const fieldContract=tampered.fieldContract as { classes: Array<{ fields: string[] }> };
+  fieldContract.classes[0].fields.pop();
   assert.equal(assert.throws(()=>verifyBundleFieldContract(tampered),BundleFieldContractError),undefined);
   assert.throws(()=>verifyCatalogBundleAttestation(tampered,SECRET),/bundle_attestation_mismatch/);
 });
@@ -56,7 +57,7 @@ test("F2: deleted/renamed/additional source keys cannot masquerade as a complete
     delete row[first];
     assert.throws(()=>verifyBundleFieldContract(payload),/bundle_field_contract_incomplete_source/,kind);
     row[first]=null;
-    row.__extraField=true;
+    row.__extraField=null;
     assert.throws(()=>verifyBundleFieldContract(payload),/bundle_field_contract_incomplete_source/,kind);
   }
 });
