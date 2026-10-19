@@ -37,6 +37,7 @@ jobs:
         with:
           node-version: '22.18.0'
       - run: npm install
+      - run: node scripts/ci-export-lockfile.mjs
       - run: npx prisma migrate deploy
       - run: npx prisma migrate status
       - run: npx prisma generate
