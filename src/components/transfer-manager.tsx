@@ -61,6 +61,7 @@ export function TransferManager({
   const [selectedSpecimens, setSelectedSpecimens] = useState<string[]>([]);
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
+  const [messageIsError, setMessageIsError] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [dispatchReviewId, setDispatchReviewId] = useState<string | null>(null);
   const [receiveBarcodes, setReceiveBarcodes] = useState<Record<string, string>>({});
@@ -92,7 +93,7 @@ export function TransferManager({
       return;
     }
     const form = new FormData(event.currentTarget);
-    setBusy("create"); setMessage("");
+    setBusy("create"); setMessage(""); setMessageIsError(false);
     try {
       const response = await fetch("/api/transfers", {
         method: "POST",
@@ -109,9 +110,14 @@ export function TransferManager({
       });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) {
-        setMessage(body.error
+        setMessageIsError(true);
+        setMessage(body.error === "transfer_order_not_active"
+          ? tr("A linked order was closed. No transfer manifest was created. Refresh and review the specimens.",
+            "أُغلق طلب مرتبط بإحدى العينات. لم يتم إنشاء بيان النقل. حدّث الصفحة وراجع العينات.")
+          : body.error
           ? tr("Manifest could not be created: ", "تعذر إنشاء البيان: ") + body.error
           : tr("Could not create transfer manifest.", "تعذر إنشاء بيان نقل العينات."));
+        if (response.status === 409) router.refresh();
         return;
       }
       setMessage(tr(`Manifest created: ${body.manifest.manifestNumber}`,
@@ -121,6 +127,7 @@ export function TransferManager({
       setDestinationBranchId("");
       router.refresh();
     } catch {
+      setMessageIsError(true);
       setMessage(tr("Connection interrupted. Check manifests before retrying to avoid duplicates.",
         "انقطع الاتصال؛ راجع بيانات الشحن قبل إعادة المحاولة لتجنب التكرار."));
     } finally {
@@ -142,7 +149,7 @@ export function TransferManager({
       setMessage(tr("Manifest state changed; refresh before dispatch.", "تغيّرت حالة البيان؛ حدّث الصفحة قبل الإرسال."));
       return;
     }
-    setBusy(`dispatch:${dispatchReviewId}`); setMessage("");
+    setBusy(`dispatch:${dispatchReviewId}`); setMessage(""); setMessageIsError(false);
     try {
       const response = await fetch(`/api/transfers/${dispatchReviewId}/actions`, {
         method: "POST",
@@ -151,9 +158,14 @@ export function TransferManager({
       });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) {
-        setMessage(body.error
+        setMessageIsError(true);
+        setMessage(body.error === "transfer_order_not_active"
+          ? tr("A linked order was closed. No specimens were dispatched. Refresh the manifest before proceeding.",
+            "أُغلق طلب مرتبط بإحدى العينات. لم تُرسل أي عينة. حدّث البيان قبل المتابعة.")
+          : body.error
           ? tr("Dispatch failed: ", "فشل الإرسال: ") + body.error
           : tr("Dispatch failed.", "فشل الإرسال."));
+        if (response.status === 409) router.refresh();
         return;
       }
       setDispatchReviewId(null);
@@ -161,6 +173,7 @@ export function TransferManager({
         "تم إرسال بيان الشحن؛ أصبحت العينات المحددة قيد النقل."));
       router.refresh();
     } catch {
+      setMessageIsError(true);
       setMessage(tr("Connection interrupted; verify manifest status before re-dispatch.",
         "انقطع الاتصال؛ تحقق من حالة البيان قبل إعادة الإرسال."));
     } finally {
@@ -271,7 +284,7 @@ export function TransferManager({
         {message && <p role="alert" className="form-error form-span">{message}</p>}
       </form>}
       </CrudModal>
-      {!createOpen && message && <p className="form-success" role="status">{message}</p>}
+      {!createOpen && message && <p className={messageIsError ? "form-error" : "form-success"} role={messageIsError ? "alert" : "status"}>{message}</p>}
     </section>
 
     <section className="transfer-manifest-list">

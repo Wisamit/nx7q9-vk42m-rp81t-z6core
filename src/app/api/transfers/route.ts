@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { NextResponse } from "next/server";
 import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { lockActiveTransferOrders, TransferOrderNoLongerActive } from "@/lib/transfer-order-activity";
 
 function text(value: unknown, max = 500) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -51,10 +52,14 @@ export async function POST(request: Request) {
       currentBranchId: sourceBranchId,
       status: { in: ["COLLECTED","RECEIVED"] },
     },
-    select: { id: true, barcode: true, status: true },
+    select: { id: true, barcode: true, status: true, orderId: true,
+      order: { select: { status: true } } },
   });
   if (specimens.length !== specimenIds.length) {
     return NextResponse.json({ error: "one_or_more_specimens_not_transferable" }, { status: 409 });
+  }
+  if (specimens.some(specimen => !["REGISTERED", "COLLECTED", "IN_PROGRESS"].includes(specimen.order.status))) {
+    return NextResponse.json({ error: "transfer_order_not_active" }, { status: 409 });
   }
 
   const activeTransfers = await prisma.specimenTransferItem.findMany({
@@ -69,6 +74,11 @@ export async function POST(request: Request) {
   }
 
   const created = await prisma.$transaction(async (tx) => {
+    // Parent order cancellation/completion must serialize with new manifest
+    // creation, even when a stale page still lists a transferable specimen.
+    await lockActiveTransferOrders(
+      tx, session.user.organizationId, specimens.map(specimen => specimen.orderId),
+    );
     // Serialize manifest creation per specimen to prevent concurrent DRAFT
     // manifests for the same specimen. Stable lock ordering avoids deadlocks.
     for (const specimenId of [...specimenIds].sort()) {
@@ -141,10 +151,14 @@ export async function POST(request: Request) {
 
     return manifest;
   }).catch(error => {
+    if (error instanceof TransferOrderNoLongerActive) return "ORDER_CLOSED" as const;
     if (error instanceof ManifestStateChanged) return null;
     throw error;
   });
 
+  if (created === "ORDER_CLOSED") {
+    return NextResponse.json({ error: "transfer_order_not_active" }, { status: 409 });
+  }
   if (!created) return NextResponse.json({ error: "specimen_already_in_active_manifest_or_state_changed" }, { status: 409 });
   return NextResponse.json({ status: "ok", manifest: created }, { status: 201 });
 }
