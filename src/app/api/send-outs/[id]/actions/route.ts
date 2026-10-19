@@ -80,6 +80,11 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   }
 
   const note = text(body?.note, 1000) || null;
+  // The UI already requires a documented cancellation; the API must enforce
+  // the same audit invariant for direct clients and automated integrations.
+  if (action === "CANCEL" && !note) {
+    return NextResponse.json({ error: "cancellation_reason_required" }, { status: 400 });
+  }
   const outcome = await prisma.$transaction(async tx => {
     // A stale UI action must not overwrite a newer transition or append a false
     // custody/verification event. InnoDB serializes this conditional update.
@@ -94,6 +99,16 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     });
     if (claimed.count !== 1) return { kind: "changed" } as const;
     const saved = await tx.sendOutReferral.findUniqueOrThrow({ where: { id: referral.id } });
+    if (action === "DISPATCH") {
+      const currentItem = await tx.orderItem.findFirst({
+        where: { id: referral.orderItemId, order: { organizationId: session.user.organizationId } },
+        select: { status: true, order: { select: { status: true } } },
+      });
+      if (!currentItem || ["CANCELLED", "VERIFIED"].includes(currentItem.status) ||
+          ["CANCELLED", "COMPLETED"].includes(currentItem.order.status)) {
+        throw new Error("SENDOUT_ORDER_NO_LONGER_ACTIVE");
+      }
+    }
     if (action === "DISPATCH" && referral.specimenId) {
       // Claim current specimen custody before emitting a dispatch event.
       // Quarantined, transferred, rejected or unlinked samples cannot be
@@ -169,9 +184,15 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     if (error instanceof Error && error.message === "SENDOUT_SPECIMEN_CUSTODY_CHANGED") {
       return { kind: "specimen_changed" } as const;
     }
+    if (error instanceof Error && error.message === "SENDOUT_ORDER_NO_LONGER_ACTIVE") {
+      return { kind: "order_changed" } as const;
+    }
     throw error;
   });
 
+  if (outcome.kind === "order_changed") {
+    return NextResponse.json({ error: "sendout_order_no_longer_active" }, { status: 409 });
+  }
   if (outcome.kind === "specimen_changed") {
     return NextResponse.json({ error: "sendout_specimen_custody_changed" }, { status: 409 });
   }
