@@ -83,7 +83,7 @@ test("Org-wide patient search retains branch-scoped clinical, specimen and finan
 
 test("Clinical AST multi-row workspace is preserved pending qualified modal decision", () => {
   const ui=readFileSync("src/components/microbiology-case-editor.tsx","utf8");
-  assert.equal((ui.match(/<CrudModal\\b/g)||[]).length,3);
+  assert.equal((ui.match(/<CrudModal\b/g)||[]).length,3);
   assert.ok(ui.includes('<form className="catalog-form" onSubmit={addSusceptibility}>'));
   assert.ok(ui.includes("rows.map(row =>"));
   assert.ok(ui.includes("breakpointSnapshot: row.breakpointSnapshot"));
