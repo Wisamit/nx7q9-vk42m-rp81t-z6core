@@ -22,7 +22,7 @@ test("Frozen 88 scope and 81 routes are actually tied to existing repository sou
 
 test("Unresolved policy, outdated evidence and human acceptance cannot be represented as GO", () => {
   const result=evidence();
-  assert.deepEqual(result.unresolvedMasterScopeRules.map(x=>x.section),[75,86,87,88]);
+  assert.deepEqual(result.unresolvedMasterScopeRules.map((x: { section: number })=>x.section),[75,86,87,88]);
   assert.equal(result.acceptance.qualifiedCasesNotPassed,88);
   assert.equal(result.acceptance.finalDecision,"NO_GO");
   assert.equal(result.acceptance.browser81RouteRealExecution,"NOT_EXECUTED");
@@ -39,7 +39,7 @@ test("No modifications to historical 88-case UAT status or external approval cla
   const uat=JSON.parse(readFileSync("docs/STAGE_132_UAT_CASES.json","utf8"));
   assert.equal(uat.stageStatus,"NOT_EXECUTED");
   assert.equal(uat.cases.length,88);
-  assert.ok(uat.cases.every(x=>x.executionStatus==="NOT_EXECUTED"));
+  assert.ok(uat.cases.every((x: { executionStatus: string })=>x.executionStatus==="NOT_EXECUTED"));
   const browser=readFileSync(".github/workflows/ci.yml","utf8");
   assert.ok(browser.includes("browser_review:"));
   assert.ok(browser.includes("FL_UI_AUDIT_SYNTHETIC_ONLY"));
