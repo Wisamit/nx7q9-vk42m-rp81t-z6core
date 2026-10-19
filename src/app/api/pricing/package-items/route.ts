@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { planNextPriceRevision } from "@/lib/pricing-version-governance";
+import { normalizeLiveTariffPrice } from "@/lib/pricing-exact-money";
 
 function text(value: unknown, max = 220) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -15,11 +16,14 @@ export async function POST(request: Request) {
 
   const priceListId = text(body.priceListId, 36);
   const packageId = text(body.packageId, 36);
-  const amount = Number(body.unitPrice);
+  const amount = normalizeLiveTariffPrice(body.unitPrice);
   const effectiveFromText = text(body.effectiveFrom, 30);
   const effectiveToText = text(body.effectiveTo, 30);
 
-  if (!priceListId || !packageId || !Number.isFinite(amount) || amount < 0 || !effectiveFromText) {
+  if (amount === null) {
+    return NextResponse.json({ error: "invalid_exact_price" }, { status: 400 });
+  }
+  if (!priceListId || !packageId || !effectiveFromText) {
     return NextResponse.json({ error: "invalid_fields" }, { status: 400 });
   }
 
@@ -60,7 +64,7 @@ export async function POST(request: Request) {
         data: {
           priceListId,
           packageId,
-          unitPrice: amount.toFixed(4),
+          unitPrice: amount,
           effectiveFrom,
           effectiveTo,
         },
@@ -104,7 +108,7 @@ export async function POST(request: Request) {
             priceListId,
             packageId,
             packageCode: pkg.code,
-            unitPrice: amount.toFixed(4),
+            unitPrice: amount,
             currency: priceList.currency,
             effectiveFrom,
             effectiveTo,
