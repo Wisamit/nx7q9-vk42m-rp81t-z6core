@@ -220,6 +220,8 @@ export default async function DiagnosticReportPage({ params }: { params: Promise
   const activeBranchIds = session.user.branchScopes
     .filter(scope => scope.branch.status === "ACTIVE")
     .map(scope => scope.branchId);
+  const currentReportDeliverable = latest.version === report.currentVersion &&
+    ["PARTIAL", "FINAL", "AMENDED"].includes(latest.status);
   const comparisonEligible = latest.version === report.currentVersion
     && ["PARTIAL", "FINAL", "AMENDED"].includes(latest.status)
     && authorizedDepartmentIds(session).length === 0;
@@ -367,7 +369,7 @@ export default async function DiagnosticReportPage({ params }: { params: Promise
         <p className="muted">{tr(locale, "Version", "الإصدار")} {latest.version} · {statusLabel(locale, latest.status)}{templateSnapshot ? ` · ${tr(locale, "Template", "القالب")} ${templateSnapshot.templateCode} v${templateSnapshot.templateVersion}` : ""}</p>
       </div>
       <div className="header-actions">
-        {permissions.has("reports.deliver") && <>
+        {permissions.has("reports.deliver") && currentReportDeliverable && <>
           <ReportPdfButton
             reportVersionId={latest.id}
             accessionNumber={snapshot.order.accessionNumber}
@@ -382,6 +384,9 @@ export default async function DiagnosticReportPage({ params }: { params: Promise
     </div>
 
     <article id="diagnostic-report-version" className="diagnostic-report professional-report" dir={reportLocale === "ar" ? "rtl" : "ltr"}>
+      {latest.status === "RETRACTED" && <div role="alert" className="report-amended-banner">
+        <strong>{reportTr("WITHDRAWN REPORT — NOT VALID FOR CLINICAL USE", "تقرير مسحوب — غير صالح للاستخدام السريري")}</strong>
+      </div>}
       {templateConfig.watermark && <div className="report-watermark" aria-hidden="true">{templateConfig.watermark}</div>}
       <header className="report-header">
         <div className="report-brand-block">
@@ -559,7 +564,7 @@ export default async function DiagnosticReportPage({ params }: { params: Promise
       )}</p>
     </section>}
 
-    {permissions.has("reports.deliver") && <ReportOutboundDelivery
+    {permissions.has("reports.deliver") && currentReportDeliverable && <ReportOutboundDelivery
       reportVersionId={latest.id}
       recipients={outboundRecipients}
       locale={locale}
