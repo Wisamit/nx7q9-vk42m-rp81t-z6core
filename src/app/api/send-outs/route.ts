@@ -3,7 +3,7 @@ import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { parseBranchExpectedInstant } from "@/lib/branch-wall-clock";
 import { parseSendOutCost } from "@/lib/sendout-cost";
-import { Prisma } from "../../../../../generated/prisma/client";
+import { Prisma } from "../../../../generated/prisma/client";
 
 function text(value: unknown, max = 1000) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
