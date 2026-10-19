@@ -54,3 +54,11 @@ test("Specimen reception shows errors visually as errors in Arabic and English",
   assert.ok(ui.includes('role={messageIsError ? "alert" : "status"}'));
   assert.ok(ui.includes("if (response.status === 409) router.refresh()"));
 });
+
+test("Volume reconciliation UI explains rejected actions without a success banner", () => {
+  const volumeUi = readFileSync("src/components/specimen-aliquot-manager.tsx", "utf8");
+  assert.ok(volumeUi.includes("specimen_order_not_active: tr("));
+  assert.ok(volumeUi.includes("لم يتغير حجم العينة"));
+  assert.ok(volumeUi.includes('messageIsError ? "form-error" : "form-success"'));
+  assert.ok(volumeUi.includes("if (response.status === 409) router.refresh()"));
+});
