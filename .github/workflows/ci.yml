@@ -201,6 +201,16 @@ jobs:
       - run: node --experimental-strip-types --test tests/analyzer-bridge-mariadb.integration.test.ts
       - run: npm run test:ui-theme
       - run: npm run test:ui-i18n
+      - run: node scripts/f0-scope-gate.mjs --check
+      - run: node scripts/f0-scope-gate.mjs --json > f0-scope-evidence.json
+      - run: node scripts/f0-scope-gate.mjs --markdown > f0-scope-evidence.md
+      - uses: actions/upload-artifact@v4
+        with:
+          name: f0-scope-evidence
+          path: |
+            f0-scope-evidence.json
+            f0-scope-evidence.md
+          if-no-files-found: error
       - run: node scripts/release-closure-evidence.mjs --check
       - run: node scripts/release-closure-evidence.mjs --json > release-closure-evidence.json
       - run: node scripts/release-closure-evidence.mjs --markdown > release-closure-evidence.md
