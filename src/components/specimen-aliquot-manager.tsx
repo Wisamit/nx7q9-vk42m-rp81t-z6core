@@ -72,6 +72,7 @@ export function SpecimenAliquotManager({
   const [busy, setBusy] = useState(false);
   const [storageBusy, setStorageBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [messageIsError, setMessageIsError] = useState(false);
   const [actionModal, setActionModal] = useState("");
   const usable = ["COLLECTED","RECEIVED","IN_PROCESS"].includes(status);
   useEffect(() => {
@@ -100,6 +101,7 @@ export function SpecimenAliquotManager({
       usage_order_item_required: tr("Select the test that consumed this specimen volume.", "اختر الفحص الذي استهلك حجم العينة."),
       usage_order_item_not_linked: tr("The selected test is not linked to this specimen.", "الفحص المحدد غير مرتبط بهذه العينة."),
       specimen_volume_changed: tr("Available volume changed concurrently. Review the updated balance and try again.", "تغير الحجم المتاح بالتزامن. راجع الرصيد الجديد وحاول مجددًا."),
+      specimen_order_not_active: tr("This order was cancelled or completed. The specimen volume was not changed.", "الطلب ملغى أو مكتمل. لم يتغير حجم العينة."),
       container_not_found: tr("Selected aliquot container is unavailable.", "حاوية الجزء المشتق المحددة غير متاحة."),
       storage_location_has_active_specimens: tr("Move all active specimens out of this position before deactivating it.", "انقل جميع العينات الفعالة من هذا الموقع قبل تعطيله."),
       invalid_storage_status_change: tr("Location, status and reason are required.", "الموقع والحالة والسبب مطلوبة."),
@@ -120,6 +122,7 @@ export function SpecimenAliquotManager({
   async function post(path: string, payload: Record<string, unknown>) {
     setBusy(true);
     setMessage("");
+    setMessageIsError(false);
     try {
       const response = await fetch(path, {
         method: "POST",
@@ -128,12 +131,15 @@ export function SpecimenAliquotManager({
       });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) {
+        setMessageIsError(true);
         setMessage(errorMessage(body.error));
+        if (response.status === 409) router.refresh();
         return false;
       }
       router.refresh();
       return true;
     } catch {
+      setMessageIsError(true);
       setMessage(tr("Connection failed during specimen operation.", "فشل الاتصال أثناء عملية العينة."));
       return false;
     } finally {
@@ -211,6 +217,7 @@ export function SpecimenAliquotManager({
     const form = new FormData(event.currentTarget);
     setStorageBusy(true);
     setMessage("");
+    setMessageIsError(false);
     try {
       const response = await fetch("/api/settings/specimen-storage-locations", {
         method: "PATCH",
@@ -223,6 +230,7 @@ export function SpecimenAliquotManager({
       });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) {
+        setMessageIsError(true);
         setMessage(errorMessage(body.error));
         return;
       }
@@ -233,6 +241,7 @@ export function SpecimenAliquotManager({
         ? tr("Storage location status updated and audited.", "تم تحديث حالة موقع التخزين وتسجيل العملية.")
         : tr("Status saved, but location list could not refresh.", "تم حفظ الحالة ولكن تعذر تحديث قائمة مواقع التخزين."));
     } catch {
+      setMessageIsError(true);
       setMessage(tr(
         "Connection interrupted; check the storage status before retrying.",
         "انقطع الاتصال؛ راجع حالة موقع التخزين قبل إعادة المحاولة.",
@@ -453,7 +462,7 @@ export function SpecimenAliquotManager({
       </details>
     </div>}
 
-    {message && <p className="form-success">{message}</p>}
+    {message && <p className={messageIsError ? "form-error" : "form-success"} role={messageIsError ? "alert" : "status"}>{message}</p>}
 
     {childAliquots.length > 0 && <div className="table-wrap">
       <table>
