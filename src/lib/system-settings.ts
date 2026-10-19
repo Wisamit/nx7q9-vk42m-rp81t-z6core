@@ -79,6 +79,7 @@ export const DEFAULT_DARK_THEME: ThemePalette = {
 
 export type SystemSettings = {
   organizationId: string;
+  settingsRevision: number;
   organizationNameEn: string;
   organizationNameAr: string | null;
   systemNameEn: string;
@@ -122,14 +123,18 @@ export async function getSingleActiveOrganizationSystemSettings(): Promise<Syste
   return getOrganizationSystemSettings(organizations[0].id);
 }
 
-export async function getOrganizationSystemSettings(organizationId: string): Promise<SystemSettings> {
-  const organization = await prisma.organization.findUniqueOrThrow({
+export async function getOrganizationSystemSettings(
+  organizationId: string,
+  client: Pick<typeof prisma, "organization"> = prisma,
+): Promise<SystemSettings> {
+  const organization = await client.organization.findUniqueOrThrow({
     where: { id: organizationId },
     include: { organizationSetting: true },
   });
   const s = organization.organizationSetting;
   return {
     organizationId,
+    settingsRevision: organization.settingsRevision,
     organizationNameEn: organization.nameEn,
     organizationNameAr: organization.nameAr,
     systemNameEn: s?.systemNameEn || organization.nameEn || "Family Lab",

@@ -1018,6 +1018,7 @@ model Organization {
   legalName       String?      @map("legal_name") @db.VarChar(255)
   defaultCurrency String       @default("EGP") @map("default_currency") @db.Char(3)
   defaultTimezone String       @default("Africa/Cairo") @map("default_timezone") @db.VarChar(64)
+  settingsRevision Int        @default(0) @map("settings_revision")
   status          RecordStatus @default(ACTIVE)
   createdAt       DateTime     @default(now()) @map("created_at") @db.DateTime(3)
   updatedAt       DateTime     @updatedAt @map("updated_at") @db.DateTime(3)

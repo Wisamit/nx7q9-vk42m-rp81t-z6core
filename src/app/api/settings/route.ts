@@ -57,14 +57,32 @@ export async function PUT(request: Request) {
 
   const lightTheme = normalizePalette(body.lightTheme, DEFAULT_LIGHT_THEME);
   const darkTheme = normalizePalette(body.darkTheme, DEFAULT_DARK_THEME);
-  const before = await getOrganizationSystemSettings(session.user.organizationId);
+  const expectedRevision = body.settingsRevision;
+  if (typeof expectedRevision !== "number" || !Number.isSafeInteger(expectedRevision) || expectedRevision < 0) {
+    return NextResponse.json({ error: "invalid_settings_revision" }, { status: 400 });
+  }
   const ctx = await requestContext();
 
-  await prisma.$transaction(async tx => {
-    await tx.organization.update({
-      where: { id: session.user.organizationId },
-      data: { nameEn: organizationNameEn, nameAr: organizationNameAr || null, defaultTimezone: timezone },
+  const saved = await prisma.$transaction(async tx => {
+    // Canonical lock serializes organization-wide settings saves across staff sessions.
+    // A monotonic integer avoids same-millisecond updatedAt collisions.
+    const locked = await tx.$queryRaw<Array<{ settings_revision: number }>>`
+      SELECT settings_revision FROM organizations
+      WHERE id = ${session.user.organizationId} FOR UPDATE
+    `;
+    if (locked.length !== 1 || locked[0].settings_revision !== expectedRevision) return false;
+    // Capture audit before-values only after the canonical row is locked.
+    const before = await getOrganizationSystemSettings(session.user.organizationId, tx);
+    const claimed = await tx.organization.updateMany({
+      where: { id: session.user.organizationId, settingsRevision: expectedRevision },
+      data: {
+        nameEn: organizationNameEn,
+        nameAr: organizationNameAr || null,
+        defaultTimezone: timezone,
+        settingsRevision: { increment: 1 },
+      },
     });
+    if (claimed.count !== 1) return false;
     await tx.organizationSetting.upsert({
       where: { organizationId: session.user.organizationId },
       create: {
@@ -108,6 +126,7 @@ export async function PUT(request: Request) {
         entityType: "OrganizationSetting",
         entityId: session.user.organizationId,
         oldValues: {
+          settingsRevision: before.settingsRevision,
           organizationNameEn: before.organizationNameEn,
           organizationNameAr: before.organizationNameAr,
           systemNameEn: before.systemNameEn,
@@ -126,6 +145,7 @@ export async function PUT(request: Request) {
           faviconConfigured: Boolean(before.faviconDataUrl),
         },
         newValues: {
+          settingsRevision: expectedRevision + 1,
           organizationNameEn,
           organizationNameAr: organizationNameAr || null,
           systemNameEn,
@@ -147,7 +167,9 @@ export async function PUT(request: Request) {
         userAgent: ctx.userAgent,
       },
     });
+    return true;
   });
 
-  return NextResponse.json({ status: "ok" });
+  if (!saved) return NextResponse.json({ error: "settings_revision_conflict" }, { status: 409 });
+  return NextResponse.json({ status: "ok", settingsRevision: expectedRevision + 1 });
 }
