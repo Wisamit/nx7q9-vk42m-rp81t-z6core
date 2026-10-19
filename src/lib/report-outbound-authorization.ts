@@ -4,7 +4,7 @@ import {
   resolveVerifiedPortalDestination,
   type ReportOutboundChannel,
   type ReportOutboundRecipientType,
-} from "@/lib/report-outbound";
+} from "./report-outbound.ts";
 
 type DbClient = PrismaClient | Prisma.TransactionClient;
 
