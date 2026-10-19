@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { parseBranchExpectedInstant } from "@/lib/branch-wall-clock";
+import { parseSendOutCost } from "@/lib/sendout-cost";
+import { Prisma } from "../../../../generated/prisma/client";
 
 function text(value: unknown, max = 1000) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -22,10 +24,8 @@ export async function POST(request: Request) {
   }
   if (!canAccessBranch(session, branchId)) return NextResponse.json({ error: "branch_forbidden" }, { status: 403 });
 
-  const costText = body.costAmount === null || body.costAmount === undefined || body.costAmount === "" ? "" : String(body.costAmount);
-  const costAmount = costText ? Number(costText) : null;
-  const costCurrency = text(body.costCurrency, 3).toUpperCase() || null;
-  if ((costAmount !== null && (!Number.isFinite(costAmount) || costAmount < 0)) || ((costAmount !== null) !== Boolean(costCurrency))) {
+  const cost = parseSendOutCost(body.costAmount, body.costCurrency);
+  if (cost.kind !== "ok") {
     return NextResponse.json({ error: "cost_and_currency_must_be_provided_together" }, { status: 400 });
   }
   const expectedResultAtText = text(body.expectedResultAt, 40);
@@ -64,13 +64,24 @@ export async function POST(request: Request) {
   if (selectedSpecimen && !["COLLECTED","RECEIVED","IN_PROCESS"].includes(selectedSpecimen.status)) {
     return NextResponse.json({ error: "specimen_not_ready_for_sendout", status: selectedSpecimen.status }, { status: 409 });
   }
-  const active = await prisma.sendOutReferral.findFirst({
-    where: { orderItemId, status: { notIn: ["COMPLETED", "CANCELLED"] } },
-    select: { id: true },
-  });
-  if (active) return NextResponse.json({ error: "active_sendout_exists", referralId: active.id }, { status: 409 });
-
-  const created = await prisma.$transaction(async tx => {
+  const outcome = await prisma.$transaction(async tx => {
+    // Serialize independent dispatch requests for this SAME order item. The
+    // pre-transaction lookup was race-prone: both writers could see no active
+    // referral and create parallel send-outs. A locking read precedes the
+    // authoritative active-referral check and every custody/audit write.
+    const locked = await tx.$queryRaw<Array<{ id: string }>>`
+      SELECT id FROM order_items WHERE id = ${orderItemId} FOR UPDATE
+    `;
+    if (locked.length !== 1) return { kind: "order_item_changed" } as const;
+    const active = await tx.sendOutReferral.findFirst({
+      where: {
+        organizationId: session.user.organizationId,
+        orderItemId,
+        status: { notIn: ["COMPLETED", "CANCELLED"] },
+      },
+      select: { id: true },
+    });
+    if (active) return { kind: "active_exists", referralId: active.id } as const;
     if (selectedSpecimen && selectedSpecimen.status !== "IN_PROCESS") {
       const claimed = await tx.specimen.updateMany({
         where: {
@@ -92,8 +103,8 @@ export async function POST(request: Request) {
         specimenId,
         externalLaboratoryId,
         externalAccession: text(body.externalAccession, 120) || null,
-        costAmount: costAmount === null ? null : costAmount.toFixed(4),
-        costCurrency,
+        costAmount: cost.amount === null ? null : new Prisma.Decimal(cost.amount).toFixed(4),
+        costCurrency: cost.currency,
         expectedResultAt,
         createdByUserId: session.user.id,
       },
@@ -122,21 +133,26 @@ export async function POST(request: Request) {
           externalLaboratoryCode: laboratory.code,
           externalAccession: referral.externalAccession,
           costAmount: referral.costAmount?.toString() || null,
-          costCurrency,
+          costCurrency: cost.currency,
           expectedResultAt,
         },
         ipAddress: ctx.ipAddress,
         userAgent: ctx.userAgent,
       },
     });
-    return referral;
-  }).catch(error => {
-    if (error instanceof Error && error.message === "SPECIMEN_PREANALYTICAL_STATE_CHANGED") return null;
+    return { kind: "created", referral } as const;
+  }, { timeout: 30000 }).catch(error => {
+    if (error instanceof Error && error.message === "SPECIMEN_PREANALYTICAL_STATE_CHANGED")
+      return { kind: "specimen_state_changed" } as const;
     throw error;
   });
 
-  if (!created) {
+  if (outcome.kind === "order_item_changed")
+    return NextResponse.json({ error: "order_item_state_changed" }, { status: 409 });
+  if (outcome.kind === "active_exists")
+    return NextResponse.json({ error: "active_sendout_exists", referralId: outcome.referralId },
+      { status: 409, headers: { "Cache-Control": "private, no-store" } });
+  if (outcome.kind === "specimen_state_changed")
     return NextResponse.json({ error: "specimen_preanalytical_state_changed" }, { status: 409 });
-  }
-  return NextResponse.json({ status: "ok", referral: created }, { status: 201 });
+  return NextResponse.json({ status: "ok", referral: outcome.referral }, { status: 201 });
 }
