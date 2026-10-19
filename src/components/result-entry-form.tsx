@@ -259,6 +259,10 @@ export function ResultEntryForm({
     } else if (body.error === "specimen_preanalytical_state_changed") {
       setMessage(tr("The specimen's clinical status or location changed. Reload the specimen before continuing.", "تغيرت حالة العينة السريرية أو موقعها. أعد تحميل العينة قبل المتابعة."));
       router.refresh();
+    } else if (body.error === "order_or_test_not_open_for_results") {
+      setMessage(tr("This order or test is closed. The result was not saved. Refresh and review the order before continuing.",
+        "الطلب أو الفحص مغلق. لم تُحفظ النتيجة. حدّث الصفحة وراجع حالة الطلب قبل المتابعة."));
+      router.refresh();
     } else {
       setMessage(body.error || tr("Result could not be saved.", "تعذر حفظ النتيجة."));
     }
@@ -320,6 +324,10 @@ export function ResultEntryForm({
       router.refresh();
     } else if (body.error === "result_state_changed_retry") {
       setMessage(tr("This result or specimen changed during technical review. Refresh the current data before retrying.", "تغيرت النتيجة أو حالة العينة أثناء المراجعة الفنية. حدّث البيانات قبل إعادة المحاولة."));
+      router.refresh();
+    } else if (body.error === "order_or_test_not_open_for_results") {
+      setMessage(tr("The order or test has closed. Technical review was not completed. Reload the current record.",
+        "الطلب أو الفحص مغلق. لم تُستكمل المراجعة الفنية. أعد تحميل السجل الحالي."));
       router.refresh();
     } else if (body.error === "reflex_review_required") {
       setMessage(tr("Technical review blocked: review all pending reflex recommendations first.", "المراجعة الفنية محظورة: راجع أولاً جميع توصيات الفحوص الانعكاسية المعلقة."));

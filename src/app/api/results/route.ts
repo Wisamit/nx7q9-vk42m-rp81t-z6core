@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { Prisma } from "../../../../generated/prisma/client";
 import { canAccessBranch, canAccessDepartment, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { lockResultOrderState, ResultOrderStateChanged } from "@/lib/result-order-state";
 import { numericFlag, referencePatientSex, resolveReferenceInterval } from "@/lib/result-reference";
 import { evaluateDelta } from "@/lib/delta-check";
 import { syncDeltaReviewEvents } from "@/lib/delta-review";
@@ -471,6 +472,12 @@ export async function POST(request: Request) {
   const entryValidationStage = complete ? "TECHNICAL_REVIEW" as const : "ENTRY" as const;
 
   const saved = await prisma.$transaction(async (tx) => {
+    const { orderStatus: currentOrderStatus } = await lockResultOrderState(tx, {
+      organizationId: session.user.organizationId,
+      orderId: orderItem.orderId,
+      orderItemId,
+      mode: "ENTRY",
+    });
     if (specimen.status === "RECEIVED") {
       const claimed = await tx.specimen.updateMany({
         where: {
@@ -833,12 +840,20 @@ export async function POST(request: Request) {
       });
     }
 
-    if (["REGISTERED", "COLLECTED"].includes(orderItem.order.status)) {
-      await tx.labOrder.update({ where: { id: orderItem.orderId }, data: { status: "IN_PROGRESS" } });
+    if (["REGISTERED", "COLLECTED"].includes(currentOrderStatus)) {
+      const promoted = await tx.labOrder.updateMany({
+        where: {
+          id: orderItem.orderId,
+          organizationId: session.user.organizationId,
+          status: currentOrderStatus as "REGISTERED" | "COLLECTED",
+        },
+        data: { status: "IN_PROGRESS" },
+      });
+      if (promoted.count !== 1) throw new Error("ORDER_RESULT_ENTRY_CLOSED");
       await tx.orderStatusHistory.create({
         data: {
           orderId: orderItem.orderId,
-          fromStatus: orderItem.order.status,
+          fromStatus: currentOrderStatus as "REGISTERED" | "COLLECTED",
           toStatus: "IN_PROGRESS",
           reason: "Laboratory result entry started",
           changedByUserId: session.user.id,
@@ -957,6 +972,8 @@ export async function POST(request: Request) {
   }, { timeout: 30000 }).catch(error => {
     if (error instanceof Error && error.message === "SPECIMEN_PREANALYTICAL_STATE_CHANGED") return null;
     if (error instanceof Error && error.message === "RESULT_STATE_CHANGED") return "RESULT_STATE_CHANGED" as const;
+    if (error instanceof ResultOrderStateChanged ||
+        (error instanceof Error && error.message === "ORDER_RESULT_ENTRY_CLOSED")) return "ORDER_RESULT_ENTRY_CLOSED" as const;
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
       return "RESULT_STATE_CHANGED" as const;
     }
@@ -965,6 +982,9 @@ export async function POST(request: Request) {
 
   if (saved === "RESULT_STATE_CHANGED") {
     return NextResponse.json({ error: "result_concurrently_updated_refresh" }, { status: 409 });
+  }
+  if (saved === "ORDER_RESULT_ENTRY_CLOSED") {
+    return NextResponse.json({ error: "order_or_test_not_open_for_results" }, { status: 409 });
   }
   if (!saved) {
     return NextResponse.json({ error: "specimen_preanalytical_state_changed" }, { status: 409 });

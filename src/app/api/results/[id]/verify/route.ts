@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { canAccessBranch, canAccessDepartment, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { lockResultOrderState, ResultOrderStateChanged } from "@/lib/result-order-state";
 import { resolveAnalyzerQcGate } from "@/lib/qc-gate";
 import { notifyUsersWithPermission } from "@/lib/notifications";
 import { validationSpecimenCustodyError } from "@/lib/result-validation-custody";
@@ -161,6 +162,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     : null;
 
   const updated = await prisma.$transaction(async (tx) => {
+    const { orderStatus: freshOrderStatus } = await lockResultOrderState(tx, {
+      organizationId: session.user.organizationId,
+      orderId: result.orderItem.orderId,
+      orderItemId: result.orderItemId,
+      mode: "REVIEW",
+    });
     if (result.specimenId) {
       // Serialize validation with specimen quarantine, rejection and transfers.
       const custody = await tx.$queryRaw<Array<{ id: string; status: string; current_branch_id: string | null }>>`
@@ -396,12 +403,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         },
       });
 
-      if (remaining === 0 && result.orderItem.order.status !== "COMPLETED") {
-        await tx.labOrder.update({ where: { id: result.orderItem.orderId }, data: { status: "COMPLETED" } });
+      if (remaining === 0 && freshOrderStatus !== "COMPLETED") {
+        const advanced = await tx.labOrder.updateMany({
+          where: { id: result.orderItem.orderId, organizationId: session.user.organizationId,
+            status: freshOrderStatus as "DRAFT" | "REGISTERED" | "COLLECTED" | "IN_PROGRESS" },
+          data: { status: "COMPLETED" },
+        });
+        if (advanced.count !== 1) throw new ResultOrderStateChanged();
         await tx.orderStatusHistory.create({
           data: {
             orderId: result.orderItem.orderId,
-            fromStatus: result.orderItem.order.status,
+            fromStatus: freshOrderStatus as "DRAFT" | "REGISTERED" | "COLLECTED" | "IN_PROGRESS",
             toStatus: "COMPLETED",
             reason: "All non-cancelled order items completed required validation",
             changedByUserId: session.user.id,
@@ -444,9 +456,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     return { id: result.id, status: finalValidationComplete ? "VERIFIED" as const : "ENTERED" as const, validationStage: nextValidationStage };
   }, { timeout: 30000 }).catch(error => {
+    if (error instanceof ResultOrderStateChanged) return "ORDER_CLOSED" as const;
     if (error instanceof Error && error.message === "RESULT_STATE_CHANGED") return null;
     throw error;
   });
+  if (updated === "ORDER_CLOSED") {
+    return NextResponse.json({ error: "order_or_test_not_open_for_results" }, { status: 409 });
+  }
   if (!updated) {
     return NextResponse.json({ error: "result_state_changed_retry" }, { status: 409 });
   }

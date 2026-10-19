@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { canAccessBranch, canAccessDepartment, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { lockResultOrderState, ResultOrderStateChanged } from "@/lib/result-order-state";
 import { resolveAnalyzerQcGate } from "@/lib/qc-gate";
 import { validationSpecimenCustodyError } from "@/lib/result-validation-custody";
 import { medicalApprovalEvidenceError, type ValidationPolicySnapshot } from "@/lib/result-validation";
@@ -77,6 +78,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     const returnedAt = new Date();
     const returned = await prisma.$transaction(async tx => {
+      await lockResultOrderState(tx, {
+        organizationId: session.user.organizationId,
+        orderId: result.orderItem.orderId,
+        orderItemId: result.orderItemId,
+        mode: "REVIEW",
+      });
       if (result.specimenId) {
         const custody = await tx.$queryRaw<Array<{ id: string; status: string; current_branch_id: string | null }>>`
           SELECT id, status, current_branch_id FROM specimens
@@ -155,9 +162,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
       return { status: "ENTERED" as const, validationStage: "TECHNICAL_REVIEW" as const };
     }).catch(error => {
-      if (error instanceof Error && error.message === "RESULT_STATE_CHANGED") return null;
+      if (error instanceof ResultOrderStateChanged) return "ORDER_CLOSED" as const;
+    if (error instanceof Error && error.message === "RESULT_STATE_CHANGED") return null;
       throw error;
     });
+    if (returned === "ORDER_CLOSED") return NextResponse.json({ error: "order_or_test_not_open_for_results" }, { status: 409 });
     if (!returned) return NextResponse.json({ error: "result_state_changed_retry" }, { status: 409 });
 
     return NextResponse.json({
@@ -218,6 +227,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const validatedAt = new Date();
   const validated = await prisma.$transaction(async tx => {
+    const { orderStatus: freshOrderStatus } = await lockResultOrderState(tx, {
+      organizationId: session.user.organizationId,
+      orderId: result.orderItem.orderId,
+      orderItemId: result.orderItemId,
+      mode: "REVIEW",
+    });
     // Approval requires live, ready specimen custody. Returning for correction
     // is separately permitted even when the specimen has been quarantined.
     if (result.specimenId) {
@@ -281,15 +296,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       },
     });
 
-    if (remaining === 0 && result.orderItem.order.status !== "COMPLETED") {
-      await tx.labOrder.update({
-        where: { id: result.orderItem.orderId },
+    if (remaining === 0 && freshOrderStatus !== "COMPLETED") {
+      const advanced = await tx.labOrder.updateMany({
+        where: { id: result.orderItem.orderId, organizationId: session.user.organizationId,
+          status: freshOrderStatus as "DRAFT" | "REGISTERED" | "COLLECTED" | "IN_PROGRESS" },
         data: { status: "COMPLETED" },
       });
+      if (advanced.count !== 1) throw new ResultOrderStateChanged();
       await tx.orderStatusHistory.create({
         data: {
           orderId: result.orderItem.orderId,
-          fromStatus: result.orderItem.order.status,
+          fromStatus: freshOrderStatus as "DRAFT" | "REGISTERED" | "COLLECTED" | "IN_PROGRESS",
           toStatus: "COMPLETED",
           reason: "All non-cancelled order items completed required validation",
           changedByUserId: session.user.id,
@@ -328,11 +345,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return { status: "VERIFIED" as const, validationStage: "COMPLETE" as const };
   }, { timeout: 30000 }).catch(error => {
     if (error instanceof StaffStepUpError) return "STEP_UP_REQUIRED" as const;
+    if (error instanceof ResultOrderStateChanged) return "ORDER_CLOSED" as const;
     if (error instanceof Error && error.message === "RESULT_STATE_CHANGED") return null;
     throw error;
   });
   if (validated === "STEP_UP_REQUIRED")
     return NextResponse.json({error:"fresh_staff_reauthentication_required"},{status:403});
+  if (validated === "ORDER_CLOSED") return NextResponse.json({ error: "order_or_test_not_open_for_results" }, { status: 409 });
   if (!validated) return NextResponse.json({ error: "result_state_changed_retry" }, { status: 409 });
 
   return NextResponse.json({

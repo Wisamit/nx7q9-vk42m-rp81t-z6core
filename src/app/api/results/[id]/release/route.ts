@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { NextResponse } from "next/server";
 import { canAccessBranch, canAccessDepartment, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { lockResultOrderState, ResultOrderStateChanged } from "@/lib/result-order-state";
 import { buildDiagnosticReportSnapshot } from "@/lib/report-snapshot";
 import { resolveAnalyzerQcGate } from "@/lib/qc-gate";
 import { queueReportIntegrations } from "@/lib/integration-outbox";
@@ -93,6 +94,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const releasedAt = new Date();
 
   const released = await prisma.$transaction(async (tx) => {
+    await lockResultOrderState(tx, {
+      organizationId: session.user.organizationId,
+      orderId: result.orderItem.orderId,
+      orderItemId: result.orderItemId,
+      mode: "RELEASE",
+    });
     // Lock related specimens before releasing. A failed reception may place
     // material into quarantine; release must fail closed even for a result
     // that was verified before the reception exception was recorded.
@@ -326,6 +333,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (error instanceof StaffStepUpError) return "STEP_UP_REQUIRED" as const;
     if (error instanceof SpecimenClinicalHold) return "CLINICAL_HOLD" as const;
     if (error instanceof SpecimenCustodyChanged) return "CUSTODY_CHANGED" as const;
+    if (error instanceof ResultOrderStateChanged) return "ORDER_CLOSED" as const;
     if (error instanceof ReportReleaseStateChanged) return "RELEASE_STATE_CHANGED" as const;
     if (error instanceof AnalyzerQcClinicalHold) return "QC_HOLD" as const;
     throw error;
@@ -337,6 +345,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
   if (released === "CUSTODY_CHANGED") {
     return NextResponse.json({ error: "specimen_custody_changed_blocks_release" }, { status: 409 });
+  }
+  if (released === "ORDER_CLOSED") {
+    return NextResponse.json({ error: "order_or_test_not_open_for_results" }, { status: 409 });
   }
   if (released === "RELEASE_STATE_CHANGED") {
     return NextResponse.json({ error: "result_already_released_or_state_changed" }, { status: 409 });
