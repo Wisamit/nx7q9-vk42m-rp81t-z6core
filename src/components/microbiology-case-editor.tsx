@@ -44,7 +44,7 @@ export function MicrobiologyCaseEditor({
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
-  const [editor, setEditor] = useState<"culture" | "observation" | "isolate" | "susceptibility" | null>(null);
+  const [editor, setEditor] = useState<"culture" | "observation" | "isolate" | null>(null);
   const [selectedIsolateId, setSelectedIsolateId] = useState(isolates[0]?.id || "");
   const [rows, setRows] = useState<Row[]>([emptyRow(1)]);
 
@@ -137,14 +137,14 @@ export function MicrobiologyCaseEditor({
   async function addSusceptibility(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!selectedIsolateId) {
-      setErrorMessage(tr("Select an isolate first.", "اختر عزلة أولًا."));
+      setMessage(tr("Select an isolate first.", "اختر عزلة أولًا."));
       return;
     }
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
     const activeRows = rows.filter(row => row.antibioticId);
     if (activeRows.length === 0) {
-      setErrorMessage(tr("Add at least one antibiotic result.", "أضف نتيجة مضاد حيوي واحدة على الأقل."));
+      setMessage(tr("Add at least one antibiotic result.", "أضف نتيجة مضاد حيوي واحدة على الأقل."));
       return;
     }
 
@@ -163,7 +163,6 @@ export function MicrobiologyCaseEditor({
     if (result) {
       setRows([emptyRow(1)]);
       formElement.reset();
-      setEditor(null);
       setMessage(tr("Susceptibility panel recorded.", "تم تسجيل لوحة الحساسية."));
     }
   }
@@ -245,18 +244,7 @@ export function MicrobiologyCaseEditor({
 
     <article className="detail-card">
       <h2>{tr("Susceptibility Panel", "لوحة الحساسية")}</h2>
-      <button type="button" className="primary-button" disabled={busy !== "" || isolates.length === 0 || antibiotics.length === 0}
-        onClick={() => { setErrorMessage(""); setMessage(""); setEditor("susceptibility"); }}>
-        {tr("Record Susceptibility Panel", "تسجيل لوحة الحساسية")}
-      </button>
-      <CrudModal open={editor === "susceptibility"} onClose={() => { if (!busy) setEditor(null); }}
-        size="compact"
-        title={tr("Record Susceptibility Panel", "تسجيل لوحة الحساسية")}
-        description={tr(
-          "Verify the patient, isolate and approved AST method and breakpoints before saving. The historical susceptibility record is retained.",
-          "تحقق من المريض والعزلة وطريقة اختبار الحساسية وحدود التفسير المعتمدة قبل الحفظ. يبقى سجل الحساسية التاريخي محفوظاً.",
-        )}>
-      {editor === "susceptibility" && <form className="catalog-form" onSubmit={addSusceptibility}>
+      <form className="catalog-form" onSubmit={addSusceptibility}>
         <label>{tr("Isolate", "العزلة")}<select value={selectedIsolateId} onChange={event => setSelectedIsolateId(event.target.value)} required>
           <option value="">{tr("Select isolate…", "اختر العزلة…")}</option>
           {isolates.map(item => <option key={item.id} value={item.id}>#{item.sequenceNumber} · {item.organismCode} — {item.organismName}</option>)}
@@ -283,9 +271,7 @@ export function MicrobiologyCaseEditor({
 
         <label className="form-span">{tr("Comments", "التعليقات")}<textarea name="comments" rows={2} /></label>
         <button className="primary-button form-span" disabled={busy !== "" || isolates.length === 0 || antibiotics.length === 0}>{busy === "susceptibility" ? tr("Saving…", "جارٍ الحفظ…") : tr("Save Susceptibility Panel", "حفظ لوحة الحساسية")}</button>
-      </form>}
-      {editor === "susceptibility" && errorMessage && <p className="form-error" role="alert">{errorMessage}</p>}
-      </CrudModal>
+      </form>
     </article>
 
     {message && <p className="form-success form-span" role="status">{message}</p>}
