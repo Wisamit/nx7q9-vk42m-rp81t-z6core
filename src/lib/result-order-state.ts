@@ -38,7 +38,14 @@ export async function lockResultOrderState(
       !["ORDERED", "COLLECTED", "IN_PROGRESS", "RESULTED"].includes(itemStatus))) {
     throw new ResultOrderStateChanged();
   }
-  if (input.mode === "REVIEW" && itemStatus === "VERIFIED") {
+  if (input.mode === "REVIEW" && (
+      !["REGISTERED", "COLLECTED", "IN_PROGRESS"].includes(orderStatus) ||
+      !["ORDERED", "COLLECTED", "IN_PROGRESS", "RESULTED"].includes(itemStatus))) {
+    throw new ResultOrderStateChanged();
+  }
+  if (input.mode === "RELEASE" && (
+      !["IN_PROGRESS", "COMPLETED"].includes(orderStatus) ||
+      itemStatus !== "VERIFIED")) {
     throw new ResultOrderStateChanged();
   }
   return { orderStatus, itemStatus };
