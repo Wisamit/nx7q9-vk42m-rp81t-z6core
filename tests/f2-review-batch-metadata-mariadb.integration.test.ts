@@ -98,7 +98,8 @@ test("F2 MariaDB: independently edited batch provenance or row evidence invalida
       const [items]=await reviewer.execute<mysql.RowDataPacket[]>(
         "SELECT summary FROM catalog_import_batches WHERE id=?",[batch]);
       return verifyIndependentExpertStage({
-        context:current,metadata:current.batchMetadata,
+        context:{...current,batchMetadata:current.batchMetadata ?? undefined},
+        metadata:current.batchMetadata ?? null,
         seal:json(items[0].summary).stageEvidenceSeal,secret,
       });
     };
