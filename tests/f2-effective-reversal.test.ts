@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { reverseF2FutureEffectiveVersionsUnderLock } from "../src/lib/catalog-f2-effective-reversal.ts";
+import { signF2ApplicationJournal } from "../src/lib/catalog-f2-application-journal.ts";
 import type { F2ApplyPlan,F2ApplyPlanRow } from "../src/lib/catalog-f2-apply-plan.ts";
 
 const id=(n:number)=>"00000000-0000-4000-8000-"+String(n).padStart(12,"0");
@@ -8,6 +9,7 @@ const effectiveAt="2026-12-01T00:00:00.000Z";
 const org=id(1),branch=id(2),batch=id(3);
 const auth={
   organizationId:org,branchId:branch,batchId:batch,actorUserId:id(4),
+  journalSigningSecret:"f2-synthetic-reversal-journal-not-production-32",
   clinicalSignerId:id(5),financialSignerId:id(6),
   sourceInstallationVerified:true,qualifiedDomainSignersVerified:true,
   currentPermissionsAndBranchScopeVerified:true,
@@ -49,19 +51,24 @@ test("F2: future-effective compensation retains old and new versions and writes 
       findMany:async(args:any)=>{
         const action=args.where.action;
         if(action==="CATALOG_F2_EFFECTIVE_BATCH_REVERSED")
-          return completed?[{newValues:{planDigest:plan.planDigest}}]:[];
+          return completed?[{newValues:signF2ApplicationJournal({
+            planDigest:plan.planDigest,
+          },auth.journalSigningSecret)}]:[];
         if(action==="CATALOG_F2_EFFECTIVE_BATCH_APPLIED")
-          return [{newValues:{planDigest:plan.planDigest,effectiveAt,
-            journalEventIds:journalIds,createdVersionIds:clonedIds}}];
+          return [{newValues:signF2ApplicationJournal({
+            planDigest:plan.planDigest,effectiveAt,
+            journalEventIds:journalIds,createdVersionIds:clonedIds,
+          },auth.journalSigningSecret)}];
         if(action==="CATALOG_F2_VERSION_CLONED")
           return rows.map((row,index)=>({
             id:journalIds[index],entityType:row.entityType,entityId:row.targetId,
-            newValues:{
+            newValues:signF2ApplicationJournal({
               planDigest:plan.planDigest,batchId:batch,effectiveAt,
               newVersionId:clonedIds[index],
               originalDigest:row.originalDigest,
               desiredDigest:row.desiredDigest,
-            },
+              before:row.originalSnapshot,after:row.desiredSnapshot,
+            },auth.journalSigningSecret),
           }));
         throw Error("unexpected audit read");
       },
