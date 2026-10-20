@@ -56,7 +56,14 @@ approval, authenticated source installation identity or application consent.
   source checksum, author, reviewer, current live token and linked author
   draft digest. The bounded complete feedback chain must validate before
   adding a revision. Forged, missing, reordered, duplicate, wrong-actor,
-  cross-tenant, wrong-key and edited events fail closed.
+  cross-tenant, wrong-key and edited events fail closed. The verified
+  revision and HMAC previous-digest chain, **not** database
+  `occurredAt DESC, id DESC` order, determine the latest feedback. Legitimate
+  events sharing an identical millisecond and sorting in the reverse
+  UUID order are accepted; forged ordinal duplicates, missing intermediate
+  revisions and digest forks still fail closed. Deletion of the terminal
+  audit event cannot be detected from this ledger alone without an external
+  immutable anchor, so this is not an externally notarized audit chain.
 - Response carries only categorical disposition, revision and
   `reviewOnly:true`, `sourceInstanceProven:false`,
   `mappingApproved:false`, `approved:false`, `signingEnabled:false`,
