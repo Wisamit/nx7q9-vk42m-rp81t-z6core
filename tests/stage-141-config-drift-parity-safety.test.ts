@@ -6,7 +6,9 @@ import { catalogBundleDrift } from "../src/lib/catalog-bundle-drift.ts";
 import { catalogExportTypes } from "../src/lib/catalog-configuration-export.ts";
 
 test("Stage 141: drift inspects all ten source groups including scoped CONTAINER metadata", () => {
-  const route=readFileSync("src/app/api/catalog/imports/[id]/bundle-drift/route.ts", "utf8");
+  const original=readFileSync("src/app/api/catalog/imports/[id]/bundle-drift/route.ts", "utf8");
+  assert.match(original,/readCatalogLiveObservations\(tx,liveScope,branchIds,idsByType\)/);
+  const route=original+"\n"+readFileSync("src/lib/catalog-live-observation.ts","utf8");
   assert.equal(catalogExportTypes.size, 10);
   assert.match(route, /const ordered: CatalogExportType\[\] = \[\.\.\.catalogExportTypes\]/);
   assert.match(route, /type === "CONTAINER"/);
@@ -30,7 +32,9 @@ test("Stage 141: drift inspects all ten source groups including scoped CONTAINER
 
 test("Stage 141: Stage140 scoped nested tariff metadata has exact drift read parity", () => {
   const bundle=readFileSync("src/app/api/catalog/configuration-export/bundle/route.ts","utf8");
-  const drift=readFileSync("src/app/api/catalog/imports/[id]/bundle-drift/route.ts","utf8");
+  const driftRoute=readFileSync("src/app/api/catalog/imports/[id]/bundle-drift/route.ts","utf8");
+  assert.match(driftRoute,/readCatalogLiveObservations\(tx,liveScope,branchIds,idsByType\)/);
+  const drift=driftRoute+"\n"+readFileSync("src/lib/catalog-live-observation.ts","utf8");
   const suffix="status: true, sourceId: true, referrerId: true, clientId: true, contractId: true";
   assert.ok(bundle.split(suffix).length>=3,"both source exported tariff items include full scope context");
   assert.ok(drift.split(suffix).length>=3,"both drift item fetches include the same tariff context");
