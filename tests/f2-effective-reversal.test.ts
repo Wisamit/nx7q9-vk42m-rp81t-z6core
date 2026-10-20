@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { reverseF2FutureEffectiveVersionsUnderLock } from "../src/lib/catalog-f2-effective-reversal.ts";
 import { signF2ApplicationJournal } from "../src/lib/catalog-f2-application-journal.ts";
 import type { F2ApplyPlan,F2ApplyPlanRow } from "../src/lib/catalog-f2-apply-plan.ts";
+type StubArgs={data:Record<string,unknown>;where?:Record<string,unknown>};
 
 const id=(n:number)=>"00000000-0000-4000-8000-"+String(n).padStart(12,"0");
 const effectiveAt="2026-12-01T00:00:00.000Z";
@@ -41,14 +42,14 @@ const journalIds=rows.map((_,i)=>id(30+i));
 const clonedIds=rows.map((_,i)=>id(50+i));
 
 test("F2: future-effective compensation retains old and new versions and writes a single reversal journal",async()=>{
-  const calls:Array<{type:string,kind:string,args:any}>=[];
+  const calls:Array<{type:string,kind:string,args:StubArgs}>=[];
   let completed=false;
-  const record=(type:string,kind:string,args:any)=>{
+  const record=(type:string,kind:string,args:StubArgs)=>{
     calls.push({type,kind,args});return {id:id(calls.length+100)};
   };
   const tx={
     auditEvent:{
-      findMany:async(args:any)=>{
+      findMany:async(args:{where:{action:string}})=>{
         const action=args.where.action;
         if(action==="CATALOG_F2_EFFECTIVE_BATCH_REVERSED")
           return completed?[{newValues:signF2ApplicationJournal({
@@ -72,22 +73,22 @@ test("F2: future-effective compensation retains old and new versions and writes 
           }));
         throw Error("unexpected audit read");
       },
-      create:async(args:any)=>{
+      create:async(args:StubArgs)=>{
         if(args.data.action==="CATALOG_F2_EFFECTIVE_BATCH_REVERSED")completed=true;
         return record("auditEvent","create",args);
       },
     },
     priceListItem:{
       findFirst:async()=>null,
-      updateMany:async(args:any)=>{record("priceListItem","update",args);return {count:1};},
+      updateMany:async(args:StubArgs)=>{record("priceListItem","update",args);return {count:1};},
     },
     priceListPackageItem:{
       findFirst:async()=>null,
-      updateMany:async(args:any)=>{record("priceListPackageItem","update",args);return {count:1};},
+      updateMany:async(args:StubArgs)=>{record("priceListPackageItem","update",args);return {count:1};},
     },
     referenceInterval:{
       findFirst:async()=>null,
-      updateMany:async(args:any)=>{record("referenceInterval","update",args);return {count:1};},
+      updateMany:async(args:StubArgs)=>{record("referenceInterval","update",args);return {count:1};},
     },
   };
   const result=await reverseF2FutureEffectiveVersionsUnderLock(
