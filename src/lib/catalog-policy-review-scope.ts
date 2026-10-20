@@ -150,6 +150,43 @@ export function policyReviewIdentityScope(
 }
 
 /**
+ * A source/normalized staging match is not enough if a live composite has
+ * since gained, lost or reordered a clinically performed test. Compare the
+ * *entire* current membership by immutable test ID, display order and the
+ * panel's required flag, not only a subset of permitted tests. This only
+ * gates review: it never applies or authorizes source configuration.
+ */
+function sameLiveMembership(
+  type: "PANEL" | "PACKAGE",
+  staged: unknown,
+  live: readonly { testId: string; displayOrder: number; required?: boolean }[],
+): boolean {
+  if (!Array.isArray(staged) || staged.length !== live.length || !staged.length)
+    return false;
+  const expected = new Map<string, { displayOrder: number; required?: boolean }>();
+  for (const raw of staged) {
+    const member = object(raw);
+    if (!member || typeof member.testId !== "string" || !UUID.test(member.testId) ||
+        !Number.isSafeInteger(member.displayOrder) || expected.has(member.testId) ||
+        (type === "PANEL" && typeof member.required !== "boolean")) return false;
+    expected.set(member.testId, {
+      displayOrder: member.displayOrder as number,
+      ...(type === "PANEL" ? { required: member.required as boolean } : {}),
+    });
+  }
+  if (expected.size !== live.length) return false;
+  const observed = new Set<string>();
+  for (const member of live) {
+    const match = expected.get(member.testId);
+    if (!match || observed.has(member.testId) ||
+        match.displayOrder !== member.displayOrder ||
+        (type === "PANEL" && match.required !== member.required)) return false;
+    observed.add(member.testId);
+  }
+  return true;
+}
+
+/**
  * Used inside the SAME tenant-locked transaction as the final reviewer audit
  * append. No assumptions about clinical/financial signing authority are made.
  */
@@ -228,5 +265,39 @@ export async function validatePolicyReviewBatchScope(
   ];
   if (counts.some((count, index) => count !== sizes[index]))
     return { ok: false, error: "policy_review_batch_scope_changed" };
+
+  // Count/scope checks alone permit a changed but still-in-scope member set.
+  // Re-read actual membership in the SAME reviewer transaction and compare it
+  // against the exact normalized rows whose source identity was validated.
+  const panelIds = ids.get("PANEL") || [];
+  const packageIds = ids.get("PACKAGE") || [];
+  const [panels, packages] = await Promise.all([
+    panelIds.length ? tx.testPanel.findMany({
+      where: { organizationId: org, id: { in: panelIds },
+        items: fullyVisibleMembership },
+      select: { id: true, items: { select: {
+        testId: true, displayOrder: true, required: true,
+      } } },
+    }) : Promise.resolve([]),
+    packageIds.length ? tx.commercialPackage.findMany({
+      where: { organizationId: org, id: { in: packageIds },
+        items: fullyVisibleMembership },
+      select: { id: true, items: { select: {
+        testId: true, displayOrder: true,
+      } } },
+    }) : Promise.resolve([]),
+  ]);
+  if (panels.length !== panelIds.length || packages.length !== packageIds.length)
+    return { ok: false, error: "policy_review_batch_scope_changed" };
+  const panelMap = new Map(panels.map(panel => [panel.id, panel.items]));
+  const packageMap = new Map(packages.map(pkg => [pkg.id, pkg.items]));
+  for (const row of rows) {
+    if (row.entityType !== "PANEL" && row.entityType !== "PACKAGE") continue;
+    const n = object(row.normalizedData);
+    const live = row.entityType === "PANEL"
+      ? panelMap.get(n?.id as string) : packageMap.get(n?.id as string);
+    if (!live || !sameLiveMembership(row.entityType, n?.items, live))
+      return { ok: false, error: "policy_review_batch_scope_changed" };
+  }
   return { ok: true };
 }
