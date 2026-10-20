@@ -105,7 +105,7 @@ function financialStagingIdentityMatches(
     list.scopeType === normalized.scopeType &&
     (list.branchId ?? null) === (normalized.branchId ?? null) &&
     typeof source.unitPrice === "string" &&
-    /^(?:0|[1-9]\\d{0,13})(?:\\.\\d{1,4})?$/.test(source.unitPrice) &&
+    /^(?:0|[1-9]\d{0,13})(?:\.\d{1,4})?$/.test(source.unitPrice) &&
     source.unitPrice === normalized.unitPrice &&
     typeof source.effectiveFrom === "string" &&
     Number.isFinite(Date.parse(source.effectiveFrom)) &&
