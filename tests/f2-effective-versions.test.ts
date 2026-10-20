@@ -54,6 +54,7 @@ test("F2: transaction core creates three new effective-dated versions, keeps ori
   const p=fixture();
   const price=p.rows.find(r=>r.entityType==="PRICE_LIST_ITEM")!;
   const packagePrice=p.rows.find(r=>r.entityType==="PRICE_LIST_PACKAGE_ITEM")!;
+  const rangePrice=p.rows.find(r=>r.entityType==="REFERENCE_INTERVAL")!;
   const actions:Array<{table:string;action:string;args:any}>=[];
   const events:Array<{id:string;newValues:unknown}>=[];
   let seq=50;
@@ -83,6 +84,7 @@ test("F2: transaction core creates three new effective-dated versions, keeps ori
       create:async(args:any)=>record("priceListPackageItem","create",args),
     },
     referenceInterval:{
+      findMany:async()=>[{id:rangePrice.targetId}],
       updateMany:async(args:any)=>{record("referenceInterval","updateMany",args);return {count:1};},
       create:async(args:any)=>record("referenceInterval","create",args),
     },
