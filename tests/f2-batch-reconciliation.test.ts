@@ -63,10 +63,15 @@ test("F2: normalized source, live and duplicate identity all fail closed",()=>{
   }:row)),null);
   const duplicate={...rows[0],rowNumber:11};
   assert.equal(verified([...rows,duplicate]),null,"repeated source/target UUID cannot be another row");
+  const upper="AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA";
+  const lower=upper.toLowerCase();
   const alternate=rows.map((row,i)=>i===3?{...row,
-    sourceData:{...(row.sourceData as object),id:id(4).toUpperCase()},
+    sourceData:{...(row.sourceData as object),id:upper},
+    normalizedData:{id:lower},
+    scopedLiveData:{...(row.scopedLiveData as object),id:lower},
   }:row);
-  assert.equal(verified(alternate),null,"unapproved UUID normalization is not a mapping policy");
+  assert.equal(verified(alternate),null,
+    "unapproved UUID case normalization is not a cross-installation mapping policy");
   assert.equal(f2ReadOnlyBatchReconciliation({
     rows,wholeStageHmacVerified:false as true,currentTenClassScopeVerified:true,
     currentLiveSnapshotVerified:true,
