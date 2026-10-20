@@ -12,6 +12,7 @@ import {
 } from "@/lib/catalog-mapping-discussion-draft";
 import { independentMappingInspection, type IndependentMappingInspection } from "@/lib/catalog-mapping-independent-inspection";
 import { f2GovernedReadinessPreview, type F2GovernedReadiness } from "@/lib/catalog-f2-governed-readiness";
+import { f2ReadOnlyBatchReconciliation, type F2BatchReconciliation } from "@/lib/catalog-f2-batch-reconciliation";
 import type { MappingDiscussionDraft } from "@/lib/catalog-mapping-discussion-draft";
 import type { Prisma } from "../../generated/prisma/client";
 import type { CatalogExportType } from "@/lib/catalog-configuration-export";
@@ -36,6 +37,8 @@ export type MappingPreflightVerified = {
   tx: Prisma.TransactionClient;
   inspection: IndependentMappingInspection;
   readiness: F2GovernedReadiness;
+  batchReconciliation: F2BatchReconciliation | null;
+  batchReconciliationCoverage: "TEN_CLASS_COMPLETE" | "SOURCE_CLASS_INCOMPLETE" | "FULL_DOMAIN_SCOPE_REQUIRED" | "NOT_REQUESTED";
   draft: MappingDiscussionDraft;
   organizationId: string;
   batchId: string;
@@ -55,6 +58,7 @@ type MappingPreflightAction = (evidence: MappingPreflightVerified) =>
 export async function runIndependentMappingPreflight(
   request: NextRequest, { params }: Context,
   onVerified?: MappingPreflightAction,
+  includeBatchReconciliation = false,
 ) {
   const query = request.nextUrl.searchParams;
   const rowId = query.get("rowId");
@@ -212,9 +216,61 @@ export async function runIndependentMappingPreflight(
     });
     if (!readiness)
       return { error: "mapping_inspection_incomplete_projection", httpStatus: 409 } as const;
-    if (!onVerified) return { ...view, readiness };
+    // Whole-stage closeout is available ONLY to a reviewer with the full
+    // original AND current clinical/financial grant set. The ordinary row
+    // inspection and author feedback workflow remain unchanged.
+    let batchReconciliation: F2BatchReconciliation | null = null;
+    let batchReconciliationCoverage: MappingPreflightVerified["batchReconciliationCoverage"] =
+      "NOT_REQUESTED";
+    if (includeBatchReconciliation) {
+      const fullDomain = ["catalog.reference_ranges.manage","pricing.manage"]
+        .every(grant=>original.has(grant) && current.has(grant));
+      batchReconciliationCoverage = fullDomain
+        ? "SOURCE_CLASS_INCOMPLETE" : "FULL_DOMAIN_SCOPE_REQUIRED";
+      if (fullDomain) {
+        const allRows = await tx.catalogImportRow.findMany({
+          where:{batchId:batch.id},orderBy:{rowNumber:"asc"},
+          select:{rowNumber:true,entityType:true,sourceData:true,normalizedData:true},
+        });
+        const present = new Set(allRows.map(item=>item.entityType));
+        if ([...present].length === 10 &&
+            [...catalogExportTypes].every(type=>present.has(type))) {
+          const byType = new Map<CatalogExportType,string[]>();
+          for (const item of allRows) {
+            const target = item.normalizedData;
+            const value = target && typeof target==="object" &&
+              !Array.isArray(target) && "id" in target ? target.id : null;
+            if (typeof value!=="string" || !UUID.test(value))
+              return { error:"mapping_inspection_batch_identity_invalid",httpStatus:409 } as const;
+            const type=item.entityType as CatalogExportType;
+            byType.set(type,[...(byType.get(type)||[]),value]);
+          }
+          const allLive=await readCatalogLiveObservations(
+            tx,scope,grantedBranchIds,byType);
+          if (!allLive)
+            return { error:"mapping_inspection_batch_live_scope_changed",httpStatus:409 } as const;
+          const joined=allRows.map(item=>{
+            const normalized=item.normalizedData;
+            const id=normalized && typeof normalized==="object" &&
+              !Array.isArray(normalized) && "id" in normalized ? normalized.id : null;
+            return { ...item,scopedLiveData:
+              allLive.get(item.entityType+":"+id) ?? null };
+          });
+          batchReconciliation=f2ReadOnlyBatchReconciliation({
+            rows:joined,wholeStageHmacVerified:true,
+            currentTenClassScopeVerified:true,currentLiveSnapshotVerified:true,
+          });
+          if(!batchReconciliation)
+            return { error:"mapping_inspection_batch_reconciliation_invalid",httpStatus:409 } as const;
+          batchReconciliationCoverage="TEN_CLASS_COMPLETE";
+        }
+      }
+    }
+    if (!onVerified) return { ...view, readiness, batchReconciliation,
+      batchReconciliationCoverage };
     return onVerified({
-      tx,inspection:view,readiness,draft:history.draft,
+      tx,inspection:view,readiness,batchReconciliation,batchReconciliationCoverage,
+      draft:history.draft,
       organizationId,batchId:batch.id,branchId:scope.branchId,
       rowId:row.id,rowNumber:row.rowNumber,entityType:row.entityType,
       authorUserId:batch.createdByUserId,reviewerUserId:session.user.id,
