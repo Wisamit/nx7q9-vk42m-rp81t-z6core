@@ -17,8 +17,11 @@ test("F2 MariaDB: independent reviewer correction history is HMAC-authenticated,
   const checkpoint=(phase:string)=>console.log("[f2-feedback-mariadb] "+phase);
   const org=randomUUID(),otherOrg=randomUUID(),branch=randomUUID(),
     author=randomUUID(),reviewer=randomUUID(),another=randomUUID(),
-    batch=randomUUID(),row=randomUUID(),id1=randomUUID(),id2=randomUUID(),
-    sourceId=randomUUID();
+    batch=randomUUID(),row=randomUUID(),sourceId=randomUUID();
+  // Deliberately make the FIRST revision UUID sort ahead of the SECOND.
+  // Their identical timestamps force the database to return the two
+  // valid audit events in the opposite order from their revision numbers.
+  const [id1,id2]=[randomUUID(),randomUUID()].sort((a,b)=>b.localeCompare(a));
   const code="F2MF"+org.slice(0,8),secret="test-f2-independent-feedback-mariadb-hmac-key-32";
   const context:MappingFeedbackContext={
     organizationId:org,batchId:batch,branchId:branch,rowId:row,
@@ -84,9 +87,14 @@ test("F2 MariaDB: independent reviewer correction history is HMAC-authenticated,
     checkpoint("first revision verified");
     assert.equal(await read({...context,organizationId:otherOrg}),null);
     await write("INSERT INTO audit_events(id,organization_id,branch_id,actor_user_id,action,entity_type,entity_id,new_values,occurred_at) VALUES(?,?,?,?,'CATALOG_BUNDLE_MAPPING_FEEDBACK_RECORDED','CatalogImportRow',?,?,?)",
-      [id2,org,branch,another,row,JSON.stringify(second),"2026-10-20 09:00:02.000"]);
+      [id2,org,branch,another,row,JSON.stringify(second),"2026-10-20 09:00:01.000"]);
+    const [physicalRows]=await writer.execute<mysql.RowDataPacket[]>(
+      "SELECT id FROM audit_events WHERE id IN (?,?) ORDER BY occurred_at DESC,id DESC",
+      [id1,id2]);
+    assert.deepEqual(physicalRows.map(item=>item.id),[id1,id2],
+      "same-time UUID DESC retrieval deliberately opposes the signed revision order");
     assert.deepEqual(await read(),{revision:2,latest:second});
-    checkpoint("second revision verified");
+    checkpoint("same-timestamp reverse UUID order verified");
     // Mutations in the persisted *audit*, not application writes, simulate
     // a compromised editor. The HMAC and persisted actor are both binding.
     await write("UPDATE audit_events SET actor_user_id=? WHERE id=?",[author,id2]);
