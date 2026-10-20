@@ -1,6 +1,7 @@
 import type { Prisma } from "../../generated/prisma/client";
 import { BUNDLE_REVIEW_MAX_ROWS } from "./catalog-bundle-review.ts";
-import { verifyReviewStageEvidence, type ReviewStageEvidenceBatchMetadata } from "./catalog-review-stage-evidence.ts";
+import { verifyReviewStageEvidence, qualifiedIndependentReviewSource,
+  type ReviewStageEvidenceBatchMetadata } from "./catalog-review-stage-evidence.ts";
 import { clinicalImportTestWhere, type ClinicalImportScope } from "./catalog-clinical-import-scope.ts";
 import { catalogExportTypes, type CatalogExportType } from "./catalog-configuration-export.ts";
 
@@ -15,7 +16,7 @@ type ScopedIdentities = { ok: true; ids: TypeIds; refs: {
 
 export type PolicyReviewScopeCheck =
   | { ok: true }
-  | { ok: false; error: "policy_review_batch_scope_changed" | "policy_review_source_integrity_error" };
+  | { ok: false; error: "policy_review_batch_scope_changed" | "policy_review_source_integrity_error" | "policy_review_unverified_source" };
 
 function object(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === "object" && !Array.isArray(value)
@@ -526,6 +527,8 @@ export async function validatePolicyReviewBatchScope(
     rows, batchMetadata: input.batchMetadata,
   }, input.stageEvidenceSeal, input.signingSecret))
     return { ok: false, error: "policy_review_source_integrity_error" };
+  if (!qualifiedIndependentReviewSource(input.batchMetadata))
+    return { ok: false, error: "policy_review_unverified_source" };
   const validated = policyReviewIdentityScope(rows, new Set(input.grantedBranchIds));
   if (!validated.ok) return validated;
   const { ids, refs } = validated;
