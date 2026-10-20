@@ -94,7 +94,12 @@ test("Stage 54: queue is metadata-only and route decisions append audit without 
   assert.match(queue, /triagePermissionScope\(category, currentPermissions\)/);
   assert.match(queue, /scope\.branchId/);
   assert.match(queue, /clinicalImportTestWhere\(scope\)/);
-  assert.doesNotMatch(queue, /sourceData: true/);
+  // Full JSON is read only inside the tenant-locked server transaction to
+  // verify the v2 stage seal; it must never leave in queue entries.
+  assert.match(queue, /sourceData: true/);
+  assert.match(queue, /verifyIndependentExpertStage\(/);
+  assert.match(queue, /batchById = verifiedBatches/);
+  assert.doesNotMatch(queue, /entries\.push\(\{[\s\S]*?sourceData:/);
   assert.match(ui, /Independent expert review queue/);
   assert.match(ui, /Confirm finding \(not approval\)/);
   assert.match(page, /requirePermission\("catalog.manage"\)/);
