@@ -167,10 +167,6 @@ export async function readCatalogLiveObservations(
 
 
 
-      if (records.length !== ids.length)
-        return { error: "reconciliation_live_master_scope_changed", httpStatus: 403 } as const;
-      for (const current of records) live.set(type + ":" + current.id, current);
-    }
     if (records.length !== ids.length) return null;
     for (const current of records)
       live.set(type + ":" + current.id, JSON.parse(JSON.stringify(current)));
