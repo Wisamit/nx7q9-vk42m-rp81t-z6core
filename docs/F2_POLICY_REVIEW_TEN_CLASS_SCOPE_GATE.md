@@ -7,8 +7,8 @@ The native signed configuration bundle has ten export classes. PR #333 fixed dri
 ## Change
 
 - Examine the complete bounded DRAFT batch, not just the displayed queue subset.
-- Bind every staged PANEL/PACKAGE member test ID to the same tenant/branch/department-filtered LabTest scope; reject malformed or repeated member identities.
-- Bind PRICE_LIST_PACKAGE_ITEM parent package and price-list IDs, and verify their current branch and clinically visible entire package membership.
+- Verify PANEL/PACKAGE signed-source and normalized membership correspond one-to-one (test UUID, linked test code, display order and required flag), then bind every test ID to the tenant/branch/department-filtered LabTest scope. Reject mismatched, malformed or repeated identities.
+- Require PRICE_LIST_PACKAGE_ITEM source/normalized equality for package/list UUID and codes, currency, price, status and effective window, then verify current branch and clinically visible entire package membership. A correctly HMAC-signed source is insufficient if persisted staging identities diverge.
 - Count all ten master entity types, including CONTAINER, PANEL, PACKAGE and PRICE_LIST_PACKAGE_ITEM, in the *same transaction* as reviewer audit capture.
 - Exclude all source/referrer/client/contract price lists from generic catalog policy review by checking live nested tariff fields and refusing untrusted private source linkage.
 - Use fail-closed count comparison on the union of staged and linked master IDs.
