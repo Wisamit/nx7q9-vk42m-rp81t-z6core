@@ -11,6 +11,10 @@ const item = (entityType: string, id: string, values: Record<string, unknown> = 
   entityType,
   sourceData: entityType === "PRICE_LIST"
     ? {id,code:"S61",currency:"AED",status:"ACTIVE",...values}
+    : entityType === "TEST"
+      ? {id,code:"TEST",nameEn:"Test",departmentId:null,status:"ACTIVE"}
+      : entityType === "UNIT"
+        ? {id,code:"U",symbol:"mg/dL",status:"ACTIVE"}
     : entityType === "COMPONENT"
       ? {id,testId:values.testId,unitId:values.unitId,code:"CMP",
         nameEn:"Component",status:"ACTIVE",test:{code:"TEST"}}
@@ -19,8 +23,12 @@ const item = (entityType: string, id: string, values: Record<string, unknown> = 
           effectiveFrom:"2026-01-01T00:00:00.000Z",approvalStatus:"APPROVED",
           status:"ACTIVE",component:{code:"CMP",test:{code:"TEST"}}}
         : {id},
-  normalizedData: entityType === "COMPONENT"
-    ? {id,...values,code:"CMP",nameEn:"Component",testCode:"TEST",status:"ACTIVE"}
+  normalizedData: entityType === "TEST"
+    ? {id,code:"TEST",nameEn:"Test",departmentId:null,status:"ACTIVE",...values}
+    : entityType === "UNIT"
+      ? {id,code:"U",symbol:"mg/dL",status:"ACTIVE",...values}
+    : entityType === "COMPONENT"
+      ? {id,...values,code:"CMP",nameEn:"Component",testCode:"TEST",status:"ACTIVE"}
     : entityType === "REFERENCE_INTERVAL"
       ? {id,...values,componentCode:"CMP",testCode:"TEST",
         effectiveFrom:"2026-01-01T00:00:00.000Z",
