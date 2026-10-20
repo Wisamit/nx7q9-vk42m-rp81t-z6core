@@ -93,7 +93,7 @@ test("F2 MariaDB: independently edited batch provenance or row evidence invalida
         .stageEvidenceSeal, secret));
     };
     assert.equal(await verify(), true);
-    assert.equal(qualifiedIndependentReviewSource((await read()).batchMetadata),true);
+    assert.equal(qualifiedIndependentReviewSource((await read()).batchMetadata ?? null),true);
     // Re-sign unverified provenance with a valid key: post-staging integrity
     // still succeeds, but the separate qualification gate MUST refuse it.
     const untrusted={...summary,attestationStatus:"UNVERIFIED"};
@@ -104,7 +104,7 @@ test("F2 MariaDB: independently edited batch provenance or row evidence invalida
     await write("UPDATE catalog_import_batches SET summary=? WHERE id=?",
       [JSON.stringify({...untrusted,stageEvidenceSeal:untrustedSeal}),batch]);
     assert.equal(await verify(),true);
-    assert.equal(qualifiedIndependentReviewSource((await read()).batchMetadata),false);
+    assert.equal(qualifiedIndependentReviewSource((await read()).batchMetadata ?? null),false);
     await write("UPDATE catalog_import_batches SET summary=? WHERE id=?",
       [JSON.stringify({...summary,stageEvidenceSeal:seal}),batch]);
     assert.equal(await verify(),true);
