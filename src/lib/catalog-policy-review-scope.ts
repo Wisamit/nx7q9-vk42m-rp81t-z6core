@@ -320,7 +320,7 @@ function sameLiveMembership(
  * changed test/unit/container for the version captured in the source snapshot.
  * This checks the review identity subset, not full configuration parity/apply.
  */
-function sameLiveScalarIdentity(
+export function sameLiveScalarIdentity(
   type: "TEST" | "UNIT" | "CONTAINER",
   staged: unknown, live: unknown,
 ): boolean {
