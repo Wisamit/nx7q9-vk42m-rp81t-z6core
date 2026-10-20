@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import mysql from "mysql2/promise";
 import {
   createMappingFeedbackDraft, verifyMappingFeedbackHistory,
-  type MappingFeedbackContext,
+  currentMappingFeedbackDisposition, type MappingFeedbackContext,
 } from "../src/lib/catalog-mapping-reviewer-feedback.ts";
 
 test("F2 MariaDB: independent reviewer correction history is HMAC-authenticated, tenant scoped and append-only",
@@ -93,8 +93,17 @@ test("F2 MariaDB: independent reviewer correction history is HMAC-authenticated,
       [id1,id2]);
     assert.deepEqual(physicalRows.map(item=>item.id),[id1,id2],
       "same-time UUID DESC retrieval deliberately opposes the signed revision order");
-    assert.deepEqual(await read(),{revision:2,latest:second});
-    checkpoint("same-timestamp reverse UUID order verified");
+    const authorView=await read();
+    assert.deepEqual(authorView,{revision:2,latest:second});
+    assert.equal(currentMappingFeedbackDisposition(authorView!,
+      "a".repeat(64),"b".repeat(64)),"RETURN_MAPPING_TO_AUTHOR");
+    assert.equal(currentMappingFeedbackDisposition(authorView!,
+      "f".repeat(64),"b".repeat(64)),null,
+      "signed feedback must not follow a newer author's draft");
+    assert.equal(currentMappingFeedbackDisposition(authorView!,
+      "a".repeat(64),"d".repeat(64)),null,
+      "signed feedback must not survive live observation drift");
+    checkpoint("same-timestamp reverse UUID order and author visibility verified");
     // Mutations in the persisted *audit*, not application writes, simulate
     // a compromised editor. The HMAC and persisted actor are both binding.
     await write("UPDATE audit_events SET actor_user_id=? WHERE id=?",[author,id2]);
