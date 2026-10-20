@@ -147,9 +147,11 @@ type MappingAuditEvent = {
 };
 
 /**
- * Examine the WHOLE bounded history in actual append order (latest first).
- * Reject missing, duplicate, foreign-user/branch, forged or reordered audits.
- * A digest chain is only a corruption check, not authenticated authorship.
+ * Validate every bounded persisted event regardless of SQL row order.
+ * Reject missing, duplicate, foreign actor/branch or forged HMAC revisions.
+ * Signed revision ordinals and previousDigest, never timestamp or random UUID
+ * sorting, establish causal history. Database-audit truncation still requires
+ * an independent immutable anchor to become externally detectable.
  */
 export function verifyMappingDiscussionHistory(input: {
   context: MappingDiscussionContext; events: readonly MappingAuditEvent[];
@@ -177,9 +179,9 @@ export function verifyMappingDiscussionHistory(input: {
     if(item.previousDigest !== (revision===1 ? null : parsed.get(revision-1)!.digest))
       return null;
   }
+  // The SQL ORDER BY occurred_at DESC, id DESC may return equal-time
+  // revisions in either order; authenticated linkage defines the latest.
   const last=parsed.get(events.length)!;
-  if (parseMappingDiscussionDraft(events[0].newValues,context,secret)?.digest !== last.digest)
-    return null;
   return {revision:events.length,draft:last};
 }
 
