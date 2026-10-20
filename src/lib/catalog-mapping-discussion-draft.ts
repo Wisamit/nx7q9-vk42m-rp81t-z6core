@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 
 export const MAPPING_DISCUSSION_HISTORY_LIMIT = 100;
 export type MappingDiscussionIntent =
@@ -7,6 +7,11 @@ export type MappingDiscussionIntent =
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SHA = /^[0-9a-f]{64}$/;
+const SEAL_PURPOSE = "family-lab/catalog-mapping-discussion-audit/v1\\n";
+
+export type MappingDiscussionSeal = {
+  version: 1; algorithm: "HMAC-SHA256"; signature: string;
+};
 const exact = (value: unknown): value is Record<string, unknown> =>
   !!value && typeof value === "object" && !Array.isArray(value);
 const keys = (value: Record<string, unknown>, expected: string[]) =>
@@ -27,7 +32,7 @@ export type MappingDiscussionContext = {
 export type MappingDiscussionDraft = MappingDiscussionContext & {
   revision: number; previousDigest: string | null;
   observationToken: string; intent: MappingDiscussionIntent;
-  digest: string;
+  digest: string; seal: MappingDiscussionSeal;
   state: "UNAPPROVED_MAPPING_DISCUSSION";
   reviewOnly: true; approved: false; signingEnabled: false;
   mappingApproved: false; activated: false; liveWrites: false;
@@ -38,7 +43,7 @@ const contextFields: (keyof MappingDiscussionContext)[] = [
   "authorUserId", "sourceChecksum", "rowNumber", "entityType",
 ];
 const payloadFields = [...contextFields, "revision","previousDigest",
-  "observationToken","intent","digest","state","reviewOnly","approved",
+  "observationToken","intent","digest","seal","state","reviewOnly","approved",
   "signingEnabled","mappingApproved","activated","liveWrites"];
 
 function validContext(c: MappingDiscussionContext): boolean {
@@ -71,21 +76,40 @@ export function mappingDiscussionDigest(input: MappingDiscussionContext & {
   ])).digest("hex");
 }
 
+/**
+ * Stage HMAC and mapping audit HMAC are domain-separated even when the same
+ * server secret is configured. The seal protects the entire authored record,
+ * not only a public hash which a database editor could recompute.
+ */
 export function createMappingDiscussionDraft(
   context: MappingDiscussionContext, input: {
     revision: number; previousDigest: string | null;
     observationToken: string; intent: MappingDiscussionIntent;
-  },
+  }, secret: string,
 ): MappingDiscussionDraft {
+  if (typeof secret !== "string" || Buffer.byteLength(secret,"utf8") < 32)
+    throw Error("mapping_discussion_signing_key_unavailable");
   const digest = mappingDiscussionDigest({...context,...input});
-  return {...context,...input,digest,
-    state:"UNAPPROVED_MAPPING_DISCUSSION",
-    reviewOnly:true,approved:false,signingEnabled:false,
-    mappingApproved:false,activated:false,liveWrites:false};
+  const unsigned = {...context,...input,digest,
+    state:"UNAPPROVED_MAPPING_DISCUSSION" as const,
+    reviewOnly:true as const,approved:false as const,signingEnabled:false as const,
+    mappingApproved:false as const,activated:false as const,liveWrites:false as const};
+  const payload = JSON.stringify([
+    SEAL_PURPOSE, ...contextFields.map(field => unsigned[field]),
+    unsigned.revision, unsigned.previousDigest, unsigned.observationToken,
+    unsigned.intent, unsigned.digest, unsigned.state, unsigned.reviewOnly,
+    unsigned.approved, unsigned.signingEnabled, unsigned.mappingApproved,
+    unsigned.activated, unsigned.liveWrites,
+  ]);
+  const seal:MappingDiscussionSeal = {
+    version:1,algorithm:"HMAC-SHA256",
+    signature:createHmac("sha256",secret).update(payload).digest("hex"),
+  };
+  return {...unsigned,seal};
 }
 
 export function parseMappingDiscussionDraft(
-  value: unknown, context: MappingDiscussionContext,
+  value: unknown, context: MappingDiscussionContext, secret: string,
 ): MappingDiscussionDraft | null {
   if (!exact(value) || !validContext(context) ||
       !keys(value,[...payloadFields]) ||
@@ -97,7 +121,10 @@ export function parseMappingDiscussionDraft(
       value.reviewOnly !== true || value.approved !== false ||
       value.signingEnabled !== false || value.mappingApproved !== false ||
       value.activated !== false || value.liveWrites !== false ||
-      (value.previousDigest !== null && typeof value.previousDigest !== "string"))
+      (value.previousDigest !== null && typeof value.previousDigest !== "string") ||
+      !exact(value.seal) || !keys(value.seal,["version","algorithm","signature"]) ||
+      value.seal.version !== 1 || value.seal.algorithm !== "HMAC-SHA256" ||
+      typeof value.seal.signature !== "string" || !SHA.test(value.seal.signature))
     return null;
   try {
     const draft = createMappingDiscussionDraft(context,{
@@ -105,8 +132,12 @@ export function parseMappingDiscussionDraft(
       previousDigest:value.previousDigest as string | null,
       observationToken:value.observationToken,
       intent:value.intent,
-    });
-    return draft.digest === value.digest ? draft : null;
+    },secret);
+    if (draft.digest !== value.digest) return null;
+    return timingSafeEqual(
+      Buffer.from(draft.seal.signature,"hex"),
+      Buffer.from(value.seal.signature,"hex")
+    ) ? draft : null;
   } catch { return null; }
 }
 
@@ -122,9 +153,12 @@ type MappingAuditEvent = {
  */
 export function verifyMappingDiscussionHistory(input: {
   context: MappingDiscussionContext; events: readonly MappingAuditEvent[];
+  secret: string;
 }): { revision: number; draft: MappingDiscussionDraft | null } | null {
-  const {context,events} = input;
-  if (!validContext(context) || events.length > MAPPING_DISCUSSION_HISTORY_LIMIT) return null;
+  const {context,events,secret} = input;
+  if (!validContext(context) || typeof secret !== "string" ||
+      Buffer.byteLength(secret,"utf8") < 32 ||
+      events.length > MAPPING_DISCUSSION_HISTORY_LIMIT) return null;
   if (!events.length) return {revision:0,draft:null};
   const ids = new Set<string>();
   const parsed = new Map<number,MappingDiscussionDraft>();
@@ -133,7 +167,7 @@ export function verifyMappingDiscussionHistory(input: {
         event.branchId !== context.branchId ||
         event.actorUserId !== context.authorUserId) return null;
     ids.add(event.id);
-    const draft = parseMappingDiscussionDraft(event.newValues,context);
+    const draft = parseMappingDiscussionDraft(event.newValues,context,secret);
     if (!draft || parsed.has(draft.revision)) return null;
     parsed.set(draft.revision,draft);
   }
@@ -144,7 +178,7 @@ export function verifyMappingDiscussionHistory(input: {
       return null;
   }
   const last=parsed.get(events.length)!;
-  if (parseMappingDiscussionDraft(events[0].newValues,context)?.digest !== last.digest)
+  if (parseMappingDiscussionDraft(events[0].newValues,context,secret)?.digest !== last.digest)
     return null;
   return {revision:events.length,draft:last};
 }
