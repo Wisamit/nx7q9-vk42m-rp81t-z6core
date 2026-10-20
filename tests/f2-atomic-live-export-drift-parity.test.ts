@@ -6,7 +6,8 @@ import { catalogBundleAllowedSourceFields, catalogBundleNestedSourceProjections,
 import type { CatalogExportType } from "../src/lib/catalog-configuration-export.ts";
 
 const sourceBundle=readFileSync("src/app/api/catalog/configuration-export/bundle/route.ts","utf8");
-const sourceDrift=readFileSync("src/app/api/catalog/imports/[id]/bundle-drift/route.ts","utf8");
+const sourceDrift=readFileSync("src/lib/catalog-live-observation.ts","utf8");
+const driftRoute=readFileSync("src/app/api/catalog/imports/[id]/bundle-drift/route.ts","utf8");
 const models: Record<CatalogExportType,string> = {
   TEST:"labTest",COMPONENT:"testComponent",UNIT:"unit",CONTAINER:"container",
   PANEL:"testPanel",PACKAGE:"commercialPackage",REFERENCE_INTERVAL:"referenceInterval",
@@ -60,6 +61,7 @@ function projections(code:string){
   return paths;
 }
 test("F2: all ten atomic export model projections equal live drift projections at EVERY nested field",()=>{
+  assert.match(driftRoute,/readCatalogLiveObservations\(tx,liveScope,branchIds,idsByType\)/);
   const exported=projections(sourceBundle),drift=projections(sourceDrift);
   assert.equal(exported.size,10);
   assert.equal(drift.size,10);
