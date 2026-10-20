@@ -14,9 +14,9 @@ test("F2 MariaDB: reviewed panel, package, package tariff and container cannot b
   const [writer,reader]=await Promise.all([mysql.createConnection(config),mysql.createConnection(config)]);
   const org=randomUUID(),foreignOrg=randomUUID(),branchA=randomUUID(),branchB=randomUUID();
   const deptA=randomUUID(),deptB=randomUUID(),testA=randomUUID(),testB=randomUUID();
-  const panel=randomUUID(),pkg=randomUUID(),list=randomUUID(),pkgPrice=randomUUID();
+  const panel=randomUUID(),pkg=randomUUID(),list=randomUUID(),pkgPrice=randomUUID(),testPrice=randomUUID();
   const tube=randomUUID(),batch=randomUUID(),author=randomUUID();
-  const ids=[randomUUID(),randomUUID(),randomUUID(),randomUUID()];
+  const ids=Array.from({length:6},()=>randomUUID());
   const prefix="F2PS"+org.slice(0,8);
   const write=(sql:string,params:Array<string|number|null>)=>writer.execute(sql,params);
   // An independent REPEATABLE READ session acquires the same tenant lock as
@@ -50,6 +50,9 @@ test("F2 MariaDB: reviewed panel, package, package tariff and container cannot b
         [pkgPrice,pkg,org,org,branchA]);
       const [containers]=await reader.execute<mysql.RowDataPacket[]>(
         "SELECT id FROM containers WHERE id=? AND organization_id=?",[tube,org]);
+      const [testPrices]=await reader.execute<mysql.RowDataPacket[]>(
+        "SELECT p.id FROM price_list_items p JOIN price_lists l ON l.id=p.price_list_id JOIN lab_tests t ON t.id=p.test_id JOIN departments d ON d.id=t.department_id WHERE p.id=? AND l.id=? AND t.id=? AND l.organization_id=? AND l.scope_type='BRANCH' AND l.branch_id=? AND t.organization_id=? AND d.branch_id=? AND l.source_id IS NULL AND l.referrer_id IS NULL AND l.client_id IS NULL AND l.contract_id IS NULL",
+        [testPrice,list,testA,org,branchA,org,branchA]);
       const [panelMembers]=await reader.execute<mysql.RowDataPacket[]>(
         "SELECT test_id AS testId, display_order AS displayOrder, required FROM test_panel_items WHERE panel_id=?",[panel]);
       const [packageMembers]=await reader.execute<mysql.RowDataPacket[]>(
@@ -63,7 +66,7 @@ test("F2 MariaDB: reviewed panel, package, package tariff and container cannot b
             (!required || Boolean(row.required)===item.required)).length===1);
       };
       return panels.length===1 && packages.length===1 && tariffs.length===1 &&
-        containers.length===1 && matches("PANEL",panelMembers,true) &&
+        containers.length===1 && testPrices.length===1 && matches("PANEL",panelMembers,true) &&
         matches("PACKAGE",packageMembers,false)
         ? {ok:true} as const
         : {ok:false,error:"policy_review_batch_scope_changed"} as const;
@@ -96,6 +99,8 @@ test("F2 MariaDB: reviewed panel, package, package tariff and container cannot b
       [list,org,prefix+"L","F2 tariff",branchA]);
     await write("INSERT INTO price_list_package_items(id,price_list_id,package_id,unit_price,effective_from,updated_at) VALUES(?,?,?,123.4500,'2026-01-01',NOW(3))",
       [pkgPrice,list,pkg]);
+    await write("INSERT INTO price_list_items(id,price_list_id,test_id,unit_price,effective_from,updated_at) VALUES(?,?,?,45.6700,'2026-01-01',NOW(3))",
+      [testPrice,list,testA]);
     await write("INSERT INTO users(id,organization_id,username,display_name_en,updated_at) VALUES(?,?,?,?,NOW(3))",
       [author,org,prefix+"U","F2 synthetic author"]);
     await write("INSERT INTO catalog_import_batches(id,organization_id,source_type,source_name,source_checksum,status,created_by_user_id,updated_at) VALUES(?,?,'CONFIG_BUNDLE_REVIEW','test-only.json',?,'DRAFT',?,NOW(3))",
@@ -118,6 +123,20 @@ test("F2 MariaDB: reviewed panel, package, package tariff and container cannot b
         branchId:branchA,currency:"AED",unitPrice:"123.4500",
         effectiveFrom:date,effectiveTo:null,status:"ACTIVE"}},
       {type:"CONTAINER",source:{id:tube},normalized:{id:tube}},
+      {type:"PRICE_LIST",source:{id:list,code:prefix+"L",currency:"AED",
+        scopeType:"BRANCH",branchId:branchA,status:"ACTIVE",sourceId:null,
+        referrerId:null,clientId:null,contractId:null},
+        normalized:{id:list,code:prefix+"L",currency:"AED",
+          scopeType:"BRANCH",branchId:branchA,status:"ACTIVE"}},
+      {type:"PRICE_LIST_ITEM",source:{id:testPrice,testId:testA,
+        priceListId:list,test:{code:prefix+"A"},
+        priceList:{code:prefix+"L",currency:"AED",scopeType:"BRANCH",
+          branchId:branchA,status:"ACTIVE",sourceId:null,referrerId:null,
+          clientId:null,contractId:null},
+        unitPrice:"45.6700",effectiveFrom:date,status:"ACTIVE"},
+        normalized:{id:testPrice,testId:testA,testCode:prefix+"A",
+          priceListId:list,priceListCode:prefix+"L",scopeType:"BRANCH",
+          branchId:branchA,unitPrice:"45.6700",effectiveFrom:date,status:"ACTIVE"}},
     ];
     for(const [i,row] of records.entries()){
       await write("INSERT INTO catalog_import_rows(id,batch_id,`row_number`,entity_type,status,source_data,normalized_data,updated_at) VALUES(?,?,?,?,'WARNING',?,?,NOW(3))",
@@ -144,6 +163,24 @@ test("F2 MariaDB: reviewed panel, package, package tariff and container cannot b
     });
     await write("UPDATE catalog_import_rows SET normalized_data=? WHERE id=?",
       [JSON.stringify(records[2].normalized),ids[2]]);
+    assert.deepEqual(await check(),{ok:true});
+    // The ordinary single-test tariff is a distinct signed source class.
+    const forgedTestPrice={...records[5].normalized,unitPrice:"999.0000"};
+    await write("UPDATE catalog_import_rows SET normalized_data=? WHERE id=?",
+      [JSON.stringify(forgedTestPrice),ids[5]]);
+    assert.deepEqual(await check(),{
+      ok:false,error:"policy_review_source_integrity_error",
+    });
+    await write("UPDATE catalog_import_rows SET normalized_data=? WHERE id=?",
+      [JSON.stringify(records[5].normalized),ids[5]]);
+    const forgedList={...records[4].normalized,currency:"USD"};
+    await write("UPDATE catalog_import_rows SET normalized_data=? WHERE id=?",
+      [JSON.stringify(forgedList),ids[4]]);
+    assert.deepEqual(await check(),{
+      ok:false,error:"policy_review_source_integrity_error",
+    });
+    await write("UPDATE catalog_import_rows SET normalized_data=? WHERE id=?",
+      [JSON.stringify(records[4].normalized),ids[4]]);
     assert.deepEqual(await check(),{ok:true});
     // Live membership can drift without leaving granted clinical scope:
     // changes in display order and required flag must also invalidate review.
@@ -176,11 +213,12 @@ test("F2 MariaDB: reviewed panel, package, package tariff and container cannot b
     assert.equal(String(master[0].unit_price),"123.4500");
     const [reviewRows]=await writer.execute<mysql.RowDataPacket[]>(
       "SELECT COUNT(*) AS n FROM catalog_import_rows WHERE batch_id=? AND status='WARNING' AND imported_entity_id IS NULL",[batch]);
-    assert.equal(Number(reviewRows[0].n),4);
+    assert.equal(Number(reviewRows[0].n),6);
   }finally{
     await writer.rollback().catch(()=>{});
     await write("DELETE FROM catalog_import_rows WHERE batch_id=?",[batch]).catch(()=>{});
     await write("DELETE FROM catalog_import_batches WHERE id=?",[batch]).catch(()=>{});
+    await write("DELETE FROM price_list_items WHERE id=?",[testPrice]).catch(()=>{});
     await write("DELETE FROM price_list_package_items WHERE id=?",[pkgPrice]).catch(()=>{});
     await write("DELETE FROM price_lists WHERE id=?",[list]).catch(()=>{});
     await write("DELETE FROM commercial_package_items WHERE package_id=?",[pkg]).catch(()=>{});
