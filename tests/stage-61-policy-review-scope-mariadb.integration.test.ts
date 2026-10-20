@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import mysql from "mysql2/promise";
-import { policyReviewIdentityScope } from "../src/lib/catalog-policy-review-scope.ts";
+import { policyReviewIdentityScope, sameLiveScalarIdentity } from "../src/lib/catalog-policy-review-scope.ts";
 
 test("Stage 61 MariaDB: staged identities fail closed on revoked branch and changed live department", {
   timeout: 45000,
@@ -93,6 +93,27 @@ test("Stage 61 MariaDB: staged identities fail closed on revoked branch and chan
     });
     await write("UPDATE catalog_import_rows SET normalized_data=? WHERE id=?",
       [JSON.stringify(parse(before[0].normalized_data)),ids[0]]);
+    // Independent MariaDB reader checks the actual fields used by the
+    // reviewer snapshot parity guard, not only an immutable UUID.
+    const liveMatches=async()=>{
+      const [tests]=await reviewer.execute<mysql.RowDataPacket[]>(
+        "SELECT id,code,name_en AS nameEn,department_id AS departmentId,status FROM lab_tests WHERE id=? AND organization_id=?",
+        [testId,org]);
+      const [units]=await reviewer.execute<mysql.RowDataPacket[]>(
+        "SELECT id,code,symbol,status FROM units WHERE id=? AND organization_id=?",
+        [unitId,org]);
+      return tests.length===1 && units.length===1 &&
+        sameLiveScalarIdentity("TEST",decoded[0].normalizedData,tests[0]) &&
+        sameLiveScalarIdentity("UNIT",decoded[1].normalizedData,units[0]);
+    };
+    assert.equal(await liveMatches(),true);
+    await write("UPDATE lab_tests SET name_en=? WHERE id=?",["Changed after staging",testId]);
+    assert.equal(await liveMatches(),false);
+    await write("UPDATE lab_tests SET name_en=? WHERE id=?",["Stage61 Test",testId]);
+    await write("UPDATE units SET symbol=? WHERE id=?",["mmol/L",unitId]);
+    assert.equal(await liveMatches(),false);
+    await write("UPDATE units SET symbol=? WHERE id=?",["mg/dL",unitId]);
+    assert.equal(await liveMatches(),true);
     const [authorized]=await reviewer.execute<mysql.RowDataPacket[]>(
       "SELECT t.id FROM lab_tests t JOIN departments d ON d.id=t.department_id WHERE t.organization_id=? AND t.id=? AND d.status='ACTIVE' AND (d.branch_id IS NULL OR d.branch_id=?)",
       [org,testId,branchA]);
