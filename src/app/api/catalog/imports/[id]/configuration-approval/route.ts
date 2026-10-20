@@ -250,6 +250,8 @@ export async function POST(request:NextRequest,{params}:{
       sourceInstallationVerified:false,qualifiedHumanApprovalVerified:false,
       liveApplyAuthorized:false,liveWrites:false} as const;
   },{isolationLevel:"RepeatableRead",timeout:30000});
-  if("error" in outcome)return reject(outcome.error,outcome.httpStatus);
+  if("error" in outcome && typeof outcome.error==="string" &&
+     "httpStatus" in outcome && typeof outcome.httpStatus==="number")
+    return reject(outcome.error,outcome.httpStatus);
   return NextResponse.json(outcome,{headers});
 }
