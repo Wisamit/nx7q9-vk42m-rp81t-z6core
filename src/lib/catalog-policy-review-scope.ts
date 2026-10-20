@@ -22,6 +22,55 @@ function object(value: unknown): Record<string, unknown> | null {
 }
 
 /**
+ * Source/normalized data are persisted in separate columns. A later policy
+ * reviewer must not trust only the normalized membership or tariff identity:
+ * tampered staging could otherwise conceal an off-scope source reference.
+ * This is proof of staging parity, not approval of any source master values.
+ */
+function compositeStagingIdentityMatches(
+  type: "PANEL" | "PACKAGE" | "PRICE_LIST_PACKAGE_ITEM",
+  source: Record<string, unknown>, normalized: Record<string, unknown>,
+): boolean {
+  if (type === "PANEL" || type === "PACKAGE") {
+    if (!Array.isArray(source.items) || !Array.isArray(normalized.items) ||
+        !source.items.length || source.items.length !== normalized.items.length ||
+        source.items.length > 1000) return false;
+    return source.items.every((raw, index) => {
+      const member = object(raw), projected = object(normalized.items[index]);
+      const test = object(member?.test);
+      return !!member && !!projected && !!test &&
+        typeof member.testId === "string" && UUID.test(member.testId) &&
+        member.testId === projected.testId &&
+        typeof test.code === "string" && test.code.length > 0 &&
+        test.code === projected.testCode &&
+        Number.isSafeInteger(member.displayOrder) &&
+        member.displayOrder === projected.displayOrder &&
+        (type !== "PANEL" || (
+          typeof member.required === "boolean" &&
+          member.required === projected.required
+        ));
+    });
+  }
+  const pkg = object(source.package), list = object(source.priceList);
+  return !!pkg && !!list &&
+    typeof source.packageId === "string" && UUID.test(source.packageId) &&
+    source.packageId === normalized.packageId &&
+    typeof pkg.code === "string" && pkg.code.length > 0 &&
+    pkg.code === normalized.packageCode &&
+    typeof source.priceListId === "string" && UUID.test(source.priceListId) &&
+    source.priceListId === normalized.priceListId &&
+    typeof list.code === "string" && list.code.length > 0 &&
+    list.code === normalized.priceListCode &&
+    list.scopeType === normalized.scopeType &&
+    (list.branchId ?? null) === (normalized.branchId ?? null) &&
+    list.currency === normalized.currency &&
+    source.unitPrice === normalized.unitPrice &&
+    source.effectiveFrom === normalized.effectiveFrom &&
+    (source.effectiveTo ?? null) === (normalized.effectiveTo ?? null) &&
+    source.status === normalized.status;
+}
+
+/**
  * Check every staged identity, not the displayed queue page. Source JSON must
  * never be returned to a reviewer or written to an audit decision.
  */
@@ -42,6 +91,10 @@ export function policyReviewIdentityScope(
     if (!catalogExportTypes.has(type) || !n || !source ||
         typeof id !== "string" || !UUID.test(id) || source.id !== id ||
         seen.has(type + ":" + id))
+      return { ok: false, error: "policy_review_source_integrity_error" };
+    if ((type === "PANEL" || type === "PACKAGE" ||
+         type === "PRICE_LIST_PACKAGE_ITEM") &&
+        !compositeStagingIdentityMatches(type, source, n))
       return { ok: false, error: "policy_review_source_integrity_error" };
     seen.add(type + ":" + id);
     ids.set(type, [...(ids.get(type) || []), id]);
