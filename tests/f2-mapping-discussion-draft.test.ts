@@ -108,11 +108,25 @@ test("F2 mapping: full history rejects invisible foreign actor/branch, omissions
   wrong({newValues:{...first,intent:"RETURN_TO_SOURCE_AUTHOR"}});
   wrong({id:events[0].id});
   assert.equal(verifyMappingDiscussionHistory({context,secret,events:[events[0]]}),null);
-  assert.equal(verifyMappingDiscussionHistory({context,secret,events:[events[1],events[0]]}),null);
+  // Equal audit timestamps may sort by UUID in reverse causal order.
+  // The signed revision chain, not SQL row ordering, is authoritative.
+  assert.deepEqual(verifyMappingDiscussionHistory({
+    context,secret,events:[events[1],events[0]],
+  }),{revision:2,draft:second});
   assert.equal(verifyMappingDiscussionHistory({context,secret,events:[
     events[0],events[0],
   ]}),null);
   assert.equal(verifyMappingDiscussionHistory({context,secret,events:Array(101).fill(events[0])}),null);
+  const alternativeOne=createMappingDiscussionDraft(context,{
+    revision:1,previousDigest:null,
+    observationToken:"d".repeat(64),intent:"PROPOSE_LOCAL_RECONCILIATION",
+  },secret);
+  assert.equal(verifyMappingDiscussionHistory({context,secret,events:[
+    events[0],{...events[1],newValues:alternativeOne},
+  ]}),null,"a signed but causally unlinked first revision must reject");
+  assert.equal(verifyMappingDiscussionHistory({context,secret,events:[
+    events[1],events[1],
+  ]}),null,"duplicate revision must reject regardless of row order");
   const fork=createMappingDiscussionDraft(context,{
     revision:2,previousDigest:"f".repeat(64),
     observationToken:"c".repeat(64),intent:"RETURN_TO_SOURCE_AUTHOR",
