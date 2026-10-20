@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { catalogExportTypes } from "../src/lib/catalog-configuration-export.ts";
-import { policyReviewIdentityScope } from "../src/lib/catalog-policy-review-scope.ts";
+import { policyReviewIdentityScope, validatePolicyReviewBatchScope } from "../src/lib/catalog-policy-review-scope.ts";
 
 const uuid = (part: number) => "00000000-0000-4000-8000-" + part.toString(16).padStart(12,"0");
 const branchId=uuid(21), testId=uuid(1), unitId=uuid(2), componentId=uuid(3);
@@ -79,6 +79,38 @@ test("F2: membership, priced package, branch, private tariff and unknown source 
   assert.equal(change("PRICE_LIST",x=>{(x.sourceData as Record<string,unknown>).sourceId=uuid(24);}).ok,false);
   assert.equal(change("CONTAINER",x=>{x.sourceData.id="wrong";}).ok,false);
   assert.equal(policyReviewIdentityScope([...all,base("INVOICE",uuid(25))],new Set([branchId])).ok,false);
+});
+
+
+test("F2: reviewer transaction must reject live but in-scope PANEL/PACKAGE membership drift", async()=>{
+  const currentPanels=[{testId,displayOrder:1,required:true}];
+  const currentPackages=[{testId,displayOrder:1}];
+  const count=async({where}:{where:{id:{in:string[]}}})=>where.id.in.length;
+  const tx = {
+    catalogImportRow:{findMany:async()=>all},
+    labTest:{count},unit:{count},testComponent:{count},referenceInterval:{count},
+    priceList:{count},priceListItem:{count},container:{count},
+    priceListPackageItem:{count},
+    testPanel:{count,findMany:async()=>[{id:panelId,items:[...currentPanels]}]},
+    commercialPackage:{count,findMany:async()=>[{id:packageId,items:[...currentPackages]}]},
+  } as unknown as Parameters<typeof validatePolicyReviewBatchScope>[0];
+  const input={batchId:uuid(25),scope:{organizationId:uuid(26),branchId,
+    departmentIds:[uuid(27)]},grantedBranchIds:[branchId]};
+  const check=()=>validatePolicyReviewBatchScope(tx,input);
+  assert.deepEqual(await check(),{ok:true});
+  currentPanels[0].displayOrder=9;
+  assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
+  currentPanels[0].displayOrder=1;
+  currentPanels[0].required=false;
+  assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
+  currentPanels[0].required=true;
+  currentPackages[0].displayOrder=2;
+  assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
+  currentPackages[0].displayOrder=1;
+  currentPackages.push({testId:uuid(44),displayOrder:2});
+  assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
+  currentPackages.pop();
+  assert.deepEqual(await check(),{ok:true});
 });
 
 test("F2: policy queue and reviewer POST enforce the SAME tenant-locked all-type checks, never mutate masters",()=>{
