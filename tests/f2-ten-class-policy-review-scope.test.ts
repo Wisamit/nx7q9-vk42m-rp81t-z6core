@@ -59,8 +59,8 @@ test("F2: membership, priced package, branch, private tariff and unknown source 
   assert.deepEqual(policyReviewIdentityScope(all,new Set()),{
     ok:false,error:"policy_review_batch_scope_changed",
   });
-  assert.equal(change("PANEL",x=>{((x.normalizedData.items as Record<string,unknown>[])[0]).testCode="CHANGED";}).ok,false);
-  assert.equal(change("PANEL",x=>{((x.normalizedData.items as Record<string,unknown>[])[0]).required=false;}).ok,false);
+  assert.equal(change("PANEL",x=>{(((x.normalizedData as Record<string,unknown>).items as Record<string,unknown>[])[0]).testCode="CHANGED";}).ok,false);
+  assert.equal(change("PANEL",x=>{(((x.normalizedData as Record<string,unknown>).items as Record<string,unknown>[])[0]).required=false;}).ok,false);
   assert.equal(change("PACKAGE",x=>{(((x.sourceData as Record<string,unknown>).items as Record<string,unknown>[])[0]).displayOrder=7;}).ok,false);
   assert.equal(change("PACKAGE",x=>{(((x.sourceData as Record<string,unknown>).items as Record<string,unknown>[])[0]).testId=uuid(55);}).ok,false);
   assert.equal(change("PRICE_LIST_PACKAGE_ITEM",x=>{(x.normalizedData as Record<string,unknown>).packageCode="OTHER";}).ok,false);
