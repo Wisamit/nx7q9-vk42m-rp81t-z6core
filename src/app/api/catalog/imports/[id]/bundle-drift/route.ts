@@ -58,7 +58,7 @@ export async function GET(request: NextRequest, context: Context) {
   if (query.has("mappingDraftRow")) {
     const row = query.get("mappingDraftRow") || "";
     if ([...query.keys()].some(key => key !== "mappingDraftRow") ||
-        !/^[1-9]\\d{0,8}$/.test(row))
+        !/^[1-9]\d{0,8}$/.test(row))
       return NextResponse.json({ error: "mapping_discussion_query_invalid" }, { status: 400 });
     return inspectBundleDrift(request, context, null, null, false, false,
       null, Number(row));
