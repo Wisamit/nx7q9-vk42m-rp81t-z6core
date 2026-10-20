@@ -140,6 +140,12 @@ test("F2: reviewer transaction rejects live catalog identity and composite membe
   const currentUnits=[{id:unitId,code:"MG",symbol:"mg/dL",status:"ACTIVE"}];
   const currentContainers=[{id:uuid(7),code:"TUBE",nameEn:"Tube",nameAr:null,
     tubeColor:"Red",additive:null as string | null,status:"ACTIVE"}];
+  const currentComponents=[{id:componentId,testId,unitId,code:"COMP",
+    nameEn:"Component",status:"ACTIVE",test:{code:"F2"}}];
+  const currentIntervals=[{id:uuid(8),componentId,branchId,
+    effectiveFrom:new Date("2026-01-01T00:00:00.000Z"),
+    approvalStatus:"APPROVED",status:"ACTIVE",
+    component:{code:"COMP",test:{code:"F2"}}}];
   const currentPanels=[{testId,displayOrder:1,required:true}];
   const currentPackages=[{testId,displayOrder:1}];
   const date=new Date("2026-01-01T00:00:00.000Z");
@@ -156,7 +162,8 @@ test("F2: reviewer transaction rejects live catalog identity and composite membe
     catalogImportRow:{findMany:async()=>all},
     labTest:{count,findMany:async()=>currentTests},
     unit:{count,findMany:async()=>currentUnits},
-    testComponent:{count},referenceInterval:{count},
+    testComponent:{count,findMany:async()=>currentComponents},
+    referenceInterval:{count,findMany:async()=>currentIntervals},
     priceList:{count,findMany:async()=>currentLists},
     priceListItem:{count,findMany:async()=>currentTestPrices},
     container:{count,findMany:async()=>currentContainers},
@@ -189,6 +196,25 @@ test("F2: reviewer transaction rejects live catalog identity and composite membe
   currentContainers[0].additive="EDTA";
   assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
   currentContainers[0].additive=null;
+  assert.deepEqual(await check(),{ok:true});
+  currentComponents[0].unitId=uuid(49);
+  assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
+  currentComponents[0].unitId=unitId;
+  currentComponents[0].nameEn="Changed component";
+  assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
+  currentComponents[0].nameEn="Component";
+  currentComponents[0].test.code="OTHER";
+  assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
+  currentComponents[0].test.code="F2";
+  currentIntervals[0].approvalStatus="RETIRED";
+  assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
+  currentIntervals[0].approvalStatus="APPROVED";
+  currentIntervals[0].effectiveFrom=new Date("2026-02-01T00:00:00.000Z");
+  assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
+  currentIntervals[0].effectiveFrom=new Date("2026-01-01T00:00:00.000Z");
+  currentIntervals[0].component.test.code="OTHER";
+  assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
+  currentIntervals[0].component.test.code="F2";
   assert.deepEqual(await check(),{ok:true});
   currentLists[0].currency="USD";
   assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
@@ -239,9 +265,11 @@ test("F2: policy queue and reviewer POST enforce the SAME tenant-locked all-type
     assert.match(code,new RegExp(name+": null"));
   assert.match(code,/every: \{ test: testScope \}/);
   assert.match(code,/refs\.packages/);
-  for(const name of ["labTest","unit","container","priceList","priceListItem","priceListPackageItem"])
+  for(const name of ["labTest","unit","container","testComponent","referenceInterval",
+    "priceList","priceListItem","priceListPackageItem"])
     assert.match(code,new RegExp("tx\\."+name+"\\.findMany\\("));
   assert.match(code,/sameLiveScalarIdentity\(/);
+  assert.match(code,/sameLiveClinicalReviewIdentity\(/);
   assert.match(endpoint,/validatePolicyReviewBatchScope\(tx/);
   assert.match(queue,/validatePolicyReviewBatchScope\(tx/);
   assert.doesNotMatch(code,/tx\.(?:labTest|unit|testPanel|commercialPackage|priceList|priceListPackageItem)\.(?:create|update|upsert|delete)/);
