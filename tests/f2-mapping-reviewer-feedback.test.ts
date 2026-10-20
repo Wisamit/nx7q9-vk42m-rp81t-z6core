@@ -5,6 +5,7 @@ import { catalogExportTypes } from "../src/lib/catalog-configuration-export.ts";
 import {
   createMappingFeedbackDraft, parseMappingFeedbackDraft,
   verifyMappingFeedbackHistory, validMappingFeedbackDisposition,
+  currentMappingFeedbackDisposition,
   type MappingFeedbackContext,
 } from "../src/lib/catalog-mapping-reviewer-feedback.ts";
 
@@ -158,4 +159,62 @@ test("F2: reviewer POST is feedback-only, strongly scoped and serialized behind 
   assert.match(commit,/CONFIG_BUNDLE_REVIEW/);
   assert.match(commit,/CSV_REVIEW/);
   assert.doesNotMatch(route,/tx\.(?:labTest|testComponent|referenceInterval|priceList|priceListItem|priceListPackageItem|catalogImportRow|catalogImportBatch)\.(?:create|update|delete|upsert)\(/);
+});
+
+test("F2: correction is visible to the author ONLY for the current signed draft and live observation",()=>{
+  const one=evidence();
+  const history=verifyMappingFeedbackHistory({
+    context:base,events:[event(one)],secret,
+  });
+  assert.ok(history);
+  assert.equal(currentMappingFeedbackDisposition(
+    history,one.authorDraftDigest,one.observationToken,
+  ),"REQUEST_SOURCE_INSTALLATION_EVIDENCE");
+  assert.equal(currentMappingFeedbackDisposition(
+    history,"d".repeat(64),one.observationToken,
+  ),null,"author's later draft supersedes reviewer feedback");
+  assert.equal(currentMappingFeedbackDisposition(
+    history,one.authorDraftDigest,"f".repeat(64),
+  ),null,"new live observation invalidates the old reviewer feedback");
+  assert.equal(currentMappingFeedbackDisposition(history,"bad",one.observationToken),null);
+  assert.equal(currentMappingFeedbackDisposition({revision:0,latest:null},
+    one.authorDraftDigest,one.observationToken),null);
+  const second=evidence(base,{
+    reviewerUserId:reviewerB,revision:2,previousDigest:one.digest,
+    disposition:"RETURN_MAPPING_TO_AUTHOR",
+  });
+  const chained=verifyMappingFeedbackHistory({
+    context:base,events:[event(one,8),event(second,9)],secret,
+  });
+  assert.ok(chained);
+  assert.equal(currentMappingFeedbackDisposition(
+    chained,one.authorDraftDigest,one.observationToken,
+  ),"RETURN_MAPPING_TO_AUTHOR");
+  assert.equal(verifyMappingFeedbackHistory({
+    context:base,events:[event(one,8),{...event(second,9),actorUserId:author}],secret,
+  }),null,"author must not impersonate an independent reviewer");
+});
+
+test("F2: author GET validates reviewer HMAC ledger, returns no actor/source and never becomes approval",()=>{
+  const author=readFileSync(
+    "src/app/api/catalog/imports/[id]/bundle-drift/route.ts","utf8");
+  const reviewer=readFileSync(
+    "src/app/api/catalog/imports/[id]/mapping-inspection/route.ts","utf8");
+  const helper=readFileSync(
+    "src/lib/catalog-mapping-reviewer-feedback.ts","utf8");
+  assert.match(author,/createdByUserId: session\.user\.id/);
+  assert.match(author,/verifyIndependentExpertStage\(/);
+  assert.match(author,/verifyMappingDiscussionHistory\(/);
+  assert.match(author,/verifyMappingFeedbackHistory\(/);
+  assert.match(author,/action:"CATALOG_BUNDLE_MAPPING_FEEDBACK_RECORDED"/);
+  assert.match(author,/currentMappingFeedbackDisposition\(/);
+  assert.match(author,/reviewerFeedbackRevision:feedback\.revision/);
+  assert.match(author,/reviewerFeedbackDisposition:currentFeedback/);
+  assert.match(author,/mapping_discussion_reviewer_feedback_corrupt/);
+  assert.match(reviewer,/currentMappingFeedbackDisposition\(/);
+  assert.match(helper,/last\.authorDraftDigest===authorDraftDigest/);
+  assert.match(helper,/last\.observationToken===currentObservationToken/);
+  assert.match(author,/reviewOnly:true,approved:false,mappingApproved:false/);
+  assert.doesNotMatch(author,/reviewerUserId:feedback\.latest/);
+  assert.doesNotMatch(author,/feedback\.latest\?\.seal/);
 });
