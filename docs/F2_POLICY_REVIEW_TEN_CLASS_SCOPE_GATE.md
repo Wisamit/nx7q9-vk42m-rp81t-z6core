@@ -19,6 +19,13 @@ The native signed configuration bundle has ten export classes. PR #333 fixed dri
 - This closes a stale-review-evidence gap and does **not** authorize changes or imply that prices, clinical definitions or signatures were approved.
 - Preserve non-committable CONFIG_BUNDLE_REVIEW and CSV_REVIEW and all existing author/reviewer separation.
 
+## Subsequent F2 checkpoint — current live identity parity
+
+- The policy reviewer gate previously re-read the complete live PANEL/PACKAGE membership, but for directly staged TEST, UNIT and CONTAINER it only counted authorized UUIDs. An in-scope edit after staging (for example a changed test English name, unit symbol or collection tube metadata) could therefore leave stale review evidence looking current.
+- A **read-only live comparison in the same tenant-locked reviewer transaction** now re-fetches the actual TEST code/name/department/status, UNIT code/symbol/status and CONTAINER code/names/color/additive/status for every directly staged identity, comparing them with its source-verified normalized identity. A mismatch returns `policy_review_batch_scope_changed` and withholds review evidence. Missing records or revoked scope still fail closed.
+- The comparator is shared by fake-Prisma transaction tests and real two-session MariaDB synthetic fixtures: rename a staged test, alter its unit symbol or modify container color/name without changing UUID and observe fail-closed behavior, then restore and confirm eligibility. Reviewer GET/POST and queue still invoke the shared validator.
+- This **does not** establish field-complete live parity for every field of all ten classes, eliminate concurrent writer scheduling risks, create a versioned apply, or authorize any clinical/financial signatory. Those remain F2 work and qualified governance gates. No data migration or active master writes are introduced by the production change. `CONFIG_BUNDLE_REVIEW` and `CSV_REVIEW` application stay blocked.
+
 ## Verification and release gate
 
 - Pure unit tests cover all ten class identities, member duplicates, malformed package relationships, branch revocation and private tariff linkage; static checks tie the reviewer queue/route to the shared scoped validator.
