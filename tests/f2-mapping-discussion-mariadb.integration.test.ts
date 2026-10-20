@@ -19,7 +19,10 @@ test("F2 MariaDB: two independent sessions verify append-only row mapping discus
   const [writer,reader]=await Promise.all([mysql.createConnection(cfg),mysql.createConnection(cfg)]);
   const org=randomUUID(),branch=randomUUID(),branchOther=randomUUID(),
     author=randomUUID(),authorOther=randomUUID(),batch=randomUUID(),
-    row=randomUUID(),sourceId=randomUUID(),a=randomUUID(),b=randomUUID();
+    row=randomUUID(),sourceId=randomUUID();
+  // Identical SQL timestamps and random UUID ordering deliberately disagree
+  // with HMAC revision ordering (revision 1 sorts first).
+  const [a,b]=[randomUUID(),randomUUID()].sort((x,y)=>y.localeCompare(x));
   const code="F2MD"+org.slice(0,8);
   const secret="synthetic-F2-mapping-audit-HMAC-test-key-never-live-32";
   const context:MappingDiscussionContext={
@@ -66,7 +69,12 @@ test("F2 MariaDB: two independent sessions verify append-only row mapping discus
       [a,org,branch,author,row,JSON.stringify(e1),"2026-10-20 10:00:01.000"]);
     assert.deepEqual(await history(),{revision:1,draft:e1});
     await write("INSERT INTO audit_events(id,organization_id,branch_id,actor_user_id,action,entity_type,entity_id,new_values,occurred_at) VALUES(?,?,?,?,'CATALOG_BUNDLE_MAPPING_DISCUSSION_DRAFT_RECORDED','CatalogImportRow',?,?,?)",
-      [b,org,branch,author,row,JSON.stringify(e2),"2026-10-20 10:00:02.000"]);
+      [b,org,branch,author,row,JSON.stringify(e2),"2026-10-20 10:00:01.000"]);
+    const [physical]=await reader.execute<mysql.RowDataPacket[]>(
+      "SELECT id FROM audit_events WHERE id IN (?,?) ORDER BY occurred_at DESC,id DESC",
+      [a,b]);
+    assert.deepEqual(physical.map(event=>event.id),[a,b],
+      "equal-time UUID order must contradict signed causal revision ordering");
     assert.deepEqual(await history(),{revision:2,draft:e2});
     assert.equal(mappingDiscussionCurrent((await history())!.draft,token),false);
     assert.equal(mappingDiscussionCurrent((await history())!.draft,nextToken),true);
