@@ -208,7 +208,7 @@ test("F2: policy queue and reviewer POST enforce the SAME tenant-locked all-type
   assert.match(code,/every: \{ test: testScope \}/);
   assert.match(code,/refs\.packages/);
   for(const name of ["labTest","unit","container"])
-    assert.match(code,new RegExp("tx\\\\."+name+"\\\\.findMany\\\\("));
+    assert.match(code,new RegExp("tx\\."+name+"\\.findMany\\("));
   assert.match(code,/sameLiveScalarIdentity\(/);
   assert.match(endpoint,/validatePolicyReviewBatchScope\(tx/);
   assert.match(queue,/validatePolicyReviewBatchScope\(tx/);
