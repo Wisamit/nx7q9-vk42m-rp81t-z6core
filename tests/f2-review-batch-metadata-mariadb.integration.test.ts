@@ -73,9 +73,12 @@ test("F2 MariaDB: independently edited batch provenance or row evidence invalida
       [rowId, batch, sourceId, JSON.stringify(original), JSON.stringify(original),
         JSON.stringify([{ severity: "WARNING", code: "CONFIGURATION_BUNDLE_REVIEW_ONLY" }])]);
     const originalRead = await read();
-    assert.ok(originalRead.batchMetadata);
+    assert.equal(originalRead.batchMetadata, null);
     const seal = sealReviewStageEvidence({
-      ...originalRead, batchMetadata: originalRead.batchMetadata!,
+      ...originalRead, batchMetadata: {
+        sourceType: "CONFIG_BUNDLE_REVIEW", sourceName: "sealed.json",
+        status: "DRAFT", summary,
+      },
     }, secret);
     assert.equal(seal.version, 2);
     await write("UPDATE catalog_import_batches SET summary=? WHERE id=?",
