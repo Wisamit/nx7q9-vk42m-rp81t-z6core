@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import mysql from "mysql2/promise";
-import { policyReviewIdentityScope } from "../src/lib/catalog-policy-review-scope.ts";
+import { policyReviewIdentityScope, sameLiveScalarIdentity } from "../src/lib/catalog-policy-review-scope.ts";
 
 test("F2 MariaDB: reviewed panel, package, package tariff and container cannot bypass nested live branch/private price scope",
 {timeout: 60000}, async()=>{
@@ -49,7 +49,11 @@ test("F2 MariaDB: reviewed panel, package, package tariff and container cannot b
         "SELECT p.id FROM price_list_package_items p JOIN price_lists l ON l.id=p.price_list_id JOIN commercial_packages k ON k.id=p.package_id WHERE p.id=? AND p.package_id=? AND k.organization_id=? AND l.organization_id=? AND l.scope_type='BRANCH' AND l.branch_id=? AND l.source_id IS NULL AND l.referrer_id IS NULL AND l.client_id IS NULL AND l.contract_id IS NULL",
         [pkgPrice,pkg,org,org,branchA]);
       const [containers]=await reader.execute<mysql.RowDataPacket[]>(
-        "SELECT id FROM containers WHERE id=? AND organization_id=?",[tube,org]);
+        "SELECT id,code,name_en AS nameEn,name_ar AS nameAr,tube_color AS tubeColor,additive,status FROM containers WHERE id=? AND organization_id=?",
+        [tube,org]);
+      const sourceContainer=identities.find(row=>row.entityType==="CONTAINER")?.normalizedData;
+      const containerUnchanged=containers.length===1 &&
+        sameLiveScalarIdentity("CONTAINER",sourceContainer,containers[0]);
       const [testPrices]=await reader.execute<mysql.RowDataPacket[]>(
         "SELECT p.id FROM price_list_items p JOIN price_lists l ON l.id=p.price_list_id JOIN lab_tests t ON t.id=p.test_id JOIN departments d ON d.id=t.department_id WHERE p.id=? AND l.id=? AND t.id=? AND l.organization_id=? AND l.scope_type='BRANCH' AND l.branch_id=? AND t.organization_id=? AND d.branch_id=? AND l.source_id IS NULL AND l.referrer_id IS NULL AND l.client_id IS NULL AND l.contract_id IS NULL",
         [testPrice,list,testA,org,branchA,org,branchA]);
@@ -66,7 +70,7 @@ test("F2 MariaDB: reviewed panel, package, package tariff and container cannot b
             (!required || Boolean(row.required)===item.required)).length===1);
       };
       return panels.length===1 && packages.length===1 && tariffs.length===1 &&
-        containers.length===1 && testPrices.length===1 && matches("PANEL",panelMembers,true) &&
+        containerUnchanged && testPrices.length===1 && matches("PANEL",panelMembers,true) &&
         matches("PACKAGE",packageMembers,false)
         ? {ok:true} as const
         : {ok:false,error:"policy_review_batch_scope_changed"} as const;
@@ -195,6 +199,15 @@ test("F2 MariaDB: reviewed panel, package, package tariff and container cannot b
     });
     await write("UPDATE catalog_import_rows SET normalized_data=? WHERE id=?",
       [JSON.stringify(records[3].normalized),ids[3]]);
+    assert.deepEqual(await check(),{ok:true});
+    // The tenant and UUID are unchanged, but a later tube metadata edit
+    // must make the staged reviewer identity stale.
+    await write("UPDATE containers SET tube_color=? WHERE id=?",["Blue",tube]);
+    assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
+    await write("UPDATE containers SET tube_color=NULL WHERE id=?",[tube]);
+    await write("UPDATE containers SET name_en=? WHERE id=?",["Changed Tube",tube]);
+    assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
+    await write("UPDATE containers SET name_en=? WHERE id=?",["Tube",tube]);
     assert.deepEqual(await check(),{ok:true});
     // Live membership can drift without leaving granted clinical scope:
     // changes in display order and required flag must also invalidate review.
