@@ -435,6 +435,69 @@ export function sameLiveClinicalReviewIdentity(
 }
 
 /**
+ * Only the full, explicitly exported reference-interval medical snapshot
+ * can support a current-review statement. Omission is not evidence that an
+ * omitted field is unchanged. Never coerce clinical decimals through Number.
+ */
+function clinicalScaledDecimal(value: unknown, scale: number): bigint | null {
+  if (typeof value !== "string") {
+    if (!value || typeof value !== "object" ||
+        !("toString" in value) || typeof value.toString !== "function")
+      return null;
+    value = value.toString();
+  }
+  if (typeof value !== "string" ||
+      !/^-?(?:0|[1-9]\d*)(?:\.\d+)?$/.test(value)) return null;
+  const [integer, fraction = ""] = value.replace(/^-/, "").split(".");
+  if (fraction.length > scale) {
+    if (fraction.slice(scale).replace(/0/g, "") !== "") return null;
+  }
+  const significant = fraction.slice(0, scale).padEnd(scale, "0");
+  const signed = (value.startsWith("-") ? "-" : "") + integer + significant;
+  return BigInt(signed);
+}
+
+const intervalTextIdentity = [
+  "methodId", "analyzerId", "specimenTypeId", "sex", "ageUnit",
+  "pregnancyStatus", "populationCode", "normalTextEn", "normalTextAr",
+  "source", "notes",
+] as const;
+const intervalDecimals = [
+  ["ageFrom", 3], ["ageTo", 3],
+  ["gestationalAgeFromWeeks", 2], ["gestationalAgeToWeeks", 2],
+  ["lowValue", 6], ["highValue", 6], ["criticalLow", 6],
+  ["criticalHigh", 6],
+] as const;
+const intervalDates = ["effectiveTo", "approvedAt", "retiredAt"] as const;
+
+/**
+ * Compare the COMPLETE v1 exported clinical parameters to the live interval,
+ * without exposing patient/range values in review responses or audit events.
+ * Source-staging integrity and qualified signatory policy are separate gates.
+ */
+export function sameLiveReferenceIntervalMedicalSnapshot(
+  sourceData: unknown, liveData: unknown,
+): boolean {
+  const source = object(sourceData), live = object(liveData);
+  if (!source || !live) return false;
+  if (!intervalTextIdentity.every(field => Object.hasOwn(source, field) &&
+      Object.hasOwn(live, field) && source[field] === live[field])) return false;
+  for (const [field, scale] of intervalDecimals) {
+    if (!Object.hasOwn(source, field) || !Object.hasOwn(live, field))
+      return false;
+    if (source[field] === null && live[field] === null) continue;
+    if (source[field] === null || live[field] === null) return false;
+    const expected = clinicalScaledDecimal(source[field], scale);
+    const observed = clinicalScaledDecimal(live[field], scale);
+    if (expected === null || observed === null || expected !== observed)
+      return false;
+  }
+  return intervalDates.every(field =>
+    Object.hasOwn(source, field) && Object.hasOwn(live, field) &&
+    sameOptionalTime(source[field], live[field]));
+}
+
+/**
  * Used inside the SAME tenant-locked transaction as the final reviewer audit
  * append. No assumptions about clinical/financial signing authority are made.
  */
@@ -618,7 +681,14 @@ export async function validatePolicyReviewBatchScope(
       where: { component: { test: testScope }, ...branchScope,
         id: { in: directIntervals } },
       select: { id: true, componentId: true, branchId: true,
-        effectiveFrom: true, approvalStatus: true, status: true,
+        effectiveFrom: true, effectiveTo: true, approvalStatus: true, status: true,
+        methodId: true, analyzerId: true, specimenTypeId: true,
+        sex: true, ageFrom: true, ageTo: true, ageUnit: true,
+        pregnancyStatus: true, gestationalAgeFromWeeks: true,
+        gestationalAgeToWeeks: true, populationCode: true,
+        lowValue: true, highValue: true, normalTextEn: true,
+        normalTextAr: true, criticalLow: true, criticalHigh: true,
+        source: true, notes: true, approvedAt: true, retiredAt: true,
         component: { select: {
           code: true, test: { select: { code: true } },
         } } },
@@ -635,8 +705,11 @@ export async function validatePolicyReviewBatchScope(
     if (row.entityType !== "COMPONENT" &&
         row.entityType !== "REFERENCE_INTERVAL") continue;
     const n = object(row.normalizedData);
-    if (!sameLiveClinicalReviewIdentity(row.entityType, n,
-        clinicalMasters[row.entityType].get(n?.id as string)))
+    const live = clinicalMasters[row.entityType].get(n?.id as string);
+    if (!sameLiveClinicalReviewIdentity(row.entityType, n, live))
+      return { ok: false, error: "policy_review_batch_scope_changed" };
+    if (row.entityType === "REFERENCE_INTERVAL" &&
+        !sameLiveReferenceIntervalMedicalSnapshot(row.sourceData, live))
       return { ok: false, error: "policy_review_batch_scope_changed" };
   }
 
