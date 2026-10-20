@@ -46,6 +46,43 @@ existing GET-only mapping-inspection `readiness.phaseOne` response. Source
 identity remains `false` until external original-installation provenance
 exists. **Package A operational exit: BLOCKED_EXTERNAL.**
 
+## Package A — Ten-class full-batch read-only reconciliation (2026-10-20)
+
+The independent **GET-only** mapping inspection, given a valid rowId, now
+optionally returns `batchReconciliation` and
+`batchReconciliationCoverage` **only** when the requester has BOTH
+`catalog.reference_ranges.manage` and `pricing.manage` in the original
+session AND currently persisted permissions, in addition to the existing
+active organization/branch/department, independent actor and catalog grant
+requirements. The whole signed v2 DRAFT source stage must validate first.
+
+- `TEN_CLASS_COMPLETE`: a bounded, same-transaction, ten-class report is
+  present. The report contains class counts, changed row counts, affected
+  field **names**, mapping-required counts and explicit NO-APPLY flags.
+  Foreign UUIDs, clinical and financial values, HMACs and author/reviewer
+  identities are never returned in the report.
+- `SOURCE_CLASS_INCOMPLETE`: the staged source did not contain all ten
+  native classes. An otherwise valid partial bundle may still be inspected,
+  but **cannot** be advertised as a ten-class closeout.
+- `FULL_DOMAIN_SCOPE_REQUIRED`: independently scoped reviewer has only
+  one domain's grants. The ordinary authorized row-level inspection remains
+  available; whole-batch clinical/financial metadata is not disclosed.
+- `NOT_REQUESTED`: author/reviewer POST and other non-closeout paths
+  do not compute the expensive full-batch report.
+
+The summary is calculated with `f2ReadOnlyBatchReconciliation` only
+after `validatePolicyReviewBatchScope` rechecks the complete signed
+source and after `readCatalogLiveObservations` reloads every in-scope
+local target in the same locked `RepeatableRead` transaction. This reducer
+rejects a missing class, duplicate type+ID, row ordinal gap/reorder,
+unexpected or absent projection field, unknown class and changed
+source/normalized/local ID. It never creates an apply plan, qualified
+approval, provenance claim, reversal, clinical report or price update.
+
+**This is evidence of source/local observation parity, not the real
+export→approved apply→re-export test.** True cross-installation provenance
+and qualified domain signatures remain external blockers.
+
 ## Package B — Qualified approvals, controlled apply/reversal and full parity
 
 Includes remaining tasks 2, 3, 4 and 5:
