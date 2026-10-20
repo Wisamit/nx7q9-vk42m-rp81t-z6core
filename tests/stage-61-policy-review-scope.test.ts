@@ -8,7 +8,10 @@ const unitId = "bbbbbbbb-bbbb-4bbb-bbbb-bbbbbbbbbbbb";
 const componentId = "cccccccc-cccc-4ccc-cccc-cccccccccccc";
 const branchId = "dddddddd-dddd-4ddd-dddd-dddddddddddd";
 const item = (entityType: string, id: string, values: Record<string, unknown> = {}) => ({
-  entityType, sourceData: { id }, normalizedData: { id, ...values },
+  entityType, sourceData: entityType === "PRICE_LIST"
+    ? {id,code:"S61",currency:"AED",status:"ACTIVE",...values}
+    : {id},
+  normalizedData: { id, ...values },
   status: "WARNING", importedEntityId: null,
 });
 const records = [
