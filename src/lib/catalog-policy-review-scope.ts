@@ -406,6 +406,35 @@ export function sameLiveTariffReviewIdentity(
 }
 
 /**
+ * Prevent stale clinical reviewer evidence when live component/interval
+ * identities change after staging. These are only the projection fields
+ * recorded by CONFIG_BUNDLE_REVIEW v1, never clinical range approval.
+ */
+export function sameLiveClinicalReviewIdentity(
+  type: "COMPONENT" | "REFERENCE_INTERVAL",
+  staged: unknown, live: unknown,
+): boolean {
+  const n = object(staged), current = object(live);
+  if (!n || !current || typeof n.id !== "string" ||
+      n.id !== current.id) return false;
+  if (type === "COMPONENT") {
+    const test = object(current.test);
+    return !!test &&
+      ["testId", "unitId", "code", "nameEn", "status"].every(field =>
+        Object.hasOwn(n, field) && n[field] === current[field]) &&
+      typeof n.testCode === "string" && n.testCode === test.code;
+  }
+  const component = object(current.component);
+  const test = object(component?.test);
+  return !!component && !!test &&
+    ["componentId", "branchId", "approvalStatus", "status"].every(field =>
+      Object.hasOwn(n, field) && n[field] === current[field]) &&
+    typeof n.componentCode === "string" && n.componentCode === component.code &&
+    typeof n.testCode === "string" && n.testCode === test.code &&
+    sameTime(n.effectiveFrom, current.effectiveFrom);
+}
+
+/**
  * Used inside the SAME tenant-locked transaction as the final reviewer audit
  * append. No assumptions about clinical/financial signing authority are made.
  */
@@ -571,6 +600,43 @@ export async function validatePolicyReviewBatchScope(
     const n = object(row.normalizedData);
     if (!sameLiveTariffReviewIdentity(row.entityType, n, row.sourceData,
         liveTariffs[row.entityType].get(n?.id as string)))
+      return { ok: false, error: "policy_review_batch_scope_changed" };
+  }
+
+  // Re-check directly staged analyte and reference interval identities
+  // with live scoped relationships. Presence/count is insufficient when
+  // an analyte is reparented or a range is retired after export.
+  const directComponents = ids.get("COMPONENT") || [];
+  const directIntervals = ids.get("REFERENCE_INTERVAL") || [];
+  const [components, intervals] = await Promise.all([
+    directComponents.length ? tx.testComponent.findMany({
+      where: { test: testScope, id: { in: directComponents } },
+      select: { id: true, testId: true, unitId: true, code: true,
+        nameEn: true, status: true, test: { select: { code: true } } },
+    }) : Promise.resolve([]),
+    directIntervals.length ? tx.referenceInterval.findMany({
+      where: { component: { test: testScope }, ...branchScope,
+        id: { in: directIntervals } },
+      select: { id: true, componentId: true, branchId: true,
+        effectiveFrom: true, approvalStatus: true, status: true,
+        component: { select: {
+          code: true, test: { select: { code: true } },
+        } } },
+    }) : Promise.resolve([]),
+  ]);
+  if (components.length !== directComponents.length ||
+      intervals.length !== directIntervals.length)
+    return { ok: false, error: "policy_review_batch_scope_changed" };
+  const clinicalMasters = {
+    COMPONENT: new Map(components.map(row => [row.id, row])),
+    REFERENCE_INTERVAL: new Map(intervals.map(row => [row.id, row])),
+  };
+  for (const row of rows) {
+    if (row.entityType !== "COMPONENT" &&
+        row.entityType !== "REFERENCE_INTERVAL") continue;
+    const n = object(row.normalizedData);
+    if (!sameLiveClinicalReviewIdentity(row.entityType, n,
+        clinicalMasters[row.entityType].get(n?.id as string)))
       return { ok: false, error: "policy_review_batch_scope_changed" };
   }
 
