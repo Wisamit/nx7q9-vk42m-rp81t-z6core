@@ -2,7 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { catalogExportTypes } from "../src/lib/catalog-configuration-export.ts";
-import { policyReviewIdentityScope, validatePolicyReviewBatchScope, sameLiveTariffReviewIdentity } from "../src/lib/catalog-policy-review-scope.ts";
+import { policyReviewIdentityScope, validatePolicyReviewBatchScope,
+  sameLiveTariffReviewIdentity, sameLiveReferenceIntervalMedicalSnapshot
+} from "../src/lib/catalog-policy-review-scope.ts";
 
 const uuid = (part: number) => "00000000-0000-4000-8000-" + part.toString(16).padStart(12,"0");
 const branchId=uuid(21), testId=uuid(1), unitId=uuid(2), componentId=uuid(3);
@@ -13,6 +15,17 @@ const base=(type: string, id: string, n: Record<string,unknown>={},
   sourceData:{id,...source},normalizedData:{id,...n},
 });
 const tariff={sourceId:null,referrerId:null,clientId:null,contractId:null};
+// Complete synthetic v1 interval projection (no patient records).
+const referenceMedical = {
+  methodId:null,analyzerId:null,specimenTypeId:null,sex:"ANY",
+  ageFrom:"0.000",ageTo:"120.000",ageUnit:"YEARS",
+  pregnancyStatus:null,gestationalAgeFromWeeks:null,
+  gestationalAgeToWeeks:null,populationCode:null,
+  lowValue:"3.100000",highValue:"7.200000",
+  normalTextEn:"Synthetic range",normalTextAr:null,
+  criticalLow:"2.000000",criticalHigh:"9.000000",
+  source:null,notes:null,effectiveTo:null,approvedAt:null,retiredAt:null,
+};
 const all=[
   base("TEST",testId,{code:"F2",nameEn:"F2 Test",departmentId:branchId,status:"ACTIVE"},
     {code:"F2",nameEn:"F2 Test",departmentId:branchId,status:"ACTIVE"}),
@@ -32,7 +45,7 @@ const all=[
     testCode:"F2",branchId,effectiveFrom:"2026-01-01T00:00:00.000Z",
     approvalStatus:"APPROVED",status:"ACTIVE"},
     {componentId,branchId,effectiveFrom:"2026-01-01T00:00:00.000Z",
-      approvalStatus:"APPROVED",status:"ACTIVE",
+      approvalStatus:"APPROVED",status:"ACTIVE",...referenceMedical,
       component:{code:"COMP",test:{code:"F2"}}}),
   base("PRICE_LIST",listId,{code:"LIST",currency:"AED",scopeType:"BRANCH",
     branchId,status:"ACTIVE"},
@@ -144,7 +157,7 @@ test("F2: reviewer transaction rejects live catalog identity and composite membe
     nameEn:"Component",status:"ACTIVE",test:{code:"F2"}}];
   const currentIntervals=[{id:uuid(8),componentId,branchId,
     effectiveFrom:new Date("2026-01-01T00:00:00.000Z"),
-    approvalStatus:"APPROVED",status:"ACTIVE",
+    approvalStatus:"APPROVED",status:"ACTIVE",...referenceMedical,
     component:{code:"COMP",test:{code:"F2"}}}];
   const currentPanels=[{testId,displayOrder:1,required:true}];
   const currentPackages=[{testId,displayOrder:1}];
@@ -216,6 +229,19 @@ test("F2: reviewer transaction rejects live catalog identity and composite membe
   assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
   currentIntervals[0].component.test.code="F2";
   assert.deepEqual(await check(),{ok:true});
+  currentIntervals[0].lowValue="3.100001";
+  assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
+  currentIntervals[0].lowValue="3.100000";
+  currentIntervals[0].criticalHigh="9.000001";
+  assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
+  currentIntervals[0].criticalHigh="9.000000";
+  currentIntervals[0].sex="FEMALE";
+  assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
+  currentIntervals[0].sex="ANY";
+  currentIntervals[0].normalTextEn="Changed clinical text";
+  assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
+  currentIntervals[0].normalTextEn="Synthetic range";
+  assert.deepEqual(await check(),{ok:true});
   currentLists[0].currency="USD";
   assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
   currentLists[0].currency="AED";
@@ -270,6 +296,7 @@ test("F2: policy queue and reviewer POST enforce the SAME tenant-locked all-type
     assert.match(code,new RegExp("tx\\."+name+"\\.findMany\\("));
   assert.match(code,/sameLiveScalarIdentity\(/);
   assert.match(code,/sameLiveClinicalReviewIdentity\(/);
+  assert.match(code,/sameLiveReferenceIntervalMedicalSnapshot\(/);
   assert.match(endpoint,/validatePolicyReviewBatchScope\(tx/);
   assert.match(queue,/validatePolicyReviewBatchScope\(tx/);
   assert.doesNotMatch(code,/tx\.(?:labTest|unit|testPanel|commercialPackage|priceList|priceListPackageItem)\.(?:create|update|upsert|delete)/);
@@ -294,4 +321,36 @@ test("F2: tariff review money rejects floating point and non-exact extra fractio
     {...live,test:{code:"OTHER"}}),false);
   assert.equal(sameLiveTariffReviewIdentity("PRICE_LIST_ITEM",staged,source,
     {...live,priceList:{...live.priceList,contractId:uuid(67),currency:"USD"}}),false);
+});
+
+test("F2: medical interval snapshot is complete, exact-decimal and fail-closed",()=>{
+  const source=all.find(x=>x.entityType==="REFERENCE_INTERVAL")!.sourceData;
+  const live={...referenceMedical};
+  assert.equal(sameLiveReferenceIntervalMedicalSnapshot(source,live),true);
+  assert.equal(sameLiveReferenceIntervalMedicalSnapshot(
+    {...source,lowValue:"3.100000"}, {...live,lowValue:"3.1"}),true);
+  assert.equal(sameLiveReferenceIntervalMedicalSnapshot(
+    {...source,lowValue:"-0.123456"}, {...live,lowValue:"-0.123456"}),true);
+  for(const [field,value] of [
+    ["lowValue","3.100001"],["highValue","7.200001"],
+    ["criticalLow","2.000001"],["criticalHigh","9.000001"],
+    ["ageFrom","0.001"],["ageTo","119.000"],
+    ["gestationalAgeFromWeeks","12.00"],
+    ["populationCode","OTHER"],["sex","FEMALE"],
+    ["methodId",uuid(88)],["analyzerId",uuid(89)],
+    ["pregnancyStatus","PREGNANT"],["normalTextEn","changed"],
+    ["approvedAt","2026-01-05T00:00:00.000Z"],
+  ] as const) {
+    assert.equal(sameLiveReferenceIntervalMedicalSnapshot(source,
+      {...live,[field]:value}),false,field);
+  }
+  const truncated={...source};
+  delete (truncated as Record<string,unknown>).criticalLow;
+  assert.equal(sameLiveReferenceIntervalMedicalSnapshot(truncated,live),false);
+  assert.equal(sameLiveReferenceIntervalMedicalSnapshot(
+    {...source,lowValue:"3.1000001"},live),false);
+  assert.equal(sameLiveReferenceIntervalMedicalSnapshot(source,
+    {...live,lowValue:3.1}),false);
+  assert.equal(sameLiveReferenceIntervalMedicalSnapshot(source,
+    {...live,effectiveTo:new Date("2026-02-01T00:00:00.000Z")}),false);
 });
