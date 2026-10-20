@@ -5,6 +5,8 @@ import { clinicalImportTestWhere, resolveClinicalImportScope } from "@/lib/catal
 import { BUNDLE_REVIEW_SOURCE, BUNDLE_REVIEW_MAX_ROWS } from "@/lib/catalog-bundle-review";
 import { catalogBundleDrift } from "@/lib/catalog-bundle-drift";
 import { observeCatalogTargetIdentity } from "@/lib/catalog-bundle-target-identity";
+import { reviewStageBatchMetadata } from "@/lib/catalog-review-stage-evidence";
+import { verifyIndependentExpertStage } from "@/lib/catalog-expert-stage-integrity";
 import { classifyCatalogReviewDrift } from "@/lib/catalog-field-review-eligibility";
 import { resolveFindingLifecycle, triageResubmission } from "@/lib/catalog-finding-lifecycle";
 import { summarizeCatalogGovernance } from "@/lib/catalog-governance-readiness";
@@ -206,7 +208,8 @@ async function inspectBundleDrift(
     const batch = await tx.catalogImportBatch.findFirst({
       where: { id: batchId, organizationId, sourceType: BUNDLE_REVIEW_SOURCE,
         ...(expert ? {} : { createdByUserId: session.user.id }), status: "DRAFT" },
-      select: { id: true, sourceChecksum: true, summary: true, createdByUserId: true },
+      select: { id: true, sourceType: true, sourceName: true, status: true,
+        sourceChecksum: true, summary: true, createdByUserId: true },
     });
     if (!batch || !batch.sourceChecksum)
       return { error: "bundle_review_not_found", httpStatus: 404 } as const;
@@ -274,12 +277,31 @@ async function inspectBundleDrift(
     // Authorize *all* 5k staged identities, not only the currently displayed page.
     const staged = await tx.catalogImportRow.findMany({
       where: { batchId: batch.id }, orderBy: { rowNumber: "asc" },
-      select: { id: true, rowNumber: true, entityType: true, sourceData: true,
-        normalizedData: true, status: true, importedEntityId: true },
+      select: { id: true, rowNumber: true, entityType: true, legacyKey: true,
+        sourceData: true, normalizedData: true, validationIssues: true,
+        status: true, importedEntityId: true },
     });
     if (!staged.length || staged.length > BUNDLE_REVIEW_MAX_ROWS ||
         staged.some(row => row.status !== "WARNING" || row.importedEntityId !== null))
       return { error: "reconciliation_batch_changed", httpStatus: 409 } as const;
+
+    // Independent expert GET preflight and PUT disposition must not trust
+    // freshly recomputed observation tokens over rewritten DRAFT rows.
+    // Author-only drift diagnostics remain available for unqualified sources,
+    // but they are not a qualified independent review or an apply action.
+    if (expert) {
+      const metadata = reviewStageBatchMetadata(batch);
+      const evidence = verifyIndependentExpertStage({
+        context: {
+          organizationId, batchId: batch.id, authorUserId: batch.createdByUserId,
+          sourceChecksum: batch.sourceChecksum, rows: staged,
+        },
+        metadata, seal: record(batch.summary)?.stageEvidenceSeal,
+        secret: key,
+      });
+      if (!evidence.ok)
+        return { error: evidence.error, httpStatus: 409 } as const;
+    }
 
     // A second reviewer may access only a previously flagged row and only
     // after full-batch tenant/branch/department checks. Do not expose source.
