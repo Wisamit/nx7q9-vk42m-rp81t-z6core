@@ -100,11 +100,10 @@ export function compileF2ApplyPlan(input:{
     // a same-installation apply. Do not resolve a display code as an ID.
     if(identityFields[type].some(field=>!equal(source[field],local[field])))
       return null;
-    const changed=fields.filter(field=>!equal(source[field],local[field]));
-    // Audit and lifecycle timestamps from an old export are not meaningful
-    // desired config state, and must never be backdated by import.
-    const unsafe=changed.filter(field=>readonlyFields.has(field));
-    if(unsafe.length)return null;
+    // Preserve live identity/audit timestamps; comparing historic export
+    // updatedAt against the new live updatedAt is NOT a configuration diff.
+    const changed=fields.filter(field=>!readonlyFields.has(field) &&
+      !equal(source[field],local[field]));
     if(versionTypes.has(type) && changed.some(field=>temporalFields.has(field)))
       return null;
     if(type==="PRICE_LIST" && changed.some(field=>temporalFields.has(field)))
@@ -115,6 +114,7 @@ export function compileF2ApplyPlan(input:{
       "COMPOSITE_MEMBERSHIP_CHANGE":"SCALAR_VERSIONED_CHANGE";
     const original=structuredClone(local);
     const desired=structuredClone(source);
+    for(const field of readonlyFields)desired[field]=structuredClone(local[field]);
     let oldHash:string,newHash:string;
     try {oldHash=HASH(original);newHash=HASH(desired);}
     catch{return null;}
