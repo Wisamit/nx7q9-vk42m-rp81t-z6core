@@ -95,7 +95,15 @@ test("F2 expert: route checks sealed original persisted rows before independent 
     verifyAt < src.indexOf("expertDispositionAllowed(") &&
     verifyAt < src.indexOf('action: "CATALOG_BUNDLE_EXPERT_DECISION_RECORDED"'));
   assert.match(src,/if \(!evidence\.ok\)\s*return \{ error: evidence\.error, httpStatus: 409 \}/);
-  assert.doesNotMatch(queue,/sourceData: true/);
+  // Full source bytes are read privately to authenticate the v2 stage seal.
+  // The metadata-only queue response must never serialize these values.
+  assert.match(queue,/sourceData: true/);
+  assert.match(queue,/verifyIndependentExpertStage\(/);
+  assert.match(queue,/const batchById = verifiedBatches/);
+  const start = queue.indexOf("entries.push({");
+  const end = queue.indexOf("});", start);
+  assert.ok(start > 0 && end > start);
+  assert.doesNotMatch(queue.slice(start,end),/sourceData|normalizedData|unitPrice/);
   assert.match(commit,/CONFIG_BUNDLE_REVIEW/);
   assert.match(commit,/CSV_REVIEW/);
   assert.doesNotMatch(src,/tx\.(?:labTest|referenceInterval|priceListItem|catalogImportRow)\.(?:create|update|delete|upsert)/);
