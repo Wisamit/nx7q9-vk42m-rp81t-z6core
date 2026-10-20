@@ -22,6 +22,38 @@ function object(value: unknown): Record<string, unknown> | null {
 }
 
 /**
+ * The three ordinary catalog master types also have separate source and
+ * normalized identities in DRAFT staging. Do not let a later DB mutation
+ * swap the reviewed test, unit, or container metadata while retaining its UUID.
+ * This is evidence parity only; no configuration activation occurs here.
+ */
+function scalarStagingIdentityMatches(
+  type: "TEST" | "UNIT" | "CONTAINER",
+  source: Record<string, unknown>,
+  normalized: Record<string, unknown>,
+): boolean {
+  if (typeof source.code !== "string" || !source.code ||
+      source.code !== normalized.code ||
+      source.status !== normalized.status) return false;
+  if (type === "TEST") {
+    return typeof source.nameEn === "string" && !!source.nameEn &&
+      source.nameEn === normalized.nameEn &&
+      (source.departmentId === null ||
+        (typeof source.departmentId === "string" && UUID.test(source.departmentId))) &&
+      source.departmentId === normalized.departmentId;
+  }
+  if (type === "UNIT") {
+    return typeof source.symbol === "string" && !!source.symbol &&
+      source.symbol === normalized.symbol;
+  }
+  if (typeof source.nameEn !== "string" || !source.nameEn ||
+      source.nameEn !== normalized.nameEn) return false;
+  return (["nameAr", "tubeColor", "additive"] as const).every(field =>
+    (source[field] === null || typeof source[field] === "string") &&
+    source[field] === normalized[field]);
+}
+
+/**
  * Source/normalized data are persisted in separate columns. A later policy
  * reviewer must not trust only the normalized membership or tariff identity:
  * tampered staging could otherwise conceal an off-scope source reference.
@@ -178,6 +210,9 @@ export function policyReviewIdentityScope(
     if (!catalogExportTypes.has(type) || !n || !source ||
         typeof id !== "string" || !UUID.test(id) || source.id !== id ||
         seen.has(type + ":" + id))
+      return { ok: false, error: "policy_review_source_integrity_error" };
+    if ((type === "TEST" || type === "UNIT" || type === "CONTAINER") &&
+        !scalarStagingIdentityMatches(type, source, n))
       return { ok: false, error: "policy_review_source_integrity_error" };
     if ((type === "PANEL" || type === "PACKAGE" ||
          type === "PRICE_LIST_PACKAGE_ITEM") &&
