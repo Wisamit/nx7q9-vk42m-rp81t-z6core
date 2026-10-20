@@ -26,6 +26,13 @@ The native signed configuration bundle has ten export classes. PR #333 fixed dri
 - The comparator is shared by fake-Prisma transaction tests and real two-session MariaDB synthetic fixtures: rename a staged test, alter its unit symbol or modify container color/name without changing UUID and observe fail-closed behavior, then restore and confirm eligibility. Reviewer GET/POST and queue still invoke the shared validator.
 - This **does not** establish field-complete live parity for every field of all ten classes, eliminate concurrent writer scheduling risks, create a versioned apply, or authorize any clinical/financial signatory. Those remain F2 work and qualified governance gates. No data migration or active master writes are introduced by the production change. `CONFIG_BUNDLE_REVIEW` and `CSV_REVIEW` application stay blocked.
 
+## Additional F2 financial live-drift gate
+
+- Ordinary `PRICE_LIST`, `PRICE_LIST_ITEM` and `PRICE_LIST_PACKAGE_ITEM` DRAFT reviewer observations now independently re-read current scoped live tariff identity in the **same tenant-locked transaction**, rather than equating matching UUID/count/branch with unchanged financial evidence. A price-list code, currency, status or branch change, price amount, item status, effective-from or signed effective-to change, or linked test/package code mismatch rejects the review.
+- Monetary equality uses validated DECIMAL(18,4) **scaled integer text**, never JavaScript `Number`, with out-of-scale and numeric-coercion rejections. Prisma Decimal strings remain exact; the reviewer does not write any live list or item. Private price-list scopes remain excluded by the existing scoped queries.
+- Scoped financial source rows from earlier review versions may omit some effective-window attributes; absence of a field is **not** proof of full round-trip or effective-date parity. Policy/application authorization and all historical invoice-price snapshots remain completely outside this read-only gate.
+- Regression includes pure malformed precision and changed live parent/price/link checks plus synthetic two-session MariaDB changes of item amount, package amount, parent currency and status. The actively used GET, POST and discovery queue share the same preflight.
+
 ## Verification and release gate
 
 - Pure unit tests cover all ten class identities, member duplicates, malformed package relationships, branch revocation and private tariff linkage; static checks tie the reviewer queue/route to the shared scoped validator.
