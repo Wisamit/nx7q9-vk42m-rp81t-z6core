@@ -36,7 +36,7 @@ function compositeStagingIdentityMatches(
         !source.items.length || source.items.length !== normalized.items.length ||
         source.items.length > 1000) return false;
     return source.items.every((raw, index) => {
-      const member = object(raw), projected = object(normalized.items[index]);
+      const member = object(raw), projected = object((normalized.items as unknown[])[index]);
       const test = object(member?.test);
       return !!member && !!projected && !!test &&
         typeof member.testId === "string" && UUID.test(member.testId) &&
