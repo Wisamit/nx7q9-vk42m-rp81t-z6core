@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import mysql from "mysql2/promise";
 import {
   reviewStageBatchMetadata, sealReviewStageEvidence, verifyReviewStageEvidence,
+  qualifiedIndependentReviewSource,
   type ReviewStageEvidenceContext,
 } from "../src/lib/catalog-review-stage-evidence.ts";
 
@@ -92,6 +93,21 @@ test("F2 MariaDB: independently edited batch provenance or row evidence invalida
         .stageEvidenceSeal, secret));
     };
     assert.equal(await verify(), true);
+    assert.equal(qualifiedIndependentReviewSource((await read()).batchMetadata),true);
+    // Re-sign unverified provenance with a valid key: post-staging integrity
+    // still succeeds, but the separate qualification gate MUST refuse it.
+    const untrusted={...summary,attestationStatus:"UNVERIFIED"};
+    const untrustedSeal=sealReviewStageEvidence({
+      ...(await read()),batchMetadata:{sourceType:"CONFIG_BUNDLE_REVIEW",
+        sourceName:"sealed.json",status:"DRAFT",summary:untrusted},
+    },secret);
+    await write("UPDATE catalog_import_batches SET summary=? WHERE id=?",
+      [JSON.stringify({...untrusted,stageEvidenceSeal:untrustedSeal}),batch]);
+    assert.equal(await verify(),true);
+    assert.equal(qualifiedIndependentReviewSource((await read()).batchMetadata),false);
+    await write("UPDATE catalog_import_batches SET summary=? WHERE id=?",
+      [JSON.stringify({...summary,stageEvidenceSeal:seal}),batch]);
+    assert.equal(await verify(),true);
     await write("UPDATE catalog_import_batches SET summary=? WHERE id=?",
       [JSON.stringify({ ...summary, attestationStatus: "UNVERIFIED", stageEvidenceSeal: seal }), batch]);
     assert.equal(await verify(), false);
