@@ -440,7 +440,6 @@ async function inspectBundleDrift(
         return { error: "reconciliation_price_scope_invalid", httpStatus: 403 } as const;
     }
     const testScope = { ...clinicalImportTestWhere(liveScope), status: undefined };
-    const branchScope = { OR: [{ branchId: null }, { branchId: { in: branchIds } }] };
     const genericPriceScope = { OR: [
       { scopeType: "ORGANIZATION" as const, branchId: null },
       { scopeType: "BRANCH" as const, branchId: { in: branchIds } },
