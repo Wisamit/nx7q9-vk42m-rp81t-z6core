@@ -33,6 +33,12 @@ The native signed configuration bundle has ten export classes. PR #333 fixed dri
 - Scoped financial source rows from earlier review versions may omit some effective-window attributes; absence of a field is **not** proof of full round-trip or effective-date parity. Policy/application authorization and all historical invoice-price snapshots remain completely outside this read-only gate.
 - Regression includes pure malformed precision and changed live parent/price/link checks plus synthetic two-session MariaDB changes of item amount, package amount, parent currency and status. The actively used GET, POST and discovery queue share the same preflight.
 
+## Additional F2 clinical identity drift gate (COMPONENT / REFERENCE_INTERVAL)
+
+- A `COMPONENT` or `REFERENCE_INTERVAL` UUID/count and currently permitted branch do **not** prove that the reviewed clinical identity is unchanged. The tenant-locked reviewer preflight now re-reads directly staged analytes (test link and live test code, unit ID, component code/name/status) and reference intervals (component/test codes, branch, effective-from, approval status and active status). Changed or missing records fail closed with `policy_review_batch_scope_changed`.
+- Both the policy reviewer GET/POST and independent-review queue consume the same shared validator. No reference-range values, medical signatory rights or live analyte are modified by the production change. An APPROVED/RETIRED lifecycle transition is **review evidence drift**, never an authorization shortcut.
+- Regression includes fake Prisma scoped-query/live-drift cases and independent MariaDB writer/reader sessions with synthetic DRAFT staging: rename an analyte, change its unit, retire a reference interval, and alter its effective date, then prove rejection and restoration. This is **projection identity parity only**, not clinical interval numeric low/high/critical limits or demographic-population criteria parity. Those remain within F2 before any authorized configuration apply, with qualified medical approval still `BLOCKED_EXTERNAL`.
+
 ## Verification and release gate
 
 - Pure unit tests cover all ten class identities, member duplicates, malformed package relationships, branch revocation and private tariff linkage; static checks tie the reviewer queue/route to the shared scoped validator.
