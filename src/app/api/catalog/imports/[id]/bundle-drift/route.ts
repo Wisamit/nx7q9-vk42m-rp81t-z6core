@@ -7,6 +7,11 @@ import { catalogBundleDrift } from "@/lib/catalog-bundle-drift";
 import { observeCatalogTargetIdentity } from "@/lib/catalog-bundle-target-identity";
 import { reviewStageBatchMetadata } from "@/lib/catalog-review-stage-evidence";
 import { verifyIndependentExpertStage } from "@/lib/catalog-expert-stage-integrity";
+import {
+  MAPPING_DISCUSSION_HISTORY_LIMIT, validMappingDiscussionIntent,
+  verifyMappingDiscussionHistory, mappingDiscussionCurrent, createMappingDiscussionDraft,
+  type MappingDiscussionIntent,
+} from "@/lib/catalog-mapping-discussion-draft";
 import { classifyCatalogReviewDrift } from "@/lib/catalog-field-review-eligibility";
 import { resolveFindingLifecycle, triageResubmission } from "@/lib/catalog-finding-lifecycle";
 import { summarizeCatalogGovernance } from "@/lib/catalog-governance-readiness";
@@ -42,10 +47,22 @@ type Context = { params: Promise<{ id: string }> };
 type TriageInput = { rowNumber: number; observationToken: string; reasonCode: TriageReason };
 type ExpertInput = { flagEventId: string; disposition: ExpertDisposition };
 type PolicyDraftInput = { expectedRevision: number; proposal: CatalogPolicyProposal };
+type MappingDiscussionInput = {
+  rowNumber: number; expectedRevision: number; observationToken: string;
+  intent: MappingDiscussionIntent;
+};
 
 /** A bounded, live-scoped snapshot diff. No source or live values in response. */
 export async function GET(request: NextRequest, context: Context) {
   const query = request.nextUrl.searchParams;
+  if (query.has("mappingDraftRow")) {
+    const row = query.get("mappingDraftRow") || "";
+    if ([...query.keys()].some(key => key !== "mappingDraftRow") ||
+        !/^[1-9]\\d{0,8}$/.test(row))
+      return NextResponse.json({ error: "mapping_discussion_query_invalid" }, { status: 400 });
+    return inspectBundleDrift(request, context, null, null, false, false,
+      null, Number(row));
+  }
   const requestedReview = query.get("reviewFlagId");
   if (query.has("governance")) {
     if (query.get("governance") !== "1" || [...query.keys()].some(key => key !== "governance"))
@@ -65,6 +82,53 @@ export async function GET(request: NextRequest, context: Context) {
 
 /** Append a domain-scoped review request, never an activation or approval. */
 export async function POST(request: NextRequest, context: Context) {
+  if (request.nextUrl.searchParams.has("mappingDraft")) {
+    const query = request.nextUrl.searchParams;
+    if (query.get("mappingDraft") !== "1" ||
+        [...query.keys()].some(key => key !== "mappingDraft"))
+      return NextResponse.json({ error: "mapping_discussion_invalid_query" }, { status: 400 });
+    if ((request.headers.get("content-type") || "").split(";")[0].trim().toLowerCase() !== "application/json")
+      return NextResponse.json({ error: "mapping_discussion_json_required" }, { status: 415 });
+    if (request.headers.get("sec-fetch-site") === "cross-site")
+      return NextResponse.json({ error: "mapping_discussion_cross_site_request" }, { status: 403 });
+    const length=Number(request.headers.get("content-length") || 0);
+    if (!Number.isFinite(length) || length < 0 || length > 768)
+      return NextResponse.json({ error: "mapping_discussion_too_large" }, { status: 413 });
+    const reader=request.body?.getReader();
+    if (!reader) return NextResponse.json({ error: "mapping_discussion_missing_body" }, { status: 400 });
+    const chunks: Uint8Array[]=[];
+    let bytes=0;
+    for (;;) {
+      const part=await reader.read();
+      if(part.done) break;
+      bytes+=part.value.byteLength;
+      if(bytes>768){
+        await reader.cancel("mapping_discussion_too_large");
+        return NextResponse.json({ error: "mapping_discussion_too_large" }, { status: 413 });
+      }
+      chunks.push(part.value);
+    }
+    let value: Record<string, unknown> | null=null;
+    try{value=record(JSON.parse(new TextDecoder("utf-8",{fatal:true}).decode(Buffer.concat(chunks))));}
+    catch{return NextResponse.json({error:"mapping_discussion_invalid_json"},{status:400});}
+    if(!value || Object.keys(value).sort().join(",") !==
+        "expectedRevision,intent,observationToken,rowNumber" ||
+        !Number.isSafeInteger(value.rowNumber) || (value.rowNumber as number)<1 ||
+        (value.rowNumber as number)>999999999 ||
+        !Number.isSafeInteger(value.expectedRevision) ||
+        (value.expectedRevision as number)<0 ||
+        (value.expectedRevision as number)>MAPPING_DISCUSSION_HISTORY_LIMIT ||
+        typeof value.observationToken!=="string" ||
+        !/^[a-f0-9]{64}$/.test(value.observationToken) ||
+        !validMappingDiscussionIntent(value.intent))
+      return NextResponse.json({error:"mapping_discussion_invalid_request"},{status:400});
+    return inspectBundleDrift(request,context,null,null,false,false,null,null,{
+      rowNumber:value.rowNumber as number,
+      expectedRevision:value.expectedRevision as number,
+      observationToken:value.observationToken,
+      intent:value.intent,
+    });
+  }
   if (request.nextUrl.searchParams.has("policyDraft")) {
     const query = request.nextUrl.searchParams;
     if (query.get("policyDraft") !== "1" ||
@@ -181,6 +245,8 @@ async function inspectBundleDrift(
   expertPreflight = false,
   governance = false,
   policyDraftInput: PolicyDraftInput | null = null,
+  mappingDiscussionRow: number | null = null,
+  mappingDiscussionInput: MappingDiscussionInput | null = null,
 ) {
   const session = await getCurrentSession();
   if (!session) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
@@ -289,7 +355,7 @@ async function inspectBundleDrift(
     // freshly recomputed observation tokens over rewritten DRAFT rows.
     // Author-only drift diagnostics remain available for unqualified sources,
     // but they are not a qualified independent review or an apply action.
-    if (expert) {
+    if (expert || mappingDiscussionInput || mappingDiscussionRow !== null) {
       const metadata = reviewStageBatchMetadata(batch);
       const evidence = verifyIndependentExpertStage({
         context: {
@@ -548,7 +614,10 @@ async function inspectBundleDrift(
         return { error: "reconciliation_live_master_scope_changed", httpStatus: 403 } as const;
       for (const current of records) live.set(type + ":" + current.id, current);
     }
-    const pageAfter = expertRow ? expertRow.rowNumber - 1 : after;
+    const requestedMappingRow=mappingDiscussionInput?.rowNumber ?? mappingDiscussionRow;
+    const pageAfter = expertRow ? expertRow.rowNumber - 1 :
+      requestedMappingRow !== null && requestedMappingRow !== undefined
+        ? requestedMappingRow - 1 : after;
     const page = governance
       ? staged : staged.filter(row => row.rowNumber > pageAfter).slice(0, PAGE_SIZE + 1);
     const shown = governance ? page : page.slice(0, PAGE_SIZE);
@@ -637,6 +706,74 @@ async function inspectBundleDrift(
         } : null,
       };
     });
+    if (requestedMappingRow !== null && requestedMappingRow !== undefined) {
+      const index = shown.findIndex(row => row.rowNumber === requestedMappingRow);
+      if (index < 0)
+        return { error:"mapping_discussion_row_not_found", httpStatus:404 } as const;
+      const observed=rows[index];
+      const identity=observed.targetIdentity;
+      const stagedRow=shown[index];
+      const context={
+        organizationId,batchId:batch.id,branchId:liveScope.branchId,
+        rowId:stagedRow.id,authorUserId:batch.createdByUserId,
+        sourceChecksum:batch.sourceChecksum,
+        rowNumber:observed.rowNumber,entityType:observed.entityType,
+      };
+      // A history from a wrong actor/branch, including an older revision,
+      // must not vanish behind a newer well-formed event.
+      const historyRows=await tx.auditEvent.findMany({
+        where:{
+          organizationId,entityType:"CatalogImportRow",entityId:stagedRow.id,
+          action:"CATALOG_BUNDLE_MAPPING_DISCUSSION_DRAFT_RECORDED",
+        },
+        orderBy:[{occurredAt:"desc"},{id:"desc"}],
+        take:MAPPING_DISCUSSION_HISTORY_LIMIT+1,
+        select:{id:true,actorUserId:true,branchId:true,newValues:true},
+      });
+      const history=verifyMappingDiscussionHistory({context,events:historyRows});
+      if(!history)
+        return {error:"mapping_discussion_history_corrupt",httpStatus:409} as const;
+      const previous=history.draft;
+      const current=mappingDiscussionCurrent(previous,observed.observationToken);
+      if(mappingDiscussionInput) {
+        if (!matchesCatalogDriftObservation(
+          mappingDiscussionInput.observationToken,observed.observationToken))
+          return {error:"mapping_discussion_evidence_stale",httpStatus:409} as const;
+        if (mappingDiscussionInput.expectedRevision!==history.revision)
+          return {error:"mapping_discussion_revision_conflict",httpStatus:409} as const;
+        if(mappingDiscussionInput.intent==="PROPOSE_LOCAL_RECONCILIATION" &&
+            identity.status!=="LOCAL_IDENTITY_OBSERVED")
+          return {error:"mapping_discussion_local_identity_not_observed",httpStatus:409} as const;
+        if(previous && current && previous.intent===mappingDiscussionInput.intent)
+          return {status:"MAPPING_DISCUSSION_UNCHANGED",revision:history.revision,
+            intent:previous.intent,current:true,reviewOnly:true,approved:false,
+            mappingApproved:false,signingEnabled:false,activated:false,
+            liveWrites:false} as const;
+        if(history.revision>=MAPPING_DISCUSSION_HISTORY_LIMIT)
+          return {error:"mapping_discussion_revision_limit",httpStatus:409} as const;
+        const next=createMappingDiscussionDraft(context,{
+          revision:history.revision+1,
+          previousDigest:previous?.digest ?? null,
+          observationToken:observed.observationToken,
+          intent:mappingDiscussionInput.intent,
+        });
+        await tx.auditEvent.create({data:{
+          organizationId,branchId:liveScope.branchId,actorUserId:session.user.id,
+          action:"CATALOG_BUNDLE_MAPPING_DISCUSSION_DRAFT_RECORDED",
+          entityType:"CatalogImportRow",entityId:stagedRow.id,newValues:next,
+          ipAddress:ctx.ipAddress,userAgent:ctx.userAgent,
+        }});
+        return {status:"MAPPING_DISCUSSION_DRAFT_RECORDED",
+          revision:next.revision,intent:next.intent,current:true,
+          reviewOnly:true,approved:false,mappingApproved:false,
+          signingEnabled:false,activated:false,liveWrites:false} as const;
+      }
+      return {status:previous?"MAPPING_DISCUSSION_DRAFT":"MAPPING_DISCUSSION_NOT_STARTED",
+        revision:history.revision,intent:previous?.intent ?? null,
+        current,localIdentityObserved:identity.status==="LOCAL_IDENTITY_OBSERVED",
+        reviewOnly:true,approved:false,mappingApproved:false,
+        signingEnabled:false,activated:false,liveWrites:false} as const;
+    }
     if (expert) {
       const index = shown.findIndex(row => row.id === expertRow!.id);
       if (index < 0) return { error: "expert_row_not_found", httpStatus: 404 } as const;
