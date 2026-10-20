@@ -134,14 +134,22 @@ test("F2: membership, priced package, branch, private tariff and unknown source 
 });
 
 
-test("F2: reviewer transaction must reject live but in-scope PANEL/PACKAGE membership drift", async()=>{
+test("F2: reviewer transaction rejects live catalog identity and composite membership drift", async()=>{
+  const currentTests=[{id:testId,code:"F2",nameEn:"F2 Test",
+    departmentId:branchId,status:"ACTIVE"}];
+  const currentUnits=[{id:unitId,code:"MG",symbol:"mg/dL",status:"ACTIVE"}];
+  const currentContainers=[{id:uuid(7),code:"TUBE",nameEn:"Tube",nameAr:null,
+    tubeColor:"Red",additive:null,status:"ACTIVE"}];
   const currentPanels=[{testId,displayOrder:1,required:true}];
   const currentPackages=[{testId,displayOrder:1}];
   const count=async({where}:{where:{id:{in:string[]}}})=>where.id.in.length;
   const tx = {
     catalogImportRow:{findMany:async()=>all},
-    labTest:{count},unit:{count},testComponent:{count},referenceInterval:{count},
-    priceList:{count},priceListItem:{count},container:{count},
+    labTest:{count,findMany:async()=>currentTests},
+    unit:{count,findMany:async()=>currentUnits},
+    testComponent:{count},referenceInterval:{count},
+    priceList:{count},priceListItem:{count},
+    container:{count,findMany:async()=>currentContainers},
     priceListPackageItem:{count},
     testPanel:{count,findMany:async()=>[{id:panelId,items:[...currentPanels]}]},
     commercialPackage:{count,findMany:async()=>[{id:packageId,items:[...currentPackages]}]},
@@ -149,6 +157,28 @@ test("F2: reviewer transaction must reject live but in-scope PANEL/PACKAGE membe
   const input={batchId:uuid(25),scope:{organizationId:uuid(26),branchId,
     departmentIds:[uuid(27)]},grantedBranchIds:[branchId]};
   const check=()=>validatePolicyReviewBatchScope(tx,input);
+  assert.deepEqual(await check(),{ok:true});
+  currentTests[0].nameEn="Renamed after staging";
+  assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
+  currentTests[0].nameEn="F2 Test";
+  currentTests[0].departmentId=uuid(40);
+  assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
+  currentTests[0].departmentId=branchId;
+  currentTests[0].code="OTHER";
+  assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
+  currentTests[0].code="F2";
+  currentTests[0].status="INACTIVE";
+  assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
+  currentTests[0].status="ACTIVE";
+  currentUnits[0].symbol="mmol/L";
+  assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
+  currentUnits[0].symbol="mg/dL";
+  currentContainers[0].tubeColor="Blue";
+  assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
+  currentContainers[0].tubeColor="Red";
+  currentContainers[0].additive="EDTA";
+  assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
+  currentContainers[0].additive=null;
   assert.deepEqual(await check(),{ok:true});
   currentPanels[0].displayOrder=9;
   assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
@@ -177,6 +207,9 @@ test("F2: policy queue and reviewer POST enforce the SAME tenant-locked all-type
     assert.match(code,new RegExp(name+": null"));
   assert.match(code,/every: \{ test: testScope \}/);
   assert.match(code,/refs\.packages/);
+  for(const name of ["labTest","unit","container"])
+    assert.match(code,new RegExp("tx\\\\."+name+"\\\\.findMany\\\\("));
+  assert.match(code,/sameLiveScalarIdentity\(/);
   assert.match(endpoint,/validatePolicyReviewBatchScope\(tx/);
   assert.match(queue,/validatePolicyReviewBatchScope\(tx/);
   assert.doesNotMatch(code,/tx\.(?:labTest|unit|testPanel|commercialPackage|priceList|priceListPackageItem)\.(?:create|update|upsert|delete)/);
