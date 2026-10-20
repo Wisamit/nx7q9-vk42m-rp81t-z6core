@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import mysql from "mysql2/promise";
-import { policyReviewIdentityScope, sameLiveScalarIdentity } from "../src/lib/catalog-policy-review-scope.ts";
+import { policyReviewIdentityScope, sameLiveScalarIdentity, sameLiveTariffReviewIdentity } from "../src/lib/catalog-policy-review-scope.ts";
 
 test("F2 MariaDB: reviewed panel, package, package tariff and container cannot bypass nested live branch/private price scope",
 {timeout: 60000}, async()=>{
@@ -57,6 +57,33 @@ test("F2 MariaDB: reviewed panel, package, package tariff and container cannot b
       const [testPrices]=await reader.execute<mysql.RowDataPacket[]>(
         "SELECT p.id FROM price_list_items p JOIN price_lists l ON l.id=p.price_list_id JOIN lab_tests t ON t.id=p.test_id JOIN departments d ON d.id=t.department_id WHERE p.id=? AND l.id=? AND t.id=? AND l.organization_id=? AND l.scope_type='BRANCH' AND l.branch_id=? AND t.organization_id=? AND d.branch_id=? AND l.source_id IS NULL AND l.referrer_id IS NULL AND l.client_id IS NULL AND l.contract_id IS NULL",
         [testPrice,list,testA,org,branchA,org,branchA]);
+      // Independent live financial snapshot reads run in the same synthetic
+      // reviewer transaction; no active tariff is ever updated by review code.
+      const [currentLists]=await reader.execute<mysql.RowDataPacket[]>(
+        "SELECT id,code,currency,scope_type AS scopeType,branch_id AS branchId,status,effective_from AS effectiveFrom,effective_to AS effectiveTo FROM price_lists WHERE id=? AND organization_id=?",
+        [list,org]);
+      const [currentTestPrices]=await reader.execute<mysql.RowDataPacket[]>(
+        "SELECT id,price_list_id AS priceListId,test_id AS testId,unit_price AS unitPrice,effective_from AS effectiveFrom,effective_to AS effectiveTo,status FROM price_list_items WHERE id=?",
+        [testPrice]);
+      const [currentPackagePrices]=await reader.execute<mysql.RowDataPacket[]>(
+        "SELECT id,price_list_id AS priceListId,package_id AS packageId,unit_price AS unitPrice,effective_from AS effectiveFrom,effective_to AS effectiveTo,status FROM price_list_package_items WHERE id=?",
+        [pkgPrice]);
+      const stagedList=identities.find(row=>row.entityType==="PRICE_LIST");
+      const stagedTestPrice=identities.find(row=>row.entityType==="PRICE_LIST_ITEM");
+      const stagedPackagePrice=identities.find(row=>row.entityType==="PRICE_LIST_PACKAGE_ITEM");
+      const parent=currentLists[0];
+      const financialParity=currentLists.length===1 &&
+        currentTestPrices.length===1 && currentPackagePrices.length===1 &&
+        sameLiveTariffReviewIdentity("PRICE_LIST",stagedList?.normalizedData,
+          stagedList?.sourceData,parent) &&
+        sameLiveTariffReviewIdentity("PRICE_LIST_ITEM",stagedTestPrice?.normalizedData,
+          stagedTestPrice?.sourceData,{
+            ...currentTestPrices[0],priceList:parent,test:{code:prefix+"A"},
+          }) &&
+        sameLiveTariffReviewIdentity("PRICE_LIST_PACKAGE_ITEM",
+          stagedPackagePrice?.normalizedData,stagedPackagePrice?.sourceData,{
+            ...currentPackagePrices[0],priceList:parent,package:{code:prefix+"K"},
+          });
       const [panelMembers]=await reader.execute<mysql.RowDataPacket[]>(
         "SELECT test_id AS testId, display_order AS displayOrder, required FROM test_panel_items WHERE panel_id=?",[panel]);
       const [packageMembers]=await reader.execute<mysql.RowDataPacket[]>(
@@ -70,7 +97,8 @@ test("F2 MariaDB: reviewed panel, package, package tariff and container cannot b
             (!required || Boolean(row.required)===item.required)).length===1);
       };
       return panels.length===1 && packages.length===1 && tariffs.length===1 &&
-        containerUnchanged && testPrices.length===1 && matches("PANEL",panelMembers,true) &&
+        containerUnchanged && testPrices.length===1 && financialParity &&
+        matches("PANEL",panelMembers,true) &&
         matches("PACKAGE",packageMembers,false)
         ? {ok:true} as const
         : {ok:false,error:"policy_review_batch_scope_changed"} as const;
@@ -228,6 +256,20 @@ test("F2 MariaDB: reviewed panel, package, package tariff and container cannot b
       [pkg,testB]);
     assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
     await write("DELETE FROM commercial_package_items WHERE package_id=? AND test_id=?",[pkg,testB]);
+    assert.deepEqual(await check(),{ok:true});
+    // Staged reviewers must not attest to tariffs updated since export.
+    await write("UPDATE price_list_items SET unit_price=45.6701 WHERE id=?",[testPrice]);
+    assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
+    await write("UPDATE price_list_items SET unit_price=45.6700 WHERE id=?",[testPrice]);
+    await write("UPDATE price_list_package_items SET unit_price=123.4501 WHERE id=?",[pkgPrice]);
+    assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
+    await write("UPDATE price_list_package_items SET unit_price=123.4500 WHERE id=?",[pkgPrice]);
+    await write("UPDATE price_lists SET currency='USD' WHERE id=?",[list]);
+    assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
+    await write("UPDATE price_lists SET currency='AED' WHERE id=?",[list]);
+    await write("UPDATE price_list_items SET status='INACTIVE' WHERE id=?",[testPrice]);
+    assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
+    await write("UPDATE price_list_items SET status='ACTIVE' WHERE id=?",[testPrice]);
     assert.deepEqual(await check(),{ok:true});
     await write("UPDATE price_lists SET branch_id=? WHERE id=?",[branchB,list]);
     assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
