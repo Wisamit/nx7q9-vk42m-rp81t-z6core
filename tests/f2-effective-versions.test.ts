@@ -4,6 +4,7 @@ import { compileF2ApplyPlan } from "../src/lib/catalog-f2-apply-plan.ts";
 import { applyF2EffectiveVersionsUnderLock } from "../src/lib/catalog-f2-effective-versions.ts";
 import { catalogBundleAllowedSourceFields } from "../src/lib/catalog-bundle-source-boundary.ts";
 import { catalogExportTypes } from "../src/lib/catalog-configuration-export.ts";
+type StubArgs={data:Record<string,unknown>;where?:Record<string,unknown>};
 
 const id=(n:number)=>"00000000-0000-4000-8000-"+String(n).padStart(12,"0");
 const authority={
@@ -55,10 +56,10 @@ test("F2: transaction core creates three new effective-dated versions, keeps ori
   const price=p.rows.find(r=>r.entityType==="PRICE_LIST_ITEM")!;
   const packagePrice=p.rows.find(r=>r.entityType==="PRICE_LIST_PACKAGE_ITEM")!;
   const rangePrice=p.rows.find(r=>r.entityType==="REFERENCE_INTERVAL")!;
-  const actions:Array<{table:string;action:string;args:any}>=[];
+  const actions:Array<{table:string;action:string;args:StubArgs}>=[];
   const events:Array<{id:string;newValues:unknown}>=[];
   let seq=50;
-  const record=(table:string,action:string,args:any)=>{
+  const record=(table:string,action:string,args:StubArgs)=>{
     actions.push({table,action,args});
     return {id:id(seq++)};
   };
@@ -66,7 +67,7 @@ test("F2: transaction core creates three new effective-dated versions, keeps ori
     auditEvent:{
       findMany:async()=>events.filter(e=>
         (e.newValues as Record<string,unknown>)?.planDigest===p.planDigest),
-      create:async(args:any)=>{
+      create:async(args:StubArgs)=>{
         const result=record("auditEvent","create",args);
         if(args.data.action==="CATALOG_F2_EFFECTIVE_BATCH_APPLIED")
           events.push({id:result.id,newValues:args.data.newValues});
@@ -75,18 +76,18 @@ test("F2: transaction core creates three new effective-dated versions, keeps ori
     },
     priceListItem:{
       findMany:async()=>[{id:price.targetId}],
-      updateMany:async(args:any)=>{record("priceListItem","updateMany",args);return {count:1};},
-      create:async(args:any)=>record("priceListItem","create",args),
+      updateMany:async(args:StubArgs)=>{record("priceListItem","updateMany",args);return {count:1};},
+      create:async(args:StubArgs)=>record("priceListItem","create",args),
     },
     priceListPackageItem:{
       findMany:async()=>[{id:packagePrice.targetId}],
-      updateMany:async(args:any)=>{record("priceListPackageItem","updateMany",args);return {count:1};},
-      create:async(args:any)=>record("priceListPackageItem","create",args),
+      updateMany:async(args:StubArgs)=>{record("priceListPackageItem","updateMany",args);return {count:1};},
+      create:async(args:StubArgs)=>record("priceListPackageItem","create",args),
     },
     referenceInterval:{
       findMany:async()=>[{id:rangePrice.targetId}],
-      updateMany:async(args:any)=>{record("referenceInterval","updateMany",args);return {count:1};},
-      create:async(args:any)=>record("referenceInterval","create",args),
+      updateMany:async(args:StubArgs)=>{record("referenceInterval","updateMany",args);return {count:1};},
+      create:async(args:StubArgs)=>record("referenceInterval","create",args),
     },
   };
   const outcome=await applyF2EffectiveVersionsUnderLock(tx as never,p,authority,
@@ -100,8 +101,10 @@ test("F2: transaction core creates three new effective-dated versions, keeps ori
     a.args.data.action==="CATALOG_F2_EFFECTIVE_BATCH_APPLIED");
   assert.ok(batch);
   for(const action of actions.filter(a=>a.action==="updateMany")){
-    assert.equal(action.args.data.effectiveTo.toISOString(),p.effectiveAt);
-    assert.equal(action.args.where.effectiveTo,null);
+    const until=action.args.data.effectiveTo;
+    assert.ok(until instanceof Date);
+    assert.equal(until.toISOString(),p.effectiveAt);
+    assert.equal(action.args.where?.effectiveTo,null);
   }
   const prices=actions.filter(a=>a.table==="priceListItem"&&a.action==="create");
   assert.equal(prices[0].args.data.unitPrice,"90.0025");
