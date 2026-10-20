@@ -15,14 +15,16 @@ const context:MappingDiscussionContext={
   rowNumber:17,entityType:"REFERENCE_INTERVAL",
 };
 const token="b".repeat(64);
+const secret="f2-test-audit-hmac-signing-key-never-production-strong";
+const otherSecret="different-f2-test-key-not-the-original-authority-32";
 const first=createMappingDiscussionDraft(context,{
   revision:1,previousDigest:null,observationToken:token,
   intent:"REQUEST_EXTERNAL_MAPPING",
-});
+},secret);
 const second=createMappingDiscussionDraft(context,{
   revision:2,previousDigest:first.digest,observationToken:"c".repeat(64),
   intent:"RETURN_TO_SOURCE_AUTHOR",
-});
+},secret);
 const events=[
   {id:id(7),branchId:context.branchId,actorUserId:context.authorUserId,newValues:second},
   {id:id(6),branchId:context.branchId,actorUserId:context.authorUserId,newValues:first},
@@ -36,8 +38,11 @@ test("F2 mapping: a draft is bounded, canonical and emphatically never an approv
   for(const key of ["approved","signingEnabled","mappingApproved","activated","liveWrites"])
     assert.equal(first[key as keyof typeof first],false,key);
   assert.equal(first.reviewOnly,true);
+  assert.deepEqual({version:first.seal.version,algorithm:first.seal.algorithm},
+    {version:1,algorithm:"HMAC-SHA256"});
+  assert.match(first.seal.signature,/^[a-f0-9]{64}$/);
   assert.match(first.digest,/^[a-f0-9]{64}$/);
-  assert.deepEqual(parseMappingDiscussionDraft(first,context),first);
+  assert.deepEqual(parseMappingDiscussionDraft(first,context,secret),first);
   assert.equal(mappingDiscussionDigest({
     ...context,revision:1,previousDigest:null,observationToken:token,
     intent:"REQUEST_EXTERNAL_MAPPING",
@@ -46,10 +51,10 @@ test("F2 mapping: a draft is bounded, canonical and emphatically never an approv
   assert.equal(mappingDiscussionCurrent(first,"c".repeat(64)),false);
   assert.equal(mappingDiscussionCurrent(null,token),false);
   assert.equal(first.digest===second.digest,false);
-  assert.deepEqual(verifyMappingDiscussionHistory({context,events}),{
+  assert.deepEqual(verifyMappingDiscussionHistory({context,secret,events}),{
     revision:2,draft:second,
   });
-  assert.deepEqual(verifyMappingDiscussionHistory({context,events:[]}),{
+  assert.deepEqual(verifyMappingDiscussionHistory({context,secret,events:[]}),{
     revision:0,draft:null,
   });
   assert.equal(MAPPING_DISCUSSION_HISTORY_LIMIT,100);
@@ -60,48 +65,59 @@ test("F2 mapping: source/tenant/branch/author/row/revision and chain mutations f
     const damaged={...first,[field]:field==="rowNumber"?18:
       field==="entityType"?"PRICE_LIST_ITEM":
       field==="sourceChecksum"?"f".repeat(64):id(99)};
-    assert.equal(parseMappingDiscussionDraft(damaged,context),null,field);
+    assert.equal(parseMappingDiscussionDraft(damaged,context,secret),null,field);
   }
   for(const key of ["approved","signingEnabled","mappingApproved","activated","liveWrites"]){
-    assert.equal(parseMappingDiscussionDraft({...first,[key]:true},context),null,key);
+    assert.equal(parseMappingDiscussionDraft({...first,[key]:true},context,secret),null,key);
   }
-  assert.equal(parseMappingDiscussionDraft({...first,extra:"UNKNOWN"},context),null);
-  assert.equal(parseMappingDiscussionDraft({...first,intent:"APPROVE"},context),null);
-  assert.equal(parseMappingDiscussionDraft({...first,observationToken:"a".repeat(64)},context),null);
-  assert.equal(parseMappingDiscussionDraft({...first,digest:"0".repeat(64)},context),null);
-  assert.equal(parseMappingDiscussionDraft({...first,revision:2},context),null);
-  assert.equal(parseMappingDiscussionDraft({...first,previousDigest:second.digest},context),null);
-  assert.equal(parseMappingDiscussionDraft({...first,approved:1},context),null);
+  assert.equal(parseMappingDiscussionDraft({...first,extra:"UNKNOWN"},context,secret),null);
+  assert.equal(parseMappingDiscussionDraft({...first,intent:"APPROVE"},context,secret),null);
+  assert.equal(parseMappingDiscussionDraft({...first,observationToken:"a".repeat(64)},context,secret),null);
+  assert.equal(parseMappingDiscussionDraft({...first,digest:"0".repeat(64)},context,secret),null);
+  assert.equal(parseMappingDiscussionDraft({...first,revision:2},context,secret),null);
+  assert.equal(parseMappingDiscussionDraft({...first,previousDigest:second.digest},context,secret),null);
+  assert.equal(parseMappingDiscussionDraft({...first,approved:1},context,secret),null);
+  assert.equal(parseMappingDiscussionDraft({...first,seal:null},context,secret),null);
+  assert.equal(parseMappingDiscussionDraft({...first,seal:{...first.seal,version:2}},context,secret),null);
+  assert.equal(parseMappingDiscussionDraft({...first,seal:{...first.seal,signature:"0".repeat(64)}},context,secret),null);
+  assert.equal(parseMappingDiscussionDraft(first,context,otherSecret),null);
+  // A writer able to recompute the public SHA-256 digest still cannot
+  // impersonate the configured HMAC key or sign a new mapping decision.
+  const forged=createMappingDiscussionDraft(context,{
+    revision:1,previousDigest:null,observationToken:token,
+    intent:"RETURN_TO_SOURCE_AUTHOR",
+  },otherSecret);
+  assert.equal(parseMappingDiscussionDraft(forged,context,secret),null);
   assert.throws(()=>createMappingDiscussionDraft(context,{
     revision:0,previousDigest:null,observationToken:token,
     intent:"REQUEST_EXTERNAL_MAPPING",
-  }));
+  },secret));
   assert.throws(()=>createMappingDiscussionDraft(context,{
     revision:101,previousDigest:null,observationToken:token,
     intent:"REQUEST_EXTERNAL_MAPPING",
-  }));
+  },secret));
 });
 test("F2 mapping: full history rejects invisible foreign actor/branch, omissions and fork",()=>{
   const wrong=(patch:Record<string,unknown>)=>{
     const cloned=structuredClone(events);
     cloned[1]={...cloned[1],...patch};
-    assert.equal(verifyMappingDiscussionHistory({context,events:cloned}),null);
+    assert.equal(verifyMappingDiscussionHistory({context,secret,events:cloned}),null);
   };
   wrong({branchId:id(99)});
   wrong({actorUserId:id(99)});
   wrong({newValues:{...first,intent:"RETURN_TO_SOURCE_AUTHOR"}});
   wrong({id:events[0].id});
-  assert.equal(verifyMappingDiscussionHistory({context,events:[events[0]]}),null);
-  assert.equal(verifyMappingDiscussionHistory({context,events:[events[1],events[0]]}),null);
-  assert.equal(verifyMappingDiscussionHistory({context,events:[
+  assert.equal(verifyMappingDiscussionHistory({context,secret,events:[events[0]]}),null);
+  assert.equal(verifyMappingDiscussionHistory({context,secret,events:[events[1],events[0]]}),null);
+  assert.equal(verifyMappingDiscussionHistory({context,secret,events:[
     events[0],events[0],
   ]}),null);
-  assert.equal(verifyMappingDiscussionHistory({context,events:Array(101).fill(events[0])}),null);
+  assert.equal(verifyMappingDiscussionHistory({context,secret,events:Array(101).fill(events[0])}),null);
   const fork=createMappingDiscussionDraft(context,{
     revision:2,previousDigest:"f".repeat(64),
     observationToken:"c".repeat(64),intent:"RETURN_TO_SOURCE_AUTHOR",
-  });
-  assert.equal(verifyMappingDiscussionHistory({context,events:[
+  },secret);
+  assert.equal(verifyMappingDiscussionHistory({context,secret,events:[
     {...events[0],newValues:fork},events[1],
   ]}),null);
 });
