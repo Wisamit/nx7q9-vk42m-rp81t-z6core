@@ -1,5 +1,53 @@
 # F2 — Two-package governed closure (no scope reduction)
 
+## Owner-approved distinction: finish engineering before operational acceptance
+
+**2026-10-20** — The owner confirms there is no real clinical/finance
+production dataset or appointed clinical/finance signatory yet. Complete
+the scoped F2 **software** using isolated synthetic data and simulated
+distinct reviewers now; do **not** wait for real data, hired staff or live
+institutional provenance to implement/test software.
+
+The original external lineage and signatory requirements **remain in the
+product**. They are deferred **operational inputs for F8**, not permission
+to omit authentication, provenance, mapping, versioned apply, amendment,
+branch isolation or clinical/financial immutability. Test-only credentials
+must never be treated as qualified real attestations.
+
+For F2 to earn **SOFTWARE_COMPLETE (synthetic)**, in addition to existing
+signed export, staging and read-only inspection, implement and pass:
+
+1. Versioned source installation/provenance **ingestion and verification
+   contracts**, with unresolved identities fail-closed and a synthetic
+   fixture issuer exercising valid/wrong-origin proofs.
+2. Controlled cross-installation mapping approval workflow; independent
+   clinical and financial reviewer identities, separate permissions and
+   current MFA/re-auth, with test actors exercising denial/revocation
+   cases. Human qualification is still required for operational use.
+3. An actual, atomic, idempotent **versioned apply** path for the ten
+   configuration classes under proper authority, exact DECIMAL handling,
+   effective dates, re-check of live field and branch/department scopes,
+   preserving existing released clinical/financial history.
+4. An auditable **compensating reversal/amendment** path, no destructive
+   deletion of released or billed values, and safe concurrent/replay
+   behavior.
+5. Real isolated MariaDB synthetic end-to-end
+   export→stage→review→two-domain simulated approval→atomic apply→
+   re-export/field parity, and authorized reversal→re-export checks
+   across all ten classes, plus negative scenarios.
+
+The current **read-only** summary and HMAC feedback APIs satisfy only
+some preparatory checks. They **do not** complete items 1–5 and must
+not be relabeled an executable apply or operational signature.
+
+F3 **software** can then be built using synthetic legacy input and a
+real read-only extraction/reconciliation pipeline; full source-row/ACE
+evidence remains explicitly deferred until the owner provides it. Owner
+manual UI acceptance stays F7, operational GO stays F8. A Hostinger
+development/staging build can be considered following code-side
+readiness and safe deployment/rollback checks, not as production GO.
+
+
 **Binding context:** Issue #327, PR #334, master `02_MASTER_SCOPE.md` §87;
 the 10 native catalog classes, multi-branch scoping, historical values and
 qualified policy decisions remain in scope. The earlier five outstanding
