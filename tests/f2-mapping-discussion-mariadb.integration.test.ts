@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { independentMappingInspection } from "../src/lib/catalog-mapping-independent-inspection.ts";
 import mysql from "mysql2/promise";
 import {
   createMappingDiscussionDraft, verifyMappingDiscussionHistory,
@@ -93,6 +94,26 @@ test("F2 MariaDB: two independent sessions verify append-only row mapping discus
     await write("UPDATE audit_events SET new_values=? WHERE id=?",
       [JSON.stringify(e2),b]);
     assert.deepEqual(await history(),{revision:2,draft:e2});
+    const authenticated=(await history())!.draft;
+    const grant=new Set(["catalog.manage","catalog.reference_ranges.manage"]);
+    const full=independentMappingInspection({
+      entityType:"TEST",authenticatedDraft:authenticated,
+      userId:authorOther,authorUserId:author,
+      originalPermissions:grant,currentPermissions:grant,
+    });
+    assert.equal(full?.status,"INDEPENDENT_DISCUSSION_INSPECTION_ONLY");
+    assert.equal(full?.currentLiveObservationRevalidated,false);
+    assert.equal(full?.mappingApproved,false);
+    assert.equal(independentMappingInspection({
+      entityType:"TEST",authenticatedDraft:authenticated,
+      userId:author,authorUserId:author,
+      originalPermissions:grant,currentPermissions:grant,
+    }),null);
+    assert.equal(independentMappingInspection({
+      entityType:"TEST",authenticatedDraft:authenticated,
+      userId:authorOther,authorUserId:author,
+      originalPermissions:grant,currentPermissions:new Set(["catalog.manage"]),
+    }),null);
   } finally {
     await write("DELETE FROM audit_events WHERE id IN (?,?)",[a,b]).catch(()=>{});
     await write("DELETE FROM catalog_import_rows WHERE id=?",[row]).catch(()=>{});
