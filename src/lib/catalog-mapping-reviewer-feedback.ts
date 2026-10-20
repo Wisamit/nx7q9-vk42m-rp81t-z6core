@@ -172,8 +172,10 @@ export function verifyMappingFeedbackHistory(input:{
     if(!item || item.previousDigest !==
        (revision===1 ? null : revisions.get(revision-1)!.digest))return null;
   }
+  // Database ORDER BY occurredAt / UUID is NOT a trustworthy sequence:
+  // separate serialized appends can share timestamp precision, and UUIDs do
+  // not encode the append order. The HMAC-bound revisions and previousDigest
+  // links, not physical row order, define the authenticated ledger.
   const latest=revisions.get(events.length)!;
-  if(parseMappingFeedbackDraft(events[0].newValues,context,secret)?.digest!==latest.digest)
-    return null;
   return {revision:events.length,latest};
 }
