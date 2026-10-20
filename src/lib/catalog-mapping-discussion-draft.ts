@@ -5,7 +5,7 @@ export type MappingDiscussionIntent =
   "REQUEST_EXTERNAL_MAPPING" | "RETURN_TO_SOURCE_AUTHOR" |
   "PROPOSE_LOCAL_RECONCILIATION";
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SHA = /^[0-9a-f]{64}$/;
 const exact = (value: unknown): value is Record<string, unknown> =>
   !!value && typeof value === "object" && !Array.isArray(value);
