@@ -122,7 +122,10 @@ test("F2 MariaDB: reviewed panel, package, package tariff and container cannot b
         priceListId:list,priceListCode:prefix+"L",scopeType:"BRANCH",
         branchId:branchA,currency:"AED",unitPrice:"123.4500",
         effectiveFrom:date,effectiveTo:null,status:"ACTIVE"}},
-      {type:"CONTAINER",source:{id:tube},normalized:{id:tube}},
+      {type:"CONTAINER",source:{id:tube,code:prefix+"T",nameEn:"Tube",
+        nameAr:null,tubeColor:null,additive:null,status:"ACTIVE"},
+        normalized:{id:tube,code:prefix+"T",nameEn:"Tube",
+          nameAr:null,tubeColor:null,additive:null,status:"ACTIVE"}},
       {type:"PRICE_LIST",source:{id:list,code:prefix+"L",currency:"AED",
         scopeType:"BRANCH",branchId:branchA,status:"ACTIVE",sourceId:null,
         referrerId:null,clientId:null,contractId:null},
@@ -181,6 +184,17 @@ test("F2 MariaDB: reviewed panel, package, package tariff and container cannot b
     });
     await write("UPDATE catalog_import_rows SET normalized_data=? WHERE id=?",
       [JSON.stringify(records[4].normalized),ids[4]]);
+    assert.deepEqual(await check(),{ok:true});
+    // A database mutation of the normalized container details cannot be
+    // laundered into a clinical reviewer observation while retaining its UUID.
+    const forgedContainer={...records[3].normalized,tubeColor:"Blue"};
+    await write("UPDATE catalog_import_rows SET normalized_data=? WHERE id=?",
+      [JSON.stringify(forgedContainer),ids[3]]);
+    assert.deepEqual(await check(),{
+      ok:false,error:"policy_review_source_integrity_error",
+    });
+    await write("UPDATE catalog_import_rows SET normalized_data=? WHERE id=?",
+      [JSON.stringify(records[3].normalized),ids[3]]);
     assert.deepEqual(await check(),{ok:true});
     // Live membership can drift without leaving granted clinical scope:
     // changes in display order and required flag must also invalidate review.
