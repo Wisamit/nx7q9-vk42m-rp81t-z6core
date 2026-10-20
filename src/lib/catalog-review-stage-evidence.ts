@@ -33,7 +33,7 @@ export function reviewStageBatchMetadata(batch: ReviewStageEvidenceBatchMetadata
 function checkedMetadata(value: ReviewStageEvidenceBatchMetadata, rows: readonly ReviewStageEvidenceRow[]): ReviewStageEvidenceBatchMetadata {
   const s = value.summary;
   if (value.sourceType !== "CONFIG_BUNDLE_REVIEW" || value.status !== "DRAFT" ||
-      typeof value.sourceName !== "string" || !value.sourceName.endsWith(".json") ||
+      typeof value.sourceName !== "string" || !value.sourceName.toLowerCase().endsWith(".json") ||
       value.sourceName.length > 255 ||
       !s || typeof s !== "object" || Array.isArray(s)) throw Error("stage_evidence_invalid_metadata");
   const summary = s as Record<string, unknown>;
