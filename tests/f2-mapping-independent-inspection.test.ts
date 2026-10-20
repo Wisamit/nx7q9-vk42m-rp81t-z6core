@@ -21,8 +21,9 @@ const draft=(type:string)=>createMappingDiscussionDraft({...context,entityType:t
   revision:1,previousDigest:null,observationToken:"b".repeat(64),
   intent:"REQUEST_EXTERNAL_MAPPING",
 },secret);
-const inspect=(type:string,initial=both,live=both,userId=reviewer)=>independentMappingInspection({
-  entityType:type,authenticatedDraft:draft(type),
+const inspect=(type:string,initial=both,live=both,userId=reviewer,
+  currentToken="b".repeat(64))=>independentMappingInspection({
+  entityType:type,authenticatedDraft:draft(type),currentObservationToken:currentToken,
   userId,authorUserId:context.authorUserId,originalPermissions:initial,
   currentPermissions:live,
 });
@@ -37,10 +38,10 @@ test("F2 independent mapping: exhaustive ten-class review permission & categoric
     const view=inspect(type,grant,grant);
     assert.ok(view,type);
     assert.deepEqual(view,{
-      status:"INDEPENDENT_DISCUSSION_INSPECTION_ONLY",
+      status:"INDEPENDENT_FRESH_OBSERVATION_INSPECTION_ONLY",
       category,revision:1,intent:"REQUEST_EXTERNAL_MAPPING",
       historicalObservationMatchesDraft:true,
-      currentLiveObservationRevalidated:false,
+      currentLiveObservationRevalidated:true,
       independentMappingApprovalEligible:false,
       sourceInstanceProven:false,mappingApproved:false,
       signingEnabled:false,reviewOnly:true,
@@ -57,6 +58,7 @@ test("F2 independent mapping: exhaustive ten-class review permission & categoric
 test("F2 independent mapping: author, revoked roles, cross-domain and unknown classes are denied",()=>{
   assert.equal(inspect("TEST",both,both,context.authorUserId),null);
   assert.equal(inspect("UNKNOWN"),null);
+  assert.equal(inspect("TEST",both,both,reviewer,"a".repeat(64)),null);
   assert.equal(inspect("TEST",financial,financial),null);
   assert.equal(inspect("PRICE_LIST",clinical,clinical),null);
   assert.equal(inspect("PANEL",clinical,clinical),null);
@@ -68,11 +70,13 @@ test("F2 independent mapping: author, revoked roles, cross-domain and unknown cl
   const original=draft("TEST");
   assert.equal(independentMappingInspection({
     entityType:"TEST",authenticatedDraft:original,
+    currentObservationToken:original.observationToken,
     userId:reviewer,authorUserId:id(99),
     originalPermissions:clinical,currentPermissions:clinical,
   }),null);
   assert.equal(independentMappingInspection({
     entityType:"TEST",authenticatedDraft:null,
+    currentObservationToken:"b".repeat(64),
     userId:reviewer,authorUserId:context.authorUserId,
     originalPermissions:clinical,currentPermissions:clinical,
   }),null);
@@ -100,6 +104,12 @@ test("F2 independent mapping: route rechecks full HMAC/source/live scope, never 
   assert.match(route,/signingSecret:secret/);
   assert.match(route,/take:MAPPING_DISCUSSION_HISTORY_LIMIT\+1/);
   assert.match(route,/independentMappingInspection\(/);
+  assert.match(route,/readCatalogLiveObservations\(tx,scope,grantedBranchIds/);
+  assert.match(route,/catalogDriftObservationToken\(secret,batch\.sourceChecksum/);
+  assert.match(route,/matchesCatalogDriftObservation\(history\.draft\.observationToken,token\)/);
+  const shared=readFileSync("src/lib/catalog-live-observation.ts","utf8");
+  assert.match(bundle,/readCatalogLiveObservations\(tx,liveScope,branchIds,idsByType\)/);
+  assert.match(shared,/JSON\.parse\(JSON\.stringify\(current\)\)/);
   assert.match(route,/FOR UPDATE/);
   assert.match(route,/isolationLevel:"RepeatableRead"/);
   assert.match(route,/private, no-store/);
