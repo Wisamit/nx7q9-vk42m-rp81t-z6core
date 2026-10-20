@@ -28,6 +28,15 @@ task 2.
    `LOCAL_IDENTITY_OBSERVED`, never an installation attestation.
 5. Record correction requests via the separate review-only HMAC audit chain.
    Use revision/previousDigest, not MariaDB UUID/timestamp ordering.
+6. Close the author/reviewer feedback loop: the author-only
+   `GET /api/catalog/imports/:batchId/bundle-drift?mappingDraftRow=N`
+   validates the whole independent feedback HMAC history before returning
+   only `reviewerFeedbackRevision` and the categorical
+   `reviewerFeedbackDisposition`. Disposition is null if no feedback exists,
+   the author's signed draft was superseded, or its exact current live
+   observation is stale. Corrupted reviewer history fails closed (409).
+   Neither reviewer user IDs, source values nor HMAC material are returned.
+   The author may draft a new correction but cannot impersonate the reviewer.
 
 **Current software evidence:** `f2GovernedReadinessPreview` is invoked
 strictly after `runIndependentMappingPreflight` verifies the complete DRAFT
