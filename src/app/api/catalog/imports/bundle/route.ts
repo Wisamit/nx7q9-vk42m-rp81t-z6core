@@ -380,6 +380,8 @@ export async function POST(request: Request) {
     const stageEvidenceSeal = signingKey ? sealReviewStageEvidence({
       organizationId: scope.organizationId, batchId: created.id,
       authorUserId: session.user.id, sourceChecksum: checksum, rows: stored,
+      batchMetadata: { sourceType: BUNDLE_REVIEW_SOURCE, sourceName,
+        status: "DRAFT", summary: initialSummary },
     }, signingKey) : null;
     await tx.catalogImportBatch.update({
       where: { id: created.id },
