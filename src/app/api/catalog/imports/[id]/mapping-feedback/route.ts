@@ -5,6 +5,7 @@ import {
 import {
   MAPPING_FEEDBACK_HISTORY_LIMIT, createMappingFeedbackDraft,
   validMappingFeedbackDisposition, verifyMappingFeedbackHistory,
+  type MappingFeedbackDisposition,
 } from "@/lib/catalog-mapping-reviewer-feedback";
 
 export const dynamic="force-dynamic";
@@ -114,7 +115,7 @@ export async function POST(request:NextRequest,context:Context){
       revision:history.revision+1,previousDigest:latest?.digest??null,
       authorDraftDigest:evidence.draft.digest,
       observationToken:evidence.currentObservationToken,
-      disposition:body.disposition,
+      disposition:body.disposition as MappingFeedbackDisposition,
     },evidence.secret);
     await evidence.tx.auditEvent.create({data:{
       organizationId:evidence.organizationId,branchId:evidence.branchId,
