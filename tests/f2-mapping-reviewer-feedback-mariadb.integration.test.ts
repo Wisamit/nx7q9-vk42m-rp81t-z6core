@@ -15,9 +15,6 @@ test("F2 MariaDB: independent reviewer correction history is HMAC-authenticated,
     user:decodeURIComponent(u.username),password:decodeURIComponent(u.password),
     database:u.pathname.slice(1)};
   const checkpoint=(phase:string)=>console.log("[f2-feedback-mariadb] "+phase);
-  checkpoint("connecting");
-  const [writer,reader]=await Promise.all([mysql.createConnection(cfg),mysql.createConnection(cfg)]);
-  checkpoint("connected");
   const org=randomUUID(),otherOrg=randomUUID(),branch=randomUUID(),
     author=randomUUID(),reviewer=randomUUID(),another=randomUUID(),
     batch=randomUUID(),row=randomUUID(),id1=randomUUID(),id2=randomUUID(),
@@ -37,6 +34,11 @@ test("F2 MariaDB: independent reviewer correction history is HMAC-authenticated,
     authorDraftDigest:"a".repeat(64),observationToken:"b".repeat(64),
     disposition:"RETURN_MAPPING_TO_AUTHOR",
   },secret);
+  // Build and validate synthetic signed fixtures BEFORE opening sockets.
+  // If a future HMAC contract fails, CI must exit instead of leaking handles.
+  checkpoint("connecting");
+  const [writer,reader]=await Promise.all([mysql.createConnection(cfg),mysql.createConnection(cfg)]);
+  checkpoint("connected");
   const write=(sql:string,params:Array<string|number|null>)=>writer.execute(sql,params);
   const read=async(ctx=context)=>{
     await reader.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ");
