@@ -88,8 +88,11 @@ must revalidate inside its separate qualified atomic write transaction.
   original author or by a reviewer whose domain grant was revoked.
 
 - `tests/f2-mapping-live-observation-mariadb.integration.test.ts`:
-  Prisma shared full-select projections for all 10 types with synthetic
-  MariaDB masters; signed author token parity followed by ten distinct
+  two independently connected MariaDB sessions with synthetic scoped
+  masters for all 10 types, exercising representative selected fields;
+  the separate TypeScript-AST `f2-atomic-live-export-drift-parity.test.ts`
+  enforces *all* actual nested Prisma export/reader field projections.
+  Signed author token parity is followed by ten distinct
   live modifications (including panel/package membership, reference
   decimal and both tariff decimals), stale-token rejection, revoked branch
   and foreign-tenant denial. Runs explicitly in CI.
