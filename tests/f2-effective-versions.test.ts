@@ -8,6 +8,7 @@ import { catalogExportTypes } from "../src/lib/catalog-configuration-export.ts";
 const id=(n:number)=>"00000000-0000-4000-8000-"+String(n).padStart(12,"0");
 const authority={
   organizationId:id(1),branchId:id(2),batchId:id(3),actorUserId:id(4),
+  journalSigningSecret:"f2-synthetic-version-journal-signer-not-production-32",
   clinicalSignerId:id(5),financialSignerId:id(6),
   sourceInstallationVerified:true,qualifiedDomainSignersVerified:true,
   currentPermissionsAndBranchScopeVerified:true,
