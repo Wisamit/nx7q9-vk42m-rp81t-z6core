@@ -42,8 +42,10 @@ test("Stage 61 MariaDB: staged identities fail closed on revoked branch and chan
     await write("INSERT INTO catalog_import_batches(id,organization_id,source_type,source_name,source_checksum,status,created_by_user_id,updated_at) VALUES(?,?,'CONFIG_BUNDLE_REVIEW','stage61.json',?,'DRAFT',?,NOW(3))",
       [batch,org,"f".repeat(64),actor]);
     const rows = [
-      {entityType:"TEST",id:testId,normalized:{id:testId,departmentId:deptA}},
-      {entityType:"UNIT",id:unitId,normalized:{id:unitId}},
+      {entityType:"TEST",id:testId,normalized:{id:testId,code:prefix+"T",
+        nameEn:"Stage61 Test",departmentId:deptA,status:"ACTIVE"}},
+      {entityType:"UNIT",id:unitId,normalized:{id:unitId,code:prefix+"U",
+        symbol:"mg/dL",status:"ACTIVE"}},
       {entityType:"PRICE_LIST",id:listId,normalized:{
         id:listId,scopeType:"BRANCH",branchId:branchB}},
     ];
@@ -53,7 +55,9 @@ test("Stage 61 MariaDB: staged identities fail closed on revoked branch and chan
         ? {id:row.id,code:prefix+"P",currency:"AED",scopeType:"BRANCH",
           branchId:branchB,status:"ACTIVE",sourceId:null,referrerId:null,
           clientId:null,contractId:null}
-        : {id:row.id}),
+        : row.entityType==="TEST"
+          ? {id:row.id,code:prefix+"T",nameEn:"Stage61 Test",departmentId:deptA,status:"ACTIVE"}
+          : {id:row.id,code:prefix+"U",symbol:"mg/dL",status:"ACTIVE"}),
         JSON.stringify(row.entityType==="PRICE_LIST"
           ? {...row.normalized,code:prefix+"P",currency:"AED",status:"ACTIVE"}
           : row.normalized),JSON.stringify([{severity:"WARNING",code:"REVIEW_ONLY"}])]);
@@ -71,6 +75,24 @@ test("Stage 61 MariaDB: staged identities fail closed on revoked branch and chan
     });
     const permitted=policyReviewIdentityScope(decoded,new Set([branchA,branchB]));
     assert.equal(permitted.ok,true);
+    // Mutating a persisted normalized identity must fail before any reviewer
+    // evidence can be accepted, even while every live master stays in scope.
+    const [before]=await reviewer.execute<mysql.RowDataPacket[]>(
+      "SELECT normalized_data FROM catalog_import_rows WHERE id=?",[ids[0]]);
+    const parse=(v:unknown)=>typeof v==="string"?JSON.parse(v):v;
+    const tampered={...parse(before[0].normalized_data),nameEn:"Forged test"};
+    await write("UPDATE catalog_import_rows SET normalized_data=? WHERE id=?",
+      [JSON.stringify(tampered),ids[0]]);
+    const [changed]=await reviewer.execute<mysql.RowDataPacket[]>(
+      "SELECT entity_type AS entityType,source_data AS sourceData,normalized_data AS normalizedData,status,imported_entity_id AS importedEntityId FROM catalog_import_rows WHERE batch_id=? ORDER BY `row_number`",[batch]);
+    const forged=changed.map(row=>({entityType:String(row.entityType),
+      sourceData:parse(row.sourceData),normalizedData:parse(row.normalizedData),
+      status:String(row.status),importedEntityId:row.importedEntityId as string|null}));
+    assert.deepEqual(policyReviewIdentityScope(forged,new Set([branchA,branchB])),{
+      ok:false,error:"policy_review_source_integrity_error",
+    });
+    await write("UPDATE catalog_import_rows SET normalized_data=? WHERE id=?",
+      [JSON.stringify(parse(before[0].normalized_data)),ids[0]]);
     const [authorized]=await reviewer.execute<mysql.RowDataPacket[]>(
       "SELECT t.id FROM lab_tests t JOIN departments d ON d.id=t.department_id WHERE t.organization_id=? AND t.id=? AND d.status='ACTIVE' AND (d.branch_id IS NULL OR d.branch_id=?)",
       [org,testId,branchA]);
