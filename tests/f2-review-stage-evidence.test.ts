@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { sealReviewStageEvidence, verifyReviewStageEvidence } from "../src/lib/catalog-review-stage-evidence.ts";
+import { sealReviewStageEvidence, verifyReviewStageEvidence, qualifiedIndependentReviewSource } from "../src/lib/catalog-review-stage-evidence.ts";
 
 const uuid=(suffix: number)=>"00000000-0000-4000-8000-"+suffix.toString(16).padStart(12,"0");
 const secret="family-lab-test-stage-authenticity-key-material";
@@ -68,6 +68,18 @@ test("F2: v2 staging HMAC authenticates all batch provenance and fails closed on
   const v2=sealReviewStageEvidence(signed,secret);
   assert.equal(v2.version,2);
   assert.equal(verifyReviewStageEvidence(signed,v2,secret),true);
+  assert.equal(qualifiedIndependentReviewSource(batchMetadata),true);
+  assert.equal(qualifiedIndependentReviewSource(null),false);
+  for(const untrusted of [
+    {...summary,attestationStatus:"UNVERIFIED"},
+    {...summary,fieldContractStatus:"LEGACY_NO_FIELD_CONTRACT"},
+    {...summary,consistency:"paged-live-not-atomic"},
+  ]) {
+    const unqualified={...batchMetadata,summary:untrusted};
+    const valid=sealReviewStageEvidence({...context,batchMetadata:unqualified},secret);
+    assert.equal(verifyReviewStageEvidence({...context,batchMetadata:unqualified},valid,secret),true);
+    assert.equal(qualifiedIndependentReviewSource(unqualified),false);
+  }
   assert.equal(verifyReviewStageEvidence(signed,sealReviewStageEvidence(context,secret),secret),false);
   assert.equal(verifyReviewStageEvidence(context,v2,secret),false);
   for(const altered of [
