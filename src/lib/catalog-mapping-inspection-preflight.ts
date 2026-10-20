@@ -11,6 +11,7 @@ import {
   verifyMappingDiscussionHistory, MAPPING_DISCUSSION_HISTORY_LIMIT,
 } from "@/lib/catalog-mapping-discussion-draft";
 import { independentMappingInspection, type IndependentMappingInspection } from "@/lib/catalog-mapping-independent-inspection";
+import { f2GovernedReadinessPreview, type F2GovernedReadiness } from "@/lib/catalog-f2-governed-readiness";
 import type { MappingDiscussionDraft } from "@/lib/catalog-mapping-discussion-draft";
 import type { Prisma } from "../../generated/prisma/client";
 import type { CatalogExportType } from "@/lib/catalog-configuration-export";
@@ -34,6 +35,7 @@ function opaqueError(error: string, status: number) {
 export type MappingPreflightVerified = {
   tx: Prisma.TransactionClient;
   inspection: IndependentMappingInspection;
+  readiness: F2GovernedReadiness;
   draft: MappingDiscussionDraft;
   organizationId: string;
   batchId: string;
@@ -203,9 +205,16 @@ export async function runIndependentMappingPreflight(
     });
     if (!view)
       return { error: "mapping_inspection_not_eligible", httpStatus: 403 } as const;
-    if (!onVerified) return view;
+    const readiness = f2GovernedReadinessPreview({
+      entityType:row.entityType,sourceData:row.sourceData,
+      scopedLiveData:observation,
+      signedStageVerified:true,liveFieldObservationRevalidated:true,
+    });
+    if (!readiness)
+      return { error: "mapping_inspection_incomplete_projection", httpStatus: 409 } as const;
+    if (!onVerified) return { ...view, readiness };
     return onVerified({
-      tx,inspection:view,draft:history.draft,
+      tx,inspection:view,readiness,draft:history.draft,
       organizationId,batchId:batch.id,branchId:scope.branchId,
       rowId:row.id,rowNumber:row.rowNumber,entityType:row.entityType,
       authorUserId:batch.createdByUserId,reviewerUserId:session.user.id,
