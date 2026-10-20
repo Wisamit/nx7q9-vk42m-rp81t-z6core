@@ -103,10 +103,15 @@ test("Stage 61 MariaDB: staged identities fail closed on revoked branch and chan
         "SELECT id,\u0060row_number\u0060 AS rowNumber,entity_type AS entityType,legacy_key AS legacyKey,status,source_data AS sourceData,normalized_data AS normalizedData,validation_issues AS validationIssues,imported_entity_id AS importedEntityId FROM catalog_import_rows WHERE batch_id=? ORDER BY \u0060row_number\u0060",
         [batch]);
       const parse=(v:unknown)=>typeof v==="string"?JSON.parse(v):v;
-      return stored.map(row=>({...row,
-        rowNumber:Number(row.rowNumber),sourceData:parse(row.sourceData),
+      return stored.map(row=>({
+        id:String(row.id),rowNumber:Number(row.rowNumber),
+        entityType:String(row.entityType),
+        legacyKey:row.legacyKey===null?null:String(row.legacyKey),
+        status:String(row.status),sourceData:parse(row.sourceData),
         normalizedData:parse(row.normalizedData),
-        validationIssues:parse(row.validationIssues)}));
+        validationIssues:parse(row.validationIssues),
+        importedEntityId:row.importedEntityId===null?null:String(row.importedEntityId),
+      }));
     };
     const signingSecret="test-family-lab-stage-auth-key-material";
     const envelope={organizationId:org,batchId:batch,authorUserId:actor,
