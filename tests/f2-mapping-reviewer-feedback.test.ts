@@ -91,9 +91,12 @@ test("F2: revisions are immutable, independently authored, contiguous and may no
   assert.deepEqual(verifyMappingFeedbackHistory({
     context:base,events:[event(second,9),event(first,8)],secret,
   }),{revision:2,latest:second});
-  assert.equal(verifyMappingFeedbackHistory({
+  // Two valid appends may share a millisecond; DB index/UUID ordering
+  // can return either order. HMAC revision links, not physical ordering,
+  // must establish the latest independent feedback.
+  assert.deepEqual(verifyMappingFeedbackHistory({
     context:base,events:[event(first,8),event(second,9)],secret,
-  }),null);
+  }),{revision:2,latest:second});
   assert.equal(verifyMappingFeedbackHistory({
     context:base,events:[event(second,9)],secret,
   }),null);
@@ -102,6 +105,21 @@ test("F2: revisions are immutable, independently authored, contiguous and may no
   });
   assert.equal(verifyMappingFeedbackHistory({
     context:base,events:[event(broken,9),event(first,8)],secret,
+  }),null);
+  // Duplicate, missing, or forked ordinal revisions still fail closed,
+  // irrespective of the order in which MariaDB returns the records.
+  const fork=evidence(base,{
+    reviewerUserId:reviewerB,revision:1,previousDigest:null,
+    disposition:"RETURN_MAPPING_TO_AUTHOR",
+  });
+  assert.equal(verifyMappingFeedbackHistory({
+    context:base,events:[event(fork,10),event(first,8)],secret,
+  }),null);
+  assert.equal(verifyMappingFeedbackHistory({
+    context:base,events:[event(second,9)],secret,
+  }),null);
+  assert.equal(verifyMappingFeedbackHistory({
+    context:base,events:[event(first,8),event(second,8)],secret,
   }),null);
 });
 
