@@ -92,7 +92,7 @@ test("F2 independent mapping: route rechecks full HMAC/source/live scope, never 
   const commit=readFileSync(
     "src/app/api/catalog/imports/[id]/commit/route.ts","utf8");
   assert.match(route,/export async function GET\(/);
-  assert.match(route,/runIndependentMappingPreflight\(request,context\)/);
+  assert.match(route,/runIndependentMappingPreflight\(request,context,async evidence=>/);
   assert.match(preflight,/export async function runIndependentMappingPreflight\(/);
   assert.doesNotMatch(route,/export async function (?:POST|PUT|PATCH|DELETE)\(/);
   assert.match(preflight,/original = permissionSet\(session\)/);
@@ -117,6 +117,8 @@ test("F2 independent mapping: route rechecks full HMAC/source/live scope, never 
   assert.match(preflight,/FOR UPDATE/);
   assert.match(preflight,/isolationLevel:"RepeatableRead"/);
   assert.match(preflight,/private, no-store/);
+  assert.match(route,/feedbackRevision:history\.revision/);
+  assert.match(route,/verifyMappingFeedbackHistory\(/);
   assert.doesNotMatch(preflight,/independentMappingApprovalEligible:\\s*true/);
   assert.match(bundle,/mappingApproved:false/);
   assert.match(commit,/CONFIG_BUNDLE_REVIEW/);
