@@ -336,6 +336,76 @@ export function sameLiveScalarIdentity(
 }
 
 /**
+ * Read-only monetary reviewer parity. Never use JS numbers for amounts:
+ * DECIMAL(18,4) comparisons are performed on integer scaled text.
+ */
+function scaledTariff(value: unknown): bigint | null {
+  if (typeof value !== "string") {
+    if (!value || typeof value !== "object" ||
+        !("toString" in value) || typeof value.toString !== "function") return null;
+    value = value.toString();
+  }
+  if (typeof value !== "string" ||
+      !/^(?:0|[1-9]\d{0,13})(?:\.\d{1,4})?$/.test(value)) return null;
+  const [whole, fractional = ""] = value.split(".");
+  return BigInt(whole + fractional.padEnd(4, "0"));
+}
+
+function sameTime(value: unknown, live: unknown): boolean {
+  return typeof value === "string" && Number.isFinite(Date.parse(value)) &&
+    live instanceof Date && Number.isFinite(live.getTime()) &&
+    new Date(value).getTime() === live.getTime();
+}
+function sameOptionalTime(value: unknown, live: unknown): boolean {
+  return value === null ? live === null : sameTime(value, live);
+}
+
+/**
+ * Evidence-only check against live financial identities, not tariff approval.
+ * Parent scope is enforced by the Prisma where clause separately.
+ */
+export function sameLiveTariffReviewIdentity(
+  type: "PRICE_LIST" | "PRICE_LIST_ITEM" | "PRICE_LIST_PACKAGE_ITEM",
+  staged: unknown, source: unknown, live: unknown,
+): boolean {
+  const n = object(staged), s = object(source), current = object(live);
+  if (!n || !s || !current || n.id !== current.id) return false;
+  if (type === "PRICE_LIST") {
+    if (!["code", "currency", "scopeType", "branchId", "status"].every(field =>
+      Object.hasOwn(n, field) && n[field] === current[field])) return false;
+    // Legacy DRAFT rows may have omitted effective windows; never claim
+    // complete window parity when those fields are missing.
+    return (!Object.hasOwn(s, "effectiveFrom") ||
+        sameTime(s.effectiveFrom, current.effectiveFrom)) &&
+      (!Object.hasOwn(s, "effectiveTo") ||
+        sameOptionalTime(s.effectiveTo, current.effectiveTo));
+  }
+
+  const parent = object(current.priceList);
+  const originalParent = object(s.priceList);
+  const linked = type === "PRICE_LIST_ITEM"
+    ? object(current.test) : object(current.package);
+  if (!parent || !originalParent || !linked ||
+      current.priceListId !== n.priceListId ||
+      (type === "PRICE_LIST_ITEM" ? current.testId !== n.testId
+        : current.packageId !== n.packageId) ||
+      linked.code !== (type === "PRICE_LIST_ITEM" ? n.testCode : n.packageCode) ||
+      parent.code !== n.priceListCode ||
+      parent.scopeType !== n.scopeType || parent.branchId !== n.branchId ||
+      parent.currency !== originalParent.currency ||
+      (type === "PRICE_LIST_PACKAGE_ITEM" && parent.currency !== n.currency) ||
+      (Object.hasOwn(originalParent, "status") &&
+        parent.status !== originalParent.status) ||
+      current.status !== n.status ||
+      !sameTime(n.effectiveFrom, current.effectiveFrom) ||
+      (Object.hasOwn(s, "effectiveTo") &&
+        !sameOptionalTime(s.effectiveTo, current.effectiveTo))) return false;
+  const expected = scaledTariff(n.unitPrice);
+  const actual = scaledTariff(current.unitPrice);
+  return expected !== null && actual !== null && expected === actual;
+}
+
+/**
  * Used inside the SAME tenant-locked transaction as the final reviewer audit
  * append. No assumptions about clinical/financial signing authority are made.
  */
@@ -450,6 +520,57 @@ export async function validatePolicyReviewBatchScope(
     const n = object(row.normalizedData);
     const live = scalarMasters[row.entityType].get(n?.id as string);
     if (!sameLiveScalarIdentity(row.entityType, n, live))
+      return { ok: false, error: "policy_review_batch_scope_changed" };
+  }
+
+  // Price-list counts alone allow a same-tenant tariff to be repriced
+  // after staging. Re-read direct financial rows with their parent identities
+  // before independent reviewer evidence is appended to the audit trail.
+  const directLists = ids.get("PRICE_LIST") || [];
+  const directTestPrices = ids.get("PRICE_LIST_ITEM") || [];
+  const directPackagePrices = ids.get("PRICE_LIST_PACKAGE_ITEM") || [];
+  const parentSelect = {
+    code: true, scopeType: true, branchId: true, currency: true, status: true,
+  } as const;
+  const [lists, testPrices, packagePrices] = await Promise.all([
+    directLists.length ? tx.priceList.findMany({
+      where: { ...priceScope, id: { in: directLists } },
+      select: { id: true, ...parentSelect, effectiveFrom: true, effectiveTo: true },
+    }) : Promise.resolve([]),
+    directTestPrices.length ? tx.priceListItem.findMany({
+      where: { priceList: priceScope, test: testScope,
+        id: { in: directTestPrices } },
+      select: { id: true, priceListId: true, testId: true,
+        unitPrice: true, effectiveFrom: true, effectiveTo: true, status: true,
+        priceList: { select: parentSelect }, test: { select: { code: true } } },
+    }) : Promise.resolve([]),
+    directPackagePrices.length ? tx.priceListPackageItem.findMany({
+      where: {
+        priceList: priceScope,
+        package: { organizationId: org, items: fullyVisibleMembership },
+        id: { in: directPackagePrices },
+      },
+      select: { id: true, priceListId: true, packageId: true,
+        unitPrice: true, effectiveFrom: true, effectiveTo: true, status: true,
+        priceList: { select: parentSelect }, package: { select: { code: true } } },
+    }) : Promise.resolve([]),
+  ]);
+  if (lists.length !== directLists.length ||
+      testPrices.length !== directTestPrices.length ||
+      packagePrices.length !== directPackagePrices.length)
+    return { ok: false, error: "policy_review_batch_scope_changed" };
+  const liveTariffs = {
+    PRICE_LIST: new Map(lists.map(row => [row.id, row])),
+    PRICE_LIST_ITEM: new Map(testPrices.map(row => [row.id, row])),
+    PRICE_LIST_PACKAGE_ITEM: new Map(packagePrices.map(row => [row.id, row])),
+  };
+  for (const row of rows) {
+    if (row.entityType !== "PRICE_LIST" &&
+        row.entityType !== "PRICE_LIST_ITEM" &&
+        row.entityType !== "PRICE_LIST_PACKAGE_ITEM") continue;
+    const n = object(row.normalizedData);
+    if (!sameLiveTariffReviewIdentity(row.entityType, n, row.sourceData,
+        liveTariffs[row.entityType].get(n?.id as string)))
       return { ok: false, error: "policy_review_batch_scope_changed" };
   }
 
