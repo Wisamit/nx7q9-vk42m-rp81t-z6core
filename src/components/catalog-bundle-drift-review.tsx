@@ -7,6 +7,15 @@ type DriftRow = {
   rowNumber: number; entityType: string;
   disposition: "UNCHANGED" | "DRIFTED"; changedFields: string[];
   additionalFieldsOmitted: boolean; observationToken: string;
+  fieldReview: {
+    fields: Array<{ path: string; classification:
+      "IMMUTABLE_SYSTEM" | "IDENTITY_RECONCILIATION" |
+      "CLINICAL_VERSIONED_REVIEW" | "FINANCIAL_VERSIONED_REVIEW" |
+      "CROSS_DOMAIN_VERSIONED_REVIEW" | "UNMAPPED_BLOCKED" }>;
+    completeFieldInventory: boolean; unmappedFieldPresent: boolean;
+    reviewOnly: true; autoApplyAllowed: false;
+    qualifiedApprovalRequired: true; versionedApplicationRequired: true;
+  };
   finding: {
     status: "UNFLAGGED" | "AWAITING_EXPERT" | "EXPERT_CONFIRMED" |
       "RETURNED_FOR_CORRECTION" | "STALE_REVIEW_REQUIRED";
@@ -100,6 +109,20 @@ export function CatalogBundleDriftReview({ batchId, locale }: {
             !Array.isArray(row.changedFields) ||
             row.changedFields.some(field => typeof field !== "string") ||
             typeof row.additionalFieldsOmitted !== "boolean" ||
+            !row.fieldReview || row.fieldReview.reviewOnly !== true ||
+            row.fieldReview.autoApplyAllowed !== false ||
+            row.fieldReview.qualifiedApprovalRequired !== true ||
+            row.fieldReview.versionedApplicationRequired !== true ||
+            typeof row.fieldReview.completeFieldInventory !== "boolean" ||
+            typeof row.fieldReview.unmappedFieldPresent !== "boolean" ||
+            !Array.isArray(row.fieldReview.fields) ||
+            row.fieldReview.fields.length !== row.changedFields.length ||
+            row.fieldReview.fields.some((field,index) =>
+              field.path !== row.changedFields[index] ||
+              !["IMMUTABLE_SYSTEM","IDENTITY_RECONCILIATION",
+                "CLINICAL_VERSIONED_REVIEW","FINANCIAL_VERSIONED_REVIEW",
+                "CROSS_DOMAIN_VERSIONED_REVIEW","UNMAPPED_BLOCKED"]
+                .includes(field.classification)) ||
             !/^[a-f0-9]{64}$/.test(row.observationToken) ||
             !row.finding || ![
               "UNFLAGGED", "AWAITING_EXPERT", "EXPERT_CONFIRMED",
@@ -133,8 +156,8 @@ export function CatalogBundleDriftReview({ batchId, locale }: {
       <div>
         <h2>{tr("Compare staged bundle with live configuration", "مقارنة ملف الإعدادات مع البيانات الحية")}</h2>
         <p className="muted">{tr(
-          "Read-only comparison of all six catalog classes. Checks current branch, department, clinical and financial permissions. Shows changed field names only; it never approves, activates or overwrites settings.",
-          "مقارنة للقراءة فقط لأنواع إعدادات المختبر الستة. تعيد فحص صلاحيات الفروع والأقسام والإعدادات الطبية والمالية. تعرض أسماء الحقول المختلفة فقط، ولا تعتمد أو تفعّل أو تستبدل أي بيانات."
+          "Read-only comparison of all ten catalog classes with field-risk labels. Existing grants permit review, not application or clinical/financial approval.",
+          "مقارنة للقراءة فقط لفئات إعدادات المختبر العشر مع تصنيف مخاطر الحقول. الصلاحيات الحالية تسمح بالمراجعة، وليس التطبيق أو الاعتماد الطبي والمالي."
         )}</p>
       </div>
       <button type="button" className="secondary-button" disabled={busy || flagging !== null || pendingReferral !== null}
@@ -202,8 +225,20 @@ export function CatalogBundleDriftReview({ batchId, locale }: {
               <td>{row.disposition === "UNCHANGED"
                 ? tr("Same as source", "مطابق للمصدر")
                 : tr("Review differences", "توجد اختلافات للمراجعة")}</td>
-              <td>{row.changedFields.length ? row.changedFields.join(", ") : "—"}
-                {row.additionalFieldsOmitted && " …"}</td>
+              <td>{row.fieldReview.fields.length ? row.fieldReview.fields.map((field,index) => {
+                const labels: Record<string,[string,string]> = {
+                  IMMUTABLE_SYSTEM:["Immutable metadata", "بيانات نظامية غير قابلة للتعديل"],
+                  IDENTITY_RECONCILIATION:["Identity / mapping review", "تطابق الهوية والربط"],
+                  CLINICAL_VERSIONED_REVIEW:["Clinical versioned review", "مراجعة سريرية مع حفظ الإصدارات"],
+                  FINANCIAL_VERSIONED_REVIEW:["Financial versioned review", "مراجعة مالية مع حفظ الإصدارات"],
+                  CROSS_DOMAIN_VERSIONED_REVIEW:["Clinical + financial review", "مراجعة طبية ومالية"],
+                  UNMAPPED_BLOCKED:["Unmapped / blocked", "حقل غير مصنّف ومحظور"],
+                };
+                return <p key={index}>{field.path} — {tr(...labels[field.classification])}</p>;
+              }) : "—"}
+                {!row.fieldReview.completeFieldInventory &&
+                  <p className="muted">{tr("Field inventory incomplete; not eligible for application",
+                    "قائمة الحقول غير مكتملة؛ غير مؤهلة للتطبيق")}</p>}</td>
               <td>{row.finding.status === "UNFLAGGED"
                 ? tr("Not referred", "لم تُحل للمراجعة")
                 : row.finding.status === "AWAITING_EXPERT"
