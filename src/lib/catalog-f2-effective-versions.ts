@@ -1,6 +1,9 @@
 import { randomUUID } from "node:crypto";
 import type { Prisma } from "../../generated/prisma/client";
-import type { F2ApplyPlan, F2ApplyPlanRow } from "./catalog-f2-apply-plan.ts";
+import type { F2ApplyPlan } from "./catalog-f2-apply-plan.ts";
+import {
+  signF2ApplicationJournal,verifyF2ApplicationJournal,
+} from "./catalog-f2-application-journal.ts";
 
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MONEY=/^(?:0|[1-9][0-9]{0,13})(?:\.[0-9]{1,4})?$/;
@@ -22,6 +25,7 @@ export type F2EffectiveApplyResult={
 export type F2EffectiveApplyAuthority={
   organizationId:string;branchId:string;batchId:string;
   actorUserId:string;clinicalSignerId:string;financialSignerId:string;
+  journalSigningSecret:string;
   sourceInstallationVerified:true;qualifiedDomainSignersVerified:true;
   currentPermissionsAndBranchScopeVerified:true;
   signedStageAndLiveSnapshotVerified:true;
@@ -47,6 +51,8 @@ export async function applyF2EffectiveVersionsUnderLock(
      !UUID.test(authority.clinicalSignerId)||!UUID.test(authority.financialSignerId)||
      new Set([authority.actorUserId,authority.clinicalSignerId,
        authority.financialSignerId]).size!==3 ||
+     !authority.journalSigningSecret ||
+     Buffer.byteLength(authority.journalSigningSecret,"utf8")<32 ||
      !authority.sourceInstallationVerified ||
      !authority.qualifiedDomainSignersVerified ||
      !authority.currentPermissionsAndBranchScopeVerified ||
@@ -68,8 +74,9 @@ export async function applyF2EffectiveVersionsUnderLock(
   });
   if(existing.length>1)throw Error("f2_apply_journal_corrupt");
   if(existing.length){
-    const saved=existing[0].newValues;
-    if(!obj(saved)||saved.planDigest!==plan.planDigest ||
+    const saved=verifyF2ApplicationJournal(
+      existing[0].newValues,authority.journalSigningSecret);
+    if(!saved||saved.planDigest!==plan.planDigest ||
        saved.organizationId!==authority.organizationId ||
        !Array.isArray(saved.createdVersionIds) ||
        !Array.isArray(saved.journalEventIds))
@@ -204,13 +211,13 @@ export async function applyF2EffectiveVersionsUnderLock(
       organizationId:authority.organizationId,branchId:authority.branchId,
       actorUserId:authority.actorUserId,action:"CATALOG_F2_VERSION_CLONED",
       entityType:row.entityType,entityId:row.targetId,
-      newValues:{
+      newValues:signF2ApplicationJournal({
         batchId:authority.batchId,planDigest:plan.planDigest,
         effectiveAt:plan.effectiveAt,newVersionId:newId,
-        before:row.originalSnapshot as Prisma.InputJsonObject,
-        after:row.desiredSnapshot as Prisma.InputJsonObject,
+        before:row.originalSnapshot,
+        after:row.desiredSnapshot,
         originalDigest:row.originalDigest,desiredDigest:row.desiredDigest,
-      },
+      },authority.journalSigningSecret) as Prisma.InputJsonObject,
     }});
     audits.push(audit.id);
   }
@@ -219,12 +226,12 @@ export async function applyF2EffectiveVersionsUnderLock(
     actorUserId:authority.actorUserId,
     entityType:"CatalogImportBatch",entityId:authority.batchId,
     action:"CATALOG_F2_EFFECTIVE_BATCH_APPLIED",
-    newValues:{
+    newValues:signF2ApplicationJournal({
       organizationId:authority.organizationId,batchId:authority.batchId,
       planDigest:plan.planDigest,effectiveAt:plan.effectiveAt,
       createdVersionIds:versions,journalEventIds:audits,
       changedRows:changes.length,unchangedRows:plan.unchangedRows,
-    },
+    },authority.journalSigningSecret) as Prisma.InputJsonObject,
   }});
   return {
     state:"EFFECTIVE_VERSIONS_APPLIED",batchId:authority.batchId,
