@@ -60,6 +60,8 @@ export async function runIndependentMappingPreflight(
   onVerified?: MappingPreflightAction,
   includeBatchReconciliation = false,
 ) {
+  if(includeBatchReconciliation && request.method!=="GET")
+    return opaqueError("mapping_inspection_batch_get_only",405);
   const query = request.nextUrl.searchParams;
   const rowId = query.get("rowId");
   if ([...query.keys()].sort().join(",") !== "rowId" ||
