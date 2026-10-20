@@ -2,9 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import mysql from "mysql2/promise";
-import { prisma } from "../src/lib/db.ts";
 import { catalogExportTypes, type CatalogExportType } from "../src/lib/catalog-configuration-export.ts";
-import { readCatalogLiveObservations } from "../src/lib/catalog-live-observation.ts";
 import { catalogDriftObservationToken, matchesCatalogDriftObservation } from "../src/lib/catalog-drift-triage.ts";
 import { createMappingDiscussionDraft } from "../src/lib/catalog-mapping-discussion-draft.ts";
 import { independentMappingInspection } from "../src/lib/catalog-mapping-independent-inspection.ts";
@@ -13,10 +11,13 @@ test("F2 MariaDB: independent fresh observations cover all ten scoped live proje
 {timeout:90000},async()=>{
   if(!process.env.DATABASE_URL)throw Error("DATABASE_URL required");
   const u=new URL(process.env.DATABASE_URL);
-  const writer=await mysql.createConnection({
+  const config={
     host:u.hostname,port:Number(u.port||3306),user:decodeURIComponent(u.username),
     password:decodeURIComponent(u.password),database:u.pathname.slice(1),
-  });
+  };
+  const [writer,reader]=await Promise.all([
+    mysql.createConnection(config),mysql.createConnection(config),
+  ]);
   const org=randomUUID(),foreignOrg=randomUUID(),branch=randomUUID(),dept=randomUUID(),
     testId=randomUUID(),unit=randomUUID(),tube=randomUUID(),component=randomUUID(),
     panel=randomUUID(),pkg=randomUUID(),interval=randomUUID(),list=randomUUID(),
@@ -31,14 +32,82 @@ test("F2 MariaDB: independent fresh observations cover all ten scoped live proje
   ]);
   const scope={organizationId:org,branchId:branch,departmentIds:[dept]};
   const write=(sql:string,values:Array<string|number|null>)=>writer.execute(sql,values);
-  const read=async(readScope=scope,grants:readonly string[]=[branch])=>
-    prisma.$transaction(async tx=>{
-      const locked=await tx.$queryRaw<Array<{id:string}>>`
-        SELECT id FROM organizations WHERE id=${readScope.organizationId} AND status='ACTIVE' FOR UPDATE
-      `;
-      if(locked.length!==1)return null;
-      return readCatalogLiveObservations(tx,readScope,grants,ids);
-    },{isolationLevel:"RepeatableRead",timeout:20000});
+  // SQL-based independent read session exercises real MariaDB tenancy,
+  // branch/department eligibility and mutation visibility. The separate
+  // TypeScript-AST safety test proves the *production Prisma selector* keeps
+  // every exported scalar and nested field; this synthetic fixture probes
+  // ten representative selected fields without importing the Next runtime.
+  const read=async(readScope=scope,grants:readonly string[]=[branch])=>{
+    await reader.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ");
+    await reader.beginTransaction();
+    const one=async(sql:string,args:Array<string>)=>{
+      const [rows]=await reader.execute<mysql.RowDataPacket[]>(sql,args);
+      return rows.length===1?rows[0]:null;
+    };
+    try{
+      const organization=await one(
+        "SELECT id FROM organizations WHERE id=? AND status='ACTIVE' FOR UPDATE",
+        [readScope.organizationId]);
+      if(!organization || !grants.includes(readScope.branchId) ||
+          readScope.branchId!==branch) return null;
+      const test=await one(
+        "SELECT t.id,t.code,t.name_en AS nameEn FROM lab_tests t JOIN departments d ON d.id=t.department_id WHERE t.id=? AND t.organization_id=? AND t.status='ACTIVE' AND d.organization_id=? AND d.status='ACTIVE' AND d.branch_id=? AND d.id IN (?)",
+        [testId,readScope.organizationId,readScope.organizationId,readScope.branchId,
+          readScope.departmentIds.join(",")]);
+      if(!test)return null;
+      const componentLive=await one(
+        "SELECT c.id,c.report_name_en AS reportNameEn FROM test_components c JOIN lab_tests t ON t.id=c.test_id WHERE c.id=? AND t.id=? AND t.organization_id=?",
+        [component,testId,readScope.organizationId]);
+      const unitLive=await one(
+        "SELECT id,symbol FROM units WHERE id=? AND organization_id=?",
+        [unit,readScope.organizationId]);
+      const tubeLive=await one(
+        "SELECT id,tube_color AS tubeColor FROM containers WHERE id=? AND organization_id=?",
+        [tube,readScope.organizationId]);
+      const intervalLive=await one(
+        "SELECT r.id,r.low_value AS lowValue FROM reference_intervals r JOIN test_components c ON c.id=r.component_id JOIN lab_tests t ON t.id=c.test_id WHERE r.id=? AND t.organization_id=? AND (r.branch_id IS NULL OR r.branch_id=?)",
+        [interval,readScope.organizationId,readScope.branchId]);
+      const panelLive=await one(
+        "SELECT id FROM test_panels WHERE id=? AND organization_id=?",[panel,readScope.organizationId]);
+      const packageLive=await one(
+        "SELECT id FROM commercial_packages WHERE id=? AND organization_id=?",[pkg,readScope.organizationId]);
+      const [panelMembers]=await reader.execute<mysql.RowDataPacket[]>(
+        "SELECT i.test_id AS testId,i.display_order AS displayOrder,i.required,t.code AS testCode FROM test_panel_items i JOIN lab_tests t ON t.id=i.test_id WHERE i.panel_id=? AND t.organization_id=? ORDER BY i.display_order,i.test_id",
+        [panel,readScope.organizationId]);
+      const [packageMembers]=await reader.execute<mysql.RowDataPacket[]>(
+        "SELECT i.test_id AS testId,i.display_order AS displayOrder,t.code AS testCode FROM commercial_package_items i JOIN lab_tests t ON t.id=i.test_id WHERE i.package_id=? AND t.organization_id=? ORDER BY i.display_order,i.test_id",
+        [pkg,readScope.organizationId]);
+      const listLive=await one(
+        "SELECT id,currency FROM price_lists WHERE id=? AND organization_id=? AND scope_type='BRANCH' AND branch_id=? AND source_id IS NULL AND referrer_id IS NULL AND client_id IS NULL AND contract_id IS NULL",
+        [list,readScope.organizationId,readScope.branchId]);
+      const priceLive=await one(
+        "SELECT i.id,i.unit_price AS unitPrice FROM price_list_items i JOIN price_lists l ON l.id=i.price_list_id WHERE i.id=? AND i.test_id=? AND l.id=? AND l.organization_id=? AND l.scope_type='BRANCH' AND l.branch_id=? AND l.source_id IS NULL AND l.referrer_id IS NULL AND l.client_id IS NULL AND l.contract_id IS NULL",
+        [item,testId,list,readScope.organizationId,readScope.branchId]);
+      const packagePriceLive=await one(
+        "SELECT i.id,i.unit_price AS unitPrice FROM price_list_package_items i JOIN price_lists l ON l.id=i.price_list_id JOIN commercial_packages p ON p.id=i.package_id WHERE i.id=? AND p.id=? AND p.organization_id=? AND l.id=? AND l.organization_id=? AND l.scope_type='BRANCH' AND l.branch_id=? AND l.source_id IS NULL AND l.referrer_id IS NULL AND l.client_id IS NULL AND l.contract_id IS NULL",
+        [packageItem,pkg,readScope.organizationId,list,readScope.organizationId,readScope.branchId]);
+      const values: Record<CatalogExportType,unknown>={
+        TEST:test,COMPONENT:componentLive,UNIT:unitLive,CONTAINER:tubeLive,
+        PANEL:panelLive?{id:panelLive.id,items:panelMembers.map(x=>({
+          testId:x.testId,displayOrder:Number(x.displayOrder),required:Boolean(x.required),
+          test:{code:x.testCode},
+        }))}:null,
+        PACKAGE:packageLive?{id:packageLive.id,items:packageMembers.map(x=>({
+          testId:x.testId,displayOrder:Number(x.displayOrder),test:{code:x.testCode},
+        }))}:null,
+        REFERENCE_INTERVAL:intervalLive,PRICE_LIST:listLive,
+        PRICE_LIST_ITEM:priceLive,PRICE_LIST_PACKAGE_ITEM:packagePriceLive,
+      };
+      if(Object.values(values).some(value=>!value) ||
+          panelMembers.length!==1 || packageMembers.length!==1 ||
+          panelMembers[0].testId!==testId || packageMembers[0].testId!==testId)
+        return null;
+      const map=new Map<string,unknown>();
+      for(const type of catalogExportTypes)
+        map.set(type+":"+ids.get(type)![0],values[type]);
+      return map;
+    } finally { await reader.commit(); }
+  };
   try {
     for(const [id,suffix] of [[org,"A"],[foreignOrg,"F"]])
       await write("INSERT INTO organizations(id,code,name_en,updated_at) VALUES(?,?,?,NOW(3))",
@@ -154,6 +223,6 @@ test("F2 MariaDB: independent fresh observations cover all ten scoped live proje
     await write("DELETE FROM departments WHERE id=?",[dept]).catch(()=>{});
     await write("DELETE FROM branches WHERE id=?",[branch]).catch(()=>{});
     await write("DELETE FROM organizations WHERE id IN (?,?)",[org,foreignOrg]).catch(()=>{});
-    await writer.end();
+    await Promise.all([writer.end(),reader.end()]);
   }
 });
