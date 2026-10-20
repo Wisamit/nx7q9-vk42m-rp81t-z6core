@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { clinicalImportTestWhere, resolveClinicalImportScope } from "@/lib/catalog-clinical-import-scope";
 import { BUNDLE_REVIEW_SOURCE, BUNDLE_REVIEW_MAX_ROWS } from "@/lib/catalog-bundle-review";
 import { catalogBundleDrift } from "@/lib/catalog-bundle-drift";
+import { classifyCatalogReviewDrift } from "@/lib/catalog-field-review-eligibility";
 import { resolveFindingLifecycle, triageResubmission } from "@/lib/catalog-finding-lifecycle";
 import { summarizeCatalogGovernance } from "@/lib/catalog-governance-readiness";
 import { summarizeSignatoryPlanning } from "@/lib/catalog-signatory-planning";
@@ -539,9 +540,12 @@ async function inspectBundleDrift(
       const observationToken = catalogDriftObservationToken(
         key, batch.sourceChecksum!, row.rowNumber, row.entityType, row.sourceData, currentJson
       );
+      const differences = catalogBundleDrift(row.sourceData, currentJson);
       return {
         rowNumber: row.rowNumber, entityType: row.entityType,
-        ...catalogBundleDrift(row.sourceData, currentJson),
+        ...differences,
+        fieldReview: classifyCatalogReviewDrift(
+          row.entityType, differences.changedFields, differences.additionalFieldsOmitted),
         observationToken,
       };
     });
