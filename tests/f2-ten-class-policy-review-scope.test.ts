@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { catalogExportTypes } from "../src/lib/catalog-configuration-export.ts";
+import { sealReviewStageEvidence } from "../src/lib/catalog-review-stage-evidence.ts";
 import { policyReviewIdentityScope, validatePolicyReviewBatchScope,
   sameLiveTariffReviewIdentity, sameLiveReferenceIntervalMedicalSnapshot
 } from "../src/lib/catalog-policy-review-scope.ts";
@@ -171,8 +172,17 @@ test("F2: reviewer transaction rejects live catalog identity and composite membe
     unitPrice:"123.4500",effectiveFrom:date,effectiveTo:null,status:"ACTIVE",
     priceList:parent,package:{code:"PACK"}}];
   const count=async({where}:{where:{id:{in:string[]}}})=>where.id.in.length;
+  const stageRows=all.map((row,index)=>({
+    ...row, id:uuid(index+100),rowNumber:index+1,
+    legacyKey:(row.normalizedData as {id:string}).id,
+    validationIssues:[{severity:"WARNING",code:"CONFIGURATION_BUNDLE_REVIEW_ONLY"}],
+  }));
+  const sourceChecksum="f".repeat(64), signingSecret="test-review-key".repeat(5);
+  const stagedContext={organizationId:uuid(26),batchId:uuid(25),authorUserId:uuid(33),
+    sourceChecksum,rows:stageRows};
+  const stageEvidenceSeal=sealReviewStageEvidence(stagedContext,signingSecret);
   const tx = {
-    catalogImportRow:{findMany:async()=>all},
+    catalogImportRow:{findMany:async()=>stageRows},
     labTest:{count,findMany:async()=>currentTests},
     unit:{count,findMany:async()=>currentUnits},
     testComponent:{count,findMany:async()=>currentComponents},
@@ -185,8 +195,27 @@ test("F2: reviewer transaction rejects live catalog identity and composite membe
     commercialPackage:{count,findMany:async()=>[{id:packageId,items:[...currentPackages]}]},
   } as unknown as Parameters<typeof validatePolicyReviewBatchScope>[0];
   const input={batchId:uuid(25),scope:{organizationId:uuid(26),branchId,
-    departmentIds:[uuid(27)]},grantedBranchIds:[branchId]};
+    departmentIds:[uuid(27)]},grantedBranchIds:[branchId],
+    authorUserId:uuid(33),sourceChecksum,stageEvidenceSeal,signingSecret};
   const check=()=>validatePolicyReviewBatchScope(tx,input);
+  assert.deepEqual(await check(),{ok:true});
+  stageRows[0].sourceData={...stageRows[0].sourceData,nameEn:"Forged source"};
+  assert.deepEqual(await check(),{ok:false,error:"policy_review_source_integrity_error"});
+  stageRows[0].sourceData=all[0].sourceData;
+  stageRows[0].normalizedData={...stageRows[0].normalizedData,nameEn:"Forged projection"};
+  assert.deepEqual(await check(),{ok:false,error:"policy_review_source_integrity_error"});
+  stageRows[0].normalizedData=all[0].normalizedData;
+  stageRows[0].validationIssues=[{severity:"WARNING",code:"REWRITTEN"}];
+  assert.deepEqual(await check(),{ok:false,error:"policy_review_source_integrity_error"});
+  stageRows[0].validationIssues=[{severity:"WARNING",code:"CONFIGURATION_BUNDLE_REVIEW_ONLY"}];
+  const initialRowNumber=stageRows[0].rowNumber;
+  stageRows[0].rowNumber=99;
+  assert.deepEqual(await check(),{ok:false,error:"policy_review_source_integrity_error"});
+  stageRows[0].rowNumber=initialRowNumber;
+  assert.deepEqual(await validatePolicyReviewBatchScope(tx,{...input,stageEvidenceSeal:null}),
+    {ok:false,error:"policy_review_source_integrity_error"});
+  assert.deepEqual(await validatePolicyReviewBatchScope(tx,{...input,signingSecret:null}),
+    {ok:false,error:"policy_review_source_integrity_error"});
   assert.deepEqual(await check(),{ok:true});
   currentTests[0].nameEn="Renamed after staging";
   assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
