@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { clinicalImportTestWhere, resolveClinicalImportScope } from "@/lib/catalog-clinical-import-scope";
 import { BUNDLE_REVIEW_SOURCE, BUNDLE_REVIEW_MAX_ROWS } from "@/lib/catalog-bundle-review";
 import { catalogBundleDrift } from "@/lib/catalog-bundle-drift";
+import { readCatalogLiveObservations } from "@/lib/catalog-live-observation";
 import { observeCatalogTargetIdentity } from "@/lib/catalog-bundle-target-identity";
 import { reviewStageBatchMetadata } from "@/lib/catalog-review-stage-evidence";
 import { verifyIndependentExpertStage } from "@/lib/catalog-expert-stage-integrity";
@@ -466,154 +467,8 @@ async function inspectBundleDrift(
     if ([...idsByType.keys()].some(type => !ordered.includes(type))) {
       return { error: "reconciliation_unsupported_source_group", httpStatus: 409 } as const;
     }
-    const live = new Map<string, unknown>();
-    for (const type of ordered) {
-      const ids = idsByType.get(type) || [];
-      if (!ids.length) continue;
-      const base = { orderBy: { id: "asc" as const }, take: ids.length };
-      const cursorScope = { id: { in: ids } };
-      let records: Array<{ id: string }> = [];
-  if (type === "TEST") {
-    records = await tx.labTest.findMany({
-      ...base, where: { ...testScope, ...cursorScope },
-      select: {
-        id: true, code: true, nameEn: true, nameAr: true, abbreviation: true,
-        departmentId: true, specimenTypeId: true, containerId: true,
-        methodId: true, defaultUnitId: true, resultType: true,
-        workflowType: true, resultEntryLayout: true, decimalPrecision: true,
-        minimumVolume: true, minimumVolumeUnit: true, assay: true,
-        tatMinutes: true, loincCode: true, status: true,
-        createdAt: true, updatedAt: true, deactivatedAt: true,
-      },
-    });
-  } else if (type === "COMPONENT") {
-    records = await tx.testComponent.findMany({
-      ...base, where: { test: testScope, ...cursorScope },
-      select: {
-        id: true, testId: true, code: true, nameEn: true, nameAr: true,
-        unitId: true, resultType: true, decimalPrecision: true,
-        displayOrder: true, resultSectionId: true,
-        reportNameEn: true, reportNameAr: true, reportDisplayOrder: true,
-        reportVisible: true, entryWidth: true, entryHintEn: true, entryHintAr: true,
-        status: true, createdAt: true, updatedAt: true, deactivatedAt: true,
-        test: { select: { code: true } },
-        unit: { select: { code: true, symbol: true } },
-      },
-    });
-  } else if (type === "PANEL") {
-    records = await tx.testPanel.findMany({
-      ...base, where: { organizationId, items: fullyVisibleItems, ...cursorScope },
-      select: {
-        id: true, code: true, nameEn: true, nameAr: true,
-        descriptionEn: true, descriptionAr: true, status: true,
-        createdAt: true, updatedAt: true, deactivatedAt: true,
-        items: { select: {
-          testId: true, displayOrder: true, required: true,
-          test: { select: { code: true } },
-        }, orderBy: [{ displayOrder: "asc" }, { testId: "asc" }] },
-      },
-    });
-  } else if (type === "PACKAGE") {
-    records = await tx.commercialPackage.findMany({
-      ...base, where: { organizationId, items: fullyVisibleItems, ...cursorScope },
-      select: {
-        id: true, code: true, nameEn: true, nameAr: true,
-        descriptionEn: true, descriptionAr: true, status: true,
-        createdAt: true, updatedAt: true, deactivatedAt: true,
-        items: { select: {
-          testId: true, displayOrder: true,
-          test: { select: { code: true } },
-        }, orderBy: [{ displayOrder: "asc" }, { testId: "asc" }] },
-      },
-    });
-  } else if (type === "UNIT") {
-    records = await tx.unit.findMany({
-      ...base, where: { organizationId, ...cursorScope },
-      select: {
-        id: true, code: true, symbol: true, nameEn: true, nameAr: true,
-        ucumCode: true, status: true,
-        createdAt: true, updatedAt: true, deactivatedAt: true,
-      },
-    });
-  } else if (type === "CONTAINER") {
-    records = await tx.container.findMany({
-      ...base, where: { organizationId, ...cursorScope },
-      select: {
-        id: true, code: true, nameEn: true, nameAr: true,
-        tubeColor: true, additive: true, status: true,
-        createdAt: true, updatedAt: true, deactivatedAt: true,
-      },
-    });
-  } else if (type === "REFERENCE_INTERVAL") {
-    records = await tx.referenceInterval.findMany({
-      ...base, where: { component: { test: testScope }, ...branchScope, ...cursorScope },
-      select: {
-        id: true, componentId: true, branchId: true, methodId: true,
-        analyzerId: true, specimenTypeId: true, sex: true, ageFrom: true,
-        ageTo: true, ageUnit: true, pregnancyStatus: true,
-        gestationalAgeFromWeeks: true, gestationalAgeToWeeks: true,
-        populationCode: true, lowValue: true, highValue: true,
-        normalTextEn: true, normalTextAr: true, criticalLow: true,
-        criticalHigh: true, source: true, notes: true,
-        effectiveFrom: true, effectiveTo: true, approvalStatus: true,
-        status: true, approvedAt: true, retiredAt: true,
-        createdAt: true, updatedAt: true,
-        component: { select: { code: true, test: { select: { code: true } } } },
-      },
-    });
-  } else if (type === "PRICE_LIST") {
-    records = await tx.priceList.findMany({
-      ...base, where: { organizationId, ...genericPriceScope, ...cursorScope },
-      select: {
-        id: true, code: true, nameEn: true, nameAr: true, scopeType: true,
-        branchId: true, sourceId: true, referrerId: true, clientId: true,
-        contractId: true, currency: true, priority: true, effectiveFrom: true,
-        effectiveTo: true, status: true, createdAt: true, updatedAt: true,
-        deactivatedAt: true,
-      },
-    });
-  } else if (type === "PRICE_LIST_PACKAGE_ITEM") {
-    records = await tx.priceListPackageItem.findMany({
-      ...base, where: {
-        ...cursorScope,
-        package: { organizationId, items: fullyVisibleItems },
-        priceList: { organizationId, ...genericPriceScope,
-          sourceId: null, referrerId: null, clientId: null, contractId: null },
-      },
-      select: {
-        id: true, priceListId: true, packageId: true, unitPrice: true,
-        effectiveFrom: true, effectiveTo: true, status: true,
-        createdAt: true, updatedAt: true, deactivatedAt: true,
-        package: { select: { code: true } },
-        priceList: { select: {
-          code: true, currency: true, scopeType: true, branchId: true,
-          status: true, sourceId: true, referrerId: true, clientId: true, contractId: true,
-        } },
-      },
-    });
-  } else if (type === "PRICE_LIST_ITEM") {
-    records = await tx.priceListItem.findMany({
-      ...base,
-      where: { priceList: { organizationId, ...genericPriceScope }, test: testScope, ...cursorScope },
-      select: {
-        id: true, priceListId: true, testId: true, unitPrice: true,
-        effectiveFrom: true, effectiveTo: true, status: true,
-        createdAt: true, updatedAt: true, deactivatedAt: true,
-        test: { select: { code: true } },
-        priceList: { select: {
-          code: true, currency: true, scopeType: true, branchId: true,
-          status: true, sourceId: true, referrerId: true, clientId: true, contractId: true,
-        } },
-      },
-    });
-  }
-
-
-
-      if (records.length !== ids.length)
-        return { error: "reconciliation_live_master_scope_changed", httpStatus: 403 } as const;
-      for (const current of records) live.set(type + ":" + current.id, current);
-    }
+    const live = await readCatalogLiveObservations(tx,liveScope,branchIds,idsByType);
+    if (!live) return { error: "reconciliation_live_master_scope_changed", httpStatus: 403 } as const;
     const requestedMappingRow=mappingDiscussionInput?.rowNumber ?? mappingDiscussionRow;
     const pageAfter = expertRow ? expertRow.rowNumber - 1 :
       requestedMappingRow !== null && requestedMappingRow !== undefined
