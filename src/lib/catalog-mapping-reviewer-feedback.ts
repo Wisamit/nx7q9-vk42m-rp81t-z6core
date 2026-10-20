@@ -179,3 +179,20 @@ export function verifyMappingFeedbackHistory(input:{
   const latest=revisions.get(events.length)!;
   return {revision:events.length,latest};
 }
+
+/**
+ * Minimal author-visible correction status. Authenticate the WHOLE persisted
+ * reviewer history before calling this helper; stale or unrelated feedback
+ * is not a current instruction. Never expose reviewer actor IDs, HMAC or raw
+ * clinical/financial values to the author-facing response.
+ */
+export function currentMappingFeedbackDisposition(
+  history: MappingFeedbackHistory, authorDraftDigest: string,
+  currentObservationToken: string,
+): MappingFeedbackDisposition | null {
+  const last=history.latest;
+  return last && SHA.test(authorDraftDigest) && SHA.test(currentObservationToken) &&
+    last.authorDraftDigest===authorDraftDigest &&
+    last.observationToken===currentObservationToken
+    ? last.disposition : null;
+}
