@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { catalogExportTypes } from "../src/lib/catalog-configuration-export.ts";
-import { policyReviewIdentityScope, validatePolicyReviewBatchScope } from "../src/lib/catalog-policy-review-scope.ts";
+import { policyReviewIdentityScope, validatePolicyReviewBatchScope, sameLiveTariffReviewIdentity } from "../src/lib/catalog-policy-review-scope.ts";
 
 const uuid = (part: number) => "00000000-0000-4000-8000-" + part.toString(16).padStart(12,"0");
 const branchId=uuid(21), testId=uuid(1), unitId=uuid(2), componentId=uuid(3);
@@ -142,15 +142,25 @@ test("F2: reviewer transaction rejects live catalog identity and composite membe
     tubeColor:"Red",additive:null as string | null,status:"ACTIVE"}];
   const currentPanels=[{testId,displayOrder:1,required:true}];
   const currentPackages=[{testId,displayOrder:1}];
+  const date=new Date("2026-01-01T00:00:00.000Z");
+  const parent={code:"LIST",scopeType:"BRANCH",branchId,currency:"AED",status:"ACTIVE"};
+  const currentLists=[{id:listId,...parent,effectiveFrom:date,effectiveTo:null}];
+  const currentTestPrices=[{id:uuid(9),priceListId:listId,testId,
+    unitPrice:"45.6700",effectiveFrom:date,effectiveTo:null,status:"ACTIVE",
+    priceList:parent,test:{code:"F2"}}];
+  const currentPackagePrices=[{id:uuid(10),priceListId:listId,packageId,
+    unitPrice:"123.4500",effectiveFrom:date,effectiveTo:null,status:"ACTIVE",
+    priceList:parent,package:{code:"PACK"}}];
   const count=async({where}:{where:{id:{in:string[]}}})=>where.id.in.length;
   const tx = {
     catalogImportRow:{findMany:async()=>all},
     labTest:{count,findMany:async()=>currentTests},
     unit:{count,findMany:async()=>currentUnits},
     testComponent:{count},referenceInterval:{count},
-    priceList:{count},priceListItem:{count},
+    priceList:{count,findMany:async()=>currentLists},
+    priceListItem:{count,findMany:async()=>currentTestPrices},
     container:{count,findMany:async()=>currentContainers},
-    priceListPackageItem:{count},
+    priceListPackageItem:{count,findMany:async()=>currentPackagePrices},
     testPanel:{count,findMany:async()=>[{id:panelId,items:[...currentPanels]}]},
     commercialPackage:{count,findMany:async()=>[{id:packageId,items:[...currentPackages]}]},
   } as unknown as Parameters<typeof validatePolicyReviewBatchScope>[0];
@@ -180,6 +190,28 @@ test("F2: reviewer transaction rejects live catalog identity and composite membe
   assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
   currentContainers[0].additive=null;
   assert.deepEqual(await check(),{ok:true});
+  currentLists[0].currency="USD";
+  assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
+  currentLists[0].currency="AED";
+  currentLists[0].status="INACTIVE";
+  assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
+  currentLists[0].status="ACTIVE";
+  currentTestPrices[0].unitPrice="45.6701";
+  assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
+  currentTestPrices[0].unitPrice="45.6700";
+  currentTestPrices[0].status="INACTIVE";
+  assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
+  currentTestPrices[0].status="ACTIVE";
+  currentPackagePrices[0].unitPrice="123.4501";
+  assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
+  currentPackagePrices[0].unitPrice="123.4500";
+  currentPackagePrices[0].effectiveFrom=new Date("2026-02-01T00:00:00.000Z");
+  assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
+  currentPackagePrices[0].effectiveFrom=date;
+  currentPackagePrices[0].priceList.currency="USD";
+  assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
+  currentPackagePrices[0].priceList.currency="AED";
+  assert.deepEqual(await check(),{ok:true});
   currentPanels[0].displayOrder=9;
   assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
   currentPanels[0].displayOrder=1;
@@ -207,10 +239,31 @@ test("F2: policy queue and reviewer POST enforce the SAME tenant-locked all-type
     assert.match(code,new RegExp(name+": null"));
   assert.match(code,/every: \{ test: testScope \}/);
   assert.match(code,/refs\.packages/);
-  for(const name of ["labTest","unit","container"])
+  for(const name of ["labTest","unit","container","priceList","priceListItem","priceListPackageItem"])
     assert.match(code,new RegExp("tx\\."+name+"\\.findMany\\("));
   assert.match(code,/sameLiveScalarIdentity\(/);
   assert.match(endpoint,/validatePolicyReviewBatchScope\(tx/);
   assert.match(queue,/validatePolicyReviewBatchScope\(tx/);
   assert.doesNotMatch(code,/tx\.(?:labTest|unit|testPanel|commercialPackage|priceList|priceListPackageItem)\.(?:create|update|upsert|delete)/);
+});
+
+test("F2: tariff review money rejects floating point and non-exact extra fractional precision",()=>{
+  const n=all.find(x=>x.entityType==="PRICE_LIST_ITEM")!;
+  const staged=n.normalizedData;
+  const source=n.sourceData;
+  const live={id:uuid(9),priceListId:listId,testId,unitPrice:"45.6700",
+    effectiveFrom:new Date("2026-01-01T00:00:00.000Z"),effectiveTo:null,
+    status:"ACTIVE",priceList:{code:"LIST",currency:"AED",
+      scopeType:"BRANCH",branchId,status:"ACTIVE"},test:{code:"F2"}};
+  assert.equal(sameLiveTariffReviewIdentity("PRICE_LIST_ITEM",staged,source,live),true);
+  assert.equal(sameLiveTariffReviewIdentity("PRICE_LIST_ITEM",staged,source,
+    {...live,unitPrice:45.67}),false);
+  assert.equal(sameLiveTariffReviewIdentity("PRICE_LIST_ITEM",staged,source,
+    {...live,unitPrice:"45.67001"}),false);
+  assert.equal(sameLiveTariffReviewIdentity("PRICE_LIST_ITEM",staged,source,
+    {...live,unitPrice:"45.6701"}),false);
+  assert.equal(sameLiveTariffReviewIdentity("PRICE_LIST_ITEM",staged,source,
+    {...live,test:{code:"OTHER"}}),false);
+  assert.equal(sameLiveTariffReviewIdentity("PRICE_LIST_ITEM",staged,source,
+    {...live,priceList:{...live.priceList,contractId:uuid(67),currency:"USD"}}),false);
 });
