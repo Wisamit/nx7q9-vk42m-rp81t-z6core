@@ -14,12 +14,16 @@ const base=(type: string, id: string, n: Record<string,unknown>={},
 });
 const tariff={sourceId:null,referrerId:null,clientId:null,contractId:null};
 const all=[
-  base("TEST",testId),
+  base("TEST",testId,{code:"F2",nameEn:"F2 Test",departmentId:branchId,status:"ACTIVE"},
+    {code:"F2",nameEn:"F2 Test",departmentId:branchId,status:"ACTIVE"}),
   base("COMPONENT",componentId,{testId,unitId,code:"COMP",nameEn:"Component",
     testCode:"F2",status:"ACTIVE"},
     {testId,unitId,code:"COMP",nameEn:"Component",test:{code:"F2"},status:"ACTIVE"}),
-  base("UNIT",unitId),
-  base("CONTAINER",uuid(7)),
+  base("UNIT",unitId,{code:"MG",symbol:"mg/dL",status:"ACTIVE"},
+    {code:"MG",symbol:"mg/dL",status:"ACTIVE"}),
+  base("CONTAINER",uuid(7),{code:"TUBE",nameEn:"Tube",nameAr:null,
+    tubeColor:"Red",additive:null,status:"ACTIVE"},
+    {code:"TUBE",nameEn:"Tube",nameAr:null,tubeColor:"Red",additive:null,status:"ACTIVE"}),
   base("PANEL",panelId,{items:[{testId,testCode:"F2",displayOrder:1,required:true}]},
     {items:[{testId,displayOrder:1,required:true,test:{code:"F2"}}]}),
   base("PACKAGE",packageId,{items:[{testId,testCode:"F2",displayOrder:1}]},
@@ -73,6 +77,15 @@ test("F2: membership, priced package, branch, private tariff and unknown source 
   assert.deepEqual(policyReviewIdentityScope(all,new Set()),{
     ok:false,error:"policy_review_batch_scope_changed",
   });
+  assert.equal(change("TEST",x=>{(x.normalizedData as Record<string,unknown>).departmentId=uuid(71);}).ok,false);
+  assert.equal(change("TEST",x=>{(x.sourceData as Record<string,unknown>).nameEn="Swapped";}).ok,false);
+  assert.equal(change("TEST",x=>{delete (x.sourceData as Record<string,unknown>).departmentId;}).ok,false);
+  assert.equal(change("UNIT",x=>{(x.normalizedData as Record<string,unknown>).symbol="mmol/L";}).ok,false);
+  assert.equal(change("UNIT",x=>{(x.sourceData as Record<string,unknown>).code="OTHER";}).ok,false);
+  assert.equal(change("CONTAINER",x=>{(x.normalizedData as Record<string,unknown>).tubeColor="Blue";}).ok,false);
+  assert.equal(change("CONTAINER",x=>{(x.sourceData as Record<string,unknown>).additive="EDTA";}).ok,false);
+  assert.equal(change("CONTAINER",x=>{delete (x.sourceData as Record<string,unknown>).nameAr;}).ok,false);
+  assert.equal(change("CONTAINER",x=>{(x.normalizedData as Record<string,unknown>).status="INACTIVE";}).ok,false);
   assert.equal(change("PANEL",x=>{(((x.normalizedData as Record<string,unknown>).items as Record<string,unknown>[])[0]).testCode="CHANGED";}).ok,false);
   assert.equal(change("PANEL",x=>{(((x.normalizedData as Record<string,unknown>).items as Record<string,unknown>[])[0]).required=false;}).ok,false);
   assert.equal(change("PACKAGE",x=>{(((x.sourceData as Record<string,unknown>).items as Record<string,unknown>[])[0]).displayOrder=7;}).ok,false);
