@@ -113,11 +113,13 @@ test("F2 MariaDB: two independent sessions verify append-only row mapping discus
     assert.equal(full?.mappingApproved,false);
     assert.equal(independentMappingInspection({
       entityType:"TEST",authenticatedDraft:authenticated,
+      currentObservationToken:nextToken,
       userId:author,authorUserId:author,
       originalPermissions:grant,currentPermissions:grant,
     }),null);
     assert.equal(independentMappingInspection({
       entityType:"TEST",authenticatedDraft:authenticated,
+      currentObservationToken:nextToken,
       userId:authorOther,authorUserId:author,
       originalPermissions:grant,currentPermissions:new Set(["catalog.manage"]),
     }),null);
