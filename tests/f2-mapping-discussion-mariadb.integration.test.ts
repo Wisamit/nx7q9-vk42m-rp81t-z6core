@@ -98,11 +98,18 @@ test("F2 MariaDB: two independent sessions verify append-only row mapping discus
     const grant=new Set(["catalog.manage","catalog.reference_ranges.manage"]);
     const full=independentMappingInspection({
       entityType:"TEST",authenticatedDraft:authenticated,
+      currentObservationToken:nextToken,
       userId:authorOther,authorUserId:author,
       originalPermissions:grant,currentPermissions:grant,
     });
-    assert.equal(full?.status,"INDEPENDENT_DISCUSSION_INSPECTION_ONLY");
-    assert.equal(full?.currentLiveObservationRevalidated,false);
+    assert.equal(full?.status,"INDEPENDENT_FRESH_OBSERVATION_INSPECTION_ONLY");
+    assert.equal(full?.currentLiveObservationRevalidated,true);
+    assert.equal(independentMappingInspection({
+      entityType:"TEST",authenticatedDraft:authenticated,
+      currentObservationToken:token,
+      userId:authorOther,authorUserId:author,
+      originalPermissions:grant,currentPermissions:grant,
+    }),null);
     assert.equal(full?.mappingApproved,false);
     assert.equal(independentMappingInspection({
       entityType:"TEST",authenticatedDraft:authenticated,
