@@ -173,7 +173,9 @@ test("F2: reviewer transaction rejects live catalog identity and composite membe
     priceList:parent,package:{code:"PACK"}}];
   const count=async({where}:{where:{id:{in:string[]}}})=>where.id.in.length;
   const stageRows=all.map((row,index)=>({
-    ...row, id:uuid(index+100),rowNumber:index+1,
+    ...row, sourceData: row.sourceData as Record<string,unknown>,
+    normalizedData: row.normalizedData as Record<string,unknown>,
+    id:uuid(index+100),rowNumber:index+1,
     legacyKey:(row.normalizedData as {id:string}).id,
     validationIssues:[{severity:"WARNING",code:"CONFIGURATION_BUNDLE_REVIEW_ONLY"}],
   }));
