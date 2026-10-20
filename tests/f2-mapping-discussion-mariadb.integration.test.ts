@@ -20,6 +20,7 @@ test("F2 MariaDB: two independent sessions verify append-only row mapping discus
     author=randomUUID(),authorOther=randomUUID(),batch=randomUUID(),
     row=randomUUID(),sourceId=randomUUID(),a=randomUUID(),b=randomUUID();
   const code="F2MD"+org.slice(0,8);
+  const secret="synthetic-F2-mapping-audit-HMAC-test-key-never-live-32";
   const context:MappingDiscussionContext={
     organizationId:org,batchId:batch,branchId:branch,rowId:row,
     authorUserId:author,sourceChecksum:"f".repeat(64),
@@ -29,18 +30,18 @@ test("F2 MariaDB: two independent sessions verify append-only row mapping discus
   const e1=createMappingDiscussionDraft(context,{
     revision:1,previousDigest:null,observationToken:token,
     intent:"REQUEST_EXTERNAL_MAPPING",
-  });
+  },secret);
   const e2=createMappingDiscussionDraft(context,{
     revision:2,previousDigest:e1.digest,observationToken:nextToken,
     intent:"RETURN_TO_SOURCE_AUTHOR",
-  });
+  },secret);
   const json=(x:unknown):unknown=>typeof x==="string"?JSON.parse(x):x;
   const write=(sql:string,args:Array<string|number|null>)=>writer.execute(sql,args);
   const history=async()=>{
     const [rows]=await reader.execute<mysql.RowDataPacket[]>(
       "SELECT id,branch_id AS branchId,actor_user_id AS actorUserId,new_values AS newValues FROM audit_events WHERE organization_id=? AND entity_type='CatalogImportRow' AND entity_id=? AND action='CATALOG_BUNDLE_MAPPING_DISCUSSION_DRAFT_RECORDED' ORDER BY occurred_at DESC,id DESC LIMIT 101",
       [org,row]);
-    return verifyMappingDiscussionHistory({context,events:rows.map(r=>({
+    return verifyMappingDiscussionHistory({context,secret,events:rows.map(r=>({
       id:String(r.id),branchId:r.branchId as string|null,
       actorUserId:r.actorUserId as string|null,
       newValues:json(r.newValues),
@@ -78,6 +79,19 @@ test("F2 MariaDB: two independent sessions verify append-only row mapping discus
       [JSON.stringify({...e1,intent:"RETURN_TO_SOURCE_AUTHOR"}),a]);
     assert.equal(await history(),null);
     await write("UPDATE audit_events SET new_values=? WHERE id=?",[JSON.stringify(e1),a]);
+    assert.deepEqual(await history(),{revision:2,draft:e2});
+    // A database writer can recompute the SHA digest of a replacement
+    // decision, but cannot forge our independent server HMAC.
+    const attackerSecret="attacker-database-writer-can-change-JSON-not-KEY";
+    const forged=createMappingDiscussionDraft(context,{
+      revision:2,previousDigest:e1.digest,observationToken:nextToken,
+      intent:"PROPOSE_LOCAL_RECONCILIATION",
+    },attackerSecret);
+    await write("UPDATE audit_events SET new_values=? WHERE id=?",
+      [JSON.stringify(forged),b]);
+    assert.equal(await history(),null);
+    await write("UPDATE audit_events SET new_values=? WHERE id=?",
+      [JSON.stringify(e2),b]);
     assert.deepEqual(await history(),{revision:2,draft:e2});
   } finally {
     await write("DELETE FROM audit_events WHERE id IN (?,?)",[a,b]).catch(()=>{});
