@@ -27,7 +27,7 @@ type Event = {
   id: string; actorUserId: string | null; branchId: string | null;
   newValues: unknown;
 };
-const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SHA=/^[a-f0-9]{64}$/;
 const PURPOSE="family-lab/catalog-mapping-independent-feedback/v1\n";
 const object=(value:unknown):value is Record<string,unknown> =>
