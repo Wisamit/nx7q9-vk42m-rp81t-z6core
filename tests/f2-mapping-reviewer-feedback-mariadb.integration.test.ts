@@ -42,6 +42,10 @@ test("F2 MariaDB: independent reviewer correction history is HMAC-authenticated,
       const [locked]=await reader.execute<mysql.RowDataPacket[]>(
         "SELECT id FROM organizations WHERE id=? AND status='ACTIVE' FOR UPDATE",[ctx.organizationId]);
       if(locked.length!==1)return null;
+      const [owned]=await reader.execute<mysql.RowDataPacket[]>(
+        "SELECT id FROM catalog_import_batches WHERE id=? AND organization_id=? AND status='DRAFT'",
+        [ctx.batchId,ctx.organizationId]);
+      if(owned.length!==1)return null;
       const [events]=await reader.execute<mysql.RowDataPacket[]>(
         "SELECT a.id,a.actor_user_id AS actorUserId,a.branch_id AS branchId,a.new_values AS newValues FROM audit_events a WHERE a.organization_id=? AND a.entity_type='CatalogImportRow' AND a.entity_id=? AND a.action='CATALOG_BUNDLE_MAPPING_FEEDBACK_RECORDED' ORDER BY a.occurred_at DESC,a.id DESC LIMIT 101",
         [ctx.organizationId,ctx.rowId]);
