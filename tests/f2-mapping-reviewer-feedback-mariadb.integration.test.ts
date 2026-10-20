@@ -14,7 +14,10 @@ test("F2 MariaDB: independent reviewer correction history is HMAC-authenticated,
   const cfg={host:u.hostname,port:Number(u.port||3306),
     user:decodeURIComponent(u.username),password:decodeURIComponent(u.password),
     database:u.pathname.slice(1)};
+  const checkpoint=(phase:string)=>console.log("[f2-feedback-mariadb] "+phase);
+  checkpoint("connecting");
   const [writer,reader]=await Promise.all([mysql.createConnection(cfg),mysql.createConnection(cfg)]);
+  checkpoint("connected");
   const org=randomUUID(),otherOrg=randomUUID(),branch=randomUUID(),
     author=randomUUID(),reviewer=randomUUID(),another=randomUUID(),
     batch=randomUUID(),row=randomUUID(),id1=randomUUID(),id2=randomUUID(),
@@ -57,6 +60,7 @@ test("F2 MariaDB: independent reviewer correction history is HMAC-authenticated,
     }finally{await reader.commit();}
   };
   try {
+    checkpoint("creating fixtures");
     for(const [id,suffix] of [[org,"A"],[otherOrg,"B"]])
       await write("INSERT INTO organizations(id,code,name_en,updated_at) VALUES(?,?,?,NOW(3))",
         [id,code+suffix,"F2 feedback synthetic org"]);
@@ -69,14 +73,18 @@ test("F2 MariaDB: independent reviewer correction history is HMAC-authenticated,
       [batch,org,context.sourceChecksum,author]);
     await write("INSERT INTO catalog_import_rows(id,batch_id,`row_number`,entity_type,status,legacy_key,source_data,normalized_data,validation_issues,updated_at) VALUES(?,?,1,'TEST','WARNING',?,?,?,?,NOW(3))",
       [row,batch,sourceId,JSON.stringify({id:sourceId,code}),JSON.stringify({id:sourceId,code}),JSON.stringify([])]);
+    checkpoint("fixture inserted");
     assert.deepEqual(await read(),{revision:0,latest:null});
+    checkpoint("initial read completed");
     await write("INSERT INTO audit_events(id,organization_id,branch_id,actor_user_id,action,entity_type,entity_id,new_values,occurred_at) VALUES(?,?,?,?,'CATALOG_BUNDLE_MAPPING_FEEDBACK_RECORDED','CatalogImportRow',?,?,?)",
       [id1,org,branch,reviewer,row,JSON.stringify(first),"2026-10-20 09:00:01.000"]);
     assert.deepEqual(await read(),{revision:1,latest:first});
+    checkpoint("first revision verified");
     assert.equal(await read({...context,organizationId:otherOrg}),null);
     await write("INSERT INTO audit_events(id,organization_id,branch_id,actor_user_id,action,entity_type,entity_id,new_values,occurred_at) VALUES(?,?,?,?,'CATALOG_BUNDLE_MAPPING_FEEDBACK_RECORDED','CatalogImportRow',?,?,?)",
       [id2,org,branch,another,row,JSON.stringify(second),"2026-10-20 09:00:02.000"]);
     assert.deepEqual(await read(),{revision:2,latest:second});
+    checkpoint("second revision verified");
     // Mutations in the persisted *audit*, not application writes, simulate
     // a compromised editor. The HMAC and persisted actor are both binding.
     await write("UPDATE audit_events SET actor_user_id=? WHERE id=?",[author,id2]);
@@ -95,6 +103,7 @@ test("F2 MariaDB: independent reviewer correction history is HMAC-authenticated,
       [batch]);
     assert.equal(Number(records[0].total),1);
   }finally{
+    checkpoint("cleaning fixtures");
     await write("DELETE FROM audit_events WHERE id IN (?,?)",[id1,id2]).catch(()=>{});
     await write("DELETE FROM catalog_import_rows WHERE id=?",[row]).catch(()=>{});
     await write("DELETE FROM catalog_import_batches WHERE id=?",[batch]).catch(()=>{});
@@ -102,5 +111,6 @@ test("F2 MariaDB: independent reviewer correction history is HMAC-authenticated,
     await write("DELETE FROM branches WHERE id=?",[branch]).catch(()=>{});
     await write("DELETE FROM organizations WHERE id IN (?,?)",[org,otherOrg]).catch(()=>{});
     await Promise.all([writer.end(),reader.end()]);
+    checkpoint("done");
   }
 });
