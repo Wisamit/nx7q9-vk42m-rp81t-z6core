@@ -61,8 +61,8 @@ test("F2: membership, priced package, branch, private tariff and unknown source 
   });
   assert.equal(change("PANEL",x=>{((x.normalizedData.items as Record<string,unknown>[])[0]).testCode="CHANGED";}).ok,false);
   assert.equal(change("PANEL",x=>{((x.normalizedData.items as Record<string,unknown>[])[0]).required=false;}).ok,false);
-  assert.equal(change("PACKAGE",x=>{((x.sourceData.items as Record<string,unknown>[])[0]).displayOrder=7;}).ok,false);
-  assert.equal(change("PACKAGE",x=>{((x.sourceData.items as Record<string,unknown>[])[0]).testId=uuid(55);}).ok,false);
+  assert.equal(change("PACKAGE",x=>{(((x.sourceData as Record<string,unknown>).items as Record<string,unknown>[])[0]).displayOrder=7;}).ok,false);
+  assert.equal(change("PACKAGE",x=>{(((x.sourceData as Record<string,unknown>).items as Record<string,unknown>[])[0]).testId=uuid(55);}).ok,false);
   assert.equal(change("PRICE_LIST_PACKAGE_ITEM",x=>{(x.normalizedData as Record<string,unknown>).packageCode="OTHER";}).ok,false);
   assert.equal(change("PRICE_LIST_PACKAGE_ITEM",x=>{(x.normalizedData as Record<string,unknown>).unitPrice="200.0000";}).ok,false);
   assert.equal(change("PRICE_LIST_PACKAGE_ITEM",x=>{(x.normalizedData as Record<string,unknown>).currency="USD";}).ok,false);
