@@ -6,6 +6,10 @@ import { BUNDLE_REVIEW_SOURCE, BUNDLE_REVIEW_MAX_ROWS } from "@/lib/catalog-bund
 import { catalogBundleDrift } from "@/lib/catalog-bundle-drift";
 import { readCatalogLiveObservations } from "@/lib/catalog-live-observation";
 import { observeCatalogTargetIdentity } from "@/lib/catalog-bundle-target-identity";
+import {
+  MAPPING_FEEDBACK_HISTORY_LIMIT, verifyMappingFeedbackHistory,
+  currentMappingFeedbackDisposition,
+} from "@/lib/catalog-mapping-reviewer-feedback";
 import { reviewStageBatchMetadata } from "@/lib/catalog-review-stage-evidence";
 import { verifyIndependentExpertStage } from "@/lib/catalog-expert-stage-integrity";
 import {
@@ -589,6 +593,28 @@ async function inspectBundleDrift(
         return {error:"mapping_discussion_history_corrupt",httpStatus:409} as const;
       const previous=history.draft;
       const current=mappingDiscussionCurrent(previous,observed.observationToken);
+      // Closed-loop correction visibility for the ORIGINAL AUTHOR only.
+      // Authenticate the entire independent reviewer ledger even if the
+      // current draft has superseded the feedback. Never return actor IDs,
+      // raw values, HMAC digests or a clinical/financial authorization.
+      const feedbackRows=await tx.auditEvent.findMany({
+        where:{
+          organizationId,entityType:"CatalogImportRow",entityId:stagedRow.id,
+          action:"CATALOG_BUNDLE_MAPPING_FEEDBACK_RECORDED",
+        },
+        orderBy:[{occurredAt:"desc"},{id:"desc"}],
+        take:MAPPING_FEEDBACK_HISTORY_LIMIT+1,
+        select:{id:true,actorUserId:true,branchId:true,newValues:true},
+      });
+      const feedback=verifyMappingFeedbackHistory({
+        context,events:feedbackRows,secret:key,
+      });
+      if(!feedback)
+        return {error:"mapping_discussion_reviewer_feedback_corrupt",httpStatus:409} as const;
+      const currentFeedback=previous && current
+        ? currentMappingFeedbackDisposition(
+          feedback,previous.digest,observed.observationToken,
+        ) : null;
       if(mappingDiscussionInput) {
         if (!matchesCatalogDriftObservation(
           mappingDiscussionInput.observationToken,observed.observationToken))
@@ -625,6 +651,8 @@ async function inspectBundleDrift(
       return {status:previous?"MAPPING_DISCUSSION_DRAFT":"MAPPING_DISCUSSION_NOT_STARTED",
         revision:history.revision,intent:previous?.intent ?? null,
         current,localIdentityObserved:identity.status==="LOCAL_IDENTITY_OBSERVED",
+        reviewerFeedbackRevision:feedback.revision,
+        reviewerFeedbackDisposition:currentFeedback,
         reviewOnly:true,approved:false,mappingApproved:false,
         signingEnabled:false,activated:false,liveWrites:false} as const;
     }
