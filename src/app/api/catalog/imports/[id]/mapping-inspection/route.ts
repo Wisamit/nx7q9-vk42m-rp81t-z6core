@@ -4,6 +4,7 @@ import {
 } from "@/lib/catalog-mapping-inspection-preflight";
 import {
   MAPPING_FEEDBACK_HISTORY_LIMIT, verifyMappingFeedbackHistory,
+  currentMappingFeedbackDisposition,
 } from "@/lib/catalog-mapping-reviewer-feedback";
 
 export const dynamic="force-dynamic";
@@ -34,11 +35,10 @@ export async function GET(request:NextRequest,context:Context){
       context:historyContext,events,secret:evidence.secret,
     });
     if(!history)return {error:"mapping_inspection_feedback_history_corrupt",httpStatus:409};
-    const freshFeedback=history.latest &&
-      history.latest.authorDraftDigest===evidence.draft.digest &&
-      history.latest.observationToken===evidence.currentObservationToken;
     return {...evidence.inspection,readiness:evidence.readiness,
       feedbackRevision:history.revision,
-      feedbackDisposition:freshFeedback?history.latest!.disposition:null};
+      feedbackDisposition:currentMappingFeedbackDisposition(
+        history,evidence.draft.digest,evidence.currentObservationToken,
+      )};
   });
 }
