@@ -315,6 +315,27 @@ function sameLiveMembership(
 }
 
 /**
+ * Live catalog identity can drift after DRAFT staging while the same immutable
+ * UUID still passes tenant and branch counts. A reviewer must not mistake a
+ * changed test/unit/container for the version captured in the source snapshot.
+ * This checks the review identity subset, not full configuration parity/apply.
+ */
+function sameLiveScalarIdentity(
+  type: "TEST" | "UNIT" | "CONTAINER",
+  staged: unknown, live: unknown,
+): boolean {
+  const n = object(staged), current = object(live);
+  if (!n || !current) return false;
+  const fields = type === "TEST"
+    ? ["code", "nameEn", "departmentId", "status"]
+    : type === "UNIT"
+      ? ["code", "symbol", "status"]
+      : ["code", "nameEn", "nameAr", "tubeColor", "additive", "status"];
+  return fields.every(field =>
+    Object.hasOwn(n, field) && current[field] === n[field]);
+}
+
+/**
  * Used inside the SAME tenant-locked transaction as the final reviewer audit
  * append. No assumptions about clinical/financial signing authority are made.
  */
@@ -393,6 +414,44 @@ export async function validatePolicyReviewBatchScope(
   ];
   if (counts.some((count, index) => count !== sizes[index]))
     return { ok: false, error: "policy_review_batch_scope_changed" };
+
+  // A count proves visibility, not identity parity. Re-read all directly
+  // staged simple masters inside the reviewer transaction; if any changed
+  // since the signed source was staged, withhold independent review evidence.
+  const directTests = ids.get("TEST") || [];
+  const directUnits = ids.get("UNIT") || [];
+  const directContainers = ids.get("CONTAINER") || [];
+  const [tests, units, containers] = await Promise.all([
+    directTests.length ? tx.labTest.findMany({
+      where: { ...testScope, id: { in: directTests } },
+      select: { id: true, code: true, nameEn: true, departmentId: true, status: true },
+    }) : Promise.resolve([]),
+    directUnits.length ? tx.unit.findMany({
+      where: { organizationId: org, id: { in: directUnits } },
+      select: { id: true, code: true, symbol: true, status: true },
+    }) : Promise.resolve([]),
+    directContainers.length ? tx.container.findMany({
+      where: { organizationId: org, id: { in: directContainers } },
+      select: { id: true, code: true, nameEn: true, nameAr: true,
+        tubeColor: true, additive: true, status: true },
+    }) : Promise.resolve([]),
+  ]);
+  if (tests.length !== directTests.length || units.length !== directUnits.length ||
+      containers.length !== directContainers.length)
+    return { ok: false, error: "policy_review_batch_scope_changed" };
+  const scalarMasters = {
+    TEST: new Map(tests.map(row => [row.id, row])),
+    UNIT: new Map(units.map(row => [row.id, row])),
+    CONTAINER: new Map(containers.map(row => [row.id, row])),
+  };
+  for (const row of rows) {
+    if (row.entityType !== "TEST" && row.entityType !== "UNIT" &&
+        row.entityType !== "CONTAINER") continue;
+    const n = object(row.normalizedData);
+    const live = scalarMasters[row.entityType].get(n?.id as string);
+    if (!sameLiveScalarIdentity(row.entityType, n, live))
+      return { ok: false, error: "policy_review_batch_scope_changed" };
+  }
 
   // Count/scope checks alone permit a changed but still-in-scope member set.
   // Re-read actual membership in the SAME reviewer transaction and compare it
