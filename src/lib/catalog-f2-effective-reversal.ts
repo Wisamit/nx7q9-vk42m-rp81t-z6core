@@ -1,6 +1,9 @@
 import type { Prisma } from "../../generated/prisma/client";
 import type { F2ApplyPlan } from "./catalog-f2-apply-plan.ts";
 import type { F2EffectiveApplyAuthority } from "./catalog-f2-effective-versions.ts";
+import {
+  signF2ApplicationJournal,verifyF2ApplicationJournal,
+} from "./catalog-f2-application-journal.ts";
 
 const obj=(v:unknown):v is Record<string,unknown> =>
   !!v && typeof v==="object"&&!Array.isArray(v);
@@ -26,6 +29,8 @@ export async function reverseF2FutureEffectiveVersionsUnderLock(
   if(plan.format!=="F2_TEN_CLASS_EXECUTABLE_PLAN_V1"||
      !UUID.test(authority.organizationId)||!UUID.test(authority.branchId)||
      !UUID.test(authority.batchId)||!UUID.test(authority.actorUserId)||
+     !authority.journalSigningSecret||
+     Buffer.byteLength(authority.journalSigningSecret,"utf8")<32||
      !authority.sourceInstallationVerified||
      !authority.qualifiedDomainSignersVerified||
      !authority.currentPermissionsAndBranchScopeVerified||
@@ -42,8 +47,9 @@ export async function reverseF2FutureEffectiveVersionsUnderLock(
   });
   if(reversed.length>1)throw Error("f2_reversal_duplicate_journal");
   if(reversed.length){
-    const journal=reversed[0].newValues;
-    if(!obj(journal)||journal.planDigest!==plan.planDigest)
+    const journal=verifyF2ApplicationJournal(
+      reversed[0].newValues,authority.journalSigningSecret);
+    if(!journal||journal.planDigest!==plan.planDigest)
       throw Error("f2_reversal_journal_mismatch");
     return {state:"FUTURE_VERSIONS_ALREADY_REVERSED",
       changedRows:plan.changedRows,batchId:authority.batchId};
@@ -53,15 +59,18 @@ export async function reverseF2FutureEffectiveVersionsUnderLock(
       entityType:"CatalogImportBatch",entityId:authority.batchId},
     take:2,select:{newValues:true},
   });
-  if(applied.length!==1||!obj(applied[0].newValues) ||
-     applied[0].newValues.planDigest!==plan.planDigest ||
-     applied[0].newValues.effectiveAt!==plan.effectiveAt ||
-     !Array.isArray(applied[0].newValues.journalEventIds) ||
-     !Array.isArray(applied[0].newValues.createdVersionIds) ||
-     applied[0].newValues.journalEventIds.length!==plan.changedRows ||
-     applied[0].newValues.createdVersionIds.length!==plan.changedRows)
+  const applyRecord=applied.length===1?
+    verifyF2ApplicationJournal(
+      applied[0].newValues,authority.journalSigningSecret):null;
+  if(!applyRecord ||
+     applyRecord.planDigest!==plan.planDigest ||
+     applyRecord.effectiveAt!==plan.effectiveAt ||
+     !Array.isArray(applyRecord.journalEventIds) ||
+     !Array.isArray(applyRecord.createdVersionIds) ||
+     applyRecord.journalEventIds.length!==plan.changedRows ||
+     applyRecord.createdVersionIds.length!==plan.changedRows)
     throw Error("f2_reversal_missing_applied_journal");
-  const ids=applied[0].newValues.journalEventIds as unknown[];
+  const ids=applyRecord.journalEventIds as unknown[];
   if(ids.some(id=>typeof id!=="string"||!UUID.test(id))||
      new Set(ids).size!==ids.length)
     throw Error("f2_reversal_invalid_journal_ids");
@@ -75,16 +84,21 @@ export async function reverseF2FutureEffectiveVersionsUnderLock(
   const byId=new Map(journals.map(event=>[event.entityType+":"+event.entityId,event]));
   for(const row of plan.rows.filter(r=>r.operation!=="UNCHANGED")){
     const journal=byId.get(row.entityType+":"+row.targetId);
-    if(!journal||!obj(journal.newValues) ||
-       journal.newValues.planDigest!==plan.planDigest ||
-       journal.newValues.batchId!==authority.batchId||
-       journal.newValues.effectiveAt!==plan.effectiveAt ||
-       journal.newValues.originalDigest!==row.originalDigest ||
-       journal.newValues.desiredDigest!==row.desiredDigest ||
-       typeof journal.newValues.newVersionId!=="string" ||
-       !UUID.test(journal.newValues.newVersionId))
+    const values=journal?verifyF2ApplicationJournal(
+      journal.newValues,authority.journalSigningSecret):null;
+    if(!journal||!values ||
+       values.planDigest!==plan.planDigest ||
+       values.batchId!==authority.batchId||
+       values.effectiveAt!==plan.effectiveAt ||
+       values.originalDigest!==row.originalDigest ||
+       values.desiredDigest!==row.desiredDigest ||
+       !obj(values.before)||!obj(values.after) ||
+       values.before.id!==row.originalSnapshot.id ||
+       values.after.id!==row.desiredSnapshot.id ||
+       typeof values.newVersionId!=="string" ||
+       !UUID.test(values.newVersionId))
       throw Error("f2_reversal_journal_tampered");
-    const newId=journal.newValues.newVersionId;
+    const newId=values.newVersionId;
     const parentId=row.targetId;
     if(row.entityType==="PRICE_LIST_ITEM"){
       const referenced=await tx.priceListItem.findFirst({
@@ -144,8 +158,10 @@ export async function reverseF2FutureEffectiveVersionsUnderLock(
       actorUserId:authority.actorUserId,
       action:"CATALOG_F2_EFFECTIVE_VERSION_REVERSED",
       entityType:row.entityType,entityId:parentId,
-      newValues:{batchId:authority.batchId,planDigest:plan.planDigest,
-        retiredNeverEffectiveVersionId:newId,effectiveAt:plan.effectiveAt},
+      newValues:signF2ApplicationJournal({
+        batchId:authority.batchId,planDigest:plan.planDigest,
+        retiredNeverEffectiveVersionId:newId,effectiveAt:plan.effectiveAt,
+      },authority.journalSigningSecret) as Prisma.InputJsonObject,
     }});
   }
   await tx.auditEvent.create({data:{
@@ -153,8 +169,10 @@ export async function reverseF2FutureEffectiveVersionsUnderLock(
     actorUserId:authority.actorUserId,
     entityType:"CatalogImportBatch",entityId:authority.batchId,
     action:"CATALOG_F2_EFFECTIVE_BATCH_REVERSED",
-    newValues:{planDigest:plan.planDigest,effectiveAt:plan.effectiveAt,
-      changedRows:plan.changedRows,reason:"FUTURE_VERSION_COMPENSATION"},
+    newValues:signF2ApplicationJournal({
+      planDigest:plan.planDigest,effectiveAt:plan.effectiveAt,
+      changedRows:plan.changedRows,reason:"FUTURE_VERSION_COMPENSATION",
+    },authority.journalSigningSecret) as Prisma.InputJsonObject,
   }});
   return {state:"FUTURE_EFFECTIVE_VERSIONS_REVERSED",
     changedRows:plan.changedRows,batchId:authority.batchId};
