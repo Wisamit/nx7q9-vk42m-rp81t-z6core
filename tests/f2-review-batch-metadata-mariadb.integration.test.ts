@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import mysql from "mysql2/promise";
+import { verifyIndependentExpertStage } from "../src/lib/catalog-expert-stage-integrity.ts";
 import {
   reviewStageBatchMetadata, sealReviewStageEvidence, verifyReviewStageEvidence,
   qualifiedIndependentReviewSource,
@@ -92,7 +93,17 @@ test("F2 MariaDB: independently edited batch provenance or row evidence invalida
         "SELECT summary FROM catalog_import_batches WHERE id=?", [batch]))[0][0].summary)
         .stageEvidenceSeal, secret));
     };
+    const verifyExpert=async()=>{
+      const current=await read();
+      const [items]=await reviewer.execute<mysql.RowDataPacket[]>(
+        "SELECT summary FROM catalog_import_batches WHERE id=?",[batch]);
+      return verifyIndependentExpertStage({
+        context:current,metadata:current.batchMetadata,
+        seal:json(items[0].summary).stageEvidenceSeal,secret,
+      });
+    };
     assert.equal(await verify(), true);
+    assert.deepEqual(await verifyExpert(),{ok:true});
     assert.equal(qualifiedIndependentReviewSource((await read()).batchMetadata ?? null),true);
     // Re-sign unverified provenance with a valid key: post-staging integrity
     // still succeeds, but the separate qualification gate MUST refuse it.
@@ -104,6 +115,8 @@ test("F2 MariaDB: independently edited batch provenance or row evidence invalida
     await write("UPDATE catalog_import_batches SET summary=? WHERE id=?",
       [JSON.stringify({...untrusted,stageEvidenceSeal:untrustedSeal}),batch]);
     assert.equal(await verify(),true);
+    assert.deepEqual(await verifyExpert(),
+      {ok:false,error:"expert_source_not_qualified"});
     assert.equal(qualifiedIndependentReviewSource((await read()).batchMetadata ?? null),false);
     await write("UPDATE catalog_import_batches SET summary=? WHERE id=?",
       [JSON.stringify({...summary,stageEvidenceSeal:seal}),batch]);
@@ -111,6 +124,8 @@ test("F2 MariaDB: independently edited batch provenance or row evidence invalida
     await write("UPDATE catalog_import_batches SET summary=? WHERE id=?",
       [JSON.stringify({ ...summary, attestationStatus: "UNVERIFIED", stageEvidenceSeal: seal }), batch]);
     assert.equal(await verify(), false);
+    assert.deepEqual(await verifyExpert(),
+      {ok:false,error:"expert_staged_evidence_integrity_error"});
     await write("UPDATE catalog_import_batches SET summary=? WHERE id=?",
       [JSON.stringify({ ...summary, counts: { UNIT: 1 }, stageEvidenceSeal: seal }), batch]);
     assert.equal(await verify(), false);
@@ -124,9 +139,12 @@ test("F2 MariaDB: independently edited batch provenance or row evidence invalida
     await write("UPDATE catalog_import_rows SET normalized_data=? WHERE id=?",
       [JSON.stringify({ ...original, nameEn: "Tampered" }), rowId]);
     assert.equal(await verify(), false);
+    assert.deepEqual(await verifyExpert(),
+      {ok:false,error:"expert_staged_evidence_integrity_error"});
     await write("UPDATE catalog_import_rows SET normalized_data=? WHERE id=?",
       [JSON.stringify(original), rowId]);
     assert.equal(await verify(), true);
+    assert.deepEqual(await verifyExpert(),{ok:true});
   } finally {
     await writer.execute("DELETE FROM catalog_import_rows WHERE batch_id=?", [batch]).catch(() => {});
     await writer.execute("DELETE FROM catalog_import_batches WHERE id=?", [batch]).catch(() => {});
