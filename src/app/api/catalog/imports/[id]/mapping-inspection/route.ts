@@ -11,6 +11,8 @@ import {
   verifyMappingDiscussionHistory, MAPPING_DISCUSSION_HISTORY_LIMIT,
 } from "@/lib/catalog-mapping-discussion-draft";
 import { independentMappingInspection } from "@/lib/catalog-mapping-independent-inspection";
+import { readCatalogLiveObservations } from "@/lib/catalog-live-observation";
+import { catalogDriftObservationToken, matchesCatalogDriftObservation } from "@/lib/catalog-drift-triage";
 
 export const dynamic = "force-dynamic";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -111,7 +113,7 @@ export async function GET(request: NextRequest, { params }: Context) {
 
     const row = await tx.catalogImportRow.findFirst({
       where: { id: rowId, batchId: batch.id },
-      select: { id: true, rowNumber: true, entityType: true },
+      select: { id: true, rowNumber: true, entityType: true, sourceData: true, normalizedData: true },
     });
     if (!row) return { error: "mapping_inspection_not_found", httpStatus: 404 } as const;
     const category = bundleTriageClass(row.entityType);
@@ -153,8 +155,25 @@ export async function GET(request: NextRequest, { params }: Context) {
     if (!history.draft)
       return { error: "mapping_inspection_no_discussion", httpStatus: 404 } as const;
 
+    const normalized = row.normalizedData;
+    const targetId = normalized && typeof normalized === "object" &&
+      !Array.isArray(normalized) && "id" in normalized ? normalized.id : null;
+    if (typeof targetId !== "string" || !UUID.test(targetId))
+      return { error: "mapping_inspection_evidence_invalid", httpStatus: 409 } as const;
+    const live = await readCatalogLiveObservations(tx,scope,grantedBranchIds,
+      new Map([[row.entityType as Parameters<typeof readCatalogLiveObservations>[3] extends
+        ReadonlyMap<infer K, string[]> ? K : never, [targetId]]]));
+    const observation = live?.get(row.entityType + ":" + targetId);
+    if (!observation)
+      return { error: "mapping_inspection_live_scope_changed", httpStatus: 409 } as const;
+    const token = catalogDriftObservationToken(secret,batch.sourceChecksum,
+      row.rowNumber,row.entityType,row.sourceData,observation);
+    if (!matchesCatalogDriftObservation(history.draft.observationToken,token))
+      return { error: "mapping_inspection_live_observation_stale", httpStatus: 409 } as const;
+
     const view = independentMappingInspection({
       entityType:row.entityType,authenticatedDraft:history.draft,
+      currentObservationToken:token,
       userId:session.user.id,authorUserId:batch.createdByUserId,
       originalPermissions:original,currentPermissions:current,
     });
