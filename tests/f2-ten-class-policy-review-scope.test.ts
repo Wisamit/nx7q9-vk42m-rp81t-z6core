@@ -180,8 +180,16 @@ test("F2: reviewer transaction rejects live catalog identity and composite membe
     validationIssues:[{severity:"WARNING",code:"CONFIGURATION_BUNDLE_REVIEW_ONLY"}],
   }));
   const sourceChecksum="f".repeat(64), signingSecret="test-review-key".repeat(5);
+  const metadata={sourceType:"CONFIG_BUNDLE_REVIEW", sourceName:"safe-review.json",
+    status:"DRAFT",summary:{
+      total:stageRows.length,WARNING:stageRows.length,reviewOnly:true,
+      format:"family-lab-catalog-bundle",consistency:"transactional-consistent-read",
+      attestationStatus:"VERIFIED",fieldContractStatus:"COMPLETE_SOURCE_FIELD_PROJECTION",
+      exportedAt:"2026-10-20T00:00:00.000Z",
+      counts:Object.fromEntries(all.map(row=>[row.entityType,1])),
+    }};
   const stagedContext={organizationId:uuid(26),batchId:uuid(25),authorUserId:uuid(33),
-    sourceChecksum,rows:stageRows};
+    sourceChecksum,rows:stageRows,batchMetadata:metadata};
   const stageEvidenceSeal=sealReviewStageEvidence(stagedContext,signingSecret);
   const tx = {
     catalogImportRow:{findMany:async()=>stageRows},
@@ -198,9 +206,20 @@ test("F2: reviewer transaction rejects live catalog identity and composite membe
   } as unknown as Parameters<typeof validatePolicyReviewBatchScope>[0];
   const input={batchId:uuid(25),scope:{organizationId:uuid(26),branchId,
     departmentIds:[uuid(27)]},grantedBranchIds:[branchId],
-    authorUserId:uuid(33),sourceChecksum,stageEvidenceSeal,signingSecret};
+    authorUserId:uuid(33),sourceChecksum,stageEvidenceSeal,signingSecret,
+    batchMetadata:metadata};
   const check=()=>validatePolicyReviewBatchScope(tx,input);
   assert.deepEqual(await check(),{ok:true});
+  assert.deepEqual(await validatePolicyReviewBatchScope(tx,{...input,batchMetadata:null}),
+    {ok:false,error:"policy_review_source_integrity_error"});
+  assert.deepEqual(await validatePolicyReviewBatchScope(tx,{
+    ...input,batchMetadata:{...metadata,summary:{
+      ...(metadata.summary),attestationStatus:"UNVERIFIED",
+    }},
+  }),{ok:false,error:"policy_review_source_integrity_error"});
+  assert.deepEqual(await validatePolicyReviewBatchScope(tx,{
+    ...input,batchMetadata:{...metadata,sourceName:"renamed.json"},
+  }),{ok:false,error:"policy_review_source_integrity_error"});
   stageRows[0].sourceData={...stageRows[0].sourceData,nameEn:"Forged source"};
   assert.deepEqual(await check(),{ok:false,error:"policy_review_source_integrity_error"});
   stageRows[0].sourceData=all[0].sourceData;
