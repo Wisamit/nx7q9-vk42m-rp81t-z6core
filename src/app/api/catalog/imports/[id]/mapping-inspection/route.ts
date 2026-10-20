@@ -36,9 +36,11 @@ export async function GET(request:NextRequest,context:Context){
     });
     if(!history)return {error:"mapping_inspection_feedback_history_corrupt",httpStatus:409};
     return {...evidence.inspection,readiness:evidence.readiness,
+      batchReconciliation:evidence.batchReconciliation,
+      batchReconciliationCoverage:evidence.batchReconciliationCoverage,
       feedbackRevision:history.revision,
       feedbackDisposition:currentMappingFeedbackDisposition(
         history,evidence.draft.digest,evidence.currentObservationToken,
       )};
-  });
+  },true);
 }
