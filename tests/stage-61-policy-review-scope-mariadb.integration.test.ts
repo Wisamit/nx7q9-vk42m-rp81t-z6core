@@ -2,7 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import mysql from "mysql2/promise";
-import { policyReviewIdentityScope, sameLiveScalarIdentity } from "../src/lib/catalog-policy-review-scope.ts";
+import { policyReviewIdentityScope, sameLiveScalarIdentity,
+  sameLiveClinicalReviewIdentity } from "../src/lib/catalog-policy-review-scope.ts";
 
 test("Stage 61 MariaDB: staged identities fail closed on revoked branch and changed live department", {
   timeout: 45000,
@@ -18,7 +19,8 @@ test("Stage 61 MariaDB: staged identities fail closed on revoked branch and chan
   const org=randomUUID(),otherOrg=randomUUID(),branchA=randomUUID(),branchB=randomUUID();
   const deptA=randomUUID(),deptB=randomUUID(),testId=randomUUID(),unitId=randomUUID();
   const listId=randomUUID(),batch=randomUUID(),actor=randomUUID();
-  const ids=[randomUUID(),randomUUID(),randomUUID()];
+  const componentId=randomUUID(),intervalId=randomUUID();
+  const ids=Array.from({length:5},()=>randomUUID());
   const prefix="S61"+org.slice(0,8);
   const write=(sql:string,params:(string|number|null)[])=>writer.execute(sql,params);
   try {
@@ -35,6 +37,10 @@ test("Stage 61 MariaDB: staged identities fail closed on revoked branch and chan
       [testId,org,deptA,prefix+"T","Stage61 Test"]);
     await write("INSERT INTO units(id,organization_id,code,symbol,updated_at) VALUES(?,?,?,?,NOW(3))",
       [unitId,org,prefix+"U","mg/dL"]);
+    await write("INSERT INTO test_components(id,test_id,code,name_en,unit_id,updated_at) VALUES(?,?,?,?,?,NOW(3))",
+      [componentId,testId,prefix+"C","Stage61 Component",unitId]);
+    await write("INSERT INTO reference_intervals(id,component_id,branch_id,effective_from,approval_status,status,updated_at) VALUES(?,?,?,'2026-01-01','APPROVED','ACTIVE',NOW(3))",
+      [intervalId,componentId,branchA]);
     await write("INSERT INTO price_lists(id,organization_id,code,name_en,scope_type,branch_id,currency,effective_from,updated_at) VALUES(?,?,?,?,'BRANCH',?,'AED','2025-01-01',NOW(3))",
       [listId,org,prefix+"P","Stage61 List",branchB]);
     await write("INSERT INTO users(id,organization_id,username,display_name_en,updated_at) VALUES(?,?,?,?,NOW(3))",
@@ -61,6 +67,24 @@ test("Stage 61 MariaDB: staged identities fail closed on revoked branch and chan
         JSON.stringify(row.entityType==="PRICE_LIST"
           ? {...row.normalized,code:prefix+"P",currency:"AED",status:"ACTIVE"}
           : row.normalized),JSON.stringify([{severity:"WARNING",code:"REVIEW_ONLY"}])]);
+    const date="2026-01-01T00:00:00.000Z";
+    const clinicalRows=[
+      {type:"COMPONENT",source:{id:componentId,code:prefix+"C",
+        nameEn:"Stage61 Component",testId,unitId,status:"ACTIVE",
+        test:{code:prefix+"T"}},
+        normalized:{id:componentId,code:prefix+"C",nameEn:"Stage61 Component",
+          testId,unitId,testCode:prefix+"T",status:"ACTIVE"}},
+      {type:"REFERENCE_INTERVAL",source:{id:intervalId,componentId,
+        branchId:branchA,effectiveFrom:date,approvalStatus:"APPROVED",
+        status:"ACTIVE",component:{code:prefix+"C",test:{code:prefix+"T"}}},
+        normalized:{id:intervalId,componentId,componentCode:prefix+"C",
+          testCode:prefix+"T",branchId:branchA,effectiveFrom:date,
+          approvalStatus:"APPROVED",status:"ACTIVE"}},
+    ];
+    for(const [i,row] of clinicalRows.entries())
+      await write("INSERT INTO catalog_import_rows(id,batch_id,`row_number`,entity_type,status,source_data,normalized_data,updated_at) VALUES(?,?,? ,?,'WARNING',?,?,NOW(3))",
+        [ids[i+3],batch,i+4,row.type,JSON.stringify(row.source),
+          JSON.stringify(row.normalized)]);
     const [staged]=await reviewer.execute<mysql.RowDataPacket[]>(
       "SELECT entity_type AS entityType,source_data AS sourceData,normalized_data AS normalizedData,status,imported_entity_id AS importedEntityId FROM catalog_import_rows WHERE batch_id=? ORDER BY \u0060row_number\u0060",
       [batch]);
@@ -114,6 +138,40 @@ test("Stage 61 MariaDB: staged identities fail closed on revoked branch and chan
     assert.equal(await liveMatches(),false);
     await write("UPDATE units SET symbol=? WHERE id=?",["mg/dL",unitId]);
     assert.equal(await liveMatches(),true);
+    // Real MariaDB rows, independent writer/reader connections: same IDs but
+    // changed component and interval review identity must refuse attestation.
+    const liveClinical=async()=>{
+      const [components]=await reviewer.execute<mysql.RowDataPacket[]>(
+        "SELECT c.id,c.test_id AS testId,c.unit_id AS unitId,c.code,c.name_en AS nameEn,c.status,t.code AS testCode FROM test_components c JOIN lab_tests t ON t.id=c.test_id WHERE c.id=? AND t.organization_id=?",
+        [componentId,org]);
+      const [intervals]=await reviewer.execute<mysql.RowDataPacket[]>(
+        "SELECT r.id,r.component_id AS componentId,r.branch_id AS branchId,r.effective_from AS effectiveFrom,r.approval_status AS approvalStatus,r.status,c.code AS componentCode,t.code AS testCode FROM reference_intervals r JOIN test_components c ON c.id=r.component_id JOIN lab_tests t ON t.id=c.test_id WHERE r.id=? AND t.organization_id=?",
+        [intervalId,org]);
+      return components.length===1 && intervals.length===1 &&
+        sameLiveClinicalReviewIdentity("COMPONENT",decoded[3].normalizedData,
+          {...components[0],test:{code:components[0].testCode}}) &&
+        sameLiveClinicalReviewIdentity("REFERENCE_INTERVAL",
+          decoded[4].normalizedData,{
+            ...intervals[0],component:{code:intervals[0].componentCode,
+              test:{code:intervals[0].testCode}},
+          });
+    };
+    assert.equal(await liveClinical(),true);
+    await write("UPDATE test_components SET name_en=? WHERE id=?",
+      ["Changed after staging",componentId]);
+    assert.equal(await liveClinical(),false);
+    await write("UPDATE test_components SET name_en=? WHERE id=?",
+      ["Stage61 Component",componentId]);
+    await write("UPDATE test_components SET unit_id=NULL WHERE id=?",[componentId]);
+    assert.equal(await liveClinical(),false);
+    await write("UPDATE test_components SET unit_id=? WHERE id=?",[unitId,componentId]);
+    await write("UPDATE reference_intervals SET approval_status='RETIRED' WHERE id=?",[intervalId]);
+    assert.equal(await liveClinical(),false);
+    await write("UPDATE reference_intervals SET approval_status='APPROVED' WHERE id=?",[intervalId]);
+    await write("UPDATE reference_intervals SET effective_from='2026-02-01' WHERE id=?",[intervalId]);
+    assert.equal(await liveClinical(),false);
+    await write("UPDATE reference_intervals SET effective_from='2026-01-01' WHERE id=?",[intervalId]);
+    assert.equal(await liveClinical(),true);
     const [authorized]=await reviewer.execute<mysql.RowDataPacket[]>(
       "SELECT t.id FROM lab_tests t JOIN departments d ON d.id=t.department_id WHERE t.organization_id=? AND t.id=? AND d.status='ACTIVE' AND (d.branch_id IS NULL OR d.branch_id=?)",
       [org,testId,branchA]);
@@ -136,6 +194,8 @@ test("Stage 61 MariaDB: staged identities fail closed on revoked branch and chan
     await write("DELETE FROM catalog_import_rows WHERE batch_id=?",[batch]).catch(()=>{});
     await write("DELETE FROM catalog_import_batches WHERE id=?",[batch]).catch(()=>{});
     await write("DELETE FROM price_lists WHERE id=?",[listId]).catch(()=>{});
+    await write("DELETE FROM reference_intervals WHERE id=?",[intervalId]).catch(()=>{});
+    await write("DELETE FROM test_components WHERE id=?",[componentId]).catch(()=>{});
     await write("DELETE FROM lab_tests WHERE id=?",[testId]).catch(()=>{});
     await write("DELETE FROM units WHERE id=?",[unitId]).catch(()=>{});
     await write("DELETE FROM departments WHERE id IN (?,?)",[deptA,deptB]).catch(()=>{});
