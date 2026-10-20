@@ -86,19 +86,28 @@ test("F2 MariaDB: reviewed panel, package, package tariff and container cannot b
       [author,org,prefix+"U","F2 synthetic author"]);
     await write("INSERT INTO catalog_import_batches(id,organization_id,source_type,source_name,source_checksum,status,created_by_user_id,updated_at) VALUES(?,?,'CONFIG_BUNDLE_REVIEW','test-only.json',?,'DRAFT',?,NOW(3))",
       [batch,org,"a".repeat(64),author]);
+    const date="2026-01-01T00:00:00.000Z";
     const records=[
-      ["PANEL",panel,{id:panel,items:[{testId:testA,testCode:prefix+"A",displayOrder:1,required:true}]}],
-      ["PACKAGE",pkg,{id:pkg,items:[{testId:testA,testCode:prefix+"A",displayOrder:1}]}],
-      ["PRICE_LIST_PACKAGE_ITEM",pkgPrice,{id:pkgPrice,packageId:pkg,
-        priceListId:list,scopeType:"BRANCH",branchId:branchA}],
-      ["CONTAINER",tube,{id:tube}],
-    ] as const;
+      {type:"PANEL",source:{id:panel,items:[
+        {testId:testA,displayOrder:1,required:true,test:{code:prefix+"A"}}]},
+        normalized:{id:panel,items:[{testId:testA,testCode:prefix+"A",displayOrder:1,required:true}]}},
+      {type:"PACKAGE",source:{id:pkg,items:[
+        {testId:testA,displayOrder:1,test:{code:prefix+"A"}}]},
+        normalized:{id:pkg,items:[{testId:testA,testCode:prefix+"A",displayOrder:1}]}},
+      {type:"PRICE_LIST_PACKAGE_ITEM",source:{
+        id:pkgPrice,priceListId:list,packageId:pkg,package:{code:prefix+"K"},
+        priceList:{code:prefix+"L",scopeType:"BRANCH",branchId:branchA,
+          currency:"AED",sourceId:null,referrerId:null,clientId:null,contractId:null},
+        unitPrice:"123.4500",effectiveFrom:date,effectiveTo:null,status:"ACTIVE",
+      },normalized:{id:pkgPrice,packageId:pkg,packageCode:prefix+"K",
+        priceListId:list,priceListCode:prefix+"L",scopeType:"BRANCH",
+        branchId:branchA,currency:"AED",unitPrice:"123.4500",
+        effectiveFrom:date,effectiveTo:null,status:"ACTIVE"}},
+      {type:"CONTAINER",source:{id:tube},normalized:{id:tube}},
+    ];
     for(const [i,row] of records.entries()){
-      const source={id:row[1],...(row[0]==="PRICE_LIST_PACKAGE_ITEM"?
-        {priceList:{scopeType:"BRANCH",branchId:branchA,
-          sourceId:null,referrerId:null,clientId:null,contractId:null}}:{})};
       await write("INSERT INTO catalog_import_rows(id,batch_id,`row_number`,entity_type,status,source_data,normalized_data,updated_at) VALUES(?,?,?,?,'WARNING',?,?,NOW(3))",
-        [ids[i],batch,i+1,row[0],JSON.stringify(source),JSON.stringify(row[2])]);
+        [ids[i],batch,i+1,row.type,JSON.stringify(row.source),JSON.stringify(row.normalized)]);
     }
     assert.deepEqual(await check(),{ok:true});
     // All member tests must remain visible: adding a second off-branch member
