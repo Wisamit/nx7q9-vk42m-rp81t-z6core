@@ -11,6 +11,7 @@ import {
   verifyMappingDiscussionHistory, MAPPING_DISCUSSION_HISTORY_LIMIT,
 } from "@/lib/catalog-mapping-discussion-draft";
 import { independentMappingInspection } from "@/lib/catalog-mapping-independent-inspection";
+import type { CatalogExportType } from "@/lib/catalog-configuration-export";
 import { readCatalogLiveObservations } from "@/lib/catalog-live-observation";
 import { catalogDriftObservationToken, matchesCatalogDriftObservation } from "@/lib/catalog-drift-triage";
 
@@ -24,9 +25,9 @@ function opaqueError(error: string, status: number) {
 }
 
 /**
- * Independently scoped metadata inspection, deliberately GET-only. It does
- * not validate a fresh full source/live drift token; no reviewer decision,
- * consent, clinical sign-off, tariff change or master activation is possible.
+ * Independently scoped metadata inspection, deliberately GET-only. It
+ * revalidates the exact current author-side full field observation token
+ * without permitting any reviewer decision, medical sign-off or activation.
  */
 export async function GET(request: NextRequest, { params }: Context) {
   const query = request.nextUrl.searchParams;
@@ -161,8 +162,7 @@ export async function GET(request: NextRequest, { params }: Context) {
     if (typeof targetId !== "string" || !UUID.test(targetId))
       return { error: "mapping_inspection_evidence_invalid", httpStatus: 409 } as const;
     const live = await readCatalogLiveObservations(tx,scope,grantedBranchIds,
-      new Map([[row.entityType as Parameters<typeof readCatalogLiveObservations>[3] extends
-        ReadonlyMap<infer K, string[]> ? K : never, [targetId]]]));
+      new Map<CatalogExportType,string[]>([[row.entityType as CatalogExportType, [targetId]]]));
     const observation = live?.get(row.entityType + ":" + targetId);
     if (!observation)
       return { error: "mapping_inspection_live_scope_changed", httpStatus: 409 } as const;
