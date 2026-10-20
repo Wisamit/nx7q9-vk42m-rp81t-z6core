@@ -210,6 +210,22 @@ test("F2: reviewer transaction rejects live catalog identity and composite membe
     batchMetadata:metadata};
   const check=()=>validatePolicyReviewBatchScope(tx,input);
   assert.deepEqual(await check(),{ok:true});
+  // These are legitimate v2 HMAC seals over deliberately unqualified ORIGINAL
+  // exports. Staging authenticity alone cannot give a reviewer authority to
+  // attest to unsigned, field-incomplete or paginated source material.
+  for (const summaryChanges of [
+    { attestationStatus:"UNVERIFIED" },
+    { fieldContractStatus:"LEGACY_NO_FIELD_CONTRACT" },
+    { consistency:"paged-live-not-atomic" },
+  ]) {
+    const unqualified={...metadata,summary:{...metadata.summary,...summaryChanges}};
+    const sealed=sealReviewStageEvidence({...stagedContext,
+      batchMetadata:unqualified},signingSecret);
+    assert.deepEqual(await validatePolicyReviewBatchScope(tx,{
+      ...input,batchMetadata:unqualified,stageEvidenceSeal:sealed,
+    }),{ok:false,error:"policy_review_unverified_source"});
+  }
+
   assert.deepEqual(await validatePolicyReviewBatchScope(tx,{...input,batchMetadata:null}),
     {ok:false,error:"policy_review_source_integrity_error"});
   assert.deepEqual(await validatePolicyReviewBatchScope(tx,{
