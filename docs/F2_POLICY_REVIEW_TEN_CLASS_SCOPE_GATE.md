@@ -1,0 +1,22 @@
+# F2 — Ten-class independent policy review scope gate
+
+## Problem and effect
+
+The native signed configuration bundle has ten export classes. PR #333 fixed drift observations and governance triage for all ten, but the *separate* `validatePolicyReviewBatchScope` preflight used by policy reviewer GET, POST, and discovery queue still counted only six live master classes, omitted linked panel/package memberships and package-price parent scope, and did not require client/contract tariff IDs to be null. A valid review-only source whose linked clinical membership or private tariff context had changed could therefore pass this reviewer gate without proving full current scope. No clinical/financial apply was possible, but the independent policy review evidence could be misleading.
+
+## Change
+
+- Examine the complete bounded DRAFT batch, not just the displayed queue subset.
+- Bind every staged PANEL/PACKAGE member test ID to the same tenant/branch/department-filtered LabTest scope; reject malformed or repeated member identities.
+- Bind PRICE_LIST_PACKAGE_ITEM parent package and price-list IDs, and verify their current branch and clinically visible entire package membership.
+- Count all ten master entity types, including CONTAINER, PANEL, PACKAGE and PRICE_LIST_PACKAGE_ITEM, in the *same transaction* as reviewer audit capture.
+- Exclude all source/referrer/client/contract price lists from generic catalog policy review by checking live nested tariff fields and refusing untrusted private source linkage.
+- Use fail-closed count comparison on the union of staged and linked master IDs.
+- Preserve non-committable CONFIG_BUNDLE_REVIEW and CSV_REVIEW and all existing author/reviewer separation.
+
+## Verification and release gate
+
+- Pure unit tests cover all ten class identities, member duplicates, malformed package relationships, branch revocation and private tariff linkage; static checks tie the reviewer queue/route to the shared scoped validator.
+- Real MariaDB integration exercises actual tenant-locked Prisma validation for panel, package, package tariff and container and verifies off-branch membership, branch-revoked tariff and cross-tenant container fail closed, without live configuration mutations by the validator.
+- No schema migrations or configuration apply, no signatory credential inference. Approval workflow, domain policy, medical/financial signing and version-safe immutable application remain **F2 OPEN/BLOCKED_EXTERNAL** until qualified decisions.
+- **Hostinger deploy HOLD** per owner 2026-10-20 instruction. Continue GitHub PR/CI only. Latest *owner confirmed deployed* version is `d74115933bb24d745be4412883084fb54d8c152e`; `main` `66919fede47230277a74781b3ef4f9077713c3f4` has green CI #1839 but is not confirmed deployed. Do not promote a new PR to production or F3. No owner browser testing before F7.
