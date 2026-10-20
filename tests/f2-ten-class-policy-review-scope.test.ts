@@ -15,14 +15,21 @@ const base=(type: string, id: string, n: Record<string,unknown>={},
 const tariff={sourceId:null,referrerId:null,clientId:null,contractId:null};
 const all=[
   base("TEST",testId),
-  base("COMPONENT",componentId,{testId,unitId}),
+  base("COMPONENT",componentId,{testId,unitId,code:"COMP",nameEn:"Component",
+    testCode:"F2",status:"ACTIVE"},
+    {testId,unitId,code:"COMP",nameEn:"Component",test:{code:"F2"},status:"ACTIVE"}),
   base("UNIT",unitId),
   base("CONTAINER",uuid(7)),
   base("PANEL",panelId,{items:[{testId,testCode:"F2",displayOrder:1,required:true}]},
     {items:[{testId,displayOrder:1,required:true,test:{code:"F2"}}]}),
   base("PACKAGE",packageId,{items:[{testId,testCode:"F2",displayOrder:1}]},
     {items:[{testId,displayOrder:1,test:{code:"F2"}}]}),
-  base("REFERENCE_INTERVAL",uuid(8),{componentId,branchId}),
+  base("REFERENCE_INTERVAL",uuid(8),{componentId,componentCode:"COMP",
+    testCode:"F2",branchId,effectiveFrom:"2026-01-01T00:00:00.000Z",
+    approvalStatus:"APPROVED",status:"ACTIVE"},
+    {componentId,branchId,effectiveFrom:"2026-01-01T00:00:00.000Z",
+      approvalStatus:"APPROVED",status:"ACTIVE",
+      component:{code:"COMP",test:{code:"F2"}}}),
   base("PRICE_LIST",listId,{code:"LIST",currency:"AED",scopeType:"BRANCH",
     branchId,status:"ACTIVE"},
     {...tariff,code:"LIST",currency:"AED",scopeType:"BRANCH",branchId,status:"ACTIVE"}),
@@ -70,6 +77,19 @@ test("F2: membership, priced package, branch, private tariff and unknown source 
   assert.equal(change("PANEL",x=>{(((x.normalizedData as Record<string,unknown>).items as Record<string,unknown>[])[0]).required=false;}).ok,false);
   assert.equal(change("PACKAGE",x=>{(((x.sourceData as Record<string,unknown>).items as Record<string,unknown>[])[0]).displayOrder=7;}).ok,false);
   assert.equal(change("PACKAGE",x=>{(((x.sourceData as Record<string,unknown>).items as Record<string,unknown>[])[0]).testId=uuid(55);}).ok,false);
+  assert.equal(change("COMPONENT",x=>{(x.normalizedData as Record<string,unknown>).testId=uuid(90);}).ok,false);
+  assert.equal(change("COMPONENT",x=>{(x.normalizedData as Record<string,unknown>).testCode="OTHER";}).ok,false);
+  assert.equal(change("COMPONENT",x=>{(x.sourceData as Record<string,unknown>).unitId=uuid(77);}).ok,false);
+  assert.equal(change("COMPONENT",x=>{(x.normalizedData as Record<string,unknown>).nameEn="Tampered";}).ok,false);
+  assert.equal(change("COMPONENT",x=>{delete (x.sourceData as Record<string,unknown>).test;}).ok,false);
+  assert.equal(change("REFERENCE_INTERVAL",x=>{(x.normalizedData as Record<string,unknown>).componentId=uuid(91);}).ok,false);
+  assert.equal(change("REFERENCE_INTERVAL",x=>{(x.normalizedData as Record<string,unknown>).componentCode="WRONG";}).ok,false);
+  assert.equal(change("REFERENCE_INTERVAL",x=>{(x.normalizedData as Record<string,unknown>).testCode="WRONG";}).ok,false);
+  assert.equal(change("REFERENCE_INTERVAL",x=>{(x.normalizedData as Record<string,unknown>).branchId=uuid(55);}).ok,false);
+  assert.equal(change("REFERENCE_INTERVAL",x=>{(x.normalizedData as Record<string,unknown>).effectiveFrom="2027-01-01T00:00:00.000Z";}).ok,false);
+  assert.equal(change("REFERENCE_INTERVAL",x=>{(x.normalizedData as Record<string,unknown>).approvalStatus="DRAFT";}).ok,false);
+  assert.equal(change("REFERENCE_INTERVAL",x=>{(x.normalizedData as Record<string,unknown>).status="INACTIVE";}).ok,false);
+  assert.equal(change("REFERENCE_INTERVAL",x=>{delete (x.sourceData as Record<string,unknown>).component;}).ok,false);
   assert.equal(change("PRICE_LIST",x=>{(x.normalizedData as Record<string,unknown>).currency="USD";}).ok,false);
   assert.equal(change("PRICE_LIST",x=>{(x.normalizedData as Record<string,unknown>).code="SWAPPED";}).ok,false);
   assert.equal(change("PRICE_LIST",x=>{(x.sourceData as Record<string,unknown>).branchId=null;}).ok,false);
