@@ -4,7 +4,6 @@ import { prisma } from "@/lib/db";
 import { resolveClinicalImportScope } from "@/lib/catalog-clinical-import-scope";
 import { BUNDLE_REVIEW_SOURCE } from "@/lib/catalog-bundle-review";
 import { POLICY_DRAFT_HISTORY_LIMIT } from "@/lib/catalog-policy-draft-history";
-import { catalogBundleSigningSecret } from "@/lib/catalog-bundle-attestation";
 import {
   issueSignedPolicyQueueCursor, verifySignedPolicyQueueCursor,
   samePolicyQueueAnchor, samePolicyQueueAuditWatermark,
