@@ -15,7 +15,7 @@ import { f2GovernedReadinessPreview, type F2GovernedReadiness } from "@/lib/cata
 import { f2ReadOnlyBatchReconciliation, type F2BatchReconciliation } from "@/lib/catalog-f2-batch-reconciliation";
 import type { MappingDiscussionDraft } from "@/lib/catalog-mapping-discussion-draft";
 import type { Prisma } from "../../generated/prisma/client";
-import type { CatalogExportType } from "@/lib/catalog-configuration-export";
+import { catalogExportTypes, type CatalogExportType } from "@/lib/catalog-configuration-export";
 import { readCatalogLiveObservations } from "@/lib/catalog-live-observation";
 import { catalogDriftObservationToken, matchesCatalogDriftObservation } from "@/lib/catalog-drift-triage";
 
