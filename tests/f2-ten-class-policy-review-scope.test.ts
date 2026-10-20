@@ -23,9 +23,16 @@ const all=[
   base("PACKAGE",packageId,{items:[{testId,testCode:"F2",displayOrder:1}]},
     {items:[{testId,displayOrder:1,test:{code:"F2"}}]}),
   base("REFERENCE_INTERVAL",uuid(8),{componentId,branchId}),
-  base("PRICE_LIST",listId,{scopeType:"BRANCH",branchId},tariff),
-  base("PRICE_LIST_ITEM",uuid(9),{testId,priceListId:listId,scopeType:"BRANCH",branchId},
-    {priceList:tariff}),
+  base("PRICE_LIST",listId,{code:"LIST",currency:"AED",scopeType:"BRANCH",
+    branchId,status:"ACTIVE"},
+    {...tariff,code:"LIST",currency:"AED",scopeType:"BRANCH",branchId,status:"ACTIVE"}),
+  base("PRICE_LIST_ITEM",uuid(9),{testId,priceListId:listId,testCode:"F2",
+    priceListCode:"LIST",scopeType:"BRANCH",branchId,unitPrice:"45.6700",
+    effectiveFrom:"2026-01-01T00:00:00.000Z",status:"ACTIVE"},
+    {testId,priceListId:listId,test:{code:"F2"},
+      unitPrice:"45.6700",effectiveFrom:"2026-01-01T00:00:00.000Z",
+      status:"ACTIVE",priceList:{...tariff,code:"LIST",currency:"AED",scopeType:"BRANCH",
+        branchId,status:"ACTIVE"}}),
   base("PRICE_LIST_PACKAGE_ITEM",uuid(10),{priceListId:listId,priceListCode:"LIST",
     packageId,packageCode:"PACK",scopeType:"BRANCH",branchId,currency:"AED",
     unitPrice:"123.4500",effectiveFrom:"2026-01-01T00:00:00.000Z",
@@ -63,6 +70,18 @@ test("F2: membership, priced package, branch, private tariff and unknown source 
   assert.equal(change("PANEL",x=>{(((x.normalizedData as Record<string,unknown>).items as Record<string,unknown>[])[0]).required=false;}).ok,false);
   assert.equal(change("PACKAGE",x=>{(((x.sourceData as Record<string,unknown>).items as Record<string,unknown>[])[0]).displayOrder=7;}).ok,false);
   assert.equal(change("PACKAGE",x=>{(((x.sourceData as Record<string,unknown>).items as Record<string,unknown>[])[0]).testId=uuid(55);}).ok,false);
+  assert.equal(change("PRICE_LIST",x=>{(x.normalizedData as Record<string,unknown>).currency="USD";}).ok,false);
+  assert.equal(change("PRICE_LIST",x=>{(x.normalizedData as Record<string,unknown>).code="SWAPPED";}).ok,false);
+  assert.equal(change("PRICE_LIST",x=>{(x.sourceData as Record<string,unknown>).branchId=null;}).ok,false);
+  assert.equal(change("PRICE_LIST_ITEM",x=>{(x.normalizedData as Record<string,unknown>).testId=uuid(42);}).ok,false);
+  assert.equal(change("PRICE_LIST_ITEM",x=>{(x.normalizedData as Record<string,unknown>).testCode="OTHER";}).ok,false);
+  assert.equal(change("PRICE_LIST_ITEM",x=>{(x.normalizedData as Record<string,unknown>).priceListCode="OTHER";}).ok,false);
+  assert.equal(change("PRICE_LIST_ITEM",x=>{(x.normalizedData as Record<string,unknown>).unitPrice="99.0000";}).ok,false);
+  assert.equal(change("PRICE_LIST_ITEM",x=>{(x.normalizedData as Record<string,unknown>).effectiveFrom="2027-01-01T00:00:00.000Z";}).ok,false);
+  assert.equal(change("PRICE_LIST_ITEM",x=>{(x.sourceData as Record<string,unknown>).priceListId=uuid(42);}).ok,false);
+  assert.equal(change("PRICE_LIST_ITEM",x=>{(x.sourceData as Record<string,unknown>).unitPrice="12.34567";}).ok,false);
+  assert.equal(change("PRICE_LIST_ITEM",x=>{delete (x.sourceData as Record<string,unknown>).test;}).ok,false);
+  assert.equal(change("PRICE_LIST_ITEM",x=>{delete (x.sourceData as Record<string,unknown>).priceList;}).ok,false);
   assert.equal(change("PRICE_LIST_PACKAGE_ITEM",x=>{(x.normalizedData as Record<string,unknown>).packageCode="OTHER";}).ok,false);
   assert.equal(change("PRICE_LIST_PACKAGE_ITEM",x=>{(x.normalizedData as Record<string,unknown>).unitPrice="200.0000";}).ok,false);
   assert.equal(change("PRICE_LIST_PACKAGE_ITEM",x=>{(x.normalizedData as Record<string,unknown>).currency="USD";}).ok,false);
