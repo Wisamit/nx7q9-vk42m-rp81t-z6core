@@ -9,7 +9,6 @@ import {
 } from "@/lib/catalog-mapping-reviewer-feedback";
 
 export const dynamic="force-dynamic";
-const SHA=/^[a-f0-9]{64}$/;
 const headers={"Cache-Control":"private, no-store"};
 const reject=(error:string,status:number)=>
   NextResponse.json({error},{status,headers});
@@ -51,11 +50,13 @@ export async function POST(request:NextRequest,context:Context){
     return reject("mapping_feedback_invalid_request",400);
   const body=raw as Record<string,unknown>;
   if(Object.keys(body).sort().join(",") !==
-       "authorDraftDigest,disposition,expectedFeedbackRevision" ||
+       "disposition,expectedAuthorDraftRevision,expectedFeedbackRevision" ||
      !Number.isSafeInteger(body.expectedFeedbackRevision) ||
      (body.expectedFeedbackRevision as number)<0 ||
      (body.expectedFeedbackRevision as number)>=MAPPING_FEEDBACK_HISTORY_LIMIT ||
-     typeof body.authorDraftDigest!=="string" || !SHA.test(body.authorDraftDigest) ||
+     !Number.isSafeInteger(body.expectedAuthorDraftRevision) ||
+     (body.expectedAuthorDraftRevision as number)<1 ||
+     (body.expectedAuthorDraftRevision as number)>100 ||
      !validMappingFeedbackDisposition(body.disposition))
     return reject("mapping_feedback_invalid_request",400);
   return runIndependentMappingPreflight(request,context,async evidence=>{
@@ -81,7 +82,7 @@ export async function POST(request:NextRequest,context:Context){
       context,events,secret:evidence.secret,
     });
     if(!history)return {error:"mapping_feedback_history_corrupt",httpStatus:409};
-    if(body.authorDraftDigest!==evidence.draft.digest)
+    if(body.expectedAuthorDraftRevision!==evidence.draft.revision)
       return {error:"mapping_feedback_author_draft_stale",httpStatus:409};
     const latest=history.latest;
     if(body.expectedFeedbackRevision!==history.revision){
