@@ -60,3 +60,35 @@ The native signed configuration bundle has ten export classes. PR #333 fixed dri
 - Real MariaDB two-session integration exercises tenant-locked SQL membership, package-tariff and container visibility on synthetic rows; off-branch membership, revoked tariff branch, in-scope display-order/required-flag drift and cross-tenant container fail closed. Additional synthetic DRAFT price-list and single-test tariff rows prove that a tampered normalized currency or unit price fails before independent review; no published price is changed. Static tests independently assert the production GET/POST/queue paths call the same Prisma scope validator; direct Node integration cannot import the Next.js-only generated Prisma path without a test-specific bundling layer.
 - No schema migrations or configuration apply, no signatory credential inference. Approval workflow, domain policy, medical/financial signing and version-safe immutable application remain **F2 OPEN/BLOCKED_EXTERNAL** until qualified decisions.
 - **Hostinger deploy HOLD** per owner 2026-10-20 instruction. Continue GitHub PR/CI only. Latest *owner confirmed deployed* version is `d74115933bb24d745be4412883084fb54d8c152e`; `main` `66919fede47230277a74781b3ef4f9077713c3f4` has green CI #1839 but is not confirmed deployed. Do not promote a new PR to production or F3. No owner browser testing before F7.
+
+
+## F2 follow-up — persisted batch provenance seal v2 (review-only)
+
+Earlier staged-row HMAC v1 authenticated row JSON, warning evidence, checksum and
+author, but did not authenticate the separate batch source name/type/status or
+summary metadata. Editing `attestationStatus`, `fieldContractStatus`, export
+consistency or counts in the database could misdescribe the independent
+reviewer's original evidence without changing any sealed row.
+
+- Newly staged CONFIG_BUNDLE_REVIEW batches receive a domain-separated
+  **HMAC-SHA256 v2** over the persisted review rows **and** their original batch
+  provenance: source type, source file name, DRAFT status, summary totals,
+  export timestamp, transactional consistency, source attestation status,
+  field-contract status and per-class counts. Batch organization, author and
+  checksum remain signed. The seal is persisted in the same stage transaction.
+- GET/POST policy review and independent discovery queue read the batch
+  metadata again inside their existing organization-locked repeatable-read
+  transaction, remove only the `stageEvidenceSeal` key, and verify that
+  the recomputed v2 signature matches. Any metadata or row alteration, missing
+  seal, missing deployment signing key, or old v1-only seal fails closed.
+- Older draft batches with v1 seal are **not** silently upgraded: they need
+  **restaging from a fresh verified source** before independent review.
+- The legacy v1 library API remains testable for compatibility, but no
+  authenticated reviewer pathway accepts its older evidence format.
+- Regression includes HMAC tamper/downgrade tests, ten-class scope rejection
+  tests and independent writer/reader MariaDB mutation/restoration tests.
+- This is not evidence of an independently trusted original export, clinical
+  approval, tax/contract authorization, or deployment. No clinical/price masters
+  are written. Both `CONFIG_BUNDLE_REVIEW` and `CSV_REVIEW` stay
+  **non-committable**. Human signatory policy and an atomic versioned apply
+  workflow remain `BLOCKED_EXTERNAL` / unfinished F2 gates.
