@@ -49,8 +49,14 @@ test("Stage 61 MariaDB: staged identities fail closed on revoked branch and chan
     ];
     for (const [i,row] of rows.entries()) await write(
       "INSERT INTO catalog_import_rows(id,batch_id,\u0060row_number\u0060,entity_type,status,legacy_key,source_data,normalized_data,validation_issues,updated_at) VALUES(?,?,?,?,'WARNING',?,?,?,?,NOW(3))",
-      [ids[i],batch,i+1,row.entityType,row.id,JSON.stringify({id:row.id}),
-        JSON.stringify(row.normalized),JSON.stringify([{severity:"WARNING",code:"REVIEW_ONLY"}])]);
+      [ids[i],batch,i+1,row.entityType,row.id,JSON.stringify(row.entityType==="PRICE_LIST"
+        ? {id:row.id,code:prefix+"P",currency:"AED",scopeType:"BRANCH",
+          branchId:branchB,status:"ACTIVE",sourceId:null,referrerId:null,
+          clientId:null,contractId:null}
+        : {id:row.id}),
+        JSON.stringify(row.entityType==="PRICE_LIST"
+          ? {...row.normalized,code:prefix+"P",currency:"AED",status:"ACTIVE"}
+          : row.normalized),JSON.stringify([{severity:"WARNING",code:"REVIEW_ONLY"}])]);
     const [staged]=await reviewer.execute<mysql.RowDataPacket[]>(
       "SELECT entity_type AS entityType,source_data AS sourceData,normalized_data AS normalizedData,status,imported_entity_id AS importedEntityId FROM catalog_import_rows WHERE batch_id=? ORDER BY \u0060row_number\u0060",
       [batch]);
