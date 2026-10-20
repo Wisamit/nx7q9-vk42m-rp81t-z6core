@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import { getCurrentSession, permissionSet } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { BUNDLE_REVIEW_SOURCE } from "@/lib/catalog-bundle-review";
+import { BUNDLE_REVIEW_SOURCE, BUNDLE_REVIEW_MAX_ROWS } from "@/lib/catalog-bundle-review";
+import { catalogBundleSigningSecret } from "@/lib/catalog-bundle-attestation";
+import { reviewStageBatchMetadata } from "@/lib/catalog-review-stage-evidence";
+import { verifyIndependentExpertStage } from "@/lib/catalog-expert-stage-integrity";
 import { clinicalImportTestWhere, resolveClinicalImportScope } from "@/lib/catalog-clinical-import-scope";
 import { bundleTriageClass, triagePermissionScope } from "@/lib/catalog-drift-triage";
 
@@ -20,6 +23,9 @@ export async function GET() {
   if (!sessionPermissions.has("catalog.manage"))
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   const organizationId = session.user.organizationId;
+  const signingSecret = catalogBundleSigningSecret(process.env);
+  if (!signingSecret)
+    return NextResponse.json({ error: "expert_queue_stage_key_unavailable" }, { status: 503 });
   const response = await prisma.$transaction(async tx => {
     const locked = await tx.$queryRaw<Array<{ id: string }>>`
       SELECT id FROM organizations WHERE id = ${organizationId} AND status = 'ACTIVE' FOR UPDATE
@@ -101,9 +107,76 @@ export async function GET() {
         sourceType: BUNDLE_REVIEW_SOURCE, status: "DRAFT",
         createdByUserId: { not: session.user.id },
       },
-      select: { id: true, createdByUserId: true },
+      select: { id: true, createdByUserId: true, sourceType: true,
+        sourceName: true, status: true, sourceChecksum: true, summary: true },
     });
-    const batchById = new Map(batches.map(batch => [batch.id, batch]));
+
+    // The queue must not offer a pending expert decision for a DRAFT which
+    // independent GET/PUT will reject due to a changed staging envelope.
+    // Read *all* staged rows, not only the flagged row, and bound the total
+    // SQL JSON materialization to one maximum-size bundle per queue request.
+    const batchIndex = new Map(batches.map(batch => [batch.id, batch]));
+    const orderedBatchIds: string[] = [];
+    for (const flag of flags) {
+      const id = rowById.get(flag.entityId)?.batchId;
+      if (id && batchIndex.has(id) && !orderedBatchIds.includes(id))
+        orderedBatchIds.push(id);
+    }
+    const counts = orderedBatchIds.length ? await tx.catalogImportRow.groupBy({
+      by: ["batchId"], where: { batchId: { in: orderedBatchIds } },
+      _count: { _all: true },
+    }) : [];
+    const rowCounts = new Map(counts.map(item => [item.batchId, item._count._all]));
+    let budget = 0;
+    let evidenceTruncated = false;
+    const stageBatchIds: string[] = [];
+    for (const id of orderedBatchIds) {
+      const count = rowCounts.get(id) || 0;
+      if (count < 1 || count > BUNDLE_REVIEW_MAX_ROWS) continue;
+      if (budget + count > BUNDLE_REVIEW_MAX_ROWS) {
+        evidenceTruncated = true; continue;
+      }
+      budget += count;
+      stageBatchIds.push(id);
+    }
+    const evidenceRows = stageBatchIds.length ? await tx.catalogImportRow.findMany({
+      where: { batchId: { in: stageBatchIds } },
+      orderBy: [{ batchId: "asc" }, { rowNumber: "asc" }],
+      take: BUNDLE_REVIEW_MAX_ROWS + 1,
+      select: {
+        id: true, batchId: true, rowNumber: true, entityType: true,
+        legacyKey: true, status: true, sourceData: true,
+        normalizedData: true, validationIssues: true,
+        importedEntityId: true,
+      },
+    }) : [];
+    if (evidenceRows.length !== budget)
+      return { error: "expert_queue_staging_snapshot_changed", status: 409 } as const;
+    const rowsByBatch = new Map<string, typeof evidenceRows>();
+    for (const row of evidenceRows) {
+      const group = rowsByBatch.get(row.batchId) || [];
+      group.push(row);
+      rowsByBatch.set(row.batchId, group);
+    }
+    const verifiedBatches = new Map<string, typeof batches[number]>();
+    for (const id of stageBatchIds) {
+      const batch = batchIndex.get(id);
+      const rows = rowsByBatch.get(id);
+      if (!batch || !batch.sourceChecksum || !rows ||
+          rows.length !== rowCounts.get(id)) continue;
+      const result = verifyIndependentExpertStage({
+        context: {
+          organizationId, batchId: id, authorUserId: batch.createdByUserId,
+          sourceChecksum: batch.sourceChecksum, rows,
+        },
+        metadata: reviewStageBatchMetadata(batch),
+        seal: object(batch.summary)?.stageEvidenceSeal,
+        secret: signingSecret,
+      });
+      if (result.ok) verifiedBatches.set(id, batch);
+    }
+    // An empty queue is safer than presenting a forged or non-atomic source.
+    const batchById = verifiedBatches;
     const seenRows = new Set<string>();
     const entries: Array<{
       flagEventId: string; batchId: string; rowNumber: number; entityType: string;
@@ -153,7 +226,7 @@ export async function GET() {
       });
       if (entries.length >= 30) break;
     }
-    return { entries, hasMore: flags.length === 100 } as const;
+    return { entries, hasMore: flags.length === 100 || evidenceTruncated } as const;
   }, { isolationLevel: "RepeatableRead", timeout: 30000 });
   if ("error" in response) return NextResponse.json({ error: response.error },
     { status: response.status, headers: { "Cache-Control": "private, no-store" } });
