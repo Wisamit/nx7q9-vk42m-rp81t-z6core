@@ -129,9 +129,11 @@ test("F2: reviewer POST is feedback-only, strongly scoped and serialized behind 
   assert.match(preflight,/triagePermissionScope\(category, current\)/);
   assert.match(preflight,/batch\.createdByUserId === session\.user\.id/);
   assert.match(route,/verifyMappingFeedbackHistory\(/);
-  assert.match(route,/authorDraftDigest!==evidence\.draft\.digest/);
+  assert.match(route,/expectedAuthorDraftRevision!==evidence\.draft\.revision/);
   assert.match(route,/mapping_feedback_revision_conflict/);
   assert.match(route,/mapping_feedback_history_corrupt/);
+  assert.match(route,/expectedAuthorDraftRevision/);
+  assert.doesNotMatch(route,/body\.authorDraftDigest/);
   assert.match(route,/CATALOG_BUNDLE_MAPPING_FEEDBACK_RECORDED/);
   assert.match(route,/sourceInstanceProven:false,mappingApproved:false/);
   assert.match(route,/liveWrites:false/);
