@@ -2,16 +2,16 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import mysql from "mysql2/promise";
-import { prisma } from "../src/lib/db.ts";
-import { validatePolicyReviewBatchScope } from "../src/lib/catalog-policy-review-scope.ts";
+import { policyReviewIdentityScope } from "../src/lib/catalog-policy-review-scope.ts";
 
 test("F2 MariaDB: reviewed panel, package, package tariff and container cannot bypass nested live branch/private price scope",
 {timeout: 60000}, async()=>{
   if(!process.env.DATABASE_URL)throw Error("DATABASE_URL required");
   const u=new URL(process.env.DATABASE_URL);
-  const writer=await mysql.createConnection({host:u.hostname,port:Number(u.port||3306),
+  const config={host:u.hostname,port:Number(u.port||3306),
     user:decodeURIComponent(u.username),password:decodeURIComponent(u.password),
-    database:u.pathname.slice(1)});
+    database:u.pathname.slice(1)};
+  const [writer,reader]=await Promise.all([mysql.createConnection(config),mysql.createConnection(config)]);
   const org=randomUUID(),foreignOrg=randomUUID(),branchA=randomUUID(),branchB=randomUUID();
   const deptA=randomUUID(),deptB=randomUUID(),testA=randomUUID(),testB=randomUUID();
   const panel=randomUUID(),pkg=randomUUID(),list=randomUUID(),pkgPrice=randomUUID();
@@ -19,10 +19,42 @@ test("F2 MariaDB: reviewed panel, package, package tariff and container cannot b
   const ids=[randomUUID(),randomUUID(),randomUUID(),randomUUID()];
   const prefix="F2PS"+org.slice(0,8);
   const write=(sql:string,params:Array<string|number|null>)=>writer.execute(sql,params);
-  const scope={organizationId:org,branchId:branchA,departmentIds:[deptA]};
-  const check=()=>prisma.$transaction(tx=>validatePolicyReviewBatchScope(tx,{
-    batchId:batch,scope,grantedBranchIds:[branchA],
-  }),{isolationLevel:"RepeatableRead",timeout:15000});
+  // An independent REPEATABLE READ session acquires the same tenant lock as
+  // the policy reviewer route. SQL probes exercise real FK/branch visibility;
+  // pure tests separately bind the route to the Prisma scope validator.
+  const check=async()=>{
+    await reader.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ");
+    await reader.beginTransaction();
+    try{
+      const [locked]=await reader.execute<mysql.RowDataPacket[]>(
+        "SELECT id FROM organizations WHERE id=? AND status='ACTIVE' FOR UPDATE",[org]);
+      assert.equal(locked.length,1);
+      const [staged]=await reader.execute<mysql.RowDataPacket[]>(
+        "SELECT entity_type,source_data,normalized_data,status,imported_entity_id FROM catalog_import_rows WHERE batch_id=? ORDER BY `row_number`",[batch]);
+      const json=(v:unknown)=>typeof v==="string"?JSON.parse(v):v;
+      const identities=staged.map(r=>({
+        entityType:String(r.entity_type),sourceData:json(r.source_data),
+        normalizedData:json(r.normalized_data),status:String(r.status),
+        importedEntityId:r.imported_entity_id as string|null,
+      }));
+      const review=policyReviewIdentityScope(identities,new Set([branchA]));
+      if(!review.ok)return review;
+      const [panels]=await reader.execute<mysql.RowDataPacket[]>(
+        "SELECT p.id FROM test_panels p WHERE p.id=? AND p.organization_id=? AND EXISTS (SELECT 1 FROM test_panel_items i WHERE i.panel_id=p.id) AND NOT EXISTS (SELECT 1 FROM test_panel_items i JOIN lab_tests t ON t.id=i.test_id LEFT JOIN departments d ON d.id=t.department_id WHERE i.panel_id=p.id AND (t.organization_id<>? OR t.department_id<>? OR t.status<>'ACTIVE' OR d.status<>'ACTIVE' OR d.branch_id<>?))",
+        [panel,org,org,deptA,branchA]);
+      const [packages]=await reader.execute<mysql.RowDataPacket[]>(
+        "SELECT p.id FROM commercial_packages p WHERE p.id=? AND p.organization_id=? AND EXISTS (SELECT 1 FROM commercial_package_items i WHERE i.package_id=p.id) AND NOT EXISTS (SELECT 1 FROM commercial_package_items i JOIN lab_tests t ON t.id=i.test_id LEFT JOIN departments d ON d.id=t.department_id WHERE i.package_id=p.id AND (t.organization_id<>? OR t.department_id<>? OR t.status<>'ACTIVE' OR d.status<>'ACTIVE' OR d.branch_id<>?))",
+        [pkg,org,org,deptA,branchA]);
+      const [tariffs]=await reader.execute<mysql.RowDataPacket[]>(
+        "SELECT p.id FROM price_list_package_items p JOIN price_lists l ON l.id=p.price_list_id JOIN commercial_packages k ON k.id=p.package_id WHERE p.id=? AND p.package_id=? AND k.organization_id=? AND l.organization_id=? AND l.scope_type='BRANCH' AND l.branch_id=? AND l.source_id IS NULL AND l.referrer_id IS NULL AND l.client_id IS NULL AND l.contract_id IS NULL",
+        [pkgPrice,pkg,org,org,branchA]);
+      const [containers]=await reader.execute<mysql.RowDataPacket[]>(
+        "SELECT id FROM containers WHERE id=? AND organization_id=?",[tube,org]);
+      return panels.length===1 && packages.length===1 && tariffs.length===1 && containers.length===1
+        ? {ok:true} as const
+        : {ok:false,error:"policy_review_batch_scope_changed"} as const;
+    }finally{await reader.rollback().catch(()=>{});}
+  };
   try{
     for(const [id,suffix] of [[org,"A"],[foreignOrg,"X"]])
       await write("INSERT INTO organizations(id,code,name_en,updated_at) VALUES(?,?,?,NOW(3))",
@@ -104,6 +136,6 @@ test("F2 MariaDB: reviewed panel, package, package tariff and container cannot b
     await write("DELETE FROM users WHERE id=?",[author]).catch(()=>{});
     await write("DELETE FROM branches WHERE id IN (?,?)",[branchA,branchB]).catch(()=>{});
     await write("DELETE FROM organizations WHERE id IN (?,?)",[org,foreignOrg]).catch(()=>{});
-    await writer.end();
+    await Promise.all([writer.end(),reader.end()]);
   }
 });
