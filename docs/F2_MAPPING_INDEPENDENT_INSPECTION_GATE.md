@@ -38,26 +38,43 @@ Within a tenant organization lock (`FOR UPDATE`, `RepeatableRead`) it:
    `triagePermissionScope` covers all ten native types; panel/package
    reviews require both clinical and financial management grants.
 
-The response **always** includes:
+The independent reader now uses the **same full Prisma SELECT projection** as
+the author drift endpoint for all ten native classes, through
+`readCatalogLiveObservations`. Both run scoped under the organization lock
+and `RepeatableRead`. The reviewer loads the exact DRAFT row and computes
+`catalogDriftObservationToken(secret, sourceChecksum, rowNumber, entityType,
+sourceData, currentLiveJSON)` with the original algorithm. Constant-time
+token comparison must match the latest fully HMAC-authenticated author
+discussion revision. There is no approximate subset or reserialization of
+selected columns separate from the author route.
 
-- `status: "INDEPENDENT_DISCUSSION_INSPECTION_ONLY"`
+When the scoped target is absent, a linked membership/branch becomes
+unreviewable, or any full projected value changes, the endpoint returns an
+opaque **409**, not a "fresh" observation. Its read-only result after exact
+match is:
+
+- `status: "INDEPENDENT_FRESH_OBSERVATION_INSPECTION_ONLY"`
 - `historicalObservationMatchesDraft: true`
-- `currentLiveObservationRevalidated: false`
+- `currentLiveObservationRevalidated: true` (**exact token parity only**)
 - `independentMappingApprovalEligible: false`
 - `sourceInstanceProven: false`
 - `mappingApproved: false`, `signingEnabled: false`,
   `approved: false`, `activated: false`, `liveWrites: false`,
   `reviewOnly: true`
 
-The response **does NOT claim live drift observation-token parity**. The
-whole-batch source/live policy review scope check covers the existing
-identity and selected clinical/financial snapshots, but does not recompute
-the exact author-side live observation token for each projected field.
-Consequently, this is strictly **historical discussion inspection**, not
-"current mapping verified", not qualified signatory evidence, and never a
-production apply prerequisite. If a stronger workflow is designed later,
-it must independently recalculate the complete live observation and enforce
-professionally approved mapping/signature policies.
+**Precision of the claim:** this is fresh parity to the existing Stage 50/51
+author-side observation projection. It cannot detect fields that neither
+author drift SELECT nor the signed source covered, and cannot establish
+original installation lineage, qualified medical/financial signatory consent,
+approved foreign UUID remaps or any versioned apply authority. A manager
+grant or server HMAC remains review evidence only. Full live parity is also
+transaction-snapshot scoped; concurrent external writers that bypass the
+organization serialization protocol may commit afterward. Any future apply
+must revalidate inside its separate qualified atomic write transaction.
+
+**No clinical/financial import application is enabled.** Direct
+`CONFIG_BUNDLE_REVIEW` and `CSV_REVIEW` commit denial remains in force.
+
 
 ## Tests
 
@@ -69,6 +86,13 @@ professionally approved mapping/signature policies.
   independently connected SQL writer/reader, HMAC tamper and restore tests
   also verify metadata-only independent preflight cannot be performed by the
   original author or by a reviewer whose domain grant was revoked.
+
+- `tests/f2-mapping-live-observation-mariadb.integration.test.ts`:
+  Prisma shared full-select projections for all 10 types with synthetic
+  MariaDB masters; signed author token parity followed by ten distinct
+  live modifications (including panel/package membership, reference
+  decimal and both tariff decimals), stale-token rejection, revoked branch
+  and foreign-tenant denial. Runs explicitly in CI.
 
 No schema migration, new medical/financial master writes, approval event or
 clinical report changes. Direct `CONFIG_BUNDLE_REVIEW` and `CSV_REVIEW`
