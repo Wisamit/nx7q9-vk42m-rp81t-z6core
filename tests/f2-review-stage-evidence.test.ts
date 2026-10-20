@@ -53,3 +53,37 @@ test("F2: missing, spoofed, malformed and re-keyed seals are rejected without do
   assert.throws(()=>sealReviewStageEvidence({...context,rows:[row,row]},secret));
   assert.throws(()=>sealReviewStageEvidence(context,"short"));
 });
+
+
+test("F2: v2 staging HMAC authenticates all batch provenance and fails closed on legacy v1",()=>{
+  const summary={
+    total:1,WARNING:1,reviewOnly:true,format:"family-lab-catalog-bundle",
+    consistency:"transactional-consistent-read",
+    attestationStatus:"VERIFIED",fieldContractStatus:"COMPLETE_SOURCE_FIELD_PROJECTION",
+    exportedAt:"2026-10-20T00:00:00.000Z",counts:{REFERENCE_INTERVAL:1},
+  };
+  const batchMetadata={sourceType:"CONFIG_BUNDLE_REVIEW",sourceName:"config.JSON",
+    status:"DRAFT",summary};
+  const signed={...context,batchMetadata};
+  const v2=sealReviewStageEvidence(signed,secret);
+  assert.equal(v2.version,2);
+  assert.equal(verifyReviewStageEvidence(signed,v2,secret),true);
+  assert.equal(verifyReviewStageEvidence(signed,sealReviewStageEvidence(context,secret),secret),false);
+  assert.equal(verifyReviewStageEvidence(context,v2,secret),false);
+  for(const altered of [
+    {...batchMetadata,sourceName:"other.json"},
+    {...batchMetadata,sourceType:"CSV_REVIEW"},
+    {...batchMetadata,status:"VALIDATED"},
+    {...batchMetadata,summary:{...summary,attestationStatus:"UNVERIFIED"}},
+    {...batchMetadata,summary:{...summary,fieldContractStatus:"LEGACY_NO_FIELD_CONTRACT"}},
+    {...batchMetadata,summary:{...summary,consistency:"paged-live-not-atomic"}},
+    {...batchMetadata,summary:{...summary,counts:{TEST:1}}},
+    {...batchMetadata,summary:{...summary,exportedAt:"2026-10-21T00:00:00.000Z"}},
+    {...batchMetadata,summary:{...summary,reviewOnly:false}},
+    {...batchMetadata,summary:{...summary,WARNING:0}},
+    {...batchMetadata,summary:{...summary,extra:"unsealed"}},
+  ]) assert.equal(verifyReviewStageEvidence({...context,batchMetadata:altered},v2,secret),false);
+  assert.throws(()=>sealReviewStageEvidence({...context,
+    batchMetadata:{...batchMetadata,summary:{...summary,total:2}},
+  },secret));
+});
