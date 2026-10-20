@@ -50,7 +50,21 @@ test("F2 MariaDB: reviewed panel, package, package tariff and container cannot b
         [pkgPrice,pkg,org,org,branchA]);
       const [containers]=await reader.execute<mysql.RowDataPacket[]>(
         "SELECT id FROM containers WHERE id=? AND organization_id=?",[tube,org]);
-      return panels.length===1 && packages.length===1 && tariffs.length===1 && containers.length===1
+      const [panelMembers]=await reader.execute<mysql.RowDataPacket[]>(
+        "SELECT test_id AS testId, display_order AS displayOrder, required FROM test_panel_items WHERE panel_id=?",[panel]);
+      const [packageMembers]=await reader.execute<mysql.RowDataPacket[]>(
+        "SELECT test_id AS testId, display_order AS displayOrder FROM commercial_package_items WHERE package_id=?",[pkg]);
+      const matches=(entityType:string,live:mysql.RowDataPacket[],required:boolean)=>{
+        const stagedRow=identities.find(row=>row.entityType===entityType);
+        const expected=(stagedRow?.normalizedData as {items?: Array<{testId:string;displayOrder:number;required?:boolean}>} | undefined)?.items;
+        return Array.isArray(expected) && expected.length===live.length && expected.every(item=>
+          live.filter(row=>row.testId===item.testId &&
+            Number(row.displayOrder)===item.displayOrder &&
+            (!required || Boolean(row.required)===item.required)).length===1);
+      };
+      return panels.length===1 && packages.length===1 && tariffs.length===1 &&
+        containers.length===1 && matches("PANEL",panelMembers,true) &&
+        matches("PACKAGE",packageMembers,false)
         ? {ok:true} as const
         : {ok:false,error:"policy_review_batch_scope_changed"} as const;
     }finally{await reader.rollback().catch(()=>{});}
@@ -130,6 +144,19 @@ test("F2 MariaDB: reviewed panel, package, package tariff and container cannot b
     });
     await write("UPDATE catalog_import_rows SET normalized_data=? WHERE id=?",
       [JSON.stringify(records[2].normalized),ids[2]]);
+    assert.deepEqual(await check(),{ok:true});
+    // Live membership can drift without leaving granted clinical scope:
+    // changes in display order and required flag must also invalidate review.
+    await write("UPDATE test_panel_items SET required=0 WHERE panel_id=? AND test_id=?",
+      [panel,testA]);
+    assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
+    await write("UPDATE test_panel_items SET required=1 WHERE panel_id=? AND test_id=?",
+      [panel,testA]);
+    await write("UPDATE commercial_package_items SET display_order=9 WHERE package_id=? AND test_id=?",
+      [pkg,testA]);
+    assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
+    await write("UPDATE commercial_package_items SET display_order=1 WHERE package_id=? AND test_id=?",
+      [pkg,testA]);
     assert.deepEqual(await check(),{ok:true});
     // All member tests must remain visible: adding a second off-branch member
     // must revoke review of both the package and its tariff.
