@@ -139,7 +139,7 @@ test("F2: reviewer transaction rejects live catalog identity and composite membe
     departmentId:branchId,status:"ACTIVE"}];
   const currentUnits=[{id:unitId,code:"MG",symbol:"mg/dL",status:"ACTIVE"}];
   const currentContainers=[{id:uuid(7),code:"TUBE",nameEn:"Tube",nameAr:null,
-    tubeColor:"Red",additive:null,status:"ACTIVE"}];
+    tubeColor:"Red",additive:null as string | null,status:"ACTIVE"}];
   const currentPanels=[{testId,displayOrder:1,required:true}];
   const currentPackages=[{testId,displayOrder:1}];
   const count=async({where}:{where:{id:{in:string[]}}})=>where.id.in.length;
