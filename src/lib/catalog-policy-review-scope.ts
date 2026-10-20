@@ -71,6 +71,49 @@ function compositeStagingIdentityMatches(
 }
 
 /**
+ * The ordinary test-price item and its parent tariff are a distinct financial
+ * source class from a package-price item. Both snapshots live in DRAFT rows;
+ * no reviewer may attest to a silently changed price, test identity, list
+ * scope or currency. This validates persisted review evidence only.
+ */
+function financialStagingIdentityMatches(
+  type: "PRICE_LIST" | "PRICE_LIST_ITEM",
+  source: Record<string, unknown>,
+  normalized: Record<string, unknown>,
+): boolean {
+  if (type === "PRICE_LIST") {
+    return typeof source.code === "string" && source.code.length > 0 &&
+      source.code === normalized.code &&
+      typeof source.currency === "string" && source.currency.length === 3 &&
+      source.currency === normalized.currency &&
+      source.scopeType === normalized.scopeType &&
+      (source.branchId ?? null) === (normalized.branchId ?? null) &&
+      source.status === normalized.status;
+  }
+  const test = object(source.test), list = object(source.priceList);
+  return !!test && !!list &&
+    typeof source.testId === "string" && UUID.test(source.testId) &&
+    source.testId === normalized.testId &&
+    typeof test.code === "string" && test.code.length > 0 &&
+    test.code === normalized.testCode &&
+    typeof source.priceListId === "string" && UUID.test(source.priceListId) &&
+    source.priceListId === normalized.priceListId &&
+    typeof list.code === "string" && list.code.length > 0 &&
+    list.code === normalized.priceListCode &&
+    typeof list.currency === "string" && list.currency.length === 3 &&
+    (list.scopeType === "ORGANIZATION" || list.scopeType === "BRANCH") &&
+    list.scopeType === normalized.scopeType &&
+    (list.branchId ?? null) === (normalized.branchId ?? null) &&
+    typeof source.unitPrice === "string" &&
+    /^(?:0|[1-9]\\d{0,13})(?:\\.\\d{1,4})?$/.test(source.unitPrice) &&
+    source.unitPrice === normalized.unitPrice &&
+    typeof source.effectiveFrom === "string" &&
+    Number.isFinite(Date.parse(source.effectiveFrom)) &&
+    source.effectiveFrom === normalized.effectiveFrom &&
+    source.status === normalized.status;
+}
+
+/**
  * Check every staged identity, not the displayed queue page. Source JSON must
  * never be returned to a reviewer or written to an audit decision.
  */
@@ -95,6 +138,9 @@ export function policyReviewIdentityScope(
     if ((type === "PANEL" || type === "PACKAGE" ||
          type === "PRICE_LIST_PACKAGE_ITEM") &&
         !compositeStagingIdentityMatches(type, source, n))
+      return { ok: false, error: "policy_review_source_integrity_error" };
+    if ((type === "PRICE_LIST" || type === "PRICE_LIST_ITEM") &&
+        !financialStagingIdentityMatches(type, source, n))
       return { ok: false, error: "policy_review_source_integrity_error" };
     seen.add(type + ":" + id);
     ids.set(type, [...(ids.get(type) || []), id]);
