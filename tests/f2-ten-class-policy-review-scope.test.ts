@@ -57,9 +57,9 @@ test("F2: membership, priced package, branch, private tariff and unknown source 
     {testId},{testId}];}).ok,false);
   assert.equal(change("PRICE_LIST_PACKAGE_ITEM",x=>{(x.normalizedData as Record<string,unknown>).packageId="bad";}).ok,false);
   assert.equal(change("PRICE_LIST_PACKAGE_ITEM",x=>{(x.normalizedData as Record<string,unknown>).scopeType="CLIENT";}).ok,false);
-  assert.equal(change("PRICE_LIST_PACKAGE_ITEM",x=>{(x.sourceData.priceList as Record<string,unknown>).contractId=uuid(22);}).ok,false);
-  assert.equal(change("PRICE_LIST_ITEM",x=>{(x.sourceData.priceList as Record<string,unknown>).clientId=uuid(23);}).ok,false);
-  assert.equal(change("PRICE_LIST",x=>{x.sourceData.sourceId=uuid(24);}).ok,false);
+  assert.equal(change("PRICE_LIST_PACKAGE_ITEM",x=>{((x.sourceData as Record<string,unknown>).priceList as Record<string,unknown>).contractId=uuid(22);}).ok,false);
+  assert.equal(change("PRICE_LIST_ITEM",x=>{((x.sourceData as Record<string,unknown>).priceList as Record<string,unknown>).clientId=uuid(23);}).ok,false);
+  assert.equal(change("PRICE_LIST",x=>{(x.sourceData as Record<string,unknown>).sourceId=uuid(24);}).ok,false);
   assert.equal(change("CONTAINER",x=>{x.sourceData.id="wrong";}).ok,false);
   assert.equal(policyReviewIdentityScope([...all,base("INVOICE",uuid(25))],new Set([branchId])).ok,false);
 });
