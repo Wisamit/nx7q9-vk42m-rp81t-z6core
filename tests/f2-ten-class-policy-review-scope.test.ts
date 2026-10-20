@@ -18,14 +18,22 @@ const all=[
   base("COMPONENT",componentId,{testId,unitId}),
   base("UNIT",unitId),
   base("CONTAINER",uuid(7)),
-  base("PANEL",panelId,{items:[{testId, testCode:"F2",displayOrder:1,required:true}]}),
-  base("PACKAGE",packageId,{items:[{testId,testCode:"F2",displayOrder:1}]}),
+  base("PANEL",panelId,{items:[{testId,testCode:"F2",displayOrder:1,required:true}]},
+    {items:[{testId,displayOrder:1,required:true,test:{code:"F2"}}]}),
+  base("PACKAGE",packageId,{items:[{testId,testCode:"F2",displayOrder:1}]},
+    {items:[{testId,displayOrder:1,test:{code:"F2"}}]}),
   base("REFERENCE_INTERVAL",uuid(8),{componentId,branchId}),
   base("PRICE_LIST",listId,{scopeType:"BRANCH",branchId},tariff),
   base("PRICE_LIST_ITEM",uuid(9),{testId,priceListId:listId,scopeType:"BRANCH",branchId},
     {priceList:tariff}),
-  base("PRICE_LIST_PACKAGE_ITEM",uuid(10),{priceListId:listId,packageId,scopeType:"BRANCH",branchId},
-    {priceList:tariff}),
+  base("PRICE_LIST_PACKAGE_ITEM",uuid(10),{priceListId:listId,priceListCode:"LIST",
+    packageId,packageCode:"PACK",scopeType:"BRANCH",branchId,currency:"AED",
+    unitPrice:"123.4500",effectiveFrom:"2026-01-01T00:00:00.000Z",
+    effectiveTo:null,status:"ACTIVE"},
+    {priceListId:listId,packageId,unitPrice:"123.4500",
+      effectiveFrom:"2026-01-01T00:00:00.000Z",effectiveTo:null,status:"ACTIVE",
+      package:{code:"PACK"},priceList:{...tariff,code:"LIST",scopeType:"BRANCH",
+        branchId,currency:"AED"}}),
 ];
 
 test("F2: every selected export class participates in policy draft reviewer scope, including nested member and priced package refs",()=>{
@@ -51,6 +59,15 @@ test("F2: membership, priced package, branch, private tariff and unknown source 
   assert.deepEqual(policyReviewIdentityScope(all,new Set()),{
     ok:false,error:"policy_review_batch_scope_changed",
   });
+  assert.equal(change("PANEL",x=>{((x.normalizedData.items as Record<string,unknown>[])[0]).testCode="CHANGED";}).ok,false);
+  assert.equal(change("PANEL",x=>{((x.normalizedData.items as Record<string,unknown>[])[0]).required=false;}).ok,false);
+  assert.equal(change("PACKAGE",x=>{((x.sourceData.items as Record<string,unknown>[])[0]).displayOrder=7;}).ok,false);
+  assert.equal(change("PACKAGE",x=>{((x.sourceData.items as Record<string,unknown>[])[0]).testId=uuid(55);}).ok,false);
+  assert.equal(change("PRICE_LIST_PACKAGE_ITEM",x=>{(x.normalizedData as Record<string,unknown>).packageCode="OTHER";}).ok,false);
+  assert.equal(change("PRICE_LIST_PACKAGE_ITEM",x=>{(x.normalizedData as Record<string,unknown>).unitPrice="200.0000";}).ok,false);
+  assert.equal(change("PRICE_LIST_PACKAGE_ITEM",x=>{(x.normalizedData as Record<string,unknown>).currency="USD";}).ok,false);
+  assert.equal(change("PRICE_LIST_PACKAGE_ITEM",x=>{(x.sourceData as Record<string,unknown>).priceListId=uuid(88);}).ok,false);
+  assert.equal(change("PRICE_LIST_PACKAGE_ITEM",x=>{(x.normalizedData as Record<string,unknown>).effectiveFrom="2027-01-01T00:00:00.000Z";}).ok,false);
   assert.equal(change("PANEL",x=>{(x.normalizedData as Record<string,unknown>).items=[];}).ok,false);
   assert.equal(change("PACKAGE",x=>{(x.normalizedData as Record<string,unknown>).items=[{testId:"wrong"}];}).ok,false);
   assert.equal(change("PANEL",x=>{(x.normalizedData as Record<string,unknown>).items=[
