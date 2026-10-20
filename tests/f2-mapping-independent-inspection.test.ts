@@ -85,35 +85,39 @@ test("F2 independent mapping: author, revoked roles, cross-domain and unknown cl
 test("F2 independent mapping: route rechecks full HMAC/source/live scope, never grants action",()=>{
   const route=readFileSync(
     "src/app/api/catalog/imports/[id]/mapping-inspection/route.ts","utf8");
+  const preflight=readFileSync(
+    "src/lib/catalog-mapping-inspection-preflight.ts","utf8");
   const bundle=readFileSync(
     "src/app/api/catalog/imports/[id]/bundle-drift/route.ts","utf8");
   const commit=readFileSync(
     "src/app/api/catalog/imports/[id]/commit/route.ts","utf8");
   assert.match(route,/export async function GET\(/);
+  assert.match(route,/runIndependentMappingPreflight\(request,context\)/);
+  assert.match(preflight,/export async function runIndependentMappingPreflight\(/);
   assert.doesNotMatch(route,/export async function (?:POST|PUT|PATCH|DELETE)\(/);
-  assert.match(route,/original = permissionSet\(session\)/);
-  assert.match(route,/current = new Set/);
-  assert.match(route,/activeUser = await tx\.user\.findFirst/);
-  assert.match(route,/batch\.createdByUserId === session\.user\.id/);
-  assert.match(route,/resolveClinicalImportScope\(/);
-  assert.match(route,/triagePermissionScope\(category, original\)/);
-  assert.match(route,/triagePermissionScope\(category, current\)/);
-  assert.match(route,/validatePolicyReviewBatchScope\(tx,/);
-  assert.match(route,/reviewStageBatchMetadata\(batch\)/);
-  assert.match(route,/verifyMappingDiscussionHistory\(/);
-  assert.match(route,/signingSecret:secret/);
-  assert.match(route,/take:MAPPING_DISCUSSION_HISTORY_LIMIT\+1/);
-  assert.match(route,/independentMappingInspection\(/);
-  assert.match(route,/readCatalogLiveObservations\(tx,scope,grantedBranchIds/);
-  assert.match(route,/catalogDriftObservationToken\(secret,batch\.sourceChecksum/);
-  assert.match(route,/matchesCatalogDriftObservation\(history\.draft\.observationToken,token\)/);
+  assert.match(preflight,/original = permissionSet\(session\)/);
+  assert.match(preflight,/current = new Set/);
+  assert.match(preflight,/activeUser = await tx\.user\.findFirst/);
+  assert.match(preflight,/batch\.createdByUserId === session\.user\.id/);
+  assert.match(preflight,/resolveClinicalImportScope\(/);
+  assert.match(preflight,/triagePermissionScope\(category, original\)/);
+  assert.match(preflight,/triagePermissionScope\(category, current\)/);
+  assert.match(preflight,/validatePolicyReviewBatchScope\(tx,/);
+  assert.match(preflight,/reviewStageBatchMetadata\(batch\)/);
+  assert.match(preflight,/verifyMappingDiscussionHistory\(/);
+  assert.match(preflight,/signingSecret:secret/);
+  assert.match(preflight,/take:MAPPING_DISCUSSION_HISTORY_LIMIT\+1/);
+  assert.match(preflight,/independentMappingInspection\(/);
+  assert.match(preflight,/readCatalogLiveObservations\(tx,scope,grantedBranchIds/);
+  assert.match(preflight,/catalogDriftObservationToken\(secret,batch\.sourceChecksum/);
+  assert.match(preflight,/matchesCatalogDriftObservation\(history\.draft\.observationToken,token\)/);
   const shared=readFileSync("src/lib/catalog-live-observation.ts","utf8");
   assert.match(bundle,/readCatalogLiveObservations\(tx,liveScope,branchIds,idsByType\)/);
   assert.match(shared,/JSON\.parse\(JSON\.stringify\(current\)\)/);
-  assert.match(route,/FOR UPDATE/);
-  assert.match(route,/isolationLevel:"RepeatableRead"/);
-  assert.match(route,/private, no-store/);
-  assert.doesNotMatch(route,/independentMappingApprovalEligible:\\s*true/);
+  assert.match(preflight,/FOR UPDATE/);
+  assert.match(preflight,/isolationLevel:"RepeatableRead"/);
+  assert.match(preflight,/private, no-store/);
+  assert.doesNotMatch(preflight,/independentMappingApprovalEligible:\\s*true/);
   assert.match(bundle,/mappingApproved:false/);
   assert.match(commit,/CONFIG_BUNDLE_REVIEW/);
   assert.match(commit,/CSV_REVIEW/);
