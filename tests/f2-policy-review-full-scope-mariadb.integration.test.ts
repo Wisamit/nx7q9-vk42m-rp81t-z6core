@@ -110,6 +110,27 @@ test("F2 MariaDB: reviewed panel, package, package tariff and container cannot b
         [ids[i],batch,i+1,row.type,JSON.stringify(row.source),JSON.stringify(row.normalized)]);
     }
     assert.deepEqual(await check(),{ok:true});
+    // Even within a granted branch, staging must not silently rewrite a
+    // signed source member code or a financial snapshot before review.
+    const forgedPanel={...records[0].normalized,items:[
+      {testId:testA,testCode:"FORGED_CODE",displayOrder:1,required:true},
+    ]};
+    await write("UPDATE catalog_import_rows SET normalized_data=? WHERE id=?",
+      [JSON.stringify(forgedPanel),ids[0]]);
+    assert.deepEqual(await check(),{
+      ok:false,error:"policy_review_source_integrity_error",
+    });
+    await write("UPDATE catalog_import_rows SET normalized_data=? WHERE id=?",
+      [JSON.stringify(records[0].normalized),ids[0]]);
+    const forgedTariff={...records[2].normalized,unitPrice:"999.0000"};
+    await write("UPDATE catalog_import_rows SET normalized_data=? WHERE id=?",
+      [JSON.stringify(forgedTariff),ids[2]]);
+    assert.deepEqual(await check(),{
+      ok:false,error:"policy_review_source_integrity_error",
+    });
+    await write("UPDATE catalog_import_rows SET normalized_data=? WHERE id=?",
+      [JSON.stringify(records[2].normalized),ids[2]]);
+    assert.deepEqual(await check(),{ok:true});
     // All member tests must remain visible: adding a second off-branch member
     // must revoke review of both the package and its tariff.
     await write("INSERT INTO commercial_package_items(package_id,test_id,display_order) VALUES(?,?,2)",
