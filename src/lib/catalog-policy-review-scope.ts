@@ -1,5 +1,6 @@
 import type { Prisma } from "../../generated/prisma/client";
 import { BUNDLE_REVIEW_MAX_ROWS } from "./catalog-bundle-review.ts";
+import { verifyReviewStageEvidence } from "./catalog-review-stage-evidence.ts";
 import { clinicalImportTestWhere, type ClinicalImportScope } from "./catalog-clinical-import-scope.ts";
 import { catalogExportTypes, type CatalogExportType } from "./catalog-configuration-export.ts";
 
@@ -504,14 +505,26 @@ export function sameLiveReferenceIntervalMedicalSnapshot(
 export async function validatePolicyReviewBatchScope(
   tx: Prisma.TransactionClient, input: {
     batchId: string; scope: ClinicalImportScope; grantedBranchIds: readonly string[];
+    sourceChecksum: string; authorUserId: string; stageEvidenceSeal: unknown;
+    signingSecret: string | null;
   },
 ): Promise<PolicyReviewScopeCheck> {
   const rows = await tx.catalogImportRow.findMany({
     where: { batchId: input.batchId }, orderBy: { rowNumber: "asc" },
     take: BUNDLE_REVIEW_MAX_ROWS + 1,
-    select: { entityType: true, normalizedData: true, sourceData: true,
-      status: true, importedEntityId: true },
+    select: { id: true, rowNumber: true, entityType: true,
+      legacyKey: true, normalizedData: true, sourceData: true,
+      validationIssues: true, status: true, importedEntityId: true },
   });
+  // A reviewer must not accept individually consistent but independently
+  // rewritten DRAFT source/normalized JSON. Verify the signed persisted
+  // envelope before any scope, clinical or price comparison.
+  if (!verifyReviewStageEvidence({
+    organizationId: input.scope.organizationId, batchId: input.batchId,
+    authorUserId: input.authorUserId, sourceChecksum: input.sourceChecksum,
+    rows,
+  }, input.stageEvidenceSeal, input.signingSecret))
+    return { ok: false, error: "policy_review_source_integrity_error" };
   const validated = policyReviewIdentityScope(rows, new Set(input.grantedBranchIds));
   if (!validated.ok) return validated;
   const { ids, refs } = validated;
