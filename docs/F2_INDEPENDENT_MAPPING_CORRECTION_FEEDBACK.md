@@ -17,7 +17,7 @@ Exactly these JSON fields are accepted (synthetic shape, no raw source values):
 ```json
 {
   "expectedFeedbackRevision": 0,
-  "authorDraftDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "expectedAuthorDraftRevision": 1,
   "disposition": "REQUEST_SOURCE_INSTALLATION_EVIDENCE"
 }
 ```
@@ -41,7 +41,12 @@ approval, authenticated source installation identity or application consent.
 - Source installation provenance is not guessed: it remains
   `sourceInstanceProven: false`. No third-party bundle UUID becomes portable
   or an authoritative local mapping.
-- Only the latest author draft digest is acceptable. An independent
+- Only the latest **author revision number** from the independent GET is
+  acceptable; the actual author digest is recomputed and bound internally,
+  never exposed through the browser request. The independent GET also returns
+  `feedbackRevision` and the latest matching categorical
+  `feedbackDisposition` (or null), after authenticating the full feedback
+  HMAC audit history. Only the latest author draft digest is acceptable. An independent
   feedback expected revision acts as a tenant-serialized CAS. Exact retries
   return `INDEPENDENT_MAPPING_FEEDBACK_UNCHANGED` without a second event;
   concurrent changed/stale inputs fail closed.
