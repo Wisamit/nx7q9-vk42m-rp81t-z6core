@@ -114,6 +114,50 @@ function financialStagingIdentityMatches(
 }
 
 /**
+ * Reviewer evidence must retain the original clinical relationship to the
+ * analyte and its linked test, even if the reference interval has changed in
+ * the live laboratory. This is DRAFT source/staging parity, not clinical
+ * approval or an assertion that imported values should replace live ranges.
+ */
+function clinicalStagingIdentityMatches(
+  type: "COMPONENT" | "REFERENCE_INTERVAL",
+  source: Record<string, unknown>,
+  normalized: Record<string, unknown>,
+): boolean {
+  if (type === "COMPONENT") {
+    const test = object(source.test);
+    return !!test &&
+      typeof source.testId === "string" && UUID.test(source.testId) &&
+      source.testId === normalized.testId &&
+      typeof test.code === "string" && test.code.length > 0 &&
+      test.code === normalized.testCode &&
+      typeof source.code === "string" && source.code.length > 0 &&
+      source.code === normalized.code &&
+      typeof source.nameEn === "string" && source.nameEn.length > 0 &&
+      source.nameEn === normalized.nameEn &&
+      (source.unitId === null || (typeof source.unitId === "string" && UUID.test(source.unitId))) &&
+      source.unitId === normalized.unitId &&
+      source.status === normalized.status;
+  }
+  const component = object(source.component);
+  const test = object(component?.test);
+  return !!component && !!test &&
+    typeof source.componentId === "string" && UUID.test(source.componentId) &&
+    source.componentId === normalized.componentId &&
+    typeof component.code === "string" && component.code.length > 0 &&
+    component.code === normalized.componentCode &&
+    typeof test.code === "string" && test.code.length > 0 &&
+    test.code === normalized.testCode &&
+    (source.branchId === null || (typeof source.branchId === "string" && UUID.test(source.branchId))) &&
+    source.branchId === normalized.branchId &&
+    typeof source.effectiveFrom === "string" &&
+    Number.isFinite(Date.parse(source.effectiveFrom)) &&
+    new Date(source.effectiveFrom).toISOString() === normalized.effectiveFrom &&
+    source.approvalStatus === normalized.approvalStatus &&
+    source.status === normalized.status;
+}
+
+/**
  * Check every staged identity, not the displayed queue page. Source JSON must
  * never be returned to a reviewer or written to an audit decision.
  */
@@ -141,6 +185,9 @@ export function policyReviewIdentityScope(
       return { ok: false, error: "policy_review_source_integrity_error" };
     if ((type === "PRICE_LIST" || type === "PRICE_LIST_ITEM") &&
         !financialStagingIdentityMatches(type, source, n))
+      return { ok: false, error: "policy_review_source_integrity_error" };
+    if ((type === "COMPONENT" || type === "REFERENCE_INTERVAL") &&
+        !clinicalStagingIdentityMatches(type, source, n))
       return { ok: false, error: "policy_review_source_integrity_error" };
     seen.add(type + ":" + id);
     ids.set(type, [...(ids.get(type) || []), id]);
