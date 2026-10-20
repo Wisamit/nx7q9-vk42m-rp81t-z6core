@@ -115,3 +115,27 @@ test("F2: full-set helper is explicitly non-authorizing and bounded by caller's 
   assert.match(commit,/CONFIG_BUNDLE_REVIEW/);
   assert.match(commit,/CSV_REVIEW/);
 });
+
+test("F2: independent GET compiles the ten-class report only for dual-grant authenticated reviewer",()=>{
+  const preflight=readFileSync("src/lib/catalog-mapping-inspection-preflight.ts","utf8");
+  const get=readFileSync("src/app/api/catalog/imports/[id]/mapping-inspection/route.ts","utf8");
+  const feedback=readFileSync("src/app/api/catalog/imports/[id]/mapping-feedback/route.ts","utf8");
+  assert.match(preflight,/validatePolicyReviewBatchScope\(tx,/);
+  assert.match(preflight,/verifyMappingDiscussionHistory\(/);
+  assert.match(preflight,/matchesCatalogDriftObservation\(history\.draft\.observationToken,token\)/);
+  assert.match(preflight,/SELECT id FROM organizations/);
+  assert.match(preflight,/FOR UPDATE/);
+  assert.match(preflight,/isolationLevel:"RepeatableRead"/);
+  assert.match(preflight,/includeBatchReconciliation = false/);
+  assert.match(preflight,/original\.has\(grant\) && current\.has\(grant\)/);
+  assert.match(preflight,/catalog\.reference_ranges\.manage","pricing\.manage/);
+  assert.match(preflight,/readCatalogLiveObservations\(\s*tx,scope,grantedBranchIds,byType\)/);
+  assert.match(preflight,/f2ReadOnlyBatchReconciliation\(/);
+  assert.match(preflight,/mapping_inspection_batch_reconciliation_invalid/);
+  assert.match(get,/batchReconciliation:evidence\.batchReconciliation/);
+  assert.match(get,/batchReconciliationCoverage:evidence\.batchReconciliationCoverage/);
+  assert.match(get,/\},true\);/);
+  assert.doesNotMatch(get,/export async function POST\(/);
+  assert.match(feedback,/runIndependentMappingPreflight\(request,context,async evidence=>/);
+  assert.doesNotMatch(feedback,/includeBatchReconciliation/);
+});
