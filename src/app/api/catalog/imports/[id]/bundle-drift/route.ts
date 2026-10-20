@@ -730,7 +730,7 @@ async function inspectBundleDrift(
         take:MAPPING_DISCUSSION_HISTORY_LIMIT+1,
         select:{id:true,actorUserId:true,branchId:true,newValues:true},
       });
-      const history=verifyMappingDiscussionHistory({context,events:historyRows});
+      const history=verifyMappingDiscussionHistory({context,events:historyRows,secret:key});
       if(!history)
         return {error:"mapping_discussion_history_corrupt",httpStatus:409} as const;
       const previous=history.draft;
@@ -756,7 +756,7 @@ async function inspectBundleDrift(
           previousDigest:previous?.digest ?? null,
           observationToken:observed.observationToken,
           intent:mappingDiscussionInput.intent,
-        });
+        },key);
         await tx.auditEvent.create({data:{
           organizationId,branchId:liveScope.branchId,actorUserId:session.user.id,
           action:"CATALOG_BUNDLE_MAPPING_DISCUSSION_DRAFT_RECORDED",
