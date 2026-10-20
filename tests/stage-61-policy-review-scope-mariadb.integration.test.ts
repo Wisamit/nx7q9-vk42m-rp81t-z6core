@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import mysql from "mysql2/promise";
+import { sealReviewStageEvidence, verifyReviewStageEvidence } from "../src/lib/catalog-review-stage-evidence.ts";
 import { policyReviewIdentityScope, sameLiveScalarIdentity,
   sameLiveClinicalReviewIdentity, sameLiveReferenceIntervalMedicalSnapshot
 } from "../src/lib/catalog-policy-review-scope.ts";
@@ -96,6 +97,24 @@ test("Stage 61 MariaDB: staged identities fail closed on revoked branch and chan
       await write("INSERT INTO catalog_import_rows(id,batch_id,`row_number`,entity_type,status,source_data,normalized_data,updated_at) VALUES(?,?,? ,?,'WARNING',?,?,NOW(3))",
         [ids[i+3],batch,i+4,row.type,JSON.stringify(row.source),
           JSON.stringify(row.normalized)]);
+    // HMAC-seal the actual persisted MariaDB stage envelope under a tenant key.
+    const storedEvidence=async()=>{
+      const [stored]=await reviewer.execute<mysql.RowDataPacket[]>(
+        "SELECT id,\u0060row_number\u0060 AS rowNumber,entity_type AS entityType,legacy_key AS legacyKey,status,source_data AS sourceData,normalized_data AS normalizedData,validation_issues AS validationIssues,imported_entity_id AS importedEntityId FROM catalog_import_rows WHERE batch_id=? ORDER BY \u0060row_number\u0060",
+        [batch]);
+      const parse=(v:unknown)=>typeof v==="string"?JSON.parse(v):v;
+      return stored.map(row=>({...row,
+        rowNumber:Number(row.rowNumber),sourceData:parse(row.sourceData),
+        normalizedData:parse(row.normalizedData),
+        validationIssues:parse(row.validationIssues)}));
+    };
+    const signingSecret="test-family-lab-stage-auth-key-material";
+    const envelope={organizationId:org,batchId:batch,authorUserId:actor,
+      sourceChecksum:"f".repeat(64)};
+    const sealed=sealReviewStageEvidence({...envelope,
+      rows:await storedEvidence()},signingSecret);
+    assert.equal(verifyReviewStageEvidence({...envelope,
+      rows:await storedEvidence()},sealed,signingSecret),true);
     const [staged]=await reviewer.execute<mysql.RowDataPacket[]>(
       "SELECT entity_type AS entityType,source_data AS sourceData,normalized_data AS normalizedData,status,imported_entity_id AS importedEntityId FROM catalog_import_rows WHERE batch_id=? ORDER BY \u0060row_number\u0060",
       [batch]);
@@ -118,6 +137,8 @@ test("Stage 61 MariaDB: staged identities fail closed on revoked branch and chan
     const tampered={...parse(before[0].normalized_data),nameEn:"Forged test"};
     await write("UPDATE catalog_import_rows SET normalized_data=? WHERE id=?",
       [JSON.stringify(tampered),ids[0]]);
+    assert.equal(verifyReviewStageEvidence({...envelope,
+      rows:await storedEvidence()},sealed,signingSecret),false);
     const [changed]=await reviewer.execute<mysql.RowDataPacket[]>(
       "SELECT entity_type AS entityType,source_data AS sourceData,normalized_data AS normalizedData,status,imported_entity_id AS importedEntityId FROM catalog_import_rows WHERE batch_id=? ORDER BY `row_number`",[batch]);
     const forged=changed.map(row=>({entityType:String(row.entityType),
@@ -128,6 +149,19 @@ test("Stage 61 MariaDB: staged identities fail closed on revoked branch and chan
     });
     await write("UPDATE catalog_import_rows SET normalized_data=? WHERE id=?",
       [JSON.stringify(parse(before[0].normalized_data)),ids[0]]);
+    assert.equal(verifyReviewStageEvidence({...envelope,
+      rows:await storedEvidence()},sealed,signingSecret),true);
+    const [sourceRows]=await reviewer.execute<mysql.RowDataPacket[]>(
+      "SELECT source_data FROM catalog_import_rows WHERE id=?",[ids[4]]);
+    const sourceBefore=parse(sourceRows[0].source_data);
+    await write("UPDATE catalog_import_rows SET source_data=? WHERE id=?",
+      [JSON.stringify({...sourceBefore,lowValue:"99.000000"}),ids[4]]);
+    assert.equal(verifyReviewStageEvidence({...envelope,
+      rows:await storedEvidence()},sealed,signingSecret),false);
+    await write("UPDATE catalog_import_rows SET source_data=? WHERE id=?",
+      [JSON.stringify(sourceBefore),ids[4]]);
+    assert.equal(verifyReviewStageEvidence({...envelope,
+      rows:await storedEvidence()},sealed,signingSecret),true);
     // Independent MariaDB reader checks the actual fields used by the
     // reviewer snapshot parity guard, not only an immutable UUID.
     const liveMatches=async()=>{
