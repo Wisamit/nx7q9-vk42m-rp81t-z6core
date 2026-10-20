@@ -7,6 +7,16 @@ type DriftRow = {
   rowNumber: number; entityType: string;
   disposition: "UNCHANGED" | "DRIFTED"; changedFields: string[];
   additionalFieldsOmitted: boolean; observationToken: string;
+  targetIdentity: {
+    status: "LOCAL_IDENTITY_OBSERVED" | "MAPPING_REQUIRED";
+    reasons: Array<
+      "INVALID_SOURCE_IDENTITY" | "TARGET_RECORD_ID_MISMATCH" |
+      "PRIMARY_CODE_MISMATCH" | "PARENT_IDENTITY_MISMATCH" |
+      "BRANCH_OR_TARIFF_SCOPE_MISMATCH" | "COMPOSITE_MEMBERSHIP_MISMATCH" |
+      "UNSUPPORTED_CLASS">;
+    sourceInstanceProven: false; portableSourceIds: false;
+    mappingApproved: false; reviewOnly: true; autoApplyAllowed: false;
+  };
   fieldReview: {
     fields: Array<{ path: string; classification:
       "IMMUTABLE_SYSTEM" | "IDENTITY_RECONCILIATION" |
@@ -109,6 +119,23 @@ export function CatalogBundleDriftReview({ batchId, locale }: {
             !Array.isArray(row.changedFields) ||
             row.changedFields.some(field => typeof field !== "string") ||
             typeof row.additionalFieldsOmitted !== "boolean" ||
+            !row.targetIdentity || row.targetIdentity.reviewOnly !== true ||
+            row.targetIdentity.autoApplyAllowed !== false ||
+            row.targetIdentity.mappingApproved !== false ||
+            row.targetIdentity.sourceInstanceProven !== false ||
+            row.targetIdentity.portableSourceIds !== false ||
+            !["LOCAL_IDENTITY_OBSERVED", "MAPPING_REQUIRED"]
+              .includes(row.targetIdentity.status) ||
+            !Array.isArray(row.targetIdentity.reasons) ||
+            row.targetIdentity.reasons.length > 7 ||
+            row.targetIdentity.reasons.some(reason => ![
+              "INVALID_SOURCE_IDENTITY","TARGET_RECORD_ID_MISMATCH",
+              "PRIMARY_CODE_MISMATCH","PARENT_IDENTITY_MISMATCH",
+              "BRANCH_OR_TARIFF_SCOPE_MISMATCH","COMPOSITE_MEMBERSHIP_MISMATCH",
+              "UNSUPPORTED_CLASS",
+            ].includes(reason)) ||
+            (row.targetIdentity.status === "LOCAL_IDENTITY_OBSERVED" !==
+              (row.targetIdentity.reasons.length === 0)) ||
             !row.fieldReview || row.fieldReview.reviewOnly !== true ||
             row.fieldReview.autoApplyAllowed !== false ||
             row.fieldReview.qualifiedApprovalRequired !== true ||
@@ -224,7 +251,15 @@ export function CatalogBundleDriftReview({ batchId, locale }: {
               <td>{row.entityType}</td>
               <td>{row.disposition === "UNCHANGED"
                 ? tr("Same as source", "مطابق للمصدر")
-                : tr("Review differences", "توجد اختلافات للمراجعة")}</td>
+                : tr("Review differences", "توجد اختلافات للمراجعة")}
+                <p className="muted">{row.targetIdentity.status === "LOCAL_IDENTITY_OBSERVED"
+                  ? tr("Current local IDs match; source instance unproven",
+                    "الهويات المحلية متطابقة حالياً، لكن نسخة المصدر غير مثبتة")
+                  : tr("Target mapping requires separate review",
+                    "ربط المصدر بالوجهة يحتاج مراجعة منفصلة")}</p>
+                {row.targetIdentity.reasons.length > 0 &&
+                  <p className="muted">{tr("Mapping flags: ", "ملاحظات الربط: ")}
+                    {row.targetIdentity.reasons.join(", ")}</p>}</td>
               <td>{row.fieldReview.fields.length ? row.fieldReview.fields.map((field,index) => {
                 const labels: Record<string,[string,string]> = {
                   IMMUTABLE_SYSTEM:["Immutable metadata", "بيانات نظامية غير قابلة للتعديل"],
