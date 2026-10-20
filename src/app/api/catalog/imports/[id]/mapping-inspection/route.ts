@@ -37,7 +37,8 @@ export async function GET(request:NextRequest,context:Context){
     const freshFeedback=history.latest &&
       history.latest.authorDraftDigest===evidence.draft.digest &&
       history.latest.observationToken===evidence.currentObservationToken;
-    return {...evidence.inspection,feedbackRevision:history.revision,
+    return {...evidence.inspection,readiness:evidence.readiness,
+      feedbackRevision:history.revision,
       feedbackDisposition:freshFeedback?history.latest!.disposition:null};
   });
 }
