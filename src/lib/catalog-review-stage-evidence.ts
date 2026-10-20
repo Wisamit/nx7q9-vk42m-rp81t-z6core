@@ -30,6 +30,22 @@ export function reviewStageBatchMetadata(batch: ReviewStageEvidenceBatchMetadata
     status: batch.status, summary };
 }
 
+/**
+ * A valid post-staging HMAC proves that DRAFT bytes were not altered. It
+ * does not prove that their ORIGINAL export was trustworthy. Independent
+ * procedural review only accepts a verified, field-complete atomic export.
+ * Legacy/unsigned/paged bundles remain DRAFT for diagnostics and restaging.
+ */
+export function qualifiedIndependentReviewSource(metadata: ReviewStageEvidenceBatchMetadata | null): boolean {
+  if (!metadata || metadata.sourceType !== "CONFIG_BUNDLE_REVIEW" ||
+      metadata.status !== "DRAFT" || !metadata.summary ||
+      typeof metadata.summary !== "object" || Array.isArray(metadata.summary)) return false;
+  const summary = metadata.summary as Record<string, unknown>;
+  return summary.attestationStatus === "VERIFIED" &&
+    summary.fieldContractStatus === "COMPLETE_SOURCE_FIELD_PROJECTION" &&
+    summary.consistency === "transactional-consistent-read";
+}
+
 function checkedMetadata(value: ReviewStageEvidenceBatchMetadata, rows: readonly ReviewStageEvidenceRow[]): ReviewStageEvidenceBatchMetadata {
   const s = value.summary;
   if (value.sourceType !== "CONFIG_BUNDLE_REVIEW" || value.status !== "DRAFT" ||
