@@ -122,7 +122,7 @@ test("F2 mapping: GET/POST use current locked stage, optimistic revision, fresh 
   assert.match(route,/mapping_discussion_local_identity_not_observed/);
   assert.match(route,/MAPPING_DISCUSSION_UNCHANGED/);
   assert.match(route,/action:"CATALOG_BUNDLE_MAPPING_DISCUSSION_DRAFT_RECORDED"/);
-  assert.match(route,/expectedRevision: value\.expectedRevision/);
+  assert.match(route,/expectedRevision:\\s*value\\.expectedRevision/);
   assert.match(route,/isolationLevel: "RepeatableRead"/);
   assert.doesNotMatch(route,/tx\.(?:labTest|referenceInterval|priceList|priceListItem|catalogImportRow)\.(?:create|update|upsert|delete)\(/);
   const commit=readFileSync("src/app/api/catalog/imports/[id]/commit/route.ts","utf8");
