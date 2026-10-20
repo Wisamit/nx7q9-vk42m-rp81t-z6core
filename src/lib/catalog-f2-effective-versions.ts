@@ -172,6 +172,28 @@ export async function applyF2EffectiveVersionsUnderLock(
       const componentId=prior.componentId;
       if(typeof componentId!=="string"||!UUID.test(componentId))
         throw Error("f2_apply_range_identity");
+      // A second concurrently configured open, approved interval for the
+      // identical population/method scope would make the newly activated
+      // critical range ambiguous. Reject rather than choose arbitrary one.
+      const openScope=await tx.referenceInterval.findMany({
+        where:{
+          componentId,branchId:prior.branchId as string|null,
+          methodId:prior.methodId as string|null,
+          analyzerId:prior.analyzerId as string|null,
+          specimenTypeId:prior.specimenTypeId as string|null,
+          sex:prior.sex as never,
+          ageFrom:prior.ageFrom as string|null,
+          ageTo:prior.ageTo as string|null,
+          ageUnit:prior.ageUnit as never,
+          pregnancyStatus:prior.pregnancyStatus as never,
+          gestationalAgeFromWeeks:prior.gestationalAgeFromWeeks as string|null,
+          gestationalAgeToWeeks:prior.gestationalAgeToWeeks as string|null,
+          populationCode:prior.populationCode as string|null,
+          status:"ACTIVE",approvalStatus:"APPROVED",effectiveTo:null,
+        },select:{id:true},take:2,
+      });
+      if(openScope.length!==1||openScope[0].id!==row.targetId)
+        throw Error("f2_apply_range_population_overlap");
       const claim=await tx.referenceInterval.updateMany({
         where:{id:row.targetId,componentId,
           status:"ACTIVE",approvalStatus:"APPROVED",effectiveTo:null,
