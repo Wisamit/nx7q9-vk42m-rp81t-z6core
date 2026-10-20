@@ -87,7 +87,10 @@ test("F2 expert: route checks sealed original persisted rows before independent 
   const commit=readFileSync("src/app/api/catalog/imports/[id]/commit/route.ts","utf8");
   assert.match(src,/reviewStageBatchMetadata\(batch\)/);
   assert.match(src,/verifyIndependentExpertStage\(/);
-  assert.match(src,/if \(expert\) \{\s*const metadata/);
+  // The verified v2 stage gate protects both the expert and author mapping
+  // discussion paths before either can inspect or append audit history.
+  assert.match(src,/if \(expert \|\| mappingDiscussionInput \|\| mappingDiscussionRow !== null\)/);
+  assert.match(src,/const metadata = reviewStageBatchMetadata\(batch\)/);
   assert.match(src,/legacyKey: true/);
   assert.match(src,/validationIssues: true/);
   const verifyAt=src.indexOf("verifyIndependentExpertStage(");
