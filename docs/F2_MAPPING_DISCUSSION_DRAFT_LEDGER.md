@@ -61,14 +61,19 @@ fail closed, including older revisions.
 - New evidence produces a new draft revision; no historical draft is
   overwritten. A previous draft automatically becomes stale when target
   state changes.
-- Every row's bounded full history (max 100 entries) is validated in
-  append order with unique IDs, contiguous revisions, previous-digest links
-  and a constant-time comparison of every revision's server-authenticated
-  HMAC seal. Any gap, duplicate, wrong actor/branch/key, unsigned revision,
-  forged SHA replacement, malformed field, additional property or overflow
-  returns an error. The HMAC reuses the deployment's validated signing
-  secret with a **distinct mapping-audit purpose prefix**, separate from
-  staged bundle evidence and live-observation HMACs.
+- Every row's bounded full history (max 100 entries) is authenticated
+  irrespective of the physical SQL retrieval order: unique audit IDs,
+  contiguous signed revision ordinals, previous-digest links and
+  constant-time verification of every server-controlled HMAC seal. Two
+  events with identical MariaDB timestamp precision can sort by random
+  UUID in the opposite order from their actual causal revision chain;
+  that legitimate case must succeed. Gaps, duplicate ordinals/IDs, forks,
+  wrong actor/branch/key, unsigned entries, forged SHA replacements,
+  malformed fields, extra properties and overflow all fail closed.
+  The HMAC uses a **distinct mapping-audit purpose prefix** from stage and
+  live-observation HMACs. A database administrator deleting a terminal
+  signed audit event still cannot be detected without an independent
+  immutable audit anchor; this is not external notarization.
 - Both endpoint responses explicitly have
   `reviewOnly:true`, `approved:false`,
   `mappingApproved:false`, `signingEnabled:false`,
@@ -91,7 +96,10 @@ target-binding governance policy. Codes/names must not be used as portable IDs.
   one database session. Independent reader session validates historical
   authenticity constraints and refusal after branch/actor/payload mutation,
   including a forged re-digested revision signed under an attacker's key;
-  restoration recovers the valid history. CI runs it with MariaDB.
+  restoration recovers the valid history. The regression now also proves
+  equal-timestamp author revisions with inverted SQL UUID ordering remain
+  verifiable as long as their signed causality chain is intact. CI runs it
+  with MariaDB.
 - No modifications to any clinical, billing, released-result, tariff,
   reference-range, identity or migration table other than **synthetic CI
   fixtures**, and the append-only mapping discussion `AuditEvent`.
