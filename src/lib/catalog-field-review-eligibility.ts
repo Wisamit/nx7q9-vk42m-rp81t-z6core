@@ -96,7 +96,9 @@ export function classifyCatalogReviewDrift(
   const fields = changedFields.map(path => ({
     path, classification: classifyCatalogReviewField(type, path),
   }));
-  const unsupported = fields.some(field => field.classification === "UNMAPPED_BLOCKED");
+  const unsupported = !catalogExportTypes.has(type as CatalogExportType) ||
+    fields.some(field => field.classification === "UNMAPPED_BLOCKED") ||
+    catalogFieldCoverageGaps().length !== 0;
   return {
     fields,
     completeFieldInventory: !additionalFieldsOmitted && !unsupported,
