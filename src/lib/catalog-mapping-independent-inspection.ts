@@ -4,12 +4,12 @@ import {
 } from "./catalog-mapping-discussion-draft.ts";
 
 export type IndependentMappingInspection = {
-  status: "INDEPENDENT_DISCUSSION_INSPECTION_ONLY";
+  status: "INDEPENDENT_FRESH_OBSERVATION_INSPECTION_ONLY";
   category: TriageClass;
   revision: number;
   intent: MappingDiscussionDraft["intent"];
   historicalObservationMatchesDraft: true;
-  currentLiveObservationRevalidated: false;
+  currentLiveObservationRevalidated: true;
   independentMappingApprovalEligible: false;
   sourceInstanceProven: false;
   mappingApproved: false;
@@ -21,15 +21,16 @@ export type IndependentMappingInspection = {
 };
 
 /**
- * This preflight only surfaces authenticated historical discussion metadata.
- * It cannot recompute the full live drift HMAC, and must NEVER claim that
- * historical observation tokens are still fresh or approve target IDs.
+ * The caller must recompute the EXACT full author-side live observation using
+ * the shared scoped projection, within the same tenant-locked transaction.
+ * Fresh parity is a read-only fact, never approval of source lineage or IDs.
  */
 export function independentMappingInspection(input: {
   entityType: string;
   authenticatedDraft: MappingDiscussionDraft | null;
   userId: string;
   authorUserId: string;
+  currentObservationToken: string;
   originalPermissions: ReadonlySet<string>;
   currentPermissions: ReadonlySet<string>;
 }): IndependentMappingInspection | null {
@@ -41,13 +42,13 @@ export function independentMappingInspection(input: {
       draft.entityType !== input.entityType ||
       !triagePermissionScope(category,input.originalPermissions) ||
       !triagePermissionScope(category,input.currentPermissions) ||
-      !mappingDiscussionCurrent(draft,draft.observationToken))
+      !mappingDiscussionCurrent(draft,input.currentObservationToken))
     return null;
   return {
-    status: "INDEPENDENT_DISCUSSION_INSPECTION_ONLY",
+    status: "INDEPENDENT_FRESH_OBSERVATION_INSPECTION_ONLY",
     category,revision:draft.revision,intent:draft.intent,
     historicalObservationMatchesDraft:true,
-    currentLiveObservationRevalidated:false,
+    currentLiveObservationRevalidated:true,
     independentMappingApprovalEligible:false,
     sourceInstanceProven:false,
     mappingApproved:false,signingEnabled:false,reviewOnly:true,
