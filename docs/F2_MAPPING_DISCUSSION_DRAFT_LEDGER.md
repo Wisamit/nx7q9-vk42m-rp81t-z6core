@@ -46,8 +46,13 @@ The route only appends an `AuditEvent` action
 `CatalogImportRow` identity, current organization/branch, original batch
 author, checksum, row index and entity type, selected intent, observation
 HMAC, revision number, previous revision's digest, and a SHA-256 revision
-digest. The digest is a **corruption indicator**, NOT an electronic signature,
-independent attestation or legal authority. Audit actor and branch are
+digest **plus** a separate domain-separated `HMAC-SHA256` mapping-audit seal.
+The SHA digest is a corruption indicator. The HMAC authenticates the audit
+payload against the existing server-controlled signing key, so database-only
+writers cannot silently invent new revision digests. Neither value is a
+qualified professional signature, clinical/financial approval, independent
+attestation or legal authority. Missing, malformed, old unsigned, wrong-key
+or forged seals fail closed on the entire existing audit history. Audit actor and branch are
 rechecked against every historical event; malformed or inconsistent events
 fail closed, including older revisions.
 
@@ -57,9 +62,13 @@ fail closed, including older revisions.
   overwritten. A previous draft automatically becomes stale when target
   state changes.
 - Every row's bounded full history (max 100 entries) is validated in
-  append order with unique IDs, contiguous revisions and previous-digest
-  links. Any gap, duplicated revision, wrong actor/branch, malformed field,
-  additional property, or history overflow returns an error.
+  append order with unique IDs, contiguous revisions, previous-digest links
+  and a constant-time comparison of every revision's server-authenticated
+  HMAC seal. Any gap, duplicate, wrong actor/branch/key, unsigned revision,
+  forged SHA replacement, malformed field, additional property or overflow
+  returns an error. The HMAC reuses the deployment's validated signing
+  secret with a **distinct mapping-audit purpose prefix**, separate from
+  staged bundle evidence and live-observation HMACs.
 - Both endpoint responses explicitly have
   `reviewOnly:true`, `approved:false`,
   `mappingApproved:false`, `signingEnabled:false`,
@@ -74,12 +83,14 @@ target-binding governance policy. Codes/names must not be used as portable IDs.
 
 - `tests/f2-mapping-discussion-draft.test.ts` validates audit record shape,
   digest chaining, actor/branch/checksum/tenant/row isolation, revision
-  cap, malformed intents, tamper, staleness and non-approval static route
+  cap, malformed intents, tamper, wrong-key / unsigned HMAC seals,
+  SHA recomputation attacks, staleness and non-approval static route
   guards.
 - `tests/f2-mapping-discussion-mariadb.integration.test.ts` creates only
   synthetic organization/branches/users/DRAFT and appends audit revisions in
   one database session. Independent reader session validates historical
-  authenticity constraints and refusal after branch/actor/payload mutation;
+  authenticity constraints and refusal after branch/actor/payload mutation,
+  including a forged re-digested revision signed under an attacker's key;
   restoration recovers the valid history. CI runs it with MariaDB.
 - No modifications to any clinical, billing, released-result, tariff,
   reference-range, identity or migration table other than **synthetic CI
@@ -95,3 +106,13 @@ export→approved apply→re-export parity all remain to be designed, approved
 and tested. Human policy decisions remain `BLOCKED_EXTERNAL`; user/browser
 QA and F7/F8 UAT remain deferred. Direct bundle/CSV review commits are
 still forbidden.
+
+## HMAC transition limitation
+
+This checkpoint updates the still-unmerged **F2 Draft PR** ledger format.
+Unsigned SHA-only mapping discussion entries from any prior test snapshots
+are no longer accepted as verified records. There is no silent upgrade or
+fabricated professional signature. A production deployment containing these
+old draft events would need a separately reviewed migration/reconciliation
+plan before this stricter reader could be enabled. No live data migration
+or clinical/financial approval is performed here.
