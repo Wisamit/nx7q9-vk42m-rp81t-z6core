@@ -113,8 +113,8 @@ test("F2: two signed separate signers + exact 10-class source/live HMAC reach hi
   // the version core, rather than assuming any HMAC implies a live approval.
   const target=request.rows.find(x=>x.entityType==="PRICE_LIST_ITEM")!;
   let changes=0;
-  data.tx.priceListItem.findMany=async()=>[{id:target.scopedLiveData&&
-    (target.scopedLiveData as {id:string}).id}];
+  data.tx.priceListItem.findMany=async()=>[
+    {id:(target.scopedLiveData as {id:string}).id}];
   const packageTarget=request.rows.find(x=>x.entityType==="PRICE_LIST_PACKAGE_ITEM")!;
   data.tx.priceListPackageItem.findMany=async()=>[
     {id:(packageTarget.scopedLiveData as {id:string}).id}];
