@@ -9,6 +9,10 @@ import {applyF2EffectiveVersionsUnderLock,
   type F2EffectiveApplyResult,type F2EffectiveApplyAuthority} from "./catalog-f2-effective-versions.ts";
 import {reverseF2FutureEffectiveVersionsUnderLock,
   type F2EffectiveReversalResult} from "./catalog-f2-effective-reversal.ts";
+import {recordF2CatalogMasterRevisionsUnderLock}
+  from "./catalog-f2-master-revisions.ts";
+import {cancelF2FutureMasterRevisionsUnderLock}
+  from "./catalog-f2-master-reversal.ts";
 
 const SHA=/^[0-9a-f]{64}$/;
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -52,7 +56,11 @@ export type F2GovernedExecutionInput={
  */
 export async function executeF2GovernedApplicationUnderLock(
   tx:Prisma.TransactionClient,input:F2GovernedExecutionInput,
-):Promise<F2EffectiveApplyResult|F2EffectiveReversalResult>{
+):Promise<F2EffectiveApplyResult|F2EffectiveReversalResult|{
+  state:"TEN_CLASS_CONFIGURATION_SCHEDULED"|"TEN_CLASS_CONFIGURATION_REVERSED";
+  nativeChangedRows:number;masterChangedRows:number;
+  nativeVersionIds:readonly string[];masterRevisionIds:readonly string[];
+}>{
   const {source,secret,now,rows,approvals,mode}=input;
   if(!["APPLY","REVERSE"].includes(mode) ||
     !Number.isFinite(now.getTime()) ||
@@ -117,9 +125,9 @@ export async function executeF2GovernedApplicationUnderLock(
     scopedLiveSnapshotVerified:true,
   });
   if(!plan)throw Error("f2_governed_plan_invalid");
-  if(plan.rows.some(row=>row.operation!=="UNCHANGED" &&
-    row.operation!=="EFFECTIVE_DATED_NEW_VERSION"))
-    throw Error("f2_governed_unsupported_master_change");
+  const nativeChangedRows=plan.rows.filter(row=>
+    row.operation==="EFFECTIVE_DATED_NEW_VERSION").length;
+  const masterChangedRows=plan.changedRows-nativeChangedRows;
   if(plan.changedRows===0)
     throw Error("f2_governed_no_changes_to_apply");
   // This is the *source-owned* policy permission, not a submitted flag.
@@ -134,7 +142,27 @@ export async function executeF2GovernedApplicationUnderLock(
     currentPermissionsAndBranchScopeVerified:true,
     signedStageAndLiveSnapshotVerified:true,
   };
-  if(mode==="APPLY")
-    return applyF2EffectiveVersionsUnderLock(tx,plan,authority,now);
-  return reverseF2FutureEffectiveVersionsUnderLock(tx,plan,authority,now);
+  // Both families must run in the EXACT SAME Prisma transaction under
+  // the organization's FOR UPDATE lock. Neither helper owns commit/rollback.
+  // A failure in either family MUST roll back all SQL writes and audit events.
+  const mixed=masterChangedRows>0&&nativeChangedRows>0;
+  if(mode==="APPLY"){
+    const native=nativeChangedRows?await applyF2EffectiveVersionsUnderLock(
+      tx,plan,authority,now,mixed):null;
+    const masters=masterChangedRows?await recordF2CatalogMasterRevisionsUnderLock(
+      tx,plan,authority,now,mixed):null;
+    if(!masters && native)return native;
+    return {state:"TEN_CLASS_CONFIGURATION_SCHEDULED" as const,
+      nativeChangedRows,masterChangedRows,
+      nativeVersionIds:native?.createdVersionIds??[],
+      masterRevisionIds:masters?.revisionIds??[]};
+  }
+  const masters=masterChangedRows?await cancelF2FutureMasterRevisionsUnderLock(
+    tx,plan,authority,now,mixed):null;
+  const native=nativeChangedRows?await reverseF2FutureEffectiveVersionsUnderLock(
+    tx,plan,authority,now,mixed):null;
+  if(!masters && native)return native;
+  return {state:"TEN_CLASS_CONFIGURATION_REVERSED" as const,
+    nativeChangedRows,masterChangedRows,
+    nativeVersionIds:[],masterRevisionIds:[]};
 }
