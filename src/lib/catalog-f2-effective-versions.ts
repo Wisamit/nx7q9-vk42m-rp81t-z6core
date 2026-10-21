@@ -1,16 +1,13 @@
 import { randomUUID } from "node:crypto";
 import type { Prisma } from "../../generated/prisma/client";
 import type { F2ApplyPlan } from "./catalog-f2-apply-plan.ts";
+import { validF2ClinicalIntervalNumbers } from "./catalog-f2-clinical-values.ts";
 import {
   signF2ApplicationJournal,verifyF2ApplicationJournal,
 } from "./catalog-f2-application-journal.ts";
 
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MONEY=/^(?:0|[1-9][0-9]{0,13})(?:\.[0-9]{1,4})?$/;
-const DECIMAL=(whole:number,fraction:number)=>new RegExp(
-  "^-?(?:0|[1-9][0-9]{0,"+(whole-1)+"})(?:\\.[0-9]{1,"+fraction+"})?$");
-const decimal=(v:unknown,w:number,f:number)=>v===null ||
-  (typeof v==="string"&&DECIMAL(w,f).test(v));
 const obj=(v:unknown):v is Record<string,unknown> =>
   v!==null&&typeof v==="object"&&!Array.isArray(v);
 const date=(v:unknown)=>typeof v==="string"&&Number.isFinite(Date.parse(v))?
@@ -195,14 +192,8 @@ export async function applyF2EffectiveVersionsUnderLock(
       if(prior.approvalStatus!=="APPROVED"||
          desired.approvalStatus!=="APPROVED")
         throw Error("f2_apply_range_not_approved");
-      const monetaryFields=["ageFrom","ageTo","gestationalAgeFromWeeks",
-        "gestationalAgeToWeeks","lowValue","highValue","criticalLow","criticalHigh"] as const;
-      for(const field of monetaryFields){
-        const whole=field.startsWith("gestational")?4:field.startsWith("age")?7:12;
-        const frac=field.startsWith("gestational")?2:field.startsWith("age")?3:6;
-        if(!decimal(desired[field],whole,frac))
-          throw Error("f2_apply_range_decimal_invalid");
-      }
+      if(!validF2ClinicalIntervalNumbers(desired))
+        throw Error("f2_apply_range_decimal_invalid");
       const componentId=prior.componentId;
       if(typeof componentId!=="string"||!UUID.test(componentId))
         throw Error("f2_apply_range_identity");
