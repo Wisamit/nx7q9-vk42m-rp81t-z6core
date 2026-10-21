@@ -4,13 +4,10 @@ import {
   F3_LEGACY_MAX_ROWS,buildF3LegacyExtractionManifest,
   type F3LegacySourceManifestInput,
 } from "../src/lib/f3-legacy-extraction-manifest.ts";
+import {LEGACY_COVERAGE_SOURCES} from "../src/lib/legacy-source-coverage.ts";
 const id="00000000-0000-4000-8000-000000000001";
 const secret="synthetic-F3-row-evidence-key-never-use-in-production-32";
-const legacyTables=[
-  "test","Test name","price","profile","normal","Referdby",
-  "Report","Gropes","cbcn","coagn","fertn","Glycosen",
-  "kidnyn","lipidn","Thyroidn",
-];
+const legacyTables=LEGACY_COVERAGE_SOURCES.map(x=>x.tableName);
 const fixture=():F3LegacySourceManifestInput=>({
   organizationId:id,sourceSha256:"a".repeat(64),
   digestKeyId:"b".repeat(64),
