@@ -410,7 +410,11 @@ export async function POST(request: Request) {
   if (effectiveClientId && !effectiveClient) {
     return NextResponse.json({ error: "client_not_found" }, { status: 404 });
   }
-  const invoiceIssuedAt = new Date();
+  // One accepted request instant must drive catalog overlays, package
+  // membership, both tariff resolvers, tax day and immutable invoice/order
+  // snapshots. Otherwise crossing an effective-date boundary while awaiting
+  // sequential DB reads can mix two independently valid configurations.
+  const invoiceIssuedAt = catalogAsOf;
   const paymentTermsDaysSnapshot = effectiveClient ? effectiveClient.paymentTermsDays ?? 0 : null;
   const invoiceDueDate = effectiveClient
     ? invoiceDueDateSnapshot(invoiceIssuedAt, orderingBranch.timezone, paymentTermsDaysSnapshot ?? 0)
@@ -858,6 +862,7 @@ export async function POST(request: Request) {
         data: {
           organizationId: session.user.organizationId,
           accessionNumber,
+          orderedAt: catalogAsOf,
           orderingBranchId: branchId,
           patientId,
           patientSexSnapshot: patient.sexAtBirth,
