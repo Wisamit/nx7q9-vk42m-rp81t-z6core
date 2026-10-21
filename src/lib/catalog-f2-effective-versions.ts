@@ -147,6 +147,10 @@ export async function applyF2EffectiveVersionsUnderLock(
          !UUID.test(String(row.desiredSnapshot.priceListId)))
         throw Error("f2_apply_price_invalid");
       const unitPrice=row.desiredSnapshot.unitPrice as string;
+      // Ordinary price creation stores inclusive effectiveTo, ending the
+      // superseded price one millisecond before its successor starts. F2
+      // follows that same contract to prevent double-effective tariffs.
+      const priceCloseAt=new Date(effectiveAt.getTime()-1);
       if(row.entityType==="PRICE_LIST_ITEM"){
         const testId=row.originalSnapshot.testId;
         if(typeof testId!=="string"||!UUID.test(testId))
@@ -162,7 +166,7 @@ export async function applyF2EffectiveVersionsUnderLock(
           where:{id:row.targetId,priceListId:row.originalSnapshot.priceListId as string,
             testId,unitPrice:row.originalSnapshot.unitPrice as string,
             status:"ACTIVE",effectiveTo:null,effectiveFrom:start},
-          data:{effectiveTo:effectiveAt},
+          data:{effectiveTo:priceCloseAt},
         });
         if(claim.count!==1)throw Error("f2_apply_price_conflict");
         await tx.priceListItem.create({data:{
@@ -184,7 +188,7 @@ export async function applyF2EffectiveVersionsUnderLock(
           where:{id:row.targetId,priceListId:row.originalSnapshot.priceListId as string,
             packageId,unitPrice:row.originalSnapshot.unitPrice as string,
             status:"ACTIVE",effectiveTo:null,effectiveFrom:start},
-          data:{effectiveTo:effectiveAt},
+          data:{effectiveTo:priceCloseAt},
         });
         if(claim.count!==1)throw Error("f2_apply_package_conflict");
         await tx.priceListPackageItem.create({data:{
