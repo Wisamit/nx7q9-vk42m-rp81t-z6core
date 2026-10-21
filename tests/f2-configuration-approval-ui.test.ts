@@ -5,7 +5,7 @@ import {readFileSync} from "node:fs";
 const api=readFileSync(
   "src/app/api/catalog/imports/[id]/configuration-approval/status/route.ts","utf8");
 const form=readFileSync("src/components/f2-configuration-approval-form.tsx","utf8");
-const page=readFileSync("src/app/catalog/configuration-approvals/page.tsx","utf8");
+const page=readFileSync("src/app/catalog/expert-reviews/page.tsx","utf8");
 const catalog=readFileSync("src/app/catalog/page.tsx","utf8");
 test("F2: signatory status is an independent scoped read, not an author import view",()=>{
   assert.match(api,/export async function GET\(/);
@@ -30,10 +30,11 @@ test("F2: signatory status is an independent scoped read, not an author import v
 });
 test("F2: signatory page never assumes signatures apply masters; authenticators are not stored in the client",()=>{
   assert.match(page,/requirePermission\("catalog\.manage"\)/);
+  assert.match(page,/permissionSet\(session\)/);
   assert.match(page,/catalog\.configuration\.clinical\.sign/);
   assert.match(page,/catalog\.configuration\.financial\.sign/);
   assert.match(page,/F2ConfigurationApprovalForm/);
-  assert.match(page,/dir=\{locale==="ar"\?"rtl":"ltr"\}/);
+  assert.match(page,/CatalogExpertReviewQueue/);
   assert.match(form,/method:"GET"/);
   assert.match(form,/configuration-approval\/status/);
   assert.match(form,/method:"POST"/);
@@ -41,8 +42,9 @@ test("F2: signatory page never assumes signatures apply masters; authenticators 
   assert.match(form,/mfaCode:totp/);
   assert.match(form,/setTotp\(""\)/);
 });
-test("F2: catalog navigation surfaces signing only with the corresponding domain permission",()=>{
-  assert.match(catalog,/configuration-approvals/);
-  assert.match(catalog,/catalog\.reference_ranges\.manage/);
-  assert.match(catalog,/pricing\.manage/);
+test("F2: catalog keeps its canonical independent review page and signer controls",()=>{
+  assert.match(catalog,/\/catalog\/expert-reviews/);
+  assert.match(page,/catalog\.reference_ranges\.manage/);
+  assert.match(page,/pricing\.manage/);
+  assert.match(page,/F2ConfigurationApprovalForm/);
 });
