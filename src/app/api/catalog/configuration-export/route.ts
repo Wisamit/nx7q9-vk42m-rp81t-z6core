@@ -5,6 +5,10 @@ import { liveCatalogReviewStagingAuthority } from "@/lib/catalog-review-staging-
 import { clinicalImportTestWhere } from "@/lib/catalog-clinical-import-scope";
 import { genericCatalogPriceScope } from "@/lib/catalog-generic-price-scope";
 import {
+  F2_EFFECTIVE_READ_TYPES,resolveF2EffectiveCatalogViews,
+  projectF2EffectiveCatalogView,
+} from "@/lib/catalog-f2-effective-view";
+import {
   catalogExportNavigation, catalogExportTypes, type CatalogExportType,
 } from "@/lib/catalog-configuration-export";
 
@@ -224,6 +228,18 @@ export async function GET(request: NextRequest) {
   const hasMore = records.length > 250;
   const shown = records.slice(0, 250);
   const nextCursor = hasMore ? shown[shown.length - 1].id : null;
+  let effectiveShown=shown;
+  if(shown.length && F2_EFFECTIVE_READ_TYPES.some(t=>t===type)){
+    const effectiveType=type as typeof F2_EFFECTIVE_READ_TYPES[number];
+    // Apply only time-effective signed master revisions to previously scoped
+    // base rows. A page cursor and source field contract stay unchanged.
+    const overlays=await resolveF2EffectiveCatalogViews(tx,{
+      organizationId,asOf:new Date(),
+      records:shown.map(row=>({entityType:effectiveType,id:row.id})),
+    });
+    effectiveShown=shown.map(row=>
+      projectF2EffectiveCatalogView(effectiveType,row,overlays));
+  }
 
   // Log config exports; never update catalog definitions or historical prices.
   const ctx = await requestContext();
@@ -250,7 +266,7 @@ export async function GET(request: NextRequest) {
     generatedAt: new Date().toISOString(),
     consistency: "paged-live-not-atomic",
     pageSize: 250,
-    records: shown,
+    records: effectiveShown,
     nextCursor,
     hasMore,
   }, { headers: { "Cache-Control": "private, no-store" } });
