@@ -10,6 +10,14 @@ test("F2: separate tenant-locked verifier writes only signed source provenance a
   assert.match(route,/export async function POST\(/);
   assert.doesNotMatch(route,/export async function GET\(/);
   assert.match(route,/runIndependentMappingPreflight\(request,context/);
+  assert.match(route,/\},false,true\);/);
+  const preflight=readFileSync(
+    "src/lib/catalog-mapping-inspection-preflight.ts","utf8");
+  const review=readFileSync(
+    "src/app/api/catalog/imports/[id]/mapping-inspection/route.ts","utf8");
+  assert.match(preflight,/allowSignedProvenanceValueChanges = false/);
+  assert.match(preflight,/allowGovernedValueDifferences:allowSignedProvenanceValueChanges \? true : undefined/);
+  assert.doesNotMatch(review,/allowSignedProvenanceValueChanges|\},false,true\);/);
   assert.match(route,/verifyF2SourceProvenance\(/);
   assert.match(route,/F2_SOURCE_AUTHORITY_PUBLIC_KEY_PEM/);
   assert.match(route,/F2_TARGET_INSTALLATION_ID/);
