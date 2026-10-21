@@ -39,7 +39,7 @@ test("F2: signatory page never assumes signatures apply masters; authenticators 
   assert.match(form,/method:"POST"/);
   assert.match(form,/expectedRevision:status\.revision/);
   assert.match(form,/mfaCode:totp/);
-  assert.match(form,/setTotp\(" "\)/);
+  assert.match(form,/setTotp\(""\)/);
 });
 test("F2: catalog navigation surfaces signing only with the corresponding domain permission",()=>{
   assert.match(catalog,/configuration-approvals/);
