@@ -110,6 +110,10 @@ try {
   if ($connection.State -eq 1) { $connection.Close() }
   [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($connection)
 }
+$postReadSha = (Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash.ToLowerInvariant()
+if ($postReadSha -ne $sha) {
+  throw 'f3_access_source_changed_during_read'
+}
 if (Test-Path -LiteralPath $out) {
   throw 'f3_access_output_already_exists'
 }
