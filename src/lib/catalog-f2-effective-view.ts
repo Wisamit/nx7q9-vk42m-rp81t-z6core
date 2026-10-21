@@ -4,7 +4,7 @@ import {canonicalJson,type Json} from "./catalog-bundle-attestation.ts";
 import {catalogBundleAllowedSourceFields} from "./catalog-bundle-source-boundary.ts";
 import type {CatalogExportType} from "./catalog-configuration-export.ts";
 
-const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SHA=/^[0-9a-f]{64}$/;
 export const F2_EFFECTIVE_READ_TYPES=[
   "TEST","COMPONENT","UNIT","CONTAINER",
