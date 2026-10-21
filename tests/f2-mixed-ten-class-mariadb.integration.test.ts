@@ -336,9 +336,17 @@ test("F2 actual MariaDB: ten-class mixed governed apply is atomic across native 
     assert.equal(await scalar(
       "SELECT COUNT(*) AS count FROM audit_events WHERE organization_id=? AND action='CATALOG_F2_MASTER_REVISION_SCHEDULED'",
       [organizationId]),7);
-    await assert.rejects(()=>invoke(false),
-      /(?:f2_apply|f2_master_revision).*|f2_governed.*/,
-      "same batch must not schedule more than one set of ten changes");
+    const replay=await invoke(false);
+    assert.equal(replay.state,"TEN_CLASS_CONFIGURATION_SCHEDULED");
+    assert.equal(await scalar(
+      "SELECT COUNT(*) AS count FROM catalog_config_revisions WHERE source_batch_id=?",[batchId]),7,
+      "replay must not create any additional master revisions");
+    assert.equal(await scalar(
+      "SELECT COUNT(*) AS count FROM reference_intervals WHERE component_id=?",[componentId]),2,
+      "replay must not create an additional clinical interval");
+    assert.equal(await scalar(
+      "SELECT COUNT(*) AS count FROM price_list_items WHERE price_list_id=?",[priceListId]),2,
+      "replay must not create an additional billed tariff");
   }finally{
     await sql.rollback().catch(()=>{});
     for(const statement of [
