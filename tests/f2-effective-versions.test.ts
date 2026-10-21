@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { compileF2ApplyPlan } from "../src/lib/catalog-f2-apply-plan.ts";
 import { applyF2EffectiveVersionsUnderLock } from "../src/lib/catalog-f2-effective-versions.ts";
+import { signF2ApplicationJournal } from "../src/lib/catalog-f2-application-journal.ts";
 import { catalogBundleAllowedSourceFields } from "../src/lib/catalog-bundle-source-boundary.ts";
 import { catalogExportTypes } from "../src/lib/catalog-configuration-export.ts";
 type StubArgs={data:Record<string,unknown>;where?:Record<string,unknown>};
@@ -59,6 +60,7 @@ test("F2: transaction core creates three new effective-dated versions, keeps ori
   const rangePrice=p.rows.find(r=>r.entityType==="REFERENCE_INTERVAL")!;
   const actions:Array<{table:string;action:string;args:StubArgs}>=[];
   const events:Array<{id:string;newValues:unknown}>=[];
+  let compensated=false;
   let seq=50;
   const record=(table:string,action:string,args:StubArgs)=>{
     actions.push({table,action,args});
@@ -66,8 +68,13 @@ test("F2: transaction core creates three new effective-dated versions, keeps ori
   };
   const tx={
     auditEvent:{
-      findMany:async()=>events.filter(e=>
-        (e.newValues as Record<string,unknown>)?.planDigest===p.planDigest),
+      findMany:async(query:{where:{action:string}})=>{
+        if(query.where.action==="CATALOG_F2_EFFECTIVE_BATCH_REVERSED")
+          return compensated?[{id:id(991),newValues:signF2ApplicationJournal({
+            planDigest:p.planDigest,effectiveAt:p.effectiveAt,
+          },authority.journalSigningSecret)}]:[];
+        return events;
+      },
       create:async(args:StubArgs)=>{
         const result=record("auditEvent","create",args);
         if(args.data.action==="CATALOG_F2_EFFECTIVE_BATCH_APPLIED")
@@ -119,6 +126,12 @@ test("F2: transaction core creates three new effective-dated versions, keeps ori
     new Date("2026-10-21T00:00:00.000Z"));
   assert.equal(repeated.state,"EFFECTIVE_VERSIONS_ALREADY_APPLIED");
   assert.equal(actions.length,actionsBefore,"idempotent repeat cannot create further versions");
+  compensated=true;
+  await assert.rejects(()=>applyF2EffectiveVersionsUnderLock(
+    tx as never,p,authority,new Date("2026-10-21T00:00:00.000Z")),
+    /f2_apply_batch_previously_reversed/);
+  assert.equal(actions.length,actionsBefore,
+    "a compensated batch cannot create or reopen a clinical/financial version");
 });
 
 test("F2: unauthorized, backdated and unsupported class changes cannot mutate masters",async()=>{
