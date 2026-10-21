@@ -369,6 +369,7 @@ function sameOptionalTime(value: unknown, live: unknown): boolean {
 export function sameLiveTariffReviewIdentity(
   type: "PRICE_LIST" | "PRICE_LIST_ITEM" | "PRICE_LIST_PACKAGE_ITEM",
   staged: unknown, source: unknown, live: unknown,
+  allowDesiredPriceDifference = false,
 ): boolean {
   const n = object(staged), s = object(source), current = object(live);
   if (!n || !s || !current || n.id !== current.id) return false;
@@ -404,7 +405,8 @@ export function sameLiveTariffReviewIdentity(
         !sameOptionalTime(s.effectiveTo, current.effectiveTo))) return false;
   const expected = scaledTariff(n.unitPrice);
   const actual = scaledTariff(current.unitPrice);
-  return expected !== null && actual !== null && expected === actual;
+  return expected !== null && actual !== null &&
+    (allowDesiredPriceDifference || expected === actual);
 }
 
 /**
@@ -479,19 +481,43 @@ const intervalDates = ["effectiveTo", "approvedAt", "retiredAt"] as const;
  */
 export function sameLiveReferenceIntervalMedicalSnapshot(
   sourceData: unknown, liveData: unknown,
+  allowDesiredClinicalValueDifference = false,
 ): boolean {
   const source = object(sourceData), live = object(liveData);
   if (!source || !live) return false;
+  // Age, sex, population and laboratory method are identity selectors:
+  // they cannot be changed as an ordinary revision to a medical threshold.
+  const clinicalSelectors = new Set([
+    "methodId","analyzerId","specimenTypeId","sex","ageUnit",
+    "pregnancyStatus","populationCode",
+  ]);
   if (!intervalTextIdentity.every(field => Object.hasOwn(source, field) &&
-      Object.hasOwn(live, field) && source[field] === live[field])) return false;
+      Object.hasOwn(live, field) &&
+      (allowDesiredClinicalValueDifference && !clinicalSelectors.has(field) ||
+       source[field] === live[field]))) return false;
+  const demographicSelectors = new Set([
+    "ageFrom","ageTo","gestationalAgeFromWeeks",
+    "gestationalAgeToWeeks",
+  ]);
   for (const [field, scale] of intervalDecimals) {
     if (!Object.hasOwn(source, field) || !Object.hasOwn(live, field))
       return false;
     if (source[field] === null && live[field] === null) continue;
-    if (source[field] === null || live[field] === null) return false;
+    if (source[field] === null || live[field] === null) {
+      if (allowDesiredClinicalValueDifference &&
+          !demographicSelectors.has(field) &&
+          (source[field] === null ||
+           clinicalScaledDecimal(source[field],scale) !== null) &&
+          (live[field] === null ||
+           clinicalScaledDecimal(live[field],scale) !== null))
+        continue;
+      return false;
+    }
     const expected = clinicalScaledDecimal(source[field], scale);
     const observed = clinicalScaledDecimal(live[field], scale);
-    if (expected === null || observed === null || expected !== observed)
+    if (expected === null || observed === null ||
+        (!allowDesiredClinicalValueDifference ||
+         demographicSelectors.has(field)) && expected !== observed)
       return false;
   }
   return intervalDates.every(field =>
@@ -509,6 +535,9 @@ export async function validatePolicyReviewBatchScope(
     sourceChecksum: string; authorUserId: string; stageEvidenceSeal: unknown;
     batchMetadata: ReviewStageEvidenceBatchMetadata | null;
     signingSecret: string | null;
+    // Only the independent MFA signing endpoint may request planned value
+    // differences. All ordinary reviewer and mapping paths remain strict.
+    allowGovernedValueDifferences?: true;
   },
 ): Promise<PolicyReviewScopeCheck> {
   const rows = await tx.catalogImportRow.findMany({
@@ -679,7 +708,8 @@ export async function validatePolicyReviewBatchScope(
         row.entityType !== "PRICE_LIST_PACKAGE_ITEM") continue;
     const n = object(row.normalizedData);
     if (!sameLiveTariffReviewIdentity(row.entityType, n, row.sourceData,
-        liveTariffs[row.entityType].get(n?.id as string)))
+        liveTariffs[row.entityType].get(n?.id as string),
+        input.allowGovernedValueDifferences === true))
       return { ok: false, error: "policy_review_batch_scope_changed" };
   }
 
@@ -726,7 +756,8 @@ export async function validatePolicyReviewBatchScope(
     if (!sameLiveClinicalReviewIdentity(row.entityType, n, live))
       return { ok: false, error: "policy_review_batch_scope_changed" };
     if (row.entityType === "REFERENCE_INTERVAL" &&
-        !sameLiveReferenceIntervalMedicalSnapshot(row.sourceData, live))
+        !sameLiveReferenceIntervalMedicalSnapshot(row.sourceData, live,
+          input.allowGovernedValueDifferences === true))
       return { ok: false, error: "policy_review_batch_scope_changed" };
   }
 
