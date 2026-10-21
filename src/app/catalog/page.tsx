@@ -2,6 +2,7 @@ import { TableEmptyState } from "@/components/table-empty-state";
 import Link from "next/link";
 import { permissionSet, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import {projectF2EffectiveCatalogView,resolveF2EffectiveCatalogViews} from "@/lib/catalog-f2-effective-view";
 import { CatalogManager } from "@/components/catalog-manager";
 import { ClinicalCatalogManager } from "@/components/clinical-catalog-manager";
 import { LegacyImportBatches } from "@/components/legacy-import-batches";
@@ -28,22 +29,26 @@ export default async function CatalogPage({ searchParams }: { searchParams: Prom
       activeBranchId: session.activeBranchId, activeBranch: session.activeBranch,
       branchScopes: session.user.branchScopes, departmentScopes: session.user.departmentScopes,
     }) !== null;
-  const [tests, departments, specimens, containers, methods, units, analyzers, panels, packages] = await Promise.all([
-    prisma.labTest.findMany({
+  const [tests, departments, specimens, containers, methods, units, analyzers, panels, packages] = await prisma.$transaction(async tx=>{
+    const asOf=new Date();
+    const [baseTests, departments, specimens, baseContainers, methods, baseUnits, analyzers, panels, packages] = await Promise.all([
+    tx.labTest.findMany({
       where: { organizationId: session.user.organizationId },
       include: { department: true, specimenType: true, components: { include: { unit: true, referenceIntervals: { orderBy: { effectiveFrom: "desc" }, take: 1 } }, orderBy: { displayOrder: "asc" } } },
       orderBy: { nameEn: "asc" },
     }),
-    prisma.department.findMany({ where: { organizationId: session.user.organizationId, status: "ACTIVE" }, orderBy: { nameEn: "asc" } }),
-    prisma.specimenType.findMany({ where: { organizationId: session.user.organizationId, status: "ACTIVE" }, orderBy: { nameEn: "asc" } }),
-    prisma.container.findMany({ where: { organizationId: session.user.organizationId, status: "ACTIVE" }, orderBy: { nameEn: "asc" } }),
-    prisma.method.findMany({ where: { organizationId: session.user.organizationId, status: "ACTIVE" }, orderBy: { nameEn: "asc" } }),
-    prisma.unit.findMany({ where: { organizationId: session.user.organizationId, status: "ACTIVE" }, orderBy: { code: "asc" } }),
-    prisma.analyzer.findMany({ where: { organizationId: session.user.organizationId, status: "ACTIVE" }, include: { branch: true }, orderBy: [{ branch: { nameEn: "asc" } }, { name: "asc" }] }),
-    prisma.testPanel.findMany({ where: { organizationId: session.user.organizationId }, include: { items: true }, orderBy: { nameEn: "asc" } }),
-    prisma.commercialPackage.findMany({ where: { organizationId: session.user.organizationId }, include: { items: { include: { test: true }, orderBy: { displayOrder: "asc" } }, priceListItems: {
+    tx.department.findMany({ where: { organizationId: session.user.organizationId, status: "ACTIVE" }, orderBy: { nameEn: "asc" } }),
+    tx.specimenType.findMany({ where: { organizationId: session.user.organizationId, status: "ACTIVE" }, orderBy: { nameEn: "asc" } }),
+    tx.container.findMany({ where: { organizationId: session.user.organizationId }, orderBy: { nameEn: "asc" } }),
+    tx.method.findMany({ where: { organizationId: session.user.organizationId, status: "ACTIVE" }, orderBy: { nameEn: "asc" } }),
+    tx.unit.findMany({ where: { organizationId: session.user.organizationId }, orderBy: { code: "asc" } }),
+    tx.analyzer.findMany({ where: { organizationId: session.user.organizationId, status: "ACTIVE" }, include: { branch: true }, orderBy: [{ branch: { nameEn: "asc" } }, { name: "asc" }] }),
+    tx.testPanel.findMany({ where: { organizationId: session.user.organizationId }, include: { items: true }, orderBy: { nameEn: "asc" } }),
+    tx.commercialPackage.findMany({ where: { organizationId: session.user.organizationId }, include: { items: { include: { test: true }, orderBy: { displayOrder: "asc" } }, priceListItems: {
       where: {
         status: "ACTIVE",
+        effectiveFrom: { lte: asOf },
+        OR: [{ effectiveTo: null }, { effectiveTo: { gt: asOf } }],
         priceList: {
           organizationId: session.user.organizationId,
           scopeType: { in: ["ORGANIZATION", "BRANCH"] },
@@ -55,7 +60,35 @@ export default async function CatalogPage({ searchParams }: { searchParams: Prom
       include: { priceList: true },
     } }, orderBy: { nameEn: "asc" } }),
 
-  ]);
+    ]);
+    const records=[
+      ...baseTests.map(test=>({entityType:"TEST" as const,id:test.id})),
+      ...baseTests.flatMap(test=>test.components.map(component=>({
+        entityType:"COMPONENT" as const,id:component.id,
+      }))),
+      ...baseContainers.map(container=>({entityType:"CONTAINER" as const,id:container.id})),
+      ...baseUnits.map(unit=>({entityType:"UNIT" as const,id:unit.id})),
+    ];
+    const overlays=await resolveF2EffectiveCatalogViews(tx,{
+      organizationId:session.user.organizationId,asOf,records,
+    });
+    const tests=baseTests.map(test=>({
+      ...projectF2EffectiveCatalogView("TEST",test,overlays),
+      components:test.components.map(component=>
+        projectF2EffectiveCatalogView("COMPONENT",component,overlays))
+        .sort((a,b)=>a.displayOrder-b.displayOrder||a.code.localeCompare(b.code)),
+    })).sort((a,b)=>a.nameEn.localeCompare(b.nameEn));
+    const units=baseUnits
+      .map(unit=>projectF2EffectiveCatalogView("UNIT",unit,overlays))
+      .filter(unit=>unit.status==="ACTIVE")
+      .sort((a,b)=>a.code.localeCompare(b.code));
+    const containers=baseContainers
+      .map(container=>projectF2EffectiveCatalogView("CONTAINER",container,overlays))
+      .filter(container=>container.status==="ACTIVE")
+      .sort((a,b)=>a.nameEn.localeCompare(b.nameEn));
+    return [tests,departments,specimens,containers,methods,units,
+      analyzers,panels,packages] as const;
+  },{isolationLevel:"RepeatableRead",timeout:30000});
 
   // Keep count and discovery under one consistent MariaDB snapshot with the
   // same organization, author, clinical and price visibility predicate.
