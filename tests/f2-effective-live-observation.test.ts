@@ -4,6 +4,7 @@ import {createHash} from "node:crypto";
 import {catalogBundleAllowedSourceFields} from "../src/lib/catalog-bundle-source-boundary.ts";
 import {canonicalJson,type Json} from "../src/lib/catalog-bundle-attestation.ts";
 import {readF2EffectiveLiveObservations} from "../src/lib/catalog-f2-effective-live-observation.ts";
+import {compileF2ApplyPlan,verifyF2ApplyPlanIntegrity} from "../src/lib/catalog-f2-apply-plan.ts";
 import type {CatalogExportType} from "../src/lib/catalog-configuration-export.ts";
 
 const org="00000000-0000-4000-8000-000000000001";
@@ -89,4 +90,35 @@ test("F2: reject corrupted future revision before deriving any second-bundle app
   await assert.rejects(()=>readF2EffectiveLiveObservations(db as never,
     {organizationId:org} as never,[],ids,new Date("2026-11-01T00:00:00.000Z")),
     /f2_effective_snapshot_digest_invalid/);
+});
+
+test("F2: a second imported revision plans against the first effective value, not the old physical master",async()=>{
+  const first=desired();
+  const second={...first,nameEn:"Second governed name"};
+  const db={
+    unit:{findMany:async()=>[original()]},
+    catalogConfigurationRevision:{findMany:async()=>[
+      {entityId:unit,afterSnapshot:first,desiredDigest:digest(first)},
+    ]},
+  };
+  const scoped=await readF2EffectiveLiveObservations(db as never,
+    {organizationId:org} as never,[],ids,
+    new Date("2026-12-01T00:00:00.000Z"));
+  assert.ok(scoped);
+  const plan=compileF2ApplyPlan({
+    rows:[{
+      rowNumber:1,entityType:"UNIT",sourceData:second,
+      normalizedData:{id:unit},scopedLiveData:scoped.get("UNIT:"+unit),
+    }],
+    effectiveAt:"2027-01-01T00:00:00.000Z",
+    signedStageVerified:true,independentDomainApprovalsVerified:true,
+    scopedLiveSnapshotVerified:true,
+  });
+  assert.ok(plan);
+  assert.equal(plan.changedRows,1);
+  assert.equal(plan.rows[0].originalSnapshot.nameEn,"Revised effective unit");
+  assert.equal(plan.rows[0].desiredSnapshot.nameEn,"Second governed name");
+  assert.equal(plan.rows[0].operation,"SCALAR_VERSIONED_CHANGE");
+  assert.equal(verifyF2ApplyPlanIntegrity(plan),true);
+  assert.equal(original().nameEn,"Old unit","physical master remains unchanged");
 });
