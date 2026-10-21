@@ -1,6 +1,7 @@
 import type { Prisma } from "../../generated/prisma/client";
 import type { F2ApplyPlan } from "./catalog-f2-apply-plan.ts";
 import type { F2EffectiveApplyAuthority } from "./catalog-f2-effective-versions.ts";
+import { f2ReferenceIntervalCasWhere } from "./catalog-f2-effective-versions.ts";
 import {
   signF2ApplicationJournal,verifyF2ApplicationJournal,
 } from "./catalog-f2-application-journal.ts";
@@ -112,7 +113,9 @@ export async function reverseF2FutureEffectiveVersionsUnderLock(
       });
       if(retired.count!==1)throw Error("f2_reversal_new_price_changed");
       const restored=await tx.priceListItem.updateMany({
-        where:{id:parentId,effectiveTo:at,status:"ACTIVE"},
+        where:{id:parentId,effectiveTo:at,status:"ACTIVE",
+          unitPrice:row.originalSnapshot.unitPrice as string,
+          effectiveFrom:new Date(row.originalSnapshot.effectiveFrom as string)},
         data:{effectiveTo:null},
       });
       if(restored.count!==1)throw Error("f2_reversal_old_price_changed");
@@ -128,7 +131,9 @@ export async function reverseF2FutureEffectiveVersionsUnderLock(
       });
       if(retired.count!==1)throw Error("f2_reversal_new_package_changed");
       const restored=await tx.priceListPackageItem.updateMany({
-        where:{id:parentId,effectiveTo:at,status:"ACTIVE"},
+        where:{id:parentId,effectiveTo:at,status:"ACTIVE",
+          unitPrice:row.originalSnapshot.unitPrice as string,
+          effectiveFrom:new Date(row.originalSnapshot.effectiveFrom as string)},
         data:{effectiveTo:null},
       });
       if(restored.count!==1)throw Error("f2_reversal_old_package_changed");
@@ -148,7 +153,9 @@ export async function reverseF2FutureEffectiveVersionsUnderLock(
       if(retired.count!==1)throw Error("f2_reversal_new_range_changed");
       const restored=await tx.referenceInterval.updateMany({
         where:{id:parentId,effectiveTo:at,status:"ACTIVE",
-          approvalStatus:"APPROVED"},
+          approvalStatus:"APPROVED",
+          effectiveFrom:new Date(row.originalSnapshot.effectiveFrom as string),
+          ...f2ReferenceIntervalCasWhere(row.originalSnapshot)},
         data:{effectiveTo:null},
       });
       if(restored.count!==1)throw Error("f2_reversal_old_range_changed");
