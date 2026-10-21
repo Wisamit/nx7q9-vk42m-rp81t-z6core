@@ -1,5 +1,6 @@
 import {createHash,createHmac} from "node:crypto";
 import {canonicalJson,type Json} from "./catalog-bundle-attestation.ts";
+import {LEGACY_COVERAGE_SOURCES} from "./legacy-source-coverage.ts";
 
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SHA=/^[a-f0-9]{64}$/;
@@ -8,7 +9,8 @@ const PURPOSE="family-lab/f3-access-source-row-evidence/v1\n";
 const FORBIDDEN=new Set([
   "password","id","id2","idprice","result","profnam","abo","bhcg","bilh","cbc","clerance","coag","csf","cul","culture","esr","fertility","hepatitis","kidney","lipid","liver","marrow","occult","pcr","post_coital","pregnancy","prostata","pt","rotavirus","semin","serology","stone","stool","thyroid","torch","tumer","urine","widal","zn",
 ]);
-export const F3_LEGACY_MAX_TABLES=15;
+export const F3_LEGACY_MAX_TABLES=LEGACY_COVERAGE_SOURCES.length;
+const ALLOWED_TABLES=new Set(LEGACY_COVERAGE_SOURCES.map(x=>x.tableName));
 export const F3_LEGACY_MAX_ROWS=20000;
 export type F3LegacyTable={
   name:string;
@@ -83,7 +85,7 @@ export function buildF3LegacyExtractionManifest(
   const rows:F3LegacyRowEvidence[]=[];
   for(const table of input.tables){
     if(!object(table)||Object.keys(table).sort().join(",")!=="columns,name,rows"||
-       !safeName(table.name)||
+       !safeName(table.name)||!ALLOWED_TABLES.has(table.name)||
        FORBIDDEN.has(table.name.toLowerCase())||
        seen.has(table.name.toLowerCase())||
        !Array.isArray(table.columns)||table.columns.length<1||
