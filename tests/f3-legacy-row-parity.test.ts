@@ -1,14 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {LEGACY_COVERAGE_TYPE,LEGACY_COVERAGE_SOURCES} from "../src/lib/legacy-source-coverage.ts";
-import {LEGACY_ROW_LINEAGE_TYPE} from "../src/lib/catalog-legacy-row-lineage.ts";
+import {LEGACY_COVERAGE_TYPE,LEGACY_COVERAGE_SOURCES,type LegacySourceCoverage} from "../src/lib/legacy-source-coverage.ts";
+import {LEGACY_ROW_LINEAGE_TYPE,type LegacyRowManifest} from "../src/lib/catalog-legacy-row-lineage.ts";
 import {f3ScopedTargetKey,reconcileF3LegacyRowParity} from "../src/lib/legacy-f3-row-parity.ts";
 
 const id=(n:number)=>"00000000-0000-4000-8000-"+String(n).padStart(12,"0");
 const hex=(n:number)=>n.toString(16).padStart(64,"0");
 const source={sourceName:"synthetic.mdb",sourceSha256:hex(99),sourceBytes:8192};
 const columns=[["Test name",2,"TEST"],["normal",1,"REFERENCE_INTERVAL"],["price",1,"PRICE_LIST_ITEM"]] as const;
-const coverage={schemaVersion:1 as const,evidenceType:LEGACY_COVERAGE_TYPE,...source,
+const coverage:LegacySourceCoverage={schemaVersion:1 as const,evidenceType:LEGACY_COVERAGE_TYPE,...source,
   exportedAtUtc:"2026-10-21T12:00:00Z",includesPatientData:false as const,
   tables:LEGACY_COVERAGE_SOURCES.map(t=>{
     const match=columns.find(x=>x[0]===t.tableName);
@@ -16,7 +16,7 @@ const coverage={schemaVersion:1 as const,evidenceType:LEGACY_COVERAGE_TYPE,...so
       columnCount:match?2:0,schemaSha256:match?hex(150+columns.indexOf(match)):null};
   }),
 };
-const pages=columns.map(([table,count],n)=>({
+const pages:LegacyRowManifest[]=columns.map(([table,count],n)=>({
   schemaVersion:1 as const,evidenceType:LEGACY_ROW_LINEAGE_TYPE,...source,
   tableName:table,schemaSha256:hex(150+n),digestKeyId:hex(200),
   sourceRowCount:count,chunkIndex:0,chunkCount:1,

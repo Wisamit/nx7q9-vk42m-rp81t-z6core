@@ -4,6 +4,7 @@ import {createHash} from "node:crypto";
 import {mkdtemp,mkdir,writeFile,rm} from "node:fs/promises";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
+// @ts-ignore - The private Node .mjs tool is validated by this runtime test.
 import {checkPrivateF3Lineage} from "../scripts/legacy/reconcile-source-ledger.mjs";
 import {LEGACY_COVERAGE_TYPE,LEGACY_COVERAGE_SOURCES} from "../src/lib/legacy-source-coverage.ts";
 import {LEGACY_ROW_LINEAGE_TYPE} from "../src/lib/catalog-legacy-row-lineage.ts";

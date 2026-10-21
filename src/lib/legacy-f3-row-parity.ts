@@ -27,7 +27,7 @@ export type F3PersistedLineageRow={
 export type F3RowParityTable={
   tableName:string;present:boolean;sourceRows:number;
   persistedRows:number;missingRows:number;
-  classifications:Readonly<Record<LegacyRowClassification,number>>;
+  classifications:Record<LegacyRowClassification,number>;
   missingLiveTargets:number;multipleRowsPerTarget:number;
 };
 export type F3RowParityReport={
