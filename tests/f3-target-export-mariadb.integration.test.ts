@@ -11,8 +11,9 @@ import {parseF3TargetLineageExport} from "../src/lib/f3-legacy-target-reconcilia
 test("F3 MariaDB: export exactly one tenant/source under read-only snapshot into exclusive private file",{
   timeout:60000,
 },async()=>{
-  if(!process.env.DATABASE_URL)throw Error("DATABASE_URL required");
-  const u=new URL(process.env.DATABASE_URL);
+  const databaseUrl=process.env.DATABASE_URL;
+  if(!databaseUrl)throw Error("DATABASE_URL required");
+  const u=new URL(databaseUrl);
   const db=await mysql.createConnection({
     host:u.hostname,port:Number(u.port||3306),
     user:decodeURIComponent(u.username),password:decodeURIComponent(u.password),
@@ -43,7 +44,7 @@ test("F3 MariaDB: export exactly one tenant/source under read-only snapshot into
     await execute(insert,[otherRow,foreign,sha,"Test name",schema,hmac,digest,1,
       "MAPPED","TEST",randomUUID(),1,"test-actor"]);
     const result=await exportF3TargetLineage({
-      databaseUrl:process.env.DATABASE_URL,
+      databaseUrl,
       organizationId:org,sourceSha256:sha,outputPath:target,
     });
     assert.deepEqual(result,{exportedRows:2,privateFileCreated:true,
@@ -56,14 +57,14 @@ test("F3 MariaDB: export exactly one tenant/source under read-only snapshot into
     const file=await stat(target);
     if(process.platform!=="win32")assert.equal(file.mode&0o777,0o600);
     await assert.rejects(()=>exportF3TargetLineage({
-      databaseUrl:process.env.DATABASE_URL,
+      databaseUrl,
       organizationId:org,sourceSha256:sha,outputPath:target,
     }),/EEXIST/,"private output must not be overwritten");
     assert.equal(parseF3TargetLineageExport(JSON.parse(
       await readFile(target,"utf8"))).rows.length,2);
     const separate=join(tmp,"unrelated-source.json");
     const empty=await exportF3TargetLineage({
-      databaseUrl:process.env.DATABASE_URL,
+      databaseUrl,
       organizationId:org,sourceSha256:otherSha,outputPath:separate,
     });
     assert.equal(empty.exportedRows,0);
