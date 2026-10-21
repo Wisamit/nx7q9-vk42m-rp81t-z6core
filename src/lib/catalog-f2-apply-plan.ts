@@ -3,6 +3,7 @@ import { canonicalJson, type Json } from "./catalog-bundle-attestation.ts";
 import { catalogExportTypes, type CatalogExportType } from "./catalog-configuration-export.ts";
 import { catalogBundleAllowedSourceFields } from "./catalog-bundle-source-boundary.ts";
 import { BUNDLE_REVIEW_MAX_ROWS } from "./catalog-bundle-review.ts";
+import { validF2ClinicalIntervalNumbers } from "./catalog-f2-clinical-values.ts";
 
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const record=(value:unknown):value is Record<string,unknown>=>
@@ -107,6 +108,8 @@ export function compileF2ApplyPlan(input:{
       return null;
     // Preserve live identity/audit timestamps; comparing historic export
     // updatedAt against the new live updatedAt is NOT a configuration diff.
+    if(type==="REFERENCE_INTERVAL" && !validF2ClinicalIntervalNumbers(source))
+      return null;
     const changed=fields.filter(field=>!readonlyFields.has(field) &&
       !equal(source[field],local[field]));
     if(versionTypes.has(type) && changed.some(field=>temporalFields.has(field)))
