@@ -7,7 +7,7 @@ import {
 
 const obj=(v:unknown):v is Record<string,unknown> =>
   !!v && typeof v==="object"&&!Array.isArray(v);
-const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export type F2EffectiveReversalResult={
   state:"FUTURE_EFFECTIVE_VERSIONS_REVERSED"|"FUTURE_VERSIONS_ALREADY_REVERSED";
