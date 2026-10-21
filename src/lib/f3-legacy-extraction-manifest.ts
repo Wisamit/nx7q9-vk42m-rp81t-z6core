@@ -69,7 +69,9 @@ function validRecord(row:unknown,columns:readonly string[]):row is Record<string
 export function buildF3LegacyExtractionManifest(
   input:F3LegacySourceManifestInput,secret:string,
 ):F3LegacyExtractionManifest {
-  if(!UUID.test(input.organizationId)||!SHA.test(input.sourceSha256)||
+  if(!object(input)||Object.keys(input).sort().join(",")!==
+       "digestKeyId,organizationId,sourceSha256,tables"||
+     !UUID.test(input.organizationId)||!SHA.test(input.sourceSha256)||
      !SHA.test(input.digestKeyId)||
      typeof secret!=="string"||Buffer.byteLength(secret,"utf8")<32||
      !Array.isArray(input.tables)||input.tables.length<1||
@@ -80,7 +82,8 @@ export function buildF3LegacyExtractionManifest(
   const tables:F3LegacyTableEvidence[]=[];
   const rows:F3LegacyRowEvidence[]=[];
   for(const table of input.tables){
-    if(!object(table)||!safeName(table.name)||
+    if(!object(table)||Object.keys(table).sort().join(",")!=="columns,name,rows"||
+       !safeName(table.name)||
        FORBIDDEN.has(table.name.toLowerCase())||
        seen.has(table.name.toLowerCase())||
        !Array.isArray(table.columns)||table.columns.length<1||
@@ -89,7 +92,8 @@ export function buildF3LegacyExtractionManifest(
     seen.add(table.name.toLowerCase());
     const named=new Set<string>();
     for(const col of table.columns){
-      if(!object(col)||!safeName(col.name)||
+      if(!object(col)||Object.keys(col).sort().join(",")!=="accessType,name"||
+         !safeName(col.name)||
          typeof col.accessType!=="string"||
          !/^[A-Za-z][A-Za-z0-9 ()_-]{0,63}$/.test(col.accessType)||
          named.has(col.name.toLowerCase()))
@@ -112,7 +116,7 @@ export function buildF3LegacyExtractionManifest(
         throw Error("f3_source_manifest_row_too_large");
       const digest=createHmac("sha256",secret).update(PURPOSE)
         .update(canonicalJson([
-          input.organizationId,input.sourceSha256,table.name,
+          input.organizationId,input.sourceSha256,input.digestKeyId,table.name,
           sourceSchemaSha256,canonical,
         ] as Json)).digest("hex");
       contentHashes.push(digest);
