@@ -42,6 +42,23 @@ const run=(lineage:F3LineageDecision[],manifest=build().manifest)=>
 
 test("F3: offline manifest envelope matches the canonical source evidence contract",()=>{
   const {manifest}=build();
+  const rejected = [
+    ["tenantScope", false],["format",manifest.format!=="F3_LEGACY_SOURCE_FINGERPRINT_V1"],
+    ["organizationId",!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(manifest.organizationId)],
+    ["sourceSha256",!/^[0-9a-f]{64}$/.test(manifest.sourceSha256)],
+    ["digestKeyId",!/^[0-9a-f]{64}$/.test(manifest.digestKeyId)],
+    ["tableCount",manifest.tableCount!==manifest.tables.length],
+    ["rowCount",manifest.rowCount!==manifest.rows.length],
+    ["tableBounds",manifest.tableCount<1||manifest.tableCount>15],
+    ["rowBounds",manifest.rowCount>20000],
+    ["status",manifest.status!=="SYNTHETIC_OR_OFFLINE_EXTRACT_UNVERIFIED"],
+    ["sourceBytes",manifest.sourceBytesVerified!==false],
+    ["crossMapping",manifest.crossInstallationMappingApproved!==false],
+    ["realParity",manifest.realLegacyParityVerified!==false],
+    ["clinicalFinance",manifest.clinicalFinanceApproved!==false],
+    ["operational",manifest.operationalReady!==false],
+  ].filter(([,invalid])=>invalid).map(([reason])=>reason);
+  assert.deepEqual(rejected,[],"valid signed metadata may not be rejected before row reconciliation");
   assert.deepEqual({
     format:manifest.format,status:manifest.status,
     organizationId:manifest.organizationId,
