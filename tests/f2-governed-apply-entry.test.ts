@@ -27,7 +27,7 @@ test("F2: locked preflight binds source provenance, signed decisions, live scope
     /allowGovernedValueDifferences:true/,
     /verifyBranchScopedPolicyDraftHistory\(/,
     /verifyCatalogApprovalHistory\(/,
-    /readCatalogLiveObservations\(/,
+    /readF2EffectiveLiveObservations\(/,
     /catalogDriftObservationToken\(/,
     /executeF2GovernedApplicationUnderLock\(tx,/,
     /catalog\.configuration\.clinical\.sign/,
