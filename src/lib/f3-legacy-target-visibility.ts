@@ -1,7 +1,7 @@
 import type {Prisma} from "../../generated/prisma/client";
 import type {F3LineageDecision} from "./f3-legacy-source-reconciliation.ts";
 
-const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const TYPES=[
   "TEST","COMPONENT","PANEL","PACKAGE","UNIT","CONTAINER",
   "REFERENCE_INTERVAL","PRICE_LIST","PRICE_LIST_ITEM",
