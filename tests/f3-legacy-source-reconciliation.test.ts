@@ -28,7 +28,9 @@ const build=()=>{
   const lineage:F3LineageDecision[]=manifest.rows.map((row,i)=>({
     organizationId:manifest.organizationId,sourceSha256:manifest.sourceSha256,
     digestKeyId:manifest.digestKeyId,...row,
-    classification:"APPROVED_MAPPING",targetType:"TEST",targetId:uuid(i+10),
+    classification:"APPROVED_MAPPING",
+    targetType:row.sourceTable==="normal"?"REFERENCE_INTERVAL":"PANEL",
+    targetId:uuid(i+10),
   }));
   return {manifest,lineage};
 };
@@ -92,7 +94,7 @@ test("F3: mismatched tenant, schema, source and duplicate/extraneous ledger keys
     /foreign_or_duplicate_mapping/);
   assert.throws(()=>run(lineage.map((row,i)=>i===0?{
     ...row,classification:"MAPPED",targetId:null,
-  }:row),manifest),/unverified_target_identity/);
+  }:row),manifest),/incompatible_source_target/);
   assert.throws(()=>run(lineage.map((row,i)=>i===0?{
     ...row,classification:"UNRESOLVED",targetId:uuid(80),targetType:"TEST",
   }:row),manifest),/unreviewed_target_link/);
@@ -123,4 +125,53 @@ test("F3: tampered table totals, duplicate counters and source row parity cannot
       ...table,duplicateContentRows:0,
     }:table)};
   assert.throws(()=>run(lineage,falseDuplicate),/duplicate_content_mismatch/);
+});
+
+test("F3: a valid source HMAC cannot be mapped to the wrong target class",()=>{
+  const {manifest,lineage}=build();
+  // normal is a REFERENCE_INTERVAL, profile is a PANEL: mapping either as
+  // TEST would be a clinically dangerous but syntactically valid UUID.
+  assert.throws(()=>run(lineage.map((entry,i)=>i===0?
+    {...entry,targetType:"TEST"}:entry),manifest),
+    /incompatible_source_target/);
+  assert.throws(()=>run(lineage.map((entry,i)=>i===2?
+    {...entry,targetType:"PRICE_LIST_ITEM"}:entry),manifest),
+    /incompatible_source_target/);
+  assert.throws(()=>run(lineage.map((entry,i)=>i===0?
+    {...entry,sourceTable:entry.sourceTable.toUpperCase()}:entry),manifest),
+    /foreign_or_duplicate_mapping/);
+  const unknownTable={...manifest,tables:manifest.tables.map((entry,i)=>i===0?
+    {...entry,sourceTable:"INJECTED"}:entry)};
+  assert.throws(()=>run(lineage,unknownTable),/invalid_table_coverage/);
+  for(const override of [
+    {status:"VERIFIED_BY_UNTRUSTED_IMPORT"},
+    {sourceBytesVerified:true},
+    {crossInstallationMappingApproved:true},
+    {clinicalFinanceApproved:true},
+  ]){
+    assert.throws(()=>run(lineage,{...manifest,...override} as typeof manifest),
+      /invalid_source_evidence/);
+  }
+});
+
+test("F3: legacy manual-only Gropes cannot fabricate a direct GROUP mapping",()=>{
+  const input:F3LegacySourceManifestInput={
+    organizationId:uuid(1),sourceSha256:"a".repeat(64),
+    digestKeyId:"b".repeat(64),
+    tables:[{name:"Gropes",
+      columns:[{name:"label",accessType:"ACE_TYPE_202"}],
+      rows:[{label:"Synthetic group"}]}],
+  };
+  const manifest=buildF3LegacyExtractionManifest(input,secret);
+  const source=manifest.rows[0];
+  const lineage:F3LineageDecision[]=[{
+    organizationId:manifest.organizationId,sourceSha256:manifest.sourceSha256,
+    digestKeyId:manifest.digestKeyId,...source,
+    classification:"APPROVED_MAPPING",targetType:"GROUP",targetId:uuid(99),
+  }];
+  assert.throws(()=>run(lineage,manifest),/incompatible_source_target/);
+  const deferred=run([{...lineage[0],classification:"UNRESOLVED",
+    targetType:null,targetId:null}],manifest);
+  assert.equal(deferred.syntheticFullyClassified,false);
+  assert.equal(deferred.dispositions.UNRESOLVED,1);
 });
