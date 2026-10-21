@@ -1,5 +1,5 @@
 import type { Prisma } from "../../generated/prisma/client";
-import type { F2ApplyPlan } from "./catalog-f2-apply-plan.ts";
+import { verifyF2ApplyPlanIntegrity, type F2ApplyPlan } from "./catalog-f2-apply-plan.ts";
 import type { F2EffectiveApplyAuthority } from "./catalog-f2-effective-versions.ts";
 import { f2ReferenceIntervalCasWhere } from "./catalog-f2-effective-versions.ts";
 import {
@@ -27,7 +27,7 @@ export async function reverseF2FutureEffectiveVersionsUnderLock(
   tx:Prisma.TransactionClient,plan:F2ApplyPlan,
   authority:F2EffectiveApplyAuthority,now:Date,
 ):Promise<F2EffectiveReversalResult>{
-  if(plan.format!=="F2_TEN_CLASS_EXECUTABLE_PLAN_V1"||
+  if(!verifyF2ApplyPlanIntegrity(plan)||
      !UUID.test(authority.organizationId)||!UUID.test(authority.branchId)||
      !UUID.test(authority.batchId)||!UUID.test(authority.actorUserId)||
      !authority.journalSigningSecret||
