@@ -26,6 +26,7 @@ export type F2EffectiveReversalResult={
 export async function reverseF2FutureEffectiveVersionsUnderLock(
   tx:Prisma.TransactionClient,plan:F2ApplyPlan,
   authority:F2EffectiveApplyAuthority,now:Date,
+  coordinatedMasterRevisions=false,
 ):Promise<F2EffectiveReversalResult>{
   if(!verifyF2ApplyPlanIntegrity(plan)||
      !UUID.test(authority.organizationId)||!UUID.test(authority.branchId)||
@@ -38,6 +39,13 @@ export async function reverseF2FutureEffectiveVersionsUnderLock(
      !authority.signedStageAndLiveSnapshotVerified ||
      !Number.isFinite(now.getTime()))
     throw Error("f2_reversal_unauthorized");
+  const allChanged=plan.rows.filter(row=>row.operation!=="UNCHANGED");
+  if(allChanged.some(row=>row.operation!=="EFFECTIVE_DATED_NEW_VERSION") &&
+     !coordinatedMasterRevisions)
+    throw Error("f2_reversal_other_class_support_pending");
+  const nativeChanges=allChanged.filter(row=>
+    row.operation==="EFFECTIVE_DATED_NEW_VERSION");
+  if(!nativeChanges.length)throw Error("f2_reversal_no_native_version_changes");
   const at=new Date(plan.effectiveAt);
   if(!Number.isFinite(at.getTime())||now.getTime()>=at.getTime())
     throw Error("f2_reversal_requires_pre_effective_date");
@@ -53,7 +61,7 @@ export async function reverseF2FutureEffectiveVersionsUnderLock(
     if(!journal||journal.planDigest!==plan.planDigest)
       throw Error("f2_reversal_journal_mismatch");
     return {state:"FUTURE_VERSIONS_ALREADY_REVERSED",
-      changedRows:plan.changedRows,batchId:authority.batchId};
+      changedRows:nativeChanges.length,batchId:authority.batchId};
   }
   const applied=await tx.auditEvent.findMany({
     where:{organizationId:authority.organizationId,action:"CATALOG_F2_EFFECTIVE_BATCH_APPLIED",
@@ -68,8 +76,8 @@ export async function reverseF2FutureEffectiveVersionsUnderLock(
      applyRecord.effectiveAt!==plan.effectiveAt ||
      !Array.isArray(applyRecord.journalEventIds) ||
      !Array.isArray(applyRecord.createdVersionIds) ||
-     applyRecord.journalEventIds.length!==plan.changedRows ||
-     applyRecord.createdVersionIds.length!==plan.changedRows)
+     applyRecord.journalEventIds.length!==nativeChanges.length ||
+     applyRecord.createdVersionIds.length!==nativeChanges.length)
     throw Error("f2_reversal_missing_applied_journal");
   const ids=applyRecord.journalEventIds as unknown[];
   if(ids.some(id=>typeof id!=="string"||!UUID.test(id))||
@@ -83,7 +91,7 @@ export async function reverseF2FutureEffectiveVersionsUnderLock(
   if(journals.length!==ids.length)
     throw Error("f2_reversal_incomplete_journal");
   const byId=new Map(journals.map(event=>[event.entityType+":"+event.entityId,event]));
-  for(const row of plan.rows.filter(r=>r.operation!=="UNCHANGED")){
+  for(const row of nativeChanges){
     const journal=byId.get(row.entityType+":"+row.targetId);
     const values=journal?verifyF2ApplicationJournal(
       journal.newValues,authority.journalSigningSecret):null;
@@ -178,9 +186,9 @@ export async function reverseF2FutureEffectiveVersionsUnderLock(
     action:"CATALOG_F2_EFFECTIVE_BATCH_REVERSED",
     newValues:signF2ApplicationJournal({
       planDigest:plan.planDigest,effectiveAt:plan.effectiveAt,
-      changedRows:plan.changedRows,reason:"FUTURE_VERSION_COMPENSATION",
+      changedRows:nativeChanges.length,reason:"FUTURE_VERSION_COMPENSATION",
     },authority.journalSigningSecret) as Prisma.InputJsonObject,
   }});
   return {state:"FUTURE_EFFECTIVE_VERSIONS_REVERSED",
-    changedRows:plan.changedRows,batchId:authority.batchId};
+    changedRows:nativeChanges.length,batchId:authority.batchId};
 }
