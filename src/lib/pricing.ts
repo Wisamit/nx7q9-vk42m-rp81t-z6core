@@ -42,6 +42,8 @@ export async function resolveTestPrice(
   }) : [];
   const contractIds = activeContracts.map((x) => x.id);
 
+  // Price revisions use half-open [effectiveFrom, effectiveTo), so a
+  // version closed at the successor's start is never priced twice.
   const priceLists = await db.priceList.findMany({
     where: {
       organizationId: input.organizationId,
@@ -63,7 +65,7 @@ export async function resolveTestPrice(
           testId: input.testId,
           status: "ACTIVE",
           effectiveFrom: { lte: at },
-          OR: [{ effectiveTo: null }, { effectiveTo: { gte: at } }],
+          OR: [{ effectiveTo: null }, { effectiveTo: { gt: at } }],
         },
       },
     },
@@ -73,7 +75,7 @@ export async function resolveTestPrice(
           testId: input.testId,
           status: "ACTIVE",
           effectiveFrom: { lte: at },
-          OR: [{ effectiveTo: null }, { effectiveTo: { gte: at } }],
+          OR: [{ effectiveTo: null }, { effectiveTo: { gt: at } }],
         },
         orderBy: [{ effectiveFrom: "desc" }, { id: "desc" }],
       },
@@ -154,7 +156,7 @@ export async function resolvePackagePrice(
           packageId: input.packageId,
           status: "ACTIVE",
           effectiveFrom: { lte: at },
-          OR: [{ effectiveTo: null }, { effectiveTo: { gte: at } }],
+          OR: [{ effectiveTo: null }, { effectiveTo: { gt: at } }],
         },
       },
     },
@@ -164,7 +166,7 @@ export async function resolvePackagePrice(
           packageId: input.packageId,
           status: "ACTIVE",
           effectiveFrom: { lte: at },
-          OR: [{ effectiveTo: null }, { effectiveTo: { gte: at } }],
+          OR: [{ effectiveTo: null }, { effectiveTo: { gt: at } }],
         },
         orderBy: [{ effectiveFrom: "desc" }, { id: "desc" }],
       },
