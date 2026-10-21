@@ -62,7 +62,6 @@ export function F2ConfigurationOperationForm({locale,allowedModes}:{
       const response=await fetch(
         "/api/catalog/imports/"+encodeURIComponent(batchId)+"/"+action,{
           method:"POST",credentials:"same-origin",cache:"no-store",
-          headers:{"Content-Length":"0"},
         },
       );
       const body:unknown=await response.json();
