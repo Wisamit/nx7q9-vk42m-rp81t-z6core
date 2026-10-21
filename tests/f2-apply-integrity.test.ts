@@ -71,7 +71,7 @@ test("F2: independently recompile full ten-class plan before SQL mutation",()=>{
     p=>{p.planDigest="f".repeat(64);},
     p=>{p.changedRows=0;},
     p=>{(p.operations as MutableRecord).EFFECTIVE_DATED_NEW_VERSION=0;},
-    p=>{draftRow(p).operation="UNCHANGED";},
+    p=>{draftRow(p).operation="SCALAR_VERSIONED_CHANGE";},
     p=>{draftRow(p).changedFields=["status"];},
     p=>{draftRow(p).originalDigest="f".repeat(64);},
     p=>{draftRow(p).desiredDigest="f".repeat(64);},
