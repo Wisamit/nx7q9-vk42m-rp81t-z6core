@@ -10,7 +10,8 @@ import { catalogExportTypes, type CatalogExportType } from "@/lib/catalog-config
 import { bundleFieldContract, verifyBundleFieldContract } from "@/lib/catalog-bundle-field-contract";
 import {
   F2_EFFECTIVE_READ_TYPES,resolveF2EffectiveCatalogViews,
-  projectF2EffectiveCatalogView,
+  projectF2EffectiveCatalogView,f2EffectiveCompositeMemberIds,
+  f2EffectiveCompositeMembersAuthorized,
 } from "@/lib/catalog-f2-effective-view";
 
 export const dynamic = "force-dynamic";
@@ -250,6 +251,21 @@ export async function GET(request: NextRequest) {
         });
         records=records.map(item=>
           projectF2EffectiveCatalogView(readType,item,revisions));
+        if(type==="PANEL"||type==="PACKAGE"){
+          const members=f2EffectiveCompositeMemberIds(type,records);
+          if(!members)return {
+            error:"bundle_export_effective_membership_invalid",httpStatus:409,
+          } as const;
+          const scopedTests=await tx.labTest.findMany({
+            where:{...testScope,id:{in:[...members.keys()]}},
+            select:{id:true,code:true},take:members.size+1,
+          });
+          if(!f2EffectiveCompositeMembersAuthorized(members,scopedTests))
+            return {
+              error:"bundle_export_effective_member_scope_changed",
+              httpStatus:403,
+            } as const;
+        }
       }
       total += records.length;
       groups.push({ entityType: type, records });
