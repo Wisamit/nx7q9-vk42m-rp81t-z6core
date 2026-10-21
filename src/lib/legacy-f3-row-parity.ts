@@ -85,7 +85,7 @@ export function reconcileF3LegacyRowParity(input:{
     invalid("f3_inconsistent_source_inventory");
   const classes=legacyRowClassifications;
   const byTable=new Map<string,F3RowParityTable>();
-  const targetCounters=new Map<string,number>();
+  const targetCounters=new Map<string,{count:number;tables:Map<string,number>}>();
   for(const item of inventory.tables){
     byTable.set(item.tableName,{
       tableName:item.tableName,present:item.present,sourceRows:item.sourceRows,
@@ -136,7 +136,10 @@ export function reconcileF3LegacyRowParity(input:{
         reviewed++;
       }else unresolved++;
       const target=targetKey(row.targetType,row.targetId);
-      targetCounters.set(target,(targetCounters.get(target)||0)+1);
+      const usage=targetCounters.get(target)??{count:0,tables:new Map<string,number>()};
+      usage.count++;
+      usage.tables.set(row.sourceTable,(usage.tables.get(row.sourceTable)||0)+1);
+      targetCounters.set(target,usage);
       if(!input.verifiedScopedTargets?.has(target)){
         table.missingLiveTargets++;missingTarget++;
       }
@@ -155,22 +158,18 @@ export function reconcileF3LegacyRowParity(input:{
     if(table.missingRows<0)invalid("f3_source_row_overflow");
     missing+=table.missingRows;
   }
-  for(const [key,count] of targetCounters){
-    if(count>1){
-      multiple+=count-1;
-      // This is a finding, not automatic rejection: aliases can legitimately
-      // map to one target. It must be explicitly reviewed for final cutover.
-      for(const row of persisted){
-        if(row.targetId&&row.targetType&&
-           targetKey(row.targetType,row.targetId)===key){
-          byTable.get(row.sourceTable)!.multipleRowsPerTarget++;
-        }
-      }
+  for(const usage of targetCounters.values()){
+    if(usage.count>1){
+      multiple+=usage.count-1;
+      // Aliases can legitimately share one target. Count every affected
+      // table without quadratic scans or silently certifying cardinality.
+      for(const [tableName,count] of usage.tables)
+        byTable.get(tableName)!.multipleRowsPerTarget+=count;
     }
   }
   const accounted=missing===0;
   const resolved=accounted&&unresolved===0&&ambiguous===0&&
-    missingTarget===0&&multiple===0;
+    notImported===0&&missingTarget===0&&multiple===0;
   return {
     state:resolved?"FULL_ROW_LEDGER_RECONCILED":"SOURCE_TO_TARGET_REVIEW_INCOMPLETE",
     sourceTables:LEGACY_COVERAGE_SOURCES.length,
