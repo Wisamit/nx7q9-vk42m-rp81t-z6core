@@ -72,7 +72,8 @@ test("F3: invalid Access schema, unlisted sensitive sources and accidental PHI f
   assert.throws(()=>buildF3LegacyExtractionManifest(
     {...base,tables:[...base.tables,{...base.tables[0],name:"TEST"}]},secret),
     /invalid_table/);
-  for(const forbidden of ["password","ID","ID2","idprice","result","profnam"]){
+  for(const forbidden of ["password","ID","ID2","idprice","result","profnam",
+    "culture","cbc","Coag","Urine","Thyroid","Torch","fertility","widal","ZN"]){
     assert.throws(()=>buildF3LegacyExtractionManifest(
       {...base,tables:[{...base.tables[0],name:forbidden}]},secret),
       /invalid_table/);
