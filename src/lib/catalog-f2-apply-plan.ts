@@ -40,8 +40,13 @@ const identityFields:Record<CatalogExportType,readonly string[]>={
   COMPONENT:["code","testId","unitId","resultSectionId","test","unit"],
   UNIT:["code","symbol"],CONTAINER:["code"],
   PANEL:["code"],PACKAGE:["code"],
+  // Demographic/reference population selectors identify WHICH patients a
+  // clinical interval applies to. They are not ordinary value amendments:
+  // changing one requires a separately governed population replacement.
   REFERENCE_INTERVAL:["componentId","branchId","methodId","analyzerId",
-    "specimenTypeId","component"],
+    "specimenTypeId","sex","ageFrom","ageTo","ageUnit",
+    "pregnancyStatus","gestationalAgeFromWeeks","gestationalAgeToWeeks",
+    "populationCode","component"],
   PRICE_LIST:["code","scopeType","branchId","sourceId","referrerId",
     "clientId","contractId","currency"],
   PRICE_LIST_ITEM:["priceListId","testId","test","priceList"],
