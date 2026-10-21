@@ -101,7 +101,7 @@ test("F3: exactly declared schema, bounded rows and deterministic source-reconci
   const head={...base,tables:[{...base.tables[0],rows:[]}]};
   const clean=buildF3LegacyExtractionManifest(head,secret);
   assert.equal(clean.rowCount,0);
-  assert.equal(clean.tables.find(t=>t.sourceTable==="test")?.rows,0);
+  assert.equal(clean.tables.find(t=>t.sourceTable==="Test name")?.rows,0);
   assert.equal(F3_LEGACY_MAX_ROWS,20000);
   const oversized={...base,tables:[{
     ...base.tables[0],rows:Array.from({length:F3_LEGACY_MAX_ROWS+1},
