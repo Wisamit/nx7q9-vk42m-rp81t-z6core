@@ -88,9 +88,12 @@ test("F2: reject duplicate display positions and case-insensitive repeated test 
     {id:alpha,code:"ALPHA"},
     {id:alpha.toUpperCase(),code:"ALPHA"},
   ]),false,"one real test cannot be authorized as two separate members");
-  assert.equal(f2EffectiveCompositeMemberIds("PACKAGE",[{
-    ...valid,items:[valid.items[0],{...valid.items[1],displayOrder:1}],
-  }]),null,"duplicate order positions can produce ambiguous report/order line ordering");
+  const tied=f2EffectiveCompositeMemberIds("PACKAGE",[{
+    ...valid,items:[valid.items[1],{...valid.items[0],displayOrder:2}],
+  }]);
+  assert.ok(tied,"historical duplicate displayOrder values are schema-permitted");
+  assert.deepEqual([...tied.keys()],[alpha,another],
+    "same displayOrder must use immutable canonical UUID as stable tie-break");
   assert.equal(f2EffectiveCompositeMemberIds("PACKAGE",[{
     ...valid,items:[valid.items[0],{...valid.items[1],testId:alpha.toUpperCase()}],
   }]),null,"case-only duplicate UUIDs refer to the same immutable lab test");
