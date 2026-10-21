@@ -43,5 +43,6 @@ test("F2: locked preflight binds source provenance, signed decisions, live scope
 });
 test("F2: operator permission must be explicitly granted, not inherited from SYSTEM_ADMIN",()=>{
   assert.match(migration,/catalog\.configuration\.apply/);
-  assert.doesNotMatch(migration,/role_permissions|SYSTEM_ADMIN/);
+  const sql=migration.replace(/^--.*$/gm,"");
+  assert.doesNotMatch(sql,/role_permissions|SYSTEM_ADMIN/);
 });
