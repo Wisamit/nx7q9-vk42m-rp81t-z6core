@@ -122,3 +122,57 @@ test("F2: a second imported revision plans against the first effective value, no
   assert.equal(verifyF2ApplyPlanIntegrity(plan),true);
   assert.equal(original().nameEn,"Old unit","physical master remains unchanged");
 });
+
+test("F2: a future PANEL adding an out-of-department test cannot enter a signed live observation",async()=>{
+  const panel="00000000-0000-4000-8000-000000000090";
+  const first="00000000-0000-4000-8000-000000000091";
+  const additional="00000000-0000-4000-8000-000000000092";
+  const base:Record<string,unknown>={};
+  for(const field of catalogBundleAllowedSourceFields.PANEL)base[field]=null;
+  Object.assign(base,{id:panel,code:"PANEL",nameEn:"Synthetic panel",
+    status:"ACTIVE",
+    items:[{testId:first,displayOrder:0,required:true,test:{code:"A"}}],
+  });
+  const revised={...base,items:[
+    {testId:first,displayOrder:0,required:true,test:{code:"A"}},
+    {testId:additional,displayOrder:1,required:false,test:{code:"B"}},
+  ]};
+  const targets=new Map<CatalogExportType,string[]>([["PANEL",[panel]]]);
+  const scopedRecords=[
+    {id:first,code:"A"},{id:additional,code:"B"},
+  ];
+  let visibleTests=scopedRecords;
+  const db={
+    testPanel:{findMany:async({where}:{where:{organizationId:string}})=>{
+      assert.equal(where.organizationId,org);
+      return [base];
+    }},
+    catalogConfigurationRevision:{findMany:async()=>[
+      {entityId:panel,afterSnapshot:revised,desiredDigest:digest(revised)},
+    ]},
+    labTest:{findMany:async({where}:{where:{
+      organizationId:string;id:{in:string[]};departmentId?:unknown;
+    }})=>{
+      assert.equal(where.organizationId,org);
+      assert.deepEqual(new Set(where.id.in),new Set([first,additional]));
+      assert.ok(where.departmentId,"department predicate required");
+      return visibleTests;
+    }},
+  };
+  const scope={organizationId:org,branchId:unit,
+    departmentIds:[unit]};
+  const asOf=new Date("2026-12-01T00:00:00.000Z");
+  visibleTests=[scopedRecords[0]];
+  assert.equal(await readF2EffectiveLiveObservations(db as never,
+    scope,[],targets,asOf),null,
+    "a missing out-of-department test must fail closed");
+  visibleTests=[scopedRecords[0],{id:additional,code:"SPOOF"}];
+  assert.equal(await readF2EffectiveLiveObservations(db as never,
+    scope,[],targets,asOf),null,
+    "a changed test code cannot authenticate a future composite member");
+  visibleTests=scopedRecords;
+  const allowed=await readF2EffectiveLiveObservations(db as never,
+    scope,[],targets,asOf);
+  assert.deepEqual((allowed?.get("PANEL:"+panel) as Record<string,unknown>).items,
+    revised.items);
+});
