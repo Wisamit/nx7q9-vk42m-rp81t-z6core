@@ -23,7 +23,7 @@ test("F3: target existence verification batches IDs by class and validates org/p
     row("Referdby","REFERRER",id(15)),
   ];
   function handler(kind:string) {
-    return async({where}:{where:Record<string,any>})=>{
+    return async({where}:{where:{id:{in:string[]};[key:string]:unknown}})=>{
       calls.push({kind,where});
       return where.id.in.map((item:string)=>({id:item}));
     };
