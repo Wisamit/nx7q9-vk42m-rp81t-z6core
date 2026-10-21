@@ -152,6 +152,9 @@ export async function POST(request:NextRequest,{params}:{
       batchId:batch.id,scope,grantedBranchIds,sourceChecksum:batch.sourceChecksum,
       authorUserId:batch.createdByUserId,stageEvidenceSeal:seal,
       batchMetadata:metadata,signingSecret:secret,
+      // Intentional clinical and tariff changes are separately protected by
+      // signed source/live observations and two-domain MFA approvals.
+      allowGovernedValueDifferences:true,
     });
     if(!verified.ok)return {error:verified.error,httpStatus:409} as const;
     const rows=await tx.catalogImportRow.findMany({
