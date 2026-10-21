@@ -112,9 +112,8 @@ test("F2: transaction core creates three new effective-dated versions, keeps ori
     const until=action.args.data.effectiveTo;
     assert.ok(until instanceof Date);
     const inclusivePriceEnd="2026-11-30T23:59:59.999Z";
-    assert.equal(until.toISOString(),
-      action.table==="referenceInterval"?p.effectiveAt:inclusivePriceEnd,
-      "tariff closes one millisecond before its successor; ranges retain clinical convention");
+    assert.equal(until.toISOString(),inclusivePriceEnd,
+      "both clinical and tariff predecessors end at the final prior millisecond");
     assert.equal(action.args.where?.effectiveTo,null);
   }
   const prices=actions.filter(a=>a.table==="priceListItem"&&a.action==="create");
