@@ -434,6 +434,7 @@ export async function POST(request: Request) {
         referrerId,
         clientId: effectiveClientId,
         testId: test.id,
+        at: catalogAsOf,
       }),
     })));
 
@@ -446,6 +447,7 @@ export async function POST(request: Request) {
         referrerId,
         clientId: effectiveClientId,
         packageId: pkg.id,
+        at: catalogAsOf,
       }),
     })));
   } catch (error) {
