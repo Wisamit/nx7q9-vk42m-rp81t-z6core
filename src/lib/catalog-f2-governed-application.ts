@@ -1,4 +1,4 @@
-import {createHash,timingSafeEqual} from "node:crypto";
+import {createHash} from "node:crypto";
 import type {Prisma} from "../../generated/prisma/client";
 import {catalogExportTypes} from "./catalog-configuration-export.ts";
 import {catalogDriftObservationToken} from "./catalog-drift-triage.ts";
@@ -24,6 +24,12 @@ type VerifiedSource={
   fullDomainSignatoryGrantsCurrentlyVerified:true;
   currentOperatorScopesVerified:true;
   independentlyVerifiedInstallationMapping:true;
+  /**
+   * For compensation only: server has authenticated the signed apply journal,
+   * checked exact future cloned versions and retained its frozen pre-apply
+   * observation. Live post-apply rows are necessarily NOT that observation.
+   */
+  appliedVersionJournalValidated?:true;
 };
 export type F2GovernedExecutionInput={
   source:VerifiedSource;mode:Mode;now:Date;secret:string;
@@ -56,6 +62,7 @@ export async function executeF2GovernedApplicationUnderLock(
     !source.fullyScopedStageVerified ||
     !source.fullDomainSignatoryGrantsCurrentlyVerified ||
     !source.currentOperatorScopesVerified ||
+    (mode==="REVERSE" && source.appliedVersionJournalValidated!==true) ||
     ![source.organizationId,source.branchId,source.batchId,
       source.authorUserId,source.actorUserId].every(id=>UUID.test(id)) ||
     ![source.sourceChecksum,source.stageEvidenceDigest,source.policyDigest]
@@ -70,9 +77,11 @@ export async function executeF2GovernedApplicationUnderLock(
     [...catalogExportTypes].some(type=>!covered.has(type)))
     throw Error("f2_governed_ten_class_stage_required");
 
-  // This uses the same row-wise HMAC and concatenation as POST approval.
-  // Ordinary JS JSON changes or Prisma decimal/time projection drift prevent
-  // an approved plan from being replayed against a different live catalog.
+  // APPLY: caller must re-read current live rows under tenant lock.
+  // REVERSE: caller must use the frozen, HMAC-authenticated PRE-APPLY
+  // observation bound to the approved journal; the reversal CAS separately
+  // checks post-apply cloned versions and rejects already-used records.
+  // Both modes must match precisely the originally approved source snapshot.
   const liveHash=createHash("sha256");
   for(const [index,row] of rows.entries()){
     if(row.rowNumber!==index+1 ||
@@ -128,10 +137,4 @@ export async function executeF2GovernedApplicationUnderLock(
   if(mode==="APPLY")
     return applyF2EffectiveVersionsUnderLock(tx,plan,authority,now);
   return reverseF2FutureEffectiveVersionsUnderLock(tx,plan,authority,now);
-}
-
-/** This must never be exposed: HMAC bound snapshot comparisons stay internal. */
-export function equalF2ClinicalApplicationDigests(a:string,b:string):boolean{
-  return SHA.test(a)&&SHA.test(b)&&
-    timingSafeEqual(Buffer.from(a,"hex"),Buffer.from(b,"hex"));
 }
