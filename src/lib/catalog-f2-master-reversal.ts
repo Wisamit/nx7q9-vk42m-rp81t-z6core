@@ -4,7 +4,7 @@ import type {F2EffectiveApplyAuthority} from "./catalog-f2-effective-versions.ts
 import {signF2ApplicationJournal,verifyF2ApplicationJournal}
   from "./catalog-f2-application-journal.ts";
 
-const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const revisionTypes=new Set(["TEST","COMPONENT","UNIT","CONTAINER",
   "PANEL","PACKAGE","PRICE_LIST"]);
 /**
