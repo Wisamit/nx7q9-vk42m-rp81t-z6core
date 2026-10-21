@@ -139,6 +139,10 @@ test("F2 MariaDB: atomic synthetic price/package/range versions and compensating
     const again=await transaction(tx=>reverseF2FutureEffectiveVersionsUnderLock(
       tx as never,plan,authority,new Date("2026-11-01T00:00:00.000Z")));
     assert.equal(again.state,"FUTURE_VERSIONS_ALREADY_REVERSED");
+    await assert.rejects(()=>transaction(tx=>applyF2EffectiveVersionsUnderLock(
+      tx as never,plan,authority,new Date("2026-11-01T00:00:00.000Z"))),
+      /f2_apply_batch_previously_reversed/,
+      "previously compensated signed batch must not re-activate archived versions");
     const [post]=await sql.execute<mysql.RowDataPacket[]>(
       "SELECT id,effective_to,status FROM price_list_items WHERE price_list_id=? ORDER BY effective_from",
       [priceListId]);
