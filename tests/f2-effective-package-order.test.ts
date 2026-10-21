@@ -70,7 +70,7 @@ test("F2: new order snapshots capture effective test and unit display values, pr
   assert.ok(route.indexOf("const tests=storedTests.map")<route.indexOf("for (const test of tests)"));
 });
 
-test("F2: reject duplicate display positions and case-insensitive repeated test UUIDs in effective composite members",()=>{
+test("F2: preserve allowed display ties while rejecting case-insensitive repeated test UUIDs",()=>{
   const alpha="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
   const another="bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
   const valid={id:id(1),items:[
@@ -97,10 +97,13 @@ test("F2: reject duplicate display positions and case-insensitive repeated test 
   assert.equal(f2EffectiveCompositeMemberIds("PACKAGE",[{
     ...valid,items:[valid.items[0],{...valid.items[1],testId:alpha.toUpperCase()}],
   }]),null,"case-only duplicate UUIDs refer to the same immutable lab test");
-  assert.equal(f2EffectiveCompositeMemberIds("PANEL",[{
+  const panelTie=f2EffectiveCompositeMemberIds("PANEL",[{
     id:id(2),items:[
-      {testId:alpha,displayOrder:1,required:true,test:{code:"ALPHA"}},
       {testId:another,displayOrder:1,required:false,test:{code:"BETA"}},
+      {testId:alpha,displayOrder:1,required:true,test:{code:"ALPHA"}},
     ],
-  }]),null,"panel display ordering must be unambiguous as well");
+  }]);
+  assert.ok(panelTie,"panels also allow a repeated displayOrder");
+  assert.deepEqual([...panelTie.keys()],[alpha,another],
+    "tie-breaking is stable regardless of incoming array order");
 });
