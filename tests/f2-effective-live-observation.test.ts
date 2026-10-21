@@ -49,13 +49,13 @@ test("F2: repeated import sees the same effective unit fields as the exported co
   };
   const asOf=new Date("2026-11-01T00:00:00.000Z");
   const current=await readF2EffectiveLiveObservations(db as never,
-    {organizationId:org} as never,[],ids,asOf);
+    {organizationId:org,branchId:unit,departmentIds:[]},[],ids,asOf);
   assert.ok(current);
   assert.equal(overlayRead,true);
   assert.deepEqual(current.get("UNIT:"+unit),source);
   assert.equal(current.get("UNIT:"+unit)!==original(),true);
   const before=await readF2EffectiveLiveObservations(db as never,
-    {organizationId:org} as never,[],ids,new Date("2026-10-01T00:00:00.000Z"));
+    {organizationId:org,branchId:unit,departmentIds:[]},[],ids,new Date("2026-10-01T00:00:00.000Z"));
   assert.deepEqual(before?.get("UNIT:"+unit),original(),
     "future configuration must remain invisible before effective date");
 });
@@ -69,12 +69,12 @@ test("F2: no unauthorized master can obtain an overlay before branch/department-
     }},
   };
   const current=await readF2EffectiveLiveObservations(db as never,
-    {organizationId:org} as never,[],ids,new Date("2026-11-01T00:00:00.000Z"));
+    {organizationId:org,branchId:unit,departmentIds:[]},[],ids,new Date("2026-11-01T00:00:00.000Z"));
   assert.equal(current,null);
   assert.equal(overlaysQueried,false);
   const bad=new Map<CatalogExportType,string[]>([["UNIT",["bad-id"]]]);
   const rejected=await readF2EffectiveLiveObservations(db as never,
-    {organizationId:org} as never,[],bad,new Date("2026-11-01T00:00:00.000Z"));
+    {organizationId:org,branchId:unit,departmentIds:[]},[],bad,new Date("2026-11-01T00:00:00.000Z"));
   assert.equal(rejected,null);
   assert.equal(overlaysQueried,false);
 });
@@ -88,7 +88,7 @@ test("F2: reject corrupted future revision before deriving any second-bundle app
     }]},
   };
   await assert.rejects(()=>readF2EffectiveLiveObservations(db as never,
-    {organizationId:org} as never,[],ids,new Date("2026-11-01T00:00:00.000Z")),
+    {organizationId:org,branchId:unit,departmentIds:[]},[],ids,new Date("2026-11-01T00:00:00.000Z")),
     /f2_effective_snapshot_digest_invalid/);
 });
 
@@ -102,7 +102,7 @@ test("F2: a second imported revision plans against the first effective value, no
     ]},
   };
   const scoped=await readF2EffectiveLiveObservations(db as never,
-    {organizationId:org} as never,[],ids,
+    {organizationId:org,branchId:unit,departmentIds:[]},[],ids,
     new Date("2026-12-01T00:00:00.000Z"));
   assert.ok(scoped);
   const plan=compileF2ApplyPlan({
