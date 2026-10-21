@@ -7,7 +7,7 @@ import type {CatalogExportType} from "./catalog-configuration-export.ts";
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SHA=/^[0-9a-f]{64}$/;
 export const F2_EFFECTIVE_READ_TYPES=[
-  "TEST","COMPONENT","UNIT","CONTAINER",
+  "TEST","COMPONENT","UNIT","CONTAINER","PRICE_LIST",
 ] as const satisfies readonly CatalogExportType[];
 type ReadType=typeof F2_EFFECTIVE_READ_TYPES[number];
 const viewFields=(type:ReadType)=>catalogBundleAllowedSourceFields[type]
