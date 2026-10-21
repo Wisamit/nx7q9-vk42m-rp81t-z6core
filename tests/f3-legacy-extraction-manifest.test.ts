@@ -16,7 +16,7 @@ const fixture=():F3LegacySourceManifestInput=>({
       {name:"test name",accessType:"Text (100)"},
       {name:"Normal",accessType:"Text (255)"},
     ],
-    rows:index===0?[
+    rows:name==="test"?[
       {"test name":"Synthetic CBC","Normal":"1.100000"},
       {"test name":"Synthetic CBC","Normal":"1.100000"},
       {"test name":"Synthetic CRP","Normal":"2.500000"},
@@ -67,7 +67,7 @@ test("F3: Access row order does not change HMAC occurrence identities",()=>{
 test("F3: invalid Access schema, unlisted sensitive sources and accidental PHI fail closed",()=>{
   const base=fixture();
   assert.throws(()=>buildF3LegacyExtractionManifest(
-    {...base,tables:[...base.tables,{...base.tables[0],name:"TEST"}]},secret),
+    {...base,tables:[...base.tables.slice(0,-1),{...base.tables[0],name:"TEST"}]},secret),
     /invalid_table/);
   for(const forbidden of ["password","ID","ID2","idprice","result","profnam",
     "culture","cbc","Coag","Urine","Thyroid","Torch","fertility","widal","ZN"]){
