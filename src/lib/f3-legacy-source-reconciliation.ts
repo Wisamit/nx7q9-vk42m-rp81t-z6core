@@ -91,7 +91,7 @@ export function reconcileF3LegacySource(input:{
     source.set(id,row);
   }
   if(manifest.tables.some(table=>
-     observedTableCounts.get(table.sourceTable.toLowerCase())!==table.rows))
+     (observedTableCounts.get(table.sourceTable.toLowerCase())??0)!==table.rows))
     throw Error("f3_reconciliation_table_row_count_mismatch");
   // An Access table has no guaranteed physical row sequence. Every repeated
   // content digest must have one-and-only-one contiguous occurrence 1..N,
