@@ -12,7 +12,9 @@ const make=():F2ApplySourceRow[]=>[...catalogExportTypes].map((entityType,i)=>{
   const source:Record<string,unknown>={};
   for(const field of catalogBundleAllowedSourceFields[entityType])
     source[field]=null;
-  source.id=id(i+1);source.code="C-"+i;source.createdAt="2026-01-01T00:00:00.000Z";
+  source.id=id(i+1);
+  if(Object.hasOwn(source,"code"))source.code="C-"+i;
+  source.createdAt="2026-01-01T00:00:00.000Z";
   source.updatedAt="2026-01-01T00:00:00.000Z";
   const live=structuredClone(source);
   live.updatedAt="2026-10-01T00:00:00.000Z";
