@@ -211,7 +211,7 @@ export async function POST(request: Request) {
   const allTestIds = [...directTestIds, ...packageTestIds];
   const orderQuestionAsOf = catalogAsOf;
 
-  const [patient, tests, source, referrer, client, orderingBranch] = await Promise.all([
+  const [patient, storedTests, source, referrer, client, orderingBranch] = await Promise.all([
     prisma.patient.findFirst({ where: { id: patientId, organizationId: session.user.organizationId, status: "ACTIVE" }, select: { id: true, patientNumber: true, fullNameEn: true, sexAtBirth: true, dateOfBirth: true, recordedAgeValue: true, recordedAgeUnit: true, recordedAgeAt: true } }),
     prisma.labTest.findMany({
       where: { id: { in: allTestIds }, organizationId: session.user.organizationId, status: "ACTIVE" },
@@ -235,6 +235,37 @@ export async function POST(request: Request) {
     clientId ? prisma.client.findFirst({ where: { id: clientId, organizationId: session.user.organizationId, status: "ACTIVE" }, select: { id: true, paymentTermsDays: true, creditControlVersion: true } }) : null,
     prisma.branch.findFirst({ where: { id: branchId, organizationId: session.user.organizationId, status: "ACTIVE" }, select: { id: true, timezone: true, taxConfigVersion: true } }),
   ]);
+
+  // A signed F2 catalog revision changes the NEW order's frozen test and
+  // unit display values. Do not silently snapshot stale base-row metadata.
+  // Identity, specimen and department FKs are immutable under F2 planning.
+  const testViewRecords=[
+    ...storedTests.map(test=>({entityType:"TEST" as const,id:test.id})),
+    ...storedTests.filter(test=>test.defaultUnit!==null)
+      .map(test=>({entityType:"UNIT" as const,id:test.defaultUnit!.id})),
+  ];
+  const uniqueViewRecords=[...new Map(testViewRecords.map(entry=>[
+    entry.entityType+":"+entry.id,entry,
+  ])).values()];
+  const orderTestOverlays=await resolveF2EffectiveCatalogViews(
+    prisma as Prisma.TransactionClient,{
+      organizationId:session.user.organizationId,asOf:catalogAsOf,
+      records:uniqueViewRecords,
+    },
+  );
+  const tests=storedTests.map(test=>{
+    const effective=projectF2EffectiveCatalogView("TEST",test,orderTestOverlays);
+    const unit=test.defaultUnit?
+      projectF2EffectiveCatalogView("UNIT",test.defaultUnit,orderTestOverlays):null;
+    // Decimal source snapshots use lossless text; the operational order
+    // engine expects a Prisma.Decimal instance for specimen volume math.
+    const minimumVolume=typeof effective.minimumVolume==="string"?
+      new Prisma.Decimal(effective.minimumVolume):effective.minimumVolume;
+    return {...effective,minimumVolume,defaultUnit:unit};
+  });
+  if(tests.some(test=>test.status!=="ACTIVE" ||
+      test.defaultUnit?.status==="INACTIVE"))
+    return NextResponse.json({error:"test_not_active_at_order_time"},{status:409});
 
   if (!patient) return NextResponse.json({ error: "patient_not_found" }, { status: 404 });
   if (tests.length !== allTestIds.length) return NextResponse.json({ error: "one_or_more_tests_not_found" }, { status: 404 });
