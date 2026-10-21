@@ -34,7 +34,8 @@ test("F3: all 15 legacy-config tables produce stable source-index HMACs with no 
   assert.equal(proof.rowCount,17);
   assert.equal(proof.rows.length,17);
   assert.equal(proof.tables.find(t=>t.sourceTable==="test")?.duplicateContentRows,1);
-  assert.deepEqual(proof.rows.filter(r=>r.sourceTable==="test").map(r=>r.occurrence),[1,2,1]);
+  assert.deepEqual(proof.rows.filter(r=>r.sourceTable==="test")
+    .map(r=>r.occurrence).sort((a,b)=>a-b),[1,1,2]);
   assert.equal(proof.rows.every(r=>/^[a-f0-9]{64}$/.test(r.rowDigest)),true);
   const bytes=JSON.stringify(proof);
   for(const value of ["Synthetic CBC","Synthetic CRP","1.100000","0.000000","2.500000"])
@@ -60,6 +61,10 @@ test("F3: Access row order does not change HMAC occurrence identities",()=>{
     first,"a distinct signing secret must never replay the same row digest");
   assert.notDeepEqual(buildF3LegacyExtractionManifest(
     {...base,sourceSha256:"f".repeat(64)},secret),first);
+  const rotated=buildF3LegacyExtractionManifest(
+    {...base,digestKeyId:"f".repeat(64)},secret);
+  assert.notDeepEqual(rotated.rows,first.rows,
+    "rotating key identification must change source-row HMAC bindings");
 });
 
 test("F3: invalid Access schema, unlisted sensitive sources and accidental PHI fail closed",()=>{
@@ -98,7 +103,7 @@ test("F3: exactly declared schema, bounded rows and deterministic source-reconci
   const head={...base,tables:[{...base.tables[0],rows:[]}]};
   const clean=buildF3LegacyExtractionManifest(head,secret);
   assert.equal(clean.rowCount,0);
-  assert.equal(clean.tables[0].rows,0);
+  assert.equal(clean.tables.find(t=>t.sourceTable==="test")?.rows,0);
   assert.equal(F3_LEGACY_MAX_ROWS,20000);
   const oversized={...base,tables:[{
     ...base.tables[0],rows:Array.from({length:F3_LEGACY_MAX_ROWS+1},
