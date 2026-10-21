@@ -5,6 +5,8 @@ import {parseF3UnverifiedDigestManifest}
   from "@/lib/f3-legacy-manifest-validator";
 import {reconcileF3LegacySource}
   from "@/lib/f3-legacy-source-reconciliation";
+import {f3LiveLineageTargetsVisible}
+  from "@/lib/f3-legacy-target-visibility";
 
 export const dynamic="force-dynamic";
 const LIMIT=8*1024*1024;
@@ -112,6 +114,13 @@ export async function POST(request:NextRequest){
     });
     if(rows.length>20000)return {
       error:"f3_legacy_lineage_too_large",code:409,
+    } as const;
+    const visible=await f3LiveLineageTargetsVisible(tx,{
+      organizationId:org,lineage:rows,
+      currentOrganizationScopeVerified:true,
+    });
+    if(!visible)return {
+      error:"f3_lineage_target_scope_changed",code:409,
     } as const;
     let report:ReturnType<typeof reconcileF3LegacySource>;
     try{
