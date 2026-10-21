@@ -16,7 +16,17 @@ test("F3: Windows Access extractor is explicitly read-only and bounded",()=>{
   assert.match(source,/row_limit|extraction_row_limit/);
   assert.match(source,/\$total -gt 20000/);
   assert.match(source,/\$columns\.Count -gt 150/);
-  assert.match(source,/\$Blocked = @\('password','id','id2','idprice','result','profnam'\)/);
+  const ts=readFileSync("src/lib/f3-legacy-extraction-manifest.ts","utf8");
+  const shellList=source.match(/\$Blocked = @\(([^\n]*)\)/)?.[1];
+  const codeList=ts.match(/const FORBIDDEN=new Set\(\[([\s\S]*?)\]\);/)?.[1];
+  assert.ok(shellList&&codeList);
+  const shellBlocked=[...shellList.matchAll(/'([^']+)'/g)].map(x=>x[1]).sort();
+  const codeBlocked=[...codeList.matchAll(/"([^"]+)"/g)].map(x=>x[1]).sort();
+  assert.deepEqual(shellBlocked,codeBlocked,
+    "offline ACE and Node row manifest must block exactly the same legacy result tables");
+  for(const name of ["password","id","result","culture","cbc","urine",
+    "thyroid","torch","fertility","widal","zn"])
+    assert.ok(shellBlocked.includes(name));
   assert.match(source,/SELECT.*\$selected -join/);
   assert.match(source,/\.Trim\(\) -ne \$value/);
   assert.match(source,/Test-Path -LiteralPath \$out/);
