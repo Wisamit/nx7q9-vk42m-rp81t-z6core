@@ -230,11 +230,14 @@ export async function applyF2EffectiveVersionsUnderLock(
         throw Error("f2_apply_range_population_overlap");
       // Atomic full-value CAS: any drift in the signed medical limits,
       // free-text interpretation or population scope blocks the write.
+      // The existing clinical resolver also uses inclusive effectiveTo.
+      // A successor must not overlap the old critical/reference limits.
+      const clinicalCloseAt=new Date(effectiveAt.getTime()-1);
       const claim=await tx.referenceInterval.updateMany({
         where:{id:row.targetId,componentId,
           status:"ACTIVE",approvalStatus:"APPROVED",effectiveTo:null,
           effectiveFrom:start,...f2ReferenceIntervalCasWhere(prior)},
-        data:{effectiveTo:effectiveAt},
+        data:{effectiveTo:clinicalCloseAt},
       });
       if(claim.count!==1)throw Error("f2_apply_range_conflict");
       await tx.referenceInterval.create({data:{
