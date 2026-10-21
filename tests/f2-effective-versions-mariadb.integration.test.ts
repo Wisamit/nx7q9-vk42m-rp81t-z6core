@@ -113,6 +113,33 @@ test("F2 MariaDB: atomic synthetic price/package/range versions and compensating
       [oldPackagePriceId,priceListId,packageId,"150.0000","2026-01-01 00:00:00.000"]);
     await query("INSERT INTO reference_intervals(id,component_id,sex,low_value,high_value,critical_low,critical_high,effective_from,approval_status,status,updated_at) VALUES(? ,?,'ANY',?,?,?,?,?,'APPROVED','ACTIVE',NOW(3))",
       [oldIntervalId,componentId,"1.000000","9.000000","0.500000","10.000000","2026-01-01 00:00:00.000"]);
+    // An independently changed money field must make the signed plan stale.
+    await query("UPDATE price_list_items SET unit_price=? WHERE id=?",
+      ["151.0000",oldTestPriceId]);
+    await assert.rejects(()=>transaction(tx=>applyF2EffectiveVersionsUnderLock(
+      tx as never,plan,authority,new Date("2026-10-21T00:00:00.000Z"))),
+      /f2_apply_price_conflict/);
+    const [stalePrice]=await sql.execute<mysql.RowDataPacket[]>(
+      "SELECT COUNT(*) AS count FROM price_list_items WHERE price_list_id=?",
+      [priceListId]);
+    assert.equal(Number(stalePrice[0].count),1,
+      "stale signed price cannot create an extra version");
+    await query("UPDATE price_list_items SET unit_price=? WHERE id=?",
+      ["150.0000",oldTestPriceId]);
+    // Equally, a changed critical threshold may not be overwritten merely
+    // because the old version retained its UUID/effective dates.
+    await query("UPDATE reference_intervals SET critical_low=? WHERE id=?",
+      ["0.600000",oldIntervalId]);
+    await assert.rejects(()=>transaction(tx=>applyF2EffectiveVersionsUnderLock(
+      tx as never,plan,authority,new Date("2026-10-21T00:00:00.000Z"))),
+      /f2_apply_range_conflict/);
+    const [noPartial]=await sql.execute<mysql.RowDataPacket[]>(
+      "SELECT COUNT(*) AS count FROM price_list_items WHERE price_list_id=?",
+      [priceListId]);
+    assert.equal(Number(noPartial[0].count),1,
+      "clinical drift must roll back all earlier financial version writes");
+    await query("UPDATE reference_intervals SET critical_low=? WHERE id=?",
+      ["0.500000",oldIntervalId]);
     const apply=await transaction(tx=>applyF2EffectiveVersionsUnderLock(
       tx as never,plan,authority,new Date("2026-10-21T00:00:00.000Z")));
     assert.equal(apply.changedRows,3);
