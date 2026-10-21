@@ -41,6 +41,13 @@ export async function checkPrivateF3Lineage(mdb,coveragePath,lineageDir,ledgerPa
   const coverage=parseLegacySourceCoverage(await readLimited(coveragePath,65536));
   const persisted=await readLimited(ledgerPath,200*1024*1024);
   if(!Array.isArray(persisted))throw Error("f3_ledger_array_required");
+  const fields=["sourceSha256","sourceTable","sourceSchemaSha256","digestKeyId",
+    "rowDigest","occurrence","revision","classification","targetType",
+    "targetId","createdByUserId","mappedByUserId","reviewedByUserId",
+    "reviewedAt"].sort().join(",");
+  if(persisted.some(row=>!row||typeof row!=="object"||
+     Array.isArray(row)||Object.keys(row).sort().join(",")!==fields))
+    throw Error("f3_private_ledger_contains_unexpected_fields");
   return reconcileF3LegacyRowParity({
     source:{sourceName:basename(mdb),sourceSha256:coverage.sourceSha256,
       sourceBytes:coverage.sourceBytes},
