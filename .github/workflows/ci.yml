@@ -133,6 +133,7 @@ jobs:
       - run: node --experimental-strip-types --test tests/f2-mapping-discussion-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/f2-mapping-live-observation-mariadb.integration.test.ts
       - run: timeout --signal=TERM --kill-after=10s 120s node --experimental-strip-types --test tests/f2-effective-versions-mariadb.integration.test.ts
+      - run: timeout --signal=TERM --kill-after=10s 140s node --experimental-strip-types --test tests/f2-mixed-ten-class-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-62-policy-author-feedback-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-63-policy-draft-history-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-64-policy-review-queue-mariadb.integration.test.ts
