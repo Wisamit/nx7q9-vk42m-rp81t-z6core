@@ -59,6 +59,18 @@ test("F3: offline manifest envelope matches the canonical source evidence contra
     ["operational",manifest.operationalReady!==false],
   ].filter(([,invalid])=>invalid).map(([reason])=>reason);
   assert.deepEqual(rejected,[],"valid signed metadata may not be rejected before row reconciliation");
+  const reads:string[]=[];
+  const watched=new Proxy(manifest,{get(object,field,receiver){
+    if(typeof field==="string")reads.push(field);
+    return Reflect.get(object,field,receiver);
+  }});
+  try{
+    reconcileF3LegacySource({manifest:watched,lineage:[],
+      tenantAndTargetScopeVerified:true});
+  }catch(error){
+    throw Error("F3 source envelope unexpectedly rejected after reading: "+
+      reads.join(",")+"; "+String(error));
+  }
   assert.deepEqual({
     format:manifest.format,status:manifest.status,
     organizationId:manifest.organizationId,
