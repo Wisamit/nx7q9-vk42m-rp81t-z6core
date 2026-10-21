@@ -147,6 +147,8 @@ test("F2: ten changed classes pass one approved signed decision into three nativ
  const db=mockDb();
  const outcome=await executeF2GovernedApplicationUnderLock(db.tx as never,db.input);
  assert.equal(outcome.state,"TEN_CLASS_CONFIGURATION_SCHEDULED");
+ if(outcome.state!=="TEN_CLASS_CONFIGURATION_SCHEDULED")
+   throw Error("expected mixed ten-class scheduled result");
  assert.equal(outcome.nativeChangedRows,3);
  assert.equal(outcome.masterChangedRows,7);
  assert.equal(db.versions.length,7);
