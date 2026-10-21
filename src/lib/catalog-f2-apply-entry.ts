@@ -5,7 +5,7 @@ import {catalogBundleSigningSecret} from "./catalog-bundle-attestation.ts";
 import {reviewStageBatchMetadata} from "./catalog-review-stage-evidence.ts";
 import {validatePolicyReviewBatchScope} from "./catalog-policy-review-scope.ts";
 import {catalogExportTypes,type CatalogExportType} from "./catalog-configuration-export.ts";
-import {readCatalogLiveObservations} from "./catalog-live-observation.ts";
+import {readF2EffectiveLiveObservations} from "./catalog-f2-effective-live-observation.ts";
 import {loadF2VerifiedSourceReceiptUnderLock} from "./catalog-f2-source-receipt.ts";
 import {executeF2GovernedApplicationUnderLock}
   from "./catalog-f2-governed-application.ts";
@@ -151,7 +151,7 @@ export async function applyF2ConfigurationFromVerifiedDatabaseUnderLock(
     const type=row.entityType as CatalogExportType;
     byType.set(type,[...(byType.get(type)||[]),row.normalizedData.id]);
   }
-  const live=await readCatalogLiveObservations(tx,scope,grantedBranchIds,byType);
+  const live=await readF2EffectiveLiveObservations(tx,scope,grantedBranchIds,byType,now);
   if(!live)return fail("f2_apply_live_scope_changed");
   const currentRows=all.map(row=>{
     const id=(row.normalizedData as {id:string}).id;
