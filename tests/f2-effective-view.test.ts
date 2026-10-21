@@ -101,3 +101,18 @@ test("F2: effective overlays are consumed by existing catalog GET within a consi
   assert.match(route,/isolationLevel:"RepeatableRead"/);
   assert.match(route,/where:\{organizationId\}/);
 });
+
+test("F2: catalog administration SSR reads effective master fields and only effective visible package tariffs",()=>{
+  const page=readFileSync("src/app/catalog/page.tsx","utf8");
+  assert.match(page,/prisma\.\$transaction\(async tx=>/);
+  assert.match(page,/resolveF2EffectiveCatalogViews\(tx,/);
+  assert.match(page,/projectF2EffectiveCatalogView\("TEST"/);
+  assert.match(page,/projectF2EffectiveCatalogView\("COMPONENT"/);
+  assert.match(page,/projectF2EffectiveCatalogView\("CONTAINER"/);
+  assert.match(page,/projectF2EffectiveCatalogView\("UNIT"/);
+  assert.match(page,/effectiveFrom: \{ lte: asOf \}/);
+  assert.match(page,/effectiveTo: \{ gt: asOf \}/);
+  assert.match(page,/isolationLevel:"RepeatableRead"/);
+  assert.match(page,/\.filter\(unit=>unit\.status==="ACTIVE"\)/);
+  assert.match(page,/\.filter\(container=>container\.status==="ACTIVE"\)/);
+});
