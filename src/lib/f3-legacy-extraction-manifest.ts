@@ -10,7 +10,8 @@ const FORBIDDEN=new Set([
   "password","id","id2","idprice","result","profnam","abo","bhcg","bilh","cbc","clerance","coag","csf","cul","culture","esr","fertility","hepatitis","kidney","lipid","liver","marrow","occult","pcr","post_coital","pregnancy","prostata","pt","rotavirus","semin","serology","stone","stool","thyroid","torch","tumer","urine","widal","zn",
 ]);
 export const F3_LEGACY_MAX_TABLES=LEGACY_COVERAGE_SOURCES.length;
-const ALLOWED_TABLES=new Set(LEGACY_COVERAGE_SOURCES.map(x=>x.tableName));
+const ALLOWED_TABLES: ReadonlySet<string>=new Set<string>(
+  LEGACY_COVERAGE_SOURCES.map(x=>x.tableName));
 export const F3_LEGACY_MAX_ROWS=20000;
 export type F3LegacyTable={
   name:string;
