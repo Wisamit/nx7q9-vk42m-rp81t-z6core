@@ -5,7 +5,8 @@ import mysql from "mysql2/promise";
 import { f2MysqlTransactionalTestClient } from "./f2-effective-versions-mariadb-driver.ts";
 import { applyF2EffectiveVersionsUnderLock } from "../src/lib/catalog-f2-effective-versions.ts";
 import { reverseF2FutureEffectiveVersionsUnderLock } from "../src/lib/catalog-f2-effective-reversal.ts";
-import type { F2ApplyPlan,F2ApplyPlanRow } from "../src/lib/catalog-f2-apply-plan.ts";
+import type { F2ApplyPlanRow } from "../src/lib/catalog-f2-apply-plan.ts";
+import { canonicalF2TestPlan } from "./f2-canonical-application-fixture.ts";
 
 test("F2 MariaDB: atomic synthetic price/package/range versions and compensating reversal preserve original master IDs",{
   timeout:90000,
@@ -82,13 +83,7 @@ test("F2 MariaDB: atomic synthetic price/package/range versions and compensating
       desiredSnapshot:{...oldInterval,criticalLow:"0.750000"},
       originalDigest:"c".repeat(64),desiredDigest:"d".repeat(64)},
   ];
-  const plan:F2ApplyPlan={
-    format:"F2_TEN_CLASS_EXECUTABLE_PLAN_V1",
-    totalRows:3,changedRows:3,unchangedRows:0,rows,
-    operations:{UNCHANGED:0,SCALAR_VERSIONED_CHANGE:0,
-      COMPOSITE_MEMBERSHIP_CHANGE:0,EFFECTIVE_DATED_NEW_VERSION:3},
-    planDigest:"e".repeat(64),effectiveAt:nextStart,
-  };
+  const plan=canonicalF2TestPlan({rows,effectiveAt:nextStart});
   try{
     await query("INSERT INTO organizations (id,code,name_en,updated_at) VALUES(?,?,?,NOW(3))",
       [organizationId,prefix+"O","Synthetic F2 Version Lab"]);
