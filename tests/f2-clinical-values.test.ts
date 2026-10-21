@@ -22,10 +22,10 @@ test("F2: exact decimal lower/upper clinical and population boundaries",()=>{
     ["lowValue","2.000001","2.000000"],
     ["criticalLow","0.000001","0.000000"],
   ] as const){
-    const highKey:Record<typeof key,string>={
+    const highKey={
       ageFrom:"ageTo",gestationalAgeFromWeeks:"gestationalAgeToWeeks",
       lowValue:"highValue",criticalLow:"criticalHigh",
-    } as Record<typeof key,string>;
+    } as const;
     assert.equal(validF2ClinicalIntervalNumbers({
       ...initial,[key]:lower,[highKey[key]]:higher,
     }),false,key);
