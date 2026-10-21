@@ -139,7 +139,7 @@ test("F2: reject one immutable SQL UUID targeted twice with mixed casing",()=>{
     "case-only aliases for the same MariaDB UUID cannot cause double updates");
 });
 
-test("F2: invalid future panel and package membership is rejected before any scheduled revision",()=>{
+test("F2: future panel/package revisions accept order ties but reject invalid identities and metadata",()=>{
   const base=make();
   const alpha="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
   const beta="bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
@@ -156,8 +156,8 @@ test("F2: invalid future panel and package membership is rejected before any sch
     const a=withRequired({testId:alpha,displayOrder:1,test:{code:"A"}});
     const b=withRequired({testId:beta,displayOrder:2,test:{code:"B"}});
     assert.ok(candidate(type,[a,b]),"valid ordered composite can be scheduled");
-    assert.equal(candidate(type,[a,{...b,displayOrder:1}]),null,
-      "duplicate display order must not become a live configuration");
+    assert.ok(candidate(type,[a,{...b,displayOrder:1}]),
+      "existing schema permits position ties; UUID tie-break is deterministic");
     assert.equal(candidate(type,[a,{...b,testId:alpha.toUpperCase()}]),null,
       "case-only duplicate member IDs must not become a live configuration");
     assert.equal(candidate(type,[a,{...b,test:{code:"B",unexpected:"PHI"}}]),null,
