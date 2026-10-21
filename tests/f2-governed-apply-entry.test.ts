@@ -46,3 +46,19 @@ test("F2: operator permission must be explicitly granted, not inherited from SYS
   const sql=migration.replace(/^--.*$/gm,"");
   assert.doesNotMatch(sql,/role_permissions|SYSTEM_ADMIN/);
 });
+
+test("F2: both independent signers must still have department and branch scope for all staged rows",()=>{
+  assert.match(entry,/tx\.userDepartmentScope\.findMany\(/);
+  assert.match(entry,/tx\.userBranchScope\.findMany\(/);
+  assert.match(entry,/for\(const signerId of signerIds\)/);
+  assert.match(entry,/departmentScopes:signerDepartments\.filter\(item=>item\.userId===signerId\)/);
+  assert.match(entry,/grantedBranchIds:scopedBranches/);
+  assert.match(entry,/scope:signerScope/);
+  assert.match(entry,/f2_apply_signatory_department_scope_revoked/);
+  assert.match(entry,/f2_apply_signatory_target_scope_revoked/);
+  assert.match(entry,/allowGovernedValueDifferences:true/);
+  const signerScopeBlock=entry.slice(entry.indexOf("for(const signerId of signerIds)"));
+  assert.ok(signerScopeBlock.indexOf("validatePolicyReviewBatchScope")<
+    signerScopeBlock.indexOf("executeF2GovernedApplicationUnderLock"),
+    "independent signer scope must be rechecked before mutation");
+});
