@@ -8,6 +8,7 @@ const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SHA=/^[0-9a-f]{64}$/;
 export const F2_EFFECTIVE_READ_TYPES=[
   "TEST","COMPONENT","UNIT","CONTAINER","PRICE_LIST",
+  "PANEL","PACKAGE",
 ] as const satisfies readonly CatalogExportType[];
 type ReadType=typeof F2_EFFECTIVE_READ_TYPES[number];
 const viewFields=(type:ReadType)=>catalogBundleAllowedSourceFields[type]
@@ -93,4 +94,51 @@ export function projectF2EffectiveCatalogView<T extends {id:string}>(
   const fields=overlays.get(key(entityType,record.id));
   if(!fields)return record;
   return {...record,...fields};
+}
+
+/**
+ * Every effective composite member must be authorized in the exporter's
+ * current clinical department/branch scope. Base membership scoping does
+ * not protect a future revision that adds a different test.
+ *
+ * Callers must query all returned IDs using their existing scoped testWhere
+ * and fail the export unless this helper returns true.
+ */
+export function f2EffectiveCompositeMemberIds(
+  kind:"PANEL"|"PACKAGE",
+  records:readonly {id:string}[],
+):ReadonlyMap<string,string>|null {
+  const membership=new Map<string,string>();
+  for(const row of records){
+    const items=(row as {items?:unknown}).items;
+    if(!Array.isArray(items)||items.length<1||items.length>1000)return null;
+    const local=new Set<string>();
+    for(const member of items){
+      if(!isObj(member)||typeof member.testId!=="string"||
+         !UUID.test(member.testId)||local.has(member.testId)||
+         !Number.isSafeInteger(member.displayOrder)||
+         member.displayOrder<0||!isObj(member.test)||
+         typeof member.test.code!=="string"||!member.test.code||
+         Object.keys(member.test).join(",")!=="code"||
+         Object.keys(member).sort().join(",")!==
+           (kind==="PANEL"?"displayOrder,required,test,testId":"displayOrder,test,testId")||
+         (kind==="PANEL"&&typeof member.required!=="boolean"))
+        return null;
+      local.add(member.testId);
+      const prior=membership.get(member.testId);
+      if(prior!==undefined && prior!==member.test.code)return null;
+      membership.set(member.testId,member.test.code);
+      if(membership.size>5000)return null;
+    }
+  }
+  return membership;
+}
+export function f2EffectiveCompositeMembersAuthorized(
+  membership:ReadonlyMap<string,string>,
+  permitted:readonly {id:string;code:string}[],
+):boolean {
+  if(permitted.length!==membership.size)return false;
+  const seen=new Set<string>();
+  return permitted.every(test=>!seen.has(test.id)&&
+    (seen.add(test.id),membership.get(test.id)===test.code));
 }
