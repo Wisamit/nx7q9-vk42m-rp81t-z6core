@@ -6,7 +6,8 @@ import { clinicalImportTestWhere } from "@/lib/catalog-clinical-import-scope";
 import { genericCatalogPriceScope } from "@/lib/catalog-generic-price-scope";
 import {
   F2_EFFECTIVE_READ_TYPES,resolveF2EffectiveCatalogViews,
-  projectF2EffectiveCatalogView,
+  projectF2EffectiveCatalogView,f2EffectiveCompositeMemberIds,
+  f2EffectiveCompositeMembersAuthorized,
 } from "@/lib/catalog-f2-effective-view";
 import {
   catalogExportNavigation, catalogExportTypes, type CatalogExportType,
@@ -239,6 +240,20 @@ export async function GET(request: NextRequest) {
     });
     effectiveShown=shown.map(row=>
       projectF2EffectiveCatalogView(effectiveType,row,overlays));
+    if(type==="PANEL"||type==="PACKAGE"){
+      const members=f2EffectiveCompositeMemberIds(type,effectiveShown);
+      if(!members)return NextResponse.json({
+        error:"export_effective_membership_invalid",
+      },{status:409});
+      const scopedTests=await tx.labTest.findMany({
+        where:{...testScope,id:{in:[...members.keys()]}},
+        select:{id:true,code:true},take:members.size+1,
+      });
+      if(!f2EffectiveCompositeMembersAuthorized(members,scopedTests))
+        return NextResponse.json({
+          error:"export_effective_member_scope_changed",
+        },{status:403});
+    }
   }
 
   // Log config exports; never update catalog definitions or historical prices.
