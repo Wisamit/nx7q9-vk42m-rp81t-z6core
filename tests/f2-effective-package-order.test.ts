@@ -69,3 +69,35 @@ test("F2: new order snapshots capture effective test and unit display values, pr
   assert.ok(route.indexOf("const orderTestOverlays=")<route.indexOf("const tests=storedTests.map"));
   assert.ok(route.indexOf("const tests=storedTests.map")<route.indexOf("for (const test of tests)"));
 });
+
+test("F2: reject duplicate display positions and case-insensitive repeated test UUIDs in effective composite members",()=>{
+  const alpha="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const another="bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+  const valid={id:id(1),items:[
+    {testId:alpha,displayOrder:1,test:{code:"ALPHA"}},
+    {testId:another,displayOrder:2,test:{code:"BETA"}},
+  ]};
+  const members=f2EffectiveCompositeMemberIds("PACKAGE",[valid]);
+  assert.ok(members);
+  assert.deepEqual([...members.keys()],[alpha,another]);
+  assert.equal(f2EffectiveCompositeMembersAuthorized(members,[
+    {id:alpha.toUpperCase(),code:"ALPHA"},
+    {id:another.toUpperCase(),code:"BETA"},
+  ]),true,"database UUID letter-case must not prevent legitimate scope checks");
+  assert.equal(f2EffectiveCompositeMembersAuthorized(members,[
+    {id:alpha,code:"ALPHA"},
+    {id:alpha.toUpperCase(),code:"ALPHA"},
+  ]),false,"one real test cannot be authorized as two separate members");
+  assert.equal(f2EffectiveCompositeMemberIds("PACKAGE",[{
+    ...valid,items:[valid.items[0],{...valid.items[1],displayOrder:1}],
+  }]),null,"duplicate order positions can produce ambiguous report/order line ordering");
+  assert.equal(f2EffectiveCompositeMemberIds("PACKAGE",[{
+    ...valid,items:[valid.items[0],{...valid.items[1],testId:alpha.toUpperCase()}],
+  }]),null,"case-only duplicate UUIDs refer to the same immutable lab test");
+  assert.equal(f2EffectiveCompositeMemberIds("PANEL",[{
+    id:id(2),items:[
+      {testId:alpha,displayOrder:1,required:true,test:{code:"ALPHA"}},
+      {testId:another,displayOrder:1,required:false,test:{code:"BETA"}},
+    ],
+  }]),null,"panel display ordering must be unambiguous as well");
+});
