@@ -94,6 +94,14 @@ test("F2: reject unauthorized, cross-installation identity swaps, remaps and tam
   }
   assert.equal(plan(rows.map((r,i)=>i===interval?{...r,
     sourceData:{...(r.sourceData as object),effectiveFrom:"2026-01-01T00:00:00.000Z"}}:r)),null);
+  assert.equal(plan(rows.map((r,i)=>i===interval?{...r,
+    sourceData:{...(r.sourceData as object),
+      criticalLow:"5.000001",criticalHigh:"5.000000"}}:r)),null,
+      "a reversed critical interval must never become an executable plan");
+  assert.equal(plan(rows.map((r,i)=>i===interval?{...r,
+    sourceData:{...(r.sourceData as object),
+      lowValue:"1.0000001"}}:r)),null,
+      "out-of-scale DECIMAL must fail before clinical approval");
   assert.equal(compileF2ApplyPlan({rows,effectiveAt,
     signedStageVerified:false as true,independentDomainApprovalsVerified:true,
     scopedLiveSnapshotVerified:true}),null);
