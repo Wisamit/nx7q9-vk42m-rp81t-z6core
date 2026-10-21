@@ -106,4 +106,12 @@ test("F3: tampered table totals, duplicate counters and source row parity cannot
   const fakeRow={...manifest,rows:[manifest.rows[0],manifest.rows[0],
     ...manifest.rows.slice(2)]};
   assert.throws(()=>run(lineage,fakeRow),/duplicate_source_identity/);
+  const gap={...manifest,rows:manifest.rows.map((row,i)=>i===0?{
+    ...row,occurrence:3,
+  }:row)};
+  assert.throws(()=>run(lineage,gap),/noncontiguous_occurrence/);
+  const falseDuplicate={...manifest,tables:manifest.tables.map((table,i)=>i===0?{
+    ...table,duplicateContentRows:0,
+  }:table)};
+  assert.throws(()=>run(lineage,falseDuplicate),/duplicate_content_mismatch/);
 });
