@@ -110,7 +110,7 @@ export function F2ConfigurationApprovalForm({
     <div className="form-grid">
       <label>{tr("Import batch ID","معرّف دفعة الاستيراد")}
         <input value={batchId} onChange={e=>{setBatchId(e.target.value.trim());setStatus(null);setMessage("");}}
-          placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" spellCheck={false}
+          placeholder={tr("Enter batch UUID","أدخل معرّف الدفعة")} spellCheck={false}
           autoComplete="off" maxLength={36} dir="ltr"/>
       </label>
       <button type="button" className="secondary-button" disabled={busy||!ID.test(batchId)}
