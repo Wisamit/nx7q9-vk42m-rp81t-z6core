@@ -113,13 +113,13 @@ export function f2EffectiveCompositeMemberIds(
     const items=(row as {items?:unknown}).items;
     if(!Array.isArray(items)||items.length<1||items.length>1000)return null;
     const local=new Set<string>();
-    const displayOrders=new Set<number>();
+    const ordered:{id:string;code:string;position:number}[]=[];
     for(const member of items){
       if(!isObj(member)||typeof member.testId!=="string"||
          !UUID.test(member.testId)||local.has(member.testId.toLowerCase())||
          typeof member.displayOrder!=="number"||
          !Number.isSafeInteger(member.displayOrder)||
-         member.displayOrder<0||displayOrders.has(member.displayOrder)||
+         member.displayOrder<0||
          !isObj(member.test)||
          typeof member.test.code!=="string"||!member.test.code||
          Object.keys(member.test).join(",")!=="code"||
@@ -129,10 +129,18 @@ export function f2EffectiveCompositeMemberIds(
         return null;
       const canonicalId=member.testId.toLowerCase();
       local.add(canonicalId);
-      displayOrders.add(member.displayOrder);
-      const prior=membership.get(canonicalId);
-      if(prior!==undefined && prior!==member.test.code)return null;
-      membership.set(canonicalId,member.test.code);
+      ordered.push({id:canonicalId,code:member.test.code,
+        position:member.displayOrder});
+    }
+    // The existing SQL schema permits equal displayOrder values (default 0).
+    // Preserve that valid historic configuration, but resolve ties by the
+    // immutable UUID to make new order membership deterministic.
+    ordered.sort((a,b)=>a.position-b.position ||
+      a.id.localeCompare(b.id));
+    for(const entry of ordered){
+      const prior=membership.get(entry.id);
+      if(prior!==undefined && prior!==entry.code)return null;
+      membership.set(entry.id,entry.code);
       if(membership.size>5000)return null;
     }
   }
