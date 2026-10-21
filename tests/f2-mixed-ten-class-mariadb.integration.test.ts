@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {createHash,randomUUID} from "node:crypto";
+import {canonicalJson,type Json} from "../src/lib/catalog-bundle-attestation.ts";
 import mysql from "mysql2/promise";
 import {catalogExportTypes} from "../src/lib/catalog-configuration-export.ts";
 import {catalogBundleAllowedSourceFields} from "../src/lib/catalog-bundle-source-boundary.ts";
@@ -337,6 +338,48 @@ test("F2 actual MariaDB: ten-class mixed governed apply is atomic across native 
     assert.equal(await scalar(
       "SELECT COUNT(*) AS count FROM audit_events WHERE organization_id=? AND action='CATALOG_F2_MASTER_REVISION_SCHEDULED'",
       [organizationId]),7);
+    // SQL-based re-export parity: seven actual stored immutable overlays
+    // must reproduce each full source-side field contract, not only counts.
+    const [sqlRevisions]=await sql.execute<mysql.RowDataPacket[]>(
+      "SELECT entity_type,entity_id,after_snapshot,effective_from FROM catalog_config_revisions WHERE source_batch_id=? AND state='RECORDED'",
+      [batchId]);
+    assert.equal(sqlRevisions.length,7);
+    for(const revision of sqlRevisions){
+      const staged=rows.find(row=>row.entityType===revision.entity_type &&
+        (row.normalizedData as {id:string}).id===revision.entity_id);
+      assert.ok(staged,"each stored overlay must match one signed staged row");
+      const stored=typeof revision.after_snapshot==="string"?
+        JSON.parse(revision.after_snapshot):revision.after_snapshot;
+      assert.equal(canonicalJson(stored as Json),canonicalJson(staged.sourceData as Json),
+        revision.entity_type+" full-field future export parity");
+      assert.equal(new Date(revision.effective_from).getTime(),new Date(at).getTime());
+    }
+    const [storedPrices]=await sql.execute<mysql.RowDataPacket[]>(
+      "SELECT id,unit_price,effective_from,effective_to,status FROM price_list_items WHERE price_list_id=? ORDER BY effective_from",
+      [priceListId]);
+    const [storedPackagePrices]=await sql.execute<mysql.RowDataPacket[]>(
+      "SELECT id,unit_price,effective_from,effective_to,status FROM price_list_package_items WHERE price_list_id=? ORDER BY effective_from",
+      [priceListId]);
+    const [storedRanges]=await sql.execute<mysql.RowDataPacket[]>(
+      "SELECT id,critical_low,effective_from,effective_to,approval_status FROM reference_intervals WHERE component_id=? ORDER BY effective_from",
+      [componentId]);
+    for(const prices of [storedPrices,storedPackagePrices]){
+      assert.equal(prices.length,2);
+      assert.equal(String(prices[0].unit_price),"150.0000");
+      assert.equal(String(prices[1].unit_price),"122.7500",
+        "future tariff must retain all four financial decimal places");
+      assert.equal(new Date(prices[1].effective_from).getTime(),new Date(at).getTime());
+      assert.ok(prices[0].effective_to!==null &&
+        new Date(prices[0].effective_to).getTime()<new Date(at).getTime(),
+        "old and new tariffs must never be simultaneously billable");
+    }
+    assert.equal(storedRanges.length,2);
+    assert.equal(String(storedRanges[0].critical_low),"0.500000");
+    assert.equal(String(storedRanges[1].critical_low),"0.750000",
+      "new critical limit must retain six clinical decimal places");
+    assert.equal(new Date(storedRanges[1].effective_from).getTime(),new Date(at).getTime());
+    assert.equal(storedRanges[0].approval_status,"APPROVED");
+    assert.equal(storedRanges[1].approval_status,"APPROVED");
     const replay=await invoke(false);
     assert.equal(replay.state,"TEN_CLASS_CONFIGURATION_SCHEDULED");
     assert.equal(await scalar(
