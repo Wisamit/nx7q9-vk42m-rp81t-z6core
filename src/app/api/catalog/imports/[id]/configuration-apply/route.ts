@@ -5,7 +5,7 @@ import {applyF2ConfigurationFromVerifiedDatabaseUnderLock}
   from "@/lib/catalog-f2-apply-entry";
 
 export const dynamic="force-dynamic";
-const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const needed=["catalog.manage","pricing.manage",
   "catalog.reference_ranges.manage","catalog.configuration.apply"] as const;
 const refuse=(error:string,status:number)=>NextResponse.json({error},
