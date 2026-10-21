@@ -38,7 +38,7 @@ const transaction=(opts:{
   version?:Record<string,unknown>|null;versionBranch?:string;
   master?:boolean;
 }={})=>({
-  auditEvent:{findMany:async(query:any)=>{
+  auditEvent:{findMany:async(query:{where:{action:string}})=>{
     switch(query.where.action){
       case "CATALOG_F2_EFFECTIVE_BATCH_APPLIED":
         return opts.batch===null?[]:[{
