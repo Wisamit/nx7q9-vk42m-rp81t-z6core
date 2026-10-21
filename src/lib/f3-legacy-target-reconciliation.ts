@@ -61,10 +61,11 @@ export function parseF3TargetLineageExport(value:unknown):F3TargetLineageExport{
        !legacyRowHex.test(row.sourceSchemaSha256) ||
        typeof row.digestKeyId!=="string"||!legacyRowHex.test(row.digestKeyId)||
        typeof row.rowDigest!=="string"||!legacyRowHex.test(row.rowDigest)||
-       !Number.isSafeInteger(row.occurrence)||row.occurrence<1 ||
+       (typeof row.occurrence!=="number" || !Number.isSafeInteger(row.occurrence) ||
+        row.occurrence<1 || row.occurrence>10_000_000) ||
        !legacyRowClassifications.includes(row.classification as LegacyRowClassification)||
-       !Number.isSafeInteger(row.revision)||row.revision<0 ||
-       row.revision>100000||
+       (typeof row.revision!=="number" || !Number.isSafeInteger(row.revision) ||
+        row.revision<0 || row.revision>100000)||
        (row.targetType!==null &&
          (typeof row.targetType!=="string" ||
          !legacyRowTargets[row.sourceTable]?.includes(row.targetType)))||
@@ -205,7 +206,7 @@ export function reconcileF3LegacyTargets(input:{
       total[field]+=counts[field];
   }
   return {
-    state:total.absentFromTarget+total.unresolved+total.ambiguous+
+    state:total.sourceRows===0 || total.absentFromTarget+total.unresolved+total.ambiguous+
       total.notImported+total.mapped+total.targetReuse>0?
       "GAPS_REMAIN":"ROW_KEYS_MATCH_REVIEW_ONLY",
     sourceTableCount:15,...total,tables,
