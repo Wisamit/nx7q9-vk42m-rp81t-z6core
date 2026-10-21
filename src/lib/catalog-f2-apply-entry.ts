@@ -22,7 +22,7 @@ type Session=NonNullable<Awaited<ReturnType<typeof getCurrentSession>>>;
 type Failure={ok:false;code:string};
 type Success={ok:true;result:{
   state:string;changedRows:number;effectiveAt:string;
-  masterWritesScheduled:true;
+  masterWritesScheduled:boolean;masterVersionsReversed:boolean;
 }};
 const fail=(code:string):Failure=>({ok:false,code});
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -258,6 +258,7 @@ export async function applyF2ConfigurationFromVerifiedDatabaseUnderLock(
     result.nativeChangedRows+result.masterChangedRows;
   return {ok:true,result:{
     state:result.state,changedRows,effectiveAt:approvalContext.effectiveAt,
-    masterWritesScheduled:true,
+    masterWritesScheduled:mode==="APPLY",
+    masterVersionsReversed:mode==="REVERSE",
   }};
 }
