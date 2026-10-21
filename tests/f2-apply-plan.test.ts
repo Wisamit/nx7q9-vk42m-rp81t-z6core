@@ -122,3 +122,19 @@ test("F2: plan remains separate from unapproved import master commit route",()=>
   assert.doesNotMatch(helper,/tx\.(?:labTest|priceList|referenceInterval|priceListItem)\.(?:update|upsert|create)/);
   assert.match(commit,/CONFIG_BUNDLE_REVIEW/);
 });
+
+test("F2: reject one immutable SQL UUID targeted twice with mixed casing",()=>{
+  const original=make()[0];
+  const lower="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const upper=lower.toUpperCase();
+  const rekey=(value:string,rowNumber:number):F2ApplySourceRow=>({
+    ...original,rowNumber,
+    sourceData:{...(original.sourceData as Record<string,unknown>),id:value},
+    normalizedData:{id:value},
+    scopedLiveData:{...(original.scopedLiveData as Record<string,unknown>),id:value},
+  });
+  assert.ok(plan([rekey(lower,1)]),"one canonical UUID is an allowed target");
+  assert.ok(plan([rekey(upper,1)]),"one uppercase UUID is an allowed target");
+  assert.equal(plan([rekey(lower,1),rekey(upper,2)]),null,
+    "case-only aliases for the same MariaDB UUID cannot cause double updates");
+});
