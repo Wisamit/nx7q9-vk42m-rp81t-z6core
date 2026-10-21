@@ -8,6 +8,7 @@ param(
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+$Allowed = @('Test name','test','profile','normal','price','Unites','Tube','Tubes','Comment','ORGANISM','Antibiotic','Fungi','Referdby','Source','Gropes')
 $Blocked = @('password','id','id2','idprice','result','profnam','abo','bhcg','bilh','cbc','clerance','coag','csf','cul','culture','esr','fertility','hepatitis','kidney','lipid','liver','marrow','occult','pcr','post_coital','pregnancy','prostata','pt','rotavirus','semin','serology','stone','stool','thyroid','torch','tumer','urine','widal','zn')
 function Assert-AccessName([string]$value) {
   if ([string]::IsNullOrWhiteSpace($value) -or
@@ -46,6 +47,9 @@ try {
   foreach ($table in @($config.tables)) {
     $name = [string]$table.name
     Assert-AccessName $name
+    if ($Allowed -cnotcontains $name) {
+      throw 'f3_access_unlisted_configuration_table'
+    }
     if ($Blocked -contains $name.ToLowerInvariant() -or
         @($seen | Where-Object { $_.ToLowerInvariant() -eq $name.ToLowerInvariant() }).Count -gt 0) {
       throw 'f3_access_unapproved_or_duplicate_table'
