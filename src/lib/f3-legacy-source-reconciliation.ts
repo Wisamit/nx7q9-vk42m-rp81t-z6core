@@ -159,7 +159,7 @@ export function reconcileF3LegacySource(input:{
     sourceRows:manifest.rowCount,matchedRows:selected.size,
     missingRows:missing,duplicates,unknownRows:0,
     manyToOneTargets,dispositions:statuses,byTable,
-    syntheticFullyClassified:missing===0&&
+    syntheticFullyClassified:manifest.tableCount===15&&missing===0&&
       statuses.UNRESOLVED===0&&statuses.AMBIGUOUS===0&&
       manyToOneTargets===0,
     originalMdbProven:false,qualifiedMappingApproved:false,
