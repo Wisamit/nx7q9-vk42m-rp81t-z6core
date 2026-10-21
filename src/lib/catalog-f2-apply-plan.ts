@@ -4,6 +4,7 @@ import { catalogExportTypes, type CatalogExportType } from "./catalog-configurat
 import { catalogBundleAllowedSourceFields } from "./catalog-bundle-source-boundary.ts";
 import { BUNDLE_REVIEW_MAX_ROWS } from "./catalog-bundle-review.ts";
 import { validF2ClinicalIntervalNumbers } from "./catalog-f2-clinical-values.ts";
+import { f2EffectiveCompositeMemberIds } from "./catalog-f2-effective-view.ts";
 
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const record=(value:unknown):value is Record<string,unknown>=>
@@ -114,6 +115,14 @@ export function compileF2ApplyPlan(input:{
       return null;
     const changed=fields.filter(field=>!readonlyFields.has(field) &&
       !equal(source[field],local[field]));
+    // A future-effective composite is part of a clinical and financial
+    // ordering contract. Reject repeated UUIDs (including case aliases),
+    // duplicate display positions and malformed member metadata at
+    // scheduling time, not only when a branch later tries to use it.
+    if(compositeTypes.has(type) && changed.includes("items") &&
+       !f2EffectiveCompositeMemberIds(type as "PANEL"|"PACKAGE",[
+         {id:source.id as string,items:source.items},
+       ]))return null;
     if(versionTypes.has(type) && changed.some(field=>temporalFields.has(field)))
       return null;
     if(type==="PRICE_LIST" && changed.some(field=>temporalFields.has(field)))
