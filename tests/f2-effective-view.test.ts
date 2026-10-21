@@ -116,3 +116,15 @@ test("F2: catalog administration SSR reads effective master fields and only effe
   assert.match(page,/\.filter\(unit=>unit\.status==="ACTIVE"\)/);
   assert.match(page,/\.filter\(container=>container\.status==="ACTIVE"\)/);
 });
+
+test("F2: catalog test details use the same effective test/component/unit/container snapshot",()=>{
+  const detail=readFileSync("src/app/catalog/tests/[id]/page.tsx","utf8");
+  assert.match(detail,/prisma\.\$transaction\(async tx =>/);
+  assert.match(detail,/resolveF2EffectiveCatalogViews\(tx,/);
+  for(const type of ["TEST","COMPONENT","UNIT","CONTAINER"])
+    assert.ok(detail.includes('projectF2EffectiveCatalogView("'+type+'"'),
+      type+" should use current effective configuration");
+  assert.match(detail,/new Map\(targets\.map/);
+  assert.match(detail,/isolationLevel:"RepeatableRead"/);
+  assert.match(detail,/where: \{ id, organizationId: session\.user\.organizationId \}/);
+});
