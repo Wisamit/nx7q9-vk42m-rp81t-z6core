@@ -195,7 +195,7 @@ export async function applyF2ConfigurationFromVerifiedDatabaseUnderLock(
   const signers=await tx.user.findMany({
     where:{id:{in:signerIds},organizationId:org,status:"ACTIVE"},
     select:{id:true,mfaEnabled:true,mfaConfirmedAt:true,
-      roles:{include:{role:{include:{permissions:{include:{permission:true}}}}}}},
+      roles:{include:{role:{include:{permissions:{include:{permission:true}}}}}},
     },
   });
   const branchSigners=await tx.userBranchScope.findMany({
