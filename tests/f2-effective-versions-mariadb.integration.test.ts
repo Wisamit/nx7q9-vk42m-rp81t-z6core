@@ -147,6 +147,26 @@ test("F2 MariaDB: atomic synthetic price/package/range versions and compensating
     assert.equal(String(prices[0].unit_price),"150.0000");
     assert.equal(String(prices[1].unit_price),"122.7500");
     assert.equal(prices[0].effective_to!==null,true);
+    // MariaDB's existing tariff resolver treats effective_to as INCLUSIVE.
+    // The old and new price must never both be billable at midnight, and
+    // the prior price remains billable at the final preceding millisecond.
+    const atStart="2026-12-01 00:00:00.000";
+    const beforeStart="2026-11-30 23:59:59.999";
+    for(const [at,expectedId] of [
+      [atStart,prices[1].id],[beforeStart,oldTestPriceId],
+    ]){
+      const [matching]=await sql.execute<mysql.RowDataPacket[]>(
+        "SELECT id FROM price_list_items WHERE price_list_id=? AND test_id=? AND status='ACTIVE' AND effective_from<=? AND (effective_to IS NULL OR effective_to>=?)",
+        [priceListId,testId,at,at]);
+      assert.deepEqual(matching.map(row=>row.id),[expectedId],
+        "exact tariff cutoff must resolve ONE signed price revision");
+    }
+    const [packageMatching]=await sql.execute<mysql.RowDataPacket[]>(
+      "SELECT id FROM price_list_package_items WHERE price_list_id=? AND package_id=? AND status='ACTIVE' AND effective_from<=? AND (effective_to IS NULL OR effective_to>=?)",
+      [priceListId,packageId,atStart,atStart]);
+    assert.equal(packageMatching.length,1,
+      "package prices must not overlap exactly at new effective timestamp");
+    assert.notEqual(packageMatching[0].id,oldPackagePriceId);
     const [ranges]=await sql.execute<mysql.RowDataPacket[]>(
       "SELECT id,critical_low,approval_status,effective_to FROM reference_intervals WHERE component_id=?",
       [componentId]);
