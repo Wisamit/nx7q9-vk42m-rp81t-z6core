@@ -20,7 +20,7 @@ const names:Readonly<Record<string,string>>={
   actorUserId:"actor_user_id",entityType:"entity_type",
   entityId:"entity_id",action:"action",newValues:"new_values",
   priceListId:"price_list_id",testId:"test_id",packageId:"package_id",
-  unitPrice:"unit_price",effectiveFrom:"effective_from",
+  unitPrice:"unit_price",updatedAt:"updated_at",effectiveFrom:"effective_from",
   effectiveTo:"effective_to",status:"status",
   deactivatedAt:"deactivated_at",componentId:"component_id",
   methodId:"method_id",analyzerId:"analyzer_id",
