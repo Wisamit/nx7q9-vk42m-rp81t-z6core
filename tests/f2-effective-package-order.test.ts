@@ -1,0 +1,54 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import {readFileSync} from "node:fs";
+import {
+  f2EffectiveCompositeMemberIds,f2EffectiveCompositeMembersAuthorized,
+} from "../src/lib/catalog-f2-effective-view.ts";
+
+const id=(n:number)=>"00000000-0000-4000-8000-"+String(n).padStart(12,"0");
+
+test("F2: new order package membership is its currently effective signed revision",()=>{
+  const route=readFileSync("src/app/api/orders/route.ts","utf8");
+  for(const name of [
+    "resolveF2EffectiveCatalogViews","projectF2EffectiveCatalogView",
+    "f2EffectiveCompositeMemberIds","f2EffectiveCompositeMembersAuthorized",
+    "effectiveMemberships","eligibleTests","packageTestOwner",
+  ])assert.match(route,new RegExp(name));
+  assert.match(route,/entityType:"PACKAGE" as const/);
+  assert.match(route,/asOf:catalogAsOf/);
+  assert.match(route,/pkg\.status!=="ACTIVE"/);
+  assert.match(route,/status:"ACTIVE"/);
+  assert.match(route,/effective_package_membership_scope_changed/);
+  assert.match(route,/const orderQuestionAsOf = catalogAsOf/);
+  assert.ok(route.indexOf("const effectiveMemberships=")<
+    route.indexOf("const packageTestOwner ="));
+  assert.ok(route.indexOf("const packageTestOwner =")<
+    route.indexOf("const allTestIds ="));
+  assert.doesNotMatch(route,/sourceInstallationVerified:true|request\.json\(\).*f2/);
+});
+
+test("F2: effective package member codes and identity cannot be quietly remapped",()=>{
+  const first=id(11),second=id(12);
+  const payload={id:id(1),items:[
+    {testId:first,displayOrder:1,test:{code:"T-A"}},
+    {testId:second,displayOrder:2,test:{code:"T-B"}},
+  ]};
+  const members=f2EffectiveCompositeMemberIds("PACKAGE",[payload]);
+  assert.ok(members);
+  assert.equal(members.size,2);
+  assert.equal(f2EffectiveCompositeMembersAuthorized(members,[
+    {id:first,code:"T-A"},{id:second,code:"T-B"},
+  ]),true);
+  assert.equal(f2EffectiveCompositeMembersAuthorized(members,[
+    {id:first,code:"T-A"},
+  ]),false,"newly effective extra member must exist and be active");
+  assert.equal(f2EffectiveCompositeMembersAuthorized(members,[
+    {id:first,code:"T-A"},{id:second,code:"T-X"},
+  ]),false,"code mismatch must reject instead of using stale legacy membership");
+  assert.equal(f2EffectiveCompositeMemberIds("PACKAGE",[
+    {...payload,items:[payload.items[0],payload.items[0]]},
+  ]),null);
+  assert.equal(f2EffectiveCompositeMemberIds("PACKAGE",[
+    {...payload,items:[{testId:first,displayOrder:1,test:{code:"T-A"},unknown:true}]},
+  ]),null);
+});
