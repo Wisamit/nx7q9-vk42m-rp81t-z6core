@@ -109,12 +109,7 @@ export default async function CatalogPage({ searchParams }: { searchParams: Prom
           {permissions.has("catalog.manage") && <CommercialPackageManager locale={locale} tests={tests.map(test => ({ id: test.id, code: test.code, nameEn: test.nameEn, nameAr: test.nameAr }))} />}
           {permissions.has("catalog.manage") && <Link className="secondary-link" href="/catalog/imports/reconciliation-ledger">{tr(locale, "Legacy Migration Reconciliation", "مطابقة ترحيل Access")}</Link>}
           {permissions.has("catalog.manage") && <Link className="secondary-link" href="/catalog/expert-reviews">{tr(locale, "Independent Expert Reviews", "المراجعات المستقلة للمختصين")}</Link>}
-          {permissions.has("catalog.manage") && (
-            (permissions.has("catalog.configuration.clinical.sign") && permissions.has("catalog.reference_ranges.manage")) ||
-            (permissions.has("catalog.configuration.financial.sign") && permissions.has("pricing.manage"))
-          ) && <Link className="secondary-link" href="/catalog/configuration-approvals">
-            {tr(locale, "Configuration Decisions", "قرارات اعتماد الإعدادات")}
-          </Link>}
+
           <Link className="secondary-link" href="/dashboard">{tr(locale, "Back to Dashboard", "العودة إلى لوحة التحكم")}</Link>
         </div>
       </header>
