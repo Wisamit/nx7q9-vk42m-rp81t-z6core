@@ -2,7 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { reverseF2FutureEffectiveVersionsUnderLock } from "../src/lib/catalog-f2-effective-reversal.ts";
 import { signF2ApplicationJournal } from "../src/lib/catalog-f2-application-journal.ts";
-import type { F2ApplyPlan,F2ApplyPlanRow } from "../src/lib/catalog-f2-apply-plan.ts";
+import type { F2ApplyPlanRow } from "../src/lib/catalog-f2-apply-plan.ts";
+import { canonicalF2TestPlan } from "./f2-canonical-application-fixture.ts";
 type StubArgs={data:Record<string,unknown>;where?:Record<string,unknown>};
 
 const id=(n:number)=>"00000000-0000-4000-8000-"+String(n).padStart(12,"0");
@@ -31,13 +32,7 @@ const rows:F2ApplyPlanRow[]=types.map((entityType,index)=>({
   },
   originalDigest:"a".repeat(64),desiredDigest:"b".repeat(64),
 }));
-const plan:F2ApplyPlan={
-  format:"F2_TEN_CLASS_EXECUTABLE_PLAN_V1",totalRows:3,
-  changedRows:3,unchangedRows:0,effectiveAt,
-  operations:{UNCHANGED:0,SCALAR_VERSIONED_CHANGE:0,
-    COMPOSITE_MEMBERSHIP_CHANGE:0,EFFECTIVE_DATED_NEW_VERSION:3},
-  rows,planDigest:"c".repeat(64),
-};
+const plan=canonicalF2TestPlan({rows,effectiveAt});
 const journalIds=rows.map((_,i)=>id(30+i));
 const clonedIds=rows.map((_,i)=>id(50+i));
 
@@ -61,7 +56,7 @@ test("F2: future-effective compensation retains old and new versions and writes 
             journalEventIds:journalIds,createdVersionIds:clonedIds,
           },auth.journalSigningSecret)}];
         if(action==="CATALOG_F2_VERSION_CLONED")
-          return rows.map((row,index)=>({
+          return plan.rows.map((row,index)=>({
             id:journalIds[index],entityType:row.entityType,entityId:row.targetId,
             newValues:signF2ApplicationJournal({
               planDigest:plan.planDigest,batchId:batch,effectiveAt,
