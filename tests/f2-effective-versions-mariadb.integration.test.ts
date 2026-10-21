@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import mysql from "mysql2/promise";
-import { prisma } from "../src/lib/db.ts";
+import { f2MysqlTransactionalTestClient } from "./f2-effective-versions-mariadb-driver.ts";
 import { applyF2EffectiveVersionsUnderLock } from "../src/lib/catalog-f2-effective-versions.ts";
 import { reverseF2FutureEffectiveVersionsUnderLock } from "../src/lib/catalog-f2-effective-reversal.ts";
 import type { F2ApplyPlan,F2ApplyPlanRow } from "../src/lib/catalog-f2-apply-plan.ts";
@@ -26,6 +26,20 @@ test("F2 MariaDB: atomic synthetic price/package/range versions and compensating
     nextStart="2026-12-01T00:00:00.000Z",
     prefix="F2E"+organizationId.slice(0,8);
   const query=(statement:string,values:Array<string|number|null>)=>sql.execute(statement,values);
+  const transaction=async<T>(
+    work:(tx:ReturnType<typeof f2MysqlTransactionalTestClient>)=>Promise<T>,
+  ):Promise<T>=>{
+    await sql.beginTransaction();
+    try {
+      const [lock]=await sql.execute<mysql.RowDataPacket[]>(
+        "SELECT id FROM organizations WHERE id=? AND status='ACTIVE' FOR UPDATE",
+        [organizationId]);
+      assert.equal(lock.length,1,"test transaction owns the same tenant lock");
+      const outcome=await work(f2MysqlTransactionalTestClient(sql));
+      await sql.commit();
+      return outcome;
+    }catch(error){await sql.rollback();throw error;}
+  };
   const authority={
     organizationId,branchId,batchId,actorUserId,
     clinicalSignerId:clinician,financialSignerId:finance,
@@ -99,13 +113,8 @@ test("F2 MariaDB: atomic synthetic price/package/range versions and compensating
       [oldPackagePriceId,priceListId,packageId,"150.0000","2026-01-01 00:00:00.000"]);
     await query("INSERT INTO reference_intervals(id,component_id,sex,low_value,high_value,critical_low,critical_high,effective_from,approval_status,status,updated_at) VALUES(? ,?,'ANY',?,?,?,?,?,'APPROVED','ACTIVE',NOW(3))",
       [oldIntervalId,componentId,"1.000000","9.000000","0.500000","10.000000","2026-01-01 00:00:00.000"]);
-    const apply=await prisma.$transaction(async tx=>{
-      const locks=await tx.$queryRaw<Array<{id:string}>>`
-        SELECT id FROM organizations WHERE id=${organizationId} AND status='ACTIVE' FOR UPDATE`;
-      assert.equal(locks.length,1);
-      return applyF2EffectiveVersionsUnderLock(tx,plan,authority,
-        new Date("2026-10-21T00:00:00.000Z"));
-    },{isolationLevel:"RepeatableRead",timeout:30000});
+    const apply=await transaction(tx=>applyF2EffectiveVersionsUnderLock(
+      tx as never,plan,authority,new Date("2026-10-21T00:00:00.000Z")));
     assert.equal(apply.changedRows,3);
     assert.equal(apply.createdVersionIds.length,3);
     const [prices]=await sql.execute<mysql.RowDataPacket[]>(
@@ -121,23 +130,14 @@ test("F2 MariaDB: atomic synthetic price/package/range versions and compensating
       [componentId]);
     assert.equal(ranges.length,2);
     assert.equal(ranges.some(r=>r.id===oldIntervalId&&r.effective_to!==null),true);
-    const replay=await prisma.$transaction(async tx=>{
-      await tx.$queryRaw`SELECT id FROM organizations WHERE id=${organizationId} FOR UPDATE`;
-      return applyF2EffectiveVersionsUnderLock(tx,plan,authority,
-        new Date("2026-10-21T00:00:00.000Z"));
-    });
+    const replay=await transaction(tx=>applyF2EffectiveVersionsUnderLock(
+      tx as never,plan,authority,new Date("2026-10-21T00:00:00.000Z")));
     assert.equal(replay.state,"EFFECTIVE_VERSIONS_ALREADY_APPLIED");
-    const reverted=await prisma.$transaction(async tx=>{
-      await tx.$queryRaw`SELECT id FROM organizations WHERE id=${organizationId} FOR UPDATE`;
-      return reverseF2FutureEffectiveVersionsUnderLock(tx,plan,authority,
-        new Date("2026-11-01T00:00:00.000Z"));
-    });
+    const reverted=await transaction(tx=>reverseF2FutureEffectiveVersionsUnderLock(
+      tx as never,plan,authority,new Date("2026-11-01T00:00:00.000Z")));
     assert.equal(reverted.state,"FUTURE_EFFECTIVE_VERSIONS_REVERSED");
-    const again=await prisma.$transaction(async tx=>{
-      await tx.$queryRaw`SELECT id FROM organizations WHERE id=${organizationId} FOR UPDATE`;
-      return reverseF2FutureEffectiveVersionsUnderLock(tx,plan,authority,
-        new Date("2026-11-01T00:00:00.000Z"));
-    });
+    const again=await transaction(tx=>reverseF2FutureEffectiveVersionsUnderLock(
+      tx as never,plan,authority,new Date("2026-11-01T00:00:00.000Z")));
     assert.equal(again.state,"FUTURE_VERSIONS_ALREADY_REVERSED");
     const [post]=await sql.execute<mysql.RowDataPacket[]>(
       "SELECT id,effective_to,status FROM price_list_items WHERE price_list_id=? ORDER BY effective_from",
