@@ -114,7 +114,11 @@ export function compileF2ApplyPlan(input:{
       "COMPOSITE_MEMBERSHIP_CHANGE":"SCALAR_VERSIONED_CHANGE";
     const original=structuredClone(local);
     const desired=structuredClone(source);
-    for(const field of readonlyFields)desired[field]=structuredClone(local[field]);
+    for(const field of readonlyFields){
+      // Some native projections (e.g. REFERENCE_INTERVAL) do not include
+      // deactivatedAt. Never add undefined to a canonical signed snapshot.
+      if(Object.hasOwn(desired,field))desired[field]=structuredClone(local[field]);
+    }
     let oldHash:string,newHash:string;
     try {oldHash=HASH(original);newHash=HASH(desired);}
     catch{return null;}
