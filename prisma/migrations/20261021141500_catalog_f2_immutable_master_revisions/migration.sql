@@ -40,4 +40,4 @@ CREATE TABLE `catalog_config_revisions` (
   CONSTRAINT `f2_config_clinical_fk` FOREIGN KEY (`clinical_signer_user_id`) REFERENCES `users`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
   CONSTRAINT `f2_config_financial_fk` FOREIGN KEY (`financial_signer_user_id`) REFERENCES `users`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
   CONSTRAINT `f2_config_cancelled_by_fk` FOREIGN KEY (`cancelled_by_user_id`) REFERENCES `users`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE
-);
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
