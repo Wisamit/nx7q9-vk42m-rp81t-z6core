@@ -81,6 +81,23 @@ export async function applyF2EffectiveVersionsUnderLock(
        !Array.isArray(saved.createdVersionIds) ||
        !Array.isArray(saved.journalEventIds))
       throw Error("f2_apply_batch_already_changed");
+    // A canceled future version cannot be resurrected by replaying an
+    // already-signed but now compensated import batch.
+    const compensated=await tx.auditEvent.findMany({
+      where:{organizationId:authority.organizationId,
+        entityType:"CatalogImportBatch",entityId:authority.batchId,
+        action:"CATALOG_F2_EFFECTIVE_BATCH_REVERSED"},
+      take:2,select:{id:true,newValues:true},
+    });
+    if(compensated.length>1)throw Error("f2_apply_reversal_history_corrupt");
+    if(compensated.length){
+      const reversal=verifyF2ApplicationJournal(
+        compensated[0].newValues,authority.journalSigningSecret);
+      if(!reversal||reversal.planDigest!==plan.planDigest ||
+         reversal.effectiveAt!==plan.effectiveAt)
+        throw Error("f2_apply_reversal_history_corrupt");
+      throw Error("f2_apply_batch_previously_reversed");
+    }
     return {
       state:"EFFECTIVE_VERSIONS_ALREADY_APPLIED",
       batchId:authority.batchId,
