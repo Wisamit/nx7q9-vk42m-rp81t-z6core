@@ -82,6 +82,16 @@ test("F2: reject unauthorized, cross-installation identity swaps, remaps and tam
   assert.equal(plan(rows.map((r,i)=>i===0?{...r,
     sourceData:{...(r.sourceData as object),unexpected:true}}:r)),null);
   const interval=rows.findIndex(r=>r.entityType==="REFERENCE_INTERVAL");
+  // The population selector defines the clinical cohort. Editing its sex,
+  // age or pregnancy scope cannot be smuggled in as a threshold amendment.
+  for(const [field,value] of [
+    ["sex","FEMALE"],["ageFrom","10.000"],["ageUnit","YEAR"],
+    ["pregnancyStatus","PREGNANT"],["populationCode","PREGNANCY"],
+    ["gestationalAgeFromWeeks","10.00"],
+  ] as const){
+    assert.equal(plan(rows.map((r,i)=>i===interval?{...r,
+      sourceData:{...(r.sourceData as object),[field]:value}}:r)),null,field);
+  }
   assert.equal(plan(rows.map((r,i)=>i===interval?{...r,
     sourceData:{...(r.sourceData as object),effectiveFrom:"2026-01-01T00:00:00.000Z"}}:r)),null);
   assert.equal(compileF2ApplyPlan({rows,effectiveAt,
