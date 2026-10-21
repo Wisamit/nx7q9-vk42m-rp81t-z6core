@@ -98,6 +98,6 @@ test("F2: forged plan fails apply AND reversal without any SQL call",async()=>{
   await assert.rejects(()=>applyF2EffectiveVersionsUnderLock(
     tx as never,p as unknown as F2ApplyPlan,authority,now),/f2_apply_unauthorized/);
   await assert.rejects(()=>reverseF2FutureEffectiveVersionsUnderLock(
-    tx as never,p,authority,now),/f2_reversal_unauthorized/);
+    tx as never,p as unknown as F2ApplyPlan,authority,now),/f2_reversal_unauthorized/);
   assert.equal(called,false);
 });
