@@ -52,3 +52,20 @@ test("F2: effective package member codes and identity cannot be quietly remapped
     {...payload,items:[{testId:first,displayOrder:1,test:{code:"T-A"},unknown:true}]},
   ]),null);
 });
+
+test("F2: new order snapshots capture effective test and unit display values, preserving Decimal type",()=>{
+  const route=readFileSync("src/app/api/orders/route.ts","utf8");
+  assert.match(route,/const \[patient, storedTests, source/);
+  assert.match(route,/const orderTestOverlays=await resolveF2EffectiveCatalogViews\(/);
+  assert.match(route,/entityType:"TEST" as const/);
+  assert.match(route,/entityType:"UNIT" as const/);
+  assert.match(route,/projectF2EffectiveCatalogView\("TEST",test,orderTestOverlays\)/);
+  assert.match(route,/projectF2EffectiveCatalogView\("UNIT",test\.defaultUnit,orderTestOverlays\)/);
+  assert.match(route,/new Prisma\.Decimal\(effective\.minimumVolume\)/);
+  assert.match(route,/test_not_active_at_order_time/);
+  assert.match(route,/testNameEnSnapshot: test\.nameEn/);
+  assert.match(route,/testNameArSnapshot: test\.nameAr/);
+  assert.match(route,/unitSnapshot: test\.defaultUnit\?\.symbol/);
+  assert.ok(route.indexOf("const orderTestOverlays=")<route.indexOf("const tests=storedTests.map"));
+  assert.ok(route.indexOf("const tests=storedTests.map")<route.indexOf("for (const test of tests)"));
+});
