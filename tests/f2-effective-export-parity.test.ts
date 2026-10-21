@@ -28,7 +28,10 @@ const digest=(v:unknown)=>createHash("sha256")
 test("F2: effective price list export keeps stable identity, organization currency and old dates",async()=>{
   assert.ok(F2_EFFECTIVE_READ_TYPES.includes("PRICE_LIST"));
   const source=snapshot(),db={
-    catalogConfigurationRevision:{findMany:async(args:any)=>{
+    catalogConfigurationRevision:{findMany:async(args:{
+      where:{organizationId:string;entityType:string;state:string;
+        entityId:{in:string[]};effectiveFrom:{lte:Date}},
+    })=>{
       assert.equal(args.where.organizationId,organizationId);
       assert.equal(args.where.entityType,"PRICE_LIST");
       assert.equal(args.where.state,"RECORDED");
@@ -107,7 +110,9 @@ test("F2: future panel and package memberships are only exported after CURRENT b
     const source:Record<string,unknown>={};
     for(const field of catalogBundleAllowedSourceFields[kind])source[field]=null;
     Object.assign(source,{id:entityId,code:"COMPOSITE",
-      items:kind==="PANEL"?codes:codes.map(({required:_unused,...member})=>member),
+      items:kind==="PANEL"?codes:codes.map(member=>({
+        testId:member.testId,displayOrder:member.displayOrder,test:member.test,
+      })),
     });
     const overlay=await resolveF2EffectiveCatalogViews({
       catalogConfigurationRevision:{findMany:async()=>[{
