@@ -38,7 +38,7 @@ test("F3: target existence verification batches IDs by class and validates org/p
     organizationId:org,lineage:records,
     currentOrganizationScopeVerified:true,
   });
-  assert.equal(ok,true);
+  assert.equal(ok,true,JSON.stringify({calls,records}));
   assert.equal(calls.length,4,"group two TEST mappings into a single SQL lookup");
   const tests=calls.find(c=>c.kind==="TEST");
   assert.deepEqual(tests?.where.id,{in:[id(11),id(12)]});
@@ -59,7 +59,7 @@ test("F3: missing, foreign, duplicated or unverified target never yields false p
     organizationId:org,lineage:[original],
     currentOrganizationScopeVerified:true,
   }),false);
-  assert.equal(lookups,1);
+  assert.equal(lookups,1,"missing mapped target must be looked up before rejection");
   lookups=0;
   assert.equal(await f3LiveLineageTargetsVisible(db as never,{
     organizationId:org,lineage:[{...original,organizationId:id(2)}],
