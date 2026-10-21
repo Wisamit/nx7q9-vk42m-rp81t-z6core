@@ -195,7 +195,7 @@ export function verifyF2ApplyPlanIntegrity(value:unknown):value is F2ApplyPlan{
        typeof raw.targetId!=="string"||!UUID.test(raw.targetId))
       return false;
     rows.push({
-      rowNumber:raw.rowNumber,entityType:raw.entityType,
+      rowNumber:raw.rowNumber as number,entityType:raw.entityType,
       sourceData:raw.desiredSnapshot,
       normalizedData:{id:raw.targetId},
       scopedLiveData:raw.originalSnapshot,
