@@ -75,9 +75,11 @@ test("F2: reject foreign actor branch, forged HMAC, missing clone and expired ca
     transaction({versionBranch:id(99)}) as never,input),null);
   assert.equal(await recoverF2PreApplyObservationsUnderLock(
     transaction({batch:{...batchLog,changedRows:200}}) as never,input),null);
+  const tamperedVersion={
+    ...versionLog,before:{...before,unitPrice:"0.0000"},
+  };
   assert.equal(await recoverF2PreApplyObservationsUnderLock(
-    transaction({version:{...versionLog,before:{...before,unitPrice:"0.0000"}}})
-      as never,input),null);
+    transaction({version:tamperedVersion}) as never,input),null);
   assert.equal(await recoverF2PreApplyObservationsUnderLock(
     transaction({version:null}) as never,input),null);
   assert.equal(await recoverF2PreApplyObservationsUnderLock(
