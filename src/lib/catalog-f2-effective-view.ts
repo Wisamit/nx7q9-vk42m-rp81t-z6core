@@ -113,22 +113,26 @@ export function f2EffectiveCompositeMemberIds(
     const items=(row as {items?:unknown}).items;
     if(!Array.isArray(items)||items.length<1||items.length>1000)return null;
     const local=new Set<string>();
+    const displayOrders=new Set<number>();
     for(const member of items){
       if(!isObj(member)||typeof member.testId!=="string"||
-         !UUID.test(member.testId)||local.has(member.testId)||
+         !UUID.test(member.testId)||local.has(member.testId.toLowerCase())||
          typeof member.displayOrder!=="number"||
          !Number.isSafeInteger(member.displayOrder)||
-         member.displayOrder<0||!isObj(member.test)||
+         member.displayOrder<0||displayOrders.has(member.displayOrder)||
+         !isObj(member.test)||
          typeof member.test.code!=="string"||!member.test.code||
          Object.keys(member.test).join(",")!=="code"||
          Object.keys(member).sort().join(",")!==
            (kind==="PANEL"?"displayOrder,required,test,testId":"displayOrder,test,testId")||
          (kind==="PANEL"&&typeof member.required!=="boolean"))
         return null;
-      local.add(member.testId);
-      const prior=membership.get(member.testId);
+      const canonicalId=member.testId.toLowerCase();
+      local.add(canonicalId);
+      displayOrders.add(member.displayOrder);
+      const prior=membership.get(canonicalId);
       if(prior!==undefined && prior!==member.test.code)return null;
-      membership.set(member.testId,member.test.code);
+      membership.set(canonicalId,member.test.code);
       if(membership.size>5000)return null;
     }
   }
@@ -140,6 +144,10 @@ export function f2EffectiveCompositeMembersAuthorized(
 ):boolean {
   if(permitted.length!==membership.size)return false;
   const seen=new Set<string>();
-  return permitted.every(test=>!seen.has(test.id)&&
-    (seen.add(test.id),membership.get(test.id)===test.code));
+  return permitted.every(test=>{
+    if(!UUID.test(test.id))return false;
+    const canonicalId=test.id.toLowerCase();
+    return !seen.has(canonicalId)&&
+      (seen.add(canonicalId),membership.get(canonicalId)===test.code);
+  });
 }
