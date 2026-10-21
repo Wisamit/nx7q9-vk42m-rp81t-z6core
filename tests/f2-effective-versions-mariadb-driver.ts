@@ -74,7 +74,7 @@ export function f2MysqlTransactionalTestClient(db:mysql.Connection){
     return raw;
   };
   const insert=async(table:string,values:Row)=>{
-    const data=table==="audit_events"
+    const data:Row=table==="audit_events"
       ? {id:randomUUID(),...values}
       : {id:randomUUID(),updatedAt:new Date(),...values};
     const keys=Object.keys(data),cols=keys.map(column);
