@@ -102,6 +102,14 @@ test("F2: schedule all seven versionless catalog classes without mutating origin
     organizationId:auth.organizationId,entityType:"TEST",
     entityId:id(20),asOf:new Date("2026-12-02T00:00:00.000Z")});
   assert.equal(effective?.nameEn,"Revised test");
+  const target=db.stored.find(x=>x.entityType==="TEST")!;
+  const saved=target.afterSnapshot;
+  target.afterSnapshot={...(saved as Record<string,unknown>),nameEn:"FORGED MEDICAL NAME"};
+  await assert.rejects(()=>resolveF2CatalogMasterAsOf(db.tx as never,{
+    organizationId:auth.organizationId,entityType:"TEST",entityId:id(20),
+    asOf:new Date("2026-12-02T00:00:00.000Z"),
+  }),/snapshot_corrupt/);
+  target.afterSnapshot=saved;
   const unchanged=await resolveF2CatalogMasterAsOf(db.tx as never,{
     organizationId:auth.organizationId,entityType:"REFERENCE_INTERVAL",
     entityId:id(26),asOf:new Date("2026-12-02T00:00:00.000Z")}).then(
