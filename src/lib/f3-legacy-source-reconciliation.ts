@@ -66,23 +66,33 @@ export function reconcileF3LegacySource(input:{
   const schemaByTable=new Map<string,string>();
   let counted=0;
   for(const table of manifest.tables){
-    if(!table.sourceTable||!SHA.test(table.sourceSchemaSha256)||
+    if(typeof table.sourceTable!=="string"||!table.sourceTable||
+       !SHA.test(table.sourceSchemaSha256)||
        !Number.isSafeInteger(table.rows)||table.rows<0||
+       !Number.isSafeInteger(table.duplicateContentRows)||
+       table.duplicateContentRows<0||table.duplicateContentRows>table.rows||
        schemaByTable.has(table.sourceTable.toLowerCase()))
       throw Error("f3_reconciliation_invalid_table_coverage");
     schemaByTable.set(table.sourceTable.toLowerCase(),table.sourceSchemaSha256);
     counted+=table.rows;
   }
   if(counted!==manifest.rowCount)throw Error("f3_reconciliation_row_count_mismatch");
+  const observedTableCounts=new Map<string,number>();
   for(const row of manifest.rows){
-    if(!SHA.test(row.rowDigest)||!SHA.test(row.sourceSchemaSha256)||
+    if(typeof row.sourceTable!=="string"||
+       !SHA.test(row.rowDigest)||!SHA.test(row.sourceSchemaSha256)||
        !Number.isSafeInteger(row.occurrence)||row.occurrence<1||
        schemaByTable.get(row.sourceTable.toLowerCase())!==row.sourceSchemaSha256)
       throw Error("f3_reconciliation_invalid_source_row");
+    const tableName=row.sourceTable.toLowerCase();
+    observedTableCounts.set(tableName,(observedTableCounts.get(tableName)||0)+1);
     const id=key(row);
     if(source.has(id))throw Error("f3_reconciliation_duplicate_source_identity");
     source.set(id,row);
   }
+  if(manifest.tables.some(table=>
+     observedTableCounts.get(table.sourceTable.toLowerCase())!==table.rows))
+    throw Error("f3_reconciliation_table_row_count_mismatch");
   const statuses:Record<F3LegacyDisposition,number>={
     UNRESOLVED:0,AMBIGUOUS:0,NOT_IMPORTED:0,MAPPED:0,APPROVED_MAPPING:0,
   };
