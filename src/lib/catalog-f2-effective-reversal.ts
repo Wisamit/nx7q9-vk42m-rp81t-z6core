@@ -91,6 +91,10 @@ export async function reverseF2FutureEffectiveVersionsUnderLock(
   if(journals.length!==ids.length)
     throw Error("f2_reversal_incomplete_journal");
   const byId=new Map(journals.map(event=>[event.entityType+":"+event.entityId,event]));
+  // Match the inclusive tariff predecessor close-at rule used by the
+  // ordinary manual price-version writer; clinical interval ranges keep
+  // their existing effectiveTo convention.
+  const priceCloseAt=new Date(at.getTime()-1);
   for(const row of nativeChanges){
     const journal=byId.get(row.entityType+":"+row.targetId);
     const values=journal?verifyF2ApplicationJournal(
@@ -121,7 +125,7 @@ export async function reverseF2FutureEffectiveVersionsUnderLock(
       });
       if(retired.count!==1)throw Error("f2_reversal_new_price_changed");
       const restored=await tx.priceListItem.updateMany({
-        where:{id:parentId,effectiveTo:at,status:"ACTIVE",
+        where:{id:parentId,effectiveTo:priceCloseAt,status:"ACTIVE",
           unitPrice:row.originalSnapshot.unitPrice as string,
           effectiveFrom:new Date(row.originalSnapshot.effectiveFrom as string)},
         data:{effectiveTo:null},
