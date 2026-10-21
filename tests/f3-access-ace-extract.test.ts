@@ -11,6 +11,8 @@ test("F3: Windows Access extractor is explicitly read-only and bounded",()=>{
   assert.match(source,/\$records\.Open\(\$query, \$connection, 0, 1\)/);
   assert.match(source,/\$query = 'SELECT '/);
   assert.match(source,/Get-FileHash -LiteralPath \$source -Algorithm SHA256/);
+  assert.match(source,/\$postReadSha = \(Get-FileHash -LiteralPath \$source -Algorithm SHA256\)/);
+  assert.match(source,/f3_access_source_changed_during_read/);
   assert.match(source,/sourceIdentityExternallyAttested=\$false/);
   assert.match(source,/migrated=\$false/);
   assert.match(source,/row_limit|extraction_row_limit/);
