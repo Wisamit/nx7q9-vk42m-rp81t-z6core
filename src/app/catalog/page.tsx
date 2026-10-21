@@ -74,9 +74,11 @@ export default async function CatalogPage({ searchParams }: { searchParams: Prom
     });
     const tests=baseTests.map(test=>({
       ...projectF2EffectiveCatalogView("TEST",test,overlays),
-      components:test.components.map(component=>
-        projectF2EffectiveCatalogView("COMPONENT",component,overlays))
-        .sort((a,b)=>a.displayOrder-b.displayOrder||a.code.localeCompare(b.code)),
+      components:test.components.map(component=>({
+        ...projectF2EffectiveCatalogView("COMPONENT",component,overlays),
+        unit:component.unit?
+          projectF2EffectiveCatalogView("UNIT",component.unit,overlays):null,
+      })).sort((a,b)=>a.displayOrder-b.displayOrder||a.code.localeCompare(b.code)),
     })).sort((a,b)=>a.nameEn.localeCompare(b.nameEn));
     const units=baseUnits
       .map(unit=>projectF2EffectiveCatalogView("UNIT",unit,overlays))
