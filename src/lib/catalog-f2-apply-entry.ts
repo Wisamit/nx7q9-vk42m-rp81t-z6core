@@ -23,7 +23,7 @@ type Success={ok:true;result:{
   masterWritesScheduled:true;
 }};
 const fail=(code:string):Failure=>({ok:false,code});
-const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SHA=/^[0-9a-f]{64}$/;
 const obj=(v:unknown):v is Record<string,unknown> =>
   v!==null&&typeof v==="object"&&!Array.isArray(v);
