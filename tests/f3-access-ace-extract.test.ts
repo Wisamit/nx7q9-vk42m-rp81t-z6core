@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
+import {LEGACY_COVERAGE_SOURCES} from "../src/lib/legacy-source-coverage.ts";
 
 test("F3: Windows Access extractor is explicitly read-only and bounded",()=>{
   const source=readFileSync("scripts/f3-access-ace-extract.ps1","utf8");
@@ -26,6 +27,13 @@ test("F3: Windows Access extractor is explicitly read-only and bounded",()=>{
   const codeBlocked=[...codeList.matchAll(/"([^"]+)"/g)].map(x=>x[1]).sort();
   assert.deepEqual(shellBlocked,codeBlocked,
     "offline ACE and Node row manifest must block exactly the same legacy result tables");
+  const listed=source.match(/\$Allowed = @\(([^\n]*)\)/)?.[1];
+  assert.ok(listed);
+  const shellAllowed=[...listed.matchAll(/'([^']+)'/g)].map(x=>x[1]).sort();
+  assert.deepEqual(shellAllowed,LEGACY_COVERAGE_SOURCES.map(x=>x.tableName).sort(),
+    "ACE query table allowlist must track all and only the 15 catalog source tables");
+  assert.match(source,/\$Allowed -cnotcontains \$name/);
+  assert.match(source,/f3_access_unlisted_configuration_table/);
   for(const name of ["password","id","result","culture","cbc","urine",
     "thyroid","torch","fertility","widal","zn"])
     assert.ok(shellBlocked.includes(name));
