@@ -54,7 +54,7 @@ const transaction=(opts:{
     }
   }},
   catalogConfigurationRevision:{findMany:async()=>opts.master?[{
-    id:id(50),branchId,sourceRowNumber:1,entityType:"PRICE_LIST_ITEM",
+    id:id(50),branchId,sourceRowNumber:1,entityType:"TEST",
     entityId:target,planDigest,
     originalDigest:hash(before),desiredDigest:hash(after),
   }]:[]},
@@ -94,8 +94,8 @@ test("F2: master-only plans may reverse without a native clone but require persi
     scopedLiveData:{id:target,nameEn:"OLD"}};
   assert.deepEqual(await recoverF2PreApplyObservationsUnderLock(
     transaction({batch:null,master:true}) as never,{
-      ...input,rows:[{...existing,entityType:"PRICE_LIST_ITEM"}],
-    }),[{...existing,entityType:"PRICE_LIST_ITEM"}]);
+      ...input,rows:[existing],
+    }),[existing]);
   assert.equal(await recoverF2PreApplyObservationsUnderLock(
     transaction({batch:null,master:false}) as never,{
       ...input,rows:[existing],
