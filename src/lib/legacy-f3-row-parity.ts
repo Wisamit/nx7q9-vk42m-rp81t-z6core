@@ -90,8 +90,8 @@ export function reconcileF3LegacyRowParity(input:{
     byTable.set(item.tableName,{
       tableName:item.tableName,present:item.present,sourceRows:item.sourceRows,
       persistedRows:0,missingRows:0,
-      classifications:Object.fromEntries(classes.map(code=>[code,0]))
-        as Record<LegacyRowClassification,number>,
+      classifications:{UNRESOLVED:0,AMBIGUOUS:0,NOT_IMPORTED:0,
+        MAPPED:0,APPROVED_MAPPING:0},
       missingLiveTargets:0,multipleRowsPerTarget:0,
     });
   }
