@@ -16,6 +16,23 @@ const obj=(v:unknown):v is Record<string,unknown> =>
 const date=(v:unknown)=>typeof v==="string"&&Number.isFinite(Date.parse(v))?
   new Date(v):null;
 
+/** Same compare-and-swap predicate for application and compensation.
+ * Never reopen an interval whose patient population or clinical values
+ * have changed since the immutable signed source snapshot. */
+export function f2ReferenceIntervalCasWhere(
+  snapshot:Readonly<Record<string,unknown>>,
+):Prisma.ReferenceIntervalWhereInput {
+  const fields=[
+    "sex","ageFrom","ageTo","ageUnit","pregnancyStatus",
+    "gestationalAgeFromWeeks","gestationalAgeToWeeks","populationCode",
+    "lowValue","highValue","normalTextEn","normalTextAr",
+    "criticalLow","criticalHigh","source","notes",
+    "branchId","methodId","analyzerId","specimenTypeId",
+  ] as const;
+  return Object.fromEntries(fields.filter(field=>Object.hasOwn(snapshot,field))
+    .map(field=>[field,snapshot[field]])) as Prisma.ReferenceIntervalWhereInput;
+}
+
 export type F2EffectiveApplyResult={
   state:"EFFECTIVE_VERSIONS_APPLIED"|"EFFECTIVE_VERSIONS_ALREADY_APPLIED";
   batchId:string;createdVersionIds:readonly string[];
@@ -211,23 +228,12 @@ export async function applyF2EffectiveVersionsUnderLock(
       });
       if(openScope.length!==1||openScope[0].id!==row.targetId)
         throw Error("f2_apply_range_population_overlap");
-      // Compare-and-swap the complete mutable clinical projection, not just
-      // the UUID and effective dates. If a clinician edited limits/notes since
-      // the signed preview, the SQL update must affect zero rows.
-      const clinicalFields=[
-        "sex","ageFrom","ageTo","ageUnit","pregnancyStatus",
-        "gestationalAgeFromWeeks","gestationalAgeToWeeks","populationCode",
-        "lowValue","highValue","normalTextEn","normalTextAr",
-        "criticalLow","criticalHigh","source","notes",
-        "branchId","methodId","analyzerId","specimenTypeId",
-      ] as const;
-      const expectedClinical=Object.fromEntries(clinicalFields
-        .filter(field=>Object.hasOwn(prior,field))
-        .map(field=>[field,prior[field]])) as Prisma.ReferenceIntervalWhereInput;
+      // Atomic full-value CAS: any drift in the signed medical limits,
+      // free-text interpretation or population scope blocks the write.
       const claim=await tx.referenceInterval.updateMany({
         where:{id:row.targetId,componentId,
           status:"ACTIVE",approvalStatus:"APPROVED",effectiveTo:null,
-          effectiveFrom:start,...expectedClinical},
+          effectiveFrom:start,...f2ReferenceIntervalCasWhere(prior)},
         data:{effectiveTo:effectiveAt},
       });
       if(claim.count!==1)throw Error("f2_apply_range_conflict");
