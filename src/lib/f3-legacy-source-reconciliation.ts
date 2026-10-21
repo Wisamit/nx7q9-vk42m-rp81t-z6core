@@ -93,6 +93,29 @@ export function reconcileF3LegacySource(input:{
   if(manifest.tables.some(table=>
      observedTableCounts.get(table.sourceTable.toLowerCase())!==table.rows))
     throw Error("f3_reconciliation_table_row_count_mismatch");
+  // An Access table has no guaranteed physical row sequence. Every repeated
+  // content digest must have one-and-only-one contiguous occurrence 1..N,
+  // and the declared duplicate count must match those actual occurrences.
+  for(const table of manifest.tables){
+    const repeated=new Map<string,Set<number>>();
+    for(const row of manifest.rows){
+      if(row.sourceTable.toLowerCase()!==table.sourceTable.toLowerCase())continue;
+      const seen=repeated.get(row.rowDigest)||new Set<number>();
+      seen.add(row.occurrence);
+      repeated.set(row.rowDigest,seen);
+    }
+    let duplicates=0;
+    for(const occurrences of repeated.values()){
+      const highest=Math.max(...occurrences);
+      if(highest!==occurrences.size||
+         !Array.from({length:highest},(_,i)=>i+1)
+           .every(ordinal=>occurrences.has(ordinal)))
+        throw Error("f3_reconciliation_noncontiguous_occurrence");
+      duplicates+=occurrences.size-1;
+    }
+    if(duplicates!==table.duplicateContentRows)
+      throw Error("f3_reconciliation_duplicate_content_mismatch");
+  }
   const statuses:Record<F3LegacyDisposition,number>={
     UNRESOLVED:0,AMBIGUOUS:0,NOT_IMPORTED:0,MAPPED:0,APPROVED_MAPPING:0,
   };
