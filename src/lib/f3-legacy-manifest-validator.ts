@@ -3,7 +3,7 @@ import type {F3LegacyExtractionManifest}
   from "./f3-legacy-extraction-manifest.ts";
 
 const SHA=/^[a-f0-9]{64}$/;
-const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const object=(v:unknown):v is Record<string,unknown> =>
   v!==null&&typeof v==="object"&&!Array.isArray(v);
 const exact=(v:Record<string,unknown>,keys:readonly string[])=>
