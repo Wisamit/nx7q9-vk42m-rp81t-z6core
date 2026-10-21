@@ -53,40 +53,50 @@ const authority={
   sourceInstallationVerified:true,qualifiedDomainSignersVerified:true,
   currentPermissionsAndBranchScopeVerified:true,signedStageAndLiveSnapshotVerified:true,
 } as const;
-const mutate=(original:F2ApplyPlan,change:(clone:any)=>void)=>{
-  const clone=structuredClone(original);change(clone);return clone;
+type MutableRecord=Record<string,unknown>;
+const mutate=(original:F2ApplyPlan,change:(draft:MutableRecord)=>void)=>{
+  const draft=structuredClone(original) as unknown as MutableRecord;
+  change(draft);
+  return draft;
 };
+const draftRows=(p:MutableRecord)=>p.rows as MutableRecord[];
+const draftRow=(p:MutableRecord,index=0)=>draftRows(p)[index];
+const value=(p:MutableRecord,index:number,key:"originalSnapshot"|"desiredSnapshot")=>
+  draftRow(p,index)[key] as MutableRecord;
+
 test("F2: independently recompile full ten-class plan before SQL mutation",()=>{
   const original=compiled();
   assert.equal(verifyF2ApplyPlanIntegrity(original),true);
-  const changes=[
-    (p:any)=>{p.planDigest="f".repeat(64);},
-    (p:any)=>{p.changedRows=0;},
-    (p:any)=>{p.operations.EFFECTIVE_DATED_NEW_VERSION=0;},
-    (p:any)=>{p.rows[0].operation="UNCHANGED";},
-    (p:any)=>{p.rows[0].changedFields=["status"];},
-    (p:any)=>{p.rows[0].originalDigest="f".repeat(64);},
-    (p:any)=>{p.rows[0].desiredDigest="f".repeat(64);},
-    (p:any)=>{p.rows[0].originalSnapshot.code="BACKDOOR";},
-    (p:any)=>{p.rows[0].desiredSnapshot.code="BACKDOOR";},
-    (p:any)=>{p.rows[0].desiredSnapshot.extra="BACKDOOR";},
-    (p:any)=>{p.rows[0].targetId=id(300);},
-    (p:any)=>{p.rows.reverse();},
-    (p:any)=>{p.effectiveAt="2026-12-02T00:00:00.000Z";},
-    (p:any)=>{p.rows.push(p.rows[0]);},
-    (p:any)=>{p.supervisorApproval=true;},
+  const changes:Array<(draft:MutableRecord)=>void>=[
+    p=>{p.planDigest="f".repeat(64);},
+    p=>{p.changedRows=0;},
+    p=>{(p.operations as MutableRecord).EFFECTIVE_DATED_NEW_VERSION=0;},
+    p=>{draftRow(p).operation="UNCHANGED";},
+    p=>{draftRow(p).changedFields=["status"];},
+    p=>{draftRow(p).originalDigest="f".repeat(64);},
+    p=>{draftRow(p).desiredDigest="f".repeat(64);},
+    p=>{value(p,0,"originalSnapshot").code="BACKDOOR";},
+    p=>{value(p,0,"desiredSnapshot").code="BACKDOOR";},
+    p=>{value(p,0,"desiredSnapshot").extra="BACKDOOR";},
+    p=>{draftRow(p).targetId=id(300);},
+    p=>{draftRows(p).reverse();},
+    p=>{p.effectiveAt="2026-12-02T00:00:00.000Z";},
+    p=>{draftRows(p).push(draftRow(p));},
+    p=>{p.supervisorApproval=true;},
   ];
   for(const change of changes)assert.equal(
     verifyF2ApplyPlanIntegrity(mutate(original,change)),false,
     "any modified count, plan digest, historical value or extra key must reject");
 });
 test("F2: forged plan fails apply AND reversal without any SQL call",async()=>{
-  const p=mutate(compiled(),x=>{x.rows.find((r:any)=>
-    r.entityType==="REFERENCE_INTERVAL").desiredSnapshot.criticalLow="999.000000";});
+  const p=mutate(compiled(),draft=>{
+    const index=draftRows(draft).findIndex(r=>r.entityType==="REFERENCE_INTERVAL");
+    value(draft,index,"desiredSnapshot").criticalLow="999.000000";
+  });
   let called=false;
   const tx={auditEvent:{findMany:async()=>{called=true;throw Error("unexpected query");}}};
   await assert.rejects(()=>applyF2EffectiveVersionsUnderLock(
-    tx as never,p,authority,now),/f2_apply_unauthorized/);
+    tx as never,p as unknown as F2ApplyPlan,authority,now),/f2_apply_unauthorized/);
   await assert.rejects(()=>reverseF2FutureEffectiveVersionsUnderLock(
     tx as never,p,authority,now),/f2_reversal_unauthorized/);
   assert.equal(called,false);
