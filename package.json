@@ -15,7 +15,8 @@
     "test:ui-i18n": "node scripts/check-ui-i18n.mjs",
     "ops:backup": "node scripts/operations/create-encrypted-backup.mjs create",
     "ops:backup:verify": "node scripts/operations/create-encrypted-backup.mjs verify",
-    "ops:restore-isolated": "node scripts/operations/restore-isolated-backup.mjs restore-isolated"
+    "ops:restore-isolated": "node scripts/operations/restore-isolated-backup.mjs restore-isolated",
+    "f3:offline-intake": "node --experimental-strip-types scripts/f3-offline-intake.ts"
   },
   "dependencies": {
     "@prisma/client": "7.10.0",
