@@ -5,7 +5,8 @@ import {readFileSync} from "node:fs";
 import {canonicalJson,type Json} from "../src/lib/catalog-bundle-attestation.ts";
 import {catalogBundleAllowedSourceFields} from "../src/lib/catalog-bundle-source-boundary.ts";
 import {F2_EFFECTIVE_READ_TYPES,projectF2EffectiveCatalogView,
-  resolveF2EffectiveCatalogViews} from "../src/lib/catalog-f2-effective-view.ts";
+  resolveF2EffectiveCatalogViews,f2EffectiveCompositeMemberIds,
+  f2EffectiveCompositeMembersAuthorized} from "../src/lib/catalog-f2-effective-view.ts";
 
 const uuid=(n:number)=>"00000000-0000-4000-8000-"+String(n).padStart(12,"0");
 const organizationId=uuid(100),priceListId=uuid(200);
@@ -94,4 +95,63 @@ test("F2: bundle and paged configuration exports use effective snapshot after li
   assert.match(bundle,/verifyBundleFieldContract\(payload\)/);
   assert.match(paged,/records: effectiveShown/);
   assert.match(bundle,/groups\.push\(\{ entityType: type, records \}\)/);
+});
+
+test("F2: future panel and package memberships are only exported after CURRENT branch/department test-code checks",async()=>{
+  const codes=[
+    {testId:uuid(810),displayOrder:0,required:true,test:{code:"CBC"}},
+    {testId:uuid(811),displayOrder:1,required:false,test:{code:"CRP"}},
+  ];
+  for(const kind of ["PANEL","PACKAGE"] as const){
+    const entityId=uuid(kind==="PANEL"?901:902);
+    const source:Record<string,unknown>={};
+    for(const field of catalogBundleAllowedSourceFields[kind])source[field]=null;
+    Object.assign(source,{id:entityId,code:"COMPOSITE",
+      items:kind==="PANEL"?codes:codes.map(({required:_unused,...member})=>member),
+    });
+    const overlay=await resolveF2EffectiveCatalogViews({
+      catalogConfigurationRevision:{findMany:async()=>[{
+        entityId,afterSnapshot:source,desiredDigest:digest(source),
+      }]},
+    } as never,{organizationId,asOf:new Date("2026-11-01T00:00:00.000Z"),
+      records:[{entityType:kind,id:entityId}]});
+    const live=projectF2EffectiveCatalogView(kind,{
+      id:entityId,items:[],nameEn:"Existing name",organizationId,
+    },overlay);
+    const members=f2EffectiveCompositeMemberIds(kind,[live]);
+    assert.ok(members);
+    assert.equal(members.size,2);
+    assert.equal(members.get(uuid(810)),"CBC");
+    assert.equal(f2EffectiveCompositeMembersAuthorized(members,[
+      {id:uuid(810),code:"CBC"},{id:uuid(811),code:"CRP"},
+    ]),true);
+    assert.equal(f2EffectiveCompositeMembersAuthorized(members,[
+      {id:uuid(810),code:"CBC"},
+    ]),false,"out-of-department members are not silently omitted");
+    assert.equal(f2EffectiveCompositeMembersAuthorized(members,[
+      {id:uuid(810),code:"CBC"},{id:uuid(811),code:"SPOOF"},
+    ]),false,"linked test identity codes are checked from live scoped tests");
+    assert.deepEqual(live.organizationId,organizationId);
+    assert.equal(live.id,entityId);
+    assert.equal(f2EffectiveCompositeMemberIds(kind,[{id:entityId,
+      items:[...(source.items as object[]), (source.items as object[])[0]],
+    }]),null,"duplicate member ids are not allowed");
+  }
+  assert.equal(f2EffectiveCompositeMemberIds("PANEL",[{
+    id:uuid(902),items:[{testId:uuid(810),displayOrder:0,
+      required:true,test:{code:"CBC",private:true}}],
+  }]),null);
+});
+
+test("F2: both export modes cross-check every revised composite member against scoped source tests",()=>{
+  for(const file of [
+    "src/app/api/catalog/configuration-export/bundle/route.ts",
+    "src/app/api/catalog/configuration-export/route.ts",
+  ]){
+    const body=readFileSync(file,"utf8");
+    assert.match(body,/f2EffectiveCompositeMemberIds\(type,/);
+    assert.match(body,/f2EffectiveCompositeMembersAuthorized\(members,scopedTests\)/);
+    assert.match(body,/tx\.labTest\.findMany\(/);
+    assert.match(body,/where:\{\.\.\.testScope,id:\{in:\[\.\.\.members\.keys\(\)\]\}\}/);
+  }
 });
