@@ -5,6 +5,8 @@ import {parseF3UnverifiedDigestManifest}
   from "@/lib/f3-legacy-manifest-validator";
 import {reconcileF3LegacySource}
   from "@/lib/f3-legacy-source-reconciliation";
+import {f3MappedTargetsCurrentlyScoped}
+  from "@/lib/f3-legacy-target-scope";
 import {f3LiveLineageTargetsVisible}
   from "@/lib/f3-legacy-target-visibility";
 
@@ -122,6 +124,10 @@ export async function POST(request:NextRequest){
     if(!visible)return {
       error:"f3_lineage_target_scope_changed",code:409,
     } as const;
+    // Check current SQL ownership/existence after revalidating exact source
+    // table/target-type compatibility, before returning any target-linked
+    // classification as reconciled. Original/current branch scopes must be
+    // organization-wide and were checked above inside this tenant lock.
     let report:ReturnType<typeof reconcileF3LegacySource>;
     try{
       report=reconcileF3LegacySource({
@@ -132,6 +138,11 @@ export async function POST(request:NextRequest){
         return {error:"f3_lineage_source_mismatch",code:409} as const;
       throw error;
     }
+    if(!await f3MappedTargetsCurrentlyScoped(tx,{
+      organizationId:org,activeBranchIds:branches.map(branch=>branch.id),
+      lineage:rows,
+    }))return {error:"f3_mapped_target_scope_missing_or_revoked",
+      code:409} as const;
     await tx.auditEvent.create({data:{
       organizationId:org,branchId,actorUserId:session.user.id,
       action:"F3_LEGACY_DIGEST_RECONCILIATION_REVIEWED",
