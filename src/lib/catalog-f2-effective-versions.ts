@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Prisma } from "../../generated/prisma/client";
-import type { F2ApplyPlan } from "./catalog-f2-apply-plan.ts";
+import { verifyF2ApplyPlanIntegrity, type F2ApplyPlan } from "./catalog-f2-apply-plan.ts";
 import { validF2ClinicalIntervalNumbers } from "./catalog-f2-clinical-values.ts";
 import {
   signF2ApplicationJournal,verifyF2ApplicationJournal,
@@ -59,7 +59,7 @@ export async function applyF2EffectiveVersionsUnderLock(
   tx:Prisma.TransactionClient,plan:F2ApplyPlan,
   authority:F2EffectiveApplyAuthority,now:Date,
 ):Promise<F2EffectiveApplyResult>{
-  if(plan.format!=="F2_TEN_CLASS_EXECUTABLE_PLAN_V1"||
+  if(!verifyF2ApplyPlanIntegrity(plan)||
      !UUID.test(authority.organizationId)||!UUID.test(authority.branchId)||
      !UUID.test(authority.batchId)||!UUID.test(authority.actorUserId)||
      !UUID.test(authority.clinicalSignerId)||!UUID.test(authority.financialSignerId)||
