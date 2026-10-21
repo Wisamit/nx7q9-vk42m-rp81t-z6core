@@ -21,9 +21,14 @@ const verified=(tx:unknown,lineage:readonly F3LineageDecision[])=>
   });
 
 test("F3: source-target type, tenant and branch filters are rechecked in live SQL",async()=>{
-  const calls:Array<{model:string;args:any}>=[];
-  const query=(model:string)=>(async(args:any)=>{
-    calls.push({model,args});return args.where.id.in.map((id:string)=>({id}));
+  type LookupArgs={where:{
+    id:{in:string[]};organizationId?:string;status?:string;
+    component?:{test:{organizationId:string}};
+    priceList?:{organizationId:string;OR:Array<{branchId:null|{in:string[]}}>} ;
+  }};
+  const calls:Array<{model:string;args:LookupArgs}>=[];
+  const query=(model:string)=>(async(args:LookupArgs)=>{
+    calls.push({model,args});return args.where.id.in.map(id=>({id}));
   });
   const tx={
     labTest:{findMany:query("labTest")},
@@ -44,10 +49,11 @@ test("F3: source-target type, tenant and branch filters are rechecked in live SQ
     "labTest","referenceInterval","priceListItem","testPanel","orderSource"]);
   assert.equal(calls[0].args.where.organizationId,org);
   assert.equal(calls[0].args.where.status,"ACTIVE");
-  assert.equal(calls[1].args.where.component.test.organizationId,org);
+  assert.equal(calls[1].args.where.component?.test.organizationId,org);
   const tariff=calls[2].args.where.priceList;
+  assert.ok(tariff);
   assert.equal(tariff.organizationId,org);
-  assert.deepEqual(tariff.OR[1].branchId.in,branches);
+  assert.deepEqual(tariff.OR[1].branchId, {in:branches});
   assert.equal(calls[3].args.where.organizationId,org);
   assert.equal(calls[4].args.where.organizationId,org);
 });
