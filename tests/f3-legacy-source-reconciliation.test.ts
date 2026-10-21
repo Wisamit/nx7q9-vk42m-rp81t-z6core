@@ -4,6 +4,7 @@ import {buildF3LegacyExtractionManifest,type F3LegacySourceManifestInput}
   from "../src/lib/f3-legacy-extraction-manifest.ts";
 import {reconcileF3LegacySource,type F3LineageDecision}
   from "../src/lib/f3-legacy-source-reconciliation.ts";
+import {LEGACY_COVERAGE_SOURCES} from "../src/lib/legacy-source-coverage.ts";
 const uuid=(n:number)=>"00000000-0000-4000-8000-"+String(n).padStart(12,"0");
 const secret="f3-synthetic-reconciliation-secret-never-deploy-123456";
 const build=()=>{
@@ -15,8 +16,9 @@ const build=()=>{
         rows:[{"test name":"Synthetic Hb"},{"test name":"Synthetic Hb"}]},
       {name:"profile",columns:[{name:"profilname",accessType:"ACE_TYPE_202"}],
         rows:[{"profilname":"Synthetic Cbc"}]},
-      ...Array.from({length:13},(_,i)=>({
-        name:"Config"+String(i+1),
+      ...LEGACY_COVERAGE_SOURCES.filter(x=>
+        x.tableName!=="normal" && x.tableName!=="profile").map(({tableName})=>({
+        name:tableName,
         columns:[{name:"label",accessType:"ACE_TYPE_202"}],
         rows:[],
       })),
