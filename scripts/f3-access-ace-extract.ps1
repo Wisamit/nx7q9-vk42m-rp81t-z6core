@@ -123,7 +123,11 @@ if (Test-Path -LiteralPath $out) {
 }
 @{
   format='F3_ACE_OFFLINE_CONFIGURATION_EXTRACT_V1'
+  sourceName=[System.IO.Path]::GetFileName($source)
   sourceSha256=$sha
+  sourceBytes=(Get-Item -LiteralPath $source).Length
+  exportedAtUtc=[DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ss.fffZ',
+    [System.Globalization.CultureInfo]::InvariantCulture)
   sourceFileBytesHashedLocally=$true
   sourceIdentityExternallyAttested=$false
   migrated=$false
