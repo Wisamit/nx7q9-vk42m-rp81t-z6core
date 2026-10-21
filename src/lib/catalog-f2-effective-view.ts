@@ -106,7 +106,7 @@ export function projectF2EffectiveCatalogView<T extends {id:string}>(
  */
 export function f2EffectiveCompositeMemberIds(
   kind:"PANEL"|"PACKAGE",
-  records:readonly {id:string}[],
+  records:readonly {id:string;items?:unknown}[],
 ):ReadonlyMap<string,string>|null {
   const membership=new Map<string,string>();
   for(const row of records){
@@ -116,6 +116,7 @@ export function f2EffectiveCompositeMemberIds(
     for(const member of items){
       if(!isObj(member)||typeof member.testId!=="string"||
          !UUID.test(member.testId)||local.has(member.testId)||
+         typeof member.displayOrder!=="number"||
          !Number.isSafeInteger(member.displayOrder)||
          member.displayOrder<0||!isObj(member.test)||
          typeof member.test.code!=="string"||!member.test.code||
