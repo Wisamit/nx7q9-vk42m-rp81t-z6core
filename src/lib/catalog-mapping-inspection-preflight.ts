@@ -59,6 +59,7 @@ export async function runIndependentMappingPreflight(
   request: NextRequest, { params }: Context,
   onVerified?: MappingPreflightAction,
   includeBatchReconciliation = false,
+  allowSignedProvenanceValueChanges = false,
 ) {
   if(includeBatchReconciliation && request.method!=="GET")
     return opaqueError("mapping_inspection_batch_get_only",405);
@@ -162,6 +163,9 @@ export async function runIndependentMappingPreflight(
       stageEvidenceSeal:batch.summary && typeof batch.summary==="object" &&
         !Array.isArray(batch.summary) ? batch.summary.stageEvidenceSeal : null,
       batchMetadata:reviewStageBatchMetadata(batch),signingSecret:secret,
+      // Only the independent source-authority intake may inspect planned
+      // clinical/tariff DIFFERENCES; ordinary review remains strict.
+      allowGovernedValueDifferences:allowSignedProvenanceValueChanges ? true : undefined,
     });
     if (!stage.ok)
       return { error: stage.error, httpStatus: 409 } as const;
