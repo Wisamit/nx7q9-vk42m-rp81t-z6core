@@ -96,7 +96,9 @@ export function compileF2ApplyPlan(input:{
        !UUID.test(item.normalizedData.id) ||
        source.id!==item.normalizedData.id ||
        local.id!==item.normalizedData.id)return null;
-    const key=type+":"+source.id;
+    // MySQL CHAR(36) UUID comparisons can be case-insensitive: two source
+    // spellings must never schedule the SAME immutable target twice.
+    const key=type+":"+(source.id as string).toLowerCase();
     if(seen.has(key))return null;
     seen.add(key);
     const fields=[...catalogBundleAllowedSourceFields[type]].sort();
