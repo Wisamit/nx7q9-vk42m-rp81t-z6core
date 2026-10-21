@@ -60,8 +60,15 @@ test("F2 MariaDB: seven immutable master revisions survive real commit, idempote
   assert.ok(plan);
   assert.equal(plan.changedRows,7);
   type Row=mysql.RowDataPacket & Record<string,unknown>;
+  const sqlArgs=(values:unknown[]):Array<string|number|Date|null>=>values.map(value=>{
+    if(value===null||typeof value==="string"||
+       (typeof value==="number"&&Number.isFinite(value))||
+       (value instanceof Date&&Number.isFinite(value.getTime())))
+      return value;
+    throw Error("f2_synthetic_sql_argument_invalid");
+  });
   const select=async(query:string,values:unknown[])=>{
-    const [data]=await sql.query<mysql.RowDataPacket[]>(query,values);
+    const [data]=await sql.query<mysql.RowDataPacket[]>(query,sqlArgs(values));
     return data as Row[];
   };
   const safeJson=(v:unknown)=>typeof v==="string"?JSON.parse(v):v;
@@ -101,12 +108,12 @@ test("F2 MariaDB: seven immutable master revisions survive real commit, idempote
         const id=randomUUID();
         await sql.execute(
           "INSERT INTO catalog_config_revisions(id,organization_id,branch_id,source_batch_id,source_row_number,entity_type,entity_id,revision,effective_from,state,before_snapshot,after_snapshot,original_digest,desired_digest,plan_digest,created_by_user_id,clinical_signer_user_id,financial_signer_user_id) VALUES(?,?,?,?,?,?,?,?,?,'RECORDED',?,?,?,?,?,?,?,?)",
-          [id,data.organizationId,data.branchId,data.sourceBatchId,
+          sqlArgs([id,data.organizationId,data.branchId,data.sourceBatchId,
            data.sourceRowNumber,data.entityType,data.entityId,data.revision,
            data.effectiveFrom,JSON.stringify(data.beforeSnapshot),
            JSON.stringify(data.afterSnapshot),data.originalDigest,data.desiredDigest,
            data.planDigest,data.createdByUserId,data.clinicalSignerUserId,
-           data.financialSignerUserId]);
+           data.financialSignerUserId]));
         return {id};
       },
       updateMany:async({where,data}:{where:{id:string},data:{effectiveTo:Date}})=>{
@@ -120,12 +127,12 @@ test("F2 MariaDB: seven immutable master revisions survive real commit, idempote
       const id=randomUUID();
       await sql.execute(
         "INSERT INTO audit_events(id,organization_id,branch_id,actor_user_id,action,entity_type,entity_id,new_values) VALUES(?,?,?,?,?,?,?,?)",
-        [id,data.organizationId,data.branchId,data.actorUserId,data.action,
-         data.entityType,data.entityId,JSON.stringify(data.newValues)]);
+        sqlArgs([id,data.organizationId,data.branchId,data.actorUserId,data.action,
+         data.entityType,data.entityId,JSON.stringify(data.newValues)]));
       return {id};
     }},
   };
-  const insert=async(q:string,v:unknown[])=>sql.execute(q,v);
+  const insert=async(q:string,v:unknown[])=>sql.execute(q,sqlArgs(v));
   try{
     await insert("INSERT INTO organizations(id,code,name_en,updated_at) VALUES(?,?,?,NOW(3))",
       [organizationId,code+"O","Synthetic F2 Master Version Org"]);
