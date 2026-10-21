@@ -23,7 +23,8 @@ function matchesSnapshotDigest(snapshot:unknown,digest:unknown){
     return timingSafeEqual(current,Buffer.from(digest as string,"hex"));
   }catch{return false;}
 }
-function guard(plan:F2ApplyPlan,auth:F2EffectiveApplyAuthority,now:Date){
+function guard(plan:F2ApplyPlan,auth:F2EffectiveApplyAuthority,now:Date,
+  coordinatedNativeVersions=false){
   if(!verifyF2ApplyPlanIntegrity(plan)||
      ![auth.organizationId,auth.branchId,auth.batchId,
        auth.actorUserId,auth.clinicalSignerId,auth.financialSignerId].every(x=>UUID.test(x))||
@@ -39,11 +40,14 @@ function guard(plan:F2ApplyPlan,auth:F2EffectiveApplyAuthority,now:Date){
   const startsAt=new Date(plan.effectiveAt);
   if(!Number.isFinite(startsAt.getTime())||startsAt<=now)
     throw Error("f2_master_revision_requires_future_date");
-  const changed=plan.rows.filter(row=>row.operation!=="UNCHANGED");
-  if(!changed.length ||
-     changed.some(row=>!revisionTypes.has(row.entityType) ||
-       !["SCALAR_VERSIONED_CHANGE","COMPOSITE_MEMBERSHIP_CHANGE"]
-         .includes(row.operation)))
+  const allChanged=plan.rows.filter(row=>row.operation!=="UNCHANGED");
+  if(allChanged.some(row=>!revisionTypes.has(row.entityType)) &&
+     !coordinatedNativeVersions)
+    throw Error("f2_master_revision_unhandled_changed_class");
+  const changed=allChanged.filter(row=>revisionTypes.has(row.entityType));
+  if(!changed.length || changed.some(row=>
+     !["SCALAR_VERSIONED_CHANGE","COMPOSITE_MEMBERSHIP_CHANGE"]
+        .includes(row.operation)))
     throw Error("f2_master_revision_unhandled_changed_class");
   return {changed,startsAt};
 }
@@ -60,9 +64,10 @@ function guard(plan:F2ApplyPlan,auth:F2EffectiveApplyAuthority,now:Date){
 export async function recordF2CatalogMasterRevisionsUnderLock(
   tx:Prisma.TransactionClient,plan:F2ApplyPlan,
   auth:F2EffectiveApplyAuthority,now:Date,
+  coordinatedNativeVersions=false,
 ):Promise<{state:"MASTER_REVISIONS_RECORDED"|"MASTER_REVISIONS_ALREADY_RECORDED";
   count:number;revisionIds:readonly string[]}>{
-  const {changed,startsAt}=guard(plan,auth,now);
+  const {changed,startsAt}=guard(plan,auth,now,coordinatedNativeVersions);
   const batch=await tx.catalogImportBatch.findFirst({
     where:{id:auth.batchId,organizationId:auth.organizationId,
       sourceType:"CONFIG_BUNDLE_REVIEW",status:"DRAFT"},
