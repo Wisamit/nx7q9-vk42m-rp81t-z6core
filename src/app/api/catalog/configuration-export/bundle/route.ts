@@ -8,6 +8,10 @@ import { genericCatalogPriceScope } from "@/lib/catalog-generic-price-scope";
 import { BUNDLE_REVIEW_MAX_BYTES, BUNDLE_REVIEW_MAX_ROWS } from "@/lib/catalog-bundle-review";
 import { catalogExportTypes, type CatalogExportType } from "@/lib/catalog-configuration-export";
 import { bundleFieldContract, verifyBundleFieldContract } from "@/lib/catalog-bundle-field-contract";
+import {
+  F2_EFFECTIVE_READ_TYPES,resolveF2EffectiveCatalogViews,
+  projectF2EffectiveCatalogView,
+} from "@/lib/catalog-f2-effective-view";
 
 export const dynamic = "force-dynamic";
 
@@ -88,6 +92,9 @@ export async function GET(request: NextRequest) {
     const branchScope = { OR: [{ branchId: null }, { branchId: { in: branchIds } }] };
     const genericPriceScope = genericCatalogPriceScope(branchIds);
     const groups: Array<{ entityType: CatalogExportType; records: Array<{ id: string }> }> = [];
+    // Pin a single effective clock for all ten exported groups in the same
+    // locked transaction. Future/cancelled overlays are invisible.
+    const effectiveAt = new Date();
     let total = 0;
     for (const type of ordered.filter(value => requested.includes(value))) {
       const base = { orderBy: { id: "asc" as const }, take: BUNDLE_REVIEW_MAX_ROWS - total + 1 };
@@ -231,6 +238,18 @@ export async function GET(request: NextRequest) {
 
       if (records.length + total > BUNDLE_REVIEW_MAX_ROWS) {
         return { error: "bundle_export_too_many_rows", httpStatus: 413 } as const;
+      }
+      if(F2_EFFECTIVE_READ_TYPES.some(value=>value===type)&&records.length){
+        const readType=type as typeof F2_EFFECTIVE_READ_TYPES[number];
+        // The base fetch has already enforced tenant, branch, department,
+        // and (for PRICE_LIST) finance export scope. Overlay lookup may
+        // address ONLY those pre-authorized IDs.
+        const revisions=await resolveF2EffectiveCatalogViews(tx,{
+          organizationId,asOf:effectiveAt,
+          records:records.map(item=>({entityType:readType,id:item.id})),
+        });
+        records=records.map(item=>
+          projectF2EffectiveCatalogView(readType,item,revisions));
       }
       total += records.length;
       groups.push({ entityType: type, records });
