@@ -24,9 +24,11 @@ test("F2: tenant-scoped, bounded as-of reads return effective metadata but not f
   const testId=id(2),componentId=id(3);
   const testData=source("TEST",testId);
   const componentData=source("COMPONENT",componentId);
-  const args:unknown[]=[];
+  type OverlayQuery={where:{organizationId:string;entityType:string;
+    state:string;effectiveFrom:{lte:Date};OR:unknown}};
+  const args:OverlayQuery[]=[];
   const db={catalogConfigurationRevision:{
-    findMany:async(input:any)=>{
+    findMany:async(input:OverlayQuery)=>{
       args.push(input);
       if(input.where.entityType==="TEST")return [{
         entityId:testId,afterSnapshot:testData,desiredDigest:digest(testData),
@@ -43,11 +45,11 @@ test("F2: tenant-scoped, bounded as-of reads return effective metadata but not f
     records:[{entityType:"TEST",id:testId},{entityType:"COMPONENT",id:componentId}],
   });
   assert.equal(view.size,2);
-  assert.equal((args[0] as any).where.organizationId,organizationId);
-  assert.equal((args[0] as any).where.state,"RECORDED");
-  assert.equal((args[0] as any).where.effectiveFrom.lte.toISOString(),
+  assert.equal(args[0].where.organizationId,organizationId);
+  assert.equal(args[0].where.state,"RECORDED");
+  assert.equal(args[0].where.effectiveFrom.lte.toISOString(),
     "2026-11-01T00:00:00.000Z");
-  assert.deepEqual((args[0] as any).where.OR,
+  assert.deepEqual(args[0].where.OR,
     [{effectiveTo:null},{effectiveTo:{gt:new Date("2026-11-01T00:00:00.000Z")} }]);
   const base={id:testId,nameEn:"Old name",department:{id:id(12)},
     components:[{id:componentId,reportNameEn:"Old report"}]};
@@ -64,7 +66,7 @@ test("F2: tenant-scoped, bounded as-of reads return effective metadata but not f
 });
 test("F2: reject forged values, digest mismatch, overlaps and foreign UUID disclosure",async()=>{
   const target=id(8),data=source("TEST",target);
-  async function call(revisions:any[]){
+  async function call(revisions:Array<{entityId:string;afterSnapshot:unknown;desiredDigest:string}>){
     return resolveF2EffectiveCatalogViews({
       catalogConfigurationRevision:{findMany:async()=>revisions},
     } as never,{
