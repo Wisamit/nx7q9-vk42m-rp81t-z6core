@@ -52,8 +52,25 @@ function projections(code:string){
       if(!input||!ts.isObjectLiteralExpression(input))throw Error("F2: query input is dynamic "+model);
       const select=selectValue(input,"select");
       if(!ts.isObjectLiteralExpression(select))throw Error("F2: SELECT is dynamic "+model);
-      if(paths.has(model))throw Error("F2: ambiguous repeat query "+model);
-      paths.set(model,flattenSelect(select));
+      const fields=flattenSelect(select);
+      // The atomic export may additionally inspect a small {id,code}
+      // selection to authorize panel/package member tests. It is NOT a
+      // second exported record projection and must not replace the full
+      // field-complete bundle read.
+      const direct=[...new Set(fields.map(path=>path.split(".")[0]))].sort();
+      const kind=(Object.entries(models) as [CatalogExportType,string][])
+        .find(([,value])=>value===model)?.[0];
+      if(!kind)throw Error("F2: missing model type "+model);
+      const all=[...catalogBundleAllowedSourceFields[kind]].sort();
+      if(direct.join(",")!==all.join(",")){
+        if(model==="labTest" && fields.join(",")==="code,id") {
+          ts.forEachChild(node,visit);
+          return;
+        }
+        throw Error("F2: unexpected partial or extra query projection "+model);
+      }
+      if(paths.has(model))throw Error("F2: ambiguous full export query "+model);
+      paths.set(model,fields);
     }
     ts.forEachChild(node,visit);
   };
