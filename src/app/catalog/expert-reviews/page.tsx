@@ -22,8 +22,8 @@ export default async function CatalogExpertReviewsPage() {
         <p className="eyebrow">{tr(locale, "Governed Configuration", "حوكمة الإعدادات")}</p>
         <h1>{tr(locale, "Independent Expert Review", "المراجعة المستقلة من المختص")}</h1>
         <p className="muted">{tr(locale,
-          "Independent review of flagged catalog differences. No clinical or financial activation or approval is performed here.",
-          "مراجعة مستقلة للاختلافات المحالة في إعدادات المختبر، دون إجراء اعتماد أو تفعيل لأي قيم طبية أو مالية.")}</p>
+          "Review differences and record separately authenticated technical sign-off decisions. Applying changes requires its own governed workflow.",
+          "مراجعة الاختلافات وتسجيل قرارات التوقيع التقني المستقلة. تطبيق التغييرات يحتاج مساراً منفصلاً محكوماً بالصلاحيات.")}</p>
       </div>
       <div className="header-actions">
         <Link className="secondary-link" href="/catalog">
