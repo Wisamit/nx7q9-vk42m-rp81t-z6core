@@ -19,7 +19,8 @@ function fixture(){
   const rows=[...catalogExportTypes].map((entityType,i)=>{
     const source:Record<string,unknown>={};
     for(const field of catalogBundleAllowedSourceFields[entityType])source[field]=null;
-    source.id=id(i+11);source.code="C"+i;
+    source.id=id(i+11);
+    if(Object.hasOwn(source,"code"))source.code="C"+i;
     source.createdAt="2026-01-01T00:00:00.000Z";
     source.updatedAt="2026-10-21T00:00:00.000Z";
     if(["PRICE_LIST_ITEM","PRICE_LIST_PACKAGE_ITEM","REFERENCE_INTERVAL"].includes(entityType)){
