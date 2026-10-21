@@ -2,7 +2,7 @@ import type {F3LegacyExtractionManifest,F3LegacyRowEvidence}
   from "./f3-legacy-extraction-manifest.ts";
 import {legacyRowTargets} from "./catalog-legacy-row-lineage.ts";
 
-const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SHA=/^[0-9a-f]{64}$/;
 export type F3LegacyDisposition=
   "UNRESOLVED"|"AMBIGUOUS"|"NOT_IMPORTED"|"MAPPED"|"APPROVED_MAPPING";
