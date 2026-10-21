@@ -1,3 +1,4 @@
+import {createHash,timingSafeEqual} from "node:crypto";
 import type {Prisma} from "../../generated/prisma/client";
 import {canonicalJson,type Json} from "./catalog-bundle-attestation.ts";
 import {verifyF2ApplyPlanIntegrity,type F2ApplyPlan} from "./catalog-f2-apply-plan.ts";
@@ -13,6 +14,15 @@ const same=(a:unknown,b:unknown)=>{
   try{return canonicalJson(a as Json)===canonicalJson(b as Json);}
   catch{return false;}
 };
+const SHA=/^[0-9a-f]{64}$/;
+function matchesSnapshotDigest(snapshot:unknown,digest:unknown){
+  if(!SHA.test(String(digest)))return false;
+  try{
+    const current=createHash("sha256").update(
+      canonicalJson(snapshot as Json)).digest();
+    return timingSafeEqual(current,Buffer.from(digest as string,"hex"));
+  }catch{return false;}
+}
 function guard(plan:F2ApplyPlan,auth:F2EffectiveApplyAuthority,now:Date){
   if(!verifyF2ApplyPlanIntegrity(plan)||
      ![auth.organizationId,auth.branchId,auth.batchId,
@@ -88,7 +98,7 @@ export async function recordF2CatalogMasterRevisionsUnderLock(
         entityId:row.targetId,state:"RECORDED"},
       orderBy:{revision:"desc"},take:2,
       select:{id:true,revision:true,effectiveFrom:true,effectiveTo:true,
-        afterSnapshot:true},
+        afterSnapshot:true,desiredDigest:true},
     });
     if(prior.length>1 && prior[1].revision===prior[0].revision)
       throw Error("f2_master_revision_history_corrupt");
@@ -96,6 +106,7 @@ export async function recordF2CatalogMasterRevisionsUnderLock(
     if(latest && (latest.effectiveFrom>=startsAt||
        latest.effectiveFrom>now||
        latest.effectiveTo!==null||
+       !matchesSnapshotDigest(latest.afterSnapshot,latest.desiredDigest)||
        !same(latest.afterSnapshot,row.originalSnapshot)))
       throw Error("f2_master_revision_prior_version_conflict");
     if(latest){
@@ -152,12 +163,13 @@ export async function resolveF2CatalogMasterAsOf(
       entityId:scope.entityId,state:"RECORDED",
       effectiveFrom:{lte:scope.asOf},
       OR:[{effectiveTo:null},{effectiveTo:{gt:scope.asOf}}]},
-    select:{afterSnapshot:true},take:2,orderBy:{revision:"desc"},
+    select:{afterSnapshot:true,desiredDigest:true},take:2,orderBy:{revision:"desc"},
   });
   if(matches.length>1)throw Error("f2_master_revision_overlapping_effective_period");
   const snapshot=matches[0]?.afterSnapshot;
   if(snapshot===undefined)return null;
-  if(!item(snapshot)||snapshot.id!==scope.entityId)
+  if(!item(snapshot)||snapshot.id!==scope.entityId||
+     !matchesSnapshotDigest(snapshot,matches[0].desiredDigest))
     throw Error("f2_master_revision_snapshot_corrupt");
   return snapshot;
 }
