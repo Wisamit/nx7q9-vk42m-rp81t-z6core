@@ -40,6 +40,31 @@ const run=(lineage:F3LineageDecision[],manifest=build().manifest)=>
     manifest,lineage,tenantAndTargetScopeVerified:true,
   });
 
+test("F3: offline manifest envelope matches the canonical source evidence contract",()=>{
+  const {manifest}=build();
+  assert.deepEqual({
+    format:manifest.format,status:manifest.status,
+    organizationId:manifest.organizationId,
+    sourceSha256Length:manifest.sourceSha256.length,
+    digestKeyIdLength:manifest.digestKeyId.length,
+    tableCount:manifest.tableCount,tableLength:manifest.tables.length,
+    rowCount:manifest.rowCount,rowLength:manifest.rows.length,
+    sourceBytesVerified:manifest.sourceBytesVerified,
+    crossInstallationMappingApproved:manifest.crossInstallationMappingApproved,
+    realLegacyParityVerified:manifest.realLegacyParityVerified,
+    clinicalFinanceApproved:manifest.clinicalFinanceApproved,
+    operationalReady:manifest.operationalReady,
+  },{
+    format:"F3_LEGACY_SOURCE_FINGERPRINT_V1",
+    status:"SYNTHETIC_OR_OFFLINE_EXTRACT_UNVERIFIED",
+    organizationId:uuid(1),sourceSha256Length:64,digestKeyIdLength:64,
+    tableCount:15,tableLength:15,rowCount:3,rowLength:3,
+    sourceBytesVerified:false,crossInstallationMappingApproved:false,
+    realLegacyParityVerified:false,clinicalFinanceApproved:false,
+    operationalReady:false,
+  });
+});
+
 test("F3: synthetic row-to-target classifications reconcile exact schema/HMAC occurrence IDs",()=>{
   const {manifest,lineage}=build();
   const r=run(lineage,manifest);
