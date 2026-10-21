@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import {readFileSync} from "node:fs";
 import {buildF3LegacyExtractionManifest,type F3LegacySourceManifestInput}
   from "../src/lib/f3-legacy-extraction-manifest.ts";
 import {reconcileF3LegacySource,type F3LineageDecision}
@@ -154,7 +155,7 @@ test("F3: a valid source HMAC cannot be mapped to the wrong target class",()=>{
   }
 });
 
-test("F3: legacy manual-only Gropes cannot fabricate a direct GROUP mapping",()=>{
+test("F3: Gropes can legitimately map to PANEL or PACKAGE but not an invented GROUP target",()=>{
   const input:F3LegacySourceManifestInput={
     organizationId:uuid(1),sourceSha256:"a".repeat(64),
     digestKeyId:"b".repeat(64),
@@ -170,8 +171,28 @@ test("F3: legacy manual-only Gropes cannot fabricate a direct GROUP mapping",()=
     classification:"APPROVED_MAPPING",targetType:"GROUP",targetId:uuid(99),
   }];
   assert.throws(()=>run(lineage,manifest),/incompatible_source_target/);
+  for(const supported of ["PANEL","PACKAGE"]){
+    const mapped=run([{...lineage[0],targetType:supported}],manifest);
+    assert.equal(mapped.dispositions.APPROVED_MAPPING,1);
+    assert.equal(mapped.syntheticFullyClassified,false,
+      "single-table evidence is not 15-table parity");
+  }
   const deferred=run([{...lineage[0],classification:"UNRESOLVED",
     targetType:null,targetId:null}],manifest);
   assert.equal(deferred.syntheticFullyClassified,false);
   assert.equal(deferred.dispositions.UNRESOLVED,1);
+});
+
+test("F3: reconciliation reuses canonical multi-target contract, not one arbitrary guessed class",()=>{
+  const {manifest,lineage}=build();
+  const profileAsPackage=run(lineage.map((entry,i)=>i===2?
+    {...entry,targetType:"PACKAGE"}:entry),manifest);
+  assert.equal(profileAsPackage.syntheticFullyClassified,true,
+    "profile may map to a package as defined by legacy-row-lineage");
+  const unknownClass=run(lineage.map((entry,i)=>i===0?
+    {...entry,classification:"UNRESOLVED",targetType:null,targetId:null}:entry),manifest);
+  assert.equal(unknownClass.syntheticFullyClassified,false);
+  const code=readFileSync("src/lib/f3-legacy-source-reconciliation.ts","utf8");
+  assert.match(code,/import \{legacyRowTargets\}/);
+  assert.match(code,/allowedTypes\.includes\(item\.targetType\)/);
 });
