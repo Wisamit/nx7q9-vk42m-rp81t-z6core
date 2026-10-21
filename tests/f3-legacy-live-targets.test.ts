@@ -16,7 +16,7 @@ const row=(sourceTable:string,targetType:string,targetId:string):F3LineageDecisi
 });
 test("F3: target existence verification batches IDs by class and validates org/parent relationships",async()=>{
   const calls:Array<{kind:string;where:Record<string,unknown>}>=[],records=[
-    row("test","TEST",id(11)),
+    row("Test name","TEST",id(11)),
     row("Test name","TEST",id(12)),
     row("normal","REFERENCE_INTERVAL",id(13)),
     row("price","PRICE_LIST_ITEM",id(14)),
@@ -50,7 +50,7 @@ test("F3: target existence verification batches IDs by class and validates org/p
   assert.deepEqual(price?.where.test,{organizationId:org});
 });
 test("F3: missing, foreign, duplicated or unverified target never yields false parity",async()=>{
-  const original=row("test","TEST",id(11));
+  const original=row("Test name","TEST",id(11));
   let lookups=0;
   const db={labTest:{findMany:async()=>{
     lookups++;return [];
