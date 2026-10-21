@@ -39,6 +39,8 @@ export async function GET() {
     });
     const effectiveTests=tests.map(row=>({
       ...projectF2EffectiveCatalogView("TEST",row,overlays),
+      defaultUnit:row.defaultUnit?
+        projectF2EffectiveCatalogView("UNIT",row.defaultUnit,overlays):null,
       components:row.components.map(component=>
         projectF2EffectiveCatalogView("COMPONENT",component,overlays))
         .sort((a,b)=>a.displayOrder-b.displayOrder||a.code.localeCompare(b.code)),
