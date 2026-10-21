@@ -15,6 +15,8 @@ import {verifyCatalogApprovalHistory,
   type CatalogApprovalContext} from "./catalog-f2-approval-evidence.ts";
 import {catalogDriftObservationToken} from "./catalog-drift-triage.ts";
 import {createHash} from "node:crypto";
+import {recoverF2PreApplyObservationsUnderLock}
+  from "./catalog-f2-reversal-source.ts";
 
 type Session=NonNullable<Awaited<ReturnType<typeof getCurrentSession>>>;
 type Failure={ok:false;code:string};
@@ -42,17 +44,24 @@ const grants=(roles:readonly {role:{status:string;organizationId:string;
  */
 export async function applyF2ConfigurationFromVerifiedDatabaseUnderLock(
   tx:Prisma.TransactionClient,session:Session,batchId:string,now:Date,
+  mode:"APPLY"|"REVERSE"="APPLY",
 ):Promise<Failure|Success>{
   const org=session.user.organizationId,actor=session.user.id;
-  if(!UUID.test(batchId)||!Number.isFinite(now.getTime()))
+  if(!["APPLY","REVERSE"].includes(mode)||
+     !UUID.test(batchId)||!Number.isFinite(now.getTime()))
     return fail("f2_apply_invalid_context");
+  const operatorPermission=mode==="REVERSE"?
+    "catalog.configuration.reverse":"catalog.configuration.apply";
   const currentUser=await tx.user.findFirst({
     where:{id:actor,organizationId:org,status:"ACTIVE"},
     select:{roles:{include:{role:{include:{
       permissions:{include:{permission:true}},
     }}}}},
   });
-  if(!currentUser||!ALL.every(x=>grants(currentUser.roles,org).has(x)))
+  if(!currentUser||!ALL.every(x=>
+     grants(currentUser.roles,org).has(
+       x==="catalog.configuration.apply"?operatorPermission:x,
+     )))
     return fail("f2_apply_permission_revoked");
   const branch=await tx.branch.findFirst({
     where:{id:session.activeBranchId||"",organizationId:org,status:"ACTIVE"},
@@ -144,17 +153,30 @@ export async function applyF2ConfigurationFromVerifiedDatabaseUnderLock(
   }
   const live=await readCatalogLiveObservations(tx,scope,grantedBranchIds,byType);
   if(!live)return fail("f2_apply_live_scope_changed");
-  const snapshot=createHash("sha256");
-  const rows=all.map(row=>{
+  const currentRows=all.map(row=>{
     const id=(row.normalizedData as {id:string}).id;
     const observation=live.get(row.entityType+":"+id);
-    if(!observation)return null;
-    const digest=catalogDriftObservationToken(secret,batch.sourceChecksum!,
-      row.rowNumber,row.entityType,row.sourceData,observation);
-    snapshot.update(JSON.stringify([row.rowNumber,row.entityType,digest]));
-    return {...row,scopedLiveData:observation};
+    return observation?{...row,scopedLiveData:observation}:null;
   });
-  if(rows.some(row=>row===null))return fail("f2_apply_live_record_missing");
+  if(currentRows.some(row=>row===null))
+    return fail("f2_apply_live_record_missing");
+  const approvedRows=currentRows.filter((row):row is
+    NonNullable<typeof row>=>row!==null);
+  const recovered=mode==="REVERSE"?
+    await recoverF2PreApplyObservationsUnderLock(tx,{
+      organizationId:org,branchId:scope.branchId,batchId,secret,
+      rows:approvedRows,now,
+    }):approvedRows;
+  if(!recovered)return fail("f2_reverse_signed_preapply_history_invalid");
+  // Match ORIGINAL approved live observations; closed native rows must
+  // use authenticated signed before-snapshots, never request JSON.
+  const snapshot=createHash("sha256");
+  const rows=recovered;
+  for(const row of rows){
+    const digest=catalogDriftObservationToken(secret,batch.sourceChecksum!,
+      row.rowNumber,row.entityType,row.sourceData,row.scopedLiveData);
+    snapshot.update(JSON.stringify([row.rowNumber,row.entityType,digest]));
+  }
   const policyEvents=await tx.auditEvent.findMany({
     where:{organizationId:org,entityType:"CatalogImportBatch",entityId:batchId,
       action:"CATALOG_BUNDLE_SIGNATORY_POLICY_DRAFT_RECORDED"},
@@ -229,8 +251,8 @@ export async function applyF2ConfigurationFromVerifiedDatabaseUnderLock(
       fullDomainSignatoryGrantsCurrentlyVerified:true,
       currentOperatorScopesVerified:true,
       independentlyVerifiedInstallationMapping:true,
-    },rows:rows.filter((x):x is NonNullable<typeof x>=>x!==null),
-    approvals:approvalEvents,secret,now,mode:"APPLY",
+      ...(mode==="REVERSE"?{appliedVersionJournalValidated:true as const}:{}),
+    },rows,approvals:approvalEvents,secret,now,mode,
   });
   const changedRows="changedRows" in result ? result.changedRows :
     result.nativeChangedRows+result.masterChangedRows;
