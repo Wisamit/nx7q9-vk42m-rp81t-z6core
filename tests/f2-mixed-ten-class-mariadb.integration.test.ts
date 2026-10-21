@@ -66,7 +66,7 @@ function revisionClient(sql:mysql.Connection,override:{
           [...values,opts.take??5000]);
         return data.map(row=>({
           id:row.id,sourceRowNumber:row.source_row_number,
-          organizationId:row.organization_id,
+          organizationId:row.organization_id,branchId:row.branch_id,
           entityType:row.entity_type,entityId:row.entity_id,
           state:row.state,revision:row.revision,
           effectiveFrom:row.effective_from,effectiveTo:row.effective_to,
@@ -248,7 +248,8 @@ test("F2 actual MariaDB: ten-class mixed governed apply is atomic across native 
     const [result]=await sql.execute<mysql.RowDataPacket[]>(q,args.map(asSql));
     return Number(result[0].count);
   };
-  const invoke=async(failOnFirstRevisionCreate:boolean)=>{
+  const invoke=async(failOnFirstRevisionCreate:boolean,
+    mode:"APPLY"|"REVERSE"="APPLY")=>{
     await sql.beginTransaction();
     try{
       const [locks]=await sql.execute<mysql.RowDataPacket[]>(
@@ -259,7 +260,7 @@ test("F2 actual MariaDB: ten-class mixed governed apply is atomic across native 
       const revisions=revisionClient(sql,{failOnFirstRevisionCreate});
       const outcome=await executeF2GovernedApplicationUnderLock({
         ...base,...revisions,
-      } as never,input);
+      } as never,{...input,mode});
       await sql.commit();
       return outcome;
     }catch(error){
@@ -347,6 +348,47 @@ test("F2 actual MariaDB: ten-class mixed governed apply is atomic across native 
     assert.equal(await scalar(
       "SELECT COUNT(*) AS count FROM price_list_items WHERE price_list_id=?",[priceListId]),2,
       "replay must not create an additional billed tariff");
+    // The same signed, frozen pre-apply observations support an independent
+    // compensating reversal while the change is still future-effective.
+    // SQL must preserve every clone as retired/cancelled history, never DELETE.
+    const reversed=await invoke(false,"REVERSE");
+    assert.equal(reversed.state,"TEN_CLASS_CONFIGURATION_REVERSED");
+    if(reversed.state!=="TEN_CLASS_CONFIGURATION_REVERSED")
+      throw Error("f2_mixed_expected_reverse_result");
+    assert.equal(reversed.nativeChangedRows,3);
+    assert.equal(reversed.masterChangedRows,7);
+    assert.equal(await scalar(
+      "SELECT COUNT(*) AS count FROM catalog_config_revisions WHERE source_batch_id=? AND state='CANCELLED'",
+      [batchId]),7);
+    assert.equal(await scalar(
+      "SELECT COUNT(*) AS count FROM price_list_items WHERE price_list_id=? AND status='INACTIVE'",
+      [priceListId]),1);
+    assert.equal(await scalar(
+      "SELECT COUNT(*) AS count FROM price_list_package_items WHERE price_list_id=? AND status='INACTIVE'",
+      [priceListId]),1);
+    assert.equal(await scalar(
+      "SELECT COUNT(*) AS count FROM reference_intervals WHERE component_id=? AND approval_status='RETIRED'",
+      [componentId]),1);
+    assert.equal(await scalar(
+      "SELECT COUNT(*) AS count FROM price_list_items WHERE id=? AND effective_to IS NULL AND status='ACTIVE'",
+      [itemId]),1);
+    assert.equal(await scalar(
+      "SELECT COUNT(*) AS count FROM price_list_package_items WHERE id=? AND effective_to IS NULL AND status='ACTIVE'",
+      [packageItemId]),1);
+    assert.equal(await scalar(
+      "SELECT COUNT(*) AS count FROM reference_intervals WHERE id=? AND effective_to IS NULL AND approval_status='APPROVED'",
+      [intervalId]),1);
+    // Reversals are idempotent, and neither replay nor a later APPLY may
+    // recreate the previously compensated future versions.
+    const secondReversal=await invoke(false,"REVERSE");
+    assert.equal(secondReversal.state,"TEN_CLASS_CONFIGURATION_REVERSED");
+    assert.equal(await scalar(
+      "SELECT COUNT(*) AS count FROM catalog_config_revisions WHERE source_batch_id=?",[batchId]),7);
+    await assert.rejects(()=>invoke(false,"APPLY"),
+      /f2_apply_batch_previously_reversed/);
+    assert.equal(await scalar(
+      "SELECT COUNT(*) AS count FROM price_list_items WHERE price_list_id=?",[priceListId]),2);
+
   }finally{
     await sql.rollback().catch(()=>{});
     for(const statement of [
