@@ -107,3 +107,24 @@ test("F2: preserve allowed display ties while rejecting case-insensitive repeate
   assert.deepEqual([...panelTie.keys()],[alpha,another],
     "tie-breaking is stable regardless of incoming array order");
 });
+
+test("F2: order tariff, package membership, test names, invoice tax day and order timestamp share ONE as-of instant",()=>{
+  const route=readFileSync("src/app/api/orders/route.ts","utf8");
+  const pricing=readFileSync("src/lib/pricing.ts","utf8");
+  assert.match(route,/const catalogAsOf = new Date\(\)/);
+  assert.match(route,/asOf:catalogAsOf/);
+  assert.match(route,/const orderQuestionAsOf = catalogAsOf/);
+  assert.match(route,/const invoiceIssuedAt = catalogAsOf/);
+  assert.match(route,/orderedAt: catalogAsOf/);
+  const direct=route.match(/resolveTestPrice\(prisma,\s*\{[\s\S]*?\}\)/)?.[0];
+  const bundled=route.match(/resolvePackagePrice\(prisma,\s*\{[\s\S]*?\}\)/)?.[0];
+  assert.ok(direct,"the direct-test tariff resolver must be wired");
+  assert.ok(bundled,"the package tariff resolver must be wired");
+  assert.match(direct,/at: catalogAsOf/);
+  assert.match(bundled,/at: catalogAsOf/);
+  assert.match(pricing,/const at = input\.at \?\? new Date\(\)/);
+  assert.match(route,/localCalendarDate\(invoiceIssuedAt, orderingBranch\.timezone\)/);
+  const segment=route.slice(route.indexOf("const catalogAsOf = new Date()"),
+    route.indexOf("const selectedTaxRules ="));
+  assert.doesNotMatch(segment,/resolve(?:Test|Package)Price\(prisma,[\s\S]*?at: new Date\(\)/);
+});
