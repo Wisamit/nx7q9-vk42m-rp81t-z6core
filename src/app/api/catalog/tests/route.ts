@@ -1,18 +1,55 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentSession, permissionSet } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import {
+  projectF2EffectiveCatalogView,resolveF2EffectiveCatalogViews,
+} from "@/lib/catalog-f2-effective-view";
 
 export async function GET() {
   const session = await getCurrentSession();
   if (!session) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   if (!permissionSet(session).has("catalog.view")) return NextResponse.json({ error: "forbidden" }, { status: 403 });
 
-  const [tests, departments, specimenTypes, containers, methods, units] = await Promise.all([prisma.labTest.findMany({
-    where: { organizationId: session.user.organizationId },
-    include: { department: true, specimenType: true, defaultUnit: true, components: { orderBy: { displayOrder: "asc" } } },
-    orderBy: [{ status: "asc" }, { nameEn: "asc" }],
-  }), prisma.department.findMany({ where: { organizationId: session.user.organizationId, status: "ACTIVE" }, orderBy: { nameEn: "asc" } }), prisma.specimenType.findMany({ where: { organizationId: session.user.organizationId, status: "ACTIVE" }, orderBy: { nameEn: "asc" } }), prisma.container.findMany({ where: { organizationId: session.user.organizationId, status: "ACTIVE" }, orderBy: { nameEn: "asc" } }), prisma.method.findMany({ where: { organizationId: session.user.organizationId, status: "ACTIVE" }, orderBy: { nameEn: "asc" } }), prisma.unit.findMany({ where: { organizationId: session.user.organizationId, status: "ACTIVE" }, orderBy: { code: "asc" } })]);
-  return NextResponse.json({ tests, departments, specimenTypes, containers, methods, units });
+  const organizationId=session.user.organizationId;
+  const result=await prisma.$transaction(async tx=>{
+    const asOf=new Date();
+    const [tests,departments,specimenTypes,containers,methods,units]=await Promise.all([
+      tx.labTest.findMany({
+        where:{organizationId},
+        include:{department:true,specimenType:true,defaultUnit:true,
+          components:{orderBy:{displayOrder:"asc"}}},
+        orderBy:[{status:"asc"},{nameEn:"asc"}],
+      }),
+      tx.department.findMany({where:{organizationId,status:"ACTIVE"},orderBy:{nameEn:"asc"}}),
+      tx.specimenType.findMany({where:{organizationId,status:"ACTIVE"},orderBy:{nameEn:"asc"}}),
+      tx.container.findMany({where:{organizationId,status:"ACTIVE"},orderBy:{nameEn:"asc"}}),
+      tx.method.findMany({where:{organizationId,status:"ACTIVE"},orderBy:{nameEn:"asc"}}),
+      tx.unit.findMany({where:{organizationId,status:"ACTIVE"},orderBy:{code:"asc"}}),
+    ]);
+    const targets=[
+      ...tests.map(row=>({entityType:"TEST" as const,id:row.id})),
+      ...tests.flatMap(row=>row.components.map(component=>({
+        entityType:"COMPONENT" as const,id:component.id,
+      }))),
+      ...units.map(row=>({entityType:"UNIT" as const,id:row.id})),
+      ...containers.map(row=>({entityType:"CONTAINER" as const,id:row.id})),
+    ];
+    const overlays=await resolveF2EffectiveCatalogViews(tx,{
+      organizationId,asOf,records:targets,
+    });
+    return {
+      tests:tests.map(row=>({
+        ...projectF2EffectiveCatalogView("TEST",row,overlays),
+        components:row.components.map(component=>
+          projectF2EffectiveCatalogView("COMPONENT",component,overlays)),
+      })),
+      departments,specimenTypes,
+      containers:containers.map(row=>projectF2EffectiveCatalogView("CONTAINER",row,overlays)),
+      methods,
+      units:units.map(row=>projectF2EffectiveCatalogView("UNIT",row,overlays)),
+    };
+  },{isolationLevel:"RepeatableRead",timeout:30000});
+  return NextResponse.json(result);
 }
 
 export async function POST(request: NextRequest) {
