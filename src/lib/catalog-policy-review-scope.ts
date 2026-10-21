@@ -325,14 +325,24 @@ function sameLiveMembership(
 export function sameLiveScalarIdentity(
   type: "TEST" | "UNIT" | "CONTAINER",
   staged: unknown, live: unknown,
+  allowGovernedValueDifferences = false,
 ): boolean {
   const n = object(staged), current = object(live);
   if (!n || !current) return false;
+  // Only the signed, dual-domain governed application may plan versioned
+  // display/status changes. Ordinary independent reviewer parity remains
+  // strict and refuses any difference from the reviewed staged values.
   const fields = type === "TEST"
-    ? ["code", "nameEn", "departmentId", "status"]
+    ? (allowGovernedValueDifferences
+      ? ["code", "departmentId"]
+      : ["code", "nameEn", "departmentId", "status"])
     : type === "UNIT"
-      ? ["code", "symbol", "status"]
-      : ["code", "nameEn", "nameAr", "tubeColor", "additive", "status"];
+      ? (allowGovernedValueDifferences
+        ? ["code", "symbol"]
+        : ["code", "symbol", "status"])
+      : (allowGovernedValueDifferences
+        ? ["code"] : ["code", "nameEn", "nameAr", "tubeColor",
+          "additive", "status"]);
   return fields.every(field =>
     Object.hasOwn(n, field) && current[field] === n[field]);
 }
@@ -417,6 +427,7 @@ export function sameLiveTariffReviewIdentity(
 export function sameLiveClinicalReviewIdentity(
   type: "COMPONENT" | "REFERENCE_INTERVAL",
   staged: unknown, live: unknown,
+  allowGovernedValueDifferences = false,
 ): boolean {
   const n = object(staged), current = object(live);
   if (!n || !current || typeof n.id !== "string" ||
@@ -424,7 +435,9 @@ export function sameLiveClinicalReviewIdentity(
   if (type === "COMPONENT") {
     const test = object(current.test);
     return !!test &&
-      ["testId", "unitId", "code", "nameEn", "status"].every(field =>
+      (allowGovernedValueDifferences
+        ? ["testId", "unitId", "code"]
+        : ["testId", "unitId", "code", "nameEn", "status"]).every(field =>
         Object.hasOwn(n, field) && n[field] === current[field]) &&
       typeof n.testCode === "string" && n.testCode === test.code;
   }
@@ -657,7 +670,8 @@ export async function validatePolicyReviewBatchScope(
         row.entityType !== "CONTAINER") continue;
     const n = object(row.normalizedData);
     const live = scalarMasters[row.entityType].get(n?.id as string);
-    if (!sameLiveScalarIdentity(row.entityType, n, live))
+    if (!sameLiveScalarIdentity(row.entityType, n, live,
+        input.allowGovernedValueDifferences === true))
       return { ok: false, error: "policy_review_batch_scope_changed" };
   }
 
@@ -753,7 +767,8 @@ export async function validatePolicyReviewBatchScope(
         row.entityType !== "REFERENCE_INTERVAL") continue;
     const n = object(row.normalizedData);
     const live = clinicalMasters[row.entityType].get(n?.id as string);
-    if (!sameLiveClinicalReviewIdentity(row.entityType, n, live))
+    if (!sameLiveClinicalReviewIdentity(row.entityType, n, live,
+        input.allowGovernedValueDifferences === true))
       return { ok: false, error: "policy_review_batch_scope_changed" };
     if (row.entityType === "REFERENCE_INTERVAL" &&
         !sameLiveReferenceIntervalMedicalSnapshot(row.sourceData, live,
@@ -791,7 +806,8 @@ export async function validatePolicyReviewBatchScope(
     const n = object(row.normalizedData);
     const live = row.entityType === "PANEL"
       ? panelMap.get(n?.id as string) : packageMap.get(n?.id as string);
-    if (!live || !sameLiveMembership(row.entityType, n?.items, live))
+    if (!live || (input.allowGovernedValueDifferences !== true &&
+        !sameLiveMembership(row.entityType, n?.items, live)))
       return { ok: false, error: "policy_review_batch_scope_changed" };
   }
   return { ok: true };
