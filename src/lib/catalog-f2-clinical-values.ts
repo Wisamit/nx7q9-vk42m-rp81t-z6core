@@ -21,7 +21,7 @@ function decimalValue(raw:unknown,integerDigits:number,fractionDigits:number):bi
   const regex=new RegExp(`^(-?)(?:0|[1-9][0-9]{0,${integerDigits-1}})(?:\\.([0-9]{1,${fractionDigits}}))?$`);
   const match=regex.exec(raw);
   if(!match)return undefined;
-  const sign=match[1]==="-"?-1n:1n;
+  const sign=match[1]==="-"?-BigInt(1):BigInt(1);
   const [intPart,fraction=""]=raw.replace(/^-/, "").split(".");
   return sign*BigInt(intPart+fraction.padEnd(fractionDigits,"0"));
 }
@@ -41,7 +41,7 @@ export function validF2ClinicalIntervalNumbers(value:unknown):boolean{
   }
   for(const field of ["ageFrom","ageTo","gestationalAgeFromWeeks",
     "gestationalAgeToWeeks"] as NumericField[]){
-    if(v[field]!==null && v[field]! < 0n)return false;
+    if(v[field]!==null && v[field]! < BigInt(0))return false;
   }
   for(const [low,high] of [
     ["ageFrom","ageTo"],["gestationalAgeFromWeeks","gestationalAgeToWeeks"],
