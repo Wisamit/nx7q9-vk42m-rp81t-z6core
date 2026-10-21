@@ -27,7 +27,7 @@ test("F2: technical approval POST is credentialed, anti-CSRF, branch-scoped and 
   assert.match(source,/validatePolicyReviewBatchScope\(tx,/);
   assert.match(source,/verifyBranchScopedPolicyDraftHistory\(/);
   assert.match(source,/Object\.values\(draft\.proposal\)\.includes\("UNDECIDED"\)/);
-  assert.match(source,/readCatalogLiveObservations\(tx,scope,grantedBranchIds,byType\)/);
+  assert.match(source,/readF2EffectiveLiveObservations\(tx,scope,grantedBranchIds,byType,new Date\(\)\)/);
   assert.match(source,/f2GovernedReadinessPreview\(/);
   assert.match(source,/catalogDriftObservationToken\(/);
   assert.match(source,/verifyCatalogApprovalHistory\(/);
