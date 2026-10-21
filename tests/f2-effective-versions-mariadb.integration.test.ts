@@ -160,6 +160,22 @@ test("F2 MariaDB: atomic synthetic price/package/range versions and compensating
     const replay=await transaction(tx=>applyF2EffectiveVersionsUnderLock(
       tx as never,plan,authority,new Date("2026-10-21T00:00:00.000Z")));
     assert.equal(replay.state,"EFFECTIVE_VERSIONS_ALREADY_APPLIED");
+    // A future-version compensation must not silently resurrect an original
+    // price or critical threshold that was edited after the signed apply.
+    await query("UPDATE price_list_items SET unit_price=? WHERE id=?",
+      ["171.0000",oldTestPriceId]);
+    await assert.rejects(()=>transaction(tx=>reverseF2FutureEffectiveVersionsUnderLock(
+      tx as never,plan,authority,new Date("2026-11-01T00:00:00.000Z"))),
+      /f2_reversal_old_price_changed/);
+    await query("UPDATE price_list_items SET unit_price=? WHERE id=?",
+      ["150.0000",oldTestPriceId]);
+    await query("UPDATE reference_intervals SET critical_low=? WHERE id=?",
+      ["0.650000",oldIntervalId]);
+    await assert.rejects(()=>transaction(tx=>reverseF2FutureEffectiveVersionsUnderLock(
+      tx as never,plan,authority,new Date("2026-11-01T00:00:00.000Z"))),
+      /f2_reversal_old_range_changed/);
+    await query("UPDATE reference_intervals SET critical_low=? WHERE id=?",
+      ["0.500000",oldIntervalId]);
     const reverted=await transaction(tx=>reverseF2FutureEffectiveVersionsUnderLock(
       tx as never,plan,authority,new Date("2026-11-01T00:00:00.000Z")));
     assert.equal(reverted.state,"FUTURE_EFFECTIVE_VERSIONS_REVERSED");
