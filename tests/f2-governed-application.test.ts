@@ -132,6 +132,7 @@ test("F2: a changed stage, sign decision, branch or live medical value rejects b
     {...baseline,source:{...source,sourceInstallationVerified:false as true}},
     {...baseline,source:{...source,independentlyVerifiedInstallationMapping:false as true}},
     {...baseline,source:{...source,fullDomainSignatoryGrantsCurrentlyVerified:false as true}},
+    {...baseline,mode:"REVERSE"},
     {...baseline,source:{...source,organizationId:uuid(99)}},
     {...baseline,source:{...source,policyDigest:"f".repeat(64)}},
     {...baseline,source:{...source,stageEvidenceDigest:"f".repeat(64)}},
