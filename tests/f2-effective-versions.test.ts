@@ -148,6 +148,6 @@ test("F2: unauthorized, backdated and unsupported class changes cannot mutate ma
   }:row)};
   await assert.rejects(()=>applyF2EffectiveVersionsUnderLock(
     tx as never,unsupported,authority,new Date("2026-10-21T00:00:00.000Z")),
-    /other_class_support_pending/);
+    /f2_apply_unauthorized/);
   assert.equal(called,false);
 });
