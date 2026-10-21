@@ -15,6 +15,11 @@ const build=()=>{
         rows:[{"test name":"Synthetic Hb"},{"test name":"Synthetic Hb"}]},
       {name:"profile",columns:[{name:"profilname",accessType:"ACE_TYPE_202"}],
         rows:[{"profilname":"Synthetic Cbc"}]},
+      ...Array.from({length:13},(_,i)=>({
+        name:"Config"+String(i+1),
+        columns:[{name:"label",accessType:"ACE_TYPE_202"}],
+        rows:[],
+      })),
     ],
   };
   const manifest=buildF3LegacyExtractionManifest(input,secret);
@@ -34,6 +39,7 @@ test("F3: synthetic row-to-target classifications reconcile exact schema/HMAC oc
   const {manifest,lineage}=build();
   const r=run(lineage,manifest);
   assert.equal(r.sourceRows,3);
+  assert.equal(manifest.tableCount,15);
   assert.equal(r.matchedRows,3);
   assert.equal(r.missingRows,0);
   assert.equal(r.duplicates,1);
