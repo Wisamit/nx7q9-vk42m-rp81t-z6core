@@ -119,7 +119,9 @@ test("F3: cross-tenant, cross-source, unknown rows and duplicate lineage keys fa
     ...f,expectedOrganizationId:id(999),
   }),/scope_mismatch/);
   assert.throws(()=>check({...f,targetExport:{...f.targetExport,
-    sourceSha256:sha("e")}}),/source_sha256|scope_mismatch/);
+    sourceSha256:sha("e")}}),/row_invalid|scope_mismatch/);
+  // The mismatch is detected inside the strict private-export parser before
+  // cross-source scope evaluation; both are fail-closed responses.
   assert.throws(()=>check({...f,targetExport:{...f.targetExport,
     rows:[...f.targetExport.rows,f.targetExport.rows[0]]}}),/duplicate_row_identity/);
   assert.throws(()=>check({...f,targetExport:{...f.targetExport,
