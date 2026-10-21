@@ -58,6 +58,7 @@ export type F2EffectiveApplyAuthority={
 export async function applyF2EffectiveVersionsUnderLock(
   tx:Prisma.TransactionClient,plan:F2ApplyPlan,
   authority:F2EffectiveApplyAuthority,now:Date,
+  coordinatedMasterRevisions=false,
 ):Promise<F2EffectiveApplyResult>{
   if(!verifyF2ApplyPlanIntegrity(plan)||
      !UUID.test(authority.organizationId)||!UUID.test(authority.branchId)||
@@ -77,9 +78,13 @@ export async function applyF2EffectiveVersionsUnderLock(
   if(!Number.isFinite(effectiveAt.getTime())||
      effectiveAt.getTime()<=now.getTime())
     throw Error("f2_apply_requires_future_effective_date");
-  const changes=plan.rows.filter(row=>row.operation!=="UNCHANGED");
-  if(changes.some(row=>row.operation!=="EFFECTIVE_DATED_NEW_VERSION"))
+  const changed=plan.rows.filter(row=>row.operation!=="UNCHANGED");
+  if(changed.some(row=>row.operation!=="EFFECTIVE_DATED_NEW_VERSION") &&
+     !coordinatedMasterRevisions)
     throw Error("f2_apply_other_class_support_pending");
+  const changes=changed.filter(row=>
+    row.operation==="EFFECTIVE_DATED_NEW_VERSION");
+  if(!changes.length)throw Error("f2_apply_no_native_version_changes");
   const existing=await tx.auditEvent.findMany({
     where:{organizationId:authority.organizationId,
       entityType:"CatalogImportBatch",entityId:authority.batchId,
