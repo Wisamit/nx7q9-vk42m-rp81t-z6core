@@ -8,7 +8,7 @@ param(
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
-$Blocked = @('password','id','id2','idprice','result','profnam')
+$Blocked = @('password','id','id2','idprice','result','profnam','abo','bhcg','bilh','cbc','clerance','coag','csf','cul','culture','esr','fertility','hepatitis','kidney','lipid','liver','marrow','occult','pcr','post_coital','pregnancy','prostata','pt','rotavirus','semin','serology','stone','stool','thyroid','torch','tumer','urine','widal','zn')
 function Assert-AccessName([string]$value) {
   if ([string]::IsNullOrWhiteSpace($value) -or
       $value -notmatch '^[A-Za-z][A-Za-z0-9 _.-]{0,79}$' -or
