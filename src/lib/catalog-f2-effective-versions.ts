@@ -141,8 +141,8 @@ export async function applyF2EffectiveVersionsUnderLock(
           throw Error("f2_apply_price_overlap");
         const claim=await tx.priceListItem.updateMany({
           where:{id:row.targetId,priceListId:row.originalSnapshot.priceListId as string,
-            testId,status:"ACTIVE",effectiveTo:null,
-            effectiveFrom:start},
+            testId,unitPrice:row.originalSnapshot.unitPrice as string,
+            status:"ACTIVE",effectiveTo:null,effectiveFrom:start},
           data:{effectiveTo:effectiveAt},
         });
         if(claim.count!==1)throw Error("f2_apply_price_conflict");
@@ -163,8 +163,8 @@ export async function applyF2EffectiveVersionsUnderLock(
           throw Error("f2_apply_package_overlap");
         const claim=await tx.priceListPackageItem.updateMany({
           where:{id:row.targetId,priceListId:row.originalSnapshot.priceListId as string,
-            packageId,status:"ACTIVE",effectiveTo:null,
-            effectiveFrom:start},
+            packageId,unitPrice:row.originalSnapshot.unitPrice as string,
+            status:"ACTIVE",effectiveTo:null,effectiveFrom:start},
           data:{effectiveTo:effectiveAt},
         });
         if(claim.count!==1)throw Error("f2_apply_package_conflict");
@@ -211,10 +211,23 @@ export async function applyF2EffectiveVersionsUnderLock(
       });
       if(openScope.length!==1||openScope[0].id!==row.targetId)
         throw Error("f2_apply_range_population_overlap");
+      // Compare-and-swap the complete mutable clinical projection, not just
+      // the UUID and effective dates. If a clinician edited limits/notes since
+      // the signed preview, the SQL update must affect zero rows.
+      const clinicalFields=[
+        "sex","ageFrom","ageTo","ageUnit","pregnancyStatus",
+        "gestationalAgeFromWeeks","gestationalAgeToWeeks","populationCode",
+        "lowValue","highValue","normalTextEn","normalTextAr",
+        "criticalLow","criticalHigh","source","notes",
+        "branchId","methodId","analyzerId","specimenTypeId",
+      ] as const;
+      const expectedClinical=Object.fromEntries(clinicalFields
+        .filter(field=>Object.hasOwn(prior,field))
+        .map(field=>[field,prior[field]])) as Prisma.ReferenceIntervalWhereInput;
       const claim=await tx.referenceInterval.updateMany({
         where:{id:row.targetId,componentId,
           status:"ACTIVE",approvalStatus:"APPROVED",effectiveTo:null,
-          effectiveFrom:start},
+          effectiveFrom:start,...expectedClinical},
         data:{effectiveTo:effectiveAt},
       });
       if(claim.count!==1)throw Error("f2_apply_range_conflict");
