@@ -138,3 +138,29 @@ test("F2: reject one immutable SQL UUID targeted twice with mixed casing",()=>{
   assert.equal(plan([rekey(lower,1),rekey(upper,2)]),null,
     "case-only aliases for the same MariaDB UUID cannot cause double updates");
 });
+
+test("F2: invalid future panel and package membership is rejected before any scheduled revision",()=>{
+  const base=make();
+  const alpha="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const beta="bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+  const candidate=(type:"PANEL"|"PACKAGE",members:unknown[])=>plan(base.map(row=>
+    row.entityType===type?{
+      ...row,sourceData:{
+        ...(row.sourceData as Record<string,unknown>),items:members,
+      },
+    }:row,
+  ));
+  for(const type of ["PANEL","PACKAGE"] as const){
+    const withRequired=(member:{testId:string;displayOrder:number;test:{code:string}})=>
+      type==="PANEL"?{...member,required:true}:member;
+    const a=withRequired({testId:alpha,displayOrder:1,test:{code:"A"}});
+    const b=withRequired({testId:beta,displayOrder:2,test:{code:"B"}});
+    assert.ok(candidate(type,[a,b]),"valid ordered composite can be scheduled");
+    assert.equal(candidate(type,[a,{...b,displayOrder:1}]),null,
+      "duplicate display order must not become a live configuration");
+    assert.equal(candidate(type,[a,{...b,testId:alpha.toUpperCase()}]),null,
+      "case-only duplicate member IDs must not become a live configuration");
+    assert.equal(candidate(type,[a,{...b,test:{code:"B",unexpected:"PHI"}}]),null,
+      "unexpected linked test metadata must be rejected before apply");
+  }
+});
