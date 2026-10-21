@@ -22,9 +22,9 @@ export async function GET() {
       }),
       tx.department.findMany({where:{organizationId,status:"ACTIVE"},orderBy:{nameEn:"asc"}}),
       tx.specimenType.findMany({where:{organizationId,status:"ACTIVE"},orderBy:{nameEn:"asc"}}),
-      tx.container.findMany({where:{organizationId,status:"ACTIVE"},orderBy:{nameEn:"asc"}}),
+      tx.container.findMany({where:{organizationId},orderBy:{nameEn:"asc"}}),
       tx.method.findMany({where:{organizationId,status:"ACTIVE"},orderBy:{nameEn:"asc"}}),
-      tx.unit.findMany({where:{organizationId,status:"ACTIVE"},orderBy:{code:"asc"}}),
+      tx.unit.findMany({where:{organizationId},orderBy:{code:"asc"}}),
     ]);
     const targets=[
       ...tests.map(row=>({entityType:"TEST" as const,id:row.id})),
@@ -37,17 +37,23 @@ export async function GET() {
     const overlays=await resolveF2EffectiveCatalogViews(tx,{
       organizationId,asOf,records:targets,
     });
-    return {
-      tests:tests.map(row=>({
-        ...projectF2EffectiveCatalogView("TEST",row,overlays),
-        components:row.components.map(component=>
-          projectF2EffectiveCatalogView("COMPONENT",component,overlays)),
-      })),
-      departments,specimenTypes,
-      containers:containers.map(row=>projectF2EffectiveCatalogView("CONTAINER",row,overlays)),
-      methods,
-      units:units.map(row=>projectF2EffectiveCatalogView("UNIT",row,overlays)),
-    };
+    const effectiveTests=tests.map(row=>({
+      ...projectF2EffectiveCatalogView("TEST",row,overlays),
+      components:row.components.map(component=>
+        projectF2EffectiveCatalogView("COMPONENT",component,overlays))
+        .sort((a,b)=>a.displayOrder-b.displayOrder||a.code.localeCompare(b.code)),
+    })).sort((a,b)=>a.status.localeCompare(b.status)||
+      a.nameEn.localeCompare(b.nameEn));
+    const effectiveContainers=containers
+      .map(row=>projectF2EffectiveCatalogView("CONTAINER",row,overlays))
+      .filter(row=>row.status==="ACTIVE")
+      .sort((a,b)=>a.nameEn.localeCompare(b.nameEn));
+    const effectiveUnits=units
+      .map(row=>projectF2EffectiveCatalogView("UNIT",row,overlays))
+      .filter(row=>row.status==="ACTIVE")
+      .sort((a,b)=>a.code.localeCompare(b.code));
+    return {tests:effectiveTests,departments,specimenTypes,
+      containers:effectiveContainers,methods,units:effectiveUnits};
   },{isolationLevel:"RepeatableRead",timeout:30000});
   return NextResponse.json(result);
 }
