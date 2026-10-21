@@ -238,6 +238,44 @@ export async function applyF2ConfigurationFromVerifiedDatabaseUnderLock(
      !required("FINANCIAL").every(p=>grants(signers.find(s=>
        s.id===verified.financial!.signerUserId)?.roles||[],org).has(p)))
     return fail("f2_apply_signatory_grants_revoked");
+  // Re-check the signers' CURRENT department and all applicable branch
+  // scopes against the complete staged bundle. They may have retained their
+  // signing role after losing access to a test/branch; the operator's own
+  // scope must never substitute for either independent signer.
+  const [signerDepartments,signerBranches]=await Promise.all([
+    tx.userDepartmentScope.findMany({
+      where:{userId:{in:signerIds}},
+      select:{userId:true,departmentId:true,
+        department:{select:{organizationId:true,branchId:true,status:true}}},
+    }),
+    tx.userBranchScope.findMany({
+      where:{userId:{in:signerIds},
+        branch:{organizationId:org,status:"ACTIVE"}},
+      select:{userId:true,branchId:true},
+    }),
+  ]);
+  for(const signerId of signerIds){
+    const scopedBranches=signerBranches.filter(item=>item.userId===signerId)
+      .map(item=>item.branchId);
+    const signerScope=resolveClinicalImportScope({
+      organizationId:org,activeBranchId:scope.branchId,activeBranch:branch,
+      branchScopes:scopedBranches.map(branchId=>({
+        branchId,branch:{status:"ACTIVE"},
+      })),
+      departmentScopes:signerDepartments.filter(item=>item.userId===signerId),
+    });
+    if(!signerScope)
+      return fail("f2_apply_signatory_department_scope_revoked");
+    const signerEvidence=await validatePolicyReviewBatchScope(tx,{
+      batchId,scope:signerScope,grantedBranchIds:scopedBranches,
+      sourceChecksum:batch.sourceChecksum,
+      authorUserId:batch.createdByUserId,
+      stageEvidenceSeal:seal,batchMetadata:reviewStageBatchMetadata(batch),
+      signingSecret:secret,allowGovernedValueDifferences:true,
+    });
+    if(!signerEvidence.ok)
+      return fail("f2_apply_signatory_target_scope_revoked");
+  }
   // Only code-derived booleans are passed to the execution core; never from
   // HTTP bodies or review-only HMAC diagnostics.
   const result=await executeF2GovernedApplicationUnderLock(tx,{
