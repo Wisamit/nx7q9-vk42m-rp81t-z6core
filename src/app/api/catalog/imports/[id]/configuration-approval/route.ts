@@ -10,7 +10,7 @@ import { validatePolicyReviewBatchScope } from "@/lib/catalog-policy-review-scop
 import { catalogBundleSigningSecret } from "@/lib/catalog-bundle-attestation";
 import { catalogExportTypes, type CatalogExportType } from "@/lib/catalog-configuration-export";
 import { catalogDriftObservationToken } from "@/lib/catalog-drift-triage";
-import { readCatalogLiveObservations } from "@/lib/catalog-live-observation";
+import { readF2EffectiveLiveObservations } from "@/lib/catalog-f2-effective-live-observation";
 import { f2GovernedReadinessPreview } from "@/lib/catalog-f2-governed-readiness";
 import { verifyBranchScopedPolicyDraftHistory, POLICY_DRAFT_HISTORY_LIMIT } from "@/lib/catalog-policy-draft-history";
 import { domainReviewPermissions } from "@/lib/catalog-policy-draft-review";
@@ -173,7 +173,7 @@ export async function POST(request:NextRequest,{params}:{
       const type=row.entityType as CatalogExportType;
       byType.set(type,[...(byType.get(type)||[]),row.normalizedData.id]);
     }
-    const live=await readCatalogLiveObservations(tx,scope,grantedBranchIds,byType);
+    const live=await readF2EffectiveLiveObservations(tx,scope,grantedBranchIds,byType,new Date());
     if(!live)return {error:"configuration_approval_live_scope_changed",httpStatus:409} as const;
     const snapshot=createHash("sha256");
     for(const row of rows){
