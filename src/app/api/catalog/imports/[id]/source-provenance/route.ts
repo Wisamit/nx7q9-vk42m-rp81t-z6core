@@ -88,5 +88,5 @@ export async function POST(request:NextRequest,context:Context){
     }});
     return {status:"SOURCE_PROVENANCE_RECORDED",rows:checked.rows,
       clinicalApproval:false,financialApproval:false,masterWrites:false};
-  });
+  },false,true);
 }
