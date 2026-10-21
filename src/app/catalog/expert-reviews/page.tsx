@@ -5,6 +5,8 @@ import { CatalogExpertReviewQueue } from "@/components/catalog-expert-review-que
 import { CatalogPolicyDraftReviewQueue } from "@/components/catalog-policy-draft-review-queue";
 import { F2ConfigurationApprovalForm } from "@/components/f2-configuration-approval-form";
 
+import { F2ConfigurationOperationForm } from "@/components/f2-configuration-operation-form";
+
 export const dynamic = "force-dynamic";
 
 export default async function CatalogExpertReviewsPage() {
@@ -15,6 +17,11 @@ export default async function CatalogExpertReviewsPage() {
     grants.has(domain==="CLINICAL"?"catalog.configuration.clinical.sign":
       "catalog.configuration.financial.sign") &&
     grants.has(domain==="CLINICAL"?"catalog.reference_ranges.manage":"pricing.manage"));
+
+  const operations=(["APPLY","REVERSE"] as const).filter(mode=>
+    grants.has("pricing.manage") &&
+    grants.has("catalog.reference_ranges.manage") &&
+    grants.has(mode==="APPLY"?"catalog.configuration.apply":"catalog.configuration.reverse"));
 
   return <main className="catalog-shell">
     <header className="page-header">
@@ -35,5 +42,6 @@ export default async function CatalogExpertReviewsPage() {
     <CatalogExpertReviewQueue locale={locale} />
     <CatalogPolicyDraftReviewQueue locale={locale} />
     {domains.length>0&&<F2ConfigurationApprovalForm locale={locale} allowedDomains={domains} />}
+    {operations.length>0&&<F2ConfigurationOperationForm locale={locale} allowedModes={operations} />}
   </main>;
 }
