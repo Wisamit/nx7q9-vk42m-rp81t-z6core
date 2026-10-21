@@ -172,6 +172,19 @@ test("F2 MariaDB: atomic synthetic price/package/range versions and compensating
       [componentId]);
     assert.equal(ranges.length,2);
     assert.equal(ranges.some(r=>r.id===oldIntervalId&&r.effective_to!==null),true);
+    const newRange=ranges.find(r=>r.id!==oldIntervalId);
+    assert.ok(newRange);
+    // Critical thresholds must resolve to exactly ONE approved reference
+    // interval at the cutoff (consistent with existing inclusive ranges).
+    for(const [at,expectedId] of [
+      [atStart,newRange.id],[beforeStart,oldIntervalId],
+    ]){
+      const [effective]=await sql.execute<mysql.RowDataPacket[]>(
+        "SELECT id FROM reference_intervals WHERE component_id=? AND status='ACTIVE' AND approval_status='APPROVED' AND effective_from<=? AND (effective_to IS NULL OR effective_to>=?)",
+        [componentId,at,at]);
+      assert.deepEqual(effective.map(row=>row.id),[expectedId],
+        "an exact report timestamp cannot select two incompatible critical ranges");
+    }
     const replay=await transaction(tx=>applyF2EffectiveVersionsUnderLock(
       tx as never,plan,authority,new Date("2026-10-21T00:00:00.000Z")));
     assert.equal(replay.state,"EFFECTIVE_VERSIONS_ALREADY_APPLIED");
