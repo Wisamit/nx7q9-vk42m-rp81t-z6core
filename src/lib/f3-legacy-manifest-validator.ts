@@ -8,7 +8,8 @@ const object=(v:unknown):v is Record<string,unknown> =>
   v!==null&&typeof v==="object"&&!Array.isArray(v);
 const exact=(v:Record<string,unknown>,keys:readonly string[])=>
   Object.keys(v).sort().join(",")===[...keys].sort().join(",");
-const ALLOWED=new Set(LEGACY_COVERAGE_SOURCES.map(x=>x.tableName));
+const ALLOWED: ReadonlySet<string>=new Set<string>(
+  LEGACY_COVERAGE_SOURCES.map(x=>x.tableName));
 /**
  * Validate the shape of a digest-only SOURCE evidence document received at
  * the HTTP boundary. Reject any additional metadata/source values, including
