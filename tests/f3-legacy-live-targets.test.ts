@@ -34,18 +34,11 @@ test("F3: target existence verification batches IDs by class and validates org/p
     priceListItem:{findMany:handler("PRICE_LIST_ITEM")},
     referrer:{findMany:handler("REFERRER")},
   };
-  const readOrder:string[]=[];
-  const watched=records.map((record,index)=>new Proxy(record,{
-    get(object,field,receiver){
-      if(typeof field==="string")readOrder.push(index+":"+field);
-      return Reflect.get(object,field,receiver);
-    },
-  }));
   const ok=await f3LiveLineageTargetsVisible(db as never,{
-    organizationId:org,lineage:watched,
+    organizationId:org,lineage:records,
     currentOrganizationScopeVerified:true,
   });
-  assert.equal(ok,true,JSON.stringify({calls,records,readOrder}));
+  assert.equal(ok,true);
   assert.equal(calls.length,4,"group two TEST mappings into a single SQL lookup");
   const tests=calls.find(c=>c.kind==="TEST");
   assert.deepEqual(tests?.where.id,{in:[id(11),id(12)]});
