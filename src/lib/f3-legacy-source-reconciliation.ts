@@ -1,6 +1,6 @@
 import type {F3LegacyExtractionManifest,F3LegacyRowEvidence}
   from "./f3-legacy-extraction-manifest.ts";
-import {LEGACY_COVERAGE_SOURCES} from "./legacy-source-coverage.ts";
+import {legacyRowTargets} from "./catalog-legacy-row-lineage.ts";
 
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SHA=/^[0-9a-f]{64}$/;
@@ -14,17 +14,11 @@ export type F3LineageDecision={
   targetType:string|null;targetId:string|null;
 };
 const mapped=new Set<F3LegacyDisposition>(["MAPPED","APPROVED_MAPPING"]);
-// Source-table semantics are a hard safety boundary. A correct row digest
-// is not permission to attach a reference interval to a tariff or an organism
-// to an arbitrary test. Legacy aliases may resolve to an existing TEST after
-// separate manual identity review; Gropes has no approved target model yet.
-const sourceTargets=new Map<string,string|null>(
-  LEGACY_COVERAGE_SOURCES.map(source=>[
-    source.tableName,
-    source.target==="TEST_ALIAS"?"TEST":
-    source.target==="GROUP"?null:source.target,
-  ]),
-);
+// Reuse the SAME source-table-to-target allowlist enforced by the persisted
+// legacy-row-lineage API. Some tables legitimately resolve to multiple
+// target classes (e.g. profile/PANEL or PACKAGE, Gropes/PANEL or PACKAGE);
+// a manifest digest never authorizes a type outside that established map.
+const sourceTargets=legacyRowTargets;
 const key=(row:F3LegacyRowEvidence)=>[
   row.sourceTable.toLowerCase(),row.sourceSchemaSha256,
   row.rowDigest,row.occurrence,
@@ -76,7 +70,7 @@ export function reconcileF3LegacySource(input:{
   let counted=0;
   for(const table of manifest.tables){
     if(typeof table.sourceTable!=="string"||
-       !sourceTargets.has(table.sourceTable)||
+       !Object.hasOwn(sourceTargets,table.sourceTable)||
        !SHA.test(table.sourceSchemaSha256)||
        !Number.isSafeInteger(table.rows)||table.rows<0||
        !Number.isSafeInteger(table.duplicateContentRows)||
@@ -90,7 +84,7 @@ export function reconcileF3LegacySource(input:{
   const observedTableCounts=new Map<string,number>();
   for(const row of manifest.rows){
     if(typeof row.sourceTable!=="string"||
-       !sourceTargets.has(row.sourceTable)||
+       !Object.hasOwn(sourceTargets,row.sourceTable)||
        !SHA.test(row.rowDigest)||!SHA.test(row.sourceSchemaSha256)||
        !Number.isSafeInteger(row.occurrence)||row.occurrence<1||
        schemaByTable.get(row.sourceTable.toLowerCase())!==row.sourceSchemaSha256)
@@ -142,8 +136,9 @@ export function reconcileF3LegacySource(input:{
       throw Error("f3_reconciliation_foreign_or_duplicate_mapping");
     selected.add(key(item));
     if(mapped.has(item.classification)){
-      const expectedType=sourceTargets.get(item.sourceTable);
-      if(!expectedType||item.targetType!==expectedType||
+      const allowedTypes=sourceTargets[item.sourceTable];
+      if(!allowedTypes || !item.targetType ||
+         !allowedTypes.includes(item.targetType) ||
          !item.targetId||!UUID.test(item.targetId))
         throw Error("f3_reconciliation_incompatible_source_target");
       const target=item.targetType+":"+item.targetId.toLowerCase();
