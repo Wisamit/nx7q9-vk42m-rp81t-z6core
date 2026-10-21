@@ -90,6 +90,7 @@ export function reconcileF3LegacySource(input:{
   const observedTableCounts=new Map<string,number>();
   for(const row of manifest.rows){
     if(typeof row.sourceTable!=="string"||
+       !sourceTargets.has(row.sourceTable)||
        !SHA.test(row.rowDigest)||!SHA.test(row.sourceSchemaSha256)||
        !Number.isSafeInteger(row.occurrence)||row.occurrence<1||
        schemaByTable.get(row.sourceTable.toLowerCase())!==row.sourceSchemaSha256)
@@ -135,7 +136,9 @@ export function reconcileF3LegacySource(input:{
        item.sourceSha256!==manifest.sourceSha256||
        item.digestKeyId!==manifest.digestKeyId||
        !Object.hasOwn(statuses,item.classification)||
-       !source.has(key(item))||selected.has(key(item)))
+       !source.has(key(item))||
+       source.get(key(item))?.sourceTable!==item.sourceTable||
+       selected.has(key(item)))
       throw Error("f3_reconciliation_foreign_or_duplicate_mapping");
     selected.add(key(item));
     if(mapped.has(item.classification)){
