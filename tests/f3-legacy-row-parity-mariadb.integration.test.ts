@@ -2,6 +2,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {randomUUID} from "node:crypto";
 import mysql from "mysql2/promise";
+import {readFile,stat,unlink} from "node:fs/promises";
+import {join} from "node:path";
+import {tmpdir} from "node:os";
+// @ts-ignore - Private Node .mjs script exercised at runtime.
+import {exportPrivateF3Ledger} from "../scripts/legacy/export-lis-row-ledger.mjs";
 import {LEGACY_COVERAGE_SOURCES,LEGACY_COVERAGE_TYPE,type LegacySourceCoverage} from "../src/lib/legacy-source-coverage.ts";
 import {LEGACY_ROW_LINEAGE_TYPE,type LegacyRowManifest} from "../src/lib/catalog-legacy-row-lineage.ts";
 import {reconcileF3LegacyRowParity} from "../src/lib/legacy-f3-row-parity.ts";
@@ -42,6 +47,21 @@ test("F3 MariaDB: actual persisted source occurrence must match private 15-table
       [key,org,source.sourceSha256,page.tableName,page.schemaSha256,
         page.digestKeyId,page.rows[0].rowDigest,1,author]);
     assert.equal((await query()).missingRows,0);
+    const output=join(tmpdir(),"f3-synthetic-ledger-"+key+".json");
+    try{
+      const exported=await exportPrivateF3Ledger({
+        organizationId:org,sourceSha256:source.sourceSha256,
+        digestKeyId:page.digestKeyId,outputPath:output,
+        databaseUrl:process.env.DATABASE_URL,
+      });
+      assert.equal(exported.rows,1);
+      const ledger=JSON.parse(await readFile(output,"utf8"));
+      assert.equal(reconcileF3LegacyRowParity({
+        source,coverage,lineage:[page],persisted:ledger,
+      }).missingRows,0);
+      assert.equal((await stat(output)).mode & 0o777,0o600);
+    }finally{await unlink(output).catch(()=>{});}
+
     await db.execute("DELETE FROM legacy_catalog_row_lineage WHERE id=?",[key]);
     assert.equal((await query()).missingRows,1);
   }finally{
