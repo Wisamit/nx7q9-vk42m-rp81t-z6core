@@ -167,3 +167,47 @@ export function summarizeF2ApplyPlan(plan:F2ApplyPlan){
     reviewOnly:true,masterWritesPerformed:false,
   };
 }
+
+/**
+ * Rebuild the exact canonical plan before ANY transactional master write.
+ * A caller-supplied digest, changedField list, operation or snapshot is never
+ * itself trusted. In particular, an attacker cannot forge UNCHANGED rows,
+ * bypass future-version routing, replace the signed prior clinical threshold,
+ * or alter the guarded effective date while retaining an older plan digest.
+ *
+ * This establishes internal plan integrity, NOT source provenance or user
+ * authority. Authorization + fresh scoped live observation are separate,
+ * mandatory checks performed by the transaction caller.
+ */
+export function verifyF2ApplyPlanIntegrity(value:unknown):value is F2ApplyPlan{
+  if(!record(value) ||
+     value.format!=="F2_TEN_CLASS_EXECUTABLE_PLAN_V1" ||
+     typeof value.effectiveAt!=="string" ||
+     !Array.isArray(value.rows) ||
+     value.rows.length<1 || value.rows.length>BUNDLE_REVIEW_MAX_ROWS)
+    return false;
+  const rows:F2ApplySourceRow[]=[];
+  for(const raw of value.rows){
+    if(!record(raw)||!record(raw.originalSnapshot)||
+       !record(raw.desiredSnapshot)||
+       !Number.isSafeInteger(raw.rowNumber)||
+       typeof raw.entityType!=="string"||
+       typeof raw.targetId!=="string"||!UUID.test(raw.targetId))
+      return false;
+    rows.push({
+      rowNumber:raw.rowNumber,entityType:raw.entityType,
+      sourceData:raw.desiredSnapshot,
+      normalizedData:{id:raw.targetId},
+      scopedLiveData:raw.originalSnapshot,
+    });
+  }
+  const reconstructed=compileF2ApplyPlan({
+    rows,effectiveAt:value.effectiveAt,
+    signedStageVerified:true,
+    independentDomainApprovalsVerified:true,
+    scopedLiveSnapshotVerified:true,
+  });
+  // Reject unknown keys, mismatched hashes, forged count/operation,
+  // changedField ordering or modified whole-row snapshots.
+  return reconstructed!==null && equal(value,reconstructed);
+}
