@@ -164,7 +164,7 @@ export async function reverseF2FutureEffectiveVersionsUnderLock(
       });
       if(retired.count!==1)throw Error("f2_reversal_new_range_changed");
       const restored=await tx.referenceInterval.updateMany({
-        where:{id:parentId,effectiveTo:at,status:"ACTIVE",
+        where:{id:parentId,effectiveTo:predecessorCloseAt,status:"ACTIVE",
           approvalStatus:"APPROVED",
           effectiveFrom:new Date(row.originalSnapshot.effectiveFrom as string),
           ...f2ReferenceIntervalCasWhere(row.originalSnapshot)},
