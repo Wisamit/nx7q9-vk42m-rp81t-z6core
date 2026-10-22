@@ -102,6 +102,8 @@ export function inspectF7BrowserEvidence(evidence,manifest,outputDir,options={})
        entry.documentFullyLoaded!==true||entry.documentBodyHasContent!==true||
        !Number.isSafeInteger(entry.visibleBusySurfaceCount)||
        entry.visibleBusySurfaceCount!==0||
+       !Number.isSafeInteger(entry.blockedCrossOriginNetworkCount)||
+       entry.blockedCrossOriginNetworkCount!==0||
        typeof entry.htmlLanguage!=="string"||
        entry.htmlLanguage.toLowerCase().split("-")[0]!==expectedLocale||
        entry.htmlDirection!==expectedDirection||
