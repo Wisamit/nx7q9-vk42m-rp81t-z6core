@@ -108,7 +108,13 @@ export async function POST(request: Request) {
     }
     // Replay does not create another home-collection task or audit event.
     return NextResponse.json({
-      status: "ok", replayed: true, appointment: decision.appointment,
+      status: "ok", replayed: true, appointment: {
+        id: decision.appointment.id,
+        branchId: decision.appointment.branchId,
+        patientId: decision.appointment.patientId,
+        appointmentNumber: existing!.appointmentNumber,
+        status: decision.appointment.status,
+      },
     }, { status: 200, headers: { "Cache-Control": "private, no-store" } });
   };
   const earlierSubmission = await replayResponse();
@@ -181,7 +187,14 @@ export async function POST(request: Request) {
     throw error;
   }
 
-  return NextResponse.json({ status: "ok", appointment }, {
-    status: 201, headers: { "Cache-Control": "private, no-store" },
-  });
+  // The digest is an internal conflict check over potentially identifying
+  // booking fields. Never send it or the stored submission key in API JSON.
+  return NextResponse.json({
+    status: "ok",
+    appointment: {
+      ...appointment,
+      portalSubmissionKey: undefined,
+      portalSubmissionHash: undefined,
+    },
+  }, { status: 201, headers: { "Cache-Control": "private, no-store" } });
 }
