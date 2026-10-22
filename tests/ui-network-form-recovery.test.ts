@@ -46,9 +46,10 @@ test("notification actions always release busy state on failed network operation
 test("order creation never reuses a lost React currentTarget after request completion", () => {
   const text = source("order-create-form");
   assert.match(text, /const formElement = event\.currentTarget;/);
-  assert.match(text, /if \(submitting\.current\) return;/);
+  assert.match(text, /if \(submitting\.current \|\| ambiguousSubmissionRef\.current\) return;/);
   assert.match(text, /formElement\.reset\(\)/);
-  assert.match(text, /Before retrying, check Orders/);
+  assert.match(text, /Connection interrupted; the order and invoice may already exist/);
+  assert.match(text, /ambiguousSubmissionRef\.current = true;/);
   assert.match(text, /finally \{\s*submitting\.current = false;\s*setBusy\(false\);/);
   assert.doesNotMatch(text, /event\.currentTarget\.reset\(\)/);
 });

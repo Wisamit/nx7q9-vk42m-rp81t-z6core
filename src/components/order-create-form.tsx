@@ -27,6 +27,22 @@ type SimpleOption = { id: string; code: string; nameEn: string };
 type ReferrerOption = SimpleOption & { clientId: string | null };
 type SourceOption = SimpleOption & { category: string };
 type BranchOption = SimpleOption & { timezone: string };
+type OrderCreateResponse = {
+  accessionNumber?: string;
+  invoiceNumber?: string;
+  currency?: string;
+  total?: string | number;
+  taxTotal?: string | number;
+  creditControl?: { decision?: string };
+  error?: string;
+  tests?: Array<{ code?: string }>;
+  packages?: Array<{ code?: string }>;
+  approvalRequestId?: string;
+  limitAmount?: string | number;
+  exposureBefore?: string | number;
+  projectedExposure?: string | number;
+};
+
 export type DoctorRequisitionPrefill = {
   id:string;patientId:string;branchId:string;referrerId:string;
   priority:"ROUTINE"|"URGENT"|"STAT";testIds:string[];
@@ -74,6 +90,8 @@ export function OrderCreateForm({
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const submitting = useRef(false);
+  const ambiguousSubmissionRef = useRef(false);
+  const [ambiguousSubmission, setAmbiguousSubmission] = useState(false);
   const [discountPercent, setDiscountPercent] = useState(0);
   const [discountApprovalRequestId, setDiscountApprovalRequestId] = useState("");
   const [pregnancyStatus, setPregnancyStatus] = useState<"UNKNOWN" | "NOT_PREGNANT" | "PREGNANT">("UNKNOWN");
@@ -127,7 +145,7 @@ export function OrderCreateForm({
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (submitting.current) return;
+    if (submitting.current || ambiguousSubmissionRef.current) return;
     if (initialDoctorRequisition && (
       patientId!==initialDoctorRequisition.patientId ||
       new Set(effectiveTestIds).size!==initialDoctorRequisition.testIds.length ||
@@ -180,7 +198,27 @@ export function OrderCreateForm({
       }),
     });
 
-    const body = await response.json().catch(() => ({}));
+    const rawBody = await response.json().catch(() => null);
+    const body = rawBody && typeof rawBody === "object" && !Array.isArray(rawBody)
+      ? rawBody as OrderCreateResponse : null;
+    const confirmedReceipt = body &&
+      typeof body.accessionNumber === "string" && body.accessionNumber.length > 0 &&
+      typeof body.invoiceNumber === "string" && body.invoiceNumber.length > 0 &&
+      typeof body.currency === "string" && body.currency.length > 0 &&
+      (typeof body.total === "string" || typeof body.total === "number") &&
+      String(body.total).length > 0;
+    if (response.status >= 500 || (response.ok && !confirmedReceipt) ||
+        (!response.ok && (!body || typeof body.error !== "string"))) {
+      // The database may already contain an order and invoice; no blind retry.
+      ambiguousSubmissionRef.current = true;
+      setAmbiguousSubmission(true);
+      setMessage(tr(
+        "Order/invoice creation could not be confirmed. Do not submit this form again. Keep a copy of the entered data, then reload and reconcile Orders and Billing before starting a new request.",
+        "لم يتم تأكيد إنشاء الطلب والفاتورة. لا تعِد إرسال النموذج. احتفظ بنسخة من المدخلات، ثم أعد تحميل الصفحة وطابق الطلبات والفوترة قبل إنشاء طلب جديد.",
+      ));
+      return;
+    }
+    if (!body) return;
     if (response.ok) {
       const creditWarning = body.creditControl?.decision === "WARN_EXCEEDED"
         ? tr(" · WARNING: client credit limit exceeded (recorded).", " · تحذير: تم تجاوز حد ائتمان العميل وتسجيل الحالة.")
@@ -249,9 +287,11 @@ export function OrderCreateForm({
       setMessage(body.error || tr("Could not create order.", "تعذر إنشاء الطلب."));
     }
     } catch {
+      ambiguousSubmissionRef.current = true;
+      setAmbiguousSubmission(true);
       setMessage(tr(
-        "Connection interrupted. Before retrying, check Orders to confirm whether the order and invoice were already created.",
-        "انقطع الاتصال. قبل إعادة المحاولة، تحقق من قائمة الطلبات للتأكد من عدم إنشاء الطلب والفاتورة مسبقاً.",
+        "Connection interrupted; the order and invoice may already exist. Do not submit again. Preserve your entries, then reload and reconcile Orders and Billing first.",
+        "انقطع الاتصال وربما تم إنشاء الطلب والفاتورة. لا تعِد الإرسال. احتفظ بالمدخلات، ثم أعد تحميل الصفحة وراجع الطلبات والفوترة أولاً.",
       ));
     } finally {
       submitting.current = false;
@@ -261,6 +301,11 @@ export function OrderCreateForm({
 
   return <form className="order-form" onSubmit={submit}>
     <div className="form-grid">
+      <div className="form-span order-step-heading">
+        <span className="order-step-index" aria-hidden="true">01</span>
+        <div><strong>{tr("Patient and ordering context", "المريض وبيانات الطلب")}</strong>
+          <p>{tr("Confirm patient identifier, branch, priority and clinical context before continuing.", "تأكد من معرف المريض والفرع والأولوية والسياق السريري قبل المتابعة.")}</p></div>
+      </div>
       {initialDoctorRequisition && <p className="form-warning form-span">
         {tr("Physician requisition conversion: patient, branch, referrer, tests, priority and original clinical text are fixed. Choose billing source, verify test-specific questions and register through standard pricing.",
         "تحويل إحالة طبيب: المريض والفرع والمحيل والفحوصات والأولوية والنص السريري الأصلي ثابتة. اختر مصدر الفوترة وتحقق من الأسئلة الخاصة بالفحوصات ثم سجّل وفق التسعير الاعتيادي.")}
@@ -348,6 +393,11 @@ export function OrderCreateForm({
       <label className="form-span">{tr("Pregnancy information", "معلومات الحمل")}<input name="pregnancyInfo" maxLength={500} /></label>
       <label className="form-span">{tr("Clinical notes", "ملاحظات سريرية")}<textarea name="clinicalNotes" rows={3} defaultValue={initialDoctorRequisition?.clinicalNotes || ""} readOnly={Boolean(initialDoctorRequisition)} /></label>
 
+      <div className="form-span order-step-heading">
+        <span className="order-step-index" aria-hidden="true">02</span>
+        <div><strong>{tr("Tests and packages", "الفحوصات والباقات")}</strong>
+          <p>{tr("Check for duplicates and confirm every requested test.", "تحقق من عدم تكرار الفحوصات وتأكد من كل فحص مطلوب.")}</p></div>
+      </div>
       {packages.length > 0 && !initialDoctorRequisition && <div className="form-span order-test-picker">
         <label>{tr("Commercial packages", "الباقات التجارية")}
           <div className="inline-search">
@@ -397,6 +447,11 @@ export function OrderCreateForm({
       </div>
 
 
+      <div className="form-span order-step-heading">
+        <span className="order-step-index" aria-hidden="true">03</span>
+        <div><strong>{tr("Billing and discount", "الفوترة والخصم")}</strong>
+          <p>{tr("Discount approval remains independent of clinical test selection.", "يبقى اعتماد الخصم منفصلًا عن اختيار الفحوصات السريرية.")}</p></div>
+      </div>
       <div className="form-span order-question-panel">
         <div className="section-title-row">
           <div>
@@ -444,6 +499,11 @@ export function OrderCreateForm({
         </div>}
       </div>
 
+      {selectedTests.some(test => test.orderQuestions.length > 0) && <div className="form-span order-step-heading">
+        <span className="order-step-index" aria-hidden="true">04</span>
+        <div><strong>{tr("Test-specific clinical questions", "الأسئلة السريرية الخاصة بالفحوصات")}</strong>
+          <p>{tr("Required answers remain visible for the browser and server to validate.", "تبقى الإجابات الإلزامية ظاهرة ليتحقق منها المتصفح والخادم.")}</p></div>
+      </div>}
       {selectedTests.some(test => test.orderQuestions.length > 0) && <div className="form-span order-question-panel">
         <div className="section-title-row">
           <div><p className="eyebrow">{tr("Clinical context", "السياق السريري")}</p><h3>{tr("Test-specific Questions", "أسئلة خاصة بالفحص")}</h3></div>
@@ -467,8 +527,23 @@ export function OrderCreateForm({
         </div>
       </div>}
 
-      {message && <div className="form-success form-span">{message}</div>}
-      <button className="primary-button form-span" disabled={busy}>{busy ? tr("Creating order…", "جارٍ إنشاء الطلب…") : tr("Register Order & Invoice", "تسجيل الطلب والفاتورة")}</button>
+      <div className="form-span order-compact-review" role="note">
+        <strong>{tr("Final identity and billing check", "المراجعة النهائية للهوية والفوترة")}</strong>
+        <p>{tr("Patient", "المريض")}: {patientId ? patientOptions.find(item => item.id === patientId)?.label || tr("Unrecognized selection", "اختيار غير معروف") : tr("Not selected", "لم يتم الاختيار")}</p>
+        <p>{tr("Ordered tests", "الفحوصات المطلوبة")}: {selectedTests.length} {selectedTests.length > 0 ? "— " + selectedTests.map(item => item.code).join(", ") : ""}</p>
+        <p>{tr("Commercial packages", "الباقات التجارية")}: {selectedPackages.length} {selectedPackages.length > 0 ? "— " + selectedPackages.map(item => item.code).join(", ") : ""}</p>
+        <p>{tr("Discount", "الخصم")}: {discountPercent.toFixed(2)}%</p>
+        <small>{tr(
+          "Before submitting, review the ordering branch, the clinical answers, the selected billing client and any manager approval above. This action creates a laboratory order and may create an invoice.",
+          "قبل الإرسال راجع فرع الطلب والإجابات السريرية وعميل الفوترة وأي اعتماد مدير أعلاه. هذا الإجراء ينشئ طلباً مخبرياً وقد ينشئ فاتورة.",
+        )}</small>
+      </div>
+      {message && <div className={ambiguousSubmission ? "form-warning form-span" : "form-success form-span"} role={ambiguousSubmission ? "alert" : undefined}>{message}</div>}
+      {ambiguousSubmission && <div className="form-warning form-span" role="alert">{tr(
+        "Duplicate order protection is active. Saving is blocked for this session until you reload and reconcile the recorded order and invoice.",
+        "حماية منع تكرار الطلبات مفعلة. الحفظ معطّل في هذه الجلسة إلى أن تعيد تحميل الصفحة وتتحقق من الطلب والفاتورة المسجلين.",
+      )}</div>}
+      <button className="primary-button form-span" disabled={busy || ambiguousSubmission}>{busy ? tr("Creating order…", "جارٍ إنشاء الطلب…") : tr("Register Order & Invoice", "تسجيل الطلب والفاتورة")}</button>
     </div>
   </form>;
 }
