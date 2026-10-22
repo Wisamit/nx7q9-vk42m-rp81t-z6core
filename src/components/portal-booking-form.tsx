@@ -202,7 +202,7 @@ export function PortalBookingForm({
       {mode === "HOME_COLLECTION" && <label className="form-span">{tr("Collection address", "عنوان السحب")}<textarea name="address" rows={2} required /></label>}
       <label className="form-span">{tr("Notes", "ملاحظات")}<textarea name="notes" rows={2} /></label>
       <button className="primary-button form-span" disabled={busy || requiresReconciliation}>{busy ? tr("Submitting…", "جارٍ الإرسال…") : tr("Request Booking", "طلب الحجز")}</button>
-      {requiresReconciliation && originalRequest.current && <button
+      {requiresReconciliation && <button
         className="secondary-button form-span" type="button" disabled={busy}
         onClick={() => void retryOriginal()}>
         {tr("Check/retry this exact booking safely", "التحقق من هذا الحجز نفسه وإعادة محاولته بأمان")}
