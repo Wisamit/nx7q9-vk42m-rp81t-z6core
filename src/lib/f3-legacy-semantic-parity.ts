@@ -40,6 +40,7 @@ const fieldsMatch=(v:Record<string,unknown>,keys:readonly string[])=>
 const sourceTables=new Set<string>(LEGACY_COVERAGE_SOURCES.map(x=>x.tableName));
 const numeric=/^[+-]?(?:0|[1-9]\d*)(?:\.\d+)?$/;
 const shortName=/^[a-zA-Z][a-zA-Z0-9_]{0,79}$/;
+const testCode=/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/;
 function normalized(kind:F3SemanticKind,value:unknown):string|null{
   if(value===null)return "NULL";
   switch(kind){
@@ -81,7 +82,7 @@ function normalized(kind:F3SemanticKind,value:unknown):string|null{
       if(!Array.isArray(value)||value.length>10000)return null;
       const members:string[]=[];
       for(const member of value){
-        if(typeof member!=="string"||!shortName.test(member))return null;
+        if(typeof member!=="string"||!testCode.test(member))return null;
         members.push(member.toUpperCase());
       }
       if(new Set(members).size!==members.length)return null;
