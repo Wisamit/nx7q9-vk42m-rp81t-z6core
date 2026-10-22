@@ -61,6 +61,12 @@ export function taxLineAmounts(input: {
   const amount = money4ToMinor(input.netAfterDiscount);
   if (amount === null || amount < BigInt(0)) return null;
   const rule = input.rule;
+  // Unrecognized signed/loaded policy values must not silently become
+  // "INCLUSIVE" or "tax exempt" through a default ternary branch.
+  if (rule && (
+    !["STANDARD", "ZERO_RATED", "EXEMPT"].includes(rule.treatment) ||
+    !["EXCLUSIVE", "INCLUSIVE"].includes(rule.priceMode)
+  )) return null;
   const bps = rule ? percentageHundredths(rule.ratePercent) : BigInt(0);
   if (bps === null) return null;
   if (rule && ((rule.treatment !== "STANDARD" && bps !== BigInt(0)) ||
