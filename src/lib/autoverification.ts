@@ -50,6 +50,11 @@ export function evaluateAutoverification(input: {
 
     if (!sourceAllowed) reasons.push("RESULT_SOURCE_NOT_ALLOWED");
     if (input.values.some(value => value.isCritical)) reasons.push("CRITICAL_VALUE_PRESENT");
+    // Unknown analyzer-derived LIS flags have not been qualified by a
+    // validated reference/qualitative context. Never infer that they are
+    // safe merely because an optional "all normal" switch is disabled.
+    if (input.source === "ANALYZER" && input.values.some(value => value.flag === "UNKNOWN"))
+      reasons.push("ANALYZER_UNCLASSIFIED_RESULT_REQUIRES_REVIEW");
     // A configured Delta rule without a comparable prior observation is NOT
     // evidence that the current value is within the approved limit.
     // Preserve the strict EXCEEDED block even if a legacy policy lacks the
