@@ -61,3 +61,31 @@ callsite candidates and 256 locale/date-time review callsites. These are
 
 This checkpoint must pass exact feature HEAD CI, review safety/RTL/UI static
 checks, MariaDB integrations and Next production build before any merge.
+
+
+## Additional F5 result save integrity (2026-10-22)
+
+The clinical result entry POST previously assumed network calls could not throw,
+and treated any HTTP success as a valid result receipt even when its JSON body
+was empty/malformed. A disconnected connection can conceal a committed write;
+blind retries may create confusing duplicate operations or bypass the latest
+technical review state.
+
+- Guard `src/components/result-entry-form.tsx` with a persistent
+  `saveUncertainRef` latch. On transport failure or malformed success receipt
+  (`result.id`, `result.status`, `complete` missing/invalid), show a
+  bilingual warning, restore button responsiveness and **disable further save
+  and technical review in this mounted session**. Do not claim a successful
+  save or automatically resend. The operator must preserve any draft input and
+  reload/reconcile against server state before trying again.
+- Preserve existing authoritative server conflict responses, branch/specimen
+  custody, release and amendment logic. An HTTP 409 still follows the existing
+  explicit server rejection path. No released record, value, currency or
+  clinical approval is rewritten by this UI guard.
+- Added `tests/f5-result-save-ambiguous-response.test.ts`, updated original
+  technical review regression and compatibility test for renamed staged file
+  selection; included a bounded F5 fast gate before full `test:safety` in CI.
+
+**This is a software-only F5 safety improvement**. The other 81-route
+rendered browser/ARIA/theme/mobile visual acceptance remains F7 NOT_EXECUTED;
+F8 real clinical, device, finance and DR decisions remain NO_GO until signed.
