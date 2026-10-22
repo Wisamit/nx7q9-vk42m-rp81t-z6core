@@ -25,7 +25,6 @@ test("F3 MariaDB: 15-table HMAC source reconciles the tenant's persisted ledger,
     user:decodeURIComponent(url.username),
     password:decodeURIComponent(url.password),
     database:url.pathname.slice(1)};
-  const db=await mysql.createConnection(config);
   const org=randomUUID(),foreign=randomUUID(),testId=randomUUID(),
     otherTest=randomUUID(),eventId=randomUUID(),otherEvent=randomUUID(),
     authorId=randomUUID(),foreignAuthorId=randomUUID();
@@ -57,6 +56,9 @@ test("F3 MariaDB: 15-table HMAC source reconciles the tenant's persisted ledger,
   assert.equal(page.rows[0].rowDigest,proof.rowDigest);
   assert.equal(page.schemaSha256,proof.sourceSchemaSha256);
   assert.equal(page.digestKeyId,digestKeyId);
+  // Do not open a SQL connection until the local manifest is accepted;
+  // a rejected offline fixture must not leave a live handle open in CI.
+  const db=await mysql.createConnection(config);
   const query=(text:string,params:Array<string|number>)=>db.execute(text,params);
   async function reconcile(){
     await db.beginTransaction();
