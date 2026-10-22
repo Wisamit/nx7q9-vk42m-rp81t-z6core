@@ -40,7 +40,7 @@ test("F5: clinically significant registration and invoice authorization logic is
     'name="discountPercent"',
     '"question_" + question.id',
     "Register Order & Invoice",
-    "manager approval",
+    "Manager approval required",
     "discountApprovalRequestId",
   ]) assert.ok(form.includes(required), required);
   assert.ok(form.includes("Patient") && form.includes("Clinical notes"));
