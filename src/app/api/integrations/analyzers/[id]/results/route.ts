@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { analyzerMappingTargetUnitStillMatches } from "@/lib/analyzer-mapping-governance";
 import { analyzerRoutingAllowsImport } from "@/lib/analyzer-routing";
 import { parseBridgeObservationSubmission } from "@/lib/analyzer-bridge-observation-boundary";
+import { analyzerRawClinicalQualifierDecision } from "@/lib/analyzer-raw-clinical-qualifier-gate";
 import { authenticateAnalyzerBridge } from "@/lib/analyzer-auth";
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -29,6 +30,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   });
   if (!message) {
     return NextResponse.json({ error: "raw_analyzer_message_not_found", bridgeMessageId }, { status: 409 });
+  }
+
+  // Revalidate ORIGINAL instrument bytes independently of the bridge's
+  // normalized observation. A caller must not erase HIL/OBX-8 warnings by
+  // omitting them from the five-field normalized payload.
+  const originalClinicalGate = analyzerRawClinicalQualifierDecision(
+    message.protocol, message.rawPayload,
+  );
+  if (!originalClinicalGate.eligibleForStaging) {
+    return NextResponse.json({
+      error: "analyzer_raw_clinical_qualifier_requires_review",
+      reason: originalClinicalGate.reason,
+    }, { status: 409 });
   }
 
   const now = new Date();
