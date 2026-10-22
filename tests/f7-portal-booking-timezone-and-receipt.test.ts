@@ -104,7 +104,7 @@ test("F7 booking: UI and API preserve branch timezone and fail closed on uncerta
   const portal=readFileSync("src/app/portal/page.tsx","utf8");
   assert.ok(form.includes('parseSystemLocalDateTime(rawStart)'));
   assert.ok(form.includes("scheduledStartLocal: rawStart"));
-  assert.ok(form.includes("requestPortalBooking({"));
+  assert.ok(form.includes("requestPortalBooking(intent)"));
   assert.ok(form.includes("if (outcome.kind === \"requested\")"));
   assert.ok(form.includes("if (outcome.kind === \"rejected\")"));
   assert.ok(form.includes("uncertain.current = true"));

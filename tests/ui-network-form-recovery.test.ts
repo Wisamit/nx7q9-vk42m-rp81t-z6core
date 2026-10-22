@@ -62,7 +62,11 @@ test("portal booking uses a compact, guarded request dialog with explicit uncert
   assert.match(text, /const formElement = event\.currentTarget;/);
   assert.match(text, /parseSystemLocalDateTime\(rawStart\)/);
   assert.match(text, /scheduledStartLocal: rawStart/);
-  assert.match(text, /requestPortalBooking\(\{/);
+  assert.match(text, /originalRequest\.current = intent;/);
+  assert.match(text, /requestPortalBooking\(intent\)/);
+  assert.match(text, /async function retryOriginal\(\)/);
+  assert.match(text, /requestPortalBooking\(intent\)/);
+  assert.match(text, /submissionKey: bookingKey\.current/);
   assert.match(text, /Booking status is unknown/);
   assert.match(text, /uncertain\.current = true/);
   assert.match(text, /setRequiresReconciliation\(true\)/);
