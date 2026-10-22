@@ -297,6 +297,43 @@ The code check is not a completed real browser test. F7 private synthetic
 486-case browser sweep, clinical/financial user acceptance, and F8 go-live
 remain **NOT_EXECUTED / NO_GO** per the user's end-of-project review rule.
 
+## F7 appointment: branch-local wall clock and uncertain submit receipt
+
+A source-level review found that the portal booking form took a timezone-less
+`YYYY-MM-DDTHH:mm` value, ran `new Date(...)` in the **patient's browser
+timezone**, and transmitted that UTC instant. For a remotely booking patient
+or corporate client, this could silently shift the branch appointment by
+hours. The portal UI now submits `scheduledStartLocal` without an inferred
+browser offset. The server converts it using the selected **ACTIVE,
+same-tenant branch's configured IANA timezone**, saves the resulting UTC
+instant, and rejects nonexistent or doubly valid local times at DST changes
+instead of silently moving the visit. The input and branch dropdown
+identify the relevant branch timezone. The existing `scheduledStart`
+timestamp request form remains accepted for older API callers.
+
+The former UI also treated any HTTP 2xx response as confirmation, even when
+the returned appointment payload was missing, malformed or unrelated to
+the selected patient or branch. The new shared booking transport requires
+a valid **201 `status=ok`, appointment ID, `REQUESTED` state, branchId
+and patientId** before claiming success. A 4xx is an explicit rejection.
+A network disconnect, server 5xx or untrusted/partial receipt is
+**indeterminate**: no success label or automatic retry, preserve the form,
+disable another booking submission in the current page, and instruct the
+patient to reload and inspect their appointment list before any new
+request. This is a UI duplication safeguard, **not** a database-level
+idempotency guarantee across separate tabs, devices or page reloads.
+
+Synthetic unit/source tests cover multiple IANA zones, winter/summer,
+nonexistent and ambiguous DST wall times, differing host `TZ` settings,
+valid and forged booking receipts, known rejections, and disconnected
+network behavior. No patient, clinical order, sample, result, invoice or
+historical appointment was edited. Real E2E browser acceptance, SMS/home
+collection dispatch, workload, and clinical/finance authorization remain
+outside this source-only change.
+
+F7 owner UAT and the 486 true browser screenshots remain
+`UAT_DEFERRED / NOT_EXECUTED`; F8 qualified go-live remains `NO_GO`.
+
 ## Subsequent F7 acceptance (still outstanding)
 
 Screenshot capture is a first step. To complete F7, authenticated

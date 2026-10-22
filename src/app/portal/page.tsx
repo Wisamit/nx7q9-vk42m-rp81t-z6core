@@ -104,7 +104,7 @@ export default async function PortalPage() {
       ? Promise.resolve([])
       : prisma.branch.findMany({
           where: { organizationId: account.organizationId, status: "ACTIVE" },
-          select: { id: true, nameEn: true, nameAr: true },
+          select: { id: true, nameEn: true, nameAr: true, timezone: true },
           orderBy: { nameEn: "asc" },
         }),
     account.type === "PATIENT"
@@ -222,7 +222,7 @@ export default async function PortalPage() {
     />}
 
     {account.type !== "DOCTOR" && <PortalBookingForm
-      branches={bookingBranches.map(branch => ({ id: branch.id, name: branch.nameEn || branch.nameAr || "Branch" }))}
+      branches={bookingBranches.map(branch => ({ id: branch.id, name: locale === "ar" ? branch.nameAr || branch.nameEn : branch.nameEn, timeZone: branch.timezone }))}
       patients={bookingPatients.map(patient => ({ id: patient.id, label: patient.patientNumber + " — " + patient.fullNameEn }))}
       locale={locale}
     />}

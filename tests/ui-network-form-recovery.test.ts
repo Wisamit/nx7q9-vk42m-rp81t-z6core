@@ -58,10 +58,15 @@ test("portal booking uses a compact, guarded request dialog with explicit uncert
   const text = source("portal-booking-form");
   assert.match(text, /<CrudModal open=\{open\}/);
   assert.match(text, /size="compact"/);
-  assert.match(text, /if \(submitting\.current\) return;/);
+  assert.match(text, /if \(submitting\.current \|\| uncertain\.current \|\| requiresReconciliation\) return;/);
   assert.match(text, /const formElement = event\.currentTarget;/);
-  assert.match(text, /Number\.isFinite\(date\.getTime\(\)\)/);
-  assert.match(text, /Check your appointments before submitting another request/);
+  assert.match(text, /parseSystemLocalDateTime\(rawStart\)/);
+  assert.match(text, /scheduledStartLocal: rawStart/);
+  assert.match(text, /requestPortalBooking\(\{/);
+  assert.match(text, /Booking status is unknown/);
+  assert.match(text, /uncertain\.current = true/);
+  assert.match(text, /setRequiresReconciliation\(true\)/);
+  assert.doesNotMatch(text, /new Date\(rawStart\)/);
   assert.match(text, /formElement\.reset\(\)/);
   assert.match(text, /finally \{\s*submitting\.current = false;\s*setBusy\(false\);/);
   assert.doesNotMatch(text, /event\.currentTarget\.reset\(\)/);

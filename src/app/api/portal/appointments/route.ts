@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { getCurrentPortalSession } from "@/lib/portal-auth";
 import { requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { resolveBranchLocalDateTime } from "@/lib/branch-local-date-time";
 
 function text(value: unknown, max = 5000) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -25,11 +26,12 @@ export async function POST(request: Request) {
   const mode = body?.mode === "HOME_COLLECTION" ? "HOME_COLLECTION" : "ONSITE";
   const serviceCode = text(body?.serviceCode, 80) || null;
   const serviceNameSnapshot = text(body?.serviceNameSnapshot, 220);
-  const scheduledStart = new Date(String(body?.scheduledStart || ""));
+  // New portal UI submits branch-local wall time; preserve explicit UTC/offset
+  // scheduledStart for existing API integrations without reinterpreting it.
   const address = text(body?.address, 5000) || null;
   const notes = text(body?.notes, 5000) || null;
 
-  if (!branchId || !serviceNameSnapshot || Number.isNaN(scheduledStart.getTime()) || scheduledStart <= new Date()) {
+  if (!branchId || !serviceNameSnapshot) {
     return NextResponse.json({ error: "invalid_booking_request" }, { status: 400 });
   }
   if (mode === "HOME_COLLECTION" && !address) {
@@ -59,6 +61,17 @@ export async function POST(request: Request) {
     prisma.patient.findFirst({ where: { id: patientId, organizationId: account.organizationId, status: "ACTIVE" } }),
   ]);
   if (!branch || !patient) return NextResponse.json({ error: "branch_or_patient_not_found" }, { status: 404 });
+
+  const usesBranchClock = body?.scheduledStartLocal !== undefined;
+  const scheduledStart = usesBranchClock
+    ? (typeof body?.scheduledStartLocal === "string"
+      ? resolveBranchLocalDateTime(body.scheduledStartLocal, branch.timezone) : null)
+    : new Date(String(body?.scheduledStart || ""));
+  if (!scheduledStart || !Number.isFinite(scheduledStart.getTime()) || scheduledStart <= new Date()) {
+    return NextResponse.json({
+      error: usesBranchClock ? "invalid_branch_local_schedule" : "invalid_booking_request",
+    }, { status: 400 });
+  }
 
   const datePart = scheduledStart.toISOString().slice(0,10).replaceAll("-","");
   const appointmentNumber = `${branch.code}-WEB-${datePart}-${randomUUID().slice(0,8).toUpperCase()}`;
