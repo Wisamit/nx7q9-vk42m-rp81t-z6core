@@ -35,7 +35,7 @@ test("F5: warning confirmation flags are false by default and only true after ex
   assert.ok(verify.lastIndexOf("const confirmed = await askReview")<verify.indexOf("confirmDeltaWarnings = true;"));
   assert.match(verify,/if \(!confirmed\) \{ cancelledAfterServerChallenge = true; break; \}/);
   assert.match(verify,/setBusy\("verify"\);/);
-  assert.match(verify,/if \(!accepted\)/); // use negated awaited prompt instead: guard is await directly.
+  assert.match(verify,/if \(!await askReview\(tr\(/);
 });
 
 test("F5: compact dialog focus trapping and independent clinical server review policies remain in place",()=>{
