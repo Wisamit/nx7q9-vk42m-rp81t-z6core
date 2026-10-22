@@ -188,6 +188,11 @@ async function screenshotAll() {
   fs.mkdirSync(out, {recursive:true});
   const images = path.join(out, "screenshots");
   fs.mkdirSync(images, {recursive:true});
+  // Reusing an old folder could misrepresent previous artifacts as a new
+  // sweep, even if a subsequent navigation fails. Require fresh private output.
+  if (fs.readdirSync(images).length) {
+    throw Error("Synthetic screenshot output directory must be empty before a new capture sweep.");
+  }
   const browser = await chromium.launch({headless:true});
   const findings = [];
   try {
@@ -217,6 +222,10 @@ async function screenshotAll() {
       page.on("pageerror", () => { pageErrorCount++; });
       let responseStatus = null;
       let finalRoute = "";
+      let navigationTargetMatched = false;
+      let documentFullyLoaded = false;
+      let documentBodyHasContent = false;
+      let visibleBusySurfaceCount = 0;
       let imageName = null;
       let evidenceSha256 = null;
       let documentLang = "";
@@ -233,10 +242,26 @@ async function screenshotAll() {
       try {
         const response = await page.goto(target, {waitUntil:"domcontentloaded",timeout:30000});
         responseStatus = response?.status() ?? null;
-        await page.waitForLoadState("load", {timeout:12000}).catch(() => {});
+        // Never silently turn a timed-out resource/document load into a
+        // successful screenshot. Wait for fonts so RTL/LTR geometry is real.
+        await page.waitForLoadState("load", {timeout:12000});
+        await page.waitForFunction(() => document.fonts.status === "loaded", null, {timeout:12000});
+        // Busy indicators may belong to streamed React pages. Allow them to
+        // settle; if they persist, the observation below records review needed.
+        await page.waitForFunction(() => {
+          const visible = (el) => {
+            const style = getComputedStyle(el);
+            return style.display !== "none" && style.visibility !== "hidden" &&
+              el.getClientRects().length > 0;
+          };
+          return ![...document.querySelectorAll(
+            '[aria-busy="true"],[role="progressbar"],[data-loading="true"]'
+          )].some(visible);
+        }, null, {timeout:8000}).catch(() => {});
         await page.waitForTimeout(180);
         const finalUrl = new URL(page.url());
         finalRoute = finalUrl.pathname;
+        navigationTargetMatched = finalRoute === new URL(target).pathname;
         if (finalUrl.origin !== base) {
           issues.push("REDIRECTED_OFF_STAGING_ORIGIN");
           throw Error("Browser redirected off isolated staging origin.");
@@ -255,22 +280,30 @@ async function screenshotAll() {
           const actions = [...document.querySelectorAll(
             "button, [role=button], a[href]"
           )].filter(visible);
+          const resolvedAriaName = (el) => {
+            const ids = (el.getAttribute("aria-labelledby") || "").trim()
+              .split(/\s+/).filter(Boolean);
+            return ids.length > 0 && ids.every(id =>
+              Boolean(document.getElementById(id)?.textContent?.trim())
+            );
+          };
           const labeled = (el) => {
-            const aria = el.getAttribute("aria-label") || el.getAttribute("aria-labelledby");
-            if (aria?.trim()) return true;
-            if (el.labels?.length) return true;
-            if (el.closest("label")) return true;
-            if (el.getAttribute("title")?.trim()) return true;
-            return false;
+            if ((el.getAttribute("aria-label") || "").trim() ||
+                resolvedAriaName(el)) return true;
+            if ([...(el.labels || [])].some(label => label.textContent?.trim())) return true;
+            if (el.closest("label")?.textContent?.trim()) return true;
+            return Boolean(el.getAttribute("title")?.trim());
           };
           const namedAction = (el) => {
-            if ((el.getAttribute("aria-label") || "").trim()) return true;
-            if ((el.getAttribute("aria-labelledby") || "").trim()) return true;
-            if ((el.getAttribute("title") || "").trim()) return true;
-            // The text is used only for a yes/no check and is NEVER reported.
-            if ((el.textContent || "").trim()) return true;
-            if (el.querySelector("img[alt]:not([alt=''])")) return true;
-            return false;
+            if ((el.getAttribute("aria-label") || "").trim() ||
+                resolvedAriaName(el) || (el.getAttribute("title") || "").trim()) return true;
+            // Never count hidden SVG title/text as an accessible button name.
+            // This is a boolean-only heuristic, not a full screen-reader audit.
+            const copy = el.cloneNode(true);
+            copy.querySelectorAll('[aria-hidden="true"],[hidden],[inert],script,style')
+              .forEach(node => node.remove());
+            if ((copy.textContent || "").trim()) return true;
+            return Boolean(copy.querySelector("img[alt]:not([alt=''])"));
           };
           const dialogs = [...document.querySelectorAll(
             '[role="dialog"],[role="alertdialog"]'
@@ -281,10 +314,7 @@ async function screenshotAll() {
           const dialogNamed = (el) => {
             const label = el.getAttribute("aria-label");
             if (label?.trim()) return true;
-            const refs = (el.getAttribute("aria-labelledby") || "").trim().split(/\s+/).filter(Boolean);
-            return refs.length > 0 && refs.every(id =>
-              Boolean(document.getElementById(id)?.textContent?.trim())
-            );
+            return resolvedAriaName(el);
           };
           const dialogA11yIssueCount = dialogs.filter(el =>
             el.getAttribute("aria-modal") !== "true" || !dialogNamed(el)
@@ -301,6 +331,11 @@ async function screenshotAll() {
             theme: document.documentElement.dataset.theme || "",
             overflow: document.documentElement.scrollWidth > window.innerWidth + 12,
             body: Boolean(document.querySelector("body")?.textContent?.trim()),
+            readyState: document.readyState,
+            fontsReady: document.fonts.status === "loaded",
+            visibleBusySurfaceCount: [...document.querySelectorAll(
+              '[aria-busy="true"],[role="progressbar"],[data-loading="true"]'
+            )].filter(visible).length,
             renderedFormCount: document.querySelectorAll("form").length,
             renderedActionCount: actions.length,
             visibleDialogCount: dialogs.length,
@@ -313,6 +348,9 @@ async function screenshotAll() {
         documentLang = info.lang;
         documentDirection = info.direction;
         documentTheme = info.theme;
+        documentFullyLoaded = info.readyState === "complete" && info.fontsReady;
+        documentBodyHasContent = info.body;
+        visibleBusySurfaceCount = info.visibleBusySurfaceCount;
         horizontalOverflow = info.overflow;
         renderedFormCount = info.renderedFormCount;
         renderedActionCount = info.renderedActionCount;
@@ -323,6 +361,8 @@ async function screenshotAll() {
         dialogA11yIssueCount = info.dialogA11yIssueCount;
         if (responseStatus === null || responseStatus >= 400) issues.push("HTTP_NON_SUCCESS");
         if (!info.body) issues.push("EMPTY_DOCUMENT");
+        if (!documentFullyLoaded) issues.push("DOCUMENT_NOT_FULLY_LOADED");
+        if (visibleBusySurfaceCount) issues.push("VISIBLE_LOADING_SURFACE_UNRESOLVED");
         if (info.overflow) issues.push("HORIZONTAL_VIEWPORT_OVERFLOW");
         if (info.unlabeledInputCount) issues.push("VISIBLE_INPUT_ACCESSIBLE_NAME_MISSING");
         if (info.unlabeledActionCount) issues.push("VISIBLE_ACTION_ACCESSIBLE_NAME_MISSING");
@@ -339,7 +379,7 @@ async function screenshotAll() {
         }
         // A redirected login / portal screen cannot stand as evidence for a protected route.
         // Redirect-only entry screens are captured but require human adjudication.
-        if (finalRoute !== new URL(target).pathname) {
+        if (!navigationTargetMatched) {
           issues.push("ROUTE_REDIRECTED_REVIEW_REQUIRED");
           if (finalRoute === "/login" || finalRoute === "/portal/login") {
             issues.push("REDIRECTED_TO_LOGIN");
@@ -364,6 +404,8 @@ async function screenshotAll() {
       findings.push({
         canonicalRoute:route,scenario:name,profile,
         responseStatus,redirectedToLogin:issues.includes("REDIRECTED_TO_LOGIN"),
+        navigationTargetMatched,documentFullyLoaded,documentBodyHasContent,
+        visibleBusySurfaceCount,
         htmlLanguage:documentLang,htmlDirection:documentDirection,
         htmlTheme:documentTheme,horizontalOverflow,uncaughtRuntimeErrorCount:pageErrorCount,
         renderedFormCount,renderedActionCount,visibleDialogCount,
