@@ -247,6 +247,17 @@ browsers, authenticator devices, real sessions or production credentials have
 been tested. No server-side MFA, passwords, session storage, tenant or branch
 authorization policy was changed.
 
+The same review also discovered that staff and portal logout controls
+navigated to the sign-in page regardless of the logout response. A transient
+network failure or server error could leave the session active on a shared
+workstation while displaying the login screen, falsely implying revocation.
+Both logout controls now require the server's **HTTP 200 `status=ok`**
+confirmation before navigating. An unconfirmed logout stays on the current
+screen with an explicit bilingual security warning and a manual retry option.
+In-flight protection prevents duplicate fast clicks. Regression tests verify
+success and reject malformed, non-200, 5xx and disconnected responses. Server
+revocation, audit and session-cookie logic remain unchanged.
+
 Per owner direction, all interactive owner reviews remain for the
 consolidated end-of-project acceptance stage: **F7 visual/browser UAT
 NOT_EXECUTED; F8 operational/clinical/finance/device/DR GO = NO_GO**.
