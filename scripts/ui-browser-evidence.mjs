@@ -330,7 +330,8 @@ async function screenshotAll() {
             direction: document.documentElement.dir || getComputedStyle(document.body).direction,
             theme: document.documentElement.dataset.theme || "",
             overflow: document.documentElement.scrollWidth > window.innerWidth + 12,
-            body: Boolean(document.querySelector("body")?.textContent?.trim()),
+            // Rendered text only: inline Next.js script data is not page content.
+            body: Boolean(document.body?.innerText?.trim()),
             readyState: document.readyState,
             fontsReady: document.fonts.status === "loaded",
             visibleBusySurfaceCount: [...document.querySelectorAll(
