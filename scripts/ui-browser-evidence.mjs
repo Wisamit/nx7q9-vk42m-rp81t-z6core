@@ -255,7 +255,7 @@ async function screenshotAll() {
               el.getClientRects().length > 0;
           };
           return ![...document.querySelectorAll(
-            '[aria-busy="true"],[role="progressbar"],[data-loading="true"]'
+            '[aria-busy="true"],[role="progressbar"]:not([aria-valuenow]),[data-loading="true"]'
           )].some(visible);
         }, null, {timeout:8000}).catch(() => {});
         await page.waitForTimeout(180);
@@ -335,7 +335,7 @@ async function screenshotAll() {
             readyState: document.readyState,
             fontsReady: document.fonts.status === "loaded",
             visibleBusySurfaceCount: [...document.querySelectorAll(
-              '[aria-busy="true"],[role="progressbar"],[data-loading="true"]'
+              '[aria-busy="true"],[role="progressbar"]:not([aria-valuenow]),[data-loading="true"]'
             )].filter(visible).length,
             renderedFormCount: document.querySelectorAll("form").length,
             renderedActionCount: actions.length,
