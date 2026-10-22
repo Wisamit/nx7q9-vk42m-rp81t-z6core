@@ -261,6 +261,11 @@ export function OrderCreateForm({
 
   return <form className="order-form" onSubmit={submit}>
     <div className="form-grid">
+      <div className="form-span order-step-heading">
+        <span className="order-step-index" aria-hidden="true">01</span>
+        <div><strong>{tr("Patient and ordering context", "المريض وبيانات الطلب")}</strong>
+          <p>{tr("Confirm patient identifier, branch, priority and clinical context before continuing.", "تأكد من معرف المريض والفرع والأولوية والسياق السريري قبل المتابعة.")}</p></div>
+      </div>
       {initialDoctorRequisition && <p className="form-warning form-span">
         {tr("Physician requisition conversion: patient, branch, referrer, tests, priority and original clinical text are fixed. Choose billing source, verify test-specific questions and register through standard pricing.",
         "تحويل إحالة طبيب: المريض والفرع والمحيل والفحوصات والأولوية والنص السريري الأصلي ثابتة. اختر مصدر الفوترة وتحقق من الأسئلة الخاصة بالفحوصات ثم سجّل وفق التسعير الاعتيادي.")}
@@ -348,6 +353,11 @@ export function OrderCreateForm({
       <label className="form-span">{tr("Pregnancy information", "معلومات الحمل")}<input name="pregnancyInfo" maxLength={500} /></label>
       <label className="form-span">{tr("Clinical notes", "ملاحظات سريرية")}<textarea name="clinicalNotes" rows={3} defaultValue={initialDoctorRequisition?.clinicalNotes || ""} readOnly={Boolean(initialDoctorRequisition)} /></label>
 
+      <div className="form-span order-step-heading">
+        <span className="order-step-index" aria-hidden="true">02</span>
+        <div><strong>{tr("Tests and packages", "الفحوصات والباقات")}</strong>
+          <p>{tr("Check for duplicates and confirm every requested test.", "تحقق من عدم تكرار الفحوصات وتأكد من كل فحص مطلوب.")}</p></div>
+      </div>
       {packages.length > 0 && !initialDoctorRequisition && <div className="form-span order-test-picker">
         <label>{tr("Commercial packages", "الباقات التجارية")}
           <div className="inline-search">
@@ -397,6 +407,11 @@ export function OrderCreateForm({
       </div>
 
 
+      <div className="form-span order-step-heading">
+        <span className="order-step-index" aria-hidden="true">03</span>
+        <div><strong>{tr("Billing and discount", "الفوترة والخصم")}</strong>
+          <p>{tr("Discount approval remains independent of clinical test selection.", "يبقى اعتماد الخصم منفصلًا عن اختيار الفحوصات السريرية.")}</p></div>
+      </div>
       <div className="form-span order-question-panel">
         <div className="section-title-row">
           <div>
@@ -444,6 +459,11 @@ export function OrderCreateForm({
         </div>}
       </div>
 
+      {selectedTests.some(test => test.orderQuestions.length > 0) && <div className="form-span order-step-heading">
+        <span className="order-step-index" aria-hidden="true">04</span>
+        <div><strong>{tr("Test-specific clinical questions", "الأسئلة السريرية الخاصة بالفحوصات")}</strong>
+          <p>{tr("Required answers remain visible for the browser and server to validate.", "تبقى الإجابات الإلزامية ظاهرة ليتحقق منها المتصفح والخادم.")}</p></div>
+      </div>}
       {selectedTests.some(test => test.orderQuestions.length > 0) && <div className="form-span order-question-panel">
         <div className="section-title-row">
           <div><p className="eyebrow">{tr("Clinical context", "السياق السريري")}</p><h3>{tr("Test-specific Questions", "أسئلة خاصة بالفحص")}</h3></div>
@@ -467,6 +487,17 @@ export function OrderCreateForm({
         </div>
       </div>}
 
+      <div className="form-span order-compact-review" role="note">
+        <strong>{tr("Final identity and billing check", "المراجعة النهائية للهوية والفوترة")}</strong>
+        <p>{tr("Patient", "المريض")}: {patientId ? patientOptions.find(item => item.id === patientId)?.label || tr("Unrecognized selection", "اختيار غير معروف") : tr("Not selected", "لم يتم الاختيار")}</p>
+        <p>{tr("Ordered tests", "الفحوصات المطلوبة")}: {selectedTests.length} {selectedTests.length > 0 ? "— " + selectedTests.map(item => item.code).join(", ") : ""}</p>
+        <p>{tr("Commercial packages", "الباقات التجارية")}: {selectedPackages.length} {selectedPackages.length > 0 ? "— " + selectedPackages.map(item => item.code).join(", ") : ""}</p>
+        <p>{tr("Discount", "الخصم")}: {discountPercent.toFixed(2)}%</p>
+        <small>{tr(
+          "Before submitting, review the ordering branch, the clinical answers, the selected billing client and any manager approval above. This action creates a laboratory order and may create an invoice.",
+          "قبل الإرسال راجع فرع الطلب والإجابات السريرية وعميل الفوترة وأي اعتماد مدير أعلاه. هذا الإجراء ينشئ طلباً مخبرياً وقد ينشئ فاتورة.",
+        )}</small>
+      </div>
       {message && <div className="form-success form-span">{message}</div>}
       <button className="primary-button form-span" disabled={busy}>{busy ? tr("Creating order…", "جارٍ إنشاء الطلب…") : tr("Register Order & Invoice", "تسجيل الطلب والفاتورة")}</button>
     </div>
