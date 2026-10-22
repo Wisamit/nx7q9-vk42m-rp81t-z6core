@@ -51,6 +51,7 @@ jobs:
       - run: node --experimental-strip-types --test tests/organization-settings-concurrency-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-126-legacy-row-lineage-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/f3-legacy-lineage-mariadb.integration.test.ts
+      - run: node --experimental-strip-types --test tests/f3-target-export-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/f1-exact-tariff-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-126-package-price-draft-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-127-reflex-confirmation-mariadb.integration.test.ts
@@ -225,6 +226,17 @@ jobs:
           path: |
             f0-scope-evidence.json
             f0-scope-evidence.md
+          if-no-files-found: error
+      # F6 only tests source and synthetic MariaDB evidence. Never browser UAT or GO.
+      - run: node scripts/f6-synthetic-software-gate.mjs --check
+      - run: node scripts/f6-synthetic-software-gate.mjs --json > f6-software-evidence.json
+      - run: node scripts/f6-synthetic-software-gate.mjs --markdown > f6-software-evidence.md
+      - uses: actions/upload-artifact@v4
+        with:
+          name: f6-software-evidence
+          path: |
+            f6-software-evidence.json
+            f6-software-evidence.md
           if-no-files-found: error
       - run: node scripts/release-closure-evidence.mjs --check
       - run: node scripts/release-closure-evidence.mjs --json > release-closure-evidence.json
