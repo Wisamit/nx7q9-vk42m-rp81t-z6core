@@ -31,3 +31,25 @@ export function evaluatePortalBookingReplay(
     return {kind:"conflict"};
   return {kind:"replay",appointment:previous};
 }
+
+
+/**
+ * The booking mutation acknowledges an appointment; it does not grant
+ * access to the full patient/contact/address/clinical appointment record.
+ * Construct a new object with a fixed allowlist for both 201 and 200 replay.
+ */
+export function portalBookingReceipt(appointment: {
+  id:string;
+  branchId:string;
+  patientId:string;
+  appointmentNumber:string;
+  status:string;
+}) {
+  return {
+    id:appointment.id,
+    branchId:appointment.branchId,
+    patientId:appointment.patientId,
+    appointmentNumber:appointment.appointmentNumber,
+    status:appointment.status,
+  };
+}
