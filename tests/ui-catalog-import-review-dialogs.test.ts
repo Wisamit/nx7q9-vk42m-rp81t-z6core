@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 const read=(p:string)=>readFileSync(p,"utf8");
 const modal=read("src/components/review-file-upload-dialog.tsx");
 
-test("review uploads use one-third, accessible dialog and explicit confirm not implicit file selection",()=>{
+test("review uploads use one-third, accessible dialog and explicit staging confirmation, not implicit file selection",()=>{
   assert.match(modal,/<CrudModal open=\{open\} onClose=\{close\} size="compact"/);
   assert.match(modal,/onStage: \(file: File\) => Promise<boolean>/);
   assert.match(modal,/const \[file, setFile\] = useState<File \| null>\(null\)/);
@@ -15,7 +15,7 @@ test("review uploads use one-third, accessible dialog and explicit confirm not i
   assert.match(modal,/onResetError\(\)/);
   assert.match(modal,/setSubmissionError\(\"\"\)/);
   assert.match(modal,/catch \{/);
-  assert.match(modal,/disabled=\{busy \|\| retryBlocked \|\| !file\} onClick=\{\(\) => void confirm\(\)\}/);
+  assert.match(modal,/disabled=\{busy \|\| retryBlocked \|\| !file\} onClick=\{\(\) => void stageSelectedFile\(\)\}/);
   assert.match(modal,/if \(!file \|\| busy \|\| retryBlocked \|\| submitting\.current\) return/);
   assert.match(modal,/if \(busy \|\| submitting\.current\) return/);
   assert.match(modal,/if \(succeeded\) \{/);
