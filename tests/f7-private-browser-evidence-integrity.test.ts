@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
 // @ts-expect-error Node ESM script is intentionally .mjs (no TS declaration).
 import {inspectF7BrowserEvidence,F7_SCENARIOS} from "../scripts/f7-browser-evidence-integrity.mjs";
+// @ts-expect-error Node ESM browser network policy is intentionally .mjs.
+import {isAllowedSyntheticNetworkRequest} from "../scripts/f7-synthetic-network-origin.mjs";
 
 type Entry=Record<string,unknown>;
 const manifest=JSON.parse(readFileSync("docs/UI_ROUTE_MANIFEST.json","utf8")) as {
@@ -17,6 +19,7 @@ const create=()=>{
       responseStatus:200,redirectedToLogin:false,
       navigationTargetMatched:true,documentFullyLoaded:true,
       documentBodyHasContent:true,visibleBusySurfaceCount:0,
+      blockedCrossOriginNetworkCount:0,
       htmlLanguage:scenario.split("-")[1],
       htmlDirection:scenario.includes("-ar-")?"rtl":"ltr",
       htmlTheme:scenario.split("-")[2],
@@ -95,6 +98,7 @@ test("F7: reported green screenshots cannot conceal failed HTTP, locale, keyboar
     ["navigationTargetMatched",false],["documentFullyLoaded",false],
     ["documentBodyHasContent",false],["visibleBusySurfaceCount",1],
     ["visibleBusySurfaceCount",-1],
+    ["blockedCrossOriginNetworkCount",1],["blockedCrossOriginNetworkCount",-1],
     ["htmlLanguage","en"],["htmlDirection","ltr"],["htmlTheme","dark"],
     ["redirectedToLogin",true],["horizontalOverflow",true],
     ["uncaughtRuntimeErrorCount",1],["unlabeledInputCount",1],
@@ -113,6 +117,34 @@ test("F7: reported green screenshots cannot conceal failed HTTP, locale, keyboar
   const en=create();
   en.findings[1].htmlLanguage="ar";
   assert.ok(check(en).errors.includes("F7_CAPTURE_METADATA_INVALID"));
+});
+
+test("F7: exact staging browser origin policy blocks cross-origin HTTP, CDN and WebSocket egress",()=>{
+  const origin="https://qa.familylab.example.test";
+  for (const url of [
+    "https://qa.familylab.example.test/",
+    "https://qa.familylab.example.test/assets/app.js",
+    "https://qa.familylab.example.test:443/api/session",
+    "wss://qa.familylab.example.test/interface/socket",
+  ]) assert.equal(isAllowedSyntheticNetworkRequest(url,origin),true,url);
+  for (const url of [
+    "http://qa.familylab.example.test/",
+    "ws://qa.familylab.example.test/interface/socket",
+    "https://qa.familylab.example.test:8443/api",
+    "https://sub.qa.familylab.example.test/",
+    "https://qa.familylab.example.test.evil.test/",
+    "https://fonts.googleapis.com/css2",
+    "wss://prod.familylab.example.test/device",
+    "https://u:p@qa.familylab.example.test/",
+    "data:text/plain,not-network",
+    "javascript:alert(1)",
+    "not a URL",
+  ]) assert.equal(isAllowedSyntheticNetworkRequest(url,origin),false,url);
+  const loopback="http://127.0.0.1:3041";
+  assert.equal(isAllowedSyntheticNetworkRequest("ws://127.0.0.1:3041/socket",loopback),true);
+  assert.equal(isAllowedSyntheticNetworkRequest("http://127.0.0.1:3041/health",loopback),true);
+  assert.equal(isAllowedSyntheticNetworkRequest("http://127.0.0.1:3042/health",loopback),false);
+  assert.equal(isAllowedSyntheticNetworkRequest("wss://127.0.0.1:3041/socket",loopback),false);
 });
 
 test("F7: PNG artifacts are bound to scenario viewport and SHA-256 content",()=>{
@@ -190,6 +222,16 @@ test("F7: ALL browser workflows are private, owner-triggered and use only synthe
   assert.ok(runner.includes("document.body?.innerText?.trim()"),
     "visible page content must exclude hidden JS/script payloads");
   assert.ok(runner.includes("Synthetic screenshot output directory must be empty"));
+  assert.ok(runner.includes('serviceWorkers:"block"'));
+  assert.ok(runner.includes('context.route("**/*"'));
+  assert.ok(runner.includes('context.routeWebSocket("**/*"'));
+  assert.ok(runner.includes("isAllowedSyntheticNetworkRequest"));
+  assert.ok(runner.includes("OFF_STAGING_NETWORK_EGRESS_BLOCKED"));
+  assert.ok(runner.includes("blockedCrossOriginNetworkCount"));
+  assert.ok(runner.includes("await socketRoute.connectToServer()"));
+  assert.ok(runner.includes("await socketRoute.close()"));
+  assert.ok(!runner.includes("requestRoute.fetch("),
+    "off-origin requests must be aborted before any network fetch occurs");
   assert.ok(runner.includes("resolvedAriaName(el)"));
   assert.ok(runner.includes("document.getElementById(id)?.textContent?.trim()"),
     "stale aria-labelledby IDs must not count as accessible input or button names");
