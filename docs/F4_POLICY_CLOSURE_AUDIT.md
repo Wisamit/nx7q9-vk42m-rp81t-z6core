@@ -62,3 +62,39 @@ HL7 abnormal flags or guess thresholds. Synthetic regression:
 fields or proprietary segments. Lack of an OBX-8/R flag does not prove
 interference absent; a vendor-specific approved policy remains required
 for qualified autoverification at F8. Do not activate clinical GO.
+
+
+## F4 2026-10-22 additional engineering hardening (PR #338)
+
+The authenticated LIS analyzer staging endpoint now parses a **strict, bounded**
+`bridgeMessageId` + `observations[]` contract before database lookups:
+`src/lib/analyzer-bridge-observation-boundary.ts`, invoked by
+`src/app/api/integrations/analyzers/[id]/results/route.ts`.
+
+- Accepted observation keys are exactly `observationId`, `barcode`,
+  `analyzerTestCode`, `rawValue`, and nullable `rawUnit`, consistent with
+  the conservative HL7/ASTM adapter. Unexpected keys at the top level or per
+  observation are denied with an opaque **409 requiring review**. This includes
+  `rawFlag`, HIL/hemolysis/lipemia/icterus metadata, status/qualifier, or any
+  unknown vendor field, even if empty or set to false. The system cannot assume
+  that omitting a flag proves absence of interference.
+- Known text fields use **bounds without truncation**; oversize, missing,
+  coerced or repeated IDs are rejected. The bridge's raw original message path
+  remains separate; this endpoint never treats a normalized value as an
+  authoritative substitute for the original bytes.
+- `tests/f4-bridge-observation-boundary.test.ts` verifies real normalizer
+  compatibility and denial of hidden clinical metadata before SQL staging.
+  The CI adds a bounded F4-specific fast test gate ahead of the full regression
+  suite. No new database table, clinical activation or source bytes leak.
+- `taxCreditReversal` now rejects negative original/prior tax and credit
+  values even if DECIMAL parsing accepts a signed number. The credit-note
+  regression exercises legitimate proportional reversal and negative values.
+
+**Remaining F4 software requirement:** governed, medically reviewed
+per-vendor/per-method/per-test/per-branch interference policy, with explicit
+effective dates, signed independent decisions, raw-flag metadata preservation
+and full instrument/HIL-to-hold validation. The strict ingestion gate is a
+temporary safety boundary and must not be mislabeled as implemented clinical
+interference normalization. Keep F4 `IN_PROGRESS` until the governed binding
+is designed and tested; actual vendor and tax-jurisdiction rules remain
+`BLOCKED_EXTERNAL` and no threshold/currency/tax rate is fabricated.
