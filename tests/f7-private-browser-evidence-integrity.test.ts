@@ -14,6 +14,13 @@ const create=()=>{
       canonicalRoute:row.route,scenario,
       profile:n%2?"staff_en":"staff_ar",
       status:"SCREENSHOT_CAPTURED",issues:[],
+      responseStatus:200,redirectedToLogin:false,
+      htmlLanguage:scenario.split("-")[1],
+      htmlDirection:scenario.includes("-ar-")?"rtl":"ltr",
+      horizontalOverflow:false,uncaughtRuntimeErrorCount:0,
+      renderedFormCount:1,renderedActionCount:1,visibleDialogCount:0,
+      unlabeledInputCount:0,unlabeledActionCount:0,
+      interactiveViewportClippingCount:0,dialogA11yIssueCount:0,
       evidenceImage:"synthetic-"+i+"-"+n+".png",
       visualHumanSignoff:"NOT_EXECUTED",
       modalInteractionSignoff:"NOT_EXECUTED",
@@ -69,6 +76,29 @@ test("F7: no route, device, locale, redirected session or missing file is silent
     fileInfo:()=>({file:true,symlink:false,bytes:80,signature:false}),
   });
   assert.ok(damaged.errors.includes("F7_SCREENSHOT_FILE_INVALID"));
+});
+
+test("F7: reported green screenshots cannot conceal failed HTTP, locale, keyboard or A11y checks",()=>{
+  const unsafeCases: Array<[string,unknown]> = [
+    ["responseStatus",500],["responseStatus",302],
+    ["htmlLanguage","en"],["htmlDirection","ltr"],
+    ["redirectedToLogin",true],["horizontalOverflow",true],
+    ["uncaughtRuntimeErrorCount",1],["unlabeledInputCount",1],
+    ["unlabeledActionCount",1],["interactiveViewportClippingCount",1],
+    ["dialogA11yIssueCount",1],["renderedActionCount",-1],
+  ];
+  for(const [field,value] of unsafeCases){
+    const altered=create();
+    altered.findings[0][field]=value;
+    assert.ok(check(altered).errors.includes("F7_CAPTURE_METADATA_INVALID"),
+      field+" must not pass when a forged green status hides a browser problem");
+  }
+  const missing=create();
+  delete missing.findings[0].responseStatus;
+  assert.ok(check(missing).errors.includes("F7_CAPTURE_METADATA_INVALID"));
+  const en=create();
+  en.findings[1].htmlLanguage="ar";
+  assert.ok(check(en).errors.includes("F7_CAPTURE_METADATA_INVALID"));
 });
 
 test("F7: software screenshot collector cannot grant owner, clinical or branch-role approval",()=>{
