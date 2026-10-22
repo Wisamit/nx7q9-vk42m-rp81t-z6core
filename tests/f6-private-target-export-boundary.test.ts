@@ -1,7 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
-// @ts-expect-error Deliberate private Node CLI module with no TypeScript declarations.
 import {exportF3TargetLineage} from "../scripts/legacy/export-target-lineage.mjs";
 
 const organizationId="00000000-0000-4000-8000-000000000001";
