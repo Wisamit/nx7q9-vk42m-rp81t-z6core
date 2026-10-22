@@ -227,13 +227,13 @@ async function screenshotAll() {
         blockedCrossOriginNetworkCount++;
         await requestRoute.abort("blockedbyclient");
       });
-      await context.routeWebSocket("**/*", socketRoute => {
+      await context.routeWebSocket("**/*", async socketRoute => {
         if (isAllowedSyntheticNetworkRequest(socketRoute.url(), base)) {
-          socketRoute.connect();
+          await socketRoute.connectToServer();
           return;
         }
         blockedCrossOriginNetworkCount++;
-        socketRoute.close();
+        await socketRoute.close();
       });
       // Force only the app's cosmetic theme preference in isolated synthetic
       // sessions so a saved profile setting cannot mislabel a dark/light shot.
