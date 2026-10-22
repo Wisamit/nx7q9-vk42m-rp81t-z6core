@@ -73,3 +73,23 @@ had no separately observed push-main CI run when this gate was prepared.
 This change is **prospective**, not proof that PR #352 previously passed
 its independent main gate. It can check the combined source at the next
 merge without rewriting clinical history or making a fake historical claim.
+
+## Strict private deployment-attestation structure
+
+For a privately prepared candidate, the metadata assessor denies **any**
+claim other than `ownerConfirmedDeployment: HOSTINGER_EXACT_SHA_ATTESTED`
+with a `deploymentVerification` object containing:
+
+- `deployedSha` and `mainCiSha`, both exactly matching the candidate's
+  `releaseCandidateSha`;
+- positive integer `mainCiRunId`;
+- nonempty private `reviewedBy`, `evidenceRef`, and offset-aware
+  `reviewedAt`.
+
+These are **required, externally obtained review metadata**, never inserted
+by the preparer. An arbitrary confirmation string, mismatched SHA, missing
+private evidence file, or unexecuted case fails closed. The assessor validates
+only the **structure** of signed evidence: humans must still independently
+authenticate the deployment, medical/device outcomes, financial statements,
+privacy, offsite recovery and final GO/NO-GO. Do not put private attestation
+contents or identifiers into the public repository.
