@@ -12,6 +12,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
+import { isAllowedSyntheticNetworkRequest } from "./f7-synthetic-network-origin.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MANIFEST = path.join(ROOT, "docs", "UI_ROUTE_MANIFEST.json");
@@ -65,24 +66,6 @@ function stagingOrigin(input) {
     throw Error("Staging hostname must explicitly indicate non-production (stage, qa, sandbox or test).");
   }
   return url.origin;
-}
-
-// Network egress is limited to the exactly attested isolated origin, not a
-// matching hostname suffix or another staging-looking domain. No URLs from
-// browser requests are included in evidence records or error messages.
-export function isAllowedSyntheticNetworkRequest(requestUrl, baseOrigin) {
-  try {
-    const url = new URL(requestUrl);
-    if (url.username || url.password) return false;
-    // Same-host WSS is the secure-WebSocket companion of HTTPS; same-host
-    // WS is the loopback HTTP companion. Reject all other schemes.
-    const mappedProtocol = url.protocol === "wss:" ? "https:" :
-      url.protocol === "ws:" ? "http:" : url.protocol;
-    return (mappedProtocol === "http:" || mappedProtocol === "https:") &&
-      new URL(mappedProtocol + "//" + url.host).origin === baseOrigin;
-  } catch {
-    return false;
-  }
 }
 
 function matchingFixturePath(route, actual) {
