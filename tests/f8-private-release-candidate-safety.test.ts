@@ -35,7 +35,25 @@ test("F8: private candidate carries all 88 unexecuted sections and seven unappro
     // Even a syntactically valid candidate cannot pass assessment until deployment is confirmed.
     const denied=run(assessor,["--assess",evidence,"--template",target]);
     assert.equal(denied.status,1);
-    assert.match(denied.stdout,/Hostinger deployment has not been independently confirmed/);
+    assert.match(denied.stdout,/matching main CI and Hostinger deployment attestation metadata required/);
+    candidate.ownerConfirmedDeployment="YES";
+    const spoofed=join(dir,"spoofed.json");
+    const {writeFileSync}=await import("node:fs");
+    writeFileSync(spoofed,JSON.stringify(candidate));
+    assert.equal(run(assessor,["--assess",evidence,"--template",spoofed]).status,1,
+      "An arbitrary confirmation string must never count as deployment evidence");
+    candidate.ownerConfirmedDeployment="HOSTINGER_EXACT_SHA_ATTESTED";
+    candidate.deploymentVerification={deployedSha:"b".repeat(40),mainCiSha:SHA,
+      mainCiRunId:1,reviewedBy:"owner-reviewer",evidenceRef:"private-attestation",
+      reviewedAt:"2026-10-22T18:00:00Z"};
+    writeFileSync(spoofed,JSON.stringify(candidate));
+    assert.equal(run(assessor,["--assess",evidence,"--template",spoofed]).status,1,
+      "Even valid-looking attestations must bind the EXACT main SHA");
+    candidate.deploymentVerification.deployedSha=SHA;
+    writeFileSync(spoofed,JSON.stringify(candidate));
+    assert.match(run(assessor,["--assess",evidence,"--template",spoofed]).stdout,
+      /private evidence missing or invalid JSON/,
+      "With matching attestation metadata the assessor must still require real private 88-case evidence");
     // A second preparation cannot overwrite a version already frozen for private review.
     assert.equal(run(prepare,["--sha",SHA,"--out",target]).status,1);
   } finally {
