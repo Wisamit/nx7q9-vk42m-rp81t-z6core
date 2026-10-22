@@ -4,6 +4,7 @@ import {readFileSync} from "node:fs";
 import {randomUUID} from "node:crypto";
 import {
   portalBookingSubmissionKey, portalBookingIntentHash,evaluatePortalBookingReplay,
+  portalBookingReceipt,
 } from "../src/lib/portal-appointment-idempotency.ts";
 import {requestPortalBooking,type PortalBookingPayload} from "../src/lib/portal-booking-client.ts";
 
@@ -106,6 +107,38 @@ test("F7 keyed portal booking: ambiguous HTTP timeout preserves exact original U
   assert.equal(requests,2,"only the explicit second call should query the original booking");
 });
 
+test("F7 portal appointment: create/replay receipts allowlist only booking identifiers",()=>{
+  const stored={
+    id,branchId:"branch",patientId:"patient",
+    appointmentNumber:"LAB-WEB-20261023-ABCD",status:"CONFIRMED",
+    organizationId:"private-organization",portalAccountId:"private-portal-account",
+    portalSubmissionKey:key,portalSubmissionHash:"a".repeat(64),
+    contactPhoneSnapshot:"+00000000000",
+    addressSnapshot:"synthetic-private-collection-address",
+    notes:"synthetic-private-clinical-notes",
+    serviceNameSnapshot:"synthetic-private-clinical-service",
+    createdByUserId:"private-operator",
+    updatedAt:new Date("2026-10-22T00:00:00Z"),
+  };
+  const receipt=portalBookingReceipt(stored);
+  assert.deepEqual(receipt,{
+    id,branchId:"branch",patientId:"patient",
+    appointmentNumber:"LAB-WEB-20261023-ABCD",status:"CONFIRMED",
+  });
+  const serialized=JSON.stringify({status:"ok",appointment:receipt});
+  for(const forbidden of [
+    stored.organizationId,stored.portalAccountId,stored.portalSubmissionKey,
+    stored.portalSubmissionHash,stored.contactPhoneSnapshot,
+    stored.addressSnapshot,stored.notes,stored.serviceNameSnapshot,
+    stored.createdByUserId,
+  ]){
+    assert.equal(serialized.includes(forbidden),false,
+      "internal or contact data must not be echoed in booking acknowledgment");
+  }
+  assert.equal(portalBookingReceipt({...stored,status:"REQUESTED"}).status,"REQUESTED",
+    "new 201 and advanced-status replay 200 share the same safe shape");
+});
+
 test("F7 keyed portal booking: schema, index and API enforce per-account replay without duplicate side effects",()=>{
   const schema=readFileSync("prisma/schema.prisma","utf8");
   const migration=readFileSync(
@@ -128,10 +161,10 @@ test("F7 keyed portal booking: schema, index and API enforce per-account replay 
   assert.ok(api.includes("const existing = await replayResponse()"));
   assert.ok(api.includes('return NextResponse.json({'));
   assert.ok(api.includes("tx.homeCollectionVisit.create"));
-  assert.ok(api.includes("portalSubmissionHash: undefined"),
-    "server may not return booking fingerprint of identifying intent to the portal");
-  assert.ok(api.includes("portalSubmissionKey: undefined"),
-    "server may not expose stored replay key in appointment JSON");
+  assert.equal((api.match(/appointment: portalBookingReceipt\(/g)||[]).length,2,
+    "both 201 create and 200 replay must use the same allowlisted receipt");
+  assert.doesNotMatch(api, /\.\.\.appointment\b/,
+    "do not spread the full Prisma appointment, even with a few excluded keys");
   assert.ok(api.includes("tx.auditEvent.create"));
   assert.ok(ui.includes("bookingKey.current ??= crypto.randomUUID()"));
   assert.ok(ui.includes("originalRequest.current = intent"));
