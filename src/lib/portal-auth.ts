@@ -28,7 +28,7 @@ export async function getCurrentPortalSession() {
       tokenHash: hashPortalToken(token),
       revokedAt: null,
       expiresAt: { gt: new Date() },
-      portalAccount: { status: "ACTIVE" },
+      portalAccount: { status: "ACTIVE", organization: { status: "ACTIVE" } },
     },
     include: {
       portalAccount: {
