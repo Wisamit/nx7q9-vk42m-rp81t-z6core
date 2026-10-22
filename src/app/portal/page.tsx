@@ -9,6 +9,7 @@ import { DoctorRequisitionForm } from "@/components/doctor-requisition-form";
 import { PortalContactVerification } from "@/components/portal-contact-verification";
 import { getUiLocale, statusLabel, tr } from "@/lib/ui-i18n";
 import { normalizePortalContactDestination } from "@/lib/report-outbound";
+import { corporatePortalPatientScopes } from "@/lib/corporate-portal-patient-scopes";
 
 export const dynamic = "force-dynamic";
 
@@ -36,16 +37,17 @@ export default async function PortalPage() {
       },
       select: { patientId: true, canViewReports: true, canBook: true },
     });
-    allowedPatientIds = access.filter(item => item.canBook || item.canViewReports).map(item => item.patientId);
-    reportPatientIds = access.filter(item => item.canViewReports).map(item => item.patientId);
-    bookingPatientIds = access.filter(item => item.canBook).map(item => item.patientId);
+    const scopes = corporatePortalPatientScopes(access);
+    allowedPatientIds = scopes.appointmentPatientIds;
+    reportPatientIds = scopes.reportPatientIds;
+    bookingPatientIds = scopes.bookingPatientIds;
   }
 
   const orderWhere = account.type === "PATIENT"
     ? { organizationId: account.organizationId, patientId: account.patientId! }
     : account.type === "DOCTOR"
       ? doctorAccessWhere({ organizationId: account.organizationId, referrerId: account.referrerId!, capability: "orders", now })
-      : { organizationId: account.organizationId, clientId: account.clientId!, patientId: { in: allowedPatientIds } };
+      : { organizationId: account.organizationId, clientId: account.clientId!, patientId: { in: reportPatientIds } };
 
   const reportOrderWhere = account.type === "PATIENT"
     ? { organizationId: account.organizationId, patientId: account.patientId! }
