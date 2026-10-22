@@ -36,7 +36,7 @@ export function ReviewFileUploadDialog({
     setOpen(false);
     setFile(null);
   }
-  async function confirm() {
+  async function stageSelectedFile() {
     if (!file || busy || retryBlocked || submitting.current) return;
     submitting.current = true;
     setSubmissionError("");
@@ -80,7 +80,7 @@ export function ReviewFileUploadDialog({
             {ar ? "إلغاء" : "Cancel"}
           </button>
           <button type="button" className="primary-button"
-            disabled={busy || retryBlocked || !file} onClick={() => void confirm()}>
+            disabled={busy || retryBlocked || !file} onClick={() => void stageSelectedFile()}>
             {busy ? (ar ? "جارٍ تجهيز المراجعة…" : "Staging for review…")
               : (ar ? "تأكيد تجهيز الملف" : "Confirm review staging")}
           </button>
