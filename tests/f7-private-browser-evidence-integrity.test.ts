@@ -17,6 +17,7 @@ const create=()=>{
       responseStatus:200,redirectedToLogin:false,
       htmlLanguage:scenario.split("-")[1],
       htmlDirection:scenario.includes("-ar-")?"rtl":"ltr",
+      htmlTheme:scenario.split("-")[2],
       horizontalOverflow:false,uncaughtRuntimeErrorCount:0,
       renderedFormCount:1,renderedActionCount:1,visibleDialogCount:0,
       unlabeledInputCount:0,unlabeledActionCount:0,
@@ -81,7 +82,7 @@ test("F7: no route, device, locale, redirected session or missing file is silent
 test("F7: reported green screenshots cannot conceal failed HTTP, locale, keyboard or A11y checks",()=>{
   const unsafeCases: Array<[string,unknown]> = [
     ["responseStatus",500],["responseStatus",302],
-    ["htmlLanguage","en"],["htmlDirection","ltr"],
+    ["htmlLanguage","en"],["htmlDirection","ltr"],["htmlTheme","dark"],
     ["redirectedToLogin",true],["horizontalOverflow",true],
     ["uncaughtRuntimeErrorCount",1],["unlabeledInputCount",1],
     ["unlabeledActionCount",1],["interactiveViewportClippingCount",1],
@@ -133,6 +134,10 @@ test("F7: ALL browser workflows are private, owner-triggered and use only synthe
   assert.ok(runner.includes("VISIBLE_DIALOG_ACCESSIBLE_NAME_OR_MODAL_MISSING"));
   assert.ok(runner.includes('el.getAttribute("aria-modal") !== "true"'));
   assert.ok(runner.includes("document.getElementById(id)?.textContent?.trim()"));
+  assert.ok(runner.includes('document.documentElement.dataset.theme'),
+    "a named dark/light scenario needs verified rendered theme state");
+  assert.ok(runner.includes("context.addInitScript"),
+    "the synthetic browser must override only the cosmetic profile theme");
   assert.ok(runner.includes(String.raw`split(/\s+/)`),
     "aria-labelledby IDs must be split on whitespace, not on a literal backslash");
   assert.ok(!runner.includes(String.raw`split(/\\s+/)`));
