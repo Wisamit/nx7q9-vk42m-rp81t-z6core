@@ -98,3 +98,29 @@ temporary safety boundary and must not be mislabeled as implemented clinical
 interference normalization. Keep F4 `IN_PROGRESS` until the governed binding
 is designed and tested; actual vendor and tax-jurisdiction rules remain
 `BLOCKED_EXTERNAL` and no threshold/currency/tax rate is fabricated.
+
+
+### Server-side original-analyzer-message caveat gate
+
+The staging route now also calls `analyzerRawClinicalQualifierDecision` on
+the immutable original `AnalyzerMessage.protocol` and `rawPayload` after
+locating the authenticated message, **before** resolving mappings and before
+any specimen/result mutation. This prevents a compromised or erroneous
+normalized payload from suppressing a qualifier present in the original.
+
+The conservative HL7 v2 `OBX` subset denies nonempty unsupported fields
+(including OBX-7 reference text, OBX-8 abnormal/interference flags, OBX-12+
+vendor context), any status other than final `F`, comments and unsupported
+clinical segments. The ASTM E1394 subset denies unsupported R record
+qualifiers, notes and complex clinical values. An undecodable source or
+unknown protocol fails closed. The server returns categorical 409 metadata,
+not raw patient, device, or result content. Raw evidence is retained in the
+existing AnalyzerMessage record.
+
+The implementation deliberately does **not** infer a negative HIL finding
+from an empty qualifier. Future regulated instrument acceptance still
+requires signed vendor-specific mapping, test/method/branch effective dates,
+policy-governed review outcomes and documented external sign-off. Synthetic
+tests live in `tests/f4-raw-analyzer-qualifier-gate.test.ts`. This closes an
+unsafe omission path without pretending that medical interference
+quantification or an analyzer-specific policy has been approved.
