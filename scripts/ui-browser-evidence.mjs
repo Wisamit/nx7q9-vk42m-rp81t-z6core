@@ -218,6 +218,7 @@ async function screenshotAll() {
       let responseStatus = null;
       let finalRoute = "";
       let imageName = null;
+      let evidenceSha256 = null;
       let documentLang = "";
       let documentDirection = "";
       let documentTheme = "";
@@ -349,6 +350,10 @@ async function screenshotAll() {
         await page.screenshot({
           path:path.join(images,imageName),fullPage:true,animations:"disabled",timeout:30000,
         });
+        // Tie the evidence record to the actual PNG bytes rather than trusting
+        // a reusable route/scenario filename from an earlier staging sweep.
+        evidenceSha256 = createHash("sha256")
+          .update(fs.readFileSync(path.join(images,imageName))).digest("hex");
       } catch {
         // Deliberately do not record exception/response text: a staging
         // application could accidentally embed patient names in exceptions.
@@ -364,7 +369,7 @@ async function screenshotAll() {
         renderedFormCount,renderedActionCount,visibleDialogCount,
         unlabeledInputCount,unlabeledActionCount,interactiveViewportClippingCount,
         dialogA11yIssueCount,
-        evidenceImage:imageName,
+        evidenceImage:imageName,evidenceSha256,
         status:issues.length ? "REVIEW_REQUIRED" : "SCREENSHOT_CAPTURED",
         issues,
         // Screenshots are *not* visually reviewed by this automated process.
