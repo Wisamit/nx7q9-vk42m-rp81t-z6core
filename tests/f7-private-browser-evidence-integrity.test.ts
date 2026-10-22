@@ -133,6 +133,9 @@ test("F7: ALL browser workflows are private, owner-triggered and use only synthe
   assert.ok(runner.includes("VISIBLE_DIALOG_ACCESSIBLE_NAME_OR_MODAL_MISSING"));
   assert.ok(runner.includes('el.getAttribute("aria-modal") !== "true"'));
   assert.ok(runner.includes("document.getElementById(id)?.textContent?.trim()"));
+  assert.ok(runner.includes(String.raw`split(/\s+/)`),
+    "aria-labelledby IDs must be split on whitespace, not on a literal backslash");
+  assert.ok(!runner.includes(String.raw`split(/\\s+/)`));
   assert.ok(!runner.includes("page.click("));
   assert.ok(!runner.includes("page.fill("));
   const privateReview=readFileSync(".github/workflows/ui-synthetic-browser-review.yml","utf8");
