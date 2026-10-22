@@ -34,7 +34,7 @@ test("F3: full 36-char UUID is accepted identically by manifest, reconciliation 
     organizationId:org,lineage:[],currentOrganizationScopeVerified:true,
   }),true);
 });
-test("F3: every source boundary has the same five UUID segments, rejecting truncated and malformed IDs",()=>{
+test("F3: every source boundary has the same five UUID segments, rejecting truncated and malformed IDs",async()=>{
   const files=[
     "src/lib/f3-legacy-extraction-manifest.ts",
     "src/lib/f3-legacy-intake-pages.ts",
