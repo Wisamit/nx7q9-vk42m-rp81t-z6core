@@ -101,3 +101,28 @@ export async function submitPortalPasswordChange(
     return { kind: "changed" };
   return { kind: "uncertain" };
 }
+
+/**
+ * Both logout APIs revoke the server session and clear the session cookie
+ * before returning HTTP 200 {status:"ok"}. Do not navigate to the login
+ * screen on an unconfirmed revocation: that can leave an active session on
+ * a shared computer. Manual retry is safe because logout is idempotent.
+ */
+export async function submitSignOut(
+  audience: "staff" | "portal",
+  send: Sender = fetch,
+): Promise<{ kind: "signed_out" } | Uncertain> {
+  try {
+    const route = audience === "staff" ? "/api/auth/logout" : "/api/portal/auth/logout";
+    const response = await send(route, { method: "POST" });
+    const body: unknown = await response.json().catch(() => null);
+    if (response.status === 200 && response.ok &&
+        body && typeof body === "object" && !Array.isArray(body) &&
+        (body as { status?: unknown }).status === "ok") {
+      return { kind: "signed_out" };
+    }
+  } catch {
+    // A missing acknowledgement is never proof that the session is revoked.
+  }
+  return { kind: "uncertain" };
+}
