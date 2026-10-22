@@ -22,6 +22,7 @@ const crossModule=[
   "tests/release-closure-sendout-serialization-mariadb.integration.test.ts",
   "tests/stage-139-report-template-governance-mariadb.integration.test.ts",
   "tests/stage-129-hostinger-backup.test.mjs",
+  "tests/f3-target-export-mariadb.integration.test.ts",
   "tests/f6-five-unmapped-scope-regressions.test.ts",
 ];
 
