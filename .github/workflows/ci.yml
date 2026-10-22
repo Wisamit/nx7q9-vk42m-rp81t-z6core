@@ -3,6 +3,8 @@ name: CI
 on:
   pull_request:
     branches: [main]
+    # Explicit merged-PR run: App-authored merges may not emit a push CI run.
+    types: [opened, synchronize, reopened, closed]
   push:
     branches: [main]
 
@@ -12,6 +14,8 @@ concurrency:
 
 jobs:
   validate:
+    # A closed-unmerged PR is not a valid release candidate.
+    if: ${{ github.event_name != 'pull_request' || github.event.action != 'closed' || github.event.pull_request.merged == true }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
@@ -33,6 +37,17 @@ jobs:
           --health-retries 10
     steps:
       - uses: actions/checkout@v4
+        with:
+          # A merged PR's closed event must validate the exact commit on main,
+          # not the old PR head, an inferred base, or a stale test-merge ref.
+          ref: ${{ github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged && github.event.pull_request.merge_commit_sha || github.sha }}
+      - name: Verify exact merged main revision
+        if: ${{ github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged == true }}
+        env:
+          EXPECTED_MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$EXPECTED_MERGE_SHA"
+          test "${{ github.event.pull_request.base.ref }}" = "main"
       - uses: actions/setup-node@v4
         with:
           node-version: '22.18.0'
