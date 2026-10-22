@@ -84,6 +84,28 @@ test("F7 keyed portal booking: client uses UUID in header, excludes from PII bod
   }
 });
 
+test("F7 keyed portal booking: ambiguous HTTP timeout preserves exact original UUID for safe replay",async()=>{
+  let requests=0;
+  const first=await requestPortalBooking(payload,async(url,init)=>{
+    requests++;
+    assert.equal(url,"/api/portal/appointments");
+    assert.equal((init.headers as Record<string,string>)["x-family-lab-portal-appointment-key"],key);
+    return new Response(JSON.stringify({error:"invalid_booking_request"}),{status:408});
+  });
+  assert.deepEqual(first,{kind:"uncertain"},"proxy response cannot prove rollback");
+  assert.equal(requests,1,"client must never automatically retry with a fresh key");
+  const second=await requestPortalBooking(payload,async(_url,init)=>{
+    requests++;
+    assert.equal((init.headers as Record<string,string>)["x-family-lab-portal-appointment-key"],key);
+    return new Response(JSON.stringify({
+      status:"ok",replayed:true,
+      appointment:{id,branchId:payload.branchId,patientId:payload.patientId,status:"CONFIRMED"},
+    }),{status:200});
+  });
+  assert.deepEqual(second,{kind:"requested",appointmentId:id,replayed:true});
+  assert.equal(requests,2,"only the explicit second call should query the original booking");
+});
+
 test("F7 keyed portal booking: schema, index and API enforce per-account replay without duplicate side effects",()=>{
   const schema=readFileSync("prisma/schema.prisma","utf8");
   const migration=readFileSync(
