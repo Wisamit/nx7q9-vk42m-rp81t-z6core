@@ -2,8 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
 // @ts-expect-error Node ESM script is intentionally .mjs (no TS declaration).
-import {inspectF7BrowserEvidence,F7_SCENARIOS}
-  from "../scripts/f7-browser-evidence-integrity.mjs";
+import {inspectF7BrowserEvidence,F7_SCENARIOS} from "../scripts/f7-browser-evidence-integrity.mjs";
 
 type Entry=Record<string,unknown>;
 const manifest=JSON.parse(readFileSync("docs/UI_ROUTE_MANIFEST.json","utf8")) as {
