@@ -192,6 +192,32 @@ product-owner direction to defer all manual tests until final consolidated
 UAT remains in effect. F7 owner UAT remains `NOT_EXECUTED`; F8 remains
 `NO_GO`.
 
+## F7 authenticated portal HTML language and organization context
+
+The root Next.js layout originally selected HTML `lang`, `dir`,
+organization theme and branding from a staff cookie or organization-wide
+defaults, even when a patient/doctor/client portal session was active. Portal
+content used the account's own `preferredLocale` independently, creating
+a mismatch between the document language/direction and the visible Arabic or
+English portal content. On shared multi-organization installations, the
+public-single-organization default could also be the wrong brand for an
+authenticated portal session.
+
+The root layout now resolves active staff identity first and only reads the
+active portal session when no staff identity is present. It uses the
+authenticated actor's organization-scoped settings and language; anonymous
+sessions retain the existing single-active-organization default. This is
+a **presentation-only change**; no branch grants, portal report filters,
+clinical authorization, token lifetime, billing or server-side access
+rules are altered. Synthetic regression tests cover portal-only AR/EN,
+staff precedence even with both cookies, empty/public fallback, and the
+active-account session guard.
+
+The 81-by-6 screenshot sweep and browser screen-reader, focus, visual
+and cross-role verification still await isolated private staging and
+consolidated owner review. **F7 UAT_DEFERRED / NOT_EXECUTED**;
+qualified F8 operational release **NO_GO**.
+
 ## Subsequent F7 acceptance (still outstanding)
 
 Screenshot capture is a first step. To complete F7, authenticated

@@ -3,6 +3,8 @@ import "./globals.css";
 import packageJson from "../../package.json";
 import { SystemShell } from "@/components/system-shell";
 import { getCurrentSession, permissionSet } from "@/lib/auth";
+import { getCurrentPortalSession } from "@/lib/portal-auth";
+import { resolveRootInterfaceContext } from "@/lib/root-interface-context";
 import { buildThemeCss, getOrganizationSystemSettings, getSingleActiveOrganizationSystemSettings, SYSTEM_DEVELOPER_CREDIT } from "@/lib/system-settings";
 
 export const metadata: Metadata = {
@@ -15,12 +17,24 @@ export const metadata: Metadata = {
 
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const session = await getCurrentSession();
-  const settings = session
-    ? await getOrganizationSystemSettings(session.user.organizationId)
+  // Only check the portal cookie when no staff session is active. Portal
+  // presentation context changes neither authorization nor staff privileges.
+  const portalSession = session ? null : await getCurrentPortalSession();
+  const context = resolveRootInterfaceContext(
+    session ? {
+      organizationId: session.user.organizationId,
+      preferredLocale: session.user.preferredLocale,
+    } : null,
+    portalSession ? {
+      organizationId: portalSession.portalAccount.organizationId,
+      preferredLocale: portalSession.portalAccount.preferredLocale,
+    } : null,
+  );
+  const settings = context.organizationId
+    ? await getOrganizationSystemSettings(context.organizationId)
     : await getSingleActiveOrganizationSystemSettings();
-  const locale = session
-    ? (session.user.preferredLocale === "ar" ? "ar" : "en")
-    : (settings?.defaultLocale === "ar" ? "ar" : "en");
+  const locale = context.preferredLocale
+    ?? (settings?.defaultLocale === "ar" ? "ar" : "en");
   const direction = locale === "ar" ? "rtl" : "ltr";
   const initialTheme = settings?.defaultTheme === "DARK" ? "dark" : "light";
   const systemName = settings
