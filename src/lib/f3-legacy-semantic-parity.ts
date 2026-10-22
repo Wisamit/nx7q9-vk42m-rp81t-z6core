@@ -22,7 +22,7 @@ export type F3SemanticRow={
   target:Readonly<Record<string,unknown>>;
 };
 export type F3SemanticTableResult={
-  tableName:string;rows:number;matched:number;mismatched:number;
+  tableName:string;targetType:string;rows:number;matched:number;mismatched:number;
   differingFields:readonly string[];
 };
 export type F3SemanticParityResult={
@@ -93,13 +93,13 @@ function normalized(kind:F3SemanticKind,value:unknown):string|null{
 }
 function validatedPolicies(policies:readonly F3SemanticPolicy[]){
   const map=new Map<string,F3SemanticPolicy>();
-  if(policies.length<1||policies.length>15)throw Error("f3_semantic_policy_count_invalid");
+  if(policies.length<1||policies.length>48)throw Error("f3_semantic_policy_count_invalid");
   for(const policy of policies){
     if(!sourceTables.has(policy.tableName)||
        !legacyRowTargets[policy.tableName]?.includes(policy.targetType)||
        !Array.isArray(policy.fields)||policy.fields.length<1||
        policy.fields.length>64||
-       map.has(policy.tableName))throw Error("f3_semantic_policy_invalid");
+       map.has(policy.tableName+":"+policy.targetType))throw Error("f3_semantic_policy_invalid");
     const sources=new Set<string>(),targets=new Set<string>();
     for(const field of policy.fields){
       if(!shortName.test(field.sourceField)||
@@ -110,7 +110,7 @@ function validatedPolicies(policies:readonly F3SemanticPolicy[]){
         throw Error("f3_semantic_policy_fields_invalid");
       sources.add(field.sourceField);targets.add(field.targetField);
     }
-    map.set(policy.tableName,policy);
+    map.set(policy.tableName+":"+policy.targetType,policy);
   }
   return map;
 }
@@ -133,7 +133,7 @@ export function reconcileF3SemanticValues(input:{
     rows:number;matched:number;mismatched:number;fields:Set<string>;
   }>();
   for(const row of input.rows){
-    const policy=policies.get(row.tableName);
+    const policy=policies.get(row.tableName+":"+row.targetType);
     if(!policy||row.targetType!==policy.targetType||
        row.classification!=="APPROVED_MAPPING"||
        !legacyRowHex.test(row.rowDigest)||
@@ -146,7 +146,7 @@ export function reconcileF3SemanticValues(input:{
     if(!fieldsMatch(row.source,policy.fields.map(x=>x.sourceField)) ||
        !fieldsMatch(row.target,policy.fields.map(x=>x.targetField)))
       throw Error("f3_semantic_unapproved_or_missing_field");
-    const summary=totals.get(row.tableName)||
+    const summary=totals.get(row.tableName+":"+row.targetType)||
       {rows:0,matched:0,mismatched:0,fields:new Set<string>()};
     let mismatch=false;
     for(const f of policy.fields){
@@ -158,7 +158,7 @@ export function reconcileF3SemanticValues(input:{
     }
     summary.rows++;
     if(mismatch)summary.mismatched++;else summary.matched++;
-    totals.set(row.tableName,summary);
+    totals.set(row.tableName+":"+row.targetType,summary);
   }
   const tables=[...policies].map(([name])=>{
     const v=totals.get(name);
