@@ -60,8 +60,8 @@ export function parseF3UnverifiedDigestManifest(
       throw Error("f3_manifest_unverified_table");
     tables.add(t.sourceTable);
     declared.set(t.sourceTable,{
-      schema:t.sourceSchemaSha256,count:t.rows,
-      duplicates:t.duplicateContentRows,
+      schema:t.sourceSchemaSha256,count:t.rows as number,
+      duplicates:t.duplicateContentRows as number,
       observed:0,occurrences:new Map(),
     });
   }
@@ -77,13 +77,14 @@ export function parseF3UnverifiedDigestManifest(
        (row.occurrence as number)<1)
       throw Error("f3_manifest_unverified_row");
     const table=declared.get(row.sourceTable);
+    const occurrence=row.occurrence as number;
     if(!table||row.sourceSchemaSha256!==table.schema||
-       row.occurrence>table.count)
+       occurrence>table.count)
       throw Error("f3_manifest_unverified_schema_or_occurrence");
     const seen=table.occurrences.get(row.rowDigest)??new Set<number>();
-    if(seen.has(row.occurrence))
+    if(seen.has(occurrence))
       throw Error("f3_manifest_unverified_duplicate_row");
-    seen.add(row.occurrence);
+    seen.add(occurrence);
     table.occurrences.set(row.rowDigest,seen);
     table.observed++;
   }
