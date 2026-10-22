@@ -123,6 +123,54 @@ test("F7 auth forms never automatically replay an uncertain authentication mutat
   assert.equal(count,4);
 });
 
+test("F7: neither staff nor portal logout navigates without an acknowledged revocation",async()=>{
+  for(const [audience,expected] of [
+    ["staff","/api/auth/logout"],["portal","/api/portal/auth/logout"],
+  ] as const){
+    const ok=await import("../src/lib/auth-form-transport.ts").then(
+      ({submitSignOut})=>submitSignOut(audience,async(url,init)=>{
+        assert.equal(url,expected);
+        assert.equal(init.method,"POST");
+        return json({status:"ok"});
+      }),
+    );
+    assert.deepEqual(ok,{kind:"signed_out"},audience);
+  }
+  const {submitSignOut}=await import("../src/lib/auth-form-transport.ts");
+  for(const result of [
+    json({status:"pending"}),
+    json({status:"ok"},202),
+    json({status:"ok"},500),
+    new Response("not-json",{status:200}),
+  ]) {
+    assert.deepEqual(await submitSignOut("portal",async()=>result),{kind:"uncertain"});
+  }
+  let calls=0;
+  const lost=async():Promise<Response>=>{calls++;throw Error("network failure");};
+  assert.deepEqual(await submitSignOut("staff",lost),{kind:"uncertain"});
+  assert.equal(calls,1,"logout failure must not trigger an automatic retry");
+});
+
+test("F7 logout UI retains page and displays a bilingual warning if the session may still exist",()=>{
+  for(const path of [
+    "src/components/logout-button.tsx",
+    "src/components/portal-logout-button.tsx",
+  ]){
+    const s=readFileSync(path,"utf8");
+    assert.match(s,/submitSignOut\("(?:staff|portal)"\)/);
+    assert.match(s,/kind === "signed_out"/);
+    assert.match(s,/inFlight\.current/);
+    assert.match(s,/finally \{[\s\S]*?set(?:Loading|Busy)\(false\)/);
+    assert.match(s,/role="alert"/);
+    assert.doesNotMatch(s,/await fetch\(/,path);
+    assert.ok(s.indexOf('kind === "signed_out"')<s.indexOf('router.replace('),
+      "navigation must happen only after the server confirms session revocation");
+  }
+  const shell=readFileSync("src/components/system-shell.tsx","utf8");
+  assert.ok(shell.includes('locale={locale}'),
+    "staff logout warning must use the active session language");
+});
+
 test("F7 UI source gates: busy never locks permanently, uncertain outcomes require reload and no double submits",()=>{
   for(const path of [
     "src/components/staff-login-form.tsx",
