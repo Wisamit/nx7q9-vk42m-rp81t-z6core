@@ -218,6 +218,50 @@ and cross-role verification still await isolated private staging and
 consolidated owner review. **F7 UAT_DEFERRED / NOT_EXECUTED**;
 qualified F8 operational release **NO_GO**.
 
+## F7 staff and portal authentication form reliability (software only)
+
+Source review found three independent client-facing failures in staff sign-in,
+patient/doctor/client portal sign-in and the portal first-use password change:
+a rejected browser `fetch()` could leave the submit button permanently busy;
+certain incomplete HTTP-success bodies could be interpreted as authentication
+or password-change success; double submissions could replay an ambiguous
+mutation.
+
+The new `src/lib/auth-form-transport.ts` accepts **only** the backend's
+documented success receipts: staff HTTP 200 with `status=ok`, initial staff
+MFA HTTP 202 with `status=mfa_required,mfaRequired=true`, portal login HTTP
+200 with `status=ok` and a boolean `mustChangePassword`, and portal
+password change HTTP 200 with `status=ok`. Known 4xx rejects remain
+localized UI errors; network loss, 5xx and malformed success receipts become
+`uncertain`. Neither success nor MFA completion is fabricated. Ambiguous
+mutations are **not automatically retried**; the form shows a bilingual
+reconciliation/reload instruction and disables further submissions until
+the page is reloaded. An in-flight ref blocks rapid double clicks and busy
+state is released in `finally` even after a rejected promise. Message
+announcements use `role=alert`.
+
+Direct unit/source tests cover HTTP 200/202 success, invalid receipts,
+explicit rejections, simulated lost responses, no automatic replay and
+presence of the UI latch/finally contract. This is **not** evidence that
+browsers, authenticator devices, real sessions or production credentials have
+been tested. No server-side MFA, passwords, session storage, tenant or branch
+authorization policy was changed.
+
+The same review also discovered that staff and portal logout controls
+navigated to the sign-in page regardless of the logout response. A transient
+network failure or server error could leave the session active on a shared
+workstation while displaying the login screen, falsely implying revocation.
+Both logout controls now require the server's **HTTP 200 `status=ok`**
+confirmation before navigating. An unconfirmed logout stays on the current
+screen with an explicit bilingual security warning and a manual retry option.
+In-flight protection prevents duplicate fast clicks. Regression tests verify
+success and reject malformed, non-200, 5xx and disconnected responses. Server
+revocation, audit and session-cookie logic remain unchanged.
+
+Per owner direction, all interactive owner reviews remain for the
+consolidated end-of-project acceptance stage: **F7 visual/browser UAT
+NOT_EXECUTED; F8 operational/clinical/finance/device/DR GO = NO_GO**.
+
 ## Subsequent F7 acceptance (still outstanding)
 
 Screenshot capture is a first step. To complete F7, authenticated

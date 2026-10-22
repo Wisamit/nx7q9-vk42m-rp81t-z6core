@@ -220,7 +220,7 @@ export function SystemShell({ user, appearance, children }: { user: ShellUser; a
             </span>
             <div><strong>{user.displayName}</strong><small>{locale === "ar" ? "العربية" : "English"}</small></div>
           </div>
-          <LogoutButton label={tr("Sign out", "تسجيل الخروج")} />
+          <LogoutButton label={tr("Sign out", "تسجيل الخروج")} locale={locale} />
         </div>
       </header>
       <div className="system-content">{children}</div>
