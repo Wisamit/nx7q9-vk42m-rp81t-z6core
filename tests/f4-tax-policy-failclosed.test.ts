@@ -100,3 +100,30 @@ test("F4 tax: a prior credit's tax cannot exceed the associated credited gross",
     additionalGross:"1.0000",
   }),null);
 });
+
+
+test("F4 credit note: negative tax or previously credited tax must never create refund credits",()=>{
+  const baseline={
+    originalGross:"100.0000",originalTax:"10.0000",
+    previouslyCreditedGross:"30.0000",
+    previouslyCreditedTax:"3.0000",additionalGross:"20.0000",
+  };
+  assert.equal(taxCreditReversal({
+    ...baseline,originalTax:"-10.0000",
+  }),null);
+  assert.equal(taxCreditReversal({
+    ...baseline,previouslyCreditedTax:"-1.0000",
+  }),null);
+  assert.equal(taxCreditReversal({
+    ...baseline,previouslyCreditedGross:"-30.0000",
+  }),null);
+  assert.equal(taxCreditReversal({
+    ...baseline,additionalGross:"-20.0000",
+  }),null);
+  assert.equal(taxCreditReversal({
+    ...baseline,previouslyCreditedTax:"31.0000",
+  }),null);
+  assert.deepEqual(taxCreditReversal(baseline),{
+    taxAmount:"2.0000",totalTaxCredited:"5.0000",
+  });
+});
