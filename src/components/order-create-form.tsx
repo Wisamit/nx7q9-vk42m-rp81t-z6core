@@ -27,6 +27,22 @@ type SimpleOption = { id: string; code: string; nameEn: string };
 type ReferrerOption = SimpleOption & { clientId: string | null };
 type SourceOption = SimpleOption & { category: string };
 type BranchOption = SimpleOption & { timezone: string };
+type OrderCreateResponse = {
+  accessionNumber?: string;
+  invoiceNumber?: string;
+  currency?: string;
+  total?: string | number;
+  taxTotal?: string | number;
+  creditControl?: { decision?: string };
+  error?: string;
+  tests?: Array<{ code?: string }>;
+  packages?: Array<{ code?: string }>;
+  approvalRequestId?: string;
+  limitAmount?: string | number;
+  exposureBefore?: string | number;
+  projectedExposure?: string | number;
+};
+
 export type DoctorRequisitionPrefill = {
   id:string;patientId:string;branchId:string;referrerId:string;
   priority:"ROUTINE"|"URGENT"|"STAT";testIds:string[];
@@ -184,7 +200,7 @@ export function OrderCreateForm({
 
     const rawBody = await response.json().catch(() => null);
     const body = rawBody && typeof rawBody === "object" && !Array.isArray(rawBody)
-      ? rawBody as Record<string, unknown> : null;
+      ? rawBody as OrderCreateResponse : null;
     const confirmedReceipt = body &&
       typeof body.accessionNumber === "string" && body.accessionNumber.length > 0 &&
       typeof body.invoiceNumber === "string" && body.invoiceNumber.length > 0 &&
