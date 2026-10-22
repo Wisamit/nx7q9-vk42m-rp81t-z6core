@@ -84,11 +84,29 @@ test("F7 booking: only exact 201 confirmation of REQUESTED appointment for selec
   }
 });
 
-test("F7 booking: definite 4xx rejection is distinct from an unknown commit outcome",async()=>{
-  assert.deepEqual(await requestPortalBooking(payload,async()=>json({error:"invalid_branch_local_schedule"},400)),
-    {kind:"rejected",error:"invalid_branch_local_schedule"});
-  assert.deepEqual(await requestPortalBooking(payload,async()=>new Response("no body",{status:403})),
-    {kind:"rejected",error:"unknown"});
+test("F7 booking: only known origin code/status pairs prove a non-committed rejection",async()=>{
+  for(const [status,error] of [
+    [400,"invalid_branch_local_schedule"],[400,"invalid_booking_request"],
+    [401,"portal_unauthorized"],[403,"corporate_patient_not_authorized_for_booking"],
+    [404,"branch_or_patient_not_found"],[409,"portal_appointment_key_conflict"],
+  ] as Array<[number,string]>){
+    assert.deepEqual(await requestPortalBooking(payload,async()=>json({error},status)),
+      {kind:"rejected",error},`HTTP ${status} ${error}`);
+  }
+  for(const [label,response] of [
+    ["proxy timeout after possible commit",json({error:"request_timeout"},408)],
+    ["timeout carrying a forged known code",json({error:"invalid_booking_request"},408)],
+    ["too early with original mutation unknown",json({error:"retry_later"},425)],
+    ["throttled proxy after possible commit",json({error:"invalid_booking_request"},429)],
+    ["nonstandard client closed request",json({error:"internal"},499)],
+    ["malformed forbidden response",new Response("no body",{status:403})],
+    ["forged wrong-status code",json({error:"portal_appointment_key_conflict"},400)],
+    ["unrecognized 4xx origin",json({error:"external_proxy_error"},404)],
+    ["409 without a documented conflict receipt",json({},409)],
+  ] as Array<[string,Response]>){
+    assert.deepEqual(await requestPortalBooking(payload,async()=>response),
+      {kind:"uncertain"},label);
+  }
 });
 
 test("F7 booking: lost network response never automatically duplicates appointment creation",async()=>{
