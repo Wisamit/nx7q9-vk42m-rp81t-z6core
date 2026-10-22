@@ -56,3 +56,24 @@ organization palettes, keyboard-only and screen-reader access, empty/large
 test panels, discounted/approval flows, and duplicate-patient prevention.
 F8 qualified clinical, device, tax and operational go-live remains NO_GO
 until documented sign-off.
+
+
+## Ambiguous create response: duplicate-order defense
+
+The review uncovered a separate clinical/financial hazard in the same form:
+after a connection interruption, a user could previously submit again before
+checking whether the original order and invoice had already committed.
+The original local warning alone did not stop the duplicate action.
+
+`OrderCreateForm` now latches ambiguous outcomes, shows a bilingual
+`role="alert"` warning and disables registration in the current form session.
+Ambiguity includes a network error, HTTP 5xx, missing/unstructured error
+response, or HTTP 2xx lacking an accession number, invoice number, currency
+or total. It never claims success on a malformed 2xx receipt. The operator
+must preserve the entered data, reload and reconcile existing Orders/Billing
+before starting a new submission. This **does not** claim exactly-once
+delivery across different sessions/devices; eventual server-issued
+idempotency keys and transaction/reconciliation controls remain separate
+architecture concerns. The existing server transaction and approval
+invariants are unchanged. Synthetic regression:
+`tests/f5-order-ambiguous-receipt-safety.test.ts`.
