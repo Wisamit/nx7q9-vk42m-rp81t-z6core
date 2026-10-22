@@ -13,7 +13,7 @@ test("F5: ambiguous result POST must not claim clinical save and must block dupl
   assert.match(save,/setSaveUncertain\(true\);/);
   assert.match(save,/Do not submit again/);
   assert.match(save,/لا تعِد الإرسال/);
-  assert.match(save,/setBusy\\("+"\\");/);
+  assert.match(save,/setBusy\(""\);/);
 });
 
 test("F5: malformed successful server response is not enough to present a save as completed",()=>{
