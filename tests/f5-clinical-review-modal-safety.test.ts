@@ -9,7 +9,7 @@ test("F5: technical, QC and delta consent is explicit, sequential and modal (not
   assert.match(c,/<CrudModal\s+[\s\S]*?open=\{reviewPrompt !== null\}/);
   assert.match(c,/size="compact"/);
   assert.match(c,/protectUnsavedChanges=\{false\}/);
-  assert.match(c,/if \(!savedResultId \|\| busy !== "" \|\| reviewResolver\.current\) return;/);
+  assert.match(c,/if \(!savedResultId \|\| busy !== "" \|\| reviewResolver\.current \|\| saveUncertainRef\.current\) return;/);
   assert.match(c,/if \(!await askReview\(tr\("Complete technical review/);
   assert.match(c,/qc_warning_confirmation_required/);
   assert.match(c,/delta_review_confirmation_required/);
