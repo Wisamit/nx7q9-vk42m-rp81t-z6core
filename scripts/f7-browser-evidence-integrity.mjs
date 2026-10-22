@@ -72,6 +72,31 @@ export function inspectF7BrowserEvidence(evidence,manifest,outputDir,options={})
        entry.issues.length>0){
       reportedReview++;
     }
+    // Never trust a caller-supplied SCREENSHOT_CAPTURED label over the
+    // concrete read-only browser observations. All six locale/direction
+    // contexts must agree with their captured DOM and accessibility counts.
+    const expectedLocale=entry.scenario.split("-")[1];
+    const expectedDirection=expectedLocale==="ar"?"rtl":"ltr";
+    const observedCounts=[
+      "uncaughtRuntimeErrorCount","renderedFormCount","renderedActionCount",
+      "visibleDialogCount","unlabeledInputCount","unlabeledActionCount",
+      "interactiveViewportClippingCount","dialogA11yIssueCount",
+    ];
+    const failureCounts=[
+      "uncaughtRuntimeErrorCount","unlabeledInputCount","unlabeledActionCount",
+      "interactiveViewportClippingCount","dialogA11yIssueCount",
+    ];
+    if(!Number.isInteger(entry.responseStatus)||entry.responseStatus<200||
+       entry.responseStatus>=300||entry.redirectedToLogin!==false||
+       typeof entry.htmlLanguage!=="string"||
+       entry.htmlLanguage.toLowerCase().split("-")[0]!==expectedLocale||
+       entry.htmlDirection!==expectedDirection||
+       entry.htmlTheme!==entry.scenario.split("-")[2]||
+       entry.horizontalOverflow!==false||
+       observedCounts.some(key=>!Number.isSafeInteger(entry[key])||entry[key]<0)||
+       failureCounts.some(key=>entry[key]!==0)){
+      errors.push("F7_CAPTURE_METADATA_INVALID");
+    }
     const filename=entry.evidenceImage;
     if(typeof filename!=="string"||
        filename==="."||filename===".."||

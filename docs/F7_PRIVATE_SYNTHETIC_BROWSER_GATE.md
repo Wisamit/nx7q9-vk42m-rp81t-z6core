@@ -63,6 +63,25 @@ filenames, fake approver PASS and damaged screenshots. The integrity check
 is executed in the **private** browser-review workflow after capture and its
 summary has counts/category codes, not patient or page content.
 
+## F7 evidence cross-check hardening (next software increment)
+
+The integrity validator now independently checks every claimed successful case's
+HTTP 2xx response, login-redirect flag, Arabic/English document language and
+RTL/LTR direction against the declared scenario, absence of horizontal overflow,
+runtime errors, clipped controls, unlabeled inputs/actions, and dialog accessibility
+findings. The capture runner explicitly selects the cosmetic light/dark preference
+in isolated staging, then verifies the effective rendered `html[data-theme]`
+against the scenario; persisted profile theme overrides cannot silently produce
+mislabeled screenshot evidence. This does **not** prove either organization's
+configured brand palette or accessible contrast without private rendered review. A forged `SCREENSHOT_CAPTURED` status with contradictory captured
+metrics fails closed as `F7_CAPTURE_METADATA_INVALID`, even when its `issues`
+array was cleared. Negative tests cover missing metrics and false-green statuses.
+
+The browser collector now splits multi-ID `aria-labelledby` values on actual
+whitespace, avoiding a false inaccessible-dialog finding for valid ID references.
+These are **source/contract regression fixes only**, not browser execution,
+visual acceptance, modal-interaction signoff or production readiness.
+
 ## Subsequent F7 acceptance (still outstanding)
 
 Screenshot capture is a first step. To complete F7, authenticated

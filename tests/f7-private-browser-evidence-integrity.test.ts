@@ -14,6 +14,14 @@ const create=()=>{
       canonicalRoute:row.route,scenario,
       profile:n%2?"staff_en":"staff_ar",
       status:"SCREENSHOT_CAPTURED",issues:[],
+      responseStatus:200,redirectedToLogin:false,
+      htmlLanguage:scenario.split("-")[1],
+      htmlDirection:scenario.includes("-ar-")?"rtl":"ltr",
+      htmlTheme:scenario.split("-")[2],
+      horizontalOverflow:false,uncaughtRuntimeErrorCount:0,
+      renderedFormCount:1,renderedActionCount:1,visibleDialogCount:0,
+      unlabeledInputCount:0,unlabeledActionCount:0,
+      interactiveViewportClippingCount:0,dialogA11yIssueCount:0,
       evidenceImage:"synthetic-"+i+"-"+n+".png",
       visualHumanSignoff:"NOT_EXECUTED",
       modalInteractionSignoff:"NOT_EXECUTED",
@@ -71,6 +79,29 @@ test("F7: no route, device, locale, redirected session or missing file is silent
   assert.ok(damaged.errors.includes("F7_SCREENSHOT_FILE_INVALID"));
 });
 
+test("F7: reported green screenshots cannot conceal failed HTTP, locale, keyboard or A11y checks",()=>{
+  const unsafeCases: Array<[string,unknown]> = [
+    ["responseStatus",500],["responseStatus",302],
+    ["htmlLanguage","en"],["htmlDirection","ltr"],["htmlTheme","dark"],
+    ["redirectedToLogin",true],["horizontalOverflow",true],
+    ["uncaughtRuntimeErrorCount",1],["unlabeledInputCount",1],
+    ["unlabeledActionCount",1],["interactiveViewportClippingCount",1],
+    ["dialogA11yIssueCount",1],["renderedActionCount",-1],
+  ];
+  for(const [field,value] of unsafeCases){
+    const altered=create();
+    altered.findings[0][field]=value;
+    assert.ok(check(altered).errors.includes("F7_CAPTURE_METADATA_INVALID"),
+      field+" must not pass when a forged green status hides a browser problem");
+  }
+  const missing=create();
+  delete missing.findings[0].responseStatus;
+  assert.ok(check(missing).errors.includes("F7_CAPTURE_METADATA_INVALID"));
+  const en=create();
+  en.findings[1].htmlLanguage="ar";
+  assert.ok(check(en).errors.includes("F7_CAPTURE_METADATA_INVALID"));
+});
+
 test("F7: software screenshot collector cannot grant owner, clinical or branch-role approval",()=>{
   const forged=create();
   forged.ownerAcceptance="PASS";
@@ -103,6 +134,13 @@ test("F7: ALL browser workflows are private, owner-triggered and use only synthe
   assert.ok(runner.includes("VISIBLE_DIALOG_ACCESSIBLE_NAME_OR_MODAL_MISSING"));
   assert.ok(runner.includes('el.getAttribute("aria-modal") !== "true"'));
   assert.ok(runner.includes("document.getElementById(id)?.textContent?.trim()"));
+  assert.ok(runner.includes('document.documentElement.dataset.theme'),
+    "a named dark/light scenario needs verified rendered theme state");
+  assert.ok(runner.includes("context.addInitScript"),
+    "the synthetic browser must override only the cosmetic profile theme");
+  assert.ok(runner.includes(String.raw`split(/\s+/)`),
+    "aria-labelledby IDs must be split on whitespace, not on a literal backslash");
+  assert.ok(!runner.includes(String.raw`split(/\\s+/)`));
   assert.ok(!runner.includes("page.click("));
   assert.ok(!runner.includes("page.fill("));
   const privateReview=readFileSync(".github/workflows/ui-synthetic-browser-review.yml","utf8");
