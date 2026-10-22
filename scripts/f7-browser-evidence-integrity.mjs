@@ -9,6 +9,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import {fileURLToPath} from "node:url";
+import {createHash} from "node:crypto";
 
 const ROOT=path.resolve(path.dirname(fileURLToPath(import.meta.url)),"..");
 export const F7_SCENARIOS=[
@@ -16,6 +17,8 @@ export const F7_SCENARIOS=[
   "mobile-en-light","tablet-ar-light","tablet-en-dark",
 ];
 const prefix=Buffer.from([137,80,78,71,13,10,26,10]);
+const scenarioDimensions={desktop:{width:1440,height:900},
+  mobile:{width:390,height:844},tablet:{width:820,height:1180}};
 
 export function inspectF7BrowserEvidence(evidence,manifest,outputDir,options={}){
   const errors=[];
@@ -37,18 +40,25 @@ export function inspectF7BrowserEvidence(evidence,manifest,outputDir,options={})
     errors.push("F7_UNQUALIFIED_OWNER_OR_CLINICAL_PASS_FORBIDDEN");
 
   const seen=new Set(),screens=new Set();
-  let missing=0,reportedReview=0;
+  let missing=0,verifiedImages=0,reportedReview=0;
   const list=Array.isArray(evidence?.findings)?evidence.findings:[];
   if(list.length!==486)errors.push("F7_INCOMPLETE_OR_DUPLICATED_CASE_LIST");
   const imgDir=path.join(outputDir,"screenshots");
   const fileInfo=options.fileInfo??((filename)=>{
     const p=path.join(imgDir,filename);
     const st=fs.lstatSync(p);
-    const fd=fs.openSync(p,"r");
-    try{const h=Buffer.alloc(8);fs.readSync(fd,h,0,8,0);
-      return {file:st.isFile(),symlink:st.isSymbolicLink(),bytes:st.size,
-        signature:h.equals(prefix)};
-    }finally{fs.closeSync(fd);}
+    // Do not follow symlinks into unrelated files while validating private
+    // screenshot artifacts. A PNG must have the IHDR width/height fields.
+    if(!st.isFile()||st.isSymbolicLink())
+      return {file:false,symlink:st.isSymbolicLink(),bytes:st.size,
+        signature:false,width:0,height:0,sha256:null};
+    const data=fs.readFileSync(p);
+    const signature=data.length>=24&&data.subarray(0,8).equals(prefix)&&
+      data.readUInt32BE(8)===13&&data.toString("ascii",12,16)==="IHDR";
+    return {file:true,symlink:false,bytes:st.size,signature,
+      width:signature?data.readUInt32BE(16):0,
+      height:signature?data.readUInt32BE(20):0,
+      sha256:createHash("sha256").update(data).digest("hex")};
   });
   for(const entry of list){
     if(!entry||typeof entry!=="object"||!routeSet.has(entry.canonicalRoute)||
@@ -106,8 +116,18 @@ export function inspectF7BrowserEvidence(evidence,manifest,outputDir,options={})
     screens.add(filename);
     try{
       const f=fileInfo(filename);
-      if(!f.file||f.symlink||f.bytes<100||!f.signature)
+      if(!f.file||f.symlink||f.bytes<100||!f.signature){
         errors.push("F7_SCREENSHOT_FILE_INVALID");
+      }else{
+        const sizes=scenarioDimensions[entry.scenario.split("-")[0]];
+        if(typeof entry.evidenceSha256!=="string"||
+           !/^[0-9a-f]{64}$/.test(entry.evidenceSha256)||
+           f.sha256!==entry.evidenceSha256||
+           f.width!==sizes.width||
+           !Number.isSafeInteger(f.height)||f.height<sizes.height){
+          errors.push("F7_SCREENSHOT_HASH_OR_DIMENSION_INVALID");
+        }else verifiedImages++;
+      }
     }catch{missing++;}
   }
   for(const route of routeSet){
@@ -124,7 +144,7 @@ export function inspectF7BrowserEvidence(evidence,manifest,outputDir,options={})
     schemaVersion:1,
     exactSha:options.sha??process.env.GITHUB_SHA??null,
     routeCount:routeSet.size,expectedScenarioCount:486,
-    observedUniqueCases:seen.size,verifiedImageFiles:screens.size-missing,
+    observedUniqueCases:seen.size,verifiedImageFiles:verifiedImages,
     unresolvedBrowserCases:reportedReview,
     result:errors.length?"F7_CAPTURE_INTEGRITY_BLOCKED":
       "F7_CAPTURE_SET_COMPLETE_NOT_VISUALLY_APPROVED",
