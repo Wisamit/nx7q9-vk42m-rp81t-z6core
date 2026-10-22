@@ -81,7 +81,7 @@ export function parseHl7Oru(raw, { barcodeSource } = {}) {
         rawUnit,
       });
       groupHasObx=true;
-    } else if (type === "NTE" && row.slice(1).some(value=>value && value.trim())) {
+    } else if (type === "NTE" && row.slice(3).some(value=>value && value.trim())) {
       // Free-text analyzer notes can carry critical interpretive caveats.
       reject("HL7_OBSERVATION_COMMENT_REQUIRES_APPROVED_PROFILE");
     } else if (!["PID","PV1","SPM","NTE","ORC","MSA","DSC"].includes(type)) {
