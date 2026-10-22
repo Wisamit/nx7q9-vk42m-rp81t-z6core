@@ -262,6 +262,41 @@ Per owner direction, all interactive owner reviews remain for the
 consolidated end-of-project acceptance stage: **F7 visual/browser UAT
 NOT_EXECUTED; F8 operational/clinical/finance/device/DR GO = NO_GO**.
 
+## F7 live-session tenant and branch-scope fail-closed guards
+
+A source audit found a cross-cutting authorization boundary omission:
+`getCurrentSession()` required an active employee but did **not** require
+an active owning organization, and neither checked that the selected
+`activeBranchId` still belonged to an active branch granted to the user.
+`getCurrentPortalSession()` required an active account but not an active
+owning organization. Existing browser/session cookies could therefore
+outlive an organization's deactivation or an administrator's branch
+authorization removal, and callers could continue resolving a session
+from stale configuration.
+
+All staff session fetches now require an `ACTIVE` organization and
+the pure `hasLiveStaffWorkspace` boundary requires the selected branch
+to be active, match the session's active branch ID and organization, and
+exist as an active, same-organization branch scope for that staff member.
+No automatic alternate-branch fallback is made after a scope is removed:
+the user must sign in again to establish a permitted workspace. New
+staff logins enforce an active organization and only select a branch
+belonging to that organization. Portal session retrieval now also requires
+an active organization; existing portal login already required it.
+
+These checks run at the session **read boundary** and do not overwrite
+user, branch, session or clinical records. No schema migration or patient
+data changes. Deterministic source/unit regression tests cover active,
+inactive, foreign and revoked branches, newly scoped branches, deactivated
+organizations, staff and portal public contexts. As before, truly atomic
+concurrent authorization for any clinical/billing mutation must also be
+enforced within its own server transaction; an authenticated session
+lookup by itself does not prove race-free mutation authorization.
+
+The code check is not a completed real browser test. F7 private synthetic
+486-case browser sweep, clinical/financial user acceptance, and F8 go-live
+remain **NOT_EXECUTED / NO_GO** per the user's end-of-project review rule.
+
 ## Subsequent F7 acceptance (still outstanding)
 
 Screenshot capture is a first step. To complete F7, authenticated
