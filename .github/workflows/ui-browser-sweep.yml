@@ -17,11 +17,14 @@ permissions:
 
 jobs:
   visual-audit:
-    if: github.event.inputs.confirm_synthetic_staging == 'YES'
+    if: ${{ github.ref == 'refs/heads/main' && github.event.repository.private == true && github.event.inputs.confirm_synthetic_staging == 'YES' && vars.FL_UI_AUDIT_ENABLE == 'true' && vars.FL_UI_AUDIT_SYNTHETIC_ONLY == 'I_CONFIRM_SYNTHETIC_NONPRODUCTION_DATA' }}
+    environment: ui-synthetic-staging
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: '22.18.0'
@@ -50,4 +53,4 @@ jobs:
           name: ui-browser-sweep-evidence
           path: ui-evidence/browser-sweep
           if-no-files-found: warn
-          retention-days: 7
+          retention-days: 2

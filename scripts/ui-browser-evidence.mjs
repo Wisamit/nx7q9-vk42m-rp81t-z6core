@@ -222,6 +222,7 @@ async function screenshotAll() {
       let unlabeledInputCount = 0;
       let unlabeledActionCount = 0;
       let interactiveViewportClippingCount = 0;
+      let dialogA11yIssueCount = 0;
       try {
         const response = await page.goto(target, {waitUntil:"domcontentloaded",timeout:30000});
         responseStatus = response?.status() ?? null;
@@ -264,6 +265,23 @@ async function screenshotAll() {
             if (el.querySelector("img[alt]:not([alt=''])")) return true;
             return false;
           };
+          const dialogs = [...document.querySelectorAll(
+            '[role="dialog"],[role="alertdialog"]'
+          )].filter(visible);
+          // Do not inspect or persist heading text. Only verify that a
+          // visible dialog is modal and its accessible name resolves to
+          // actual DOM text rather than a dangling aria-labelledby ID.
+          const dialogNamed = (el) => {
+            const label = el.getAttribute("aria-label");
+            if (label?.trim()) return true;
+            const refs = (el.getAttribute("aria-labelledby") || "").trim().split(/\\s+/).filter(Boolean);
+            return refs.length > 0 && refs.every(id =>
+              Boolean(document.getElementById(id)?.textContent?.trim())
+            );
+          };
+          const dialogA11yIssueCount = dialogs.filter(el =>
+            el.getAttribute("aria-modal") !== "true" || !dialogNamed(el)
+          ).length;
           const viewportWidth = document.documentElement.clientWidth;
           const clipped = [...controls, ...actions].filter(el => {
             const rect = el.getBoundingClientRect();
@@ -277,8 +295,8 @@ async function screenshotAll() {
             body: Boolean(document.querySelector("body")?.textContent?.trim()),
             renderedFormCount: document.querySelectorAll("form").length,
             renderedActionCount: actions.length,
-            visibleDialogCount: [...document.querySelectorAll('[role="dialog"],[role="alertdialog"]')]
-              .filter(visible).length,
+            visibleDialogCount: dialogs.length,
+            dialogA11yIssueCount,
             unlabeledInputCount: controls.filter(el => !labeled(el)).length,
             unlabeledActionCount: actions.filter(el => !namedAction(el)).length,
             interactiveViewportClippingCount: clipped,
@@ -293,12 +311,14 @@ async function screenshotAll() {
         unlabeledInputCount = info.unlabeledInputCount;
         unlabeledActionCount = info.unlabeledActionCount;
         interactiveViewportClippingCount = info.interactiveViewportClippingCount;
+        dialogA11yIssueCount = info.dialogA11yIssueCount;
         if (responseStatus === null || responseStatus >= 400) issues.push("HTTP_NON_SUCCESS");
         if (!info.body) issues.push("EMPTY_DOCUMENT");
         if (info.overflow) issues.push("HORIZONTAL_VIEWPORT_OVERFLOW");
         if (info.unlabeledInputCount) issues.push("VISIBLE_INPUT_ACCESSIBLE_NAME_MISSING");
         if (info.unlabeledActionCount) issues.push("VISIBLE_ACTION_ACCESSIBLE_NAME_MISSING");
         if (info.interactiveViewportClippingCount) issues.push("INTERACTIVE_CONTROL_CLIPPED");
+        if (info.dialogA11yIssueCount) issues.push("VISIBLE_DIALOG_ACCESSIBLE_NAME_OR_MODAL_MISSING");
         if (documentLang.toLowerCase().split("-")[0] !== scenario.locale) {
           issues.push("HTML_LANGUAGE_MISMATCH");
         }
@@ -332,6 +352,7 @@ async function screenshotAll() {
         horizontalOverflow,uncaughtRuntimeErrorCount:pageErrorCount,
         renderedFormCount,renderedActionCount,visibleDialogCount,
         unlabeledInputCount,unlabeledActionCount,interactiveViewportClippingCount,
+        dialogA11yIssueCount,
         evidenceImage:imageName,
         status:issues.length ? "REVIEW_REQUIRED" : "SCREENSHOT_CAPTURED",
         issues,

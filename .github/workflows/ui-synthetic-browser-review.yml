@@ -44,6 +44,9 @@ jobs:
           npx playwright install --with-deps chromium
       - name: Capture all 486 non-mutating browser views
         run: node scripts/ui-browser-evidence.mjs --run
+      - name: Verify every private screenshot and forbid fake acceptance
+        if: ${{ always() }}
+        run: node scripts/f7-browser-evidence-integrity.mjs
       - name: Upload private synthetic browser findings
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
