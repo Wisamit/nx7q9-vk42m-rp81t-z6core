@@ -104,6 +104,33 @@ and qualified F8 operational release `NO_GO`, for a consolidated
 owner-operated end-of-project review. Never interpret this deferral as a
 waiver of any requirement in Master Scope §§1–88.
 
+## F7 page readiness and accessible-name contract (software only)
+
+The synthetic collector now requires a **fresh empty screenshot directory**,
+a successful document `load` event, and completed font loading before
+capturing evidence. It allows visible busy/progress indicators time to clear
+but records unresolved visible busy state as `REVIEW_REQUIRED`, never
+automatically as a successful page. Every case records **boolean-only** route
+match, document completeness, body-content presence and a count of unresolved
+busy surfaces, which the integrity validator checks even if a misleading
+`SCREENSHOT_CAPTURED` status or empty issue list is supplied. No target
+dynamic route IDs, patient content or DOM text are written to evidence JSON.
+
+The read-only accessible-name probe now resolves `aria-labelledby`
+references to real nonempty text nodes for inputs, buttons, links and
+dialogs, instead of treating any arbitrary ID string as a valid name.
+Empty `label` elements no longer qualify controls as labeled. Hidden
+SVG/aria-hidden content is excluded from the button-text heuristic. This is
+an **automated heuristic**, not a full accessible-name computation, keyboard
+test, or screen-reader certification. Client-side streamed content without
+an explicit busy indicator may still need human inspection; screenshots
+remain `CAPTURED_NOT_VISUALLY_APPROVED` at best.
+
+All verification is synthetic source/CI contract testing only. As ordered,
+owner-operated visual, accessibility, branch-role, financial, instrument
+and Hostinger checks remain deferred to the consolidated final UAT.
+**F7 approval NOT_EXECUTED; F8 operational GO = NO_GO.**
+
 ## Subsequent F7 acceptance (still outstanding)
 
 Screenshot capture is a first step. To complete F7, authenticated

@@ -15,6 +15,8 @@ const create=()=>{
       profile:n%2?"staff_en":"staff_ar",
       status:"SCREENSHOT_CAPTURED",issues:[],
       responseStatus:200,redirectedToLogin:false,
+      navigationTargetMatched:true,documentFullyLoaded:true,
+      documentBodyHasContent:true,visibleBusySurfaceCount:0,
       htmlLanguage:scenario.split("-")[1],
       htmlDirection:scenario.includes("-ar-")?"rtl":"ltr",
       htmlTheme:scenario.split("-")[2],
@@ -90,6 +92,9 @@ test("F7: no route, device, locale, redirected session or missing file is silent
 test("F7: reported green screenshots cannot conceal failed HTTP, locale, keyboard or A11y checks",()=>{
   const unsafeCases: Array<[string,unknown]> = [
     ["responseStatus",500],["responseStatus",302],
+    ["navigationTargetMatched",false],["documentFullyLoaded",false],
+    ["documentBodyHasContent",false],["visibleBusySurfaceCount",1],
+    ["visibleBusySurfaceCount",-1],
     ["htmlLanguage","en"],["htmlDirection","ltr"],["htmlTheme","dark"],
     ["redirectedToLogin",true],["horizontalOverflow",true],
     ["uncaughtRuntimeErrorCount",1],["unlabeledInputCount",1],
@@ -177,6 +182,19 @@ test("F7: ALL browser workflows are private, owner-triggered and use only synthe
   assert.ok(!runner.includes(String.raw`split(/\\s+/)`));
   assert.ok(!runner.includes("page.click("));
   assert.ok(!runner.includes("page.fill("));
+  assert.ok(runner.includes('navigationTargetMatched'));
+  assert.ok(runner.includes('document.fonts.status === "loaded"'));
+  assert.ok(runner.includes("visibleBusySurfaceCount"));
+  assert.ok(runner.includes('[role="progressbar"]:not([aria-valuenow])'),
+    "determinate business progress bars cannot be mistaken for pending loading UI");
+  assert.ok(runner.includes("document.body?.innerText?.trim()"),
+    "visible page content must exclude hidden JS/script payloads");
+  assert.ok(runner.includes("Synthetic screenshot output directory must be empty"));
+  assert.ok(runner.includes("resolvedAriaName(el)"));
+  assert.ok(runner.includes("document.getElementById(id)?.textContent?.trim()"),
+    "stale aria-labelledby IDs must not count as accessible input or button names");
+  assert.ok(!runner.includes('await page.waitForLoadState("load", {timeout:12000}).catch'),
+    "document load timeout must no longer be silently ignored");
   const privateReview=readFileSync(".github/workflows/ui-synthetic-browser-review.yml","utf8");
   assert.ok(privateReview.includes("node scripts/f7-browser-evidence-integrity.mjs"));
   assert.ok(privateReview.includes("FL_UI_AUDIT_SYNTHETIC_ONLY"));

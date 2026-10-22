@@ -89,8 +89,10 @@ test("Issue #265: screenshot sweeps inspect rendered accessible controls and vie
     "VISIBLE_ACTION_ACCESSIBLE_NAME_MISSING",
     "INTERACTIVE_CONTROL_CLIPPED",
   ]) assert.ok(script.includes(finding), "Warning category missing: " + finding);
-  assert.ok(script.includes("el.labels?.length"));
-  assert.ok(script.includes("el.closest(\"label\")"));
+  assert.ok(script.includes("[...(el.labels || [])].some(label => label.textContent?.trim())"),
+    "labels must have non-empty accessible text; an empty label node is not valid");
+  assert.ok(script.includes('el.closest("label")?.textContent?.trim()'),
+    "containing labels must have actual text, not mere DOM presence");
   assert.ok(script.includes('document.querySelectorAll("form").length'));
   assert.ok(script.includes("filter(visible)"));
   assert.ok(script.includes("This is screenshot/smoke") ||
