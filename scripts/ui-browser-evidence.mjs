@@ -12,6 +12,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
+import { isAllowedSyntheticNetworkRequest } from "./f7-synthetic-network-origin.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MANIFEST = path.join(ROOT, "docs", "UI_ROUTE_MANIFEST.json");
@@ -205,6 +206,8 @@ async function screenshotAll() {
         locale: scenario.locale === "ar" ? "ar-AE" : "en-GB",
         colorScheme: scenario.scheme,
         reducedMotion:"reduce",
+        // Service workers can bypass Playwright route interception entirely.
+        serviceWorkers:"block",
       };
       if (profile !== "anonymous") {
         // These states exist only in a GitHub Actions secret or local private
@@ -212,6 +215,26 @@ async function screenshotAll() {
         options.storageState = config.profiles[profile];
       }
       const context = await browser.newContext(options);
+      let blockedCrossOriginNetworkCount = 0;
+      // All browser-originated HTTP(S), redirect and WebSocket requests must
+      // remain inside this exact private synthetic staging origin. Blocking
+      // is mandatory even if a page includes third-party fonts or telemetry.
+      await context.route("**/*", async requestRoute => {
+        if (isAllowedSyntheticNetworkRequest(requestRoute.request().url(), base)) {
+          await requestRoute.continue();
+          return;
+        }
+        blockedCrossOriginNetworkCount++;
+        await requestRoute.abort("blockedbyclient");
+      });
+      await context.routeWebSocket("**/*", async socketRoute => {
+        if (isAllowedSyntheticNetworkRequest(socketRoute.url(), base)) {
+          await socketRoute.connectToServer();
+          return;
+        }
+        blockedCrossOriginNetworkCount++;
+        await socketRoute.close();
+      });
       // Force only the app's cosmetic theme preference in isolated synthetic
       // sessions so a saved profile setting cannot mislabel a dark/light shot.
       await context.addInitScript(mode => {
@@ -400,13 +423,16 @@ async function screenshotAll() {
         // application could accidentally embed patient names in exceptions.
         issues.push("NAVIGATION_OR_SCREENSHOT_FAILED");
       } finally {
+        // Finish the isolated browser context before evaluating its aggregate
+        // counters, so late requests during teardown cannot evade evidence.
         await context.close();
+        if (blockedCrossOriginNetworkCount) issues.push("OFF_STAGING_NETWORK_EGRESS_BLOCKED");
       }
       findings.push({
         canonicalRoute:route,scenario:name,profile,
         responseStatus,redirectedToLogin:issues.includes("REDIRECTED_TO_LOGIN"),
         navigationTargetMatched,documentFullyLoaded,documentBodyHasContent,
-        visibleBusySurfaceCount,
+        visibleBusySurfaceCount,blockedCrossOriginNetworkCount,
         htmlLanguage:documentLang,htmlDirection:documentDirection,
         htmlTheme:documentTheme,horizontalOverflow,uncaughtRuntimeErrorCount:pageErrorCount,
         renderedFormCount,renderedActionCount,visibleDialogCount,
