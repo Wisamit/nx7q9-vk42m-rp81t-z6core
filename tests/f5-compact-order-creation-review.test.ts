@@ -29,7 +29,7 @@ test("F5: registration modal is compact, still shows all required fields and has
 test("F5: clinically significant registration and invoice authorization logic is unchanged", () => {
   const form = read("src/components/order-create-form.tsx");
   for (const required of [
-    "if (submitting.current) return;",
+    "if (submitting.current || ambiguousSubmissionRef.current) return;",
     "patientId!==initialDoctorRequisition.patientId",
     "if (!patientId)",
     "if (effectiveTestIds.length === 0)",
