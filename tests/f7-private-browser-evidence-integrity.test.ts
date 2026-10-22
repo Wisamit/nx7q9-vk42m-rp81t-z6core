@@ -99,6 +99,13 @@ test("F7: ALL browser workflows are private, owner-triggered and use only synthe
     assert.ok(!workflow.includes("pull_request:"),p);
     assert.ok(!workflow.includes("\n  push:"),p);
   }
+  const runner=readFileSync("scripts/ui-browser-evidence.mjs","utf8");
+  assert.ok(runner.includes('dialogA11yIssueCount'));
+  assert.ok(runner.includes("VISIBLE_DIALOG_ACCESSIBLE_NAME_OR_MODAL_MISSING"));
+  assert.ok(runner.includes('el.getAttribute("aria-modal") !== "true"'));
+  assert.ok(runner.includes("document.getElementById(id)?.textContent?.trim()"));
+  assert.ok(!runner.includes("page.click("));
+  assert.ok(!runner.includes("page.fill("));
   const privateReview=readFileSync(".github/workflows/ui-synthetic-browser-review.yml","utf8");
   assert.ok(privateReview.includes("node scripts/f7-browser-evidence-integrity.mjs"));
   assert.ok(privateReview.includes("FL_UI_AUDIT_SYNTHETIC_ONLY"));
