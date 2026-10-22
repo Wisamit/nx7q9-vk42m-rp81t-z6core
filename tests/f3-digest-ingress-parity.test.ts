@@ -25,7 +25,8 @@ const manifest=()=>buildF3LegacyExtractionManifest({
 },secret);
 type Manifest=ReturnType<typeof manifest>;
 const parse=(value:unknown)=>parseF3UnverifiedDigestManifest(value,organizationId);
-const clone=(value:Manifest):Manifest=>structuredClone(value);
+type Writable<T>={-readonly [K in keyof T]:T[K]};
+const clone=(value:Manifest):Writable<Manifest>=>structuredClone(value);
 
 test("F3 HTTP ingress: intact duplicate-bearing 15-table manifest retains full row parity",()=>{
   const value=manifest();
