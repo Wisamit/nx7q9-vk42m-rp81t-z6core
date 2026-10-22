@@ -334,6 +334,53 @@ outside this source-only change.
 F7 owner UAT and the 486 true browser screenshots remain
 `UAT_DEFERRED / NOT_EXECUTED`; F8 qualified go-live remains `NO_GO`.
 
+## F7 portal appointment creation: database-backed idempotency
+
+The previous UI-level uncertain-response lock prevented unintentional
+double-submission in one mounted form but did not guarantee uniqueness
+when two copies of the same POST reached MariaDB concurrently. The new
+opt-in UUID request header `x-family-lab-portal-appointment-key` is stored
+with a **per-portal-account database UNIQUE constraint** and a SHA-256
+fingerprint of the canonical booking intent. Legacy and historical
+appointments have nullable key/fingerprint fields and continue to function
+without migration of old business data.
+
+Each keyed request is scoped to the currently authenticated portal account,
+organization, authorized patient and active branch. The server checks
+the existing key before enforcing future-time rules (an earlier committed
+appointment may now lie in the past), returns its existing record only
+when the fingerprint matches, and returns `409` when the key was used with
+different intent. During concurrent creation, MariaDB's unique index
+permits only one committed appointment; the loser catches the known
+unique-key collision and replays the same result after transaction rollback.
+The replay path does **not** create another home-collection visit or audit
+event. Historic appointment status is not overwritten, and a replay may
+return its current confirmed, completed or cancelled status.
+
+The portal UI generates a per-request UUID, keeps an exact in-memory copy
+of the original submission, and on an ambiguous network result offers
+an **explicit user-triggered same-key replay**, rather than automatic new
+booking creation. The receipt validator accepts `201` on a new
+`REQUESTED` appointment or `200/replayed=true` for an existing booked
+record, always checking patient, branch and appointment UUID. A definitive
+rejection permits correction and a new key; an uncertain result preserves
+the original one.
+
+The database guarantee is **one appointment per same account + same UUID**.
+Independent fresh keys from different tabs, devices or a reloaded page
+can still create separate appointments for similar details; implementing
+a distinct business-level duplicate-detection/override policy requires
+product-specific rules and must not silently merge legitimate repeat
+bookings. Only the opaque UUID is held client-side, not persistent PII.
+
+Synthetic and real MariaDB regression tests cover fingerprints, malformed
+keys, exact success/replay receipts, different patient/branch and changed
+status responses, concurrent UNIQUE conflicts, cross-tenant key reuse,
+legacy nullable records, and structural audit/home-visit transaction
+boundaries. This is engineering evidence only; no qualified F7 browser/UAT,
+F8 clinical/finance/operations, Hostinger SHA or offsite DR verification
+has been executed. F7 remains NOT_EXECUTED; F8 remains NO_GO.
+
 ## Subsequent F7 acceptance (still outstanding)
 
 Screenshot capture is a first step. To complete F7, authenticated
