@@ -67,6 +67,19 @@ function stagingOrigin(input) {
   return url.origin;
 }
 
+// Network egress is limited to the exactly attested isolated origin, not a
+// matching hostname suffix or another staging-looking domain. No URLs from
+// browser requests are included in evidence records or error messages.
+export function isAllowedSyntheticNetworkRequest(requestUrl, baseOrigin) {
+  try {
+    const url = new URL(requestUrl);
+    return (url.protocol === "http:" || url.protocol === "https:") &&
+      url.origin === baseOrigin;
+  } catch {
+    return false;
+  }
+}
+
 function matchingFixturePath(route, actual) {
   const canonical = route.split("/").filter(Boolean);
   const supplied = actual.split("/").filter(Boolean);
@@ -205,6 +218,8 @@ async function screenshotAll() {
         locale: scenario.locale === "ar" ? "ar-AE" : "en-GB",
         colorScheme: scenario.scheme,
         reducedMotion:"reduce",
+        // Service workers can bypass Playwright route interception entirely.
+        serviceWorkers:"block",
       };
       if (profile !== "anonymous") {
         // These states exist only in a GitHub Actions secret or local private
@@ -212,6 +227,26 @@ async function screenshotAll() {
         options.storageState = config.profiles[profile];
       }
       const context = await browser.newContext(options);
+      let blockedCrossOriginNetworkCount = 0;
+      // All browser-originated HTTP(S), redirect and WebSocket requests must
+      // remain inside this exact private synthetic staging origin. Blocking
+      // is mandatory even if a page includes third-party fonts or telemetry.
+      await context.route("**/*", async requestRoute => {
+        if (isAllowedSyntheticNetworkRequest(requestRoute.request().url(), base)) {
+          await requestRoute.continue();
+          return;
+        }
+        blockedCrossOriginNetworkCount++;
+        await requestRoute.abort("blockedbyclient");
+      });
+      await context.routeWebSocket("**/*", socketRoute => {
+        if (isAllowedSyntheticNetworkRequest(socketRoute.url(), base)) {
+          socketRoute.connect();
+          return;
+        }
+        blockedCrossOriginNetworkCount++;
+        socketRoute.close();
+      });
       // Force only the app's cosmetic theme preference in isolated synthetic
       // sessions so a saved profile setting cannot mislabel a dark/light shot.
       await context.addInitScript(mode => {
@@ -400,13 +435,14 @@ async function screenshotAll() {
         // application could accidentally embed patient names in exceptions.
         issues.push("NAVIGATION_OR_SCREENSHOT_FAILED");
       } finally {
+        if (blockedCrossOriginNetworkCount) issues.push("OFF_STAGING_NETWORK_EGRESS_BLOCKED");
         await context.close();
       }
       findings.push({
         canonicalRoute:route,scenario:name,profile,
         responseStatus,redirectedToLogin:issues.includes("REDIRECTED_TO_LOGIN"),
         navigationTargetMatched,documentFullyLoaded,documentBodyHasContent,
-        visibleBusySurfaceCount,
+        visibleBusySurfaceCount,blockedCrossOriginNetworkCount,
         htmlLanguage:documentLang,htmlDirection:documentDirection,
         htmlTheme:documentTheme,horizontalOverflow,uncaughtRuntimeErrorCount:pageErrorCount,
         renderedFormCount,renderedActionCount,visibleDialogCount,
