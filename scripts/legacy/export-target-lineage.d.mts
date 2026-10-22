@@ -1,6 +1,6 @@
 export type F3ExportTargetLineageOptions={
   databaseUrl:string;organizationId:string;
-  sourceSha256:string;outputPath:string;
+  sourceSha256:string;outputPath:string;caFile?:string|null;
 };
 export type F3ExportTargetLineageResult={
   exportedRows:number;privateFileCreated:true;
