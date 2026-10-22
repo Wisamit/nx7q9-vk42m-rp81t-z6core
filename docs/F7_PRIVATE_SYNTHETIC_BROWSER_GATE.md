@@ -69,7 +69,11 @@ The integrity validator now independently checks every claimed successful case's
 HTTP 2xx response, login-redirect flag, Arabic/English document language and
 RTL/LTR direction against the declared scenario, absence of horizontal overflow,
 runtime errors, clipped controls, unlabeled inputs/actions, and dialog accessibility
-findings. A forged `SCREENSHOT_CAPTURED` status with contradictory captured
+findings. The capture runner explicitly selects the cosmetic light/dark preference
+in isolated staging, then verifies the effective rendered `html[data-theme]`
+against the scenario; persisted profile theme overrides cannot silently produce
+mislabeled screenshot evidence. This does **not** prove either organization's
+configured brand palette or accessible contrast without private rendered review. A forged `SCREENSHOT_CAPTURED` status with contradictory captured
 metrics fails closed as `F7_CAPTURE_METADATA_INVALID`, even when its `issues`
 array was cleared. Negative tests cover missing metrics and false-green statuses.
 
