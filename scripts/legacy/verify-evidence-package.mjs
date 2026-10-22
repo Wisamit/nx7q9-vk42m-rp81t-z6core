@@ -45,7 +45,8 @@ export async function loadLineagePages(pageDirectory) {
 export async function checkPrivateLegacyEvidencePackage(
   mdbPath, coveragePath, pageDirectory, replayDirectory,
 ) {
-  if (!/\.mdb$/i.test(basename(mdbPath))) throw new Error("mdb_extension_invalid");
+  const accdb=/\.accdb$/i.test(basename(mdbPath));
+  if (!/\.(?:mdb|accdb)$/i.test(basename(mdbPath))) throw new Error("mdb_extension_invalid");
   const start = await lstat(mdbPath);
   if (!start.isFile() || start.isSymbolicLink() || start.size < 4096 ||
       start.size > 1_000_000_000) throw new Error("mdb_file_invalid");
@@ -53,7 +54,8 @@ export async function checkPrivateLegacyEvidencePackage(
   try {
     const buffer = Buffer.alloc(20);
     await file.read(buffer, 0, 20, 0);
-    if (buffer.subarray(4, 19).toString("ascii") !== "Standard Jet DB")
+    if (buffer.subarray(4, 19).toString("ascii") !==
+        (accdb ? "Standard ACE DB" : "Standard Jet DB"))
       throw new Error("mdb_header_invalid");
   } finally { await file.close(); }
   const hasher = createHash("sha256");
