@@ -58,7 +58,7 @@ test("F3: offline extract header cannot claim real provenance, additional keys, 
     {...base,sourceIdentityExternallyAttested:true},
     {...base,migrated:true},
     {...base,sourceFileBytesHashedLocally:false},
-    {...base,sourceName:"people.accdb"},
+    {...base,sourceName:"people.acc"},
     {...base,sourceName:"../data.mdb"},
     {...base,sourceSha256:"fake"},
     {...base,sourceBytes:0},
@@ -73,4 +73,17 @@ test("F3: offline extract header cannot claim real provenance, additional keys, 
   assert.throws(()=>f3BuildLegacyReviewPages({
     organizationId:org,extract:base,secret:"short",
   }),/f3_hmac_secret_unavailable/);
+});
+
+
+test("F3: both read-only ACE .mdb and .accdb source formats are accepted without changing HMAC policy",()=>{
+  const mdb=f3BuildLegacyReviewPages({organizationId:org,extract:extract(),secret:key});
+  const accdb=f3BuildLegacyReviewPages({
+    organizationId:org,extract:{...extract(),sourceName:"Synthetic lab.accdb"},
+    secret:key,
+  });
+  assert.deepEqual(accdb.manifest,mdb.manifest);
+  assert.ok(accdb.pages.every(p=>p.sourceName==="Synthetic lab.accdb"));
+  assert.ok(accdb.pages.every(p=>p.includesPatientData===false));
+  assert.equal(accdb.productionApproved,false);
 });
