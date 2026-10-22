@@ -435,3 +435,36 @@ This is **software-only** evidence. 486 private browser captures and all
 qualified owner/clinical/financial F8 acceptance remain `NOT_EXECUTED`;
 F7 interactive UAT is `UAT_DEFERRED` and F8 operational GO remains
 `NO_GO`. Master Scope §§1–88 stays intact.
+
+## F7 data minimization: portal booking mutation receipts
+
+Source review after PR #354 found the HTTP 201 appointment-creation response
+spread an entire Prisma `Appointment` into portal JSON while only removing
+the idempotency key and its fingerprint. The stored row contains
+`organizationId`, `portalAccountId`, a patient's contact-phone snapshot,
+home-collection address, notes, and other internal metadata. Merely excluding
+two fields did not enforce patient data minimization, especially for
+corporate accounts permitted to book an appointment.
+
+The portal booking 201 creation and 200 idempotency replay acknowledgements
+now share `portalBookingReceipt()`, a fixed allowlist containing only:
+`id`, `branchId`, `patientId`, `appointmentNumber`, and `status`.
+The server still persists its complete authorized appointment, keeps
+home-visit creation and audit inside the same transaction, and returns
+the same new/replayed HTTP status and no-store cache policy.
+The portal client already validates the necessary ID/branch/patient/status.
+No database schema or legacy appointment records were changed.
+
+A deterministic runtime privacy regression deliberately supplies a Prisma-like
+row with synthetic contact, address, notes, session-actor, account,
+organization and submission fingerprint fields and verifies none appear
+in the serialized response. Source checks require both 201 and replay paths
+to use the allowlist and forbid full appointment object spreading.
+The existing two-connection real MariaDB key uniqueness CI remains required.
+
+**Limit:** This protects mutation receipts only, not all other portal
+read endpoints; it is software evidence, not a legal privacy certification.
+Protected 486 F7 browser cases remain NOT_EXECUTED, and 88 F8 qualified
+acceptance cases/seven approvals remain NOT_EXECUTED / NO_GO. Hostinger
+deployment and physical lab operations are not attested. Master Scope
+sections 1–88 are preserved.
