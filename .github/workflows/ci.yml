@@ -43,9 +43,11 @@ jobs:
       - run: npx tsc --noEmit
       - run: npm run lint
       - run: timeout --signal=TERM --kill-after=10s 120s node --experimental-strip-types --test tests/f2-mapping-reviewer-feedback-mariadb.integration.test.ts
+      - run: timeout --signal=TERM --kill-after=10s 180s node --experimental-strip-types --test tests/f3-*.test.ts
       - run: npm run test:safety
       - run: node --experimental-strip-types --test tests/organization-settings-concurrency-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-126-legacy-row-lineage-mariadb.integration.test.ts
+      - run: node --experimental-strip-types --test tests/f3-legacy-lineage-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/f1-exact-tariff-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-126-package-price-draft-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-127-reflex-confirmation-mariadb.integration.test.ts
