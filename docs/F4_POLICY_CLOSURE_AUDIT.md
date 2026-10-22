@@ -28,3 +28,37 @@ F4 remains **IN_PROGRESS**. This branch is a concrete fail-closed safety increme
 Instrument interference requires a typed, bounded per-observation raw-flag evidence contract, an authorized vendor-specific mapping with effective dates/reviewers, and import/autoverification fail-closed integration with negative and MariaDB checks. Existing TaxRule support must be compared against real jurisdiction/contract configuration needs when policies become available; until then retain documented external blockers rather than inventing tax values.
 
 This F4 incremental PR must **remain Draft** until the above software gap is closed or explicitly classified in the finite #327 completion board. Do not call the entire F4 phase finished based on these guards.
+
+
+## F4 bridge fail-closed increment — HL7 and ASTM
+
+The existing isolated `bridge/protocols.mjs` normalizes only a conservative
+HL7 ORU^R01 and ASTM E1394 subset. Its original implementation did **not**
+parse or carry forward these fields: HL7 OBX-8 abnormal/interference flag,
+OBX-11 observation status, HL7 NTE free-text comments, or ASTM R-record
+trailing clinical qualifiers. Silently dropping them while producing a
+normal-looking staged observation is unsafe.
+
+This branch changes the parser to **reject unapproved messages before
+normalization or LIS ingestion** when:
+- HL7 OBX-8 contains *any* value, including apparently normal or vendor
+  interference codes; no code has been classified as safe by assumption;
+- HL7 OBX-11 explicitly represents a non-final status (including correction
+  or preliminary); a correction must use qualified amendment handling;
+- HL7 NTE-3 onwards contains clinical comments/caveats; and
+- ASTM R records have nonempty trailing reference/abnormal/status/context
+  fields beyond the approved code, value and unit profile.
+
+This is a conservative input contract, not validated live analyzer
+commissioning or a substitute for proper HIL threshold/version policy.
+The bridge still retains/quarantines original raw payload through its
+existing machinery. Future vendor integration requires an independently
+approved analyzer/assay/branch effective-dated mapping that preserves
+the flags and applies review/hold rules; it must not globally whitelist
+HL7 abnormal flags or guess thresholds. Synthetic regression:
+`tests/f4-analyzer-interference-bridge.test.mjs`, explicitly called from CI.
+
+**Known limitation**: A vendor can encode interference indicators in other
+fields or proprietary segments. Lack of an OBX-8/R flag does not prove
+interference absent; a vendor-specific approved policy remains required
+for qualified autoverification at F8. Do not activate clinical GO.
