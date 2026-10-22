@@ -16,9 +16,9 @@ export function catalogBundleSigningSecret(env: Record<string, string | undefine
   return value;
 }
 
-type Json = string | number | boolean | null | Json[] | { [key: string]: Json };
+export type Json = string | number | boolean | null | Json[] | { [key: string]: Json };
 
-function canonicalJson(value: Json): string {
+export function canonicalJson(value: Json): string {
   if (value === null || typeof value === "string" || typeof value === "boolean") {
     return JSON.stringify(value);
   }

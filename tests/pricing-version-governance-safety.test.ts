@@ -90,3 +90,20 @@ test("price resolution fails closed when top price lists have tied precedence", 
   assert.ok(pricing.includes("ambiguous_test_price_list"));
   assert.ok(pricing.includes("ambiguous_package_price_list"));
 });
+
+test("F2: billing price selection honors as-of immutable PRICE_LIST priority/status overlays", () => {
+  const pricing = source("src/lib/pricing.ts");
+  const master = source("src/lib/catalog-f2-effective-view.ts");
+  assert.match(pricing, /resolveF2EffectiveCatalogViews\(db as Prisma\.TransactionClient,/);
+  assert.match(pricing, /projectF2EffectiveCatalogView\("PRICE_LIST",list,overlays\)/);
+  assert.match(pricing, /effectiveFrom:list\.effectiveFrom,effectiveTo:list\.effectiveTo/);
+  assert.equal(pricing.split("const effectiveLists=await effectivePricedLists(").length - 1,2,
+    "test and package quotations must use the effective list consistently");
+  assert.match(pricing, /const ranked = effectiveLists[\s\S]*?list\.items\.length > 0/);
+  assert.match(pricing, /const ranked = effectiveLists[\s\S]*?list\.packageItems\.length > 0/);
+  assert.match(pricing, /\.filter\(list=>list\.status==="ACTIVE"\)/);
+  assert.equal(pricing.split('organizationId: input.organizationId,\n      status: "ACTIVE"').length-1,0,
+    "a base inactive price list must be eligible for future activation overlay");
+  assert.match(master,/effectiveFrom:\{lte:asOf\}/);
+  assert.match(master,/state:"RECORDED"/);
+});

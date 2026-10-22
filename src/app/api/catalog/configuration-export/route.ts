@@ -5,6 +5,11 @@ import { liveCatalogReviewStagingAuthority } from "@/lib/catalog-review-staging-
 import { clinicalImportTestWhere } from "@/lib/catalog-clinical-import-scope";
 import { genericCatalogPriceScope } from "@/lib/catalog-generic-price-scope";
 import {
+  F2_EFFECTIVE_READ_TYPES,resolveF2EffectiveCatalogViews,
+  projectF2EffectiveCatalogView,f2EffectiveCompositeMemberIds,
+  f2EffectiveCompositeMembersAuthorized,
+} from "@/lib/catalog-f2-effective-view";
+import {
   catalogExportNavigation, catalogExportTypes, type CatalogExportType,
 } from "@/lib/catalog-configuration-export";
 
@@ -224,6 +229,32 @@ export async function GET(request: NextRequest) {
   const hasMore = records.length > 250;
   const shown = records.slice(0, 250);
   const nextCursor = hasMore ? shown[shown.length - 1].id : null;
+  let effectiveShown=shown;
+  if(shown.length && F2_EFFECTIVE_READ_TYPES.some(t=>t===type)){
+    const effectiveType=type as typeof F2_EFFECTIVE_READ_TYPES[number];
+    // Apply only time-effective signed master revisions to previously scoped
+    // base rows. A page cursor and source field contract stay unchanged.
+    const overlays=await resolveF2EffectiveCatalogViews(tx,{
+      organizationId,asOf:new Date(),
+      records:shown.map(row=>({entityType:effectiveType,id:row.id})),
+    });
+    effectiveShown=shown.map(row=>
+      projectF2EffectiveCatalogView(effectiveType,row,overlays));
+    if(type==="PANEL"||type==="PACKAGE"){
+      const members=f2EffectiveCompositeMemberIds(type,effectiveShown);
+      if(!members)return NextResponse.json({
+        error:"export_effective_membership_invalid",
+      },{status:409});
+      const scopedTests=await tx.labTest.findMany({
+        where:{...testScope,id:{in:[...members.keys()]}},
+        select:{id:true,code:true},take:members.size+1,
+      });
+      if(!f2EffectiveCompositeMembersAuthorized(members,scopedTests))
+        return NextResponse.json({
+          error:"export_effective_member_scope_changed",
+        },{status:403});
+    }
+  }
 
   // Log config exports; never update catalog definitions or historical prices.
   const ctx = await requestContext();
@@ -250,7 +281,7 @@ export async function GET(request: NextRequest) {
     generatedAt: new Date().toISOString(),
     consistency: "paged-live-not-atomic",
     pageSize: 250,
-    records: shown,
+    records: effectiveShown,
     nextCursor,
     hasMore,
   }, { headers: { "Cache-Control": "private, no-store" } });

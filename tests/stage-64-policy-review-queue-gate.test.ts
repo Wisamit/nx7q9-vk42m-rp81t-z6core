@@ -43,7 +43,9 @@ test("Stage 64: queue requires exact latest event plus intact full history",()=>
 
 test("Stage 64: queue cannot advertise staged rows in revoked branches or changed identities",()=>{
   const row={entityType:"TEST",status:"WARNING",importedEntityId:null,
-    sourceData:{id:scope.batchId},normalizedData:{id:scope.batchId,branchId:scope.branchId}};
+    sourceData:{id:scope.batchId,code:"TEST",nameEn:"Queue test",departmentId:null,status:"ACTIVE"},
+    normalizedData:{id:scope.batchId,code:"TEST",nameEn:"Queue test",departmentId:null,
+      branchId:scope.branchId,status:"ACTIVE"}};
   assert.equal(policyReviewIdentityScope([row],new Set([scope.branchId])).ok,true);
   assert.deepEqual(policyReviewIdentityScope([row],new Set()),{
     ok:false,error:"policy_review_batch_scope_changed",

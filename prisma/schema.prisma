@@ -12,6 +12,11 @@ enum RecordStatus {
   INACTIVE
 }
 
+enum CatalogConfigurationRevisionState {
+  RECORDED
+  CANCELLED
+}
+
 enum ReferenceIntervalApprovalStatus {
   DRAFT
   APPROVED
@@ -1005,6 +1010,7 @@ enum EdgeQueueStatus {
 }
 
 model Organization {
+  catalogConfigurationRevisions CatalogConfigurationRevision[]
   legacyCatalogLineage LegacyCatalogRowLineage[]
   specimenRetentionPolicies SpecimenRetentionPolicy[]
   specimenDisposalCases SpecimenDisposalCase[]
@@ -1170,6 +1176,7 @@ model OrganizationSetting {
 }
 
 model Branch {
+  catalogConfigurationRevisions CatalogConfigurationRevision[]
   specimenRetentionPolicies SpecimenRetentionPolicy[]
   specimenDisposalCases SpecimenDisposalCase[]
   id              String       @id @default(uuid()) @db.Char(36)
@@ -1355,6 +1362,10 @@ model ClinicalRuleGovernanceLock {
 }
 
 model User {
+  f2ConfigCreatedRevisions CatalogConfigurationRevision[] @relation("F2ConfigRevisionCreator")
+  f2ConfigClinicalSignedRevisions CatalogConfigurationRevision[] @relation("F2ConfigRevisionClinician")
+  f2ConfigFinancialSignedRevisions CatalogConfigurationRevision[] @relation("F2ConfigRevisionFinancier")
+  f2ConfigCancelledRevisions CatalogConfigurationRevision[] @relation("F2ConfigRevisionCanceler")
   createdSpecimenRetentionPolicies SpecimenRetentionPolicy[] @relation("RetentionPolicyCreator")
   approvedSpecimenRetentionPolicies SpecimenRetentionPolicy[] @relation("RetentionPolicyApprover")
   retiredSpecimenRetentionPolicies SpecimenRetentionPolicy[] @relation("RetentionPolicyRetirer")
@@ -2310,6 +2321,7 @@ model CommercialPackageItem {
 }
 
 model CatalogImportBatch {
+  configurationRevisions CatalogConfigurationRevision[]
   legacyCatalogLineage LegacyCatalogRowLineage[]
   id             String            @id @default(uuid()) @db.Char(36)
   organizationId String            @map("organization_id") @db.Char(36)
@@ -7174,4 +7186,47 @@ model LegacyCatalogRowLineage {
   @@index([batchId, importRowId], map: "legacy_lineage_staging_idx")
   @@index([targetType, targetId], map: "legacy_lineage_target_idx")
   @@map("legacy_catalog_row_lineage")
+}
+
+// Immutable-identity, effective-dated overlays for non-native-versioned
+// catalog masters. Clinical ranges and prices use their own native history.
+// A RECORDED revision is current only inside its effective date interval;
+// historical reports must resolve by their own as-of context or snapshots.
+model CatalogConfigurationRevision {
+  id                    String @id @default(uuid()) @db.Char(36)
+  organizationId        String @map("organization_id") @db.Char(36)
+  branchId              String @map("branch_id") @db.Char(36)
+  sourceBatchId         String @map("source_batch_id") @db.Char(36)
+  sourceRowNumber       Int @map("source_row_number")
+  entityType            String @map("entity_type") @db.VarChar(40)
+  entityId              String @map("entity_id") @db.Char(36)
+  revision              Int
+  effectiveFrom         DateTime @map("effective_from") @db.DateTime(3)
+  effectiveTo           DateTime? @map("effective_to") @db.DateTime(3)
+  state                 CatalogConfigurationRevisionState @default(RECORDED)
+  beforeSnapshot        Json @map("before_snapshot")
+  afterSnapshot         Json @map("after_snapshot")
+  originalDigest        String @map("original_digest") @db.Char(64)
+  desiredDigest         String @map("desired_digest") @db.Char(64)
+  planDigest            String @map("plan_digest") @db.Char(64)
+  createdByUserId       String @map("created_by_user_id") @db.Char(36)
+  clinicalSignerUserId  String @map("clinical_signer_user_id") @db.Char(36)
+  financialSignerUserId String @map("financial_signer_user_id") @db.Char(36)
+  createdAt             DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  cancelledAt           DateTime? @map("cancelled_at") @db.DateTime(3)
+  cancelledByUserId     String? @map("cancelled_by_user_id") @db.Char(36)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  branch Branch @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  sourceBatch CatalogImportBatch @relation(fields: [sourceBatchId], references: [id], onDelete: Restrict)
+  creator User @relation("F2ConfigRevisionCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  clinicalSigner User @relation("F2ConfigRevisionClinician", fields: [clinicalSignerUserId], references: [id], onDelete: Restrict)
+  financialSigner User @relation("F2ConfigRevisionFinancier", fields: [financialSignerUserId], references: [id], onDelete: Restrict)
+  canceller User? @relation("F2ConfigRevisionCanceler", fields: [cancelledByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([sourceBatchId, sourceRowNumber], map: "f2_config_batch_row_uq")
+  @@unique([organizationId, entityType, entityId, revision], map: "f2_config_master_revision_uq")
+  @@index([organizationId, entityType, entityId, state, effectiveFrom], map: "f2_config_effective_lookup_idx")
+  @@index([organizationId, branchId, effectiveFrom], map: "f2_config_branch_effective_idx")
+  @@map("catalog_config_revisions")
 }

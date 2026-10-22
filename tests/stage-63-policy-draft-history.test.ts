@@ -29,10 +29,11 @@ test("Stage 63: empty and consecutive history preserve latest identity and exact
   assert.equal(two?.latestEventId, entry(2).id);
   assert.equal(two?.revisionCount, 2);
   assert.equal(two?.draft?.revision, 2);
-  // Even if timestamps tie, revision continuity is independent of audit order
-  // apart from newest-event selection.
+  // Same-millisecond SQL ordering may return the older revision first.
+  // Signed author/branch/source and unique contiguous revision remain binding.
   assert.equal(verify([entry(2), entry(1)])?.draft?.proposalDigest, draft(2).proposalDigest);
-  assert.equal(verify([entry(1), entry(2)]), null);
+  assert.equal(verify([entry(1), entry(2)])?.draft?.revision, 2);
+  assert.equal(verify([entry(1), entry(2)])?.latestEventId, entry(2).id);
 });
 
 test("Stage 63: unknown actors, duplicate revisions, gaps, damaged checksums and source mismatch fail closed", () => {

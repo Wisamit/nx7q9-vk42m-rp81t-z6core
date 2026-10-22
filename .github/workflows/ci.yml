@@ -42,6 +42,7 @@ jobs:
       - run: npx prisma generate
       - run: npx tsc --noEmit
       - run: npm run lint
+      - run: timeout --signal=TERM --kill-after=10s 120s node --experimental-strip-types --test tests/f2-mapping-reviewer-feedback-mariadb.integration.test.ts
       - run: npm run test:safety
       - run: node --experimental-strip-types --test tests/organization-settings-concurrency-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-126-legacy-row-lineage-mariadb.integration.test.ts
@@ -126,6 +127,13 @@ jobs:
       - run: node --experimental-strip-types --test tests/stage-59-signatory-policy-draft-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-60-policy-draft-review-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-61-policy-review-scope-mariadb.integration.test.ts
+      - run: node --experimental-strip-types --test tests/f2-policy-review-full-scope-mariadb.integration.test.ts
+      - run: node --experimental-strip-types --test tests/f2-review-batch-metadata-mariadb.integration.test.ts
+      - run: node --experimental-strip-types --test tests/f2-target-identity-mariadb.integration.test.ts
+      - run: node --experimental-strip-types --test tests/f2-mapping-discussion-mariadb.integration.test.ts
+      - run: node --experimental-strip-types --test tests/f2-mapping-live-observation-mariadb.integration.test.ts
+      - run: timeout --signal=TERM --kill-after=10s 120s node --experimental-strip-types --test tests/f2-effective-versions-mariadb.integration.test.ts
+      - run: timeout --signal=TERM --kill-after=10s 140s node --experimental-strip-types --test tests/f2-mixed-ten-class-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-62-policy-author-feedback-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-63-policy-draft-history-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-64-policy-review-queue-mariadb.integration.test.ts

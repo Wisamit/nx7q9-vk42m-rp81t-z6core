@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { sealReviewStageEvidence } from "@/lib/catalog-review-stage-evidence";
 import { NextResponse } from "next/server";
 import { Prisma } from "../../../../../../generated/prisma/client";
 import { sameCompositeMembership, type CompositeMember } from "@/lib/catalog-composite-bundle";
@@ -330,14 +331,16 @@ export async function POST(request: Request) {
     if (replay.kind === "conflict")
       return { error: "catalog_staging_key_reused", httpStatus: 409 } as const;
     if (replay.kind === "replay") return { id: replay.id, replayed: true } as const;
+    const initialSummary = { total: references.length, WARNING: references.length,
+      reviewOnly: true, format: "family-lab-catalog-bundle",
+      consistency: parsed.consistency, attestationStatus, fieldContractStatus,
+      exportedAt: parsed.exportedAt, counts: parsed.counts };
     const created = await tx.catalogImportBatch.create({ data: {
       organizationId: scope.organizationId, sourceType: BUNDLE_REVIEW_SOURCE,
       sourceName, sourceChecksum: checksum, submissionKey: requestKey.key,
       status: "DRAFT", validatedAt: null,
       createdByUserId: session.user.id,
-      summary: { total: references.length, WARNING: references.length, reviewOnly: true,
-        format: "family-lab-catalog-bundle", consistency: parsed.consistency,
-        attestationStatus, fieldContractStatus, exportedAt: parsed.exportedAt, counts: parsed.counts },
+      summary: initialSummary,
     }, select: { id: true } });
     await tx.catalogImportRow.createMany({ data: references.map((row, index) => ({
       batchId: created.id, rowNumber: index + 1, entityType: row.entityType,
@@ -362,11 +365,36 @@ export async function POST(request: Request) {
         }] : []),
       ] as Prisma.InputJsonArray,
     })) });
+    // Bind the persisted MariaDB JSON rows to a server-keyed HMAC. This
+    // detects independent edits to source, normalized or warning evidence.
+    // Staging remains review-only if the deployment key is unavailable, but
+    // independent reviewers must fail closed on its unsealed summary.
+    const signingKey = catalogBundleSigningSecret(process.env);
+    const stored = await tx.catalogImportRow.findMany({
+      where: { batchId: created.id },
+      orderBy: { rowNumber: "asc" },
+      select: { id: true, rowNumber: true, entityType: true,
+        legacyKey: true, status: true, sourceData: true,
+        normalizedData: true, validationIssues: true, importedEntityId: true },
+    });
+    const stageEvidenceSeal = signingKey ? sealReviewStageEvidence({
+      organizationId: scope.organizationId, batchId: created.id,
+      authorUserId: session.user.id, sourceChecksum: checksum, rows: stored,
+      batchMetadata: { sourceType: BUNDLE_REVIEW_SOURCE, sourceName,
+        status: "DRAFT", summary: initialSummary },
+    }, signingKey) : null;
+    await tx.catalogImportBatch.update({
+      where: { id: created.id },
+      data: { summary: { ...initialSummary,
+        stageEvidenceSeal: stageEvidenceSeal ?? "UNSEALED" } },
+    });
     await tx.auditEvent.create({ data: {
       organizationId: scope.organizationId, branchId: scope.branchId,
       actorUserId: session.user.id, action: "CATALOG_CONFIG_BUNDLE_REVIEW_STAGED",
       entityType: "CatalogImportBatch", entityId: created.id,
-      newValues: { total: references.length, reviewOnly: true, attestationStatus, fieldContractStatus, counts: parsed.counts },
+      newValues: { total: references.length, reviewOnly: true, attestationStatus,
+        fieldContractStatus, counts: parsed.counts,
+        stageEvidenceSealed: Boolean(stageEvidenceSeal) },
       ipAddress: ctx.ipAddress, userAgent: ctx.userAgent,
     } });
     return { id: created.id, replayed: false };

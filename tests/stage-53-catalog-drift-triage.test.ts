@@ -59,7 +59,10 @@ test("Stage 53: medical/financial categories and independent live permissions fa
 });
 
 test("Stage 53: bound idempotent input and append-only evidence, never writes laboratory masters", () => {
-  const source = readFileSync("src/app/api/catalog/imports/[id]/bundle-drift/route.ts", "utf8");
+  const actual=readFileSync("src/app/api/catalog/imports/[id]/bundle-drift/route.ts","utf8");
+  const loadCall="const live = await readCatalogLiveObservations(tx,liveScope,branchIds,idsByType);";
+  assert.ok(actual.includes(loadCall),"author drift must invoke canonical full live reader");
+  const source=actual.replace(loadCall,readFileSync("src/lib/catalog-live-observation.ts","utf8"));
   const ui = readFileSync("src/components/catalog-bundle-drift-review.tsx", "utf8");
   const lock = source.indexOf("const orgLock = await tx.$queryRaw");
   const liveRoles = source.indexOf("const activeUser = await tx.user.findFirst");

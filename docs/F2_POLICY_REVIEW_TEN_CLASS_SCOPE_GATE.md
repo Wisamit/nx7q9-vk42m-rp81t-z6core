@@ -1,0 +1,94 @@
+# F2 — Ten-class independent policy review scope gate
+
+## Problem and effect
+
+The native signed configuration bundle has ten export classes. PR #333 fixed drift observations and governance triage for all ten, but the *separate* `validatePolicyReviewBatchScope` preflight used by policy reviewer GET, POST, and discovery queue still counted only six live master classes, omitted linked panel/package memberships and package-price parent scope, and did not require client/contract tariff IDs to be null. A valid review-only source whose linked clinical membership or private tariff context had changed could therefore pass this reviewer gate without proving full current scope. No clinical/financial apply was possible, but the independent policy review evidence could be misleading.
+
+## Change
+
+- Examine the complete bounded DRAFT batch, not just the displayed queue subset.
+- Verify PANEL/PACKAGE signed-source and normalized membership correspond one-to-one (test UUID, linked test code, display order and required flag), then bind every test ID to the tenant/branch/department-filtered LabTest scope. Reject mismatched, malformed or repeated identities.
+- Require PRICE_LIST_PACKAGE_ITEM source/normalized equality for package/list UUID and codes, currency, price, status and effective window, then verify current branch and clinically visible entire package membership. A correctly HMAC-signed source is insufficient if persisted staging identities diverge.
+- Apply the **same fail-closed staging parity** to ordinary `PRICE_LIST` and `PRICE_LIST_ITEM`: preserve list code/currency/status/scope/branch, test and price-list immutable links/codes, exact decimal price text, effective-from and item status. Both the source and normalized snapshots are persisted; a later reviewer must not attest to a price altered in either column. This is **review-evidence integrity only**, not acceptance of the financial amount.
+- Count all ten master entity types, including CONTAINER, PANEL, PACKAGE and PRICE_LIST_PACKAGE_ITEM, in the *same transaction* as reviewer audit capture.
+- Exclude all source/referrer/client/contract price lists from generic catalog policy review by checking live nested tariff fields and refusing untrusted private source linkage.
+- Use fail-closed count comparison on the union of staged and linked master IDs. Then **re-read every live PANEL/PACKAGE membership** inside the same reviewer transaction and compare the complete set of immutable test IDs, display order and PANEL `required` flags with the staged source-verified projection. Having all members inside the permitted branch is not sufficient if the live composite has changed since staging; mismatches return `policy_review_batch_scope_changed`.
+- Require the source-to-normalized clinical reviewer snapshot for `COMPONENT` to match immutable test/optional unit UUIDs, linked test code, component code/name and record status. Require `REFERENCE_INTERVAL` to match component UUID, nested component/test codes, branch context, canonical effective-from timestamp, approval status and record status. A maliciously rewritten DRAFT reviewer row now fails with `policy_review_source_integrity_error`, not an apparently valid clinical finding. This check intentionally does not accept, publish or amend reference intervals; qualified approval remains external.
+- Complete the ten-class source-to-normalized **review identity** coverage for the previously unguarded simple `TEST`, `UNIT`, and `CONTAINER` staging rows. Enforce code/status plus test display name and department UUID, unit symbol, and tube name/nullable Arabic label, color and additive. This specifically blocks DRAFT-row evidence forgery without touching live masters or claiming these are the entire eligible apply-field contracts.
+- Add negative fixture cases for altered, deleted and mismatched simple master fields; MariaDB synthetic multi-session review reads now reject tampered stored test identity and container metadata before reviewer attestation, while ordinary branch and composite drift protections remain in place.
+- This closes a stale-review-evidence gap and does **not** authorize changes or imply that prices, clinical definitions or signatures were approved.
+- Preserve non-committable CONFIG_BUNDLE_REVIEW and CSV_REVIEW and all existing author/reviewer separation.
+
+## Subsequent F2 checkpoint — current live identity parity
+
+- The policy reviewer gate previously re-read the complete live PANEL/PACKAGE membership, but for directly staged TEST, UNIT and CONTAINER it only counted authorized UUIDs. An in-scope edit after staging (for example a changed test English name, unit symbol or collection tube metadata) could therefore leave stale review evidence looking current.
+- A **read-only live comparison in the same tenant-locked reviewer transaction** now re-fetches the actual TEST code/name/department/status, UNIT code/symbol/status and CONTAINER code/names/color/additive/status for every directly staged identity, comparing them with its source-verified normalized identity. A mismatch returns `policy_review_batch_scope_changed` and withholds review evidence. Missing records or revoked scope still fail closed.
+- The comparator is shared by fake-Prisma transaction tests and real two-session MariaDB synthetic fixtures: rename a staged test, alter its unit symbol or modify container color/name without changing UUID and observe fail-closed behavior, then restore and confirm eligibility. Reviewer GET/POST and queue still invoke the shared validator.
+- This **does not** establish field-complete live parity for every field of all ten classes, eliminate concurrent writer scheduling risks, create a versioned apply, or authorize any clinical/financial signatory. Those remain F2 work and qualified governance gates. No data migration or active master writes are introduced by the production change. `CONFIG_BUNDLE_REVIEW` and `CSV_REVIEW` application stay blocked.
+
+## Additional F2 financial live-drift gate
+
+- Ordinary `PRICE_LIST`, `PRICE_LIST_ITEM` and `PRICE_LIST_PACKAGE_ITEM` DRAFT reviewer observations now independently re-read current scoped live tariff identity in the **same tenant-locked transaction**, rather than equating matching UUID/count/branch with unchanged financial evidence. A price-list code, currency, status or branch change, price amount, item status, effective-from or signed effective-to change, or linked test/package code mismatch rejects the review.
+- Monetary equality uses validated DECIMAL(18,4) **scaled integer text**, never JavaScript `Number`, with out-of-scale and numeric-coercion rejections. Prisma Decimal strings remain exact; the reviewer does not write any live list or item. Private price-list scopes remain excluded by the existing scoped queries.
+- Scoped financial source rows from earlier review versions may omit some effective-window attributes; absence of a field is **not** proof of full round-trip or effective-date parity. Policy/application authorization and all historical invoice-price snapshots remain completely outside this read-only gate.
+- Regression includes pure malformed precision and changed live parent/price/link checks plus synthetic two-session MariaDB changes of item amount, package amount, parent currency and status. The actively used GET, POST and discovery queue share the same preflight.
+
+## Additional F2 clinical identity drift gate (COMPONENT / REFERENCE_INTERVAL)
+
+- A `COMPONENT` or `REFERENCE_INTERVAL` UUID/count and currently permitted branch do **not** prove that the reviewed clinical identity is unchanged. The tenant-locked reviewer preflight now re-reads directly staged analytes (test link and live test code, unit ID, component code/name/status) and reference intervals (component/test codes, branch, effective-from, approval status and active status). Changed or missing records fail closed with `policy_review_batch_scope_changed`.
+- Both the policy reviewer GET/POST and independent-review queue consume the same shared validator. No reference-range values, medical signatory rights or live analyte are modified by the production change. An APPROVED/RETIRED lifecycle transition is **review evidence drift**, never an authorization shortcut.
+- Regression includes fake Prisma scoped-query/live-drift cases and independent MariaDB writer/reader sessions with synthetic DRAFT staging: rename an analyte, change its unit, retire a reference interval, and alter its effective date, then prove rejection and restoration. This is **projection identity parity only**, not clinical interval numeric low/high/critical limits or demographic-population criteria parity. Those remain within F2 before any authorized configuration apply, with qualified medical approval still `BLOCKED_EXTERNAL`.
+
+## Clinical reference interval medical-snapshot parity checkpoint
+
+- The Stage 61 identity-only live guard is extended for directly staged `REFERENCE_INTERVAL` rows to compare **all v1 source-projected clinical parameters** with the current scoped interval in the same tenant-locked review transaction. This includes method/analyzer/specimen identity, sex and age boundaries/unit, pregnancy and gestational criteria, population, exact low/high and critical low/high values, bilingual normal text, source/notes, effective-to and clinical approval/retirement timestamps. The interval's component/test relationship, branch, status and effective-from were already guarded.
+- Every projected clinical field is **required to be present**, including explicit JSON `null` where applicable. Missing legacy snapshot fields fail closed rather than being treated as proof of unchanged data. The existing bundle export selects the complete projection; no new public medical export fields are introduced.
+- Clinical decimal comparison uses exact scaled `BigInt` text for `DECIMAL(10,3)`, `DECIMAL(6,2)` and `DECIMAL(18,6)` and supports negative numeric ranges; no binary floating-point comparison or unapproved range normalization. Changed value, application condition, or lifecycle timestamp returns `policy_review_batch_scope_changed`, withholding DRAFT review evidence.
+- Real two-session MariaDB regressions compare the saved interval source with live numeric, sex, age, text and effective-to values; synthetic mutations fail and restored values pass. Fake-Prisma transaction and standalone comparator tests prove exact decimal parity and incomplete-source denial.
+- **Boundaries:** this gate checks read-only identity and source-value correspondence *to current live data*, not authenticity of a separately mutated source JSON, clinical correctness, qualified approval, released report revisioning, versioned atomic apply or re-export equality. Keep `CONFIG_BUNDLE_REVIEW` and `CSV_REVIEW` application denied. Human policy and signatory dependencies are still `BLOCKED_EXTERNAL`. No released historical clinical values or invoices are rewritten.
+
+## Authenticated persisted DRAFT stage evidence (HMAC-SHA256)
+
+- The original file attestation (if present) authenticates an *export payload*; its `sourceChecksum` alone cannot authenticate independently stored `catalog_import_rows`. For new `CONFIG_BUNDLE_REVIEW` DRAFTs, the bundle stage endpoint now reads back the persisted MariaDB rows within the same tenant-locked transaction and stores a versioned `stageEvidenceSeal` in the batch summary. The seal is a server-keyed, purpose-separated HMAC-SHA256 of the **organization, batch ID, author, original source checksum, and every sorted row's persistent ID, position, type, legacy key, status, source JSON, normalized JSON, validation issues and imported ID**.
+- The signing key is `CATALOG_BUNDLE_SIGNING_KEY` with the existing `APP_ENCRYPTION_KEY` fallback, resolved only server-side. A draft can still be staged without a configured key as explicit `UNSEALED` review-only evidence, but **no policy-review GET/POST or reviewer queue listing will accept it**. Missing/altered seals, key change, row replacement, or edits to source, normalized, warning or lineage fields return `policy_review_source_integrity_error` (or hide the queue entry). Previous unsealed DRAFTs require fresh staging with an available key.
+- The same signed stage gate executes before clinical, tariff and branch-scoped comparisons in `validatePolicyReviewBatchScope`, under the pre-existing `RepeatableRead` review transaction. The original active masters and issued clinical reports are not changed. Signing is not a medical or financial approval and does **not** prove that an unsigned file was truthful, that a privileged attacker could not control the signing key, or that all business policies are approved.
+- Rotating the signing key invalidates earlier stage seals; no historical key registry is implemented in F2. Restage explicitly after rotation, never downgrade to an unverified claim. Synthetic tests cover key/tenant replay, truncated/corrupted/moved rows, source JSON and medical bounds, and MariaDB independent writer/reader mutation/recovery. Keep the `CONFIG_BUNDLE_REVIEW` and `CSV_REVIEW` commit/apply gates closed; F2 remains OPEN, signing policy `BLOCKED_EXTERNAL`.
+
+## Verification and release gate
+
+- Pure unit tests cover all ten class identities, member duplicates, malformed package relationships, branch revocation and private tariff linkage; static checks tie the reviewer queue/route to the shared scoped validator.
+- Real MariaDB two-session integration exercises tenant-locked SQL membership, package-tariff and container visibility on synthetic rows; off-branch membership, revoked tariff branch, in-scope display-order/required-flag drift and cross-tenant container fail closed. Additional synthetic DRAFT price-list and single-test tariff rows prove that a tampered normalized currency or unit price fails before independent review; no published price is changed. Static tests independently assert the production GET/POST/queue paths call the same Prisma scope validator; direct Node integration cannot import the Next.js-only generated Prisma path without a test-specific bundling layer.
+- No schema migrations or configuration apply, no signatory credential inference. Approval workflow, domain policy, medical/financial signing and version-safe immutable application remain **F2 OPEN/BLOCKED_EXTERNAL** until qualified decisions.
+- **Hostinger deploy HOLD** per owner 2026-10-20 instruction. Continue GitHub PR/CI only. Latest *owner confirmed deployed* version is `d74115933bb24d745be4412883084fb54d8c152e`; `main` `66919fede47230277a74781b3ef4f9077713c3f4` has green CI #1839 but is not confirmed deployed. Do not promote a new PR to production or F3. No owner browser testing before F7.
+
+
+## F2 follow-up — persisted batch provenance seal v2 (review-only)
+
+Earlier staged-row HMAC v1 authenticated row JSON, warning evidence, checksum and
+author, but did not authenticate the separate batch source name/type/status or
+summary metadata. Editing `attestationStatus`, `fieldContractStatus`, export
+consistency or counts in the database could misdescribe the independent
+reviewer's original evidence without changing any sealed row.
+
+- Newly staged CONFIG_BUNDLE_REVIEW batches receive a domain-separated
+  **HMAC-SHA256 v2** over the persisted review rows **and** their original batch
+  provenance: source type, source file name, DRAFT status, summary totals,
+  export timestamp, transactional consistency, source attestation status,
+  field-contract status and per-class counts. Batch organization, author and
+  checksum remain signed. The seal is persisted in the same stage transaction.
+- GET/POST policy review and independent discovery queue read the batch
+  metadata again inside their existing organization-locked repeatable-read
+  transaction, remove only the `stageEvidenceSeal` key, and verify that
+  the recomputed v2 signature matches. Any metadata or row alteration, missing
+  seal, missing deployment signing key, or old v1-only seal fails closed.
+- Older draft batches with v1 seal are **not** silently upgraded: they need
+  **restaging from a fresh verified source** before independent review.
+- The legacy v1 library API remains testable for compatibility, but no
+  authenticated reviewer pathway accepts its older evidence format.
+- Regression includes HMAC tamper/downgrade tests, ten-class scope rejection
+  tests and independent writer/reader MariaDB mutation/restoration tests.
+- This is not evidence of an independently trusted original export, clinical
+  approval, tax/contract authorization, or deployment. No clinical/price masters
+  are written. Both `CONFIG_BUNDLE_REVIEW` and `CSV_REVIEW` stay
+  **non-committable**. Human signatory policy and an atomic versioned apply
+  workflow remain `BLOCKED_EXTERNAL` / unfinished F2 gates.

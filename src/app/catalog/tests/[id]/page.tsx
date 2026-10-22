@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { permissionSet, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import {projectF2EffectiveCatalogView,resolveF2EffectiveCatalogViews} from "@/lib/catalog-f2-effective-view";
 import { OrderQuestionManager } from "@/components/order-question-manager";
 import { SystemDateText } from "@/components/system-date-text";
 import { ResultLayoutManager } from "@/components/result-layout-manager";
@@ -19,7 +20,9 @@ export default async function TestDetailPage({ params }: { params: Promise<{ id:
   const { id } = await params;
   const permissions = permissionSet(session);
   const locale = getUiLocale(session.user.preferredLocale);
-  const test = await prisma.labTest.findFirst({
+  const test = await prisma.$transaction(async tx => {
+    const asOf=new Date();
+    const current=await tx.labTest.findFirst({
     where: { id, organizationId: session.user.organizationId },
     include: {
       department: true, specimenType: true, container: true, method: true, defaultUnit: true,
@@ -29,7 +32,38 @@ export default async function TestDetailPage({ params }: { params: Promise<{ id:
       resultSections: { orderBy: [{ displayOrder: "asc" }, { code: "asc" }] },
       orderQuestions: { orderBy: [{ code: "asc" }, { version: "desc" }, { effectiveFrom: "desc" }] },
     },
-  });
+    });
+    if(!current)return null;
+    const targets=[
+      {entityType:"TEST" as const,id:current.id},
+      ...current.components.map(component=>({
+        entityType:"COMPONENT" as const,id:component.id,
+      })),
+      ...(current.container?[{entityType:"CONTAINER" as const,id:current.container.id}]:[]),
+      ...(current.defaultUnit?[{entityType:"UNIT" as const,id:current.defaultUnit.id}]:[]),
+      ...current.components.filter(component=>component.unit).map(component=>({
+        entityType:"UNIT" as const,id:component.unit!.id,
+      })),
+    ];
+    const unique=[...new Map(targets.map(item=>[
+      item.entityType+":"+item.id,item,
+    ])).values()];
+    const overlays=await resolveF2EffectiveCatalogViews(tx,{
+      organizationId:session.user.organizationId,asOf,records:unique,
+    });
+    return {
+      ...projectF2EffectiveCatalogView("TEST",current,overlays),
+      container:current.container?
+        projectF2EffectiveCatalogView("CONTAINER",current.container,overlays):null,
+      defaultUnit:current.defaultUnit?
+        projectF2EffectiveCatalogView("UNIT",current.defaultUnit,overlays):null,
+      components:current.components.map(component=>({
+        ...projectF2EffectiveCatalogView("COMPONENT",component,overlays),
+        unit:component.unit?
+          projectF2EffectiveCatalogView("UNIT",component.unit,overlays):null,
+      })).sort((a,b)=>a.displayOrder-b.displayOrder||a.code.localeCompare(b.code)),
+    };
+  },{isolationLevel:"RepeatableRead",timeout:30000});
   if (!test) notFound();
 
   const localizedName = (item: { nameEn: string; nameAr?: string | null }) =>

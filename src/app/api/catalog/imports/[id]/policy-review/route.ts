@@ -4,6 +4,8 @@ import { prisma } from "@/lib/db";
 import { BUNDLE_REVIEW_SOURCE } from "@/lib/catalog-bundle-review";
 import { resolveClinicalImportScope } from "@/lib/catalog-clinical-import-scope";
 import { validatePolicyReviewBatchScope } from "@/lib/catalog-policy-review-scope";
+import { catalogBundleSigningSecret } from "@/lib/catalog-bundle-attestation";
+import { reviewStageBatchMetadata } from "@/lib/catalog-review-stage-evidence";
 import {
   POLICY_DRAFT_HISTORY_LIMIT, verifyBranchScopedPolicyDraftHistory,
   policyAuditBranchesMatch,
@@ -140,7 +142,8 @@ async function inspectPolicyReview(request: NextRequest, { params }: Context, in
 
     const batch = await tx.catalogImportBatch.findFirst({
       where: { id: batchId, organizationId, sourceType: BUNDLE_REVIEW_SOURCE, status: "DRAFT" },
-      select: { id: true, sourceChecksum: true, createdByUserId: true },
+      select: { id: true, sourceType: true, sourceName: true, status: true,
+        sourceChecksum: true, createdByUserId: true, summary: true },
     });
     if (!batch?.sourceChecksum)
       return { error: "policy_review_not_found", httpStatus: 404 } as const;
@@ -170,6 +173,11 @@ async function inspectPolicyReview(request: NextRequest, { params }: Context, in
     // A domain reviewer cannot make a procedural statement about out-of-scope masters.
     const batchScope = await validatePolicyReviewBatchScope(tx, {
       batchId: batch.id, scope, grantedBranchIds,
+      sourceChecksum: batch.sourceChecksum, authorUserId: batch.createdByUserId,
+      stageEvidenceSeal: batch.summary && typeof batch.summary === "object" &&
+        !Array.isArray(batch.summary) ? batch.summary.stageEvidenceSeal : null,
+      batchMetadata: reviewStageBatchMetadata(batch),
+      signingSecret: catalogBundleSigningSecret(process.env),
     });
     if (!batchScope.ok)
       return { error: batchScope.error, httpStatus: 403 } as const;

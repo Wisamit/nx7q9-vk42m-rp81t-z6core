@@ -1,5 +1,8 @@
 import type { Prisma, PrismaClient } from "../../generated/prisma/client";
 import { comparePricingCandidates, samePricingPrecedence } from "@/lib/pricing-policy";
+import {
+  projectF2EffectiveCatalogView, resolveF2EffectiveCatalogViews,
+} from "@/lib/catalog-f2-effective-view";
 
 export class PricingConfigurationError extends Error {
   constructor(
@@ -15,6 +18,29 @@ export class PricingConfigurationError extends Error {
 }
 
 type DbClient = PrismaClient | Prisma.TransactionClient;
+
+/**
+ * F2 schedules price-list priority, status and descriptions as immutable
+ * as-of overlays instead of overwriting old price-list master rows. The
+ * same effective choice must drive NEW billing quotes and order snapshots.
+ * Effective dates and scope/ownership IDs are immutable in F2's plan, so
+ * retain their typed live Prisma values (Date, UUID) rather than JSON.
+ */
+async function effectivePricedLists<T extends {
+  id:string;status:string;effectiveFrom:Date;effectiveTo:Date|null;
+}>(db:DbClient,organizationId:string,at:Date,lists:readonly T[]):Promise<T[]>{
+  if(!lists.length)return [];
+  const overlays=await resolveF2EffectiveCatalogViews(db as Prisma.TransactionClient,{
+    organizationId,asOf:at,
+    records:lists.map(list=>({entityType:"PRICE_LIST" as const,id:list.id})),
+  });
+  return lists.map(list=>{
+    const updated=projectF2EffectiveCatalogView("PRICE_LIST",list,overlays);
+    // The F2 plan forbids changing price-list effectiveFrom/effectiveTo and
+    // identity fields, and these dates MUST remain native Prisma Date values.
+    return {...updated,effectiveFrom:list.effectiveFrom,effectiveTo:list.effectiveTo};
+  }).filter(list=>list.status==="ACTIVE");
+}
 
 export async function resolveTestPrice(
   db: DbClient,
@@ -42,10 +68,12 @@ export async function resolveTestPrice(
   }) : [];
   const contractIds = activeContracts.map((x) => x.id);
 
+  // Stored price revision endpoints are inclusive to preserve existing
+  // manually authored tariff histories. F2 must close predecessor at
+  // successorStart - 1 ms, not at the successor start instant.
   const priceLists = await db.priceList.findMany({
     where: {
       organizationId: input.organizationId,
-      status: "ACTIVE",
       effectiveFrom: { lte: at },
       OR: [{ effectiveTo: null }, { effectiveTo: { gte: at } }],
       AND: [{
@@ -80,7 +108,9 @@ export async function resolveTestPrice(
     },
   });
 
-  const ranked = priceLists
+  const effectiveLists=await effectivePricedLists(
+    db,input.organizationId,at,priceLists);
+  const ranked = effectiveLists
     .filter((list) => list.items.length > 0)
     .map((list) => ({ list }))
     .sort((a, b) => comparePricingCandidates(a.list, b.list));
@@ -136,7 +166,6 @@ export async function resolvePackagePrice(
   const priceLists = await db.priceList.findMany({
     where: {
       organizationId: input.organizationId,
-      status: "ACTIVE",
       effectiveFrom: { lte: at },
       OR: [{ effectiveTo: null }, { effectiveTo: { gte: at } }],
       AND: [{
@@ -171,7 +200,9 @@ export async function resolvePackagePrice(
     },
   });
 
-  const ranked = priceLists
+  const effectiveLists=await effectivePricedLists(
+    db,input.organizationId,at,priceLists);
+  const ranked = effectiveLists
     .filter((list) => list.packageItems.length > 0)
     .map((list) => ({ list }))
     .sort((a, b) => comparePricingCandidates(a.list, b.list));

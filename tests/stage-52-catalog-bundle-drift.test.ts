@@ -3,7 +3,10 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { catalogBundleDrift } from "../src/lib/catalog-bundle-drift.ts";
 
-const route = readFileSync("src/app/api/catalog/imports/[id]/bundle-drift/route.ts", "utf8");
+const actualRoute=readFileSync("src/app/api/catalog/imports/[id]/bundle-drift/route.ts","utf8");
+const loadCall="const live = await readCatalogLiveObservations(tx,liveScope,branchIds,idsByType);";
+assert.ok(actualRoute.includes(loadCall),"author route must invoke canonical full live reader");
+const route=actualRoute.replace(loadCall,readFileSync("src/lib/catalog-live-observation.ts","utf8"));
 const ui = readFileSync("src/components/catalog-bundle-drift-review.tsx", "utf8");
 const page = readFileSync("src/app/catalog/imports/[id]/page.tsx", "utf8");
 

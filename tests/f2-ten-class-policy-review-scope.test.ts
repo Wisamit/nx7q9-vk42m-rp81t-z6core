@@ -1,0 +1,422 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { catalogExportTypes } from "../src/lib/catalog-configuration-export.ts";
+import { sealReviewStageEvidence } from "../src/lib/catalog-review-stage-evidence.ts";
+import { policyReviewIdentityScope, validatePolicyReviewBatchScope,
+  sameLiveTariffReviewIdentity, sameLiveReferenceIntervalMedicalSnapshot
+} from "../src/lib/catalog-policy-review-scope.ts";
+
+const uuid = (part: number) => "00000000-0000-4000-8000-" + part.toString(16).padStart(12,"0");
+const branchId=uuid(21), testId=uuid(1), unitId=uuid(2), componentId=uuid(3);
+const listId=uuid(4), packageId=uuid(5), panelId=uuid(6);
+const base=(type: string, id: string, n: Record<string,unknown>={},
+  source: Record<string,unknown>={})=>({
+  entityType:type, status:"WARNING",importedEntityId:null,
+  sourceData:{id,...source},normalizedData:{id,...n},
+});
+const tariff={sourceId:null,referrerId:null,clientId:null,contractId:null};
+// Complete synthetic v1 interval projection (no patient records).
+const referenceMedical = {
+  methodId:null,analyzerId:null,specimenTypeId:null,sex:"ANY",
+  ageFrom:"0.000",ageTo:"120.000",ageUnit:"YEARS",
+  pregnancyStatus:null,gestationalAgeFromWeeks:null,
+  gestationalAgeToWeeks:null,populationCode:null,
+  lowValue:"3.100000",highValue:"7.200000",
+  normalTextEn:"Synthetic range",normalTextAr:null,
+  criticalLow:"2.000000",criticalHigh:"9.000000",
+  source:null,notes:null,effectiveTo:null,approvedAt:null,retiredAt:null,
+};
+const all=[
+  base("TEST",testId,{code:"F2",nameEn:"F2 Test",departmentId:branchId,status:"ACTIVE"},
+    {code:"F2",nameEn:"F2 Test",departmentId:branchId,status:"ACTIVE"}),
+  base("COMPONENT",componentId,{testId,unitId,code:"COMP",nameEn:"Component",
+    testCode:"F2",status:"ACTIVE"},
+    {testId,unitId,code:"COMP",nameEn:"Component",test:{code:"F2"},status:"ACTIVE"}),
+  base("UNIT",unitId,{code:"MG",symbol:"mg/dL",status:"ACTIVE"},
+    {code:"MG",symbol:"mg/dL",status:"ACTIVE"}),
+  base("CONTAINER",uuid(7),{code:"TUBE",nameEn:"Tube",nameAr:null,
+    tubeColor:"Red",additive:null,status:"ACTIVE"},
+    {code:"TUBE",nameEn:"Tube",nameAr:null,tubeColor:"Red",additive:null,status:"ACTIVE"}),
+  base("PANEL",panelId,{items:[{testId,testCode:"F2",displayOrder:1,required:true}]},
+    {items:[{testId,displayOrder:1,required:true,test:{code:"F2"}}]}),
+  base("PACKAGE",packageId,{items:[{testId,testCode:"F2",displayOrder:1}]},
+    {items:[{testId,displayOrder:1,test:{code:"F2"}}]}),
+  base("REFERENCE_INTERVAL",uuid(8),{componentId,componentCode:"COMP",
+    testCode:"F2",branchId,effectiveFrom:"2026-01-01T00:00:00.000Z",
+    approvalStatus:"APPROVED",status:"ACTIVE"},
+    {componentId,branchId,effectiveFrom:"2026-01-01T00:00:00.000Z",
+      approvalStatus:"APPROVED",status:"ACTIVE",...referenceMedical,
+      component:{code:"COMP",test:{code:"F2"}}}),
+  base("PRICE_LIST",listId,{code:"LIST",currency:"AED",scopeType:"BRANCH",
+    branchId,status:"ACTIVE"},
+    {...tariff,code:"LIST",currency:"AED",scopeType:"BRANCH",branchId,status:"ACTIVE"}),
+  base("PRICE_LIST_ITEM",uuid(9),{testId,priceListId:listId,testCode:"F2",
+    priceListCode:"LIST",scopeType:"BRANCH",branchId,unitPrice:"45.6700",
+    effectiveFrom:"2026-01-01T00:00:00.000Z",status:"ACTIVE"},
+    {testId,priceListId:listId,test:{code:"F2"},
+      unitPrice:"45.6700",effectiveFrom:"2026-01-01T00:00:00.000Z",
+      status:"ACTIVE",priceList:{...tariff,code:"LIST",currency:"AED",scopeType:"BRANCH",
+        branchId,status:"ACTIVE"}}),
+  base("PRICE_LIST_PACKAGE_ITEM",uuid(10),{priceListId:listId,priceListCode:"LIST",
+    packageId,packageCode:"PACK",scopeType:"BRANCH",branchId,currency:"AED",
+    unitPrice:"123.4500",effectiveFrom:"2026-01-01T00:00:00.000Z",
+    effectiveTo:null,status:"ACTIVE"},
+    {priceListId:listId,packageId,unitPrice:"123.4500",
+      effectiveFrom:"2026-01-01T00:00:00.000Z",effectiveTo:null,status:"ACTIVE",
+      package:{code:"PACK"},priceList:{...tariff,code:"LIST",scopeType:"BRANCH",
+        branchId,currency:"AED"}}),
+];
+
+test("F2: every selected export class participates in policy draft reviewer scope, including nested member and priced package refs",()=>{
+  assert.deepEqual(new Set(all.map(x=>x.entityType)),catalogExportTypes);
+  const result=policyReviewIdentityScope(all,new Set([branchId]));
+  assert.equal(result.ok,true);
+  if(!result.ok)return;
+  assert.equal(result.refs.tests.has(testId),true);
+  assert.equal(result.refs.packages.has(packageId),true);
+  assert.equal(result.refs.lists.has(listId),true);
+  assert.deepEqual(result.ids.get("PANEL"),[panelId]);
+  assert.deepEqual(result.ids.get("PRICE_LIST_PACKAGE_ITEM"),[uuid(10)]);
+  assert.equal("sourceData" in result,false);
+});
+
+test("F2: membership, priced package, branch, private tariff and unknown source fail closed",()=>{
+  const change=(type:string,alter:(a:typeof all[number])=>void)=>{
+    const copy=structuredClone(all);
+    const row=copy.find(x=>x.entityType===type)!;
+    alter(row);
+    return policyReviewIdentityScope(copy,new Set([branchId]));
+  };
+  assert.deepEqual(policyReviewIdentityScope(all,new Set()),{
+    ok:false,error:"policy_review_batch_scope_changed",
+  });
+  assert.equal(change("TEST",x=>{(x.normalizedData as Record<string,unknown>).departmentId=uuid(71);}).ok,false);
+  assert.equal(change("TEST",x=>{(x.sourceData as Record<string,unknown>).nameEn="Swapped";}).ok,false);
+  assert.equal(change("TEST",x=>{delete (x.sourceData as Record<string,unknown>).departmentId;}).ok,false);
+  assert.equal(change("UNIT",x=>{(x.normalizedData as Record<string,unknown>).symbol="mmol/L";}).ok,false);
+  assert.equal(change("UNIT",x=>{(x.sourceData as Record<string,unknown>).code="OTHER";}).ok,false);
+  assert.equal(change("CONTAINER",x=>{(x.normalizedData as Record<string,unknown>).tubeColor="Blue";}).ok,false);
+  assert.equal(change("CONTAINER",x=>{(x.sourceData as Record<string,unknown>).additive="EDTA";}).ok,false);
+  assert.equal(change("CONTAINER",x=>{delete (x.sourceData as Record<string,unknown>).nameAr;}).ok,false);
+  assert.equal(change("CONTAINER",x=>{(x.normalizedData as Record<string,unknown>).status="INACTIVE";}).ok,false);
+  assert.equal(change("PANEL",x=>{(((x.normalizedData as Record<string,unknown>).items as Record<string,unknown>[])[0]).testCode="CHANGED";}).ok,false);
+  assert.equal(change("PANEL",x=>{(((x.normalizedData as Record<string,unknown>).items as Record<string,unknown>[])[0]).required=false;}).ok,false);
+  assert.equal(change("PACKAGE",x=>{(((x.sourceData as Record<string,unknown>).items as Record<string,unknown>[])[0]).displayOrder=7;}).ok,false);
+  assert.equal(change("PACKAGE",x=>{(((x.sourceData as Record<string,unknown>).items as Record<string,unknown>[])[0]).testId=uuid(55);}).ok,false);
+  assert.equal(change("COMPONENT",x=>{(x.normalizedData as Record<string,unknown>).testId=uuid(90);}).ok,false);
+  assert.equal(change("COMPONENT",x=>{(x.normalizedData as Record<string,unknown>).testCode="OTHER";}).ok,false);
+  assert.equal(change("COMPONENT",x=>{(x.sourceData as Record<string,unknown>).unitId=uuid(77);}).ok,false);
+  assert.equal(change("COMPONENT",x=>{(x.normalizedData as Record<string,unknown>).nameEn="Tampered";}).ok,false);
+  assert.equal(change("COMPONENT",x=>{delete (x.sourceData as Record<string,unknown>).test;}).ok,false);
+  assert.equal(change("REFERENCE_INTERVAL",x=>{(x.normalizedData as Record<string,unknown>).componentId=uuid(91);}).ok,false);
+  assert.equal(change("REFERENCE_INTERVAL",x=>{(x.normalizedData as Record<string,unknown>).componentCode="WRONG";}).ok,false);
+  assert.equal(change("REFERENCE_INTERVAL",x=>{(x.normalizedData as Record<string,unknown>).testCode="WRONG";}).ok,false);
+  assert.equal(change("REFERENCE_INTERVAL",x=>{(x.normalizedData as Record<string,unknown>).branchId=uuid(55);}).ok,false);
+  assert.equal(change("REFERENCE_INTERVAL",x=>{(x.normalizedData as Record<string,unknown>).effectiveFrom="2027-01-01T00:00:00.000Z";}).ok,false);
+  assert.equal(change("REFERENCE_INTERVAL",x=>{(x.normalizedData as Record<string,unknown>).approvalStatus="DRAFT";}).ok,false);
+  assert.equal(change("REFERENCE_INTERVAL",x=>{(x.normalizedData as Record<string,unknown>).status="INACTIVE";}).ok,false);
+  assert.equal(change("REFERENCE_INTERVAL",x=>{delete (x.sourceData as Record<string,unknown>).component;}).ok,false);
+  assert.equal(change("PRICE_LIST",x=>{(x.normalizedData as Record<string,unknown>).currency="USD";}).ok,false);
+  assert.equal(change("PRICE_LIST",x=>{(x.normalizedData as Record<string,unknown>).code="SWAPPED";}).ok,false);
+  assert.equal(change("PRICE_LIST",x=>{(x.sourceData as Record<string,unknown>).branchId=null;}).ok,false);
+  assert.equal(change("PRICE_LIST_ITEM",x=>{(x.normalizedData as Record<string,unknown>).testId=uuid(42);}).ok,false);
+  assert.equal(change("PRICE_LIST_ITEM",x=>{(x.normalizedData as Record<string,unknown>).testCode="OTHER";}).ok,false);
+  assert.equal(change("PRICE_LIST_ITEM",x=>{(x.normalizedData as Record<string,unknown>).priceListCode="OTHER";}).ok,false);
+  assert.equal(change("PRICE_LIST_ITEM",x=>{(x.normalizedData as Record<string,unknown>).unitPrice="99.0000";}).ok,false);
+  assert.equal(change("PRICE_LIST_ITEM",x=>{(x.normalizedData as Record<string,unknown>).effectiveFrom="2027-01-01T00:00:00.000Z";}).ok,false);
+  assert.equal(change("PRICE_LIST_ITEM",x=>{(x.sourceData as Record<string,unknown>).priceListId=uuid(42);}).ok,false);
+  assert.equal(change("PRICE_LIST_ITEM",x=>{(x.sourceData as Record<string,unknown>).unitPrice="12.34567";}).ok,false);
+  assert.equal(change("PRICE_LIST_ITEM",x=>{delete (x.sourceData as Record<string,unknown>).test;}).ok,false);
+  assert.equal(change("PRICE_LIST_ITEM",x=>{delete (x.sourceData as Record<string,unknown>).priceList;}).ok,false);
+  assert.equal(change("PRICE_LIST_PACKAGE_ITEM",x=>{(x.normalizedData as Record<string,unknown>).packageCode="OTHER";}).ok,false);
+  assert.equal(change("PRICE_LIST_PACKAGE_ITEM",x=>{(x.normalizedData as Record<string,unknown>).unitPrice="200.0000";}).ok,false);
+  assert.equal(change("PRICE_LIST_PACKAGE_ITEM",x=>{(x.normalizedData as Record<string,unknown>).currency="USD";}).ok,false);
+  assert.equal(change("PRICE_LIST_PACKAGE_ITEM",x=>{(x.sourceData as Record<string,unknown>).priceListId=uuid(88);}).ok,false);
+  assert.equal(change("PRICE_LIST_PACKAGE_ITEM",x=>{(x.normalizedData as Record<string,unknown>).effectiveFrom="2027-01-01T00:00:00.000Z";}).ok,false);
+  assert.equal(change("PANEL",x=>{(x.normalizedData as Record<string,unknown>).items=[];}).ok,false);
+  assert.equal(change("PACKAGE",x=>{(x.normalizedData as Record<string,unknown>).items=[{testId:"wrong"}];}).ok,false);
+  assert.equal(change("PANEL",x=>{(x.normalizedData as Record<string,unknown>).items=[
+    {testId},{testId}];}).ok,false);
+  assert.equal(change("PRICE_LIST_PACKAGE_ITEM",x=>{(x.normalizedData as Record<string,unknown>).packageId="bad";}).ok,false);
+  assert.equal(change("PRICE_LIST_PACKAGE_ITEM",x=>{(x.normalizedData as Record<string,unknown>).scopeType="CLIENT";}).ok,false);
+  assert.equal(change("PRICE_LIST_PACKAGE_ITEM",x=>{((x.sourceData as Record<string,unknown>).priceList as Record<string,unknown>).contractId=uuid(22);}).ok,false);
+  assert.equal(change("PRICE_LIST_ITEM",x=>{((x.sourceData as Record<string,unknown>).priceList as Record<string,unknown>).clientId=uuid(23);}).ok,false);
+  assert.equal(change("PRICE_LIST",x=>{(x.sourceData as Record<string,unknown>).sourceId=uuid(24);}).ok,false);
+  assert.equal(change("CONTAINER",x=>{x.sourceData.id="wrong";}).ok,false);
+  assert.equal(policyReviewIdentityScope([...all,base("INVOICE",uuid(25))],new Set([branchId])).ok,false);
+});
+
+
+test("F2: reviewer transaction rejects live catalog identity and composite membership drift", async()=>{
+  const currentTests=[{id:testId,code:"F2",nameEn:"F2 Test",
+    departmentId:branchId,status:"ACTIVE"}];
+  const currentUnits=[{id:unitId,code:"MG",symbol:"mg/dL",status:"ACTIVE"}];
+  const currentContainers=[{id:uuid(7),code:"TUBE",nameEn:"Tube",nameAr:null,
+    tubeColor:"Red",additive:null as string | null,status:"ACTIVE"}];
+  const currentComponents=[{id:componentId,testId,unitId,code:"COMP",
+    nameEn:"Component",status:"ACTIVE",test:{code:"F2"}}];
+  const currentIntervals=[{id:uuid(8),componentId,branchId,
+    effectiveFrom:new Date("2026-01-01T00:00:00.000Z"),
+    approvalStatus:"APPROVED",status:"ACTIVE",...referenceMedical,
+    component:{code:"COMP",test:{code:"F2"}}}];
+  const currentPanels=[{testId,displayOrder:1,required:true}];
+  const currentPackages=[{testId,displayOrder:1}];
+  const date=new Date("2026-01-01T00:00:00.000Z");
+  const parent={code:"LIST",scopeType:"BRANCH",branchId,currency:"AED",status:"ACTIVE"};
+  const currentLists=[{id:listId,...parent,effectiveFrom:date,effectiveTo:null}];
+  const currentTestPrices=[{id:uuid(9),priceListId:listId,testId,
+    unitPrice:"45.6700",effectiveFrom:date,effectiveTo:null,status:"ACTIVE",
+    priceList:parent,test:{code:"F2"}}];
+  const currentPackagePrices=[{id:uuid(10),priceListId:listId,packageId,
+    unitPrice:"123.4500",effectiveFrom:date,effectiveTo:null,status:"ACTIVE",
+    priceList:parent,package:{code:"PACK"}}];
+  const count=async({where}:{where:{id:{in:string[]}}})=>where.id.in.length;
+  const stageRows=all.map((row,index)=>({
+    ...row, sourceData: row.sourceData as Record<string,unknown>,
+    normalizedData: row.normalizedData as Record<string,unknown>,
+    id:uuid(index+100),rowNumber:index+1,
+    legacyKey:(row.normalizedData as {id:string}).id,
+    validationIssues:[{severity:"WARNING",code:"CONFIGURATION_BUNDLE_REVIEW_ONLY"}],
+  }));
+  const sourceChecksum="f".repeat(64), signingSecret="test-review-key".repeat(5);
+  const metadata={sourceType:"CONFIG_BUNDLE_REVIEW", sourceName:"safe-review.json",
+    status:"DRAFT",summary:{
+      total:stageRows.length,WARNING:stageRows.length,reviewOnly:true,
+      format:"family-lab-catalog-bundle",consistency:"transactional-consistent-read",
+      attestationStatus:"VERIFIED",fieldContractStatus:"COMPLETE_SOURCE_FIELD_PROJECTION",
+      exportedAt:"2026-10-20T00:00:00.000Z",
+      counts:Object.fromEntries(all.map(row=>[row.entityType,1])),
+    }};
+  const stagedContext={organizationId:uuid(26),batchId:uuid(25),authorUserId:uuid(33),
+    sourceChecksum,rows:stageRows,batchMetadata:metadata};
+  const stageEvidenceSeal=sealReviewStageEvidence(stagedContext,signingSecret);
+  const tx = {
+    catalogImportRow:{findMany:async()=>stageRows},
+    labTest:{count,findMany:async()=>currentTests},
+    unit:{count,findMany:async()=>currentUnits},
+    testComponent:{count,findMany:async()=>currentComponents},
+    referenceInterval:{count,findMany:async()=>currentIntervals},
+    priceList:{count,findMany:async()=>currentLists},
+    priceListItem:{count,findMany:async()=>currentTestPrices},
+    container:{count,findMany:async()=>currentContainers},
+    priceListPackageItem:{count,findMany:async()=>currentPackagePrices},
+    testPanel:{count,findMany:async()=>[{id:panelId,items:[...currentPanels]}]},
+    commercialPackage:{count,findMany:async()=>[{id:packageId,items:[...currentPackages]}]},
+  } as unknown as Parameters<typeof validatePolicyReviewBatchScope>[0];
+  const input={batchId:uuid(25),scope:{organizationId:uuid(26),branchId,
+    departmentIds:[uuid(27)]},grantedBranchIds:[branchId],
+    authorUserId:uuid(33),sourceChecksum,stageEvidenceSeal,signingSecret,
+    batchMetadata:metadata};
+  const check=()=>validatePolicyReviewBatchScope(tx,input);
+  assert.deepEqual(await check(),{ok:true});
+  // These are legitimate v2 HMAC seals over deliberately unqualified ORIGINAL
+  // exports. Staging authenticity alone cannot give a reviewer authority to
+  // attest to unsigned, field-incomplete or paginated source material.
+  for (const summaryChanges of [
+    { attestationStatus:"UNVERIFIED" },
+    { fieldContractStatus:"LEGACY_NO_FIELD_CONTRACT" },
+    { consistency:"paged-live-not-atomic" },
+  ]) {
+    const unqualified={...metadata,summary:{...metadata.summary,...summaryChanges}};
+    const sealed=sealReviewStageEvidence({...stagedContext,
+      batchMetadata:unqualified},signingSecret);
+    assert.deepEqual(await validatePolicyReviewBatchScope(tx,{
+      ...input,batchMetadata:unqualified,stageEvidenceSeal:sealed,
+    }),{ok:false,error:"policy_review_unverified_source"});
+  }
+
+  assert.deepEqual(await validatePolicyReviewBatchScope(tx,{...input,batchMetadata:null}),
+    {ok:false,error:"policy_review_source_integrity_error"});
+  assert.deepEqual(await validatePolicyReviewBatchScope(tx,{
+    ...input,batchMetadata:{...metadata,summary:{
+      ...(metadata.summary),attestationStatus:"UNVERIFIED",
+    }},
+  }),{ok:false,error:"policy_review_source_integrity_error"});
+  assert.deepEqual(await validatePolicyReviewBatchScope(tx,{
+    ...input,batchMetadata:{...metadata,sourceName:"renamed.json"},
+  }),{ok:false,error:"policy_review_source_integrity_error"});
+  stageRows[0].sourceData={...stageRows[0].sourceData,nameEn:"Forged source"};
+  assert.deepEqual(await check(),{ok:false,error:"policy_review_source_integrity_error"});
+  stageRows[0].sourceData=all[0].sourceData;
+  stageRows[0].normalizedData={...stageRows[0].normalizedData,nameEn:"Forged projection"};
+  assert.deepEqual(await check(),{ok:false,error:"policy_review_source_integrity_error"});
+  stageRows[0].normalizedData=all[0].normalizedData;
+  stageRows[0].validationIssues=[{severity:"WARNING",code:"REWRITTEN"}];
+  assert.deepEqual(await check(),{ok:false,error:"policy_review_source_integrity_error"});
+  stageRows[0].validationIssues=[{severity:"WARNING",code:"CONFIGURATION_BUNDLE_REVIEW_ONLY"}];
+  const initialRowNumber=stageRows[0].rowNumber;
+  stageRows[0].rowNumber=99;
+  assert.deepEqual(await check(),{ok:false,error:"policy_review_source_integrity_error"});
+  stageRows[0].rowNumber=initialRowNumber;
+  assert.deepEqual(await validatePolicyReviewBatchScope(tx,{...input,stageEvidenceSeal:null}),
+    {ok:false,error:"policy_review_source_integrity_error"});
+  assert.deepEqual(await validatePolicyReviewBatchScope(tx,{...input,signingSecret:null}),
+    {ok:false,error:"policy_review_source_integrity_error"});
+  assert.deepEqual(await check(),{ok:true});
+  currentTests[0].nameEn="Renamed after staging";
+  assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
+  currentTests[0].nameEn="F2 Test";
+  currentTests[0].departmentId=uuid(40);
+  assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
+  currentTests[0].departmentId=branchId;
+  currentTests[0].code="OTHER";
+  assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
+  currentTests[0].code="F2";
+  currentTests[0].status="INACTIVE";
+  assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
+  currentTests[0].status="ACTIVE";
+  currentUnits[0].symbol="mmol/L";
+  assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
+  currentUnits[0].symbol="mg/dL";
+  currentContainers[0].tubeColor="Blue";
+  assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
+  currentContainers[0].tubeColor="Red";
+  currentContainers[0].additive="EDTA";
+  assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
+  currentContainers[0].additive=null;
+  assert.deepEqual(await check(),{ok:true});
+  currentComponents[0].unitId=uuid(49);
+  assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
+  currentComponents[0].unitId=unitId;
+  currentComponents[0].nameEn="Changed component";
+  assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
+  currentComponents[0].nameEn="Component";
+  currentComponents[0].test.code="OTHER";
+  assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
+  currentComponents[0].test.code="F2";
+  currentIntervals[0].approvalStatus="RETIRED";
+  assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
+  currentIntervals[0].approvalStatus="APPROVED";
+  currentIntervals[0].effectiveFrom=new Date("2026-02-01T00:00:00.000Z");
+  assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
+  currentIntervals[0].effectiveFrom=new Date("2026-01-01T00:00:00.000Z");
+  currentIntervals[0].component.test.code="OTHER";
+  assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
+  currentIntervals[0].component.test.code="F2";
+  assert.deepEqual(await check(),{ok:true});
+  currentIntervals[0].lowValue="3.100001";
+  assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
+  currentIntervals[0].lowValue="3.100000";
+  currentIntervals[0].criticalHigh="9.000001";
+  assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
+  currentIntervals[0].criticalHigh="9.000000";
+  currentIntervals[0].sex="FEMALE";
+  assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
+  currentIntervals[0].sex="ANY";
+  currentIntervals[0].normalTextEn="Changed clinical text";
+  assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
+  currentIntervals[0].normalTextEn="Synthetic range";
+  assert.deepEqual(await check(),{ok:true});
+  currentLists[0].currency="USD";
+  assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
+  currentLists[0].currency="AED";
+  currentLists[0].status="INACTIVE";
+  assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
+  currentLists[0].status="ACTIVE";
+  currentTestPrices[0].unitPrice="45.6701";
+  assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
+  currentTestPrices[0].unitPrice="45.6700";
+  currentTestPrices[0].status="INACTIVE";
+  assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
+  currentTestPrices[0].status="ACTIVE";
+  currentPackagePrices[0].unitPrice="123.4501";
+  assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
+  currentPackagePrices[0].unitPrice="123.4500";
+  currentPackagePrices[0].effectiveFrom=new Date("2026-02-01T00:00:00.000Z");
+  assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
+  currentPackagePrices[0].effectiveFrom=date;
+  currentPackagePrices[0].priceList.currency="USD";
+  assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
+  currentPackagePrices[0].priceList.currency="AED";
+  assert.deepEqual(await check(),{ok:true});
+  currentPanels[0].displayOrder=9;
+  assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
+  currentPanels[0].displayOrder=1;
+  currentPanels[0].required=false;
+  assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
+  currentPanels[0].required=true;
+  currentPackages[0].displayOrder=2;
+  assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
+  currentPackages[0].displayOrder=1;
+  currentPackages.push({testId:uuid(44),displayOrder:2});
+  assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
+  currentPackages.pop();
+  assert.deepEqual(await check(),{ok:true});
+});
+
+test("F2: policy queue and reviewer POST enforce the SAME tenant-locked all-type checks, never mutate masters",()=>{
+  const code=readFileSync("src/lib/catalog-policy-review-scope.ts","utf8");
+  const endpoint=readFileSync("src/app/api/catalog/imports/[id]/policy-review/route.ts","utf8");
+  const queue=readFileSync("src/app/api/catalog/imports/policy-review-queue/route.ts","utf8");
+  for(const name of ["labTest","unit","testComponent","referenceInterval","priceList","priceListItem",
+    "container","testPanel","commercialPackage","priceListPackageItem"]){
+    assert.match(code,new RegExp("tx\\."+name+"\\.count\\("),name);
+  }
+  for(const name of ["sourceId","referrerId","clientId","contractId"])
+    assert.match(code,new RegExp(name+": null"));
+  assert.match(code,/every: \{ test: testScope \}/);
+  assert.match(code,/refs\.packages/);
+  for(const name of ["labTest","unit","container","testComponent","referenceInterval",
+    "priceList","priceListItem","priceListPackageItem"])
+    assert.match(code,new RegExp("tx\\."+name+"\\.findMany\\("));
+  assert.match(code,/sameLiveScalarIdentity\(/);
+  assert.match(code,/sameLiveClinicalReviewIdentity\(/);
+  assert.match(code,/sameLiveReferenceIntervalMedicalSnapshot\(/);
+  assert.match(endpoint,/validatePolicyReviewBatchScope\(tx/);
+  assert.match(queue,/validatePolicyReviewBatchScope\(tx/);
+  assert.doesNotMatch(code,/tx\.(?:labTest|unit|testPanel|commercialPackage|priceList|priceListPackageItem)\.(?:create|update|upsert|delete)/);
+});
+
+test("F2: tariff review money rejects floating point and non-exact extra fractional precision",()=>{
+  const n=all.find(x=>x.entityType==="PRICE_LIST_ITEM")!;
+  const staged=n.normalizedData;
+  const source=n.sourceData;
+  const live={id:uuid(9),priceListId:listId,testId,unitPrice:"45.6700",
+    effectiveFrom:new Date("2026-01-01T00:00:00.000Z"),effectiveTo:null,
+    status:"ACTIVE",priceList:{code:"LIST",currency:"AED",
+      scopeType:"BRANCH",branchId,status:"ACTIVE"},test:{code:"F2"}};
+  assert.equal(sameLiveTariffReviewIdentity("PRICE_LIST_ITEM",staged,source,live),true);
+  assert.equal(sameLiveTariffReviewIdentity("PRICE_LIST_ITEM",staged,source,
+    {...live,unitPrice:45.67}),false);
+  assert.equal(sameLiveTariffReviewIdentity("PRICE_LIST_ITEM",staged,source,
+    {...live,unitPrice:"45.67001"}),false);
+  assert.equal(sameLiveTariffReviewIdentity("PRICE_LIST_ITEM",staged,source,
+    {...live,unitPrice:"45.6701"}),false);
+  assert.equal(sameLiveTariffReviewIdentity("PRICE_LIST_ITEM",staged,source,
+    {...live,test:{code:"OTHER"}}),false);
+  assert.equal(sameLiveTariffReviewIdentity("PRICE_LIST_ITEM",staged,source,
+    {...live,priceList:{...live.priceList,contractId:uuid(67),currency:"USD"}}),false);
+});
+
+test("F2: medical interval snapshot is complete, exact-decimal and fail-closed",()=>{
+  const source=all.find(x=>x.entityType==="REFERENCE_INTERVAL")!.sourceData;
+  const live={...referenceMedical};
+  assert.equal(sameLiveReferenceIntervalMedicalSnapshot(source,live),true);
+  assert.equal(sameLiveReferenceIntervalMedicalSnapshot(
+    {...source,lowValue:"3.100000"}, {...live,lowValue:"3.1"}),true);
+  assert.equal(sameLiveReferenceIntervalMedicalSnapshot(
+    {...source,lowValue:"-0.123456"}, {...live,lowValue:"-0.123456"}),true);
+  for(const [field,value] of [
+    ["lowValue","3.100001"],["highValue","7.200001"],
+    ["criticalLow","2.000001"],["criticalHigh","9.000001"],
+    ["ageFrom","0.001"],["ageTo","119.000"],
+    ["gestationalAgeFromWeeks","12.00"],
+    ["populationCode","OTHER"],["sex","FEMALE"],
+    ["methodId",uuid(88)],["analyzerId",uuid(89)],
+    ["pregnancyStatus","PREGNANT"],["normalTextEn","changed"],
+    ["approvedAt","2026-01-05T00:00:00.000Z"],
+  ] as const) {
+    assert.equal(sameLiveReferenceIntervalMedicalSnapshot(source,
+      {...live,[field]:value}),false,field);
+  }
+  const truncated={...source};
+  delete (truncated as Record<string,unknown>).criticalLow;
+  assert.equal(sameLiveReferenceIntervalMedicalSnapshot(truncated,live),false);
+  assert.equal(sameLiveReferenceIntervalMedicalSnapshot(
+    {...source,lowValue:"3.1000001"},live),false);
+  assert.equal(sameLiveReferenceIntervalMedicalSnapshot(source,
+    {...live,lowValue:3.1}),false);
+  assert.equal(sameLiveReferenceIntervalMedicalSnapshot(source,
+    {...live,effectiveTo:new Date("2026-02-01T00:00:00.000Z")}),false);
+});

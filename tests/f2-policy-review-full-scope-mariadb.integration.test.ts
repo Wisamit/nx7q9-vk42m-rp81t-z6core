@@ -1,0 +1,305 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import mysql from "mysql2/promise";
+import { policyReviewIdentityScope, sameLiveScalarIdentity, sameLiveTariffReviewIdentity } from "../src/lib/catalog-policy-review-scope.ts";
+
+test("F2 MariaDB: reviewed panel, package, package tariff and container cannot bypass nested live branch/private price scope",
+{timeout: 60000}, async()=>{
+  if(!process.env.DATABASE_URL)throw Error("DATABASE_URL required");
+  const u=new URL(process.env.DATABASE_URL);
+  const config={host:u.hostname,port:Number(u.port||3306),
+    user:decodeURIComponent(u.username),password:decodeURIComponent(u.password),
+    database:u.pathname.slice(1)};
+  const [writer,reader]=await Promise.all([mysql.createConnection(config),mysql.createConnection(config)]);
+  const org=randomUUID(),foreignOrg=randomUUID(),branchA=randomUUID(),branchB=randomUUID();
+  const deptA=randomUUID(),deptB=randomUUID(),testA=randomUUID(),testB=randomUUID();
+  const panel=randomUUID(),pkg=randomUUID(),list=randomUUID(),pkgPrice=randomUUID(),testPrice=randomUUID();
+  const tube=randomUUID(),batch=randomUUID(),author=randomUUID();
+  const ids=Array.from({length:6},()=>randomUUID());
+  const prefix="F2PS"+org.slice(0,8);
+  const write=(sql:string,params:Array<string|number|null>)=>writer.execute(sql,params);
+  // An independent REPEATABLE READ session acquires the same tenant lock as
+  // the policy reviewer route. SQL probes exercise real FK/branch visibility;
+  // pure tests separately bind the route to the Prisma scope validator.
+  const check=async()=>{
+    await reader.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ");
+    await reader.beginTransaction();
+    try{
+      const [locked]=await reader.execute<mysql.RowDataPacket[]>(
+        "SELECT id FROM organizations WHERE id=? AND status='ACTIVE' FOR UPDATE",[org]);
+      assert.equal(locked.length,1);
+      const [staged]=await reader.execute<mysql.RowDataPacket[]>(
+        "SELECT entity_type,source_data,normalized_data,status,imported_entity_id FROM catalog_import_rows WHERE batch_id=? ORDER BY `row_number`",[batch]);
+      const json=(v:unknown)=>typeof v==="string"?JSON.parse(v):v;
+      const identities=staged.map(r=>({
+        entityType:String(r.entity_type),sourceData:json(r.source_data),
+        normalizedData:json(r.normalized_data),status:String(r.status),
+        importedEntityId:r.imported_entity_id as string|null,
+      }));
+      const review=policyReviewIdentityScope(identities,new Set([branchA]));
+      if(!review.ok)return review;
+      const [panels]=await reader.execute<mysql.RowDataPacket[]>(
+        "SELECT p.id FROM test_panels p WHERE p.id=? AND p.organization_id=? AND EXISTS (SELECT 1 FROM test_panel_items i WHERE i.panel_id=p.id) AND NOT EXISTS (SELECT 1 FROM test_panel_items i JOIN lab_tests t ON t.id=i.test_id LEFT JOIN departments d ON d.id=t.department_id WHERE i.panel_id=p.id AND (t.organization_id<>? OR t.department_id<>? OR t.status<>'ACTIVE' OR d.status<>'ACTIVE' OR d.branch_id<>?))",
+        [panel,org,org,deptA,branchA]);
+      const [packages]=await reader.execute<mysql.RowDataPacket[]>(
+        "SELECT p.id FROM commercial_packages p WHERE p.id=? AND p.organization_id=? AND EXISTS (SELECT 1 FROM commercial_package_items i WHERE i.package_id=p.id) AND NOT EXISTS (SELECT 1 FROM commercial_package_items i JOIN lab_tests t ON t.id=i.test_id LEFT JOIN departments d ON d.id=t.department_id WHERE i.package_id=p.id AND (t.organization_id<>? OR t.department_id<>? OR t.status<>'ACTIVE' OR d.status<>'ACTIVE' OR d.branch_id<>?))",
+        [pkg,org,org,deptA,branchA]);
+      const [tariffs]=await reader.execute<mysql.RowDataPacket[]>(
+        "SELECT p.id FROM price_list_package_items p JOIN price_lists l ON l.id=p.price_list_id JOIN commercial_packages k ON k.id=p.package_id WHERE p.id=? AND p.package_id=? AND k.organization_id=? AND l.organization_id=? AND l.scope_type='BRANCH' AND l.branch_id=? AND l.source_id IS NULL AND l.referrer_id IS NULL AND l.client_id IS NULL AND l.contract_id IS NULL",
+        [pkgPrice,pkg,org,org,branchA]);
+      const [containers]=await reader.execute<mysql.RowDataPacket[]>(
+        "SELECT id,code,name_en AS nameEn,name_ar AS nameAr,tube_color AS tubeColor,additive,status FROM containers WHERE id=? AND organization_id=?",
+        [tube,org]);
+      const sourceContainer=identities.find(row=>row.entityType==="CONTAINER")?.normalizedData;
+      const containerUnchanged=containers.length===1 &&
+        sameLiveScalarIdentity("CONTAINER",sourceContainer,containers[0]);
+      const [testPrices]=await reader.execute<mysql.RowDataPacket[]>(
+        "SELECT p.id FROM price_list_items p JOIN price_lists l ON l.id=p.price_list_id JOIN lab_tests t ON t.id=p.test_id JOIN departments d ON d.id=t.department_id WHERE p.id=? AND l.id=? AND t.id=? AND l.organization_id=? AND l.scope_type='BRANCH' AND l.branch_id=? AND t.organization_id=? AND d.branch_id=? AND l.source_id IS NULL AND l.referrer_id IS NULL AND l.client_id IS NULL AND l.contract_id IS NULL",
+        [testPrice,list,testA,org,branchA,org,branchA]);
+      // Independent live financial snapshot reads run in the same synthetic
+      // reviewer transaction; no active tariff is ever updated by review code.
+      const [currentLists]=await reader.execute<mysql.RowDataPacket[]>(
+        "SELECT id,code,currency,scope_type AS scopeType,branch_id AS branchId,status,effective_from AS effectiveFrom,effective_to AS effectiveTo FROM price_lists WHERE id=? AND organization_id=?",
+        [list,org]);
+      const [currentTestPrices]=await reader.execute<mysql.RowDataPacket[]>(
+        "SELECT id,price_list_id AS priceListId,test_id AS testId,unit_price AS unitPrice,effective_from AS effectiveFrom,effective_to AS effectiveTo,status FROM price_list_items WHERE id=?",
+        [testPrice]);
+      const [currentPackagePrices]=await reader.execute<mysql.RowDataPacket[]>(
+        "SELECT id,price_list_id AS priceListId,package_id AS packageId,unit_price AS unitPrice,effective_from AS effectiveFrom,effective_to AS effectiveTo,status FROM price_list_package_items WHERE id=?",
+        [pkgPrice]);
+      const stagedList=identities.find(row=>row.entityType==="PRICE_LIST");
+      const stagedTestPrice=identities.find(row=>row.entityType==="PRICE_LIST_ITEM");
+      const stagedPackagePrice=identities.find(row=>row.entityType==="PRICE_LIST_PACKAGE_ITEM");
+      const parent=currentLists[0];
+      const financialParity=currentLists.length===1 &&
+        currentTestPrices.length===1 && currentPackagePrices.length===1 &&
+        sameLiveTariffReviewIdentity("PRICE_LIST",stagedList?.normalizedData,
+          stagedList?.sourceData,parent) &&
+        sameLiveTariffReviewIdentity("PRICE_LIST_ITEM",stagedTestPrice?.normalizedData,
+          stagedTestPrice?.sourceData,{
+            ...currentTestPrices[0],priceList:parent,test:{code:prefix+"A"},
+          }) &&
+        sameLiveTariffReviewIdentity("PRICE_LIST_PACKAGE_ITEM",
+          stagedPackagePrice?.normalizedData,stagedPackagePrice?.sourceData,{
+            ...currentPackagePrices[0],priceList:parent,package:{code:prefix+"K"},
+          });
+      const [panelMembers]=await reader.execute<mysql.RowDataPacket[]>(
+        "SELECT test_id AS testId, display_order AS displayOrder, required FROM test_panel_items WHERE panel_id=?",[panel]);
+      const [packageMembers]=await reader.execute<mysql.RowDataPacket[]>(
+        "SELECT test_id AS testId, display_order AS displayOrder FROM commercial_package_items WHERE package_id=?",[pkg]);
+      const matches=(entityType:string,live:mysql.RowDataPacket[],required:boolean)=>{
+        const stagedRow=identities.find(row=>row.entityType===entityType);
+        const expected=(stagedRow?.normalizedData as {items?: Array<{testId:string;displayOrder:number;required?:boolean}>} | undefined)?.items;
+        return Array.isArray(expected) && expected.length===live.length && expected.every(item=>
+          live.filter(row=>row.testId===item.testId &&
+            Number(row.displayOrder)===item.displayOrder &&
+            (!required || Boolean(row.required)===item.required)).length===1);
+      };
+      return panels.length===1 && packages.length===1 && tariffs.length===1 &&
+        containerUnchanged && testPrices.length===1 && financialParity &&
+        matches("PANEL",panelMembers,true) &&
+        matches("PACKAGE",packageMembers,false)
+        ? {ok:true} as const
+        : {ok:false,error:"policy_review_batch_scope_changed"} as const;
+    }finally{await reader.rollback().catch(()=>{});}
+  };
+  try{
+    for(const [id,suffix] of [[org,"A"],[foreignOrg,"X"]])
+      await write("INSERT INTO organizations(id,code,name_en,updated_at) VALUES(?,?,?,NOW(3))",
+        [id,prefix+suffix,"F2 isolated policy review"]);
+    for(const [id,suffix] of [[branchA,"A"],[branchB,"B"]])
+      await write("INSERT INTO branches(id,organization_id,code,name_en,updated_at) VALUES(?,?,?,?,NOW(3))",
+        [id,org,prefix+suffix,"F2 branch"]);
+    for(const [id,branch,suffix] of [[deptA,branchA,"A"],[deptB,branchB,"B"]])
+      await write("INSERT INTO departments(id,organization_id,branch_id,code,name_en,updated_at) VALUES(?,?,?,?,?,NOW(3))",
+        [id,org,branch,prefix+suffix,"F2 dept"]);
+    for(const [id,department,suffix] of [[testA,deptA,"A"],[testB,deptB,"B"]])
+      await write("INSERT INTO lab_tests(id,organization_id,department_id,code,name_en,updated_at) VALUES(?,?,?,?,?,NOW(3))",
+        [id,org,department,prefix+suffix,"F2 test"]);
+    await write("INSERT INTO containers(id,organization_id,code,name_en,updated_at) VALUES(?,?,?,?,NOW(3))",
+      [tube,org,prefix+"T","Tube"]);
+    await write("INSERT INTO test_panels(id,organization_id,code,name_en,updated_at) VALUES(?,?,?,?,NOW(3))",
+      [panel,org,prefix+"P","F2 panel"]);
+    await write("INSERT INTO test_panel_items(panel_id,test_id,display_order,required) VALUES(?,?,1,1)",
+      [panel,testA]);
+    await write("INSERT INTO commercial_packages(id,organization_id,code,name_en,updated_at) VALUES(?,?,?,?,NOW(3))",
+      [pkg,org,prefix+"K","F2 package"]);
+    await write("INSERT INTO commercial_package_items(package_id,test_id,display_order) VALUES(?,?,1)",
+      [pkg,testA]);
+    await write("INSERT INTO price_lists(id,organization_id,code,name_en,scope_type,branch_id,currency,effective_from,updated_at) VALUES(?,?,?,?,'BRANCH',?,'AED','2026-01-01',NOW(3))",
+      [list,org,prefix+"L","F2 tariff",branchA]);
+    await write("INSERT INTO price_list_package_items(id,price_list_id,package_id,unit_price,effective_from,updated_at) VALUES(?,?,?,123.4500,'2026-01-01',NOW(3))",
+      [pkgPrice,list,pkg]);
+    await write("INSERT INTO price_list_items(id,price_list_id,test_id,unit_price,effective_from,updated_at) VALUES(?,?,?,45.6700,'2026-01-01',NOW(3))",
+      [testPrice,list,testA]);
+    await write("INSERT INTO users(id,organization_id,username,display_name_en,updated_at) VALUES(?,?,?,?,NOW(3))",
+      [author,org,prefix+"U","F2 synthetic author"]);
+    await write("INSERT INTO catalog_import_batches(id,organization_id,source_type,source_name,source_checksum,status,created_by_user_id,updated_at) VALUES(?,?,'CONFIG_BUNDLE_REVIEW','test-only.json',?,'DRAFT',?,NOW(3))",
+      [batch,org,"a".repeat(64),author]);
+    const date="2026-01-01T00:00:00.000Z";
+    const records=[
+      {type:"PANEL",source:{id:panel,items:[
+        {testId:testA,displayOrder:1,required:true,test:{code:prefix+"A"}}]},
+        normalized:{id:panel,items:[{testId:testA,testCode:prefix+"A",displayOrder:1,required:true}]}},
+      {type:"PACKAGE",source:{id:pkg,items:[
+        {testId:testA,displayOrder:1,test:{code:prefix+"A"}}]},
+        normalized:{id:pkg,items:[{testId:testA,testCode:prefix+"A",displayOrder:1}]}},
+      {type:"PRICE_LIST_PACKAGE_ITEM",source:{
+        id:pkgPrice,priceListId:list,packageId:pkg,package:{code:prefix+"K"},
+        priceList:{code:prefix+"L",scopeType:"BRANCH",branchId:branchA,
+          currency:"AED",sourceId:null,referrerId:null,clientId:null,contractId:null},
+        unitPrice:"123.4500",effectiveFrom:date,effectiveTo:null,status:"ACTIVE",
+      },normalized:{id:pkgPrice,packageId:pkg,packageCode:prefix+"K",
+        priceListId:list,priceListCode:prefix+"L",scopeType:"BRANCH",
+        branchId:branchA,currency:"AED",unitPrice:"123.4500",
+        effectiveFrom:date,effectiveTo:null,status:"ACTIVE"}},
+      {type:"CONTAINER",source:{id:tube,code:prefix+"T",nameEn:"Tube",
+        nameAr:null,tubeColor:null,additive:null,status:"ACTIVE"},
+        normalized:{id:tube,code:prefix+"T",nameEn:"Tube",
+          nameAr:null,tubeColor:null,additive:null,status:"ACTIVE"}},
+      {type:"PRICE_LIST",source:{id:list,code:prefix+"L",currency:"AED",
+        scopeType:"BRANCH",branchId:branchA,status:"ACTIVE",sourceId:null,
+        referrerId:null,clientId:null,contractId:null},
+        normalized:{id:list,code:prefix+"L",currency:"AED",
+          scopeType:"BRANCH",branchId:branchA,status:"ACTIVE"}},
+      {type:"PRICE_LIST_ITEM",source:{id:testPrice,testId:testA,
+        priceListId:list,test:{code:prefix+"A"},
+        priceList:{code:prefix+"L",currency:"AED",scopeType:"BRANCH",
+          branchId:branchA,status:"ACTIVE",sourceId:null,referrerId:null,
+          clientId:null,contractId:null},
+        unitPrice:"45.6700",effectiveFrom:date,status:"ACTIVE"},
+        normalized:{id:testPrice,testId:testA,testCode:prefix+"A",
+          priceListId:list,priceListCode:prefix+"L",scopeType:"BRANCH",
+          branchId:branchA,unitPrice:"45.6700",effectiveFrom:date,status:"ACTIVE"}},
+    ];
+    for(const [i,row] of records.entries()){
+      await write("INSERT INTO catalog_import_rows(id,batch_id,`row_number`,entity_type,status,source_data,normalized_data,updated_at) VALUES(?,?,?,?,'WARNING',?,?,NOW(3))",
+        [ids[i],batch,i+1,row.type,JSON.stringify(row.source),JSON.stringify(row.normalized)]);
+    }
+    assert.deepEqual(await check(),{ok:true});
+    // Even within a granted branch, staging must not silently rewrite a
+    // signed source member code or a financial snapshot before review.
+    const forgedPanel={...records[0].normalized,items:[
+      {testId:testA,testCode:"FORGED_CODE",displayOrder:1,required:true},
+    ]};
+    await write("UPDATE catalog_import_rows SET normalized_data=? WHERE id=?",
+      [JSON.stringify(forgedPanel),ids[0]]);
+    assert.deepEqual(await check(),{
+      ok:false,error:"policy_review_source_integrity_error",
+    });
+    await write("UPDATE catalog_import_rows SET normalized_data=? WHERE id=?",
+      [JSON.stringify(records[0].normalized),ids[0]]);
+    const forgedTariff={...records[2].normalized,unitPrice:"999.0000"};
+    await write("UPDATE catalog_import_rows SET normalized_data=? WHERE id=?",
+      [JSON.stringify(forgedTariff),ids[2]]);
+    assert.deepEqual(await check(),{
+      ok:false,error:"policy_review_source_integrity_error",
+    });
+    await write("UPDATE catalog_import_rows SET normalized_data=? WHERE id=?",
+      [JSON.stringify(records[2].normalized),ids[2]]);
+    assert.deepEqual(await check(),{ok:true});
+    // The ordinary single-test tariff is a distinct signed source class.
+    const forgedTestPrice={...records[5].normalized,unitPrice:"999.0000"};
+    await write("UPDATE catalog_import_rows SET normalized_data=? WHERE id=?",
+      [JSON.stringify(forgedTestPrice),ids[5]]);
+    assert.deepEqual(await check(),{
+      ok:false,error:"policy_review_source_integrity_error",
+    });
+    await write("UPDATE catalog_import_rows SET normalized_data=? WHERE id=?",
+      [JSON.stringify(records[5].normalized),ids[5]]);
+    const forgedList={...records[4].normalized,currency:"USD"};
+    await write("UPDATE catalog_import_rows SET normalized_data=? WHERE id=?",
+      [JSON.stringify(forgedList),ids[4]]);
+    assert.deepEqual(await check(),{
+      ok:false,error:"policy_review_source_integrity_error",
+    });
+    await write("UPDATE catalog_import_rows SET normalized_data=? WHERE id=?",
+      [JSON.stringify(records[4].normalized),ids[4]]);
+    assert.deepEqual(await check(),{ok:true});
+    // A database mutation of the normalized container details cannot be
+    // laundered into a clinical reviewer observation while retaining its UUID.
+    const forgedContainer={...records[3].normalized,tubeColor:"Blue"};
+    await write("UPDATE catalog_import_rows SET normalized_data=? WHERE id=?",
+      [JSON.stringify(forgedContainer),ids[3]]);
+    assert.deepEqual(await check(),{
+      ok:false,error:"policy_review_source_integrity_error",
+    });
+    await write("UPDATE catalog_import_rows SET normalized_data=? WHERE id=?",
+      [JSON.stringify(records[3].normalized),ids[3]]);
+    assert.deepEqual(await check(),{ok:true});
+    // The tenant and UUID are unchanged, but a later tube metadata edit
+    // must make the staged reviewer identity stale.
+    await write("UPDATE containers SET tube_color=? WHERE id=?",["Blue",tube]);
+    assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
+    await write("UPDATE containers SET tube_color=NULL WHERE id=?",[tube]);
+    await write("UPDATE containers SET name_en=? WHERE id=?",["Changed Tube",tube]);
+    assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
+    await write("UPDATE containers SET name_en=? WHERE id=?",["Tube",tube]);
+    assert.deepEqual(await check(),{ok:true});
+    // Live membership can drift without leaving granted clinical scope:
+    // changes in display order and required flag must also invalidate review.
+    await write("UPDATE test_panel_items SET required=0 WHERE panel_id=? AND test_id=?",
+      [panel,testA]);
+    assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
+    await write("UPDATE test_panel_items SET required=1 WHERE panel_id=? AND test_id=?",
+      [panel,testA]);
+    await write("UPDATE commercial_package_items SET display_order=9 WHERE package_id=? AND test_id=?",
+      [pkg,testA]);
+    assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
+    await write("UPDATE commercial_package_items SET display_order=1 WHERE package_id=? AND test_id=?",
+      [pkg,testA]);
+    assert.deepEqual(await check(),{ok:true});
+    // All member tests must remain visible: adding a second off-branch member
+    // must revoke review of both the package and its tariff.
+    await write("INSERT INTO commercial_package_items(package_id,test_id,display_order) VALUES(?,?,2)",
+      [pkg,testB]);
+    assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
+    await write("DELETE FROM commercial_package_items WHERE package_id=? AND test_id=?",[pkg,testB]);
+    assert.deepEqual(await check(),{ok:true});
+    // Staged reviewers must not attest to tariffs updated since export.
+    await write("UPDATE price_list_items SET unit_price=45.6701 WHERE id=?",[testPrice]);
+    assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
+    await write("UPDATE price_list_items SET unit_price=45.6700 WHERE id=?",[testPrice]);
+    await write("UPDATE price_list_package_items SET unit_price=123.4501 WHERE id=?",[pkgPrice]);
+    assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
+    await write("UPDATE price_list_package_items SET unit_price=123.4500 WHERE id=?",[pkgPrice]);
+    await write("UPDATE price_lists SET currency='USD' WHERE id=?",[list]);
+    assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
+    await write("UPDATE price_lists SET currency='AED' WHERE id=?",[list]);
+    await write("UPDATE price_list_items SET status='INACTIVE' WHERE id=?",[testPrice]);
+    assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
+    await write("UPDATE price_list_items SET status='ACTIVE' WHERE id=?",[testPrice]);
+    assert.deepEqual(await check(),{ok:true});
+    await write("UPDATE price_lists SET branch_id=? WHERE id=?",[branchB,list]);
+    assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
+    await write("UPDATE price_lists SET branch_id=? WHERE id=?",[branchA,list]);
+    assert.deepEqual(await check(),{ok:true});
+    await write("UPDATE containers SET organization_id=? WHERE id=?",[foreignOrg,tube]);
+    assert.deepEqual(await check(),{ok:false,error:"policy_review_batch_scope_changed"});
+    const [master]=await writer.execute<mysql.RowDataPacket[]>(
+      "SELECT unit_price FROM price_list_package_items WHERE id=?",[pkgPrice]);
+    assert.equal(String(master[0].unit_price),"123.4500");
+    const [reviewRows]=await writer.execute<mysql.RowDataPacket[]>(
+      "SELECT COUNT(*) AS n FROM catalog_import_rows WHERE batch_id=? AND status='WARNING' AND imported_entity_id IS NULL",[batch]);
+    assert.equal(Number(reviewRows[0].n),6);
+  }finally{
+    await writer.rollback().catch(()=>{});
+    await write("DELETE FROM catalog_import_rows WHERE batch_id=?",[batch]).catch(()=>{});
+    await write("DELETE FROM catalog_import_batches WHERE id=?",[batch]).catch(()=>{});
+    await write("DELETE FROM price_list_items WHERE id=?",[testPrice]).catch(()=>{});
+    await write("DELETE FROM price_list_package_items WHERE id=?",[pkgPrice]).catch(()=>{});
+    await write("DELETE FROM price_lists WHERE id=?",[list]).catch(()=>{});
+    await write("DELETE FROM commercial_package_items WHERE package_id=?",[pkg]).catch(()=>{});
+    await write("DELETE FROM test_panel_items WHERE panel_id=?",[panel]).catch(()=>{});
+    await write("DELETE FROM commercial_packages WHERE id=?",[pkg]).catch(()=>{});
+    await write("DELETE FROM test_panels WHERE id=?",[panel]).catch(()=>{});
+    await write("DELETE FROM containers WHERE id=?",[tube]).catch(()=>{});
+    await write("DELETE FROM lab_tests WHERE id IN (?,?)",[testA,testB]).catch(()=>{});
+    await write("DELETE FROM departments WHERE id IN (?,?)",[deptA,deptB]).catch(()=>{});
+    await write("DELETE FROM users WHERE id=?",[author]).catch(()=>{});
+    await write("DELETE FROM branches WHERE id IN (?,?)",[branchA,branchB]).catch(()=>{});
+    await write("DELETE FROM organizations WHERE id IN (?,?)",[org,foreignOrg]).catch(()=>{});
+    await Promise.all([writer.end(),reader.end()]);
+  }
+});

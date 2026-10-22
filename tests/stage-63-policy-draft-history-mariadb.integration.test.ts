@@ -20,7 +20,9 @@ test("Stage 63 MariaDB: two connections serialize revision append, detect corrup
   const [writer, reviewer] = await Promise.all([mysql.createConnection(cfg), mysql.createConnection(cfg)]);
   const org = randomUUID(), outside = randomUUID(), branch = randomUUID();
   const author = randomUUID(), intruder = randomUUID(), batch = randomUUID();
-  const id1 = randomUUID(), id2 = randomUUID(), badId = randomUUID();
+  // Physical descending UUID order is deliberately the reverse of revisions.
+  const [id1,id2]=[randomUUID(),randomUUID()].sort((a,b)=>b.localeCompare(a));
+  const badId=randomUUID();
   const label = "S63" + org.slice(0,8), checksum = "c".repeat(64);
   const policyScope = { organizationId: org, branchId: branch, batchId: batch, sourceChecksum: checksum };
   const proposal = Object.fromEntries(policyKeys.map(k=>[k,"UNDECIDED"])) as CatalogPolicyProposal;
@@ -69,9 +71,13 @@ test("Stage 63 MariaDB: two connections serialize revision append, detect corrup
     // Simulate stale browser compare-and-swap: revision 0 must not overwrite 1.
     assert.notEqual(0,(await load())?.draft?.revision);
     await writer.execute(
-      "INSERT INTO audit_events(id,organization_id,branch_id,actor_user_id,action,entity_type,entity_id,new_values,occurred_at) VALUES(?,?,?,?,'CATALOG_BUNDLE_SIGNATORY_POLICY_DRAFT_RECORDED','CatalogImportBatch',?,?,DATE_ADD(NOW(3),INTERVAL 1 SECOND))",
-      [id2,org,branch,author,batch,JSON.stringify(second)]);
+      "INSERT INTO audit_events(id,organization_id,branch_id,actor_user_id,action,entity_type,entity_id,new_values,occurred_at) VALUES(?,?,?,?,'CATALOG_BUNDLE_SIGNATORY_POLICY_DRAFT_RECORDED','CatalogImportBatch',?,?,(SELECT occurred_at FROM (SELECT occurred_at FROM audit_events WHERE id=?) AS original))",
+      [id2,org,branch,author,batch,JSON.stringify(second),id1]);
     await writer.commit();
+    const [physical] = await reviewer.execute<mysql.RowDataPacket[]>(
+      "SELECT id FROM audit_events WHERE id IN (?,?) ORDER BY occurred_at DESC,id DESC",[id1,id2]);
+    assert.deepEqual(physical.map(row=>row.id),[id1,id2],
+      "SQL UUID ordering must disagree with the signed revision sequence");
     const current=await load();
     assert.equal(current?.draft?.revision,2);
     assert.equal(current?.latestEventId,id2);

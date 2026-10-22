@@ -4,6 +4,20 @@ import { prisma } from "@/lib/db";
 import { clinicalImportTestWhere, resolveClinicalImportScope } from "@/lib/catalog-clinical-import-scope";
 import { BUNDLE_REVIEW_SOURCE, BUNDLE_REVIEW_MAX_ROWS } from "@/lib/catalog-bundle-review";
 import { catalogBundleDrift } from "@/lib/catalog-bundle-drift";
+import { readCatalogLiveObservations } from "@/lib/catalog-live-observation";
+import { observeCatalogTargetIdentity } from "@/lib/catalog-bundle-target-identity";
+import {
+  MAPPING_FEEDBACK_HISTORY_LIMIT, verifyMappingFeedbackHistory,
+  currentMappingFeedbackDisposition,
+} from "@/lib/catalog-mapping-reviewer-feedback";
+import { reviewStageBatchMetadata } from "@/lib/catalog-review-stage-evidence";
+import { verifyIndependentExpertStage } from "@/lib/catalog-expert-stage-integrity";
+import {
+  MAPPING_DISCUSSION_HISTORY_LIMIT, validMappingDiscussionIntent,
+  verifyMappingDiscussionHistory, mappingDiscussionCurrent, createMappingDiscussionDraft,
+  type MappingDiscussionIntent,
+} from "@/lib/catalog-mapping-discussion-draft";
+import { classifyCatalogReviewDrift } from "@/lib/catalog-field-review-eligibility";
 import { resolveFindingLifecycle, triageResubmission } from "@/lib/catalog-finding-lifecycle";
 import { summarizeCatalogGovernance } from "@/lib/catalog-governance-readiness";
 import { summarizeSignatoryPlanning } from "@/lib/catalog-signatory-planning";
@@ -38,10 +52,22 @@ type Context = { params: Promise<{ id: string }> };
 type TriageInput = { rowNumber: number; observationToken: string; reasonCode: TriageReason };
 type ExpertInput = { flagEventId: string; disposition: ExpertDisposition };
 type PolicyDraftInput = { expectedRevision: number; proposal: CatalogPolicyProposal };
+type MappingDiscussionInput = {
+  rowNumber: number; expectedRevision: number; observationToken: string;
+  intent: MappingDiscussionIntent;
+};
 
 /** A bounded, live-scoped snapshot diff. No source or live values in response. */
 export async function GET(request: NextRequest, context: Context) {
   const query = request.nextUrl.searchParams;
+  if (query.has("mappingDraftRow")) {
+    const row = query.get("mappingDraftRow") || "";
+    if ([...query.keys()].some(key => key !== "mappingDraftRow") ||
+        !/^[1-9]\d{0,8}$/.test(row))
+      return NextResponse.json({ error: "mapping_discussion_query_invalid" }, { status: 400 });
+    return inspectBundleDrift(request, context, null, null, false, false,
+      null, Number(row));
+  }
   const requestedReview = query.get("reviewFlagId");
   if (query.has("governance")) {
     if (query.get("governance") !== "1" || [...query.keys()].some(key => key !== "governance"))
@@ -61,6 +87,53 @@ export async function GET(request: NextRequest, context: Context) {
 
 /** Append a domain-scoped review request, never an activation or approval. */
 export async function POST(request: NextRequest, context: Context) {
+  if (request.nextUrl.searchParams.has("mappingDraft")) {
+    const query = request.nextUrl.searchParams;
+    if (query.get("mappingDraft") !== "1" ||
+        [...query.keys()].some(key => key !== "mappingDraft"))
+      return NextResponse.json({ error: "mapping_discussion_invalid_query" }, { status: 400 });
+    if ((request.headers.get("content-type") || "").split(";")[0].trim().toLowerCase() !== "application/json")
+      return NextResponse.json({ error: "mapping_discussion_json_required" }, { status: 415 });
+    if (request.headers.get("sec-fetch-site") === "cross-site")
+      return NextResponse.json({ error: "mapping_discussion_cross_site_request" }, { status: 403 });
+    const length=Number(request.headers.get("content-length") || 0);
+    if (!Number.isFinite(length) || length < 0 || length > 768)
+      return NextResponse.json({ error: "mapping_discussion_too_large" }, { status: 413 });
+    const reader=request.body?.getReader();
+    if (!reader) return NextResponse.json({ error: "mapping_discussion_missing_body" }, { status: 400 });
+    const chunks: Uint8Array[]=[];
+    let bytes=0;
+    for (;;) {
+      const part=await reader.read();
+      if(part.done) break;
+      bytes+=part.value.byteLength;
+      if(bytes>768){
+        await reader.cancel("mapping_discussion_too_large");
+        return NextResponse.json({ error: "mapping_discussion_too_large" }, { status: 413 });
+      }
+      chunks.push(part.value);
+    }
+    let value: Record<string, unknown> | null=null;
+    try{value=record(JSON.parse(new TextDecoder("utf-8",{fatal:true}).decode(Buffer.concat(chunks))));}
+    catch{return NextResponse.json({error:"mapping_discussion_invalid_json"},{status:400});}
+    if(!value || Object.keys(value).sort().join(",") !==
+        "expectedRevision,intent,observationToken,rowNumber" ||
+        !Number.isSafeInteger(value.rowNumber) || (value.rowNumber as number)<1 ||
+        (value.rowNumber as number)>999999999 ||
+        !Number.isSafeInteger(value.expectedRevision) ||
+        (value.expectedRevision as number)<0 ||
+        (value.expectedRevision as number)>MAPPING_DISCUSSION_HISTORY_LIMIT ||
+        typeof value.observationToken!=="string" ||
+        !/^[a-f0-9]{64}$/.test(value.observationToken) ||
+        !validMappingDiscussionIntent(value.intent))
+      return NextResponse.json({error:"mapping_discussion_invalid_request"},{status:400});
+    return inspectBundleDrift(request,context,null,null,false,false,null,null,{
+      rowNumber:value.rowNumber as number,
+      expectedRevision:value.expectedRevision as number,
+      observationToken:value.observationToken,
+      intent:value.intent,
+    });
+  }
   if (request.nextUrl.searchParams.has("policyDraft")) {
     const query = request.nextUrl.searchParams;
     if (query.get("policyDraft") !== "1" ||
@@ -177,6 +250,8 @@ async function inspectBundleDrift(
   expertPreflight = false,
   governance = false,
   policyDraftInput: PolicyDraftInput | null = null,
+  mappingDiscussionRow: number | null = null,
+  mappingDiscussionInput: MappingDiscussionInput | null = null,
 ) {
   const session = await getCurrentSession();
   if (!session) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
@@ -204,7 +279,8 @@ async function inspectBundleDrift(
     const batch = await tx.catalogImportBatch.findFirst({
       where: { id: batchId, organizationId, sourceType: BUNDLE_REVIEW_SOURCE,
         ...(expert ? {} : { createdByUserId: session.user.id }), status: "DRAFT" },
-      select: { id: true, sourceChecksum: true, summary: true, createdByUserId: true },
+      select: { id: true, sourceType: true, sourceName: true, status: true,
+        sourceChecksum: true, summary: true, createdByUserId: true },
     });
     if (!batch || !batch.sourceChecksum)
       return { error: "bundle_review_not_found", httpStatus: 404 } as const;
@@ -272,12 +348,31 @@ async function inspectBundleDrift(
     // Authorize *all* 5k staged identities, not only the currently displayed page.
     const staged = await tx.catalogImportRow.findMany({
       where: { batchId: batch.id }, orderBy: { rowNumber: "asc" },
-      select: { id: true, rowNumber: true, entityType: true, sourceData: true,
-        normalizedData: true, status: true, importedEntityId: true },
+      select: { id: true, rowNumber: true, entityType: true, legacyKey: true,
+        sourceData: true, normalizedData: true, validationIssues: true,
+        status: true, importedEntityId: true },
     });
     if (!staged.length || staged.length > BUNDLE_REVIEW_MAX_ROWS ||
         staged.some(row => row.status !== "WARNING" || row.importedEntityId !== null))
       return { error: "reconciliation_batch_changed", httpStatus: 409 } as const;
+
+    // Independent expert GET preflight and PUT disposition must not trust
+    // freshly recomputed observation tokens over rewritten DRAFT rows.
+    // Author-only drift diagnostics remain available for unqualified sources,
+    // but they are not a qualified independent review or an apply action.
+    if (expert || mappingDiscussionInput || mappingDiscussionRow !== null) {
+      const metadata = reviewStageBatchMetadata(batch);
+      const evidence = verifyIndependentExpertStage({
+        context: {
+          organizationId, batchId: batch.id, authorUserId: batch.createdByUserId,
+          sourceChecksum: batch.sourceChecksum, rows: staged,
+        },
+        metadata, seal: record(batch.summary)?.stageEvidenceSeal,
+        secret: key,
+      });
+      if (!evidence.ok)
+        return { error: evidence.error, httpStatus: 409 } as const;
+    }
 
     // A second reviewer may access only a previously flagged row and only
     // after full-batch tenant/branch/department checks. Do not expose source.
@@ -349,7 +444,6 @@ async function inspectBundleDrift(
         return { error: "reconciliation_price_scope_invalid", httpStatus: 403 } as const;
     }
     const testScope = { ...clinicalImportTestWhere(liveScope), status: undefined };
-    const branchScope = { OR: [{ branchId: null }, { branchId: { in: branchIds } }] };
     const genericPriceScope = { OR: [
       { scopeType: "ORGANIZATION" as const, branchId: null },
       { scopeType: "BRANCH" as const, branchId: { in: branchIds } },
@@ -376,155 +470,12 @@ async function inspectBundleDrift(
     if ([...idsByType.keys()].some(type => !ordered.includes(type))) {
       return { error: "reconciliation_unsupported_source_group", httpStatus: 409 } as const;
     }
-    const live = new Map<string, unknown>();
-    for (const type of ordered) {
-      const ids = idsByType.get(type) || [];
-      if (!ids.length) continue;
-      const base = { orderBy: { id: "asc" as const }, take: ids.length };
-      const cursorScope = { id: { in: ids } };
-      let records: Array<{ id: string }> = [];
-  if (type === "TEST") {
-    records = await tx.labTest.findMany({
-      ...base, where: { ...testScope, ...cursorScope },
-      select: {
-        id: true, code: true, nameEn: true, nameAr: true, abbreviation: true,
-        departmentId: true, specimenTypeId: true, containerId: true,
-        methodId: true, defaultUnitId: true, resultType: true,
-        workflowType: true, resultEntryLayout: true, decimalPrecision: true,
-        minimumVolume: true, minimumVolumeUnit: true, assay: true,
-        tatMinutes: true, loincCode: true, status: true,
-        createdAt: true, updatedAt: true, deactivatedAt: true,
-      },
-    });
-  } else if (type === "COMPONENT") {
-    records = await tx.testComponent.findMany({
-      ...base, where: { test: testScope, ...cursorScope },
-      select: {
-        id: true, testId: true, code: true, nameEn: true, nameAr: true,
-        unitId: true, resultType: true, decimalPrecision: true,
-        displayOrder: true, resultSectionId: true,
-        reportNameEn: true, reportNameAr: true, reportDisplayOrder: true,
-        reportVisible: true, entryWidth: true, entryHintEn: true, entryHintAr: true,
-        status: true, createdAt: true, updatedAt: true, deactivatedAt: true,
-        test: { select: { code: true } },
-        unit: { select: { code: true, symbol: true } },
-      },
-    });
-  } else if (type === "PANEL") {
-    records = await tx.testPanel.findMany({
-      ...base, where: { organizationId, items: fullyVisibleItems, ...cursorScope },
-      select: {
-        id: true, code: true, nameEn: true, nameAr: true,
-        descriptionEn: true, descriptionAr: true, status: true,
-        createdAt: true, updatedAt: true, deactivatedAt: true,
-        items: { select: {
-          testId: true, displayOrder: true, required: true,
-          test: { select: { code: true } },
-        }, orderBy: [{ displayOrder: "asc" }, { testId: "asc" }] },
-      },
-    });
-  } else if (type === "PACKAGE") {
-    records = await tx.commercialPackage.findMany({
-      ...base, where: { organizationId, items: fullyVisibleItems, ...cursorScope },
-      select: {
-        id: true, code: true, nameEn: true, nameAr: true,
-        descriptionEn: true, descriptionAr: true, status: true,
-        createdAt: true, updatedAt: true, deactivatedAt: true,
-        items: { select: {
-          testId: true, displayOrder: true,
-          test: { select: { code: true } },
-        }, orderBy: [{ displayOrder: "asc" }, { testId: "asc" }] },
-      },
-    });
-  } else if (type === "UNIT") {
-    records = await tx.unit.findMany({
-      ...base, where: { organizationId, ...cursorScope },
-      select: {
-        id: true, code: true, symbol: true, nameEn: true, nameAr: true,
-        ucumCode: true, status: true,
-        createdAt: true, updatedAt: true, deactivatedAt: true,
-      },
-    });
-  } else if (type === "CONTAINER") {
-    records = await tx.container.findMany({
-      ...base, where: { organizationId, ...cursorScope },
-      select: {
-        id: true, code: true, nameEn: true, nameAr: true,
-        tubeColor: true, additive: true, status: true,
-        createdAt: true, updatedAt: true, deactivatedAt: true,
-      },
-    });
-  } else if (type === "REFERENCE_INTERVAL") {
-    records = await tx.referenceInterval.findMany({
-      ...base, where: { component: { test: testScope }, ...branchScope, ...cursorScope },
-      select: {
-        id: true, componentId: true, branchId: true, methodId: true,
-        analyzerId: true, specimenTypeId: true, sex: true, ageFrom: true,
-        ageTo: true, ageUnit: true, pregnancyStatus: true,
-        gestationalAgeFromWeeks: true, gestationalAgeToWeeks: true,
-        populationCode: true, lowValue: true, highValue: true,
-        normalTextEn: true, normalTextAr: true, criticalLow: true,
-        criticalHigh: true, source: true, notes: true,
-        effectiveFrom: true, effectiveTo: true, approvalStatus: true,
-        status: true, approvedAt: true, retiredAt: true,
-        createdAt: true, updatedAt: true,
-        component: { select: { code: true, test: { select: { code: true } } } },
-      },
-    });
-  } else if (type === "PRICE_LIST") {
-    records = await tx.priceList.findMany({
-      ...base, where: { organizationId, ...genericPriceScope, ...cursorScope },
-      select: {
-        id: true, code: true, nameEn: true, nameAr: true, scopeType: true,
-        branchId: true, sourceId: true, referrerId: true, clientId: true,
-        contractId: true, currency: true, priority: true, effectiveFrom: true,
-        effectiveTo: true, status: true, createdAt: true, updatedAt: true,
-        deactivatedAt: true,
-      },
-    });
-  } else if (type === "PRICE_LIST_PACKAGE_ITEM") {
-    records = await tx.priceListPackageItem.findMany({
-      ...base, where: {
-        ...cursorScope,
-        package: { organizationId, items: fullyVisibleItems },
-        priceList: { organizationId, ...genericPriceScope,
-          sourceId: null, referrerId: null, clientId: null, contractId: null },
-      },
-      select: {
-        id: true, priceListId: true, packageId: true, unitPrice: true,
-        effectiveFrom: true, effectiveTo: true, status: true,
-        createdAt: true, updatedAt: true, deactivatedAt: true,
-        package: { select: { code: true } },
-        priceList: { select: {
-          code: true, currency: true, scopeType: true, branchId: true,
-          status: true, sourceId: true, referrerId: true, clientId: true, contractId: true,
-        } },
-      },
-    });
-  } else if (type === "PRICE_LIST_ITEM") {
-    records = await tx.priceListItem.findMany({
-      ...base,
-      where: { priceList: { organizationId, ...genericPriceScope }, test: testScope, ...cursorScope },
-      select: {
-        id: true, priceListId: true, testId: true, unitPrice: true,
-        effectiveFrom: true, effectiveTo: true, status: true,
-        createdAt: true, updatedAt: true, deactivatedAt: true,
-        test: { select: { code: true } },
-        priceList: { select: {
-          code: true, currency: true, scopeType: true, branchId: true,
-          status: true, sourceId: true, referrerId: true, clientId: true, contractId: true,
-        } },
-      },
-    });
-  }
-
-
-
-      if (records.length !== ids.length)
-        return { error: "reconciliation_live_master_scope_changed", httpStatus: 403 } as const;
-      for (const current of records) live.set(type + ":" + current.id, current);
-    }
-    const pageAfter = expertRow ? expertRow.rowNumber - 1 : after;
+    const live = await readCatalogLiveObservations(tx,liveScope,branchIds,idsByType);
+    if (!live) return { error: "reconciliation_live_master_scope_changed", httpStatus: 403 } as const;
+    const requestedMappingRow=mappingDiscussionInput?.rowNumber ?? mappingDiscussionRow;
+    const pageAfter = expertRow ? expertRow.rowNumber - 1 :
+      requestedMappingRow !== null && requestedMappingRow !== undefined
+        ? requestedMappingRow - 1 : after;
     const page = governance
       ? staged : staged.filter(row => row.rowNumber > pageAfter).slice(0, PAGE_SIZE + 1);
     const shown = governance ? page : page.slice(0, PAGE_SIZE);
@@ -539,9 +490,13 @@ async function inspectBundleDrift(
       const observationToken = catalogDriftObservationToken(
         key, batch.sourceChecksum!, row.rowNumber, row.entityType, row.sourceData, currentJson
       );
+      const differences = catalogBundleDrift(row.sourceData, currentJson);
       return {
         rowNumber: row.rowNumber, entityType: row.entityType,
-        ...catalogBundleDrift(row.sourceData, currentJson),
+        ...differences,
+        fieldReview: classifyCatalogReviewDrift(
+          row.entityType, differences.changedFields, differences.additionalFieldsOmitted),
+        targetIdentity: observeCatalogTargetIdentity(row.entityType, row.sourceData, currentJson),
         observationToken,
       };
     });
@@ -609,6 +564,98 @@ async function inspectBundleDrift(
         } : null,
       };
     });
+    if (requestedMappingRow !== null && requestedMappingRow !== undefined) {
+      const index = shown.findIndex(row => row.rowNumber === requestedMappingRow);
+      if (index < 0)
+        return { error:"mapping_discussion_row_not_found", httpStatus:404 } as const;
+      const observed=rows[index];
+      const identity=observed.targetIdentity;
+      const stagedRow=shown[index];
+      const context={
+        organizationId,batchId:batch.id,branchId:liveScope.branchId,
+        rowId:stagedRow.id,authorUserId:batch.createdByUserId,
+        sourceChecksum:batch.sourceChecksum,
+        rowNumber:observed.rowNumber,entityType:observed.entityType,
+      };
+      // A history from a wrong actor/branch, including an older revision,
+      // must not vanish behind a newer well-formed event.
+      const historyRows=await tx.auditEvent.findMany({
+        where:{
+          organizationId,entityType:"CatalogImportRow",entityId:stagedRow.id,
+          action:"CATALOG_BUNDLE_MAPPING_DISCUSSION_DRAFT_RECORDED",
+        },
+        orderBy:[{occurredAt:"desc"},{id:"desc"}],
+        take:MAPPING_DISCUSSION_HISTORY_LIMIT+1,
+        select:{id:true,actorUserId:true,branchId:true,newValues:true},
+      });
+      const history=verifyMappingDiscussionHistory({context,events:historyRows,secret:key});
+      if(!history)
+        return {error:"mapping_discussion_history_corrupt",httpStatus:409} as const;
+      const previous=history.draft;
+      const current=mappingDiscussionCurrent(previous,observed.observationToken);
+      // Closed-loop correction visibility for the ORIGINAL AUTHOR only.
+      // Authenticate the entire independent reviewer ledger even if the
+      // current draft has superseded the feedback. Never return actor IDs,
+      // raw values, HMAC digests or a clinical/financial authorization.
+      const feedbackRows=await tx.auditEvent.findMany({
+        where:{
+          organizationId,entityType:"CatalogImportRow",entityId:stagedRow.id,
+          action:"CATALOG_BUNDLE_MAPPING_FEEDBACK_RECORDED",
+        },
+        orderBy:[{occurredAt:"desc"},{id:"desc"}],
+        take:MAPPING_FEEDBACK_HISTORY_LIMIT+1,
+        select:{id:true,actorUserId:true,branchId:true,newValues:true},
+      });
+      const feedback=verifyMappingFeedbackHistory({
+        context,events:feedbackRows,secret:key,
+      });
+      if(!feedback)
+        return {error:"mapping_discussion_reviewer_feedback_corrupt",httpStatus:409} as const;
+      const currentFeedback=previous && current
+        ? currentMappingFeedbackDisposition(
+          feedback,previous.digest,observed.observationToken,
+        ) : null;
+      if(mappingDiscussionInput) {
+        if (!matchesCatalogDriftObservation(
+          mappingDiscussionInput.observationToken,observed.observationToken))
+          return {error:"mapping_discussion_evidence_stale",httpStatus:409} as const;
+        if (mappingDiscussionInput.expectedRevision!==history.revision)
+          return {error:"mapping_discussion_revision_conflict",httpStatus:409} as const;
+        if(mappingDiscussionInput.intent==="PROPOSE_LOCAL_RECONCILIATION" &&
+            identity.status!=="LOCAL_IDENTITY_OBSERVED")
+          return {error:"mapping_discussion_local_identity_not_observed",httpStatus:409} as const;
+        if(previous && current && previous.intent===mappingDiscussionInput.intent)
+          return {status:"MAPPING_DISCUSSION_UNCHANGED",revision:history.revision,
+            intent:previous.intent,current:true,reviewOnly:true,approved:false,
+            mappingApproved:false,signingEnabled:false,activated:false,
+            liveWrites:false} as const;
+        if(history.revision>=MAPPING_DISCUSSION_HISTORY_LIMIT)
+          return {error:"mapping_discussion_revision_limit",httpStatus:409} as const;
+        const next=createMappingDiscussionDraft(context,{
+          revision:history.revision+1,
+          previousDigest:previous?.digest ?? null,
+          observationToken:observed.observationToken,
+          intent:mappingDiscussionInput.intent,
+        },key);
+        await tx.auditEvent.create({data:{
+          organizationId,branchId:liveScope.branchId,actorUserId:session.user.id,
+          action:"CATALOG_BUNDLE_MAPPING_DISCUSSION_DRAFT_RECORDED",
+          entityType:"CatalogImportRow",entityId:stagedRow.id,newValues:next,
+          ipAddress:ctx.ipAddress,userAgent:ctx.userAgent,
+        }});
+        return {status:"MAPPING_DISCUSSION_DRAFT_RECORDED",
+          revision:next.revision,intent:next.intent,current:true,
+          reviewOnly:true,approved:false,mappingApproved:false,
+          signingEnabled:false,activated:false,liveWrites:false} as const;
+      }
+      return {status:previous?"MAPPING_DISCUSSION_DRAFT":"MAPPING_DISCUSSION_NOT_STARTED",
+        revision:history.revision,intent:previous?.intent ?? null,
+        current,localIdentityObserved:identity.status==="LOCAL_IDENTITY_OBSERVED",
+        reviewerFeedbackRevision:feedback.revision,
+        reviewerFeedbackDisposition:currentFeedback,
+        reviewOnly:true,approved:false,mappingApproved:false,
+        signingEnabled:false,activated:false,liveWrites:false} as const;
+    }
     if (expert) {
       const index = shown.findIndex(row => row.id === expertRow!.id);
       if (index < 0) return { error: "expert_row_not_found", httpStatus: 404 } as const;

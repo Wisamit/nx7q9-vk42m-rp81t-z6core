@@ -4,7 +4,6 @@ import { prisma } from "@/lib/db";
 import { resolveClinicalImportScope } from "@/lib/catalog-clinical-import-scope";
 import { BUNDLE_REVIEW_SOURCE } from "@/lib/catalog-bundle-review";
 import { POLICY_DRAFT_HISTORY_LIMIT } from "@/lib/catalog-policy-draft-history";
-import { catalogBundleSigningSecret } from "@/lib/catalog-bundle-attestation";
 import {
   issueSignedPolicyQueueCursor, verifySignedPolicyQueueCursor,
   samePolicyQueueAnchor, samePolicyQueueAuditWatermark,
@@ -13,6 +12,8 @@ import {
 import { verifiedPolicyQueueCandidate } from "@/lib/catalog-policy-review-queue-guard";
 import { planPolicyQueueDecisionFetch } from "@/lib/catalog-policy-queue-decision-plan";
 import { validatePolicyReviewBatchScope } from "@/lib/catalog-policy-review-scope";
+import { catalogBundleSigningSecret } from "@/lib/catalog-bundle-attestation";
+import { reviewStageBatchMetadata } from "@/lib/catalog-review-stage-evidence";
 import {
   POLICY_QUEUE_ENTRY_LIMIT, POLICY_QUEUE_EVENT_WINDOW,
   policyQueueNextPage,
@@ -166,7 +167,8 @@ export async function GET(request: NextRequest) {
         sourceType: BUNDLE_REVIEW_SOURCE, status: "DRAFT",
         createdByUserId: { not: session.user.id },
       },
-      select: { id: true, sourceChecksum: true, createdByUserId: true },
+      select: { id: true, sourceType: true, sourceName: true, status: true,
+        sourceChecksum: true, createdByUserId: true, summary: true },
     });
     const draftIds = [...latestByBatch.values()].map(event => event.id);
     // Count by draft id *across all branches in the organization*. A single
@@ -247,6 +249,11 @@ export async function GET(request: NextRequest) {
       // branch/department scope gate as independent GET preflight and POST.
       const batchScope = await validatePolicyReviewBatchScope(tx, {
         batchId: batch.id, scope, grantedBranchIds,
+        sourceChecksum: batch.sourceChecksum, authorUserId: batch.createdByUserId,
+        stageEvidenceSeal: batch.summary && typeof batch.summary === "object" &&
+          !Array.isArray(batch.summary) ? batch.summary.stageEvidenceSeal : null,
+        batchMetadata: reviewStageBatchMetadata(batch),
+        signingSecret: catalogBundleSigningSecret(process.env),
       });
       if (!batchScope.ok) continue;
       entries.push({

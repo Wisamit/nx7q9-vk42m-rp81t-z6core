@@ -6,7 +6,8 @@ import { catalogBundleAllowedSourceFields, catalogBundleNestedSourceProjections,
 import type { CatalogExportType } from "../src/lib/catalog-configuration-export.ts";
 
 const sourceBundle=readFileSync("src/app/api/catalog/configuration-export/bundle/route.ts","utf8");
-const sourceDrift=readFileSync("src/app/api/catalog/imports/[id]/bundle-drift/route.ts","utf8");
+const sourceDrift=readFileSync("src/lib/catalog-live-observation.ts","utf8");
+const driftRoute=readFileSync("src/app/api/catalog/imports/[id]/bundle-drift/route.ts","utf8");
 const models: Record<CatalogExportType,string> = {
   TEST:"labTest",COMPONENT:"testComponent",UNIT:"unit",CONTAINER:"container",
   PANEL:"testPanel",PACKAGE:"commercialPackage",REFERENCE_INTERVAL:"referenceInterval",
@@ -51,8 +52,25 @@ function projections(code:string){
       if(!input||!ts.isObjectLiteralExpression(input))throw Error("F2: query input is dynamic "+model);
       const select=selectValue(input,"select");
       if(!ts.isObjectLiteralExpression(select))throw Error("F2: SELECT is dynamic "+model);
-      if(paths.has(model))throw Error("F2: ambiguous repeat query "+model);
-      paths.set(model,flattenSelect(select));
+      const fields=flattenSelect(select);
+      // The atomic export may additionally inspect a small {id,code}
+      // selection to authorize panel/package member tests. It is NOT a
+      // second exported record projection and must not replace the full
+      // field-complete bundle read.
+      const direct=[...new Set(fields.map(path=>path.split(".")[0]))].sort();
+      const kind=(Object.entries(models) as [CatalogExportType,string][])
+        .find(([,value])=>value===model)?.[0];
+      if(!kind)throw Error("F2: missing model type "+model);
+      const all=[...catalogBundleAllowedSourceFields[kind]].sort();
+      if(direct.join(",")!==all.join(",")){
+        if(model==="labTest" && fields.join(",")==="code,id") {
+          ts.forEachChild(node,visit);
+          return;
+        }
+        throw Error("F2: unexpected partial or extra query projection "+model);
+      }
+      if(paths.has(model))throw Error("F2: ambiguous full export query "+model);
+      paths.set(model,fields);
     }
     ts.forEachChild(node,visit);
   };
@@ -60,6 +78,7 @@ function projections(code:string){
   return paths;
 }
 test("F2: all ten atomic export model projections equal live drift projections at EVERY nested field",()=>{
+  assert.match(driftRoute,/readCatalogLiveObservations\(tx,liveScope,branchIds,idsByType\)/);
   const exported=projections(sourceBundle),drift=projections(sourceDrift);
   assert.equal(exported.size,10);
   assert.equal(drift.size,10);

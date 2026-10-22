@@ -4,6 +4,10 @@ import { NextResponse } from "next/server";
 import { Prisma } from "../../../../generated/prisma/client";
 import { canAccessBranch, requirePermission, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import {
+  projectF2EffectiveCatalogView, resolveF2EffectiveCatalogViews,
+  f2EffectiveCompositeMemberIds,f2EffectiveCompositeMembersAuthorized,
+} from "@/lib/catalog-f2-effective-view";
 import { PricingConfigurationError, resolvePackagePrice, resolveTestPrice } from "@/lib/pricing";
 import { discountApprovalMode, effectiveDiscountLimit } from "@/lib/discount-policy";
 import { discountApprovalFingerprint } from "@/lib/discount-approval";
@@ -129,11 +133,14 @@ export async function POST(request: Request) {
     discountApprovedAt = new Date();
   }
 
-  const packages = packageIds.length ? await prisma.commercialPackage.findMany({
+  // A future-effective F2 package membership must become the membership of
+  // NEW orders. Previously issued order items continue to retain their own
+  // immutable package and pricing snapshots.
+  const catalogAsOf = new Date();
+  const basePackages = packageIds.length ? await prisma.commercialPackage.findMany({
     where: {
       id: { in: packageIds },
       organizationId: session.user.organizationId,
-      status: "ACTIVE",
     },
     include: {
       items: {
@@ -142,13 +149,49 @@ export async function POST(request: Request) {
       },
     },
   }) : [];
-  if (packages.length !== packageIds.length) {
+  if (basePackages.length !== packageIds.length) {
     return NextResponse.json({ error: "one_or_more_packages_not_found" }, { status: 404 });
   }
-
+  const packageOverlays = await resolveF2EffectiveCatalogViews(prisma as Prisma.TransactionClient,{
+    organizationId:session.user.organizationId,asOf:catalogAsOf,
+    records:basePackages.map(pkg=>({entityType:"PACKAGE" as const,id:pkg.id})),
+  });
+  const packages = basePackages.map(pkg=>
+    projectF2EffectiveCatalogView("PACKAGE",pkg,packageOverlays));
+  if(packages.some(pkg=>pkg.status!=="ACTIVE"))
+    return NextResponse.json({error:"package_not_active_at_order_time"},{status:409});
+  const effectiveMemberships=new Map<string,ReadonlyMap<string,string>>();
+  for(const pkg of packages){
+    const overlay=packageOverlays.get("PACKAGE:"+pkg.id.toLowerCase());
+    if(!overlay)continue;
+    const memberIds=f2EffectiveCompositeMemberIds("PACKAGE",[
+      {id:pkg.id,items:overlay.items},
+    ]);
+    if(!memberIds)
+      return NextResponse.json({error:"effective_package_membership_invalid"},{status:409});
+    effectiveMemberships.set(pkg.id,memberIds);
+  }
+  const overriddenTestIds=[...new Set([...effectiveMemberships.values()]
+    .flatMap(members=>[...members.keys()]))];
+  const eligibleTests=overriddenTestIds.length?await prisma.labTest.findMany({
+    where:{id:{in:overriddenTestIds},organizationId:session.user.organizationId,
+      status:"ACTIVE"},
+    select:{id:true,code:true},
+  }):[];
+  for(const [pkgId,members] of effectiveMemberships){
+    const permitted=eligibleTests.filter(test=>members.has(test.id));
+    if(!f2EffectiveCompositeMembersAuthorized(members,permitted))
+      return NextResponse.json({
+        error:"effective_package_membership_scope_changed",packageId:pkgId,
+      },{status:409});
+  }
   const packageTestOwner = new Map<string, string>();
   for (const pkg of packages) {
-    for (const item of pkg.items) {
+    const members=effectiveMemberships.get(pkg.id);
+    const entries=members?[...members.keys()].map(testId=>({
+      testId,test:{status:"ACTIVE"},
+    })):basePackages.find(original=>original.id===pkg.id)!.items;
+    for (const item of entries) {
       if (item.test.status !== "ACTIVE") {
         return NextResponse.json({ error: "package_contains_inactive_test", packageCode: pkg.code }, { status: 409 });
       }
@@ -166,9 +209,9 @@ export async function POST(request: Request) {
 
   const packageTestIds = [...packageTestOwner.keys()];
   const allTestIds = [...directTestIds, ...packageTestIds];
-  const orderQuestionAsOf = new Date();
+  const orderQuestionAsOf = catalogAsOf;
 
-  const [patient, tests, source, referrer, client, orderingBranch] = await Promise.all([
+  const [patient, storedTests, source, referrer, client, orderingBranch] = await Promise.all([
     prisma.patient.findFirst({ where: { id: patientId, organizationId: session.user.organizationId, status: "ACTIVE" }, select: { id: true, patientNumber: true, fullNameEn: true, sexAtBirth: true, dateOfBirth: true, recordedAgeValue: true, recordedAgeUnit: true, recordedAgeAt: true } }),
     prisma.labTest.findMany({
       where: { id: { in: allTestIds }, organizationId: session.user.organizationId, status: "ACTIVE" },
@@ -192,6 +235,37 @@ export async function POST(request: Request) {
     clientId ? prisma.client.findFirst({ where: { id: clientId, organizationId: session.user.organizationId, status: "ACTIVE" }, select: { id: true, paymentTermsDays: true, creditControlVersion: true } }) : null,
     prisma.branch.findFirst({ where: { id: branchId, organizationId: session.user.organizationId, status: "ACTIVE" }, select: { id: true, timezone: true, taxConfigVersion: true } }),
   ]);
+
+  // A signed F2 catalog revision changes the NEW order's frozen test and
+  // unit display values. Do not silently snapshot stale base-row metadata.
+  // Identity, specimen and department FKs are immutable under F2 planning.
+  const testViewRecords=[
+    ...storedTests.map(test=>({entityType:"TEST" as const,id:test.id})),
+    ...storedTests.filter(test=>test.defaultUnit!==null)
+      .map(test=>({entityType:"UNIT" as const,id:test.defaultUnit!.id})),
+  ];
+  const uniqueViewRecords=[...new Map(testViewRecords.map(entry=>[
+    entry.entityType+":"+entry.id,entry,
+  ])).values()];
+  const orderTestOverlays=await resolveF2EffectiveCatalogViews(
+    prisma as Prisma.TransactionClient,{
+      organizationId:session.user.organizationId,asOf:catalogAsOf,
+      records:uniqueViewRecords,
+    },
+  );
+  const tests=storedTests.map(test=>{
+    const effective=projectF2EffectiveCatalogView("TEST",test,orderTestOverlays);
+    const unit=test.defaultUnit?
+      projectF2EffectiveCatalogView("UNIT",test.defaultUnit,orderTestOverlays):null;
+    // Decimal source snapshots use lossless text; the operational order
+    // engine expects a Prisma.Decimal instance for specimen volume math.
+    const minimumVolume=typeof effective.minimumVolume==="string"?
+      new Prisma.Decimal(effective.minimumVolume):effective.minimumVolume;
+    return {...effective,minimumVolume,defaultUnit:unit};
+  });
+  if(tests.some(test=>test.status!=="ACTIVE" ||
+      test.defaultUnit?.status==="INACTIVE"))
+    return NextResponse.json({error:"test_not_active_at_order_time"},{status:409});
 
   if (!patient) return NextResponse.json({ error: "patient_not_found" }, { status: 404 });
   if (tests.length !== allTestIds.length) return NextResponse.json({ error: "one_or_more_tests_not_found" }, { status: 404 });
@@ -336,7 +410,11 @@ export async function POST(request: Request) {
   if (effectiveClientId && !effectiveClient) {
     return NextResponse.json({ error: "client_not_found" }, { status: 404 });
   }
-  const invoiceIssuedAt = new Date();
+  // One accepted request instant must drive catalog overlays, package
+  // membership, both tariff resolvers, tax day and immutable invoice/order
+  // snapshots. Otherwise crossing an effective-date boundary while awaiting
+  // sequential DB reads can mix two independently valid configurations.
+  const invoiceIssuedAt = catalogAsOf;
   const paymentTermsDaysSnapshot = effectiveClient ? effectiveClient.paymentTermsDays ?? 0 : null;
   const invoiceDueDate = effectiveClient
     ? invoiceDueDateSnapshot(invoiceIssuedAt, orderingBranch.timezone, paymentTermsDaysSnapshot ?? 0)
@@ -360,6 +438,7 @@ export async function POST(request: Request) {
         referrerId,
         clientId: effectiveClientId,
         testId: test.id,
+        at: catalogAsOf,
       }),
     })));
 
@@ -372,6 +451,7 @@ export async function POST(request: Request) {
         referrerId,
         clientId: effectiveClientId,
         packageId: pkg.id,
+        at: catalogAsOf,
       }),
     })));
   } catch (error) {
@@ -782,6 +862,7 @@ export async function POST(request: Request) {
         data: {
           organizationId: session.user.organizationId,
           accessionNumber,
+          orderedAt: catalogAsOf,
           orderingBranchId: branchId,
           patientId,
           patientSexSnapshot: patient.sexAtBirth,

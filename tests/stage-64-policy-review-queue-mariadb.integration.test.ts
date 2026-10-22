@@ -61,7 +61,10 @@ test("Stage 64 MariaDB: queue candidate is hidden on rogue audit and live branch
       [batch,org,sourceChecksum,author]);
     await write(
       "INSERT INTO catalog_import_rows(id,batch_id,`row_number`,entity_type,status,legacy_key,source_data,normalized_data,validation_issues,updated_at) VALUES(?,?,1,'TEST','WARNING',?,?,?,?,NOW(3))",
-      [rowId,batch,testId,JSON.stringify({id:testId}),JSON.stringify({id:testId,departmentId:deptA}),JSON.stringify([{severity:"WARNING",code:"REVIEW_ONLY"}])]);
+      [rowId,batch,testId,
+        JSON.stringify({id:testId,code:code+"T",nameEn:"Stage64 Test",departmentId:deptA,status:"ACTIVE"}),
+        JSON.stringify({id:testId,code:code+"T",nameEn:"Stage64 Test",departmentId:deptA,status:"ACTIVE"}),
+        JSON.stringify([{severity:"WARNING",code:"REVIEW_ONLY"}])]);
     await writer.beginTransaction();
     const [locked]=await writer.execute<mysql.RowDataPacket[]>(
       "SELECT id FROM organizations WHERE id=? AND status='ACTIVE' FOR UPDATE",[org]);

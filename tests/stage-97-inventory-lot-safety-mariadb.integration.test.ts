@@ -97,12 +97,22 @@ test("Stage 97 MariaDB: tenant-scoped lot fence, simultaneous quarantine, irreve
    "SELECT id FROM inventory_lots WHERE id=? AND safety_status='AVAILABLE'",[lot]);
   assert.equal(blockedReuse.length,0);
   const [historical]=await other.execute<mysql.RowDataPacket[]>(
-   "SELECT prior_status,next_status,reason,actor_user_id FROM inventory_lot_safety_events "+
-   "WHERE lot_id=? ORDER BY created_at,id",[lot]);
+   "SELECT id,prior_status,next_status,reason,actor_user_id FROM inventory_lot_safety_events "+
+   "WHERE lot_id=?",[lot]);
   assert.equal(historical.length,3,"prior safety decisions cannot be overwritten");
-  assert.equal(historical[0].prior_status,"AVAILABLE");
-  assert.equal(historical[0].next_status,"QUARANTINED");
-  assert.equal(historical[1].actor_user_id,reviewer);
+  // MariaDB events can share created_at to the millisecond. Random UUIDs
+  // are identities, not reliable causal sort keys for same-time events.
+  const byEventId=new Map(historical.map(row=>[String(row.id),row]));
+  assert.equal(byEventId.size,3,"each safety transition is uniquely retained");
+  assert.equal(byEventId.get(event1)?.prior_status,"AVAILABLE");
+  assert.equal(byEventId.get(event1)?.next_status,"QUARANTINED");
+  assert.equal(byEventId.get(event1)?.actor_user_id,user);
+  assert.equal(byEventId.get(event2)?.prior_status,"QUARANTINED");
+  assert.equal(byEventId.get(event2)?.next_status,"AVAILABLE");
+  assert.equal(byEventId.get(event2)?.actor_user_id,reviewer);
+  assert.equal(byEventId.get(event3)?.prior_status,"AVAILABLE");
+  assert.equal(byEventId.get(event3)?.next_status,"RECALLED");
+  assert.equal(byEventId.get(event3)?.actor_user_id,user);
   const [remaining]=await other.execute<mysql.RowDataPacket[]>(
    "SELECT branch_id,quantity_on_hand FROM inventory_lot_stock WHERE lot_id=?",[lot]);
   assert.equal(remaining.length,2);

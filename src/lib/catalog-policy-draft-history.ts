@@ -17,11 +17,12 @@ export type VerifiedPolicyDraftHistory = {
 /**
  * Fail closed on every malformed, omitted, duplicated, foreign-actor or
  * checksum-divergent policy draft revision, not only the newest row.
- * Events must be ordered by occurredAt DESC, id DESC, exactly as all readers
- * currently determine the latest draft. Revision ordering is validated
- * independently to tolerate equal-millisecond audit timestamps.
+ * The latest draft is selected by its unique contiguous revision, NOT by
+ * MariaDB occurredAt/id sorting (equal-millisecond timestamps and random
+ * UUIDs may invert physical order). Each event and actor is checked.
  *
- * This detects structural audit corruption, NOT an authenticated signature.
+ * The draft checksum is not a cryptographic signature. Database writers
+ * who can forge checksums still require an independent signed approval trail.
  */
 export function verifyPolicyDraftHistory(input: {
   events: readonly DraftEvent[];
@@ -48,9 +49,8 @@ export function verifyPolicyDraftHistory(input: {
     if (!revisions.has(revision)) return null;
   }
   const current = revisions.get(events.length);
-  // A newly appended revision must be the most recent audit entry. Detect
-  // timestamp/order collisions rather than silently expose a stale version.
-  if (!current || current.id !== events[0].id) return null;
+  // Audit SQL order is not a causal ordering guarantee.
+  if (!current) return null;
   return {
     latestEventId: current.id,
     draft: current.draft,

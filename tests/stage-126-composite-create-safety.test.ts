@@ -35,7 +35,10 @@ test("Stage 126: membership input refuses implicit code/label mapping, duplicate
 });
 
 test("Stage 126: bundle drift includes all nine classes with full related scope", () => {
-  const drift = readFileSync("src/app/api/catalog/imports/[id]/bundle-drift/route.ts", "utf8");
+  const driftRoute = readFileSync("src/app/api/catalog/imports/[id]/bundle-drift/route.ts", "utf8");
+  const liveSelect = readFileSync("src/lib/catalog-live-observation.ts", "utf8");
+  assert.match(driftRoute,/readCatalogLiveObservations\(tx,liveScope,branchIds,idsByType\)/);
+  const drift = driftRoute + "\n" + liveSelect;
   const source = readFileSync("src/app/api/catalog/configuration-export/bundle/route.ts", "utf8");
   for (const entity of ["PANEL","PACKAGE","PRICE_LIST_PACKAGE_ITEM"]) {
     assert.ok(drift.includes('type === "' + entity + '"'));
