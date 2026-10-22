@@ -98,6 +98,10 @@ export function inspectF7BrowserEvidence(evidence,manifest,outputDir,options={})
     ];
     if(!Number.isInteger(entry.responseStatus)||entry.responseStatus<200||
        entry.responseStatus>=300||entry.redirectedToLogin!==false||
+       entry.navigationTargetMatched!==true||
+       entry.documentFullyLoaded!==true||entry.documentBodyHasContent!==true||
+       !Number.isSafeInteger(entry.visibleBusySurfaceCount)||
+       entry.visibleBusySurfaceCount!==0||
        typeof entry.htmlLanguage!=="string"||
        entry.htmlLanguage.toLowerCase().split("-")[0]!==expectedLocale||
        entry.htmlDirection!==expectedDirection||
