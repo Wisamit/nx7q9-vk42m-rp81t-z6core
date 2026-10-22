@@ -69,3 +69,34 @@ test("F4 tax: no arbitrary jurisdiction rates, invalid monetary precision or num
     additionalGross:"100.0000",
   })?.taxAmount,"5.0000");
 });
+
+
+test("F4 tax: arithmetic must fit the persisted DECIMAL(18,4), including tax-inclusive/exclusive totals",()=>{
+  const standard:TaxFields={
+    treatment:"STANDARD",priceMode:"EXCLUSIVE",ratePercent:"5.00",
+  };
+  assert.equal(taxLineAmounts({
+    netAfterDiscount:"99999999999999.9999",rule:standard,
+  }),null,"exclusive tax must not overflow invoice money columns");
+  assert.equal(taxLineAmounts({
+    netAfterDiscount:"100000000000000.0000",rule:null,
+  }),null,"a 15-digit integer does not fit DECIMAL(18,4)");
+  const inclusive=taxLineAmounts({
+    netAfterDiscount:"99999999999999.9999",
+    rule:{...standard,priceMode:"INCLUSIVE"},
+  });
+  assert.equal(inclusive?.lineTotal,"99999999999999.9999");
+});
+
+test("F4 tax: a prior credit's tax cannot exceed the associated credited gross",()=>{
+  assert.equal(taxCreditReversal({
+    originalGross:"100.0000",originalTax:"10.0000",
+    previouslyCreditedGross:"1.0000",previouslyCreditedTax:"2.0000",
+    additionalGross:"99.0000",
+  }),null);
+  assert.equal(taxCreditReversal({
+    originalGross:"100000000000000.0000",originalTax:"1.0000",
+    previouslyCreditedGross:"0.0000",previouslyCreditedTax:"0.0000",
+    additionalGross:"1.0000",
+  }),null);
+});
