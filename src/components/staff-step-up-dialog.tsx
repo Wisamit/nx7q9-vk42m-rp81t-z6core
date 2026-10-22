@@ -34,7 +34,7 @@ export function StaffStepUpDialog({open,action,resourceKey,branchId,locale,onCan
     if(!busy){setPassword("");setTotp("");setMessage("");onCancel();}
   }} title={tr("Verify identity for high-risk action","تأكيد الهوية قبل الإجراء الحساس")}
     description={tr("Your approval is tied to this item and expires within two minutes. Enter your current password and, if enabled, the six-digit authenticator code.",
-      "الإثبات مرتبط بهذا السجل وتنتهي صلاحيته خلال دقيقتين. أدخل كلمة المرور الحالية ورمز تطبيق المصادقة إذا كان مفعّلاً.")} size="sm">
+      "الإثبات مرتبط بهذا السجل وتنتهي صلاحيته خلال دقيقتين. أدخل كلمة المرور الحالية ورمز تطبيق المصادقة إذا كان مفعّلاً.")} size="compact">
     <form className="catalog-form" onSubmit={e=>void submit(e)}>
       <label>{tr("Current password","كلمة المرور الحالية")}
         <input type="password" autoComplete="current-password" value={password}
