@@ -435,3 +435,33 @@ This is **software-only** evidence. 486 private browser captures and all
 qualified owner/clinical/financial F8 acceptance remain `NOT_EXECUTED`;
 F7 interactive UAT is `UAT_DEFERRED` and F8 operational GO remains
 `NO_GO`. Master Scope §§1–88 stays intact.
+
+## F7 corporate booking-only access must not expose clinical order data
+
+An authorization-source review found that the corporate portal's
+`Orders & Status` list used a union of patients granted `canBook` OR
+`canViewReports`. That allowed a corporate account whose access was limited
+to booking to read accession numbers, laboratory test codes, order statuses
+and patient identifiers for that client even without clinical report-view
+permission. The report download was already more restricted; the order
+listing was not.
+
+The corporate page now derives separate sets from the **same active,
+effective-dated, current-client grants**:
+- `bookingPatientIds` for offering new appointment requests;
+- `reportPatientIds` for *both* clinical order-list visibility and reports;
+- `appointmentPatientIds` for this account's own previously booked
+  appointments, additionally restricted by `portalAccountId`.
+
+A `canBook`-only grant can continue booking and viewing its own
+appointments, but does not reveal clinical orders/tests or reports.
+A report-view-only grant may see its authorized clinical orders and reports
+without the ability to book. No new permissions, schema, clinical records,
+historical results or invoices are created or rewritten.
+
+Synthetic negative grant regression tests cover book-only, report-only,
+both, neither, duplicate grant rows, empty scopes and the page's source
+query boundaries. Real cross-role/browser assessment and role-specific
+legal/medical authorization remain part of the final single consolidated
+UAT. **F7 private browser acceptance NOT_EXECUTED; F8 clinical/finance/
+vendor/DR NO_GO**, all Master Scope §§1–88 retained.
