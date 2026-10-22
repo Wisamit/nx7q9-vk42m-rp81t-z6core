@@ -67,7 +67,19 @@ function main(){
   if(violations.length){console.log("NO_GO_TEMPLATE: "+violations.join("; "));process.exitCode=1;return;}
   if(process.argv[2]==="--check-template"){console.log("TEMPLATE_VALID: 88/88 NOT_EXECUTED, 7 qualified gates; no real-world PASS claimed.");return;}
   if(process.argv[2]!=="--assess"||!process.argv[3]){console.error("Use --check-template or --assess /private/evidence.json");process.exitCode=2;return;}
-  if(t.ownerConfirmedDeployment==="NOT_VERIFIED"){
+  // Private candidates require positive, exact-release deployment metadata.
+  // This checks structure and traceability only; it never authenticates evidence.
+  if(t.candidatePreparation==="PRIVATE_UNVERIFIED_MAIN_CI_HOSTINGER_AND_HUMAN_UAT_PENDING"){
+    const d=t.deploymentVerification;
+    if(t.ownerConfirmedDeployment!=="HOSTINGER_EXACT_SHA_ATTESTED" ||
+      !obj(d) || d.deployedSha!==t.releaseCandidateSha ||
+      d.mainCiSha!==t.releaseCandidateSha ||
+      !Number.isSafeInteger(d.mainCiRunId) || d.mainCiRunId<1 ||
+      !idOk(d.reviewedBy) || !idOk(d.evidenceRef) || !timeOk(d.reviewedAt)){
+      console.log("NO_GO: matching main CI and Hostinger deployment attestation metadata required for this exact candidate SHA");
+      process.exitCode=1;return;
+    }
+  } else if(t.ownerConfirmedDeployment==="NOT_VERIFIED") {
     console.log("NO_GO: release-candidate Hostinger deployment has not been independently confirmed");
     process.exitCode=1;return;
   }
