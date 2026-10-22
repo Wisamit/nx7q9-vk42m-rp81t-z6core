@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Structural metadata check ONLY; never a clinical, financial or regulatory GO decision.
 import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { isAbsolute, resolve } from "node:path";
 const idOk = x => typeof x === "string" && /^[a-zA-Z0-9][a-zA-Z0-9_:/.-]{2,159}$/.test(x);
 const timeOk = x => typeof x === "string" && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?(?:Z|[+-]\d\d:\d\d)$/.test(x) && Number.isFinite(Date.parse(x));
 const obj = x => x !== null && typeof x === "object" && !Array.isArray(x);
@@ -53,11 +53,36 @@ function evidenceErrors(m,t) {
 }
 function readJson(path){return JSON.parse(readFileSync(path,"utf8"));}
 function main(){
-  const t=readJson(resolve(process.cwd(),"docs/STAGE_132_UAT_CASES.json"));
+  const templateIndex=process.argv.indexOf("--template");
+  const suppliedTemplate=templateIndex>=0 ? process.argv[templateIndex+1] : null;
+  if(templateIndex>=0 && (!suppliedTemplate || !isAbsolute(suppliedTemplate) ||
+      process.argv.filter(x=>x==="--template").length!==1)){
+    console.log("NO_GO: a single absolute private --template path is required");
+    process.exitCode=1;return;
+  }
+  let t;
+  try { t=readJson(suppliedTemplate || resolve(process.cwd(),"docs/STAGE_132_UAT_CASES.json")); }
+  catch { console.log("NO_GO_TEMPLATE: private candidate template missing or invalid");process.exitCode=1;return; }
   const violations=templateErrors(t);
   if(violations.length){console.log("NO_GO_TEMPLATE: "+violations.join("; "));process.exitCode=1;return;}
   if(process.argv[2]==="--check-template"){console.log("TEMPLATE_VALID: 88/88 NOT_EXECUTED, 7 qualified gates; no real-world PASS claimed.");return;}
   if(process.argv[2]!=="--assess"||!process.argv[3]){console.error("Use --check-template or --assess /private/evidence.json");process.exitCode=2;return;}
+  // Private candidates require positive, exact-release deployment metadata.
+  // This checks structure and traceability only; it never authenticates evidence.
+  if(t.candidatePreparation==="PRIVATE_UNVERIFIED_MAIN_CI_HOSTINGER_AND_HUMAN_UAT_PENDING"){
+    const d=t.deploymentVerification;
+    if(t.ownerConfirmedDeployment!=="HOSTINGER_EXACT_SHA_ATTESTED" ||
+      !obj(d) || d.deployedSha!==t.releaseCandidateSha ||
+      d.mainCiSha!==t.releaseCandidateSha ||
+      !Number.isSafeInteger(d.mainCiRunId) || d.mainCiRunId<1 ||
+      !idOk(d.reviewedBy) || !idOk(d.evidenceRef) || !timeOk(d.reviewedAt)){
+      console.log("NO_GO: matching main CI and Hostinger deployment attestation metadata required for this exact candidate SHA");
+      process.exitCode=1;return;
+    }
+  } else if(t.ownerConfirmedDeployment==="NOT_VERIFIED") {
+    console.log("NO_GO: release-candidate Hostinger deployment has not been independently confirmed");
+    process.exitCode=1;return;
+  }
   let m;try{m=readJson(resolve(process.argv[3]));}catch{console.log("NO_GO: private evidence missing or invalid JSON");process.exitCode=1;return;}
   const errors=evidenceErrors(m,t);
   if(errors.length){console.log("NO_GO_MISSING_OR_INVALID_EVIDENCE: "+errors.length+" issue(s)\n"+errors.slice(0,25).join("\n"));process.exitCode=1;return;}
