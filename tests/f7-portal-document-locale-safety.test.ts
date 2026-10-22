@@ -48,8 +48,8 @@ test("F7 root DOM: locale, direction, theme and branding come from scoped sessio
   assert.ok(root.includes('dir={direction}'));
   assert.ok(root.includes("settings?.defaultLocale"),
     "anonymous users must still honor organization default locale");
-  assert.ok(auth.includes('portalAccount: { status: "ACTIVE" }'),
-    "document context must require a current active portal session");
+  assert.ok(auth.includes('portalAccount: { status: "ACTIVE", organization: { status: "ACTIVE" } }'),
+    "document context must require both an active account and an active organization");
   assert.ok(portal.includes("getUiLocale(account.preferredLocale)"),
     "portal page content must stay tied to the portal account's language");
 });
