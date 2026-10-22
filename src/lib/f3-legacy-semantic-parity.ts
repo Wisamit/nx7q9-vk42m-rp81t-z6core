@@ -160,9 +160,10 @@ export function reconcileF3SemanticValues(input:{
     if(mismatch)summary.mismatched++;else summary.matched++;
     totals.set(row.tableName+":"+row.targetType,summary);
   }
-  const tables=[...policies].map(([name])=>{
-    const v=totals.get(name);
-    return {tableName:name,rows:v?.rows||0,matched:v?.matched||0,
+  const tables=[...policies].map(([key,policy])=>{
+    const v=totals.get(key);
+    return {tableName:policy.tableName,targetType:policy.targetType,
+      rows:v?.rows||0,matched:v?.matched||0,
       mismatched:v?.mismatched||0,
       differingFields:[...(v?.fields||[])].sort()};
   });
