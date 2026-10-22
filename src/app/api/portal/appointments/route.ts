@@ -6,6 +6,7 @@ import { prisma } from "@/lib/db";
 import { resolveBranchLocalDateTime } from "@/lib/branch-local-date-time";
 import {
   evaluatePortalBookingReplay,portalBookingIntentHash,portalBookingSubmissionKey,
+  portalBookingReceipt,
 } from "@/lib/portal-appointment-idempotency";
 
 function text(value: unknown, max = 5000) {
@@ -108,13 +109,8 @@ export async function POST(request: Request) {
     }
     // Replay does not create another home-collection task or audit event.
     return NextResponse.json({
-      status: "ok", replayed: true, appointment: {
-        id: decision.appointment.id,
-        branchId: decision.appointment.branchId,
-        patientId: decision.appointment.patientId,
-        appointmentNumber: existing!.appointmentNumber,
-        status: decision.appointment.status,
-      },
+      status: "ok", replayed: true,
+      appointment: portalBookingReceipt(existing!),
     }, { status: 200, headers: { "Cache-Control": "private, no-store" } });
   };
   const earlierSubmission = await replayResponse();
@@ -187,14 +183,10 @@ export async function POST(request: Request) {
     throw error;
   }
 
-  // The digest is an internal conflict check over potentially identifying
-  // booking fields. Never send it or the stored submission key in API JSON.
+  // A successful booking is an acknowledgment, not a patient-detail read.
+  // The fixed allowlist excludes PII and internal tenant/audit/key metadata.
   return NextResponse.json({
     status: "ok",
-    appointment: {
-      ...appointment,
-      portalSubmissionKey: undefined,
-      portalSubmissionHash: undefined,
-    },
+    appointment: portalBookingReceipt(appointment),
   }, { status: 201, headers: { "Cache-Control": "private, no-store" } });
 }
