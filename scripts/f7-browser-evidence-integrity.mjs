@@ -90,7 +90,9 @@ export function inspectF7BrowserEvidence(evidence,manifest,outputDir,options={})
        entry.responseStatus>=300||entry.redirectedToLogin!==false||
        typeof entry.htmlLanguage!=="string"||
        entry.htmlLanguage.toLowerCase().split("-")[0]!==expectedLocale||
-       entry.htmlDirection!==expectedDirection||entry.horizontalOverflow!==false||
+       entry.htmlDirection!==expectedDirection||
+       entry.htmlTheme!==entry.scenario.split("-")[2]||
+       entry.horizontalOverflow!==false||
        observedCounts.some(key=>!Number.isSafeInteger(entry[key])||entry[key]<0)||
        failureCounts.some(key=>entry[key]!==0)){
       errors.push("F7_CAPTURE_METADATA_INVALID");
