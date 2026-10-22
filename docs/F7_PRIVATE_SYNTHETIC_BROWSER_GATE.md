@@ -164,6 +164,34 @@ and role acceptance remains `UAT_DEFERRED / NOT_EXECUTED`. F8 qualified
 clinical/financial/device/DR signoff remains `NO_GO` until the final
 consolidated end-of-project review; no reduction to the 88-section scope.
 
+## F7 real portal UI defect: network-loss handling for contact verification
+
+Source review found the patient/doctor/client portal's contact verification
+buttons were left in a permanent busy state when `fetch()` rejected. Worse, a
+lost response after the server had already queued a one-time code could lead
+to an uncertain repeat, invalidating the earlier OTP. A successful HTTP
+status with an absent/malformed receipt could also be shown as success.
+
+A shared, side-effect-limited client transport boundary now distinguishes
+**explicit 201 queued receipt**, **explicit 200 verified receipt**,
+**definitive 4xx rejection**, and **uncertain response** (network loss,
+5xx or malformed success receipt). An uncertain outcome never causes an
+automatic retry or a false confirmation. The UI releases its busy state,
+blocks another mutation in the current session pending reload/reconciliation,
+and presents bilingual instructions. Repeated fast clicks are guarded by
+an in-flight latch, and switching between email and SMS clears a stale
+challenge. Error/status messages use `role=status` for screen readers.
+The existing server-side token expiry, rate limit, audit trail and OTP
+transaction were not changed.
+
+Synthetic Node tests cover valid and invalid receipt shapes, HTTP errors,
+lost transport responses, non-replay and UI source contract. **These are
+software regression tests only**, not real browser interaction, outbound
+SMS/email proof, portal role testing, or owner clinical approval. The
+product-owner direction to defer all manual tests until final consolidated
+UAT remains in effect. F7 owner UAT remains `NOT_EXECUTED`; F8 remains
+`NO_GO`.
+
 ## Subsequent F7 acceptance (still outstanding)
 
 Screenshot capture is a first step. To complete F7, authenticated
