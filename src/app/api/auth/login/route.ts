@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
   }
 
   const user = await prisma.user.findFirst({
-    where: { username, status: "ACTIVE" },
+    where: { username, status: "ACTIVE", organization: { status: "ACTIVE" } },
     include: { branchScopes: { include: { branch: true } } },
   });
 
@@ -78,7 +78,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "invalid_credentials" }, { status: 401 });
   }
 
-  const activeBranch = user.branchScopes.find((scope) => scope.branch.status === "ACTIVE")?.branch ?? null;
+  const activeBranch = user.branchScopes.find((scope) => scope.branch.status === "ACTIVE" &&
+    scope.branch.organizationId === user.organizationId)?.branch ?? null;
   if (!activeBranch) {
     return NextResponse.json({ error: "no_active_branch_scope" }, { status: 403 });
   }
