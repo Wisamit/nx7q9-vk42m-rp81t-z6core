@@ -226,6 +226,17 @@ jobs:
             f0-scope-evidence.json
             f0-scope-evidence.md
           if-no-files-found: error
+      # F6 only tests source and synthetic MariaDB evidence. Never browser UAT or GO.
+      - run: node scripts/f6-synthetic-software-gate.mjs --check
+      - run: node scripts/f6-synthetic-software-gate.mjs --json > f6-software-evidence.json
+      - run: node scripts/f6-synthetic-software-gate.mjs --markdown > f6-software-evidence.md
+      - uses: actions/upload-artifact@v4
+        with:
+          name: f6-software-evidence
+          path: |
+            f6-software-evidence.json
+            f6-software-evidence.md
+          if-no-files-found: error
       - run: node scripts/release-closure-evidence.mjs --check
       - run: node scripts/release-closure-evidence.mjs --json > release-closure-evidence.json
       - run: node scripts/release-closure-evidence.mjs --markdown > release-closure-evidence.md
