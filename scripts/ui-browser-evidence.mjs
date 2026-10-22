@@ -207,6 +207,11 @@ async function screenshotAll() {
         options.storageState = config.profiles[profile];
       }
       const context = await browser.newContext(options);
+      // Force only the app's cosmetic theme preference in isolated synthetic
+      // sessions so a saved profile setting cannot mislabel a dark/light shot.
+      await context.addInitScript(mode => {
+        try { window.localStorage.setItem("family-lab-theme", mode); } catch {}
+      }, scenario.scheme);
       const page = await context.newPage();
       let pageErrorCount = 0;
       page.on("pageerror", () => { pageErrorCount++; });
@@ -215,6 +220,7 @@ async function screenshotAll() {
       let imageName = null;
       let documentLang = "";
       let documentDirection = "";
+      let documentTheme = "";
       let horizontalOverflow = false;
       let renderedFormCount = 0;
       let renderedActionCount = 0;
@@ -291,6 +297,7 @@ async function screenshotAll() {
           return {
             lang: document.documentElement.lang,
             direction: document.documentElement.dir || getComputedStyle(document.body).direction,
+            theme: document.documentElement.dataset.theme || "",
             overflow: document.documentElement.scrollWidth > window.innerWidth + 12,
             body: Boolean(document.querySelector("body")?.textContent?.trim()),
             renderedFormCount: document.querySelectorAll("form").length,
@@ -304,6 +311,7 @@ async function screenshotAll() {
         });
         documentLang = info.lang;
         documentDirection = info.direction;
+        documentTheme = info.theme;
         horizontalOverflow = info.overflow;
         renderedFormCount = info.renderedFormCount;
         renderedActionCount = info.renderedActionCount;
@@ -324,6 +332,9 @@ async function screenshotAll() {
         }
         if (documentDirection !== scenario.direction) {
           issues.push("HTML_DIRECTION_MISMATCH");
+        }
+        if (documentTheme !== scenario.scheme) {
+          issues.push("DOCUMENT_THEME_MISMATCH");
         }
         // A redirected login / portal screen cannot stand as evidence for a protected route.
         // Redirect-only entry screens are captured but require human adjudication.
@@ -349,7 +360,7 @@ async function screenshotAll() {
         canonicalRoute:route,scenario:name,profile,
         responseStatus,redirectedToLogin:issues.includes("REDIRECTED_TO_LOGIN"),
         htmlLanguage:documentLang,htmlDirection:documentDirection,
-        horizontalOverflow,uncaughtRuntimeErrorCount:pageErrorCount,
+        htmlTheme:documentTheme,horizontalOverflow,uncaughtRuntimeErrorCount:pageErrorCount,
         renderedFormCount,renderedActionCount,visibleDialogCount,
         unlabeledInputCount,unlabeledActionCount,interactiveViewportClippingCount,
         dialogA11yIssueCount,
