@@ -131,6 +131,39 @@ owner-operated visual, accessibility, branch-role, financial, instrument
 and Hostinger checks remain deferred to the consolidated final UAT.
 **F7 approval NOT_EXECUTED; F8 operational GO = NO_GO.**
 
+## F7 outbound browser-network isolation (code-only increment)
+
+The private Playwright collector now enforces **exact-origin browser egress** before
+opening any page. Every HTTP(S) request must resolve to the configured isolated
+staging origin with the same scheme, host and port. WebSocket connections are
+likewise restricted to that origin's matching `wss:` or loopback `ws:`
+companion. Unexpected CDN, analytics, production APIs, alternative ports,
+hostname suffixes, downgraded protocols and credential-bearing URLs are denied.
+Playwright service workers are disabled to avoid their bypass of request
+routing. Only the **count** of blocked network requests and an aggregate
+`OFF_STAGING_NETWORK_EGRESS_BLOCKED` category reach evidence JSON; never URLs,
+query strings, cookies, headers or patient data.
+
+The independent integrity assessor rejects an apparently successful screenshot
+when `blockedCrossOriginNetworkCount` is missing, negative or nonzero,
+regardless of a green capture status. The policy has standalone synthetic
+allowlist/denylist regressions for HTTPS, WSS, loopback HTTP/WS, ports and
+off-origin hostnames. External resource usage may make a staging browser run
+fail closed and require corrective application asset hosting; this is not
+permission to disable the egress guard.
+
+**Limit:** Playwright request interception covers browser traffic, not
+server-side egress initiated by the staging server itself, external browser
+process traffic, or a guarantee of full infrastructure isolation. Protected
+staging must still enforce outbound network policy and remain synthetic-only
+at the infrastructure level. No private environment was launched and no
+screenshots were produced by this code-only increment.
+
+**Owner testing decision:** F7 owner/manual visual, keyboard, locale, branch
+and role acceptance remains `UAT_DEFERRED / NOT_EXECUTED`. F8 qualified
+clinical/financial/device/DR signoff remains `NO_GO` until the final
+consolidated end-of-project review; no reduction to the 88-section scope.
+
 ## Subsequent F7 acceptance (still outstanding)
 
 Screenshot capture is a first step. To complete F7, authenticated
