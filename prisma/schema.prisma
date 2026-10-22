@@ -6330,6 +6330,8 @@ model Appointment {
   branchId             String            @map("branch_id") @db.Char(36)
   patientId            String            @map("patient_id") @db.Char(36)
   portalAccountId      String?           @map("portal_account_id") @db.Char(36)
+  portalSubmissionKey  String?           @map("portal_submission_key") @db.Char(36)
+  portalSubmissionHash String?           @map("portal_submission_hash") @db.Char(64)
   createdByUserId      String?           @map("created_by_user_id") @db.Char(36)
   appointmentNumber    String            @map("appointment_number") @db.VarChar(60)
   mode                 AppointmentMode   @default(ONSITE)
@@ -6362,6 +6364,7 @@ model Appointment {
   @@index([branchId, scheduledStart, status])
   @@index([patientId, scheduledStart])
   @@index([portalAccountId, createdAt])
+  @@unique([portalAccountId, portalSubmissionKey], map: "appointment_portal_submission_uq")
   @@map("appointments")
 }
 
