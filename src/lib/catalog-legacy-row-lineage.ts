@@ -68,7 +68,7 @@ export function parseLegacyRowManifest(value: unknown): LegacyRowManifest {
     "exportedAtUtc", "includesPatientData", "rows",
   ]) || input.schemaVersion !== 1 || input.evidenceType !== LEGACY_ROW_LINEAGE_TYPE ||
       input.includesPatientData !== false ||
-      typeof input.sourceName !== "string" || !/^[^\\/\u0000-\u001f]{1,255}\.mdb$/i.test(input.sourceName) ||
+      typeof input.sourceName !== "string" || !/^[^\\/\u0000-\u001f]{1,255}\.(?:mdb|accdb)$/i.test(input.sourceName) ||
       typeof input.sourceSha256 !== "string" || !legacyRowHex.test(input.sourceSha256) ||
       !integer(input.sourceBytes, 1, 1_000_000_000) ||
       typeof input.tableName !== "string" ||
