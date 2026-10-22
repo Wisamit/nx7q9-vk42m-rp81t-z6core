@@ -42,6 +42,10 @@ export function parseF3UnverifiedDigestManifest(
      !Array.isArray(value.rows)||value.rows.length!==value.rowCount)
     throw Error("f3_manifest_unverified_shape");
   const tables=new Set<string>();
+  const declared=new Map<string,{
+    schema:string;count:number;duplicates:number;
+    observed:number;occurrences:Map<string,Set<number>>;
+  }>();
   for(const t of value.tables){
     if(!object(t)||!exact(t,["sourceTable","sourceSchemaSha256",
       "rows","duplicateContentRows"])||
@@ -55,6 +59,11 @@ export function parseF3UnverifiedDigestManifest(
        (t.duplicateContentRows as number)>(t.rows as number))
       throw Error("f3_manifest_unverified_table");
     tables.add(t.sourceTable);
+    declared.set(t.sourceTable,{
+      schema:t.sourceSchemaSha256,count:t.rows,
+      duplicates:t.duplicateContentRows,
+      observed:0,occurrences:new Map(),
+    });
   }
   for(const row of value.rows){
     if(!object(row)||!exact(row,[
@@ -67,6 +76,33 @@ export function parseF3UnverifiedDigestManifest(
        !Number.isSafeInteger(row.occurrence)||
        (row.occurrence as number)<1)
       throw Error("f3_manifest_unverified_row");
+    const table=declared.get(row.sourceTable);
+    if(!table||row.sourceSchemaSha256!==table.schema||
+       row.occurrence>table.count)
+      throw Error("f3_manifest_unverified_schema_or_occurrence");
+    const seen=table.occurrences.get(row.rowDigest)??new Set<number>();
+    if(seen.has(row.occurrence))
+      throw Error("f3_manifest_unverified_duplicate_row");
+    seen.add(row.occurrence);
+    table.occurrences.set(row.rowDigest,seen);
+    table.observed++;
   }
+  let declaredTotal=0;
+  for(const table of declared.values()){
+    declaredTotal+=table.count;
+    if(table.observed!==table.count||
+       table.count-table.occurrences.size!==table.duplicates)
+      throw Error("f3_manifest_unverified_table_parity");
+    for(const ordinals of table.occurrences.values()){
+      // Repeated Access rows have contiguous 1..N occurrences.
+      // A digest-only submission must not create phantom or missing rows.
+      for(let n=1;n<=ordinals.size;n++){
+        if(!ordinals.has(n))
+          throw Error("f3_manifest_unverified_occurrence_gap");
+      }
+    }
+  }
+  if(declaredTotal!==value.rowCount)
+    throw Error("f3_manifest_unverified_total_parity");
   return value as F3LegacyExtractionManifest;
 }
