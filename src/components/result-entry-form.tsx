@@ -153,6 +153,10 @@ export function ResultEntryForm({
   const [complete, setComplete] = useState(Boolean(resultId && ["ENTERED", "VERIFIED"].includes(resultStatus || "")));
   const [busy, setBusy] = useState<"save" | "verify" | "">("");
   const [message, setMessage] = useState("");
+  // If the POST is sent but no acknowledgement arrives, the result may have
+  // committed. Require a fresh server read instead of sending it again.
+  const saveUncertainRef = useRef(false);
+  const [saveUncertain, setSaveUncertain] = useState(false);
   // Keep explicit clinical confirmation state separate from API permissions.
   // Losing the component cancels outstanding consent, never approves it.
   const reviewResolver = useRef<((accepted:boolean)=>void) | null>(null);
@@ -235,11 +239,13 @@ export function ResultEntryForm({
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (busy !== "" || reviewResolver.current) return;
+    if (busy !== "" || reviewResolver.current || saveUncertainRef.current) return;
     setBusy("save");
     setMessage("");
 
-    const response = await fetch("/api/results", {
+    let response: Response;
+    try {
+      response = await fetch("/api/results", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -258,47 +264,71 @@ export function ResultEntryForm({
           };
         }),
       }),
-    });
-    const body = await response.json().catch(() => ({}));
+      });
+    } catch {
+      // A connection failure does not prove the write was rolled back.
+      saveUncertainRef.current = true;
+      setSaveUncertain(true);
+      setMessage(tr(
+        "The connection ended before saving could be confirmed. Do not submit again. Preserve a copy of your entries, then reload and reconcile the current result.",
+        "انقطع الاتصال قبل تأكيد الحفظ. لا تعِد الإرسال. احتفظ بنسخة من المدخلات، ثم أعد تحميل النتيجة وراجع حالتها الحالية.",
+      ));
+      setBusy("");
+      return;
+    }
+    const body = await response.json().catch(() => null);
+    if (response.ok && (!body || typeof body !== "object" ||
+        !body.result || typeof body.result.id !== "string" ||
+        typeof body.result.status !== "string" || typeof body.complete !== "boolean")) {
+      saveUncertainRef.current = true;
+      setSaveUncertain(true);
+      setMessage(tr(
+        "The save response is incomplete; the result may already have changed. Do not submit again until the current result is reloaded and reconciled.",
+        "استجابة الحفظ غير مكتملة وربما تغيّرت النتيجة فعلاً. لا تعِد الإرسال قبل إعادة تحميل النتيجة ومراجعة حالتها الحالية.",
+      ));
+      setBusy("");
+      return;
+    }
+    const receipt = body && typeof body === "object" ? body : {};
 
     if (response.ok) {
-      setSavedResultId(body.result?.id || null);
-      setSavedStatus(body.result?.status || null);
-      setSavedValidationStage(body.result?.validationStage || (body.complete ? "TECHNICAL_REVIEW" : "ENTRY"));
-      setComplete(Boolean(body.complete));
+      setSavedResultId(receipt.result?.id || null);
+      setSavedStatus(receipt.result?.status || null);
+      setSavedValidationStage(receipt.result?.validationStage || (receipt.complete ? "TECHNICAL_REVIEW" : "ENTRY"));
+      setComplete(Boolean(receipt.complete));
       const notices = [];
-      if (body.criticalCount > 0) notices.push(`${body.criticalCount} ${tr("critical value(s)", "قيمة حرجة")}`);
-      if (body.deltaExceededCount > 0) notices.push(`${body.deltaExceededCount} ${tr("delta warning(s)", "تحذير فرق")}`);
-      if (body.pendingReflexCount > 0) notices.push(`${body.pendingReflexCount} ${tr("reflex recommendation(s)", "توصية فحص انعكاسي")}`);
-      if (body.blockingValidationHoldCount > 0) notices.push(`${body.blockingValidationHoldCount} ${tr("blocking validation hold(s)", "حجز تحقق مانع")}`);
-      if (body.warningValidationHoldCount > 0) notices.push(`${body.warningValidationHoldCount} ${tr("validation warning(s)", "تحذير تحقق")}`);
-      const autoMedicalPending = body.autoVerified && body.result?.validationStage === "MEDICAL_VALIDATION";
-      setMessage(body.autoVerified
+      if (receipt.criticalCount > 0) notices.push(`${receipt.criticalCount} ${tr("critical value(s)", "قيمة حرجة")}`);
+      if (receipt.deltaExceededCount > 0) notices.push(`${receipt.deltaExceededCount} ${tr("delta warning(s)", "تحذير فرق")}`);
+      if (receipt.pendingReflexCount > 0) notices.push(`${receipt.pendingReflexCount} ${tr("reflex recommendation(s)", "توصية فحص انعكاسي")}`);
+      if (receipt.blockingValidationHoldCount > 0) notices.push(`${receipt.blockingValidationHoldCount} ${tr("blocking validation hold(s)", "حجز تحقق مانع")}`);
+      if (receipt.warningValidationHoldCount > 0) notices.push(`${receipt.warningValidationHoldCount} ${tr("validation warning(s)", "تحذير تحقق")}`);
+      const autoMedicalPending = receipt.autoVerified && receipt.result?.validationStage === "MEDICAL_VALIDATION";
+      setMessage(receipt.autoVerified
         ? autoMedicalPending
           ? tr("Technical review completed automatically. Medical validation is still required before release.", "اكتملت المراجعة الفنية تلقائيًا. لا يزال التحقق الطبي مطلوبًا قبل الإصدار.")
           : tr("Result saved and autoverified by the active clinical policy. Release remains a separate controlled action.", "تم حفظ النتيجة والتحقق منها تلقائيًا حسب السياسة السريرية الفعالة. يبقى الإصدار إجراءً مستقلاً ومضبوطًا.")
         : notices.length
           ? `${tr("Saved with", "تم الحفظ مع")}: ${notices.join(", ")}. ${tr("Review validation items before verification.", "راجع عناصر التحقق قبل اعتماد النتيجة.")}`
-          : body.complete ? tr("Result saved and ready for verification.", "تم حفظ النتيجة وهي جاهزة للتحقق.") : tr("Draft saved. Complete all required result fields before verification.", "تم حفظ المسودة. أكمل جميع حقول النتيجة المطلوبة قبل التحقق."));
+          : receipt.complete ? tr("Result saved and ready for verification.", "تم حفظ النتيجة وهي جاهزة للتحقق.") : tr("Draft saved. Complete all required result fields before verification.", "تم حفظ المسودة. أكمل جميع حقول النتيجة المطلوبة قبل التحقق."));
       router.refresh();
-    } else if (body.error === "result_concurrently_updated_refresh") {
+    } else if (receipt.error === "result_concurrently_updated_refresh") {
       setMessage(tr("This result was changed or reviewed by another operator. Refresh before editing to avoid overwriting clinical history.", "تم تعديل هذه النتيجة أو مراجعتها بواسطة مستخدم آخر. حدّث الصفحة قبل التعديل لتجنب الكتابة فوق السجل السريري."));
       router.refresh();
-    } else if (body.error === "specimen_preanalytical_state_changed") {
+    } else if (receipt.error === "specimen_preanalytical_state_changed") {
       setMessage(tr("The specimen's clinical status or location changed. Reload the specimen before continuing.", "تغيرت حالة العينة السريرية أو موقعها. أعد تحميل العينة قبل المتابعة."));
       router.refresh();
-    } else if (body.error === "order_or_test_not_open_for_results") {
+    } else if (receipt.error === "order_or_test_not_open_for_results") {
       setMessage(tr("This order or test is closed. The result was not saved. Refresh and review the order before continuing.",
         "الطلب أو الفحص مغلق. لم تُحفظ النتيجة. حدّث الصفحة وراجع حالة الطلب قبل المتابعة."));
       router.refresh();
     } else {
-      setMessage(body.error || tr("Result could not be saved.", "تعذر حفظ النتيجة."));
+      setMessage(receipt.error || tr("Result could not be saved.", "تعذر حفظ النتيجة."));
     }
     setBusy("");
   }
 
   async function verify() {
-    if (!savedResultId || busy !== "" || reviewResolver.current) return;
+    if (!savedResultId || busy !== "" || reviewResolver.current || saveUncertainRef.current) return;
     setBusy("verify");
     setMessage("");
     if (!await askReview(tr("Complete technical review of this result? If medical validation is required, values will be locked and routed to that stage.", "إكمال المراجعة الفنية لهذه النتيجة؟ إذا كان التحقق الطبي مطلوبًا فسيتم قفل القيم وتحويلها إلى تلك المرحلة."))) {
@@ -515,11 +545,15 @@ export function ResultEntryForm({
       <textarea data-result-entry-control="true" rows={3} value={note} onChange={(event) => setNote(event.target.value)} disabled={locked} />
     </label>
 
-    {message && <div className="form-success">{message}</div>}
+    {message && <div className={saveUncertain ? "form-warning" : "form-success"} role="status">{message}</div>}
+    {saveUncertain && <p className="form-warning" role="alert">{tr(
+      "Saving and technical review are blocked in this session until you reload the current record.",
+      "تم منع الحفظ والمراجعة الفنية في هذه الجلسة لحين إعادة تحميل السجل الحالي.",
+    )}</p>}
 
     <div className="result-actions">
-      {!locked && canEnter && <button className="primary-button" data-result-entry-control="true" disabled={busy !== ""}>{busy === "save" ? tr("Saving…", "جارٍ الحفظ…") : tr("Save Result", "حفظ النتيجة")}</button>}
-      {!statusLocked && canTechnicalReview && savedResultId && complete && savedValidationStage === "TECHNICAL_REVIEW" && <button className="secondary-button" type="button" disabled={busy !== ""} onClick={() => void verify()}>{busy === "verify" ? tr("Reviewing…", "جارٍ تنفيذ المراجعة…") : tr("Complete Technical Review", "إكمال المراجعة الفنية")}</button>}
+      {!locked && canEnter && <button className="primary-button" data-result-entry-control="true" disabled={busy !== "" || saveUncertain}>{busy === "save" ? tr("Saving…", "جارٍ الحفظ…") : tr("Save Result", "حفظ النتيجة")}</button>}
+      {!statusLocked && canTechnicalReview && savedResultId && complete && savedValidationStage === "TECHNICAL_REVIEW" && <button className="secondary-button" type="button" disabled={busy !== "" || saveUncertain} onClick={() => void verify()}>{busy === "verify" ? tr("Reviewing…", "جارٍ تنفيذ المراجعة…") : tr("Complete Technical Review", "إكمال المراجعة الفنية")}</button>}
       {statusLocked && <span className="muted">{tr("Verified/released results are locked. Future edits must use an amendment workflow.", "النتائج التي تم التحقق منها أو إصدارها مقفلة، وأي تعديل لاحق يجب أن يتم عبر مسار التعديل الرسمي.")}</span>}
       {!statusLocked && validationLocked && <span className="muted">{tr("Values are locked after technical review while medical validation is pending.", "القيم مقفلة بعد المراجعة الفنية أثناء انتظار التحقق الطبي.")}</span>}
       {!statusLocked && sourceLocked && <span className="muted">{tr("Analyzer/import-origin values are read-only here. Use the analyzer integration workflow for additional observations or corrections.", "القيم الواردة من الجهاز أو الاستيراد للقراءة فقط هنا. استخدم مسار تكامل أجهزة التحليل لإضافة مشاهدات أو تصحيحات.")}</span>}
