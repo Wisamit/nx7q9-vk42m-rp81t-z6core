@@ -3,6 +3,7 @@ import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { branchScopeAllows, departmentScopeAllows } from "@/lib/clinical-safety";
+import { hasLiveStaffWorkspace } from "@/lib/live-session-workspace";
 
 export const SESSION_COOKIE = "family_lab_session";
 const SESSION_DAYS = 7;
@@ -32,12 +33,12 @@ export async function getCurrentSession() {
   const token = store.get(SESSION_COOKIE)?.value;
   if (!token) return null;
 
-  return prisma.userSession.findFirst({
+  const session = await prisma.userSession.findFirst({
     where: {
       tokenHash: hashSessionToken(token),
       revokedAt: null,
       expiresAt: { gt: new Date() },
-      user: { status: "ACTIVE" },
+      user: { status: "ACTIVE", organization: { status: "ACTIVE" } },
     },
     include: {
       user: {
@@ -51,6 +52,10 @@ export async function getCurrentSession() {
       activeBranch: true,
     },
   });
+  // A stale branch selector must not preserve access after an administrator
+  // removes the user's branch scope or retires the active location.
+  if (!session || !hasLiveStaffWorkspace(session)) return null;
+  return session;
 }
 
 export async function requireSession() {
