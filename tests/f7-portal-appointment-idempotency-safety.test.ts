@@ -106,6 +106,10 @@ test("F7 keyed portal booking: schema, index and API enforce per-account replay 
   assert.ok(api.includes("const existing = await replayResponse()"));
   assert.ok(api.includes('return NextResponse.json({'));
   assert.ok(api.includes("tx.homeCollectionVisit.create"));
+  assert.ok(api.includes("portalSubmissionHash: undefined"),
+    "server may not return booking fingerprint of identifying intent to the portal");
+  assert.ok(api.includes("portalSubmissionKey: undefined"),
+    "server may not expose stored replay key in appointment JSON");
   assert.ok(api.includes("tx.auditEvent.create"));
   assert.ok(ui.includes("bookingKey.current ??= crypto.randomUUID()"));
   assert.ok(ui.includes("originalRequest.current = intent"));
