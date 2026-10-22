@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
 import {analyzerRawClinicalQualifierDecision}
   from "../src/lib/analyzer-raw-clinical-qualifier-gate.ts";
+// @ts-expect-error Bridge is deployed as pure .mjs without TypeScript declarations.
 import {parseHl7Oru,parseAstmRecords} from "../bridge/protocols.mjs";
 
 const hl7="MSH|^~\\&|A|LAB|LIS|LAB|202610221200||ORU^R01|SYN-RAW|P|2.5\r"
