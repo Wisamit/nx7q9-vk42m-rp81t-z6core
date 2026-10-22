@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -38,7 +38,6 @@ test("F8: private candidate carries all 88 unexecuted sections and seven unappro
     assert.match(denied.stdout,/matching main CI and Hostinger deployment attestation metadata required/);
     candidate.ownerConfirmedDeployment="YES";
     const spoofed=join(dir,"spoofed.json");
-    const {writeFileSync}=await import("node:fs");
     writeFileSync(spoofed,JSON.stringify(candidate));
     assert.equal(run(assessor,["--assess",evidence,"--template",spoofed]).status,1,
       "An arbitrary confirmation string must never count as deployment evidence");
