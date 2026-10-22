@@ -185,6 +185,8 @@ test("F7: ALL browser workflows are private, owner-triggered and use only synthe
   assert.ok(runner.includes('navigationTargetMatched'));
   assert.ok(runner.includes('document.fonts.status === "loaded"'));
   assert.ok(runner.includes("visibleBusySurfaceCount"));
+  assert.ok(runner.includes("document.body?.innerText?.trim()"),
+    "visible page content must exclude hidden JS/script payloads");
   assert.ok(runner.includes("Synthetic screenshot output directory must be empty"));
   assert.ok(runner.includes("resolvedAriaName(el)"));
   assert.ok(runner.includes("document.getElementById(id)?.textContent?.trim()"),
