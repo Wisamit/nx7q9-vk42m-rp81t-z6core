@@ -65,9 +65,7 @@ test("F7 portal contact: network failure and unreadable responses are uncertain 
   assert.equal(attempts,1,"request-side code must not silently reissue an OTP challenge");
   assert.deepEqual(await verifyContactChallenge(uuid,"123456",drop),{kind:"uncertain"});
   assert.equal(attempts,2,"verify-side code must not silently replay a potentially consumed OTP");
-  const invalidJson=async()=>({
-    ok:true,status:201,json:async()=>{throw Error("broken receipt");},
-  } as Response);
+  const invalidJson=async()=>new Response("invalid-json",{status:201});
   assert.deepEqual(await requestContactChallenge("EMAIL",invalidJson),{kind:"uncertain"});
 });
 
@@ -77,10 +75,10 @@ test("F7 portal contact: UI locks ambiguous mutations and clears obsolete challe
   assert.match(src,/if \(pending.current \|\| requiresReconciliation\) return/);
   assert.match(src,/setRequiresReconciliation\(true\)/);
   assert.match(src,/pending.current = false/);
-  assert.match(src,/setBusy\("")/);
-  assert.match(src,/setChallengeId\("")/);
+  assert.match(src,/setBusy\(""\)/);
+  assert.match(src,/setChallengeId\(""\)/);
   assert.match(src,/function selectChannel\(next: VerificationChannel\)/);
-  assert.match(src,/setDestination\("")/);
+  assert.match(src,/setDestination\(""\)/);
   assert.match(src,/disabled=\{busy !== "" \|\| requiresReconciliation\}/);
   assert.match(src,/role="status" aria-live="polite"/);
   assert.match(src,/router\.refresh\(\)/);
