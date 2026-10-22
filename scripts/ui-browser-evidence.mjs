@@ -73,8 +73,13 @@ function stagingOrigin(input) {
 export function isAllowedSyntheticNetworkRequest(requestUrl, baseOrigin) {
   try {
     const url = new URL(requestUrl);
-    return (url.protocol === "http:" || url.protocol === "https:") &&
-      url.origin === baseOrigin;
+    if (url.username || url.password) return false;
+    // Same-host WSS is the secure-WebSocket companion of HTTPS; same-host
+    // WS is the loopback HTTP companion. Reject all other schemes.
+    const mappedProtocol = url.protocol === "wss:" ? "https:" :
+      url.protocol === "ws:" ? "http:" : url.protocol;
+    return (mappedProtocol === "http:" || mappedProtocol === "https:") &&
+      new URL(mappedProtocol + "//" + url.host).origin === baseOrigin;
   } catch {
     return false;
   }
