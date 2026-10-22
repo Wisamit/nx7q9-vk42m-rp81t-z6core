@@ -26,7 +26,7 @@ async function jsonFile(path,max){
  */
 export async function checkF3PrivateTargetReconciliation(input){
   const {mdb,coverage,lineageDir,targetExport,organizationId}=input;
-  if(!/\.mdb$/i.test(basename(mdb)))
+  if(!/\.(?:mdb|accdb)$/i.test(basename(mdb)))
     throw Error("f3_mdb_extension_invalid");
   if(!/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(organizationId))
     throw Error("f3_organization_invalid");
