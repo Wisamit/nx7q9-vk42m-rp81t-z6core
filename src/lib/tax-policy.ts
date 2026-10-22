@@ -101,9 +101,11 @@ export function taxCreditReversal(input: {
   if (vals.some(x => x === null)) return null;
   const [gross, tax, credited, creditedTax, add] = vals as bigint[];
   if (gross <= BigInt(0) || gross > MAX_MONEY4_MINOR ||
-    tax > gross || credited < BigInt(0) ||
-    credited + add > gross || add <= BigInt(0) ||
-    creditedTax > tax || creditedTax > credited)
+    tax < BigInt(0) || tax > gross ||
+    credited < BigInt(0) || credited > gross ||
+    creditedTax < BigInt(0) || creditedTax > tax ||
+    creditedTax > credited || add <= BigInt(0) ||
+    add > MAX_MONEY4_MINOR || credited + add > gross)
     return null;
   const grossAfter = credited + add;
   const proportionalTotalTax = grossAfter === gross ? tax : roundRatio(tax * grossAfter, gross);
