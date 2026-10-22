@@ -18,8 +18,12 @@ export function validationHoldMatches(rule: HoldRule, input: {
   values: HoldValue[];
 }) {
   if (rule.condition === "ALWAYS") return true;
-  if (rule.condition === "RESULT_SOURCE") return rule.resultSource === input.source;
+  if (rule.condition === "RESULT_SOURCE")
+    return rule.resultSource === null || rule.resultSource === input.source;
   if (rule.condition === "ANY_CRITICAL") return input.values.some(value => value.isCritical);
   if (rule.condition === "DELTA_EXCEEDED") return input.values.some(value => value.deltaEvaluation === "EXCEEDED");
-  return input.values.some(value => value.isAbnormal);
+  if (rule.condition === "ANY_ABNORMAL") return input.values.some(value => value.isAbnormal);
+  // An unrecognized configured condition is a review hold, never an
+  // implicit fallback to an unrelated "abnormal" calculation.
+  return true;
 }

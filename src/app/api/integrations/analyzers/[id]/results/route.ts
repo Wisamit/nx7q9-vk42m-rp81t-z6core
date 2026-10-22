@@ -2,39 +2,24 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { analyzerMappingTargetUnitStillMatches } from "@/lib/analyzer-mapping-governance";
 import { analyzerRoutingAllowsImport } from "@/lib/analyzer-routing";
+import { parseBridgeObservationSubmission } from "@/lib/analyzer-bridge-observation-boundary";
+import { analyzerRawClinicalQualifierDecision } from "@/lib/analyzer-raw-clinical-qualifier-gate";
 import { authenticateAnalyzerBridge } from "@/lib/analyzer-auth";
-
-function text(value: unknown, max: number) {
-  return typeof value === "string" ? value.trim().slice(0, max) : "";
-}
-
-type ObservationInput = {
-  observationId?: unknown;
-  barcode?: unknown;
-  analyzerTestCode?: unknown;
-  rawValue?: unknown;
-  rawUnit?: unknown;
-};
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const credential = await authenticateAnalyzerBridge(request, id);
   if (!credential) return NextResponse.json({ error: "analyzer_bridge_unauthorized" }, { status: 401 });
 
-  const body = await request.json().catch(() => null) as {
-    bridgeMessageId?: unknown;
-    observations?: ObservationInput[];
-  } | null;
-  if (!body || !Array.isArray(body.observations)) {
-    return NextResponse.json({ error: "invalid_request" }, { status: 400 });
+  const parsed = parseBridgeObservationSubmission(await request.json().catch(() => null));
+  if (!parsed.ok) {
+    return NextResponse.json({ error: parsed.error }, { status: parsed.status });
   }
-  if (body.observations.length === 0 || body.observations.length > 500) {
-    return NextResponse.json({ error: "invalid_observation_count" }, { status: 400 });
-  }
+  const { bridgeMessageId, observations: normalized } = parsed.submission;
+  const observationIds = normalized.map(item => item.observationId);
 
-  const bridgeMessageId = text(body.bridgeMessageId, 150);
-  if (!bridgeMessageId) return NextResponse.json({ error: "bridge_message_id_required" }, { status: 400 });
-
+  // The exact original payload must already have passed authenticated bridge
+  // intake before any normalized observation can be staged.
   const message = await prisma.analyzerMessage.findUnique({
     where: {
       analyzerId_bridgeMessageId: {
@@ -47,21 +32,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "raw_analyzer_message_not_found", bridgeMessageId }, { status: 409 });
   }
 
-  const normalized = body.observations.map((item, index) => ({
-    index,
-    observationId: text(item.observationId, 150),
-    barcode: text(item.barcode, 80),
-    analyzerTestCode: text(item.analyzerTestCode, 120),
-    rawValue: text(item.rawValue, 1000),
-    rawUnit: text(item.rawUnit, 80) || null,
-  }));
-
-  if (normalized.some(item => !item.observationId || !item.barcode || !item.analyzerTestCode || !item.rawValue)) {
-    return NextResponse.json({ error: "observation_required_fields_missing" }, { status: 400 });
-  }
-  const observationIds = normalized.map(item => item.observationId);
-  if (new Set(observationIds).size !== observationIds.length) {
-    return NextResponse.json({ error: "duplicate_observation_id_in_request" }, { status: 400 });
+  // Revalidate ORIGINAL instrument bytes independently of the bridge's
+  // normalized observation. A caller must not erase HIL/OBX-8 warnings by
+  // omitting them from the five-field normalized payload.
+  const originalClinicalGate = analyzerRawClinicalQualifierDecision(
+    message.protocol, message.rawPayload,
+  );
+  if (!originalClinicalGate.eligibleForStaging) {
+    return NextResponse.json({
+      error: "analyzer_raw_clinical_qualifier_requires_review",
+      reason: originalClinicalGate.reason,
+    }, { status: 409 });
   }
 
   const now = new Date();

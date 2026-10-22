@@ -54,6 +54,14 @@ export function parseHl7Oru(raw, { barcodeSource } = {}) {
       const id=obrCount+":"+obxIndex;
       if (obxIds.has(id)) reject("HL7_DUPLICATE_OBX_SET_ID");
       obxIds.add(id);
+      // OBX-8 may contain abnormal, interference or instrument warning flags.
+      // Without an approved vendor/clinical mapping, silently dropping these
+      // qualifiers could incorrectly promote an unsafe result to normal.
+      if (row[8]) reject("HL7_OBSERVATION_FLAG_REQUIRES_APPROVED_POLICY");
+      // Preliminary/corrected/suppressed statuses are NOT standard final
+      // results. Corrected values need the governed amendment path.
+      if (row[11] && row[11] !== "F")
+        reject("HL7_OBSERVATION_STATUS_REQUIRES_APPROVED_POLICY");
       const valueType=row[2];
       if (!["NM","ST","TX"].includes(valueType)) reject("HL7_OBX_VALUE_TYPE_UNSUPPORTED");
       const code=safeIdentifier(row[3]?.split("^")[0],"HL7_TEST_CODE_INVALID",120);
@@ -73,6 +81,9 @@ export function parseHl7Oru(raw, { barcodeSource } = {}) {
         rawUnit,
       });
       groupHasObx=true;
+    } else if (type === "NTE" && row.slice(3).some(value=>value && value.trim())) {
+      // Free-text analyzer notes can carry critical interpretive caveats.
+      reject("HL7_OBSERVATION_COMMENT_REQUIRES_APPROVED_PROFILE");
     } else if (!["PID","PV1","SPM","NTE","ORC","MSA","DSC"].includes(type)) {
       // Allow empty/trailing segments, but reject unknown clinical segments:
       // the bridge must not silently drop related clinical information.
@@ -111,6 +122,11 @@ export function parseAstmRecords(raw, profile={}) {
       resultSequence++;
       const code=safeIdentifier(row[profile.testCodeField]?.split("^").filter(Boolean).at(-1),"ASTM_TEST_CODE_INVALID",120);
       const value=nonempty(row[profile.valueField],"ASTM_RESULT_REQUIRED",1000);
+      // Later R fields can carry reference qualifiers, abnormal flags,
+      // result status and clinical caveats. This subset has no approved
+      // mapping for them and must not silently drop nonempty values.
+      if (row.slice(5).some(value=>value && value.trim()))
+        reject("ASTM_RESULT_QUALIFIER_REQUIRES_APPROVED_PROFILE");
       if (value.includes("^")||value.includes("\\")||value.includes("~")) reject("ASTM_COMPLEX_VALUE_UNSUPPORTED");
       const rawUnit=row[profile.unitField] || null;
       if(rawUnit && rawUnit.length>80) reject("ASTM_UNIT_TOO_LONG");
