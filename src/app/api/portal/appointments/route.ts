@@ -6,7 +6,7 @@ import { prisma } from "@/lib/db";
 import { resolveBranchLocalDateTime } from "@/lib/branch-local-date-time";
 import {
   evaluatePortalBookingReplay,portalBookingIntentHash,portalBookingSubmissionKey,
-  portalBookingReceipt,
+  portalBookingReceipt,portalBookingMode,
 } from "@/lib/portal-appointment-idempotency";
 
 function text(value: unknown, max = 5000) {
@@ -33,7 +33,10 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => null);
   const branchId = text(body?.branchId, 36);
   const requestedPatientId = text(body?.patientId, 36);
-  const mode = body?.mode === "HOME_COLLECTION" ? "HOME_COLLECTION" : "ONSITE";
+  const mode = portalBookingMode(body?.mode);
+  if (!mode) {
+    return NextResponse.json({ error: "invalid_booking_request" }, { status: 400 });
+  }
   const serviceCode = text(body?.serviceCode, 80) || null;
   const serviceNameSnapshot = text(body?.serviceNameSnapshot, 220);
   // New portal UI submits branch-local wall time; preserve explicit UTC/offset
