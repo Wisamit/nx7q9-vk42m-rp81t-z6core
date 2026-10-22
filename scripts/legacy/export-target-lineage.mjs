@@ -1,5 +1,6 @@
 import mysql from "mysql2/promise";
-import { open } from "node:fs/promises";
+import { open, readFile } from "node:fs/promises";
+import { isAbsolute } from "node:path";
 import { pathToFileURL } from "node:url";
 import { F3_TARGET_LINEAGE_TYPE } from "../../src/lib/f3-legacy-target-reconciliation.ts";
 
@@ -15,7 +16,7 @@ const MAX=3_000_000;
  * file only) and errors are redacted. Source values are never selected.
  */
 export async function exportF3TargetLineage({
-  databaseUrl,organizationId,sourceSha256,outputPath,
+  databaseUrl,organizationId,sourceSha256,outputPath,caFile=null,
 }){
   if(!UUID.test(organizationId)||!SHA.test(sourceSha256)||
      typeof databaseUrl!=="string"||!databaseUrl ||
@@ -24,11 +25,16 @@ export async function exportF3TargetLineage({
   const url=new URL(databaseUrl);
   if(!["mysql:","mariadb:"].includes(url.protocol))
     throw Error("f3_export_database_url_invalid");
+  const host=url.hostname.replace(/^\[|\]$/g,"");
+  const local=["localhost","127.0.0.1","::1"].includes(host);
+  if(!local&&(!caFile||!isAbsolute(caFile)))
+    throw Error("f3_remote_database_tls_ca_required");
   const db=await mysql.createConnection({
     host:url.hostname,port:Number(url.port||3306),
     user:decodeURIComponent(url.username),
     password:decodeURIComponent(url.password),
     database:url.pathname.replace(/^\//,""),
+    ...(!local?{ssl:{ca:await readFile(caFile,"utf8"),rejectUnauthorized:true}}:{}),
   });
   try{
     await db.query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ");
@@ -90,6 +96,7 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
       const result=await exportF3TargetLineage({
         databaseUrl:process.env.DATABASE_URL,organizationId:args[1],
         sourceSha256:args[3],outputPath:args[5],
+        caFile:process.env.FAMILY_LAB_F3_DB_TLS_CA||null,
       });
       process.stdout.write(JSON.stringify(result)+"\n");
     }catch{
