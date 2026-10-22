@@ -274,7 +274,7 @@ async function screenshotAll() {
           const dialogNamed = (el) => {
             const label = el.getAttribute("aria-label");
             if (label?.trim()) return true;
-            const refs = (el.getAttribute("aria-labelledby") || "").trim().split(/\\s+/).filter(Boolean);
+            const refs = (el.getAttribute("aria-labelledby") || "").trim().split(/\s+/).filter(Boolean);
             return refs.length > 0 && refs.every(id =>
               Boolean(document.getElementById(id)?.textContent?.trim())
             );
