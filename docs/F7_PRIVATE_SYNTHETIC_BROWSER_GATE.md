@@ -82,6 +82,28 @@ whitespace, avoiding a false inaccessible-dialog finding for valid ID references
 These are **source/contract regression fixes only**, not browser execution,
 visual acceptance, modal-interaction signoff or production readiness.
 
+## F7 screenshot artifact integrity extension (automated only)
+
+Each captured scenario now stores a SHA-256 digest of its actual private PNG
+bytes in `evidenceSha256`. The integrity gate re-reads the file, verifies the
+standard PNG signature and IHDR header, and compares the content hash with the
+capture record. It also confirms that the PNG width equals the expected
+Playwright viewport (desktop 1440, mobile 390 or tablet 820 pixels) and its
+height is at least the corresponding viewport. An old/replaced, truncated,
+wrong-viewport or mismatched screenshot cannot count as a verified capture.
+The integrity summary counts only **actually validated** files, not simply
+filenames present on disk. This is useful in private synthetic staging and
+still does **not** establish that a screen was visually reviewed or clinically
+approved.
+
+**Product-owner sequence decision (2026-10-22):** Do not request manual
+browser/visual/device/Hostinger/clinical/financial reviews while remaining
+engineering phases are being completed. Continue software fixes and automated
+CI testing. Keep F7 visual and interaction signoff `UAT_DEFERRED / NOT_EXECUTED`,
+and qualified F8 operational release `NO_GO`, for a consolidated
+owner-operated end-of-project review. Never interpret this deferral as a
+waiver of any requirement in Master Scope §§1–88.
+
 ## Subsequent F7 acceptance (still outstanding)
 
 Screenshot capture is a first step. To complete F7, authenticated
