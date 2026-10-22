@@ -74,6 +74,8 @@ export function OrderCreateForm({
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const submitting = useRef(false);
+  const ambiguousSubmissionRef = useRef(false);
+  const [ambiguousSubmission, setAmbiguousSubmission] = useState(false);
   const [discountPercent, setDiscountPercent] = useState(0);
   const [discountApprovalRequestId, setDiscountApprovalRequestId] = useState("");
   const [pregnancyStatus, setPregnancyStatus] = useState<"UNKNOWN" | "NOT_PREGNANT" | "PREGNANT">("UNKNOWN");
@@ -127,7 +129,7 @@ export function OrderCreateForm({
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (submitting.current) return;
+    if (submitting.current || ambiguousSubmissionRef.current) return;
     if (initialDoctorRequisition && (
       patientId!==initialDoctorRequisition.patientId ||
       new Set(effectiveTestIds).size!==initialDoctorRequisition.testIds.length ||
@@ -180,7 +182,27 @@ export function OrderCreateForm({
       }),
     });
 
-    const body = await response.json().catch(() => ({}));
+    const rawBody = await response.json().catch(() => null);
+    const body = rawBody && typeof rawBody === "object" && !Array.isArray(rawBody)
+      ? rawBody as Record<string, unknown> : null;
+    const confirmedReceipt = body &&
+      typeof body.accessionNumber === "string" && body.accessionNumber.length > 0 &&
+      typeof body.invoiceNumber === "string" && body.invoiceNumber.length > 0 &&
+      typeof body.currency === "string" && body.currency.length > 0 &&
+      (typeof body.total === "string" || typeof body.total === "number") &&
+      String(body.total).length > 0;
+    if (response.status >= 500 || (response.ok && !confirmedReceipt) ||
+        (!response.ok && (!body || typeof body.error !== "string"))) {
+      // The database may already contain an order and invoice; no blind retry.
+      ambiguousSubmissionRef.current = true;
+      setAmbiguousSubmission(true);
+      setMessage(tr(
+        "Order/invoice creation could not be confirmed. Do not submit this form again. Keep a copy of the entered data, then reload and reconcile Orders and Billing before starting a new request.",
+        "لم يتم تأكيد إنشاء الطلب والفاتورة. لا تعِد إرسال النموذج. احتفظ بنسخة من المدخلات، ثم أعد تحميل الصفحة وطابق الطلبات والفوترة قبل إنشاء طلب جديد.",
+      ));
+      return;
+    }
+    if (!body) return;
     if (response.ok) {
       const creditWarning = body.creditControl?.decision === "WARN_EXCEEDED"
         ? tr(" · WARNING: client credit limit exceeded (recorded).", " · تحذير: تم تجاوز حد ائتمان العميل وتسجيل الحالة.")
@@ -249,9 +271,11 @@ export function OrderCreateForm({
       setMessage(body.error || tr("Could not create order.", "تعذر إنشاء الطلب."));
     }
     } catch {
+      ambiguousSubmissionRef.current = true;
+      setAmbiguousSubmission(true);
       setMessage(tr(
-        "Connection interrupted. Before retrying, check Orders to confirm whether the order and invoice were already created.",
-        "انقطع الاتصال. قبل إعادة المحاولة، تحقق من قائمة الطلبات للتأكد من عدم إنشاء الطلب والفاتورة مسبقاً.",
+        "Connection interrupted; the order and invoice may already exist. Do not submit again. Preserve your entries, then reload and reconcile Orders and Billing first.",
+        "انقطع الاتصال وربما تم إنشاء الطلب والفاتورة. لا تعِد الإرسال. احتفظ بالمدخلات، ثم أعد تحميل الصفحة وراجع الطلبات والفوترة أولاً.",
       ));
     } finally {
       submitting.current = false;
@@ -498,8 +522,12 @@ export function OrderCreateForm({
           "قبل الإرسال راجع فرع الطلب والإجابات السريرية وعميل الفوترة وأي اعتماد مدير أعلاه. هذا الإجراء ينشئ طلباً مخبرياً وقد ينشئ فاتورة.",
         )}</small>
       </div>
-      {message && <div className="form-success form-span">{message}</div>}
-      <button className="primary-button form-span" disabled={busy}>{busy ? tr("Creating order…", "جارٍ إنشاء الطلب…") : tr("Register Order & Invoice", "تسجيل الطلب والفاتورة")}</button>
+      {message && <div className={ambiguousSubmission ? "form-warning form-span" : "form-success form-span"} role={ambiguousSubmission ? "alert" : undefined}>{message}</div>}
+      {ambiguousSubmission && <div className="form-warning form-span" role="alert">{tr(
+        "Duplicate order protection is active. Saving is blocked for this session until you reload and reconcile the recorded order and invoice.",
+        "حماية منع تكرار الطلبات مفعلة. الحفظ معطّل في هذه الجلسة إلى أن تعيد تحميل الصفحة وتتحقق من الطلب والفاتورة المسجلين.",
+      )}</div>}
+      <button className="primary-button form-span" disabled={busy || ambiguousSubmission}>{busy ? tr("Creating order…", "جارٍ إنشاء الطلب…") : tr("Register Order & Invoice", "تسجيل الطلب والفاتورة")}</button>
     </div>
   </form>;
 }
