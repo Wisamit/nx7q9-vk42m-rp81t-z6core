@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
 import {parseBridgeObservationSubmission}
   from "../src/lib/analyzer-bridge-observation-boundary.ts";
+// @ts-expect-error Bridge is deployed as pure .mjs without TypeScript declarations.
 import {parseHl7Oru,parseAstmRecords} from "../bridge/protocols.mjs";
 
 const example=()=>({
