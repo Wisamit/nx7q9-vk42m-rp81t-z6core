@@ -405,3 +405,33 @@ F7 human visual and interactive review NOT_EXECUTED. F8 operational GO=NO_GO.**
 
 No Hostinger F6 build SHA or production/offsite restore verification is
 claimed by this source-only F7 increment.
+
+## F7 follow-up: HTTP 4xx receipt must prove non-commit before unlocking a new booking
+
+Server-side UUID/MariaDB uniqueness guarantees **one appointment per key**,
+but a browser was previously allowed to discard the key for *any* HTTP 4xx
+response, including a proxy HTTP 408 timeout, 425 early response, 429
+throttling, or an unreadable/malformed 403/409 response. Such a reply is not
+proof that the original POST rolled back and could permit another attempt
+with a different UUID to create a duplicate appointment.
+
+The shared client transport now treats a 4xx as a definitive rejection
+**only** when a *documented backend error code* matches its exact HTTP
+status: 400 invalid input/time/key; 401 unauthorized; 403 doctor or
+corporate authorization; 404 branch/patient missing; 409 exact booking-key
+intent conflict. Missing/error-shape-mismatched 4xx and proxy timeout or
+throttle responses are `uncertain`. This preserves the original in-memory
+UUID and payload, disables new booking mutation, and permits only an explicit
+safe same-key reconciliation/replay. The backend's atomic MariaDB UNIQUE
+index remains the authoritative duplicate guard.
+
+Direct deterministic regressions cover known errors, HTTP 408/425/429/499,
+malformed JSON, wrong-status codes, same-key HTTP 200 replay and no automatic
+retry; existing real MariaDB concurrency regression stays explicitly wired
+to CI. No existing appointment, patient, invoice, released report, branch
+identity or clinical data is rewritten.
+
+This is **software-only** evidence. 486 private browser captures and all
+qualified owner/clinical/financial F8 acceptance remain `NOT_EXECUTED`;
+F7 interactive UAT is `UAT_DEFERRED` and F8 operational GO remains
+`NO_GO`. Master Scope §§1–88 stays intact.
