@@ -235,6 +235,7 @@ export function ResultEntryForm({
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (busy !== "" || reviewResolver.current) return;
     setBusy("save");
     setMessage("");
 
@@ -310,8 +311,9 @@ export function ResultEntryForm({
     let response: Response | null = null;
     let body: Record<string, unknown> = {};
 
-    for (let attempt = 0; attempt < 3; attempt++) {
-      response = await fetch(`/api/results/${savedResultId}/verify`, {
+    try {
+      for (let attempt = 0; attempt < 3; attempt++) {
+        response = await fetch(`/api/results/${savedResultId}/verify`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ confirmDeltaWarnings, confirmQcWarnings }),
@@ -337,7 +339,15 @@ export function ResultEntryForm({
         continue;
       }
 
-      break;
+        break;
+      }
+    } catch {
+      setMessage(tr(
+        "Connection interrupted. Technical review was not confirmed. Refresh the current result before retrying.",
+        "انقطع الاتصال ولم يتأكد تنفيذ المراجعة الفنية. حدّث النتيجة الحالية قبل إعادة المحاولة.",
+      ));
+      setBusy("");
+      return;
     }
 
     if (cancelledAfterServerChallenge) {
