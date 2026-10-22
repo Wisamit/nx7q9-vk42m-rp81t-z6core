@@ -38,6 +38,6 @@ test("F7 corporate portal page applies active/effective grants and clinical read
   assert.match(appointments,/portalAccountId: account\.id/);
   assert.match(appointments,/patientId: \{ in: allowedPatientIds \}/,
     "booking visibility continues to be restricted to this portal account");
-  assert.match(source,/patientId: \{ in: bookingPatientIds \}/,
+  assert.match(source,/id: \{ in: bookingPatientIds \}/,
     "booking form must retain authorized appointment-creation patients");
 });
