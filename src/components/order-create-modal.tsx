@@ -55,12 +55,18 @@ export function OrderCreateModal(props: {
         "Verify physician requisition and complete standard reception pricing, billing, questions and specimen routing.",
         "راجع إحالة الطبيب وأكمل التسعير والفوترة والأسئلة ومتطلبات العينات عبر إجراءات الاستقبال الاعتيادية."
       ) : tr("Select patient, tests, source, billing context and any approved discount. The invoice is created from immutable pricing snapshots.", "اختر المريض والفحوصات والمصدر وبيانات الفوترة وأي خصم معتمد. يتم إنشاء الفاتورة من لقطات أسعار تاريخية غير قابلة للتغيير.")}
-      size="full"
+      size="compact"
     >
-      <OrderCreateForm {...props} locale={props.locale} onSuccess={message => {
-        setNotice(message);
-        setOpen(false);
-      }} />
+      <div className="order-modal-compact-flow">
+        <p className="order-modal-guidance" role="note">{tr(
+          "Review patient identity, ordering branch and test selection carefully. Then review the clinical questions, discount and invoice before registering. All fields remain available without hidden steps.",
+          "راجع هوية المريض وفرع الطلب والفحوصات بعناية، ثم الأسئلة السريرية والخصم والفاتورة قبل التسجيل. تبقى جميع الحقول متاحة دون خطوات مخفية.",
+        )}</p>
+        <OrderCreateForm {...props} locale={props.locale} onSuccess={message => {
+          setNotice(message);
+          setOpen(false);
+        }} />
+      </div>
     </CrudModal>
   </>;
 }
