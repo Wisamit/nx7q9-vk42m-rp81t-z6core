@@ -423,8 +423,10 @@ async function screenshotAll() {
         // application could accidentally embed patient names in exceptions.
         issues.push("NAVIGATION_OR_SCREENSHOT_FAILED");
       } finally {
-        if (blockedCrossOriginNetworkCount) issues.push("OFF_STAGING_NETWORK_EGRESS_BLOCKED");
+        // Finish the isolated browser context before evaluating its aggregate
+        // counters, so late requests during teardown cannot evade evidence.
         await context.close();
+        if (blockedCrossOriginNetworkCount) issues.push("OFF_STAGING_NETWORK_EGRESS_BLOCKED");
       }
       findings.push({
         canonicalRoute:route,scenario:name,profile,
