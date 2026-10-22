@@ -642,3 +642,49 @@ td.empty-state:has(> .table-empty-content){padding:24px 20px;white-space:normal;
  .table-empty-title{font-size:14px}
  .table-empty-action{width:100%;justify-content:center}
 }
+
+
+/* Compact order registration: vertically sequenced, never hidden clinical inputs.
+   Retains native required-field focus, keyboard navigation and server validation. */
+.order-modal-compact-flow{display:grid;gap:14px;min-width:0}
+.order-modal-guidance,.order-compact-review{
+  margin:0;padding:14px;border:1px solid var(--fl-border);
+  border-radius:12px;background:var(--fl-surface-soft);color:var(--fl-text);
+  font-size:12px;line-height:1.7;overflow-wrap:anywhere
+}
+.order-modal-compact-flow .order-form{min-width:0}
+.crud-modal-compact .order-modal-compact-flow .order-form>.form-grid,
+.crud-modal-compact .order-modal-compact-flow .order-form .form-grid,
+.crud-modal-compact .order-modal-compact-flow .order-question-grid{
+  grid-template-columns:minmax(0,1fr)
+}
+.order-modal-compact-flow .form-grid>*,.order-modal-compact-flow .order-test-picker,
+.order-modal-compact-flow .order-question-panel{min-width:0;max-width:100%}
+.order-modal-compact-flow :is(input,select,textarea,button){max-width:100%;min-width:0}
+.order-modal-compact-flow .inline-search{
+  display:grid;grid-template-columns:minmax(0,1fr);align-items:stretch;
+  gap:8px;width:100%
+}
+.order-modal-compact-flow .inline-search input{width:100%;min-width:0}
+.order-modal-compact-flow .inline-search button{width:100%;white-space:normal}
+.order-modal-compact-flow .selected-test-list{min-width:0}
+.order-modal-compact-flow .selected-test-chip{max-width:100%;white-space:normal;overflow-wrap:anywhere}
+.order-modal-compact-flow .selected-test-chip button{flex-shrink:0}
+.order-step-heading{
+  display:flex;align-items:flex-start;gap:12px;min-width:0;padding:13px 0 8px;
+  border-bottom:1px solid var(--fl-border)
+}
+.order-step-index{
+  flex:none;display:grid;place-items:center;width:33px;height:33px;border-radius:50%;
+  background:var(--fl-primary-soft);color:var(--fl-primary);font-weight:800;font-size:12px
+}
+.order-step-heading>div{min-width:0}
+.order-step-heading strong{font-size:13px;color:var(--fl-text)}
+.order-step-heading p{margin:4px 0 0;font-size:11px;color:var(--fl-muted);line-height:1.6}
+.order-compact-review{display:grid;gap:6px;border-color:var(--fl-primary)}
+.order-compact-review p{margin:0;overflow-wrap:anywhere}
+.order-compact-review small{color:var(--fl-muted);line-height:1.65}
+@media(max-width:760px){
+  .order-modal-guidance,.order-compact-review{padding:12px}
+  .order-step-heading{padding-block:11px 8px}
+}
