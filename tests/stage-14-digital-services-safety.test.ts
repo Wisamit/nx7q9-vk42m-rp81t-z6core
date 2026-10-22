@@ -38,7 +38,11 @@ test("corporate portal never discloses appointments of another portal identity",
   const page = file("../src/app/portal/page.tsx");
   const book = file("../src/app/api/portal/appointments/route.ts");
   assert.ok(page.includes("portalAccountId: account.id, patientId: { in: allowedPatientIds }"));
-  assert.ok(page.includes("bookingPatientIds = access.filter(item => item.canBook)"));
+  assert.ok(page.includes("const scopes = corporatePortalPatientScopes(access)"));
+  assert.ok(page.includes("bookingPatientIds = scopes.bookingPatientIds"));
+  assert.ok(page.includes("reportPatientIds = scopes.reportPatientIds"));
+  assert.ok(page.includes("patientId: { in: reportPatientIds }"));
+  assert.ok(!page.includes("bookingPatientIds = access.filter(item => item.canBook)"));
   assert.ok(page.includes("id: { in: bookingPatientIds }"));
   assert.ok(book.includes("canBook: true"));
   assert.ok(book.includes("organizationId: account.organizationId"));
