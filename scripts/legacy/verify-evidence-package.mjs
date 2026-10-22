@@ -21,7 +21,7 @@ async function safeJson(path, maxBytes) {
   return JSON.parse(await readFile(path, "utf8"));
 }
 
-async function loadLineagePages(pageDirectory) {
+export async function loadLineagePages(pageDirectory) {
   const stat = await lstat(pageDirectory);
   if (!stat.isDirectory() || stat.isSymbolicLink())
     throw new Error("evidence_directory_invalid");
