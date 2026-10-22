@@ -4,8 +4,8 @@ import {randomUUID} from "node:crypto";
 import mysql from "mysql2/promise";
 import {LEGACY_COVERAGE_SOURCES}
   from "../src/lib/legacy-source-coverage.ts";
-import {buildF3LegacyExtractionManifest}
-  from "../src/lib/f3-legacy-extraction-manifest.ts";
+import {f3BuildLegacyReviewPages,f3SourceDigestKeyId}
+  from "../src/lib/f3-legacy-intake-pages.ts";
 import {f3LiveLineageTargetsVisible}
   from "../src/lib/f3-legacy-target-visibility.ts";
 import {reconcileF3LegacySource,type F3LineageDecision}
@@ -29,17 +29,34 @@ test("F3 MariaDB: 15-table HMAC source reconciles the tenant's persisted ledger,
   const org=randomUUID(),foreign=randomUUID(),testId=randomUUID(),
     otherTest=randomUUID(),eventId=randomUUID(),otherEvent=randomUUID(),
     authorId=randomUUID(),foreignAuthorId=randomUUID();
-  const sourceSha256="a".repeat(64),digestKeyId="b".repeat(64);
+  const sourceSha256="a".repeat(64);
   const secret="synthetic-f3-mariadb-lineage-signing-key-not-production-123";
+  const digestKeyId=f3SourceDigestKeyId(secret);
   const marker="F3"+org.slice(0,8);
-  const manifest=buildF3LegacyExtractionManifest({
-    organizationId:org,sourceSha256,digestKeyId,
-    tables:LEGACY_COVERAGE_SOURCES.map(({tableName})=>({
-      name:tableName,columns:[{name:"label",accessType:"ACE_TYPE_202"}],
-      rows:tableName==="Test name"?[{label:"Synthetic analyzer definition"}]:[],
-    })),
-  },secret);
+  // The exact local ACE -> HMAC pages protocol is the input to the
+  // persisted SQL ledger, not an invented, independently assembled digest.
+  const staged=f3BuildLegacyReviewPages({
+    organizationId:org,secret,extract:{
+      format:"F3_ACE_OFFLINE_CONFIGURATION_EXTRACT_V1",
+      sourceName:"Synthetic evidence.accdb",sourceSha256,sourceBytes:8192,
+      exportedAtUtc:"2026-10-22T08:00:00.000Z",
+      sourceFileBytesHashedLocally:true,
+      sourceIdentityExternallyAttested:false,migrated:false,
+      tables:LEGACY_COVERAGE_SOURCES.map(({tableName})=>({
+        name:tableName,columns:[{name:"label",accessType:"ACE_TYPE_202"}],
+        rows:tableName==="Test name"?[{label:"Synthetic analyzer definition"}]:[],
+      })),
+    },
+  });
+  const {manifest,pages}=staged;
+  assert.equal(pages.length,15);
+  assert.equal(pages.filter(page=>page.rows.length===0).length,14);
+  assert.equal(manifest.tableCount,15);
+  const page=pages.find(item=>item.tableName==="Test name")!;
   const proof=manifest.rows.find(x=>x.sourceTable==="Test name")!;
+  assert.equal(page.rows[0].rowDigest,proof.rowDigest);
+  assert.equal(page.schemaSha256,proof.sourceSchemaSha256);
+  assert.equal(page.digestKeyId,digestKeyId);
   const query=(text:string,params:Array<string|number>)=>db.execute(text,params);
   async function reconcile(){
     await db.beginTransaction();
