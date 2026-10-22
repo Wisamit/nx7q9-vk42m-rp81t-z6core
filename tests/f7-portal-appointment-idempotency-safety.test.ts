@@ -54,7 +54,8 @@ test("F7 keyed portal booking: client uses UUID in header, excludes from PII bod
     assert.equal((init.headers as Record<string,string>)["x-family-lab-portal-appointment-key"],key);
     const json=JSON.parse(init.body as string);
     assert.equal("submissionKey" in json,false);
-    assert.deepEqual(json,{...payload,submissionKey:undefined});
+    const {submissionKey: _key,...booking} = payload;
+    assert.deepEqual(json,booking);
     return new Response(JSON.stringify({
       status:"ok",appointment:{id,branchId:"branch",patientId:"patient",status:"REQUESTED"},
     }),{status:201});
