@@ -23,6 +23,7 @@ const create=()=>{
       unlabeledInputCount:0,unlabeledActionCount:0,
       interactiveViewportClippingCount:0,dialogA11yIssueCount:0,
       evidenceImage:"synthetic-"+i+"-"+n+".png",
+      evidenceSha256:"f".repeat(64),
       visualHumanSignoff:"NOT_EXECUTED",
       modalInteractionSignoff:"NOT_EXECUTED",
       clinicalSafetySignoff:"NOT_EXECUTED",
@@ -43,7 +44,14 @@ const check=(e:ReturnType<typeof create>,m:typeof manifest=manifest)=>
     sha:"synthetic-sha",
     // A mock PNG metadata reader makes this a pure contract test; no claim
     // that any real screenshots were captured or visually inspected.
-    fileInfo:()=>({file:true,symlink:false,bytes:1024,signature:true}),
+    fileInfo:(filename:string)=>{
+      const n=Number(filename.match(/-(\d+)\.png$/)?.[1]);
+      const device=[{width:1440,height:900},{width:1440,height:900},
+        {width:390,height:844},{width:390,height:844},
+        {width:820,height:1180},{width:820,height:1180}][n];
+      return {file:true,symlink:false,bytes:1024,signature:true,
+        width:device?.width,height:device?.height,sha256:"f".repeat(64)};
+    },
   });
 
 test("F7: 81 canonical routes x 6 scenarios give 486 unique capture inputs, never signoff",()=>{
@@ -102,6 +110,30 @@ test("F7: reported green screenshots cannot conceal failed HTTP, locale, keyboar
   assert.ok(check(en).errors.includes("F7_CAPTURE_METADATA_INVALID"));
 });
 
+test("F7: PNG artifacts are bound to scenario viewport and SHA-256 content",()=>{
+  const changedHash=create();
+  changedHash.findings[0].evidenceSha256="0".repeat(64);
+  assert.ok(check(changedHash).errors.includes("F7_SCREENSHOT_HASH_OR_DIMENSION_INVALID"));
+  const missingHash=create();
+  delete missingHash.findings[0].evidenceSha256;
+  assert.ok(check(missingHash).errors.includes("F7_SCREENSHOT_HASH_OR_DIMENSION_INVALID"));
+  const replacedImage=create();
+  const wrongSize=inspectF7BrowserEvidence(replacedImage,manifest,"synthetic-audit",{
+    fileInfo:()=>({file:true,symlink:false,bytes:1024,signature:true,
+      width:390,height:844,sha256:"f".repeat(64)}),
+  });
+  assert.ok(wrongSize.errors.includes("F7_SCREENSHOT_HASH_OR_DIMENSION_INVALID"));
+  assert.equal(wrongSize.verifiedImageFiles,162,
+    "only 162 valid mobile screenshots may count as verified");
+  const invalidFile=create();
+  const broken=inspectF7BrowserEvidence(invalidFile,manifest,"synthetic-audit",{
+    fileInfo:()=>({file:true,symlink:false,bytes:1024,signature:false,
+      width:1440,height:900,sha256:"f".repeat(64)}),
+  });
+  assert.ok(broken.errors.includes("F7_SCREENSHOT_FILE_INVALID"));
+  assert.equal(broken.verifiedImageFiles,0);
+});
+
 test("F7: software screenshot collector cannot grant owner, clinical or branch-role approval",()=>{
   const forged=create();
   forged.ownerAcceptance="PASS";
@@ -136,6 +168,8 @@ test("F7: ALL browser workflows are private, owner-triggered and use only synthe
   assert.ok(runner.includes("document.getElementById(id)?.textContent?.trim()"));
   assert.ok(runner.includes('document.documentElement.dataset.theme'),
     "a named dark/light scenario needs verified rendered theme state");
+  assert.ok(runner.includes("evidenceSha256"),
+    "each browser screenshot must be fingerprinted for the evidence integrity gate");
   assert.ok(runner.includes("context.addInitScript"),
     "the synthetic browser must override only the cosmetic profile theme");
   assert.ok(runner.includes(String.raw`split(/\s+/)`),
