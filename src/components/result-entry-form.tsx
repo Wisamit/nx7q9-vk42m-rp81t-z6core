@@ -1,6 +1,7 @@
 "use client";
 
-import { FormEvent, KeyboardEvent, useState } from "react";
+import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
+import { CrudModal } from "@/components/crud-modal";
 import { useRouter } from "next/navigation";
 import { statusLabel as sharedStatusLabel } from "@/lib/ui-i18n";
 import { focusNextResultEntryControl, shouldAdvanceResultEntryOnEnter } from "@/lib/result-entry-keyboard";
@@ -152,6 +153,32 @@ export function ResultEntryForm({
   const [complete, setComplete] = useState(Boolean(resultId && ["ENTERED", "VERIFIED"].includes(resultStatus || "")));
   const [busy, setBusy] = useState<"save" | "verify" | "">("");
   const [message, setMessage] = useState("");
+  // Keep explicit clinical confirmation state separate from API permissions.
+  // Losing the component cancels outstanding consent, never approves it.
+  const reviewResolver = useRef<((accepted:boolean)=>void) | null>(null);
+  const [reviewPrompt,setReviewPrompt] = useState<string | null>(null);
+
+  useEffect(() => () => {
+    const outstanding = reviewResolver.current;
+    reviewResolver.current = null;
+    outstanding?.(false);
+  }, []);
+
+  function askReview(prompt:string):Promise<boolean> {
+    if(reviewResolver.current) return Promise.resolve(false);
+    return new Promise(resolve => {
+      reviewResolver.current = resolve;
+      setReviewPrompt(prompt);
+    });
+  }
+
+  function resolveReview(accepted:boolean) {
+    const resolver = reviewResolver.current;
+    reviewResolver.current = null;
+    setReviewPrompt(null);
+    resolver?.(accepted);
+  }
+
 
   function handleEntryKeyDown(event: KeyboardEvent<HTMLInputElement>) {
     if (!shouldAdvanceResultEntryOnEnter({
@@ -270,13 +297,16 @@ export function ResultEntryForm({
   }
 
   async function verify() {
-    if (!savedResultId) return;
-    if (!confirm(tr("Complete technical review of this result? If medical validation is required, values will be locked and routed to that stage.", "إكمال المراجعة الفنية لهذه النتيجة؟ إذا كان التحقق الطبي مطلوبًا فسيتم قفل القيم وتحويلها إلى تلك المرحلة."))) return;
-
+    if (!savedResultId || busy !== "" || reviewResolver.current) return;
     setBusy("verify");
     setMessage("");
+    if (!await askReview(tr("Complete technical review of this result? If medical validation is required, values will be locked and routed to that stage.", "إكمال المراجعة الفنية لهذه النتيجة؟ إذا كان التحقق الطبي مطلوبًا فسيتم قفل القيم وتحويلها إلى تلك المرحلة."))) {
+      setBusy("");
+      return;
+    }
     let confirmDeltaWarnings = false;
     let confirmQcWarnings = false;
+    let cancelledAfterServerChallenge = false;
     let response: Response | null = null;
     let body: Record<string, unknown> = {};
 
@@ -293,16 +323,16 @@ export function ResultEntryForm({
         const reasons = Array.isArray(body.reasons)
           ? body.reasons.map((reason) => typeof reason === "object" && reason && "code" in reason ? String(reason.code) : "").filter(Boolean).join(", ")
           : "";
-        const confirmed = confirm(tr(`QC has warning-level conditions${reasons ? ": " + reasons : ""}. Confirm that you reviewed QC and continue verification?`, `توجد حالات تحذير في QC${reasons ? ": " + reasons : ""}. أكد أنك راجعت ضبط الجودة وتريد متابعة التحقق.`));
-        if (!confirmed) break;
+        const confirmed = await askReview(tr(`QC has warning-level conditions${reasons ? ": " + reasons : ""}. Confirm that you reviewed QC and continue verification?`, `توجد حالات تحذير في QC${reasons ? ": " + reasons : ""}. أكد أنك راجعت ضبط الجودة وتريد متابعة التحقق.`));
+        if (!confirmed) { cancelledAfterServerChallenge = true; break; }
         confirmQcWarnings = true;
         continue;
       }
 
       if (body.error === "delta_review_confirmation_required" && !confirmDeltaWarnings) {
         const count = typeof body.deltaExceededCount === "number" ? body.deltaExceededCount : 0;
-        const confirmed = confirm(tr(`${count} delta-check warning(s) exceeded configured limits. Confirm that you reviewed these warnings and continue verification?`, `${count} تحذير دلتا تجاوز الحدود المهيأة. أكد أنك راجعت هذه التحذيرات وتريد متابعة التحقق.`));
-        if (!confirmed) break;
+        const confirmed = await askReview(tr(`${count} delta-check warning(s) exceeded configured limits. Confirm that you reviewed these warnings and continue verification?`, `${count} تحذير دلتا تجاوز الحدود المهيأة. أكد أنك راجعت هذه التحذيرات وتريد متابعة التحقق.`));
+        if (!confirmed) { cancelledAfterServerChallenge = true; break; }
         confirmDeltaWarnings = true;
         continue;
       }
@@ -310,7 +340,12 @@ export function ResultEntryForm({
       break;
     }
 
-    if (response?.ok) {
+    if (cancelledAfterServerChallenge) {
+      setMessage(tr(
+        "Technical review paused. No warning consent was granted; refresh the current result before continuing.",
+        "توقفت المراجعة الفنية. لم يتم تأكيد التحذيرات؛ حدّث النتيجة الحالية قبل المتابعة.",
+      ));
+    } else if (response?.ok) {
       const resultStatus = typeof body.resultStatus === "string" ? body.resultStatus : "ENTERED";
       const nextValidationStage = typeof body.validationStage === "string" ? body.validationStage : "COMPLETE";
       const criticalCount = typeof body.criticalCount === "number" ? body.criticalCount : 0;
@@ -403,7 +438,29 @@ export function ResultEntryForm({
     </div>;
   }
 
-  return <form className="result-entry-form" onSubmit={save}>
+  return <>
+    <CrudModal
+      open={reviewPrompt !== null}
+      onClose={() => resolveReview(false)}
+      size="compact"
+      protectUnsavedChanges={false}
+      title={tr("Clinical review confirmation", "تأكيد المراجعة السريرية")}
+      description={tr(
+        "Cancelling does not authorize clinical verification. This decision applies only to the current review.",
+        "الإلغاء لا يمنح إذناً للتحقق السريري. يخص هذا القرار المراجعة الحالية فقط.",
+      )}
+    >
+      <p className="form-warning">{reviewPrompt}</p>
+      <div className="crud-modal-actions">
+        <button type="button" className="secondary-button" onClick={() => resolveReview(false)}>
+          {tr("Cancel", "إلغاء")}
+        </button>
+        <button type="button" className="primary-button" onClick={() => resolveReview(true)}>
+          {tr("Confirm this review", "تأكيد هذه المراجعة")}
+        </button>
+      </div>
+    </CrudModal>
+    <form className="result-entry-form" onSubmit={save}>
     <div className="result-entry-header">
       <div><strong>{tr("Status", "الحالة")}</strong><span>{savedStatus ? sharedStatusLabel(locale, savedStatus) : tr("Not entered", "غير مدخل")}</span></div>
       <div><strong>{tr("Validation stage", "مرحلة التحقق")}</strong><span>{savedValidationStage === "MEDICAL_VALIDATION" ? tr("Medical validation", "التحقق الطبي") : savedValidationStage === "COMPLETE" ? tr("Complete", "مكتمل") : savedValidationStage === "TECHNICAL_REVIEW" ? tr("Technical review", "المراجعة الفنية") : tr("Entry", "الإدخال")}</span></div>
@@ -458,5 +515,6 @@ export function ResultEntryForm({
       {!statusLocked && sourceLocked && <span className="muted">{tr("Analyzer/import-origin values are read-only here. Use the analyzer integration workflow for additional observations or corrections.", "القيم الواردة من الجهاز أو الاستيراد للقراءة فقط هنا. استخدم مسار تكامل أجهزة التحليل لإضافة مشاهدات أو تصحيحات.")}</span>}
       {!canEnter && !statusLocked && !sourceLocked && !validationLocked && <span className="muted">{tr("You can review this result but do not have permission to edit result values.", "يمكنك مراجعة هذه النتيجة لكن لا تملك صلاحية تعديل قيم النتائج.")}</span>}
     </div>
-  </form>;
+  </form>
+  </>;
 }
