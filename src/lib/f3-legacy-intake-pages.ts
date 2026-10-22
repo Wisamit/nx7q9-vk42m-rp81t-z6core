@@ -55,7 +55,7 @@ export function f3BuildLegacyReviewPages(input:{
        "sourceIdentityExternallyAttested","migrated","tables"])||
      extract.format!=="F3_ACE_OFFLINE_CONFIGURATION_EXTRACT_V1"||
      typeof extract.sourceName!=="string" ||
-     !/^[^\\/\u0000-\u001f]{1,255}\.mdb$/i.test(extract.sourceName)||
+     !/^[^\\/\u0000-\u001f]{1,255}\.(?:mdb|accdb)$/i.test(extract.sourceName)||
      typeof extract.sourceSha256!=="string"||
      !HEX.test(extract.sourceSha256)||
      !Number.isSafeInteger(extract.sourceBytes)||
