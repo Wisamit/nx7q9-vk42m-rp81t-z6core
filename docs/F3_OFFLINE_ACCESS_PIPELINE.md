@@ -85,3 +85,23 @@ CLI, HMAC/duplicate mapping, digest-only endpoint, authoritative
 reconciliation test. F3 remains in progress until full synthetic
 conversion-to-staging and source/target parity are evidenced; CI
 passing alone does not represent operational data migration.
+
+
+## F3 synthetic software acceptance checklist (2026-10-22)
+
+| Software requirement | Evidence | Status |
+| --- | --- | --- |
+| Preserve integrated F2 ten-class exports and effective revisions | F3 merge has F2 main as an additional Git parent; comparison against `main` shows zero commits behind | Implemented |
+| Read-only ACE extract for 15 configuration tables, no patient/result/password import | `scripts/f3-access-ace-extract.ps1`, allowlist/denial tests, SHA pre/post; both `.mdb` and `.accdb` accepted by extractor and offline intake | Implemented, synthetic inspection only |
+| Local HMAC conversion without leaking source cells | `scripts/f3-offline-intake.ts`, `f3BuildLegacyReviewPages`, exclusive 0600 output and CLI regression | Implemented |
+| Strict manifest before tenant lock/SQL | `parseF3UnverifiedDigestManifest` now checks per-table counts, schema binding, duplicate counts, unique and contiguous HMAC occurrences, total-row equality; `tests/f3-digest-ingress-parity.test.ts` | Implemented |
+| Same 500-row, 15-table staged lineage protocol | `parseLegacyRowManifest`, `tests/f3-legacy-intake-pages.test.ts` | Implemented |
+| Offline synthetic evidence to actual MariaDB lineage and scoped target reconciliation | `tests/f3-legacy-lineage-mariadb.integration.test.ts` constructs same private ACE-style extract and 15 HMAC-only staged pages, then checks real SQL ledger, tenant isolation, stale target rejection, and missing-row result | Implemented for synthetic evidence |
+| Approved real MDB source custody, row-by-row authentic mapping, medical and finance signatures | Need original installation evidence, qualified independent signers and effective-dated policy at F8 | BLOCKED_EXTERNAL; never simulated as operational GO |
+| F7 owner browser and actual Windows ACE execution on owner environment | Intentionally deferred until after F6 software completion | DEFERRED |
+
+This is a **software-only** reconciliation boundary. A passing synthetic manifest or the name
+`APPROVED_MAPPING` on fixture rows must never be read as qualified clinical/financial authorization.
+No test data, patient data, report, catalog price or reference range is activated by the F3 reconciliation API.
+The synthetic CI checks do not assert an original Access installation was independently observed,
+nor do they substitute for owner UAT or device/financial policies.
