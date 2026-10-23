@@ -8,9 +8,9 @@ test("F7 portal login: both failed and successful bcrypt paths revalidate live l
   assert.equal((src.match(/PORTAL_LOGIN_PRINCIPAL_CHANGED/g)||[]).length,2);
   for(const part of ["JOIN organizations o ON o.id=a.organization_id AND o.status='ACTIVE'",
     "AND a.status IN ('ACTIVE','LOCKED') AND a.type=",
-    "p.id=","p.status='ACTIVE'","p.organization_id=a.organization_id",
-    "c.id=","c.status='ACTIVE'","c.organization_id=a.organization_id",
-    "r.id=","r.status='ACTIVE'","r.type='PHYSICIAN'",
+    "p.id=${account.patientId}","p.status='ACTIVE'","p.organization_id=a.organization_id",
+    "c.id=${account.clientId}","c.status='ACTIVE'","c.organization_id=a.organization_id",
+    "r.id=${account.referrerId}","r.status='ACTIVE'","r.type='PHYSICIAN'",
     "r.organization_id=a.organization_id","FOR UPDATE"]){
     assert.equal(src.split(part).length-1,2,"both paths require: "+part);
   }
