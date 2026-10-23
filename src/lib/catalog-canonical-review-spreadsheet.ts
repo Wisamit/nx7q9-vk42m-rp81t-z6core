@@ -4,6 +4,7 @@ import { parseCsvReviewFile } from "./catalog-review-csv-import.ts";
 import { normalizeImportRow, rowValidationStatus, validateImportRow } from "./catalog-import.ts";
 import { validateExpandedCsvReviewRow } from "./catalog-expanded-csv-review.ts";
 import { validateRangeCsvReview } from "./catalog-range-csv-review.ts";
+import { csvReviewBatchConflictIssues, csvReviewTariffRowIssues } from "./catalog-csv-review-integrity.ts";
 
 /**
  * Canonical, review-only staging projection of an atomic source export.
@@ -18,8 +19,8 @@ export class CanonicalSpreadsheetReviewError extends Error {
 const columns = {
   TEST: ["code", "nameEn", "nameAr"],
   COMPONENT: ["testCode", "code", "nameEn", "nameAr", "unitCode", "resultType"],
-  UNIT: ["code", "nameEn", "nameAr", "symbol"],
-  CONTAINER: ["code", "nameEn", "nameAr"],
+  UNIT: ["code", "nameEn", "nameAr", "symbol", "ucumCode"],
+  CONTAINER: ["code", "nameEn", "nameAr", "tubeColor", "additive"],
   PANEL: ["code", "nameEn", "nameAr", "memberTestCodes"],
   PACKAGE: ["code", "nameEn", "nameAr", "memberTestCodes"],
   PRICE_LIST: ["code", "nameEn", "nameAr", "scopeType", "branchId", "currency",
@@ -128,8 +129,10 @@ function project(type: CanonicalSpreadsheetReviewType, source: Record<string, un
     nameAr: optionalString(source, "nameAr") });
   switch (type) {
     case "TEST": return basic();
-    case "CONTAINER": return basic(); // tubeColor/additive are only in original JSON.
-    case "UNIT": return { ...basic(), symbol: string(source, "symbol") };
+    case "CONTAINER": return { ...basic(), tubeColor: optionalString(source, "tubeColor"),
+      additive: optionalString(source, "additive") };
+    case "UNIT": return { ...basic(), symbol: string(source, "symbol"),
+      ucumCode: optionalString(source, "ucumCode") };
     case "COMPONENT": return {
       testCode: linkedCode(source, "test"), ...basic(),
       unitCode: source.unit == null ? "" : linkedCode(source, "unit"),
@@ -183,12 +186,17 @@ export function canonicalStagingCsvFromAtomicGroup(
   }
   const keys = columns[batch.entityType] as readonly string[];
   const header = ["entityType", "legacyKey", ...keys];
+  const sourceIds = new Set<string>();
   const rows = batch.records.map(item => {
     const source = object(item);
     const id = string(source, "id");
     if (!/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(id)) {
       throw new CanonicalSpreadsheetReviewError("canonical_missing_source_identity");
     }
+    if (sourceIds.has(id.toLowerCase())) {
+      throw new CanonicalSpreadsheetReviewError("canonical_duplicate_source_identity");
+    }
+    sourceIds.add(id.toLowerCase());
     const fields = project(batch.entityType as CanonicalSpreadsheetReviewType, source);
     return [batch.entityType, id, ...keys.map(key => fields[key] ?? "")];
   });
@@ -202,12 +210,35 @@ export function canonicalStagingCsvFromAtomicGroup(
   if (parsed.length !== batch.records.length) {
     throw new CanonicalSpreadsheetReviewError("canonical_row_count_changed");
   }
-  for (const row of parsed) {
-    const normalized = normalizeImportRow(row);
+  const normalizedRows = parsed.map(row => normalizeImportRow(row));
+  const conflicts = csvReviewBatchConflictIssues(parsed.map((row, index) => ({
+    entityType: row.entityType, normalized: normalizedRows[index],
+  })));
+  for (const [index, row] of parsed.entries()) {
+    const normalized = normalizedRows[index];
+    // A review worksheet is deliberately not a complete restore; nevertheless,
+    // every field that the sheet DOES map must survive its canonical intake
+    // verbatim. Silent trimming, code case changes, or missing bilingual
+    // source fields would otherwise hide a real configuration drift.
+    const originals = rows[index];
+    for (const [offset, key] of keys.entries()) {
+      const projected = originals[offset + 2];
+      const observed = normalized[key];
+      const equal = key === "memberTestCodes"
+        ? Array.isArray(observed) &&
+          JSON.stringify(observed) === projected
+        : typeof observed === "string" && observed === projected;
+      if (!equal) {
+        throw new CanonicalSpreadsheetReviewError(
+          "canonical_normalization_not_lossless:" + key);
+      }
+    }
     const issues = [
       ...validateImportRow(row.entityType, normalized),
       ...validateExpandedCsvReviewRow(row.entityType, normalized),
       ...validateRangeCsvReview(row),
+      ...csvReviewTariffRowIssues(row.entityType, normalized),
+      ...conflicts[index],
     ];
     if (rowValidationStatus(issues) === "ERROR") {
       throw new CanonicalSpreadsheetReviewError("canonical_source_requires_manual_mapping:" +

@@ -25,6 +25,18 @@ export function validateExpandedCsvReviewRow(entityType: string, normalized: Rec
       issues.push({ severity: "ERROR", code: "UNIT_SYMBOL_REQUIRED",
         message: "Unit symbol must be explicitly specified and checked against UCUM." });
     }
+    if (entityType === "UNIT" && (typeof normalized.ucumCode !== "string" ||
+        normalized.ucumCode.length > 50)) {
+      issues.push({ severity: "ERROR", code: "UNIT_UCUM_FIELD_INVALID",
+        message: "Explicit UCUM code must fit the stored unit field; no automatic mapping is inferred." });
+    }
+    if (entityType === "CONTAINER" && (
+        typeof normalized.nameAr !== "string" || normalized.nameAr.length > 150 ||
+        typeof normalized.tubeColor !== "string" || normalized.tubeColor.length > 80 ||
+        typeof normalized.additive !== "string" || normalized.additive.length > 150)) {
+      issues.push({ severity: "ERROR", code: "CONTAINER_SOURCE_FIELDS_INVALID",
+        message: "Container bilingual name, tube color and additive exceed the source master field limits." });
+    }
     issues.push({ severity: "WARNING", code: "MASTER_REVIEW_ONLY",
       message: "Review-only evidence: requires identity, duplicate and owner/clinical verification." });
   }

@@ -10,6 +10,7 @@ const HEADERS = new Set([
   "testName", "unit", "sex", "ageFrom", "ageTo", "ageUnit", "low", "high", "normalTextEn",
   "symbol", "memberTestCodes", "packageCode",
   "scopeType", "branchId", "currency", "priority",
+  "ucumCode", "tubeColor", "additive",
 ]);
 export const CSV_STAGE_TEMPLATE_HEADERS = [
   "entityType", "legacyKey", "testCode", "code", "nameEn", "nameAr",
@@ -17,6 +18,7 @@ export const CSV_STAGE_TEMPLATE_HEADERS = [
 ] as const;
 export const CSV_STAGE_MASTER_TEMPLATE_HEADERS = [
   "entityType", "legacyKey", "code", "nameEn", "nameAr", "symbol", "memberTestCodes",
+  "ucumCode", "tubeColor", "additive",
 ] as const;
 export const CSV_STAGE_PRICE_LIST_TEMPLATE_HEADERS = [
   "entityType", "legacyKey", "code", "nameEn", "nameAr", "scopeType",
