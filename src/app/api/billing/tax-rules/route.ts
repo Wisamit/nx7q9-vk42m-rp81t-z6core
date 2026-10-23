@@ -1,12 +1,8 @@
 import { NextResponse } from "next/server";
 import { canAccessBranch, getCurrentSession, permissionSet, requestContext } from "@/lib/auth";
-import { nextDateString } from "@/lib/client-accounting";
+import { parseExactTaxPublicationInput } from "@/lib/tax-publication-input";
 import { taxLineAmounts, taxScopeKey, validTaxRate } from "@/lib/tax-policy";
 import { prisma } from "@/lib/db";
-
-function text(value: unknown, max: number) {
-  return typeof value === "string" ? value.trim().slice(0, max) : "";
-}
 
 export async function POST(request: Request) {
   const session = await getCurrentSession();
@@ -14,25 +10,15 @@ export async function POST(request: Request) {
   if (!permissionSet(session).has("billing.tax.manage")) {
     return NextResponse.json({ error: "tax_authority_forbidden" }, { status: 403 });
   }
-  const body = await request.json().catch(() => null) as Record<string, unknown> | null;
-  if (!body) return NextResponse.json({ error: "invalid_request" }, { status: 400 });
-
-  const branchId = text(body.branchId, 36) || null;
-  const serviceType = body.serviceType === "TEST" || body.serviceType === "PACKAGE" ? body.serviceType : null;
-  const serviceId = text(body.serviceId, 36);
-  const code = text(body.code, 60).toUpperCase();
-  const nameEn = text(body.nameEn, 200);
-  const nameAr = text(body.nameAr, 200);
-  const treatment = ["STANDARD", "ZERO_RATED", "EXEMPT"].includes(String(body.treatment))
-    ? body.treatment as "STANDARD" | "ZERO_RATED" | "EXEMPT" : null;
-  const priceMode = body.priceMode === "EXCLUSIVE" || body.priceMode === "INCLUSIVE" ? body.priceMode : null;
-  const ratePercent = validTaxRate(body.ratePercent);
-  const effectiveFrom = text(body.effectiveFrom, 10);
-  const reason = text(body.reason, 1000);
-  if (!serviceType || !serviceId || !/^[A-Z0-9_-]{2,60}$/.test(code) || !nameEn || !treatment || !priceMode
-    || ratePercent === null || !nextDateString(effectiveFrom) || !reason) {
-    return NextResponse.json({ error: "invalid_tax_fields" }, { status: 400 });
+  const body: unknown = await request.json().catch(() => null);
+  const admission = parseExactTaxPublicationInput(body);
+  if (!admission.ok) {
+    return NextResponse.json({ error: admission.error }, { status: 400 });
   }
+  const {
+    branchId, serviceType, serviceId, code, nameEn, nameAr,
+    treatment, priceMode, ratePercent, effectiveFrom, reason,
+  } = admission.value;
   if (!taxLineAmounts({ netAfterDiscount: "1.0000", rule: { treatment, priceMode, ratePercent } })) {
     return NextResponse.json({ error: "invalid_tax_treatment_rate" }, { status: 400 });
   }
