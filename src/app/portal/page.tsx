@@ -2,6 +2,7 @@ import { doctorAccessWhere, hasLiveDoctorPortalReferrer } from "@/lib/doctor-por
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requirePortalSession } from "@/lib/portal-auth";
+import { resolvePortalBookingActor } from "@/lib/portal-booking-actor";
 import { prisma } from "@/lib/db";
 import { PortalLogoutButton } from "@/components/portal-logout-button";
 import { SystemDateText } from "@/components/system-date-text";
@@ -20,6 +21,11 @@ export default async function PortalPage() {
   // A previously issued session must not disclose clinical information
   // if its physician link has since been disabled or reassigned.
   if (account.type === "DOCTOR" && !hasLiveDoctorPortalReferrer(account)) notFound();
+  // The booking mutation already verifies active same-tenant patient/client
+  // linkage. Apply that identical principal boundary before reading clinical
+  // orders, billing records or immutable diagnostic report snapshots.
+  if (account.type !== "DOCTOR" &&
+      resolvePortalBookingActor(account).kind === "DENIED") notFound();
 
   const locale = getUiLocale(account.preferredLocale);
   const now = new Date();
