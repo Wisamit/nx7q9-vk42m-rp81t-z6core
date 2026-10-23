@@ -69,6 +69,8 @@ jobs:
         run: timeout --signal=TERM --kill-after=10s 120s node --experimental-strip-types --test tests/f7-portal-otp-atomic-mariadb.integration.test.ts
       - name: Verify serialized OTP issuance in MariaDB
         run: timeout --signal=TERM --kill-after=10s 120s node --experimental-strip-types --test tests/f7-portal-otp-request-race-mariadb.integration.test.ts
+      - name: Verify portal password change revocation and disable race in MariaDB
+        run: timeout --signal=TERM --kill-after=10s 120s node --experimental-strip-types --test tests/f7-portal-password-revocation-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/organization-settings-concurrency-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-126-legacy-row-lineage-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/f3-legacy-lineage-mariadb.integration.test.ts
