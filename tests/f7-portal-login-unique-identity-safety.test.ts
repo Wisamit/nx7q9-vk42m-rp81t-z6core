@@ -6,7 +6,7 @@ test("F7 portal login rejects duplicate or cross-field identities rather than fi
   const source=readFileSync("src/app/api/portal/auth/login/route.ts","utf8");
   assert.match(source,/portalAccount\.findMany\(\{/);
   assert.match(source,/organization: \{ code: organizationCode, status: "ACTIVE" \}/);
-  assert.match(source,/OR: \[\{ normalizedEmail: login \}, \{ normalizedPhone: login \} \]/);
+  assert.match(source,/OR: \\[\\{ normalizedEmail: login \\}, \\{ normalizedPhone: login \\}\\s*\\]/);
   assert.match(source,/take: 2/);
   assert.match(source,/matches\.length === 1 \? matches\[0\] : null/);
   assert.doesNotMatch(source,/portalAccount\.findFirst\(/);
