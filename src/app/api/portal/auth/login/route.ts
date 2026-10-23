@@ -32,12 +32,17 @@ export async function POST(request: Request) {
     );
   }
 
-  const account = await prisma.portalAccount.findFirst({
+  // Neither normalizedEmail nor normalizedPhone is unique in the legacy-compatible
+  // schema. Never let findFirst choose an arbitrary identity when two portal
+  // accounts share an email, phone, or email/phone cross-match in a tenant.
+  const matches = await prisma.portalAccount.findMany({
     where: {
       organization: { code: organizationCode, status: "ACTIVE" },
       OR: [{ normalizedEmail: login }, { normalizedPhone: login }],
     },
+    take: 2,
   });
+  const account = matches.length === 1 ? matches[0] : null;
   if (!account || !account.passwordHash || account.status === "DISABLED") {
     return NextResponse.json({ error: "invalid_credentials" }, { status: 401 });
   }
