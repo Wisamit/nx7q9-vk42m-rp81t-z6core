@@ -1,5 +1,5 @@
-import { resolvePortalBookingActor } from "@/lib/portal-booking-actor";
-import { hasLiveDoctorPortalReferrer } from "@/lib/doctor-portal-access";
+import { resolvePortalBookingActor } from "./portal-booking-actor.ts";
+import { hasLiveDoctorPortalReferrer } from "./doctor-portal-access.ts";
 
 /**
  * Contact OTP can be issued or recorded only for a currently linked,
