@@ -234,6 +234,7 @@ jobs:
       - run: node --experimental-strip-types --test tests/stage-139-report-template-governance-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-140-canonical-config-review-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/f8-canonical-master-parity-mariadb.integration.test.ts
+      - run: node --experimental-strip-types --test tests/f8-tax-transaction-locking-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-141-config-drift-parity-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-142-analyzer-mapping-reviewer-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-146-bundle-boundary-mariadb.integration.test.ts
