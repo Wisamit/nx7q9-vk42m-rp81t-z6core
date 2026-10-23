@@ -48,6 +48,8 @@ export function catalogReviewCsv(
   batch: { entityType: CatalogExportType; records: readonly unknown[] },
   organizationId: string,
   exportedAt: string,
+  consistency: "paged-live-not-atomic" | "transactional-consistent-read" =
+    "paged-live-not-atomic",
 ): string {
   if (!organizationId || !Number.isFinite(Date.parse(exportedAt))) {
     throw new Error("csv_export_missing_provenance");
@@ -60,7 +62,7 @@ export function catalogReviewCsv(
   }
   const headers = [...provenanceColumns, ...keys];
   const prefix = ["family-lab-catalog-review-csv", "1", organizationId,
-    batch.entityType, exportedAt, "paged-live-not-atomic"];
+    batch.entityType, exportedAt, consistency];
   const lines = [
     headers.map(safeSpreadsheetCell).join(","),
     ...rows.map(row => [...prefix, ...keys.map(key => row.get(key) ?? "")]
