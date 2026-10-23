@@ -26,6 +26,33 @@ export async function POST(request: Request) {
       if (live.length !== 1 || live[0].status !== "ACTIVE") {
         throw new Error("PORTAL_PASSWORD_PRINCIPAL_CHANGED");
       }
+      // bcrypt runs outside this transaction. A patient merge, revoked
+      // corporate client, disabled physician or tenant during hashing must
+      // not leave a password rotation and audit for an invalid principal.
+      const livePrincipal = await tx.$queryRaw<Array<{id:string}>>`
+        SELECT a.id FROM portal_accounts a
+        JOIN organizations o ON o.id=a.organization_id AND o.status='ACTIVE'
+        LEFT JOIN patients p ON p.id=a.patient_id
+        LEFT JOIN clients c ON c.id=a.client_id
+        LEFT JOIN referrers r ON r.id=a.referrer_id
+        WHERE a.id=${session.portalAccountId}
+          AND a.organization_id=${session.portalAccount.organizationId}
+          AND a.status='ACTIVE'
+          AND a.type=${session.portalAccount.type}
+          AND (
+            (a.type='PATIENT' AND p.id=${session.portalAccount.patientId}
+              AND p.status='ACTIVE' AND p.organization_id=a.organization_id)
+            OR (a.type='CORPORATE' AND c.id=${session.portalAccount.clientId}
+              AND c.status='ACTIVE' AND c.organization_id=a.organization_id)
+            OR (a.type='DOCTOR' AND r.id=${session.portalAccount.referrerId}
+              AND r.status='ACTIVE' AND r.type='PHYSICIAN'
+              AND r.organization_id=a.organization_id)
+          )
+        FOR UPDATE
+      `;
+      if (livePrincipal.length !== 1) {
+        throw new Error("PORTAL_PASSWORD_PRINCIPAL_CHANGED");
+      }
       const currentSession = await tx.portalSession.findFirst({
         where: {
           id: session.id,
