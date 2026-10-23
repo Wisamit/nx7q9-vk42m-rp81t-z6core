@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { requestContext } from "@/lib/auth";
 import { hashPortalToken, newPortalToken, portalSessionExpiry, PORTAL_SESSION_COOKIE } from "@/lib/portal-auth";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { portalLoginStillUniquelyOwned } from "@/lib/portal-login-identity";
 
 function normalize(value: unknown) {
   if (typeof value !== "string") return "";
@@ -60,6 +61,44 @@ export async function POST(request: Request) {
         `;
         if (locked.length !== 1) throw new Error("PORTAL_ACCOUNT_CHANGED");
         const current = await tx.portalAccount.findUniqueOrThrow({ where: { id: account.id } });
+      // The initial tenant contact selection may become stale during bcrypt.
+      // A committed login cannot rely on a detached/rotated/ambiguous ID.
+      const [organization, currentOwners] = await Promise.all([
+        tx.organization.findUnique({
+          where: { id: account.organizationId }, select: { status: true },
+        }),
+        tx.portalAccount.findMany({
+          where: {
+            organizationId: account.organizationId,
+            OR: [{ normalizedEmail: login }, { normalizedPhone: login }],
+          },
+          select: { id: true }, take: 2,
+        }),
+      ]);
+      if (organization?.status !== "ACTIVE" ||
+          !portalLoginStillUniquelyOwned(current,login,currentOwners.map(owner=>owner.id))) {
+        throw new Error("PORTAL_LOGIN_IDENTITY_CHANGED");
+      }
+
+        // The initial tenant contact selection may become stale during bcrypt.
+        // A committed login cannot rely on a detached/rotated/ambiguous ID.
+        const [organization, currentOwners] = await Promise.all([
+          tx.organization.findUnique({
+            where: { id: account.organizationId }, select: { status: true },
+          }),
+          tx.portalAccount.findMany({
+            where: {
+              organizationId: account.organizationId,
+              OR: [{ normalizedEmail: login }, { normalizedPhone: login }],
+            },
+            select: { id: true }, take: 2,
+          }),
+        ]);
+        if (organization?.status !== "ACTIVE" ||
+            !portalLoginStillUniquelyOwned(current,login,currentOwners.map(owner=>owner.id))) {
+          throw new Error("PORTAL_LOGIN_IDENTITY_CHANGED");
+        }
+
         if (current.status === "DISABLED") throw new Error("ACCOUNT_DISABLED");
         // Do not count a failed comparison against a password that was replaced meanwhile.
         if (current.passwordHash !== account.passwordHash) throw new Error("PASSWORD_CHANGED");
