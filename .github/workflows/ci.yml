@@ -75,6 +75,8 @@ jobs:
         run: timeout --signal=TERM --kill-after=10s 120s node --experimental-strip-types --test tests/f7-rate-limit-atomic-mariadb.integration.test.ts
       - name: Verify atomic portal contact provisioning in MariaDB
         run: timeout --signal=TERM --kill-after=10s 120s node --experimental-strip-types --test tests/f7-portal-account-contact-provision-mariadb.integration.test.ts
+      - name: Verify tenant-safe portal login identity uniqueness in MariaDB
+        run: timeout --signal=TERM --kill-after=10s 120s node --experimental-strip-types --test tests/f7-portal-login-identity-ambiguity-mariadb.integration.test.ts
       - name: Verify portal password change revocation and disable race in MariaDB
         run: timeout --signal=TERM --kill-after=10s 120s node --experimental-strip-types --test tests/f7-portal-password-revocation-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/organization-settings-concurrency-mariadb.integration.test.ts
