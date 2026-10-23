@@ -1,6 +1,7 @@
 import type { Prisma } from "../../generated/prisma/client.ts";
 import { clinicalImportTestWhere } from "./catalog-clinical-import-scope.ts";
 import { genericCatalogPriceScope } from "./catalog-generic-price-scope.ts";
+import { reviewEligibleStagedReferences } from "./catalog-review-dependency-graph.ts";
 
 export type SpreadsheetReferenceCandidate = {
   entityType: string;
@@ -78,17 +79,6 @@ const ISSUE = {
   },
 } as const;
 
-function stagedCodes(candidates: readonly SpreadsheetReferenceCandidate[], entityType: string): Set<string> {
-  const codes = new Set<string>();
-  for (const candidate of candidates) {
-    // An invalid or ambiguous staged source must never satisfy a dependency.
-    if (candidate.entityType === entityType && candidate.status !== "ERROR") {
-      addCode(codes, code(candidate.normalized, "code"));
-    }
-  }
-  return codes;
-}
-
 /**
  * Review finding only. The source filename, legacyKey and free-text labels do
  * NOT grant reference authority. A staged master is not equivalent to a live
@@ -98,12 +88,9 @@ export function spreadsheetReferenceFindings(
   candidates: readonly SpreadsheetReferenceCandidate[],
   snapshot: SpreadsheetReferenceSnapshot,
 ): SpreadsheetReferenceIssue[][] {
-  const staged = {
-    tests: stagedCodes(candidates, "TEST"),
-    units: stagedCodes(candidates, "UNIT"),
-    packages: stagedCodes(candidates, "PACKAGE"),
-    priceLists: stagedCodes(candidates, "PRICE_LIST"),
-  };
+  // A syntactically reviewable staged master still cannot be trusted when
+  // its own dependencies are invalid or its identity is ambiguous.
+  const staged = reviewEligibleStagedReferences(candidates, snapshot);
   const results: SpreadsheetReferenceIssue[][] = candidates.map(() => []);
   for (const [index, candidate] of candidates.entries()) {
     const refs: Array<[keyof SpreadsheetReferenceSnapshot, string]> = [];
