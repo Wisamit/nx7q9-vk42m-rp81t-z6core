@@ -68,7 +68,27 @@ export async function POST(request: Request) {
   const refId = recipientReferenceId(account);
   if (!refId) return NextResponse.json({ error: "portal_subject_missing" }, { status: 409 });
 
-  const challenge = await prisma.$transaction(async tx => {
+  let challenge;
+  try {
+    challenge = await prisma.$transaction(async tx => {
+    // Serialize all issuance and replacement for this same portal account.
+    // Without locking its parent row, two parallel POSTs could both observe
+    // zero active challenges and leave two usable OTPs.
+    const live = await tx.$queryRaw<Array<{
+      id:string;email:string|null;phone:string|null;must_change_password:number|boolean;
+    }>>`
+      SELECT id,email,phone,must_change_password
+      FROM portal_accounts
+      WHERE id=${account.id} AND organization_id=${account.organizationId}
+        AND status='ACTIVE'
+      FOR UPDATE
+    `;
+    const current = live[0];
+    const currentDestination = channel === "EMAIL" ? current?.email?.trim() : current?.phone?.trim();
+    if (live.length !== 1 || current?.must_change_password || currentDestination !== destination) {
+      throw new Error("PORTAL_CONTACT_ISSUANCE_CHANGED");
+    }
+
     const replacedChallenges = await tx.portalOtpChallenge.findMany({
       where: {
         portalAccountId: account.id,
@@ -144,7 +164,13 @@ export async function POST(request: Request) {
     });
 
     return created;
-  });
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message === "PORTAL_CONTACT_ISSUANCE_CHANGED") {
+      return NextResponse.json({ error: "portal_subject_changed" }, { status: 409 });
+    }
+    throw error;
+  }
 
   return NextResponse.json({
     status: "queued",
