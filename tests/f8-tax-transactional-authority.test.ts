@@ -11,7 +11,7 @@ const branchA="cccccccc-aaaa-4ccc-8ddd-eeeeeeeeeeee";
 const branchB="dddddddd-aaaa-4ccc-8ddd-eeeeeeeeeeee";
 const serviceId="eeeeeeee-aaaa-4ccc-8ddd-eeeeeeeeeeee";
 const input=(branchId:string|null=branchA)=>({
-  userId,organizationId,branchId,serviceId,serviceType:"TEST" as const,
+  userId,organizationId,branchId,serviceId,serviceType:"TEST" as "TEST" | "PACKAGE",
   sessionBranchIds:[branchA,branchB],
 });
 function fake(opts:{
