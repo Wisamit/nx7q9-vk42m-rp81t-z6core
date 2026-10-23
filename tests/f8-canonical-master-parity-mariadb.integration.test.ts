@@ -18,7 +18,7 @@ test("F8 MariaDB: bilingual tube/additive and UCUM survive a tenant-consistent r
     database:u.pathname.slice(1),timezone:"Z"};
   const [reader,writer]=await Promise.all([mysql.createConnection(config),mysql.createConnection(config)]);
   const org=randomUUID(),foreignOrg=randomUUID(),containerId=randomUUID(),
-    unitId=randomUUID(),foreignContainerId=randomUUID(),tag=org.slice(0,8);
+    unitId=randomUUID(),foreignContainerId=randomUUID(),tag=org.slice(0,8).toUpperCase();
   const inserted:Array<{table:string;id:string}>=[];
   async function insert(table:string,id:string,sql:string,args:(string|null)[]){
     await writer.execute(sql,args);inserted.unshift({table,id});
