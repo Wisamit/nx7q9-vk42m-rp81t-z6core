@@ -216,6 +216,23 @@ export function canonicalStagingCsvFromAtomicGroup(
   })));
   for (const [index, row] of parsed.entries()) {
     const normalized = normalizedRows[index];
+    // A review worksheet is deliberately not a complete restore; nevertheless,
+    // every field that the sheet DOES map must survive its canonical intake
+    // verbatim. Silent trimming, code case changes, or missing bilingual
+    // source fields would otherwise hide a real configuration drift.
+    const originals = rows[index];
+    for (const [offset, key] of keys.entries()) {
+      const projected = originals[offset + 2];
+      const observed = normalized[key];
+      const equal = key === "memberTestCodes"
+        ? Array.isArray(observed) &&
+          JSON.stringify(observed) === projected
+        : typeof observed === "string" && observed === projected;
+      if (!equal) {
+        throw new CanonicalSpreadsheetReviewError(
+          "canonical_normalization_not_lossless:" + key);
+      }
+    }
     const issues = [
       ...validateImportRow(row.entityType, normalized),
       ...validateExpandedCsvReviewRow(row.entityType, normalized),
