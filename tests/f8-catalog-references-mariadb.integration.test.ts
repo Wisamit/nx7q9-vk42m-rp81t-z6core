@@ -19,7 +19,7 @@ test("F8 §87 MariaDB: live master references exclude foreign tenant, inactive m
   const org=randomUUID(),foreign=randomUUID(),branchA=randomUUID(),branchB=randomUUID(),
     departmentB=randomUUID(),testA=randomUUID(),testForeign=randomUUID(),
     testB=randomUUID(),testOff=randomUUID(),unitA=randomUUID(),unitForeign=randomUUID(),
-    packageA=randomUUID(),packageForeign=randomUUID(),priceA=randomUUID(),priceB=randomUUID(),
+    packageA=randomUUID(),packageForeign=randomUUID(),packageMixed=randomUUID(),priceA=randomUUID(),priceB=randomUUID(),
     priceForeign=randomUUID();
   const tag="F8R"+org.slice(0,8);
   const code=(suffix:string)=>tag+suffix;
@@ -55,10 +55,12 @@ test("F8 §87 MariaDB: live master references exclude foreign tenant, inactive m
       await put("units",id,
         "INSERT INTO units(id,organization_id,code,symbol,updated_at) VALUES(?,?,?,?,NOW(3))",
         [id,tenant,code(suffix),"u"]);
-    for(const [id,tenant,suffix] of [[packageA,org,"PACKAGE"],[packageForeign,foreign,"FOREIGNPACKAGE"]])
+    for(const [id,tenant,suffix] of [[packageA,org,"PACKAGE"],[packageForeign,foreign,"FOREIGNPACKAGE"],[packageMixed,org,"MIXED"]])
       await put("commercial_packages",id,
         "INSERT INTO commercial_packages(id,organization_id,code,name_en,updated_at) VALUES(?,?,?,?,NOW(3))",
         [id,tenant,code(suffix),"Synthetic Package"]);
+    for(const [packageId,testId] of [[packageA,testA],[packageMixed,testA],[packageMixed,testB]])
+      await writer.execute("INSERT INTO commercial_package_items(package_id,test_id) VALUES(?,?)",[packageId,testId]);
     for(const [id,tenant,suffix,scope,branch] of [
       [priceA,org,"PRICE","ORGANIZATION",null],
       [priceB,org,"PRICEB","BRANCH",branchB],
@@ -74,7 +76,16 @@ test("F8 §87 MariaDB: live master references exclude foreign tenant, inactive m
         "AND (t.department_id IS NULL OR (d.status='ACTIVE' AND (d.branch_id IS NULL OR d.branch_id=?)))",
         [org,branchA]),
       query("SELECT code FROM units WHERE organization_id=? AND status='ACTIVE'",[org]),
-      query("SELECT code FROM commercial_packages WHERE organization_id=? AND status='ACTIVE'",[org]),
+      query("SELECT p.code FROM commercial_packages p WHERE p.organization_id=? AND p.status='ACTIVE' "+
+        "AND EXISTS(SELECT 1 FROM commercial_package_items i JOIN lab_tests t ON t.id=i.test_id "+
+        "LEFT JOIN departments d ON d.id=t.department_id WHERE i.package_id=p.id AND "+
+        "t.organization_id=? AND t.status='ACTIVE' AND "+
+        "(t.department_id IS NULL OR (d.status='ACTIVE' AND (d.branch_id IS NULL OR d.branch_id=?)))) "+
+        "AND NOT EXISTS(SELECT 1 FROM commercial_package_items i JOIN lab_tests t ON t.id=i.test_id "+
+        "LEFT JOIN departments d ON d.id=t.department_id WHERE i.package_id=p.id AND NOT ("+
+        "t.organization_id=? AND t.status='ACTIVE' AND "+
+        "(t.department_id IS NULL OR (d.status='ACTIVE' AND (d.branch_id IS NULL OR d.branch_id=?)))))",
+        [org,org,branchA,org,branchA]),
       query("SELECT code FROM price_lists WHERE organization_id=? AND status='ACTIVE' "+
         "AND source_id IS NULL AND referrer_id IS NULL AND client_id IS NULL AND contract_id IS NULL "+
         "AND ((scope_type='ORGANIZATION' AND branch_id IS NULL) OR (scope_type='BRANCH' AND branch_id=?))",
@@ -97,6 +108,7 @@ test("F8 §87 MariaDB: live master references exclude foreign tenant, inactive m
       {entityType:"PANEL",normalized:{memberTestCodes:[code("UNAUTHORIZED"),code("INACTIVE")]},status:"WARNING" as const},
       {entityType:"PRICE_LIST_ITEM",normalized:{priceListCode:code("PRICEB"),testCode:code("VISIBLE")},status:"WARNING" as const},
       {entityType:"PRICE_LIST_PACKAGE_ITEM",normalized:{priceListCode:code("PRICE"),packageCode:code("FOREIGNPACKAGE")},status:"WARNING" as const},
+      {entityType:"PRICE_LIST_PACKAGE_ITEM",normalized:{priceListCode:code("PRICE"),packageCode:code("MIXED")},status:"WARNING" as const},
     ];
     const results=spreadsheetReferenceFindings(entries,snapshot);
     assert.deepEqual(results[0],[]);
@@ -107,6 +119,7 @@ test("F8 §87 MariaDB: live master references exclude foreign tenant, inactive m
     const [stored]=await query("SELECT COUNT(*) AS n FROM catalog_import_batches WHERE organization_id=?",[org]);
     assert.equal(Number(stored[0].n),0,"no clinical, financial or catalog import performed by preflight");
   }finally{
+    await writer.execute("DELETE FROM commercial_package_items WHERE package_id IN (?,?)",[packageA,packageMixed]).catch(()=>{});
     for(const row of inserts)await writer.execute("DELETE FROM "+row.table+" WHERE id=?",[row.id]).catch(()=>{});
     await Promise.all([writer.end(),reader.end()]);
   }
