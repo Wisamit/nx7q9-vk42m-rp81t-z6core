@@ -230,6 +230,7 @@ jobs:
       - run: node --experimental-strip-types --test tests/stage-135-import-batch-list-privacy-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-137-analyzer-replay-cas-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-138-config-review-mariadb.integration.test.ts
+      - run: node --experimental-strip-types --test tests/f8-catalog-references-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-139-report-template-governance-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-140-canonical-config-review-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-141-config-drift-parity-mariadb.integration.test.ts
