@@ -15,7 +15,7 @@ test("Stage 140 MariaDB: actual price master branch/tenant scoped DRAFT projecti
     password:decodeURIComponent(u.password),database:u.pathname.slice(1),timezone:"Z"};
   const [reader,writer]=await Promise.all([mysql.createConnection(cfg),mysql.createConnection(cfg)]);
   const org=randomUUID(),foreignOrg=randomUUID(),branch=randomUUID(),
-    priceId=randomUUID(),foreignPriceId=randomUUID(),tag=org.slice(0,8);
+    priceId=randomUUID(),foreignPriceId=randomUUID(),tag=org.slice(0,8).toUpperCase();
   const cleanup:Array<{table:string;id:string}>=[];
   async function insert(table:string,id:string,sql:string,values:(string|null)[]){
     await reader.execute(sql,values);cleanup.unshift({table,id});
