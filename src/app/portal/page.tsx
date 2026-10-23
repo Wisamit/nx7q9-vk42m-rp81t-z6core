@@ -1,5 +1,6 @@
-import { doctorAccessWhere } from "@/lib/doctor-portal-access";
+import { doctorAccessWhere, hasLiveDoctorPortalReferrer } from "@/lib/doctor-portal-access";
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import { requirePortalSession } from "@/lib/portal-auth";
 import { prisma } from "@/lib/db";
 import { PortalLogoutButton } from "@/components/portal-logout-button";
@@ -16,6 +17,10 @@ export const dynamic = "force-dynamic";
 export default async function PortalPage() {
   const session = await requirePortalSession();
   const account = session.portalAccount;
+  // A previously issued session must not disclose clinical information
+  // if its physician link has since been disabled or reassigned.
+  if (account.type === "DOCTOR" && !hasLiveDoctorPortalReferrer(account)) notFound();
+
   const locale = getUiLocale(account.preferredLocale);
   const now = new Date();
 
