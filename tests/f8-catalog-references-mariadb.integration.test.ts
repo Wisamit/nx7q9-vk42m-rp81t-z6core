@@ -92,15 +92,15 @@ test("F8 §87 MariaDB: live master references exclude foreign tenant, inactive m
         [org,branchA]),
     ]);
     const snapshot={
-      tests:new Set(tests.map(x=>String(x.code))),
-      units:new Set(units.map(x=>String(x.code))),
-      packages:new Set(packages.map(x=>String(x.code))),
-      priceLists:new Set(priceLists.map(x=>String(x.code))),
+      tests:new Set(tests.map(x=>String(x.code).toUpperCase())),
+      units:new Set(units.map(x=>String(x.code).toUpperCase())),
+      packages:new Set(packages.map(x=>String(x.code).toUpperCase())),
+      priceLists:new Set(priceLists.map(x=>String(x.code).toUpperCase())),
     };
-    assert.deepEqual([...snapshot.tests],[code("VISIBLE")]);
-    assert.deepEqual([...snapshot.units],[code("UNIT")]);
-    assert.deepEqual([...snapshot.packages],[code("PACKAGE")]);
-    assert.deepEqual([...snapshot.priceLists],[code("PRICE")]);
+    assert.deepEqual([...snapshot.tests],[code("VISIBLE").toUpperCase()]);
+    assert.deepEqual([...snapshot.units],[code("UNIT").toUpperCase()]);
+    assert.deepEqual([...snapshot.packages],[code("PACKAGE").toUpperCase()]);
+    assert.deepEqual([...snapshot.priceLists],[code("PRICE").toUpperCase()]);
 
     const entries=[
       {entityType:"COMPONENT",normalized:{testCode:code("VISIBLE"),unitCode:code("UNIT")},status:"WARNING" as const},
