@@ -79,6 +79,29 @@ export async function POST(request: Request) {
             !portalLoginStillUniquelyOwned(current, login, currentOwners.map(owner=>owner.id))) {
           throw new Error("PORTAL_LOGIN_IDENTITY_CHANGED");
         }
+        // A valid contact is not enough if the patient/client/physician linked
+        // before bcrypt was merged, disabled or moved to another tenant.
+        // Check in this locked transaction before any session, audit or lockout.
+        const livePrincipal = await tx.$queryRaw<Array<{id:string}>>`
+          SELECT a.id FROM portal_accounts a
+          JOIN organizations o ON o.id=a.organization_id AND o.status='ACTIVE'
+          LEFT JOIN patients p ON p.id=a.patient_id
+          LEFT JOIN clients c ON c.id=a.client_id
+          LEFT JOIN referrers r ON r.id=a.referrer_id
+          WHERE a.id=${account.id} AND a.organization_id=${account.organizationId}
+            AND a.status IN ('ACTIVE','LOCKED') AND a.type=${account.type}
+            AND (
+              (a.type='PATIENT' AND p.id=${account.patientId}
+                AND p.status='ACTIVE' AND p.organization_id=a.organization_id)
+              OR (a.type='CORPORATE' AND c.id=${account.clientId}
+                AND c.status='ACTIVE' AND c.organization_id=a.organization_id)
+              OR (a.type='DOCTOR' AND r.id=${account.referrerId}
+                AND r.status='ACTIVE' AND r.type='PHYSICIAN'
+                AND r.organization_id=a.organization_id)
+            )
+          FOR UPDATE
+        `;
+        if (livePrincipal.length !== 1) throw new Error("PORTAL_LOGIN_PRINCIPAL_CHANGED");
         if (current.status === "DISABLED") throw new Error("ACCOUNT_DISABLED");
         // Do not count a failed comparison against a password that was replaced meanwhile.
         if (current.passwordHash !== account.passwordHash) throw new Error("PASSWORD_CHANGED");
@@ -140,6 +163,29 @@ export async function POST(request: Request) {
           !portalLoginStillUniquelyOwned(current, login, currentOwners.map(owner=>owner.id))) {
         throw new Error("PORTAL_LOGIN_IDENTITY_CHANGED");
       }
+      // A valid contact is not enough if the patient/client/physician linked
+      // before bcrypt was merged, disabled or moved to another tenant.
+      // Check in this locked transaction before any session, audit or lockout.
+      const livePrincipal = await tx.$queryRaw<Array<{id:string}>>`
+        SELECT a.id FROM portal_accounts a
+        JOIN organizations o ON o.id=a.organization_id AND o.status='ACTIVE'
+        LEFT JOIN patients p ON p.id=a.patient_id
+        LEFT JOIN clients c ON c.id=a.client_id
+        LEFT JOIN referrers r ON r.id=a.referrer_id
+        WHERE a.id=${account.id} AND a.organization_id=${account.organizationId}
+          AND a.status IN ('ACTIVE','LOCKED') AND a.type=${account.type}
+          AND (
+            (a.type='PATIENT' AND p.id=${account.patientId}
+              AND p.status='ACTIVE' AND p.organization_id=a.organization_id)
+            OR (a.type='CORPORATE' AND c.id=${account.clientId}
+              AND c.status='ACTIVE' AND c.organization_id=a.organization_id)
+            OR (a.type='DOCTOR' AND r.id=${account.referrerId}
+              AND r.status='ACTIVE' AND r.type='PHYSICIAN'
+              AND r.organization_id=a.organization_id)
+          )
+        FOR UPDATE
+      `;
+      if (livePrincipal.length !== 1) throw new Error("PORTAL_LOGIN_PRINCIPAL_CHANGED");
       if (current.status === "DISABLED" || current.passwordHash !== account.passwordHash ||
           (current.lockedUntil && current.lockedUntil > new Date())) {
         throw new Error("PORTAL_ACCOUNT_CHANGED");
