@@ -53,6 +53,7 @@ test("Stage 93: electronic ordering is not derived from doctor read permissions 
   const schema=readFileSync("prisma/schema.prisma","utf8");
   const migration=readFileSync("prisma/migrations/20261012200000_doctor_electronic_requisitions/migration.sql","utf8");
   const portal=readFileSync("src/app/api/portal/doctor-requisitions/route.ts","utf8");
+  const principal=readFileSync("src/lib/doctor-portal-access.ts","utf8");
   const admin=readFileSync("src/app/api/doctor-portal-access/route.ts","utf8");
   const order=readFileSync("src/app/api/orders/route.ts","utf8");
   const staff=readFileSync("src/app/api/doctor-requisitions/review/route.ts","utf8");
@@ -66,7 +67,11 @@ test("Stage 93: electronic ordering is not derived from doctor read permissions 
   assert.match(migration,/UNIQUE INDEX `dr_portal_request_uq`/);
   assert.match(migration,/CONSTRAINT `dr_order_fk`/);
   assert.match(admin,/canRequestOrders:input\.canRequestOrders===true/);
-  assert.match(portal,/portalAccount\.type !== "DOCTOR"/);
+  assert.match(portal,/!hasLiveDoctorPortalReferrer\(session\.portalAccount\)/);
+  assert.match(principal,/account\.type==="DOCTOR"/);
+  assert.match(principal,/referrer\.organizationId===account\.organizationId/);
+  assert.match(principal,/referrer\.status==="ACTIVE"/);
+  assert.match(principal,/referrer\.type==="PHYSICIAN"/);
   assert.match(portal,/can_request_orders=TRUE/);
   assert.match(portal,/WHERE organization_id=\$\{account\.organizationId\}/);
   assert.match(portal,/FROM organizations WHERE id=\$\{account\.organizationId\}/);

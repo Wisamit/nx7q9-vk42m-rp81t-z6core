@@ -1,4 +1,4 @@
-import { doctorAccessWhere } from "@/lib/doctor-portal-access";
+import { doctorAccessWhere, hasLiveDoctorPortalReferrer } from "@/lib/doctor-portal-access";
 import { Fragment } from "react";
 import { SystemDateText } from "@/components/system-date-text";
 import { notFound } from "next/navigation";
@@ -41,6 +41,10 @@ export default async function PortalReportPage({ params }: { params: Promise<{ v
   const session = await requirePortalSession();
   const { versionId } = await params;
   const account = session.portalAccount;
+  // A previously issued session must not disclose clinical information
+  // if its physician link has since been disabled or reassigned.
+  if (account.type === "DOCTOR" && !hasLiveDoctorPortalReferrer(account)) notFound();
+
   const locale = getUiLocale(account.preferredLocale);
   const version = await prisma.diagnosticReportVersion.findUnique({
     where: { id: versionId },

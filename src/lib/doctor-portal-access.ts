@@ -39,3 +39,19 @@ export function validDoctorAccessReason(value: unknown): value is string {
   return typeof value === "string" && value.trim().length >= 10 &&
     value.trim().length <= 1000 && !/[\u0000-\u001F\u007F]/.test(value);
 }
+
+
+/** A retained portal session does not survive deactivation or tenant reassignment of its physician. */
+export function hasLiveDoctorPortalReferrer(account:{
+  type:string;
+  organizationId:string;
+  referrerId:string|null;
+  referrer:{id:string;organizationId:string;status:string;type:string}|null;
+}):boolean {
+  const referrer=account.referrer;
+  return account.type==="DOCTOR" && !!account.referrerId && !!referrer &&
+    referrer.id===account.referrerId &&
+    referrer.organizationId===account.organizationId &&
+    referrer.status==="ACTIVE" &&
+    referrer.type==="PHYSICIAN";
+}

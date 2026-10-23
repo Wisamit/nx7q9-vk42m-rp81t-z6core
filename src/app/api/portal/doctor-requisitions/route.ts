@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getCurrentPortalSession } from "@/lib/portal-auth";
 import { requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { hasLiveDoctorPortalReferrer } from "@/lib/doctor-portal-access";
 import {
   DoctorRequisitionError, doctorRequisitionFingerprint, isUuid,
   parseDoctorRequisition,
@@ -10,7 +11,7 @@ import {
 async function requireDoctorPortal() {
   const session = await getCurrentPortalSession();
   if (!session || session.portalAccount.mustChangePassword ||
-      session.portalAccount.type !== "DOCTOR" || !session.portalAccount.referrerId)
+      !hasLiveDoctorPortalReferrer(session.portalAccount))
     throw new DoctorRequisitionError("doctor_portal_unauthorized", 403);
   return session;
 }
