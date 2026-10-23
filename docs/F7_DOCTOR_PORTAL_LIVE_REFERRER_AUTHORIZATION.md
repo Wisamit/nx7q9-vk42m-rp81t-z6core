@@ -31,3 +31,16 @@ expansion or go-live claim.
 F7 protected browser review 81 routes x 6 contexts is NOT_EXECUTED;
 F8 88 qualified real-world cases and seven signoffs are NOT_EXECUTED/NO_GO.
 Master Scope sections 1–88 remain mandatory.
+
+## Server-rendered clinical disclosure paths
+
+The same guard also executes on the authenticated doctor dashboard and the
+individual released-report detail page before loading clinical order/report
+data. A disabled or reassigned physician cannot retain clinical report-list
+or report-detail access merely by keeping an otherwise active portal cookie.
+The UI fails closed through `notFound()` without revealing report content.
+All preexisting explicit per-patient doctor grants still apply once the
+principal passes the link check.
+
+This is source/runtime guard testing, NOT final live-role, browser or medical
+acceptance. The qualified F7/F8 gates remain deferred.
