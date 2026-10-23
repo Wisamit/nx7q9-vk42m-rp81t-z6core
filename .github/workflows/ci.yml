@@ -67,6 +67,8 @@ jobs:
         run: timeout --signal=TERM --kill-after=10s 120s node --experimental-strip-types --test tests/f7-portal-appointment-idempotency-mariadb.integration.test.ts
       - name: Verify concurrent OTP claims and retry limits in MariaDB
         run: timeout --signal=TERM --kill-after=10s 120s node --experimental-strip-types --test tests/f7-portal-otp-atomic-mariadb.integration.test.ts
+      - name: Verify OTP same-tenant linked principal after bcrypt in MariaDB
+        run: timeout --signal=TERM --kill-after=10s 120s node --experimental-strip-types --test tests/f7-otp-verification-exact-principal-mariadb.integration.test.ts
       - name: Verify serialized OTP issuance in MariaDB
         run: timeout --signal=TERM --kill-after=10s 120s node --experimental-strip-types --test tests/f7-portal-otp-request-race-mariadb.integration.test.ts
       - name: Verify revoked identity and session block OTP issuance in MariaDB
