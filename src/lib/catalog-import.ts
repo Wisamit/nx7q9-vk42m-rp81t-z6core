@@ -37,7 +37,7 @@ export function normalizeImportRow(row: ImportInputRow): Prisma.InputJsonObject 
   }
   if (row.entityType === "UNIT") {
     return { code: text(d.code || d.unit || d.Unit), symbol: text(d.symbol || d.unit || d.Unit),
-      nameEn: text(d.nameEn), nameAr: text(d.nameAr) };
+      nameEn: text(d.nameEn), nameAr: text(d.nameAr), ucumCode: text(d.ucumCode) };
   }
   if (row.entityType === "PANEL") {
     const nameEn = text(d.nameEn || d.profilname);
@@ -56,7 +56,8 @@ export function normalizeImportRow(row: ImportInputRow): Prisma.InputJsonObject 
   }
   if (row.entityType === "CONTAINER") {
     const nameEn = text(d.nameEn || d.name);
-    return { code: text(d.code || d.name).replace(/\s+/g, "_").toUpperCase(), nameEn };
+    return { code: text(d.code || d.name).replace(/\s+/g, "_").toUpperCase(),
+      nameEn, nameAr: text(d.nameAr), tubeColor: text(d.tubeColor), additive: text(d.additive) };
   }
   if (row.entityType === "COMPONENT") {
     return {
