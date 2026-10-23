@@ -95,6 +95,43 @@ export async function POST(request: Request) {
       throw new Error("PORTAL_CONTACT_ISSUANCE_CHANGED");
     }
 
+    // The session and linked subject may have been revoked while bcrypt
+    // hashed the new OTP. Check and lock them within the SAME transaction as
+    // replacement and notification; a stale authenticated cookie is not enough.
+    const livePrincipal = await tx.$queryRaw<Array<{id:string}>>`
+      SELECT a.id FROM portal_accounts a
+      JOIN organizations o ON o.id=a.organization_id AND o.status='ACTIVE'
+      LEFT JOIN patients p ON p.id=a.patient_id
+      LEFT JOIN clients c ON c.id=a.client_id
+      LEFT JOIN referrers r ON r.id=a.referrer_id
+      WHERE a.id=${account.id} AND a.organization_id=${account.organizationId}
+        AND a.status='ACTIVE' AND a.must_change_password=0
+        AND a.type=${account.type}
+        AND (
+          (a.type='PATIENT' AND p.id=${refId}
+            AND p.status='ACTIVE' AND p.organization_id=a.organization_id)
+          OR (a.type='CORPORATE' AND c.id=${refId}
+            AND c.status='ACTIVE' AND c.organization_id=a.organization_id)
+          OR (a.type='DOCTOR' AND r.id=${refId}
+            AND r.status='ACTIVE' AND r.type='PHYSICIAN'
+            AND r.organization_id=a.organization_id)
+        )
+      FOR UPDATE
+    `;
+    if (livePrincipal.length !== 1) {
+      throw new Error("PORTAL_CONTACT_ISSUANCE_CHANGED");
+    }
+
+    const liveSession = await tx.$queryRaw<Array<{id:string}>>`
+      SELECT id FROM portal_sessions
+      WHERE id=${session.id} AND portal_account_id=${account.id}
+        AND revoked_at IS NULL AND expires_at>NOW(3)
+      FOR UPDATE
+    `;
+    if (liveSession.length !== 1) {
+      throw new Error("PORTAL_CONTACT_ISSUANCE_SESSION_REVOKED");
+    }
+
     const replacedChallenges = await tx.portalOtpChallenge.findMany({
       where: {
         portalAccountId: account.id,
@@ -172,6 +209,9 @@ export async function POST(request: Request) {
     return created;
     });
   } catch (error) {
+    if (error instanceof Error && error.message === "PORTAL_CONTACT_ISSUANCE_SESSION_REVOKED") {
+      return NextResponse.json({ error: "portal_unauthorized" }, { status: 401 });
+    }
     if (error instanceof Error && error.message === "PORTAL_CONTACT_ISSUANCE_CHANGED") {
       return NextResponse.json({ error: "portal_subject_changed" }, { status: 409 });
     }

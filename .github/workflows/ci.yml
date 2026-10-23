@@ -69,6 +69,8 @@ jobs:
         run: timeout --signal=TERM --kill-after=10s 120s node --experimental-strip-types --test tests/f7-portal-otp-atomic-mariadb.integration.test.ts
       - name: Verify serialized OTP issuance in MariaDB
         run: timeout --signal=TERM --kill-after=10s 120s node --experimental-strip-types --test tests/f7-portal-otp-request-race-mariadb.integration.test.ts
+      - name: Verify revoked identity and session block OTP issuance in MariaDB
+        run: timeout --signal=TERM --kill-after=10s 120s node --experimental-strip-types --test tests/f7-otp-issuance-live-identity-mariadb.integration.test.ts
       - name: Verify OTP live principal revocation in MariaDB
         run: timeout --signal=TERM --kill-after=10s 120s node --experimental-strip-types --test tests/f7-portal-otp-principal-revocation-mariadb.integration.test.ts
       - name: Verify atomic rate limit rollover in MariaDB
