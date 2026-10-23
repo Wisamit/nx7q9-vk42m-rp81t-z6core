@@ -10,6 +10,7 @@ import { CsvStagingError, CSV_STAGE_MAX_BYTES, parseCsvReviewFile } from "@/lib/
 import { xlsxReviewToCsv, XlsxStagingError, XLSX_STAGE_MAX_BYTES } from "@/lib/catalog-review-xlsx-import";
 import { validateRangeCsvReview } from "@/lib/catalog-range-csv-review";
 import { validateExpandedCsvReviewRow } from "@/lib/catalog-expanded-csv-review";
+import { csvReviewTariffRowIssues, csvReviewBatchConflictIssues } from "@/lib/catalog-csv-review-integrity";
 import { resolveClinicalImportScope } from "@/lib/catalog-clinical-import-scope";
 
 export async function POST(request: Request) {
@@ -112,12 +113,18 @@ export async function POST(request: Request) {
         (typeof normalized.branchId !== "string" || !authorizedIds.has(normalized.branchId));
     })) return NextResponse.json({ error: "price_list_branch_scope_forbidden" }, { status: 403 });
   }
+  const normalizedInputs = inputs.map(row => normalizeImportRow(row));
+  const batchConflicts = csvReviewBatchConflictIssues(inputs.map((row, index) => ({
+    entityType: row.entityType, normalized: normalizedInputs[index],
+  })));
   const prepared = inputs.map((row, index) => {
-    const normalized = normalizeImportRow(row);
+    const normalized = normalizedInputs[index];
     const issues = [
       ...validateImportRow(row.entityType, normalized),
       ...validateExpandedCsvReviewRow(row.entityType, normalized),
       ...validateRangeCsvReview(row),
+      ...csvReviewTariffRowIssues(row.entityType, normalized),
+      ...batchConflicts[index],
     ];
     return { row, rowNumber: index + 1, normalized, issues, status: rowValidationStatus(issues) };
   });
