@@ -39,9 +39,11 @@ test("existing export authorization, paging and pricing checks stay in force", (
   assert.match(api, /permissions\.has\("pricing\.manage"\)/);
   assert.match(api, /organizationId = session\.user\.organizationId/);
   assert.match(api, /take: 251/);
-  assert.match(ui, /catalogReviewCsv\(groups\[0\]/);
+  assert.match(ui, /catalogReviewCsv\(group,/);
   assert.match(ui, /selected\.length !== 1/);
-  assert.match(ui, /if \(!finished\) throw new Error/);
-  assert.match(ui, /exportBundle\(groups/);
+  assert.match(ui, /checkedAtomicCatalogReviewSource/);
+  assert.match(ui, /configuration-export\/bundle\?types=/);
+  assert.doesNotMatch(ui, /if \(!finished\) throw new Error/);
+  assert.doesNotMatch(ui, /exportBundle\(groups/);
   assert.doesNotMatch(ui, /priceListItem\.create|priceListItem\.update/);
 });
