@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { canAccessBranch, getCurrentSession, permissionSet, requestContext } from "@/lib/auth";
 import { parseExactTaxPublicationInput } from "@/lib/tax-publication-input";
+import { lockLiveTaxPublicationAuthority, TaxPublicationAuthorityError } from "@/lib/tax-publication-authority";
 import { taxLineAmounts, taxScopeKey, validTaxRate } from "@/lib/tax-policy";
 import { prisma } from "@/lib/db";
 
@@ -47,18 +48,19 @@ export async function POST(request: Request) {
   const scopeKey = taxScopeKey(branchId, serviceType, serviceId);
   try {
     const rule = await prisma.$transaction(async tx => {
-      // Serialize publication against concurrent invoice issuance in every affected branch.
-      if (branchId) {
-        await tx.branch.updateMany({
-          where: { id: branchId, organizationId: session.user.organizationId, status: "ACTIVE" },
-          data: { taxConfigVersion: { increment: 1 } },
-        });
-      } else {
-        await tx.branch.updateMany({
-          where: { organizationId: session.user.organizationId, status: "ACTIVE" },
-          data: { taxConfigVersion: { increment: 1 } },
-        });
-      }
+      // The earlier preflight is for a helpful initial error only. A live
+      // administrator may revoke a role or branch grant or retire the service
+      // while this request waits. Recheck current authority while locking
+      // the tenant and all impacted tax configuration versions in THIS
+      // transaction, before writing the immutable rule and audit event.
+      await lockLiveTaxPublicationAuthority(tx, {
+        userId: session.user.id,
+        organizationId: session.user.organizationId,
+        sessionBranchIds: session.user.branchScopes
+          .filter(scope => scope.branch.status === "ACTIVE")
+          .map(scope => scope.branchId),
+        branchId, serviceType, serviceId,
+      });
       const created = await tx.taxRule.create({
         data: {
           organizationId: session.user.organizationId,
@@ -95,6 +97,9 @@ export async function POST(request: Request) {
     }, { timeout: 30000 });
     return NextResponse.json({ status: "ok", ruleId: rule.id, scopeKey: rule.scopeKey }, { status: 201 });
   } catch (error) {
+    if (error instanceof TaxPublicationAuthorityError) {
+      return NextResponse.json({ error: error.code }, { status: error.status });
+    }
     if (error && typeof error === "object" && "code" in error && error.code === "P2002") {
       return NextResponse.json({ error: "tax_rule_revision_exists" }, { status: 409 });
     }
