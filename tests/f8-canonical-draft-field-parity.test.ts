@@ -106,7 +106,7 @@ test("F8 §87 / §86: canonical exports cannot advertise an unstageable financia
   expectCode(()=>canonicalStagingCsvFromAtomicGroup({entityType:"PRICE_LIST_ITEM",
     records:[{...price(),effectiveTo:"2026-10-22T00:00:00.000Z"}]}),
     "canonical_source_requires_manual_mapping:INVALID_PRICE_EFFECTIVE_WINDOW,CSV_TARIFF_EFFECTIVE_WINDOW_INVALID");
-  const good=price();
+  const good={...price(),effectiveTo:"2026-10-23T00:00:00.000Z"};
   const second={...price(),effectiveFrom:"2026-10-24T00:00:00.000Z"};
   const csv=canonicalStagingCsvFromAtomicGroup({
     entityType:"PRICE_LIST_ITEM",records:[good,second],
