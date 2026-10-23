@@ -53,3 +53,15 @@ export function portalBookingReceipt(appointment: {
     status:appointment.status,
   };
 }
+
+
+/**
+ * Preserve the preexisting absent/empty-mode onsite default for legacy
+ * integrations. Never silently convert an unknown explicitly supplied
+ * appointment mode (e.g. a misspelled home-collection request) to ONSITE.
+ */
+export function portalBookingMode(raw:unknown):"ONSITE"|"HOME_COLLECTION"|null {
+  if(raw===undefined || raw===null || raw==="")return "ONSITE";
+  if(raw==="ONSITE" || raw==="HOME_COLLECTION")return raw;
+  return null;
+}
