@@ -116,7 +116,7 @@ test("F8 §87 MariaDB: live master references exclude foreign tenant, inactive m
       assert.deepEqual(issues.map(x=>x.code),["CSV_REVIEW_REFERENCE_MISSING_OR_OUT_OF_SCOPE"]);
       assert.ok(!issues[0].message.includes(code("FOREIGN")),"no foreign master code leaked");
     }
-    const [stored]=await query("SELECT COUNT(*) AS n FROM catalog_import_batches WHERE organization_id=?",[org]);
+    const stored=await query("SELECT COUNT(*) AS n FROM catalog_import_batches WHERE organization_id=?",[org]);
     assert.equal(Number(stored[0].n),0,"no clinical, financial or catalog import performed by preflight");
   }finally{
     await writer.execute("DELETE FROM commercial_package_items WHERE package_id IN (?,?)",[packageA,packageMixed]).catch(()=>{});
