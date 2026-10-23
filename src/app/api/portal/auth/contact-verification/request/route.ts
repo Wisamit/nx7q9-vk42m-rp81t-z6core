@@ -6,6 +6,7 @@ import {
   NotificationRecipientType,
 } from "../../../../../../../generated/prisma/client";
 import { getCurrentPortalSession } from "@/lib/portal-auth";
+import { hasLivePortalContactPrincipal } from "@/lib/portal-contact-principal";
 import { prisma } from "@/lib/db";
 import { enqueueNotification } from "@/lib/notifications";
 import { requestContext } from "@/lib/auth";
@@ -35,6 +36,11 @@ export async function POST(request: Request) {
   const account = session.portalAccount;
   if (account.mustChangePassword) {
     return NextResponse.json({ error: "password_change_required" }, { status: 409 });
+  }
+  // Revocation/merge/tenant reassignment must invalidate contact proof, even
+  // if an old portal session cookie remains active.
+  if (!hasLivePortalContactPrincipal(account)) {
+    return NextResponse.json({ error: "portal_unauthorized" }, { status: 401 });
   }
 
   const ctx = await requestContext();
