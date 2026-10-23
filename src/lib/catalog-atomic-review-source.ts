@@ -61,5 +61,5 @@ export function checkedAtomicCatalogReviewSource(
     if(error instanceof AtomicReviewSourceError) throw error;
     return reject("atomic_review_full_field_contract_invalid");
   }
-  return bundle as AtomicReviewSource;
+  return bundle as unknown as AtomicReviewSource;
 }
