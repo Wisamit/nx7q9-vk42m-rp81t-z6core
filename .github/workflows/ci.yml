@@ -71,6 +71,8 @@ jobs:
         run: timeout --signal=TERM --kill-after=10s 120s node --experimental-strip-types --test tests/f7-portal-otp-request-race-mariadb.integration.test.ts
       - name: Verify OTP live principal revocation in MariaDB
         run: timeout --signal=TERM --kill-after=10s 120s node --experimental-strip-types --test tests/f7-portal-otp-principal-revocation-mariadb.integration.test.ts
+      - name: Verify atomic rate limit rollover in MariaDB
+        run: timeout --signal=TERM --kill-after=10s 120s node --experimental-strip-types --test tests/f7-rate-limit-atomic-mariadb.integration.test.ts
       - name: Verify portal password change revocation and disable race in MariaDB
         run: timeout --signal=TERM --kill-after=10s 120s node --experimental-strip-types --test tests/f7-portal-password-revocation-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/organization-settings-concurrency-mariadb.integration.test.ts
