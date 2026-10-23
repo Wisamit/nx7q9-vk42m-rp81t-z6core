@@ -11,9 +11,13 @@ test("F7 portal login: both failed and successful bcrypt paths revalidate live l
     "p.id=${account.patientId}","p.status='ACTIVE'","p.organization_id=a.organization_id",
     "c.id=${account.clientId}","c.status='ACTIVE'","c.organization_id=a.organization_id",
     "r.id=${account.referrerId}","r.status='ACTIVE'","r.type='PHYSICIAN'",
-    "r.organization_id=a.organization_id","FOR UPDATE"]){
+    "r.organization_id=a.organization_id"]){
     assert.equal(src.split(part).length-1,2,"both paths require: "+part);
   }
+  // Two preexisting account-row locks + two new subject row locks.
+  assert.equal((src.match(/FOR UPDATE/g)||[]).length,4);
+  assert.equal((src.match(/r\.organization_id=a\.organization_id\)\s*\)\s*FOR UPDATE/g)||[]).length,2,
+    "both linked-subject queries must retain their own row locks");
   const failure=src.indexOf("if (!ok) {");
   const failureGate=src.indexOf("PORTAL_LOGIN_PRINCIPAL_CHANGED",failure);
   const failureSideEffect=src.indexOf("failedLoginAttempts + 1",failure);
