@@ -4,6 +4,7 @@ import { getCurrentPortalSession } from "@/lib/portal-auth";
 import { prisma } from "@/lib/db";
 import { requestContext } from "@/lib/auth";
 import { maskedDestination } from "@/lib/report-outbound";
+import { portalOtpAttemptGuard } from "@/lib/portal-otp-attempt-guard";
 
 export async function POST(request: Request) {
   const session = await getCurrentPortalSession();
@@ -39,10 +40,15 @@ export async function POST(request: Request) {
 
   const ok = await compare(code, challenge.codeHash);
   if (!ok) {
-    await prisma.portalOtpChallenge.update({
-      where: { id: challenge.id },
+    // Atomic attempt accounting prevents parallel incorrect guesses from
+    // exceeding maxAttempts or updating a consumed/expired challenge.
+    const attempted = await prisma.portalOtpChallenge.updateMany({
+      where: portalOtpAttemptGuard(challenge, new Date()),
       data: { attempts: { increment: 1 } },
     });
+    if (attempted.count !== 1) {
+      return NextResponse.json({ error: "verification_challenge_unavailable" }, { status: 409 });
+    }
     return NextResponse.json({ error: "invalid_verification_code" }, { status: 400 });
   }
 
@@ -61,13 +67,11 @@ export async function POST(request: Request) {
   const verifiedAt = new Date();
   try {
     await prisma.$transaction(async tx => {
+      // Recheck every OTP safety condition atomically at claim time:
+      // another concurrent attempt may have exhausted the budget, consumed
+      // the OTP, changed its destination or reached its expiry meanwhile.
       const consumed = await tx.portalOtpChallenge.updateMany({
-        where: {
-          id: challenge.id,
-          portalAccountId: account.id,
-          purpose: "VERIFY_CONTACT",
-          consumedAt: null,
-        },
+        where: portalOtpAttemptGuard(challenge, verifiedAt),
         data: { consumedAt: verifiedAt },
       });
       if (consumed.count !== 1) throw new Error("PORTAL_VERIFICATION_CONFLICT");
