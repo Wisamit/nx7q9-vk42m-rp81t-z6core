@@ -11,6 +11,7 @@ import { xlsxReviewToCsv, XlsxStagingError, XLSX_STAGE_MAX_BYTES } from "@/lib/c
 import { validateRangeCsvReview } from "@/lib/catalog-range-csv-review";
 import { validateExpandedCsvReviewRow } from "@/lib/catalog-expanded-csv-review";
 import { csvReviewTariffRowIssues, csvReviewBatchConflictIssues } from "@/lib/catalog-csv-review-integrity";
+import { liveSpreadsheetReferenceFindings } from "@/lib/catalog-csv-review-references";
 import { resolveClinicalImportScope } from "@/lib/catalog-clinical-import-scope";
 
 export async function POST(request: Request) {
@@ -173,6 +174,23 @@ export async function POST(request: Request) {
     if (replay.kind === "conflict")
       return { error: "catalog_staging_key_reused", status: 409 } as const;
     if (replay.kind === "replay") return { id: replay.id, replayed: true } as const;
+    // Resolve only current ACTIVE same-tenant and authorized branch/department
+    // references while holding the organization lock. Staged-only dependencies
+    // remain warnings, and inaccessible/foreign/inactive identities fail review.
+    const referenceFindings = await liveSpreadsheetReferenceFindings(tx, {
+      organizationId: session.user.organizationId,
+      branchId: session.activeBranchId || "",
+      departmentIds: live.departmentIds,
+      authorizedBranchIds: live.branchIds,
+    }, prepared.map(item => ({
+      entityType: item.row.entityType, normalized: item.normalized, status: item.status,
+    })));
+    for (const [index, issues] of referenceFindings.entries()) {
+      prepared[index].issues.push(...issues);
+      prepared[index].status = rowValidationStatus(prepared[index].issues);
+    }
+    for (const name of Object.keys(summary)) delete summary[name];
+    for (const item of prepared) summary[item.status] = (summary[item.status] || 0) + 1;
     const created = await tx.catalogImportBatch.create({
       data: {
         organizationId: session.user.organizationId,
