@@ -4,6 +4,7 @@ import { getCurrentPortalSession } from "@/lib/portal-auth";
 import { requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { resolveBranchLocalDateTime } from "@/lib/branch-local-date-time";
+import { resolvePortalBookingActor } from "@/lib/portal-booking-actor";
 import {
   evaluatePortalBookingReplay,portalBookingIntentHash,portalBookingSubmissionKey,
   portalBookingReceipt,portalBookingMode,
@@ -21,6 +22,12 @@ export async function POST(request: Request) {
   const account = session.portalAccount;
   if (account.type === "DOCTOR") {
     return NextResponse.json({ error: "doctor_booking_not_enabled" }, { status: 403 });
+  }
+  // A portal session is not authority to supply an unlinked patient ID.
+  // Even live sessions must resolve to an ACTIVE, same-tenant linked principal.
+  const actor = resolvePortalBookingActor(account);
+  if (actor.kind === "DENIED") {
+    return NextResponse.json({ error: "portal_unauthorized" }, { status: 401 });
   }
 
   const ctx = await requestContext();
@@ -51,12 +58,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "home_collection_address_required" }, { status: 400 });
   }
 
-  let patientId = account.patientId || requestedPatientId;
-  if (account.type === "CORPORATE") {
+  let patientId = actor.kind === "PATIENT" ? actor.patientId : requestedPatientId;
+  if (actor.kind === "CORPORATE") {
     if (!requestedPatientId) return NextResponse.json({ error: "patient_required" }, { status: 400 });
     const access = await prisma.corporatePortalPatientAccess.findFirst({
       where: {
-        clientId: account.clientId!,
+        clientId: actor.clientId,
         patientId: requestedPatientId,
         canBook: true,
         status: "ACTIVE",
