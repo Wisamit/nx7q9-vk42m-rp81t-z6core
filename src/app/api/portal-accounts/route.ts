@@ -44,20 +44,30 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "portal_subject_not_found" }, { status: 404 });
   }
 
-  const duplicate = await prisma.portalAccount.findFirst({
-    where: {
-      organizationId: orgId,
-      OR: [
-        ...(email ? [{ normalizedEmail: email }] : []),
-        ...(phone ? [{ normalizedPhone: phone }] : []),
-      ],
-    },
-    select: { id: true, type: true },
-  });
-  if (duplicate) return NextResponse.json({ error: "portal_contact_already_in_use" }, { status: 409 });
-
-  const account = await prisma.$transaction(async tx => {
-    const created = await tx.portalAccount.create({
+  let account;
+  try {
+    account = await prisma.$transaction(async tx => {
+      // Serialize provisioning per tenant. A pre-transaction duplicate check
+      // races under parallel requests because contacts are not unique in the
+      // legacy-compatible schema.
+      const liveOrganization = await tx.$queryRaw<Array<{id:string}>>`
+        SELECT id FROM organizations
+        WHERE id=${orgId} AND status='ACTIVE'
+        FOR UPDATE
+      `;
+      if (liveOrganization.length !== 1) throw new Error("PORTAL_ORG_INACTIVE");
+      const duplicate = await tx.portalAccount.findFirst({
+        where: {
+          organizationId: orgId,
+          OR: [
+            ...(email ? [{ normalizedEmail: email }] : []),
+            ...(phone ? [{ normalizedPhone: phone }] : []),
+          ],
+        },
+        select: { id: true },
+      });
+      if (duplicate) throw new Error("PORTAL_CONTACT_ALREADY_IN_USE");
+      const created = await tx.portalAccount.create({
       data: {
         organizationId: orgId,
         type,
@@ -86,7 +96,16 @@ export async function POST(request: Request) {
       },
     });
     return created;
-  });
+    }, { isolationLevel: "Serializable", timeout: 30000 });
+  } catch (error) {
+    if (error instanceof Error && error.message === "PORTAL_CONTACT_ALREADY_IN_USE") {
+      return NextResponse.json({ error: "portal_contact_already_in_use" }, { status: 409 });
+    }
+    if (error instanceof Error && error.message === "PORTAL_ORG_INACTIVE") {
+      return NextResponse.json({ error: "portal_organization_inactive" }, { status: 403 });
+    }
+    throw error;
+  }
 
   return NextResponse.json({ status: "ok", account }, { status: 201 });
 }
