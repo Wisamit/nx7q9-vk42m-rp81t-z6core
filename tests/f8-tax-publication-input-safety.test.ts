@@ -103,7 +103,9 @@ test("F8 §86: server route consumes exact structured input and retains audited 
   assert.ok(route.includes('permissionSet(session).has("billing.tax.manage")'));
   assert.ok(route.includes("canAccessBranch(session, branchId)"));
   assert.ok(route.includes('status: "ACTIVE"'));
-  assert.ok(route.includes("taxConfigVersion: { increment: 1 }"));
+  assert.ok(route.includes("await lockLiveTaxPublicationAuthority(tx"));
+  const liveAuthority=readFileSync("src/lib/tax-publication-authority.ts","utf8");
+  assert.ok(liveAuthority.includes("taxConfigVersion:{increment:1}"));
   assert.ok(route.includes('action: "TAX_RULE_PUBLISHED"'));
   assert.ok(route.includes("tx.taxRule.create"));
   assert.ok(guard.includes("nextDateString(effectiveFrom)"));
