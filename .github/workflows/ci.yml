@@ -81,6 +81,8 @@ jobs:
         run: timeout --signal=TERM --kill-after=10s 120s node --experimental-strip-types --test tests/f7-portal-login-identity-ambiguity-mariadb.integration.test.ts
       - name: Verify portal login rechecks live contact after bcrypt in MariaDB
         run: timeout --signal=TERM --kill-after=10s 120s node --experimental-strip-types --test tests/f7-portal-login-transaction-identity-mariadb.integration.test.ts
+      - name: Verify live portal login principal after bcrypt in MariaDB
+        run: timeout --signal=TERM --kill-after=10s 120s node --experimental-strip-types --test tests/f7-portal-login-live-principal-mariadb.integration.test.ts
       - name: Verify portal password change revocation and disable race in MariaDB
         run: timeout --signal=TERM --kill-after=10s 120s node --experimental-strip-types --test tests/f7-portal-password-revocation-mariadb.integration.test.ts
       - name: Verify portal password live principal revocation in MariaDB
