@@ -73,6 +73,40 @@ export async function POST(request: Request) {
   const verifiedAt = new Date();
   try {
     await prisma.$transaction(async tx => {
+      // bcrypt runs before this transaction. A revocation, merged patient,
+      // disabled corporate client, revoked session, or physician change during
+      // the comparison must NOT grant new contact verification. Lock the
+      // portal account and its live linked subject in the same transaction.
+      const live = await tx.$queryRaw<Array<{ id:string; email:string|null; phone:string|null }>>`
+        SELECT a.id,a.email,a.phone
+        FROM portal_accounts a
+        LEFT JOIN patients p ON p.id=a.patient_id
+        LEFT JOIN clients c ON c.id=a.client_id
+        LEFT JOIN referrers r ON r.id=a.referrer_id
+        WHERE a.id=${account.id} AND a.organization_id=${account.organizationId}
+          AND a.status='ACTIVE' AND a.must_change_password=0
+          AND (
+            (a.type='PATIENT' AND p.status='ACTIVE' AND p.organization_id=a.organization_id)
+            OR (a.type='CORPORATE' AND c.status='ACTIVE' AND c.organization_id=a.organization_id)
+            OR (a.type='DOCTOR' AND r.status='ACTIVE' AND r.type='PHYSICIAN'
+                AND r.organization_id=a.organization_id)
+          )
+        FOR UPDATE
+      `;
+      if (live.length !== 1) throw new Error("PORTAL_VERIFICATION_PRINCIPAL_CHANGED");
+      const currentLiveDestination = verifiesEmail ? live[0].email : live[0].phone;
+      if (!currentLiveDestination || currentLiveDestination.trim() !== currentDestination.trim()) {
+        throw new Error("PORTAL_VERIFICATION_DESTINATION_CHANGED");
+      }
+
+      const liveSession = await tx.$queryRaw<Array<{id:string}>>`
+        SELECT id FROM portal_sessions
+        WHERE id=${session.id} AND portal_account_id=${account.id}
+          AND revoked_at IS NULL AND expires_at>NOW(3)
+        FOR UPDATE
+      `;
+      if (liveSession.length !== 1) throw new Error("PORTAL_VERIFICATION_SESSION_REVOKED");
+
       // Recheck every OTP safety condition atomically at claim time:
       // another concurrent attempt may have exhausted the budget, consumed
       // the OTP, changed its destination or reached its expiry meanwhile.
@@ -84,8 +118,10 @@ export async function POST(request: Request) {
 
       const claimedAccount = await tx.portalAccount.updateMany({
         where: verifiesEmail
-          ? { id: account.id, email: currentDestination }
-          : { id: account.id, phone: currentDestination },
+          ? { id: account.id, organizationId: account.organizationId,
+              status: "ACTIVE", mustChangePassword: false, email: currentDestination }
+          : { id: account.id, organizationId: account.organizationId,
+              status: "ACTIVE", mustChangePassword: false, phone: currentDestination },
         data: {
           contactVerifiedAt: verifiedAt,
           ...(verifiesEmail ? { emailVerifiedAt: verifiedAt } : { phoneVerifiedAt: verifiedAt }),
@@ -145,6 +181,10 @@ export async function POST(request: Request) {
       });
     });
   } catch (error) {
+    if (error instanceof Error &&
+        ["PORTAL_VERIFICATION_PRINCIPAL_CHANGED", "PORTAL_VERIFICATION_SESSION_REVOKED"].includes(error.message)) {
+      return NextResponse.json({ error: "portal_unauthorized" }, { status: 401 });
+    }
     if (error instanceof Error && error.message === "PORTAL_VERIFICATION_DESTINATION_CHANGED") {
       return NextResponse.json({ error: "verification_destination_changed" }, { status: 409 });
     }
