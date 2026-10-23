@@ -41,8 +41,8 @@ export function parseExactTaxPublicationInput(raw:unknown):
   if(!object(raw)) return fail;
 
   const branchIdRaw=raw.branchId;
-  const branchId=branchIdRaw===null||branchIdRaw===""?null:exactString(branchIdRaw,36);
-  if (branchIdRaw!==null && branchIdRaw!=="" && (!branchId || !uuid.test(branchId))) return fail;
+  const branchId=branchIdRaw==null||branchIdRaw===""?null:exactString(branchIdRaw,36);
+  if (branchIdRaw!=null && branchIdRaw!=="" && (!branchId || !uuid.test(branchId))) return fail;
   const serviceId=exactString(raw.serviceId,36);
   const code=exactString(raw.code,60)?.toUpperCase();
   const nameEn=exactString(raw.nameEn,200);
