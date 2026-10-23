@@ -17,7 +17,8 @@ export type AtomicReviewSource = {
   groups: Array<{entityType: CatalogExportType; records: unknown[]}>;
 };
 export class AtomicReviewSourceError extends Error {
-  constructor(readonly code: string) { super(code); }
+  readonly code: string;
+  constructor(code: string) { super(code); this.code = code; }
 }
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const object = (v:unknown):v is Record<string,unknown> =>
