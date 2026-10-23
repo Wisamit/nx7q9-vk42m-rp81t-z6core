@@ -178,6 +178,12 @@ export async function liveSpreadsheetReferenceFindings(
     collectScopedCodes(needs.packages, codes =>
       tx.commercialPackage.findMany({where: {
         organizationId: scope.organizationId, status: "ACTIVE", code: { in: codes },
+        // Do not treat a partially visible panel/package as a usable
+        // reference in another branch's tariff review.
+        items: {
+          some: { test: clinicalImportTestWhere(clinicalScope) },
+          every: { test: clinicalImportTestWhere(clinicalScope) },
+        },
       }, select: { code: true }})),
     collectScopedCodes(needs.priceLists, codes =>
       tx.priceList.findMany({where: {
