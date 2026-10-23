@@ -34,3 +34,20 @@ test("F7 doctor requisition: all GET, POST and PATCH share the live referrer gat
   assert.match(session,/referrer: true/);
   assert.match(session,/portalAccount: \{ status: "ACTIVE", organization: \{ status: "ACTIVE" \} \}/);
 });
+
+test("F7 doctor portal: revoked physician blocks clinical dashboard and report detail before database reads",()=>{
+  const page=readFileSync("src/app/portal/page.tsx","utf8");
+  const detail=readFileSync("src/app/portal/reports/[versionId]/page.tsx","utf8");
+  for(const source of [page,detail]) {
+    const guard=source.indexOf('account.type === "DOCTOR" && !hasLiveDoctorPortalReferrer(account)');
+    assert.ok(guard>0,"deny inactive referrer in server-rendered page");
+    assert.ok(source.includes("notFound()"),"deny without disclosing clinical values");
+    const query=source.indexOf("prisma.diagnosticReportVersion.find");
+    assert.ok(query>guard,"guard must precede clinical report fetch");
+    assert.match(source,/doctorAccessWhere\(\{ organizationId: account\.organizationId/);
+  }
+  assert.ok(page.indexOf("!hasLiveDoctorPortalReferrer(account)") <
+    page.indexOf("prisma.labOrder.findMany"),"list must be blocked before querying clinical orders");
+  assert.ok(detail.indexOf("!hasLiveDoctorPortalReferrer(account)") <
+    detail.indexOf("const version = await prisma.diagnosticReportVersion.findUnique"));
+});
