@@ -23,7 +23,8 @@ test("F7 login ambiguity is not resolved by choosing an active account over a di
   const end=source.indexOf("const account = matches.length",start);
   const query=source.slice(start,end);
   assert.ok(start>0 && end>start);
-  assert.doesNotMatch(query,/status:\s*"ACTIVE"\s*[,}]/,
-    "individual account statuses must not be used to make duplicate identity collisions appear unique");
+  assert.match(query,/organization: \{ code: organizationCode, status: "ACTIVE" \}/);
+  assert.doesNotMatch(query,/accountStatus|portalAccountStatus|where:\s*\{\s*status: "ACTIVE"/,
+    "avoid picking one of two colliding accounts by filtering individual status");
   assert.match(source,/account\.status === "DISABLED"/);
 });
