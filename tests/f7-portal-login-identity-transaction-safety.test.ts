@@ -21,7 +21,8 @@ test("F7 login: neither failed nor successful bcrypt path may act on a revoked c
   assert.equal((route.match(/tx\.organization\.findUnique\(/g)||[]).length,2);
   assert.equal((route.match(/organization\?\.status !== "ACTIVE"/g)||[]).length,2);
   assert.equal((route.match(/tx\.portalAccount\.findMany\(/g)||[]).length,2);
-  assert.equal((route.match(/take: 2,/g)||[]).length,2);
+  assert.equal((route.match(/take: 2,/g)||[]).length,3,
+    "initial tenant login lookup plus both locked post-bcrypt transactions use LIMIT 2");
   assert.match(route,/const matches = await prisma\.portalAccount\.findMany/);
   assert.doesNotMatch(route,/portalAccount\.findFirst/);
   const bad=route.indexOf("if (!ok) {");
