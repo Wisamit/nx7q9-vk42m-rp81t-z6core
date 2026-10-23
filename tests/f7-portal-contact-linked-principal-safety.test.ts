@@ -47,7 +47,7 @@ test("F7 OTP: both request and verification check live subject before payload or
     const code=readFileSync(path,"utf8");
     const guard=code.indexOf("if (!hasLivePortalContactPrincipal(account))");
     const body=code.indexOf("const body = await request.json()");
-    const mutation=code.indexOf("prisma.portalOtpChallenge");
+    const mutation=code.indexOf("portalOtpChallenge.");
     assert.ok(guard>0 && body>guard,path+" guard must precede processing untrusted input");
     assert.ok(mutation>guard,path+" guard must precede checking or writing private OTP");
     assert.match(code,/error: "portal_unauthorized"/);
