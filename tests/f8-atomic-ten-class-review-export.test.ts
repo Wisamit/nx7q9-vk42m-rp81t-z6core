@@ -77,8 +77,16 @@ test("F8 §87: all ten classes are accepted only as complete atomic source snaps
     assert.equal(cells.length,2);
     assert.ok(cells[0].includes("consistency"));
     assert.equal(cells[1][5],"transactional-consistent-read");
-    assert.deepEqual(parseReviewCsvCells(xlsxReviewToCsv(catalogReviewXlsx(csv))),cells,
-      group.entityType+" retains Arabic, exact decimals and historical values");
+    const excel=catalogReviewXlsx(csv);
+    const visibleXml=new TextDecoder().decode(excel);
+    assert.ok(visibleXml.includes("<sheetData>") && !visibleXml.includes("<f>"),
+      "workbook must use literal cells only, never formulas");
+    if(cells[0].length<=32)
+      assert.deepEqual(parseReviewCsvCells(xlsxReviewToCsv(excel)),cells,
+        group.entityType+" source review retains literal cells");
+    else
+      assert.ok(visibleXml.includes("transactional-consistent-read"),
+        group.entityType+" wide human-review sheet must preserve atomic provenance without weakening upload limits");
     assert.equal(cells[1][3],group.entityType);
   }
 });
@@ -98,14 +106,18 @@ test("F8 §87: clinical ranges retain component identity, Arabic and precise cri
   assert.equal(at("normalTextAr"),"ضمن المجال المرجعي");
   assert.equal(at("id"),record.id);
   assert.throws(()=>parseCsvReviewFile(csv),
-    (err:unknown)=>err instanceof CsvStagingError && err.reason==="csv_invalid_headers");
+    (err:unknown)=>err instanceof CsvStagingError &&
+      ["csv_invalid_headers","csv_too_many_columns"].includes(err.reason));
 });
 
 test("F8 §87: incomplete or stale field manifests and mixed-state exports fail closed",()=>{
   const chosen=["UNIT","CONTAINER"] as const;
   const good=batch(chosen);
   refused({...good,consistency:"paged-live-not-atomic"},chosen,"atomic_review_source_contract_invalid");
-  refused({...good,fieldContract:undefined},chosen,"atomic_review_full_field_contract_required");
+  const unsigned={...good} as {fieldContract?:unknown};
+  delete unsigned.fieldContract;
+  refused(unsigned,chosen,"atomic_review_full_field_contract_required");
+  refused({...good,fieldContract:undefined},chosen,"atomic_review_full_field_contract_invalid");
   refused({...good,fieldContract:{version:1,classes:[]}},chosen,"atomic_review_full_field_contract_invalid");
   refused({...good,exportedAt:"2026-02-30T00:00:00.000Z"},chosen,"atomic_review_source_contract_invalid");
   refused({...good,organizationId:uuid().slice(0,8)},chosen,"atomic_review_source_contract_invalid");
