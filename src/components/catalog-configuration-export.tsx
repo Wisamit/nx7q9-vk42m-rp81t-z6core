@@ -6,9 +6,8 @@ import { catalogReviewXlsx } from "@/lib/catalog-review-xlsx";
 import {
   canonicalStagingCsvFromAtomicGroup, supportsCanonicalSpreadsheetReview,
 } from "@/lib/catalog-canonical-review-spreadsheet";
-import {
-  catalogExportTypes, exportBundle, type CatalogExportType,
-} from "@/lib/catalog-configuration-export";
+import { type CatalogExportType } from "@/lib/catalog-configuration-export";
+import { checkedAtomicCatalogReviewSource } from "@/lib/catalog-atomic-review-source";
 
 const ordered: CatalogExportType[] = [
   "TEST", "COMPONENT", "UNIT", "CONTAINER", "PANEL", "PACKAGE",
@@ -62,6 +61,7 @@ export function CatalogConfigurationExport({
           !source.organizationId || !source.exportedAt ||
           !Array.isArray(source.groups) || source.groups.length !== 1 || source.groups[0].entityType !== entityType ||
           !Array.isArray(source.groups[0].records)) throw new Error("atomic_source_invalid");
+      checkedAtomicCatalogReviewSource(source, [entityType]);
       const csv = canonicalStagingCsvFromAtomicGroup(source.groups[0]);
       const data = format === "xlsx" ? catalogReviewXlsx(csv) : csv;
       if ((typeof data === "string" ? new TextEncoder().encode(data).byteLength : data.byteLength)
@@ -106,17 +106,7 @@ export function CatalogConfigurationExport({
           throw new Error(failure.error || "export_request_failed_" + response.status);
         }
         const text = await response.text();
-        const bundle = JSON.parse(text) as {
-          format?: string; schemaVersion?: number; consistency?: string;
-          groups?: Array<{entityType:string; records: unknown[]}>;
-        };
-        if (bundle.format !== "family-lab-catalog-bundle" || bundle.schemaVersion !== 1 ||
-            bundle.consistency !== "transactional-consistent-read" ||
-            !Array.isArray(bundle.groups) || bundle.groups.length !== types.length ||
-            bundle.groups.some((group, index) =>
-              group.entityType !== types[index] || !Array.isArray(group.records))) {
-          throw new Error("atomic_bundle_invalid");
-        }
+        const bundle = checkedAtomicCatalogReviewSource(JSON.parse(text), types);
         const url = URL.createObjectURL(new Blob([text], { type: "application/json;charset=utf-8" }));
         try {
           const link = document.createElement("a");
@@ -135,47 +125,21 @@ export function CatalogConfigurationExport({
           " سجل من قراءة واحدة متّسقة لقاعدة البيانات. هذا مصدر إعدادات محدود الصلاحيات، وليس نسخة احتياطية كاملة أو استيراداً معتمداً."));
         return;
       }
-      let organizationId: string | null = null;
-      const groups: Array<{ entityType: CatalogExportType; records: unknown[] }> = [];
-      for (const entityType of ordered.filter(t => selected.includes(t))) {
-        const records: unknown[] = [];
-        let cursor: string | null = null;
-        let finished = false;
-        for (let page = 0; page < 200; page++) {
-          const qs = new URLSearchParams({ entityType });
-          if (cursor) qs.set("cursor", cursor);
-          const response = await fetch("/api/catalog/configuration-export?" + qs.toString(), {
-            cache: "no-store", credentials: "same-origin",
-          });
-          if (!response.ok) throw new Error("export_request_failed_" + response.status);
-          const data = await response.json() as {
-            format?: string; schemaVersion?: number; entityType?: string;
-            organizationId?: string; records?: unknown[];
-            nextCursor?: string | null; hasMore?: boolean;
-          };
-          if (data.format !== "family-lab-catalog-export" || data.schemaVersion !== 1
-            || data.entityType !== entityType || !data.organizationId
-            || !Array.isArray(data.records) || data.records.length > 250
-            || (organizationId !== null && organizationId !== data.organizationId)
-            || !catalogExportTypes.has(data.entityType as CatalogExportType)) {
-            throw new Error("export_payload_invalid");
-          }
-          organizationId = data.organizationId;
-          records.push(...data.records);
-          if (data.hasMore !== true) {
-            finished = true;
-            break;
-          }
-          if (!data.nextCursor || data.nextCursor === cursor) throw new Error("export_cursor_invalid");
-          cursor = data.nextCursor;
-        }
-        if (!finished) throw new Error("export_too_large_to_download_safely");
-        groups.push({ entityType, records });
+      const entityType = selected[0];
+      // Human-review CSV/XLSX must not silently combine different database
+      // revisions from independently paged reads. Reuse the exact server-side
+      // signed, tenant-scoped, transaction-consistent bundle read used by JSON.
+      const response = await fetch("/api/catalog/configuration-export/bundle?types=" +
+        encodeURIComponent(entityType), { cache: "no-store", credentials: "same-origin" });
+      if (!response.ok) {
+        const problem = await response.json() as { error?: string };
+        throw new Error(problem.error || "atomic_export_failed_" + response.status);
       }
-      if (!organizationId) throw new Error("export_organization_missing");
-      const exportedAt = new Date().toISOString();
-      const bundle = exportBundle(groups, organizationId, exportedAt);
-      const csvText = catalogReviewCsv(groups[0], organizationId, exportedAt);
+      const source = checkedAtomicCatalogReviewSource(await response.json(), [entityType]);
+      const group = source.groups[0];
+      const exportedAt = source.exportedAt;
+      const csvText = catalogReviewCsv(group, source.organizationId, exportedAt,
+        "transactional-consistent-read");
       const fileContents = format === "xlsx" ? catalogReviewXlsx(csvText) : csvText;
       const part: BlobPart = typeof fileContents === "string" ? fileContents :
         fileContents.buffer.slice(fileContents.byteOffset, fileContents.byteOffset + fileContents.byteLength) as ArrayBuffer;
@@ -185,7 +149,7 @@ export function CatalogConfigurationExport({
       try {
         const link = document.createElement("a");
         link.href = url;
-        link.download = "family-lab-catalog-" + (groups[0].entityType.toLowerCase() + "-")
+        link.download = "family-lab-catalog-" + (entityType.toLowerCase() + "-")
           + exportedAt.slice(0, 10) + "." + format;
         document.body.appendChild(link);
         link.click();
@@ -193,12 +157,12 @@ export function CatalogConfigurationExport({
       } finally {
         URL.revokeObjectURL(url);
       }
-      const total = groups.reduce((n, group) => n + group.records.length, 0);
+      const total = group.records.length;
       setMessage(format === "xlsx"
-        ? tr("Exported " + total + " Excel rows for human review only. All cells are literal text; this paged export is neither an atomic backup nor a directly activatable import.",
-          "تم تصدير " + total + " صف إلى Excel للمراجعة البشرية فقط. جميع الخلايا نصية، والتصدير ليس نسخة ثابتة أو استيراداً قابلًا للتفعيل مباشرة.")
-        : tr("Exported " + total + " rows for review only. CSV protects against spreadsheet formulas but is not a lossless restore file. Use JSON for structured values. This export is not an atomic backup.",
-          "تم تصدير " + total + " صف للمراجعة فقط. CSV يحدّ من صيغ الجداول الضارة لكنه ليس ملف استعادة مطابقاً للأصل. استخدم JSON للبيانات المهيكلة. التصدير ليس نسخة احتياطية ثابتة.")
+        ? tr("Exported " + total + " Excel review rows from a single consistent database snapshot. All cells are literal text. This is NOT a backup, import or clinical approval.",
+          "تم تصدير " + total + " صف Excel للمراجعة من لقطة واحدة متسقة لقاعدة البيانات. الخلايا نصية فقط؛ وليس الملف نسخة احتياطية أو استيراداً أو اعتماداً سريرياً.")
+        : tr("Exported " + total + " review rows from one consistent database snapshot. This human-review CSV is NOT a lossless restore or an activatable import. Use the separately signed JSON for complete structured evidence.",
+          "تم تصدير " + total + " صف مراجعة من لقطة واحدة متسقة لقاعدة البيانات. ملف CSV ليس استعادة مطابقة أو استيراداً قابلاً للتفعيل. استخدم JSON الموقّع المنفصل للأدلة الكاملة.")
         );
     } catch (error) {
       setMessage(tr("Export stopped; no partial file was saved: ", "توقف التصدير ولم يُحفظ ملف جزئي: ")
@@ -251,8 +215,8 @@ export function CatalogConfigurationExport({
       </button>
     </div>
     <p className="muted">{tr(
-      "Choose one group: source review CSV/XLSX preserves flattened evidence; NEW review-ready DRAFT CSV/XLSX uses strictly mapped fields from a consistent signed JSON source and can be re-uploaded for staged review only. Reference intervals and complex contracts require manual professional mapping. None is a lossless restore or live activation.",
-      "اختر مجموعة واحدة: ملفات CSV/XLSX الأصلية تعرض الأدلة؛ أما ملفات DRAFT الجديدة فتُحوّل الحقول المدعومة من JSON متسق وموقّع، ويمكن إعادة رفعها للمراجعة فقط. المجالات المرجعية والعقود المعقدة تحتاج مطابقة مهنية يدوية. لا توجد استعادة مطابقة أو تفعيل مباشر.",
+      "Choose one group: human-review CSV/XLSX for all ten classes uses one atomic source and full field projection, but is NOT directly re-importable. Separate review-ready DRAFT CSV/XLSX maps nine supported classes and can be uploaded for review only. Reference intervals and complex contracts require qualified manual mapping. Nothing is a lossless restore or live activation.",
+      "اختر مجموعة واحدة: ملفات CSV/XLSX للمراجعة البشرية لجميع الفئات العشر تستخدم لقطة مصدر ذرّية وحقولاً كاملة، لكنها ليست قابلة لإعادة الاستيراد مباشرة. ملفات DRAFT المنفصلة تدعم تسع فئات للمراجعة فقط. المجالات المرجعية والعقود المعقدة تحتاج مطابقة مهنية مؤهلة. لا توجد استعادة مطابقة أو تفعيل مباشر.",
     )}</p>
     {message && <p role="status" className="muted">{message}</p>}
   </section>;
