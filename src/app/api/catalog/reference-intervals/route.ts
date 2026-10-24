@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { normalizePopulationCode } from "@/lib/result-reference";
 import { planReferenceIntervalApproval } from "@/lib/reference-interval-governance";
 import { parseReferenceIntervalEffectiveFrom, validateReferenceRangeDecimals } from "@/lib/reference-interval-draft-decimals";
+import { lockReferenceIntervalWriteAuthority, lockActiveReferenceComponent, lockActiveReferenceContext, ReferenceIntervalGateError } from "@/lib/reference-interval-live-authority";
 
 // Never shorten an untrusted scope or clinical ID into an unrelated identity.
 function id(value: unknown) {
@@ -147,6 +148,17 @@ export async function POST(request: NextRequest) {
 
   try {
     const interval = await prisma.$transaction(async tx => {
+      await lockReferenceIntervalWriteAuthority(tx,{
+        organizationId:session.user.organizationId,userId:session.userId,
+        branchId,permission:"catalog.reference_ranges.manage",
+        sessionBranchIds:session.user.branchScopes
+          .filter(item=>item.branch.status==="ACTIVE").map(item=>item.branchId),
+      });
+      await lockActiveReferenceComponent(tx,session.user.organizationId,componentId);
+      await lockActiveReferenceContext(tx,{
+        organizationId:session.user.organizationId,branchId,
+        methodId,analyzerId,specimenTypeId,
+      });
       const created = await tx.referenceInterval.create({
         data: {
           componentId,
@@ -215,7 +227,9 @@ export async function POST(request: NextRequest) {
       return created;
     });
     return NextResponse.json({ interval }, { status: 201 });
-  } catch {
+  } catch (error) {
+    if (error instanceof ReferenceIntervalGateError)
+      return NextResponse.json({ error: error.errorCode }, { status: error.status });
     return NextResponse.json({ error: "create_failed" }, { status: 409 });
   }
 }
@@ -242,166 +256,119 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: "invalid_reference_interval_action" }, { status: 400 });
   }
 
-  const interval = await prisma.referenceInterval.findFirst({
-    where: {
-      id: intervalId,
-      component: { test: { organizationId: session.user.organizationId } },
-    },
+  // Preflight identifies the requested branch but does NOT authorize a write.
+  // All state, grants, conflicts and mutations are read again under the
+  // organization's FOR UPDATE lock, guarding phantom overlapping approvals.
+  const preflight = await prisma.referenceInterval.findFirst({
+    where:{id:intervalId,component:{test:{organizationId:session.user.organizationId}}},
+    select:{id:true,branchId:true},
   });
-  if (!interval) return NextResponse.json({ error: "reference_interval_not_found" }, { status: 404 });
-  if (interval.branchId && !canAccessBranch(session, interval.branchId)) {
-    return NextResponse.json({ error: "branch_forbidden" }, { status: 403 });
-  }
-  if (!interval.branchId && !await hasOrganizationWideReferenceScope(
-    session.user.organizationId,
-    session.user.branchScopes.filter(item => item.branch.status === "ACTIVE").map(item => item.branchId),
-  )) {
-    return NextResponse.json({ error: "organization_scope_incomplete" }, { status: 403 });
-  }
+  if(!preflight)return NextResponse.json({error:"reference_interval_not_found"},{status:404});
+  if(action==="RETIRE"&&!reason)
+    return NextResponse.json({error:"retirement_reason_required"},{status:400});
 
-  if (action === "APPROVE") {
-    if (interval.approvalStatus !== "DRAFT") {
-      return NextResponse.json({ error: "reference_interval_not_draft", approvalStatus: interval.approvalStatus }, { status: 409 });
-    }
+  try {
+    const updated=await prisma.$transaction(async tx=>{
+      await lockReferenceIntervalWriteAuthority(tx,{
+        organizationId:session.user.organizationId,userId:session.userId,
+        branchId:preflight.branchId,permission:"catalog.reference_ranges.approve",
+        sessionBranchIds:session.user.branchScopes
+          .filter(item=>item.branch.status==="ACTIVE").map(item=>item.branchId),
+      });
+      const locked=await tx.$queryRaw<Array<{id:string}>>`
+        SELECT id FROM reference_intervals WHERE id=${intervalId} FOR UPDATE
+      `;
+      if(locked.length!==1)
+        throw new ReferenceIntervalGateError("reference_interval_not_found",404);
+      const interval=await tx.referenceInterval.findFirst({
+        where:{id:intervalId,
+          component:{test:{organizationId:session.user.organizationId}}},
+      });
+      if(!interval||interval.branchId!==preflight.branchId)
+        throw new ReferenceIntervalGateError("reference_interval_state_changed",409);
 
-    const approved = await prisma.referenceInterval.findMany({
-      where: {
-        componentId: interval.componentId,
-        approvalStatus: "APPROVED",
-        status: "ACTIVE",
-        id: { not: interval.id },
-      },
-    });
-    const plan = planReferenceIntervalApproval(interval, approved);
-    if (plan.conflicts.length > 0) {
-      return NextResponse.json({
-        error: "approved_reference_interval_overlap",
-        conflictingIntervalIds: plan.conflicts,
-      }, { status: 409 });
-    }
-
-    const approvedAt = new Date();
-    const predecessorEffectiveTo = new Date(interval.effectiveFrom.getTime() - 1);
-
-    const updated = await prisma.$transaction(async tx => {
-      for (const predecessorId of plan.predecessorsToClose) {
-        const predecessor = approved.find(item => item.id === predecessorId);
-        if (!predecessor) continue;
-        await tx.referenceInterval.update({
-          where: { id: predecessorId },
-          data: { effectiveTo: predecessorEffectiveTo },
+      if(action==="APPROVE"){
+        if(interval.approvalStatus!=="DRAFT"||interval.status!=="INACTIVE")
+          throw new ReferenceIntervalGateError("reference_interval_not_draft",409);
+        await lockActiveReferenceComponent(tx,session.user.organizationId,interval.componentId);
+        const approved=await tx.referenceInterval.findMany({
+          where:{componentId:interval.componentId,approvalStatus:"APPROVED",
+            status:"ACTIVE",id:{not:interval.id}},
         });
-        await tx.auditEvent.create({
-          data: {
-            organizationId: session.user.organizationId,
-            branchId: session.activeBranchId,
-            actorUserId: session.userId,
-            action: "REFERENCE_INTERVAL_SUPERSEDED",
-            entityType: "ReferenceInterval",
-            entityId: predecessorId,
-            oldValues: { effectiveTo: predecessor.effectiveTo },
-            newValues: { effectiveTo: predecessorEffectiveTo, supersededByIntervalId: interval.id },
-            ipAddress: ctx.ipAddress,
-            userAgent: ctx.userAgent,
-          },
+        const plan=planReferenceIntervalApproval(interval,approved);
+        if(plan.conflicts.length)
+          throw new ReferenceIntervalGateError("approved_reference_interval_overlap",409);
+        const approvedAt=new Date();
+        const predecessorEffectiveTo=new Date(interval.effectiveFrom.getTime()-1);
+        for(const predecessorId of plan.predecessorsToClose){
+          const predecessor=approved.find(x=>x.id===predecessorId);
+          if(!predecessor)throw new ReferenceIntervalGateError("reference_interval_state_changed",409);
+          const changed=await tx.referenceInterval.updateMany({
+            where:{id:predecessorId,approvalStatus:"APPROVED",
+              status:"ACTIVE",effectiveTo:predecessor.effectiveTo},
+            data:{effectiveTo:predecessorEffectiveTo},
+          });
+          if(changed.count!==1)
+            throw new ReferenceIntervalGateError("reference_interval_state_changed",409);
+          await tx.auditEvent.create({data:{
+            organizationId:session.user.organizationId,branchId:session.activeBranchId,
+            actorUserId:session.userId,action:"REFERENCE_INTERVAL_SUPERSEDED",
+            entityType:"ReferenceInterval",entityId:predecessorId,
+            oldValues:{effectiveTo:predecessor.effectiveTo},
+            newValues:{effectiveTo:predecessorEffectiveTo,supersededByIntervalId:interval.id},
+            ipAddress:ctx.ipAddress,userAgent:ctx.userAgent,
+          }});
+        }
+        const approvedUpdate=await tx.referenceInterval.updateMany({
+          where:{id:interval.id,approvalStatus:"DRAFT",status:"INACTIVE"},
+          data:{approvalStatus:"APPROVED",status:"ACTIVE",
+            approvedByUserId:session.userId,approvedAt,
+            retiredByUserId:null,retiredAt:null,retirementReason:null},
         });
+        if(approvedUpdate.count!==1)
+          throw new ReferenceIntervalGateError("reference_interval_state_changed",409);
+        await tx.auditEvent.create({data:{
+          organizationId:session.user.organizationId,branchId:session.activeBranchId,
+          actorUserId:session.userId,action:"REFERENCE_INTERVAL_APPROVED",
+          entityType:"ReferenceInterval",entityId:interval.id,
+          oldValues:{approvalStatus:interval.approvalStatus,status:interval.status},
+          newValues:{approvalStatus:"APPROVED",status:"ACTIVE",
+            approvedAt,approvedByUserId:session.userId,
+            predecessorsClosed:plan.predecessorsToClose},
+          reason:reason||null,ipAddress:ctx.ipAddress,userAgent:ctx.userAgent,
+        }});
+      }else{
+        if(interval.approvalStatus!=="APPROVED"||interval.status!=="ACTIVE")
+          throw new ReferenceIntervalGateError("only_approved_reference_interval_can_be_retired",409);
+        const retiredAt=new Date();
+        const effectiveTo=interval.effectiveFrom<=retiredAt &&
+          (interval.effectiveTo===null||interval.effectiveTo>retiredAt)
+          ?retiredAt:interval.effectiveTo;
+        const retiredUpdate=await tx.referenceInterval.updateMany({
+          where:{id:interval.id,approvalStatus:"APPROVED",status:"ACTIVE",
+            effectiveTo:interval.effectiveTo},
+          data:{approvalStatus:"RETIRED",status:"INACTIVE",effectiveTo,
+            retiredByUserId:session.userId,retiredAt,retirementReason:reason},
+        });
+        if(retiredUpdate.count!==1)
+          throw new ReferenceIntervalGateError("reference_interval_state_changed",409);
+        await tx.auditEvent.create({data:{
+          organizationId:session.user.organizationId,branchId:session.activeBranchId,
+          actorUserId:session.userId,action:"REFERENCE_INTERVAL_RETIRED",
+          entityType:"ReferenceInterval",entityId:interval.id,
+          oldValues:{approvalStatus:interval.approvalStatus,status:interval.status,
+            effectiveTo:interval.effectiveTo},
+          newValues:{approvalStatus:"RETIRED",status:"INACTIVE",effectiveTo,
+            retiredAt,retiredByUserId:session.userId},
+          reason,ipAddress:ctx.ipAddress,userAgent:ctx.userAgent,
+        }});
       }
-
-      const approvedInterval = await tx.referenceInterval.update({
-        where: { id: interval.id },
-        data: {
-          approvalStatus: "APPROVED",
-          status: "ACTIVE",
-          approvedByUserId: session.userId,
-          approvedAt,
-          retiredByUserId: null,
-          retiredAt: null,
-          retirementReason: null,
-        },
-      });
-
-      await tx.auditEvent.create({
-        data: {
-          organizationId: session.user.organizationId,
-          branchId: session.activeBranchId,
-          actorUserId: session.userId,
-          action: "REFERENCE_INTERVAL_APPROVED",
-          entityType: "ReferenceInterval",
-          entityId: interval.id,
-          oldValues: { approvalStatus: interval.approvalStatus, status: interval.status },
-          newValues: {
-            approvalStatus: approvedInterval.approvalStatus,
-            status: approvedInterval.status,
-            approvedAt,
-            approvedByUserId: session.userId,
-            predecessorsClosed: plan.predecessorsToClose,
-          },
-          reason: reason || null,
-          ipAddress: ctx.ipAddress,
-          userAgent: ctx.userAgent,
-        },
-      });
-
-      return approvedInterval;
-    });
-
-    return NextResponse.json({ status: "ok", interval: updated });
+      return tx.referenceInterval.findUniqueOrThrow({where:{id:intervalId}});
+    },{timeout:30000});
+    return NextResponse.json({status:"ok",interval:updated});
+  }catch(error){
+    if(error instanceof ReferenceIntervalGateError)
+      return NextResponse.json({error:error.errorCode},{status:error.status});
+    throw error;
   }
-
-  if (interval.approvalStatus !== "APPROVED") {
-    return NextResponse.json({ error: "only_approved_reference_interval_can_be_retired", approvalStatus: interval.approvalStatus }, { status: 409 });
-  }
-  if (!reason) {
-    return NextResponse.json({ error: "retirement_reason_required" }, { status: 400 });
-  }
-
-  const retiredAt = new Date();
-  const effectiveTo = interval.effectiveFrom <= retiredAt
-    && (interval.effectiveTo === null || interval.effectiveTo > retiredAt)
-      ? retiredAt
-      : interval.effectiveTo;
-
-  const retired = await prisma.$transaction(async tx => {
-    const updated = await tx.referenceInterval.update({
-      where: { id: interval.id },
-      data: {
-        approvalStatus: "RETIRED",
-        status: "INACTIVE",
-        effectiveTo,
-        retiredByUserId: session.userId,
-        retiredAt,
-        retirementReason: reason,
-      },
-    });
-
-    await tx.auditEvent.create({
-      data: {
-        organizationId: session.user.organizationId,
-        branchId: session.activeBranchId,
-        actorUserId: session.userId,
-        action: "REFERENCE_INTERVAL_RETIRED",
-        entityType: "ReferenceInterval",
-        entityId: interval.id,
-        oldValues: {
-          approvalStatus: interval.approvalStatus,
-          status: interval.status,
-          effectiveTo: interval.effectiveTo,
-        },
-        newValues: {
-          approvalStatus: updated.approvalStatus,
-          status: updated.status,
-          effectiveTo,
-          retiredAt,
-          retiredByUserId: session.userId,
-        },
-        reason,
-        ipAddress: ctx.ipAddress,
-        userAgent: ctx.userAgent,
-      },
-    });
-
-    return updated;
-  });
-
-  return NextResponse.json({ status: "ok", interval: retired });
 }
