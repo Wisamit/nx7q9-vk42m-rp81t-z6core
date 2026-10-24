@@ -4,6 +4,7 @@ import { analyzerMappingTargetUnitStillMatches } from "@/lib/analyzer-mapping-go
 import { analyzerRoutingAllowsImport } from "@/lib/analyzer-routing";
 import { parseBridgeObservationSubmission } from "@/lib/analyzer-bridge-observation-boundary";
 import { analyzerRawClinicalQualifierDecision } from "@/lib/analyzer-raw-clinical-qualifier-gate";
+import { verifyOriginalAnalyzerObservationBinding } from "@/lib/analyzer-raw-observation-binding";
 import { authenticateAnalyzerBridge } from "@/lib/analyzer-auth";
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -42,6 +43,25 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({
       error: "analyzer_raw_clinical_qualifier_requires_review",
       reason: originalClinicalGate.reason,
+    }, { status: 409 });
+  }
+
+  // An authenticated Bridge is a transport, not medical evidence that its
+  // normalized JSON still matches the original instrument bytes. Confirm the
+  // persisted SHA and entire specimen/test/value/unit observation set before
+  // ANY staging, route lookup, or result mutation. Ambiguous raw identifiers
+  // must be reviewed using the retained AnalyzerMessage, never guessed.
+  const originalBinding = verifyOriginalAnalyzerObservationBinding({
+    protocol: message.protocol,
+    rawPayload: message.rawPayload,
+    storedPayloadHash: message.payloadHash,
+    bridgeMessageId,
+    observations: normalized,
+  });
+  if (!originalBinding.ok) {
+    return NextResponse.json({
+      error: "analyzer_normalized_payload_requires_review",
+      reason: originalBinding.reason,
     }, { status: 409 });
   }
 
