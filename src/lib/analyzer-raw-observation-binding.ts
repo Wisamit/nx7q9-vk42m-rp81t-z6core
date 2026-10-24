@@ -67,15 +67,18 @@ export function verifyOriginalAnalyzerObservationBinding(input: {
         rows[0][8]?.split("^")[1] !== "R01")
       return denied("ANALYZER_ORIGINAL_MESSAGE_ID_MISMATCH");
     let orderIndex = 0;
+    let groupHasObx = false;
     let obrBarcode: string | null = null;
     let spmBarcode: string | null = null;
     for (const row of rows.slice(1)) {
       if (row[0] === "OBR") {
         orderIndex++;
+        groupHasObx = false;
         obrBarcode = row[3] || null;
         spmBarcode = null;
       } else if (row[0] === "SPM") {
-        if (!orderIndex) return denied("ANALYZER_ORIGINAL_SPECIMEN_BINDING_UNVERIFIABLE");
+        if (!orderIndex || groupHasObx)
+          return denied("ANALYZER_ORIGINAL_SPECIMEN_BINDING_UNVERIFIABLE");
         spmBarcode = row[2] || null;
       } else if (row[0] === "OBX") {
         if (!orderIndex || !exactId(row[1], 20))
@@ -94,6 +97,7 @@ export function verifyOriginalAnalyzerObservationBinding(input: {
           observationId: input.bridgeMessageId + ":" + orderIndex + ":" + row[1],
           barcode, analyzerTestCode: code, rawValue: row[5], rawUnit: unit,
         });
+        groupHasObx = true;
       }
     }
   } else if (input.protocol === "ASTM") {
