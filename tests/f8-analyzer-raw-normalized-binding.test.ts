@@ -134,6 +134,12 @@ test("F8 §75: metadata flag gate stays independent and runs before raw/normaliz
   const stagedPos=route.indexOf("tx.analyzerResultImport.create(",mappingPos);
   assert.ok(rawPos>0&&bindingPos>rawPos&&mappingPos>bindingPos&&stagedPos>mappingPos);
   assert.ok(route.includes("storedPayloadHash: message.payloadHash"));
+  assert.ok(route.includes("SELECT id,raw_payload,payload_hash,protocol,bridge_message_id"));
+  assert.ok(route.includes("FOR UPDATE"));
+  assert.ok(route.includes("lockedMessage.raw_payload !== message.rawPayload"));
+  assert.ok(route.includes("BRIDGE_MESSAGE_SOURCE_CHANGED"));
+  assert.ok(route.indexOf("const lockedMessage = messageLock[0]") <
+    route.indexOf("tx.analyzerResultImport.findMany(",bindingPos));
   assert.ok(route.includes("observations: normalized"));
   assert.ok(route.includes('error: "analyzer_normalized_payload_requires_review"'));
   assert.ok(!route.slice(rawPos,bindingPos).includes("analyzerResultImport.create"));
