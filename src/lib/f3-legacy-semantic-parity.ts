@@ -7,7 +7,8 @@ import {
 
 /** Workstation-only normalized values. NEVER submit these to a LIS HTTP API. */
 export type F3SemanticKind =
-  "TEXT"|"TEXT_CASEFOLD"|"INTEGER"|"DECIMAL"|"BOOLEAN"|"DATE"|"MEMBER_CODES";
+  "TEXT"|"TEXT_CASEFOLD"|"INTEGER"|"DECIMAL"|"BOOLEAN"|"DATE"|
+  "MEMBER_CODES"|"UNORDERED_MEMBER_CODES";
 export type F3SemanticField={
   sourceField:string;targetField:string;kind:F3SemanticKind;
 };
@@ -78,7 +79,8 @@ function normalized(kind:F3SemanticKind,value:unknown):string|null{
          new Date(value+"T00:00:00.000Z").toISOString().slice(0,10)!==value)
         return null;
       return "DATE:"+value;
-    case "MEMBER_CODES": {
+    case "MEMBER_CODES":
+    case "UNORDERED_MEMBER_CODES": {
       if(!Array.isArray(value)||value.length>10000)return null;
       const members:string[]=[];
       for(const member of value){
@@ -86,7 +88,11 @@ function normalized(kind:F3SemanticKind,value:unknown):string|null{
         members.push(member.toUpperCase());
       }
       if(new Set(members).size!==members.length)return null;
-      return "MEMBERS:"+members.sort().join("|");
+      // The order of a legacy profile/panel can govern report presentation.
+      // Do not silently normalize that ordering away. Explicitly reviewed
+      // membership-only comparisons may opt into UNORDERED_MEMBER_CODES.
+      return "MEMBERS:"+
+        (kind==="UNORDERED_MEMBER_CODES"?members.sort():members).join("|");
     }
     default:return null;
   }
@@ -105,7 +111,7 @@ function validatedPolicies(policies:readonly F3SemanticPolicy[]){
       if(!shortName.test(field.sourceField)||
          !shortName.test(field.targetField)||
          !["TEXT","TEXT_CASEFOLD","INTEGER","DECIMAL","BOOLEAN",
-           "DATE","MEMBER_CODES"].includes(field.kind)||
+           "DATE","MEMBER_CODES","UNORDERED_MEMBER_CODES"].includes(field.kind)||
          sources.has(field.sourceField)||targets.has(field.targetField))
         throw Error("f3_semantic_policy_fields_invalid");
       sources.add(field.sourceField);targets.add(field.targetField);
