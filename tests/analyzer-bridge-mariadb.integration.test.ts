@@ -69,6 +69,31 @@ test("analyzer raw dedupe and clinical import are serialized across two database
     assert.equal(stored[0]?.raw_payload,raw);
     assert.equal(stored[0]?.payload_hash,hash);
 
+    // The staging transaction must protect the raw payload and its digest
+    // under the exact same analyzer-message FOR UPDATE lock as child imports.
+    // A concurrent writer cannot silently substitute an analyzer value while
+    // an observation is being staged.
+    await first.beginTransaction();
+    const [lockedSource] = await first.execute<mysql.RowDataPacket[]>(
+      "SELECT raw_payload,payload_hash,protocol,bridge_message_id "+
+      "FROM analyzer_messages WHERE id=? AND analyzer_id=? FOR UPDATE",
+      [message,analyzer]);
+    assert.equal(lockedSource[0]?.raw_payload,raw);
+    assert.equal(lockedSource[0]?.payload_hash,hash);
+    assert.equal(lockedSource[0]?.bridge_message_id,"MSG-1");
+    await second.beginTransaction();
+    await assert.rejects(second.execute(
+      "UPDATE analyzer_messages SET raw_payload=?,payload_hash=? WHERE id=?",
+      [raw.replace("MSG-1","MSG-TAMPER"),hash,message]),
+      (err:unknown)=>Boolean(err && typeof err==="object" &&
+        "code" in err && err.code==="ER_LOCK_WAIT_TIMEOUT"));
+    await second.rollback();
+    await first.commit();
+    const [unchangedSource] = await setup.execute<mysql.RowDataPacket[]>(
+      "SELECT raw_payload,payload_hash FROM analyzer_messages WHERE id=?",[message]);
+    assert.equal(unchangedSource[0]?.raw_payload,raw);
+    assert.equal(unchangedSource[0]?.payload_hash,hash);
+
     await seed("INSERT INTO analyzer_result_imports (id,message_id,bridge_observation_id,analyzer_id,order_item_id,specimen_id,barcode_snapshot,analyzer_test_code,raw_value,status,updated_at) VALUES (?,?,?,?,?,?,?,?,?,'MAPPED',NOW(3))",
       [importId,message,"MSG-1:1:1",analyzer,orderItem,specimen,"AN-BAR-"+suffix,"GLU","5.2"],
       "DELETE FROM analyzer_result_imports WHERE id = ?",[importId]);

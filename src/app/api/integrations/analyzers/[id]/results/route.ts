@@ -4,6 +4,7 @@ import { analyzerMappingTargetUnitStillMatches } from "@/lib/analyzer-mapping-go
 import { analyzerRoutingAllowsImport } from "@/lib/analyzer-routing";
 import { parseBridgeObservationSubmission } from "@/lib/analyzer-bridge-observation-boundary";
 import { analyzerRawClinicalQualifierDecision } from "@/lib/analyzer-raw-clinical-qualifier-gate";
+import { verifyOriginalAnalyzerObservationBinding } from "@/lib/analyzer-raw-observation-binding";
 import { authenticateAnalyzerBridge } from "@/lib/analyzer-auth";
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -42,6 +43,25 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({
       error: "analyzer_raw_clinical_qualifier_requires_review",
       reason: originalClinicalGate.reason,
+    }, { status: 409 });
+  }
+
+  // An authenticated Bridge is a transport, not medical evidence that its
+  // normalized JSON still matches the original instrument bytes. Confirm the
+  // persisted SHA and entire specimen/test/value/unit observation set before
+  // ANY staging, route lookup, or result mutation. Ambiguous raw identifiers
+  // must be reviewed using the retained AnalyzerMessage, never guessed.
+  const originalBinding = verifyOriginalAnalyzerObservationBinding({
+    protocol: message.protocol,
+    rawPayload: message.rawPayload,
+    storedPayloadHash: message.payloadHash,
+    bridgeMessageId,
+    observations: normalized,
+  });
+  if (!originalBinding.ok) {
+    return NextResponse.json({
+      error: "analyzer_normalized_payload_requires_review",
+      reason: originalBinding.reason,
     }, { status: 409 });
   }
 
@@ -117,12 +137,36 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const staged = await prisma.$transaction(async tx => {
     // Lock the parent before reading child imports. Concurrent retries for the
     // same bridge message must be idempotent even when both read "not found".
-    const messageLock = await tx.$queryRaw<Array<{ id: string }>>`
-      SELECT id FROM analyzer_messages
+    const messageLock = await tx.$queryRaw<Array<{
+      id: string; raw_payload: string; payload_hash: string;
+      protocol: string; bridge_message_id: string;
+    }>>`
+      SELECT id,raw_payload,payload_hash,protocol,bridge_message_id
+      FROM analyzer_messages
       WHERE id = ${message.id} AND analyzer_id = ${credential.analyzer.id}
       FOR UPDATE
     `;
     if (messageLock.length !== 1) throw new Error("BRIDGE_MESSAGE_STATE_CHANGED");
+    // Guard a concurrent change after the initial raw message lookup: the
+    // source bound to staged results must be EXACTLY the row protected by
+    // the same lock as the child import writes and their audit event.
+    const lockedMessage = messageLock[0];
+    if (lockedMessage.raw_payload !== message.rawPayload ||
+        lockedMessage.payload_hash !== message.payloadHash ||
+        lockedMessage.protocol !== message.protocol ||
+        lockedMessage.bridge_message_id !== bridgeMessageId ||
+        !analyzerRawClinicalQualifierDecision(
+          lockedMessage.protocol, lockedMessage.raw_payload,
+        ).eligibleForStaging ||
+        !verifyOriginalAnalyzerObservationBinding({
+          protocol: lockedMessage.protocol,
+          rawPayload: lockedMessage.raw_payload,
+          storedPayloadHash: lockedMessage.payload_hash,
+          bridgeMessageId,
+          observations: normalized,
+        }).ok) {
+      throw new Error("BRIDGE_MESSAGE_SOURCE_CHANGED");
+    }
     const freshImports = await tx.analyzerResultImport.findMany({
       where: { messageId: message.id, bridgeObservationId: { in: observationIds } },
     });
@@ -331,7 +375,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     return { output, errorCount: totalErrors, newObservationCount, reprocessedObservationCount, duplicateObservationCount };
   }, { timeout: 30000 }).catch(error => {
-    if (error instanceof Error && ["BRIDGE_MESSAGE_STATE_CHANGED","BRIDGE_OBSERVATION_PAYLOAD_CHANGED"].includes(error.message)) return null;
+    if (error instanceof Error && ["BRIDGE_MESSAGE_STATE_CHANGED","BRIDGE_MESSAGE_SOURCE_CHANGED",
+      "BRIDGE_OBSERVATION_PAYLOAD_CHANGED"].includes(error.message)) return null;
     throw error;
   });
   if (!staged) {
