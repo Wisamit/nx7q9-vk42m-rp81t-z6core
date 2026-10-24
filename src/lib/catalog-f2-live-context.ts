@@ -51,3 +51,16 @@ export async function lockF2ActivePriceContext(
     member.status !== "ACTIVE"))
     throw Error("f2_apply_price_package_member_inactive_or_foreign");
 }
+
+/** An F2 interval may be branch-scoped even without any analyzer. Never
+ * activate a signed interval after its branch was disabled or reassigned. */
+export async function lockF2ActiveReferenceBranch(
+  tx: Prisma.TransactionClient, organizationId: string, branchId: string | null,
+): Promise<void> {
+  if (branchId === null) return;
+  const branches = await tx.$queryRaw<Array<{ id: string }>>`
+    SELECT id FROM branches WHERE id=${branchId}
+      AND organization_id=${organizationId} AND status='ACTIVE' FOR UPDATE
+  `;
+  if (branches.length !== 1) throw Error("f2_apply_range_branch_inactive_or_foreign");
+}
