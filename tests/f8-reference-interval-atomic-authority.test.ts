@@ -17,6 +17,9 @@ function fixture(o:FakeOptions={}) {
     $queryRaw:async (strings:TemplateStringsArray,...params:unknown[])=>{
       const sql=strings.join("?"); requests.push(sql);
       if(sql.includes("FROM organizations"))return o.active===false?[]:[{id:ORG}];
+      if(sql.includes("FROM users u"))return o.role===false?[]:[{id:USER}];
+      if(sql.includes("FROM user_branch_scopes s"))return (o.currentGrants||[A,B])
+        .map(branchId=>({branchId}));
       if(sql.includes("FROM branches"))return (o.branches||[A,B]).map(id=>({id}));
       if(sql.includes("FROM test_components"))return o.component===false?[]:[{id:"C"}];
       if(sql.includes("FROM methods"))return o.method===false?[]:[{id:"M"}];
@@ -47,7 +50,9 @@ test("F8 clinical: organization lock and fresh grants precede any reference inte
   const {tx,requests}=fixture();
   await lockReferenceIntervalWriteAuthority(tx,input(null));
   assert.match(requests[0],/organizations[\s\S]*FOR UPDATE/);
-  assert.match(requests[1],/branches[\s\S]*FOR UPDATE/);
+  assert.match(requests[1],/user_roles[\s\S]*role_permissions[\s\S]*FOR UPDATE/);
+  assert.match(requests[2],/branches[\s\S]*FOR UPDATE/);
+  assert.match(requests[3],/user_branch_scopes[\s\S]*FOR UPDATE/);
   assert.ok(requests[0].indexOf("organizations")>=0);
 });
 
