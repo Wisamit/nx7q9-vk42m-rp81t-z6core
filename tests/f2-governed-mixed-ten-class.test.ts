@@ -134,6 +134,18 @@ function mockDb(){
    },
  };
  const tx={
+   $queryRaw:async(parts:TemplateStringsArray,...values:unknown[])=>{
+     const query=parts.join("?");
+     const read=(ident:string)=>{assert.equal(values[0],ident);return [{id:ident}];};
+     if(query.includes("FROM test_components c JOIN lab_tests t"))
+       return read(id(78));
+     if(query.includes("FROM price_lists"))
+       return [{...read(id(75))[0],branch_id:null}];
+     if(query.includes("FROM lab_tests WHERE"))return read(id(76));
+     if(query.includes("FROM commercial_packages WHERE"))return read(id(77));
+     if(query.includes("FROM commercial_package_items"))return [];
+     throw Error("unexpected_f2_ten_class_live_context");
+   },
    auditEvent:audit,
    catalogImportBatch:{findFirst:async()=>({id:source.batchId})},
    catalogConfigurationRevision:versionTable,

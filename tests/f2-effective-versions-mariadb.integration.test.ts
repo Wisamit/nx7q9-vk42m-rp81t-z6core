@@ -108,6 +108,28 @@ test("F2 MariaDB: atomic synthetic price/package/range versions and compensating
       [oldPackagePriceId,priceListId,packageId,"150.0000","2026-01-01 00:00:00.000"]);
     await query("INSERT INTO reference_intervals(id,component_id,sex,low_value,high_value,critical_low,critical_high,effective_from,approval_status,status,updated_at) VALUES(? ,?,'ANY',?,?,?,?,?,'APPROVED','ACTIVE',NOW(3))",
       [oldIntervalId,componentId,"1.000000","9.000000","0.500000","10.000000","2026-01-01 00:00:00.000"]);
+    // An approved signed source is NOT permission to publish against an
+    // inactive current commercial master, test, package or clinical component.
+    // Both price clones execute before the reference clone in this plan; a
+    // rejection of the last dependency must roll back earlier price writes.
+    for (const [table,id,expected] of [
+      ["price_lists",priceListId,/f2_apply_price_list_inactive_or_foreign/],
+      ["lab_tests",testId,/f2_apply_price_test_inactive_or_foreign/],
+      ["commercial_packages",packageId,/f2_apply_price_package_inactive_or_foreign/],
+      ["test_components",componentId,/component_not_found/],
+    ] as const) {
+      await query(`UPDATE ${table} SET status='INACTIVE' WHERE id=?`,[id]);
+      await assert.rejects(
+        ()=>transaction(tx=>applyF2EffectiveVersionsUnderLock(
+          tx as never,plan,authority,new Date("2026-10-21T00:00:00.000Z"))),
+        expected,`inactive ${table} must block the entire signed application`);
+      const [unchanged]=await sql.execute<mysql.RowDataPacket[]>(
+        "SELECT COUNT(*) AS count FROM price_list_items WHERE price_list_id=?",
+        [priceListId]);
+      assert.equal(Number(unchanged[0].count),1,"no partially committed tariff clone");
+      await query(`UPDATE ${table} SET status='ACTIVE' WHERE id=?`,[id]);
+    }
+
     // An independently changed money field must make the signed plan stale.
     await query("UPDATE price_list_items SET unit_price=? WHERE id=?",
       ["151.0000",oldTestPriceId]);
