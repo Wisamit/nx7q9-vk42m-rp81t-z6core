@@ -11,6 +11,16 @@ function id(value: unknown) {
     ? value : null;
 }
 
+async function hasOrganizationWideReferenceScope(
+  organizationId: string, authorizedBranchIds: readonly string[],
+) {
+  const active = await prisma.branch.findMany({
+    where: { organizationId, status: "ACTIVE" }, select: { id: true },
+  });
+  const granted = new Set(authorizedBranchIds);
+  return active.length > 0 && active.every(branch => granted.has(branch.id));
+}
+
 export async function POST(request: NextRequest) {
   const session = await getCurrentSession();
   if (!session) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
@@ -40,6 +50,12 @@ export async function POST(request: NextRequest) {
   );
   if (branchId && !canAccessBranch(session, branchId)) {
     return NextResponse.json({ error: "branch_forbidden" }, { status: 403 });
+  }
+  if (!branchId && !await hasOrganizationWideReferenceScope(
+    session.user.organizationId,
+    session.user.branchScopes.filter(item => item.branch.status === "ACTIVE").map(item => item.branchId),
+  )) {
+    return NextResponse.json({ error: "organization_scope_incomplete" }, { status: 403 });
   }
   if (body.sex != null && body.sex !== "" &&
       !["ANY", "MALE", "FEMALE"].includes(body.sex)) {
@@ -233,6 +249,15 @@ export async function PATCH(request: NextRequest) {
     },
   });
   if (!interval) return NextResponse.json({ error: "reference_interval_not_found" }, { status: 404 });
+  if (interval.branchId && !canAccessBranch(session, interval.branchId)) {
+    return NextResponse.json({ error: "branch_forbidden" }, { status: 403 });
+  }
+  if (!interval.branchId && !await hasOrganizationWideReferenceScope(
+    session.user.organizationId,
+    session.user.branchScopes.filter(item => item.branch.status === "ACTIVE").map(item => item.branchId),
+  )) {
+    return NextResponse.json({ error: "organization_scope_incomplete" }, { status: 403 });
+  }
 
   if (action === "APPROVE") {
     if (interval.approvalStatus !== "DRAFT") {
