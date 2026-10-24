@@ -167,6 +167,10 @@ export function reconcileF3LegacyTargets(input:{
     absentFromTarget:0,unresolved:0,ambiguous:0,notImported:0,
     mapped:0,approvedMapping:0,targetReuse:0};
   const tables:F3TableSummary[]=[];
+  // Cross-table aliases can accidentally map to the SAME target entity.
+  // Target uniqueness for source reconciliation is organization-wide, not
+  // limited to each Access table's ledger rows.
+  const globalTargets=new Set<string>();
   for(const expected of LEGACY_COVERAGE_SOURCES){
     const table=coverage.tables.find(x=>x.tableName===expected.tableName)!;
     const inLedger=byTable.get(expected.tableName)||[];
@@ -175,7 +179,6 @@ export function reconcileF3LegacyTargets(input:{
     if(absentFromTarget<0)throw Error("f3_target_source_count_exceeded");
     const counts={unresolved:0,ambiguous:0,notImported:0,
       mapped:0,approvedMapping:0,targetReuse:0};
-    const targetIds=new Set<string>();
     for(const item of inLedger){
       const prop={
         UNRESOLVED:"unresolved",AMBIGUOUS:"ambiguous",
@@ -185,8 +188,8 @@ export function reconcileF3LegacyTargets(input:{
       counts[prop]++;
       if(item.targetId&&item.targetType){
         const target=JSON.stringify([item.targetType,item.targetId.toLowerCase()]);
-        if(targetIds.has(target))counts.targetReuse++;
-        targetIds.add(target);
+        if(globalTargets.has(target))counts.targetReuse++;
+        globalTargets.add(target);
       }
     }
     const finding:F3TableSummary["finding"]=
@@ -206,7 +209,11 @@ export function reconcileF3LegacyTargets(input:{
       total[field]+=counts[field];
   }
   return {
-    state:total.sourceRows===0 || total.absentFromTarget+total.unresolved+total.ambiguous+
+    // An absent expected Access source table is a COVERAGE GAP even if every
+    // row in the few present tables maps to a target. Never advertise overall
+    // key reconciliation for a partial 15-table source extraction.
+    state:total.sourceRows===0 || coverage.tables.some(t=>!t.present) ||
+      total.absentFromTarget+total.unresolved+total.ambiguous+
       total.notImported+total.mapped+total.targetReuse>0?
       "GAPS_REMAIN":"ROW_KEYS_MATCH_REVIEW_ONLY",
     sourceTableCount:15,...total,tables,
