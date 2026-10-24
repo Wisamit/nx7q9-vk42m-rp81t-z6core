@@ -27,21 +27,34 @@ export async function lockReferenceIntervalWriteAuthority(
     SELECT id FROM organizations WHERE id=${organizationId} AND status='ACTIVE' FOR UPDATE
   `;
   if(org.length!==1)deny("forbidden",403);
-  const actor=await tx.user.findFirst({where:{id:userId,organizationId,status:"ACTIVE",
-    roles:{some:{role:{organizationId,status:"ACTIVE",
-      permissions:{some:{permission:{code:permission}}}
-    }}}},select:{id:true}});
-  if(!actor)deny("forbidden",403);
+  // A plain Prisma snapshot read would leave a TOCTOU gap if the role or
+  // permission is revoked before COMMIT. Lock the actual permission chain.
+  const actor=await tx.$queryRaw<Array<{id:string}>>`
+    SELECT u.id FROM users u
+    JOIN user_roles ur ON ur.user_id=u.id
+    JOIN roles r ON r.id=ur.role_id
+    JOIN role_permissions rp ON rp.role_id=r.id
+    JOIN permissions p ON p.id=rp.permission_id
+    WHERE u.id=${userId} AND u.organization_id=${organizationId}
+    AND u.status='ACTIVE' AND r.organization_id=${organizationId}
+    AND r.status='ACTIVE' AND p.code=${permission}
+    ORDER BY r.id FOR UPDATE
+  `;
+  if(!actor.length)deny("forbidden",403);
   const branches=await tx.$queryRaw<Array<{id:string}>>`
     SELECT id FROM branches WHERE organization_id=${organizationId}
     AND status='ACTIVE' ORDER BY id FOR UPDATE
   `;
   if(branchId && !branches.some(b=>b.id===branchId))deny("branch_not_found",404);
   if(!branchId && !branches.length)deny("organization_scope_incomplete",403);
-  const live=await tx.userBranchScope.findMany({
-    where:{userId,branch:{organizationId,status:"ACTIVE"}},
-    select:{branchId:true},
-  });
+  // Also hold the live grant rows; revocation cannot slip in after the
+  // scope comparison and before a clinical INSERT/UPDATE transaction COMMIT.
+  const live=await tx.$queryRaw<Array<{branchId:string}>>`
+    SELECT s.branch_id AS branchId FROM user_branch_scopes s
+    JOIN branches b ON b.id=s.branch_id
+    WHERE s.user_id=${userId} AND b.organization_id=${organizationId}
+    AND b.status='ACTIVE' ORDER BY s.branch_id FOR UPDATE
+  `;
   const session=new Set(input.sessionBranchIds);
   const authorized=new Set(live.map(x=>x.branchId).filter(id=>session.has(id)));
   if(branchId && !authorized.has(branchId))deny("branch_forbidden",403);
