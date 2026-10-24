@@ -3,6 +3,8 @@ import type { Prisma } from "../../generated/prisma/client";
 import { verifyF2ApplyPlanIntegrity, type F2ApplyPlan } from "./catalog-f2-apply-plan.ts";
 import { f2ExactUtcInstant } from "./catalog-f2-utc-instant.ts";
 import { validF2ClinicalIntervalNumbers } from "./catalog-f2-clinical-values.ts";
+import { lockActiveReferenceComponent, lockActiveReferenceContext } from "./reference-interval-live-authority.ts";
+import { lockF2ActivePriceContext } from "./catalog-f2-live-context.ts";
 import {
   signF2ApplicationJournal,verifyF2ApplicationJournal,
 } from "./catalog-f2-application-journal.ts";
@@ -158,6 +160,8 @@ export async function applyF2EffectiveVersionsUnderLock(
         const testId=row.originalSnapshot.testId;
         if(typeof testId!=="string"||!UUID.test(testId))
           throw Error("f2_apply_price_test_invalid");
+        await lockF2ActivePriceContext(tx,authority.organizationId,
+          "PRICE_LIST_ITEM",row.originalSnapshot.priceListId as string,testId);
         const sibling=await tx.priceListItem.findMany({
           where:{priceListId:row.originalSnapshot.priceListId as string,testId,
             status:"ACTIVE",effectiveTo:null},
@@ -180,6 +184,8 @@ export async function applyF2EffectiveVersionsUnderLock(
         const packageId=row.originalSnapshot.packageId;
         if(typeof packageId!=="string"||!UUID.test(packageId))
           throw Error("f2_apply_package_invalid");
+        await lockF2ActivePriceContext(tx,authority.organizationId,
+          "PRICE_LIST_PACKAGE_ITEM",row.originalSnapshot.priceListId as string,packageId);
         const sibling=await tx.priceListPackageItem.findMany({
           where:{priceListId:row.originalSnapshot.priceListId as string,
             packageId,status:"ACTIVE",effectiveTo:null},
@@ -209,6 +215,16 @@ export async function applyF2EffectiveVersionsUnderLock(
       const componentId=prior.componentId;
       if(typeof componentId!=="string"||!UUID.test(componentId))
         throw Error("f2_apply_range_identity");
+      // Signed medical values cannot override a subsequently deactivated
+      // method, specimen or branch-owned analyzer.
+      await lockActiveReferenceComponent(tx,authority.organizationId,componentId);
+      await lockActiveReferenceContext(tx,{
+        organizationId:authority.organizationId,
+        branchId:prior.branchId as string|null,
+        methodId:prior.methodId as string|null,
+        analyzerId:prior.analyzerId as string|null,
+        specimenTypeId:prior.specimenTypeId as string|null,
+      });
       // A second concurrently configured open, approved interval for the
       // identical population/method scope would make the newly activated
       // critical range ambiguous. Reject rather than choose arbitrary one.
