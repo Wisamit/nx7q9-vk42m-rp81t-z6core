@@ -70,3 +70,23 @@ export function validateReferenceRangeDecimals(body:unknown):ClinicalRangeAdmiss
     return {ok:false,error:"invalid_critical_range"};
   return {ok:true,values};
 }
+
+
+/**
+ * Effective date is a legally/clinically meaningful version boundary.
+ * Accept an exact UTC ISO calendar day or fully specified UTC timestamp;
+ * reject rollover (e.g. February 30), unqualified local clocks and offsets.
+ * Absence retains the existing new-DRAFT current-UTC-time default.
+ */
+export function parseReferenceIntervalEffectiveFrom(value:unknown):Date|null {
+  if(value===undefined||value===null||value==="")return new Date();
+  if(typeof value!=="string")return null;
+  const day=/^\d{4}-\d{2}-\d{2}$/.test(value);
+  const timestamp=/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/.test(value);
+  if(!day&&!timestamp)return null;
+  const normalized=day?value+"T00:00:00.000Z":
+    value.endsWith("Z") && !value.includes(".")?value.slice(0,-1)+".000Z":value;
+  const at=new Date(normalized);
+  if(!Number.isFinite(at.getTime())||at.toISOString()!==normalized)return null;
+  return at;
+}
