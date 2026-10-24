@@ -17,14 +17,17 @@ const sha=(letter:string)=>letter.repeat(64);
 const source={sourceName:"synthetic-only.mdb",sourceSha256:sha("a"),
   sourceBytes:8192};
 const schema=sha("b"),hmacKey=sha("c"),when="2026-10-21T00:00:00.000Z";
-function fixture(){
+function fixture(options:{fullCoverage?:boolean;crossTableReuse?:boolean}={}){
   const coverage=parseLegacySourceCoverage({
     schemaVersion:1,evidenceType:LEGACY_COVERAGE_TYPE,...source,
     exportedAtUtc:when,includesPatientData:false,
     tables:LEGACY_COVERAGE_SOURCES.map(({tableName})=>{
-      const present=["Test name","price"].includes(tableName);
+      const present=Boolean(options.fullCoverage ||
+        ["Test name","price"].includes(tableName) ||
+        (options.crossTableReuse && tableName==="test"));
       return {tableName,present,rowCount:tableName==="Test name"?501:
-        tableName==="price"?2:0,columnCount:present?3:0,
+        tableName==="price"?2:tableName==="test" && options.crossTableReuse?1:0,
+        columnCount:present?3:0,
         schemaSha256:present?schema:null};
     }),
   });
@@ -43,6 +46,16 @@ function fixture(){
     manifest("price",[{rowDigest:sha("e"),occurrence:1},
       {rowDigest:sha("e"),occurrence:2}],0,1,2),
   ];
+  if (options.crossTableReuse) {
+    lineage.push(manifest("test",[{rowDigest:sha("f"),occurrence:1}],0,1,1));
+  }
+  if (options.fullCoverage) {
+    for (const {tableName} of LEGACY_COVERAGE_SOURCES) {
+      if (tableName!=="Test name" && tableName!=="price" &&
+          !(options.crossTableReuse && tableName==="test"))
+        lineage.push(manifest(tableName,[],0,1,0));
+    }
+  }
   const rows=lineage.flatMap(page=>page.rows.map((row,i)=>({
     sourceTable:page.tableName,sourceSha256:source.sourceSha256,
     sourceSchemaSha256:schema,digestKeyId:hmacKey,
@@ -71,7 +84,8 @@ test("F3: 15-table HMAC row multiset and duplicate occurrences reconcile 503 row
   assert.equal(v.approvedMapping,503);
   assert.equal(v.targetReuse,0);
   assert.equal(v.tables.length,15);
-  assert.equal(v.state,"ROW_KEYS_MATCH_REVIEW_ONLY");
+  assert.equal(v.state,"GAPS_REMAIN",
+    "13 absent required source tables cannot be declared reconciled at the aggregate level");
   assert.equal(v.originalSourceValuesVerified,false);
   assert.equal(v.independentlyAuthenticatedDatabaseExport,false);
   assert.equal(v.clinicalApprovalVerified,false);
@@ -82,6 +96,38 @@ test("F3: 15-table HMAC row multiset and duplicate occurrences reconcile 503 row
   assert.equal(output.includes(sha("d")),false,"HMAC digest must remain private");
   assert.equal(output.includes(id(100)),false,"target UUID must remain private");
 });
+test("F8 §88: fully covered 15-table metadata can reach review-only row-key parity without GO",()=>{
+  const v=check(fixture({fullCoverage:true}));
+  assert.equal(v.sourceTableCount,15);
+  assert.equal(v.sourceRows,503);
+  assert.equal(v.absentFromTarget,0);
+  assert.equal(v.targetReuse,0);
+  assert.equal(v.tables.filter(t=>!t.present).length,0);
+  assert.equal(v.state,"ROW_KEYS_MATCH_REVIEW_ONLY");
+  assert.equal(v.originalSourceValuesVerified,false);
+  assert.equal(v.independentlyAuthenticatedDatabaseExport,false);
+  assert.equal(v.clinicalApprovalVerified,false);
+  assert.equal(v.financialApprovalVerified,false);
+  assert.equal(v.migrationCutoverApproved,false);
+});
+
+test("F8 §88: two different Access tables mapping same TEST target is a cross-table reuse gap",()=>{
+  // Test name and test may legitimately have related names, but two original
+  // source row HMAC identities do not automatically authorize a shared target.
+  const v=check(fixture({fullCoverage:true,crossTableReuse:true}));
+  assert.equal(v.sourceRows,504);
+  assert.equal(v.targetLedgerRows,504);
+  assert.equal(v.absentFromTarget,0);
+  assert.equal(v.targetReuse,1);
+  assert.equal(v.state,"GAPS_REMAIN");
+  assert.equal(v.tables.find(t=>t.tableName==="test")?.targetReuse,1);
+  assert.equal(v.tables.find(t=>t.tableName==="test")?.finding,
+    "TARGET_REUSE_REQUIRES_REVIEW");
+  assert.equal(v.originalSourceValuesVerified,false);
+  assert.equal(JSON.stringify(v).includes(id(100)),false,
+    "cross-table target identity must remain private");
+});
+
 test("F3: missing source-row assignment is explicit; ambiguous, not-imported and mapped are not approved",()=>{
   const f=fixture();
   const exportRows=f.targetExport.rows.slice(0,-1).map((item,i)=>
