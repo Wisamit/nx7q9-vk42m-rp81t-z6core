@@ -113,6 +113,11 @@ test("F8 clinical: both POST and PATCH use same transaction authority; approval 
     post.indexOf("tx.referenceInterval.create({"));
   assert.ok(post.includes("lockActiveReferenceComponent(tx"));
   assert.ok(post.includes("lockActiveReferenceContext(tx"));
+  assert.ok(patch.includes("lockActiveReferenceContext(tx"));
+  assert.ok(patch.indexOf("lockActiveReferenceContext(tx") >
+    patch.indexOf("lockActiveReferenceComponent(tx"));
+  assert.ok(patch.indexOf("lockActiveReferenceContext(tx") <
+    patch.indexOf("tx.referenceInterval.findMany({"));
   assert.ok(patch.indexOf("lockReferenceIntervalWriteAuthority(tx")<
     patch.indexOf("tx.referenceInterval.findMany({"));
   assert.ok(patch.indexOf("tx.referenceInterval.findMany({")<

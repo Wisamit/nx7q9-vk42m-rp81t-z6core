@@ -101,6 +101,10 @@ export async function lockActiveReferenceContext(
     if(rows.length!==1)deny("specimen_type_not_found",404);
   }
   if(analyzerId){
+    // Analyzer identity belongs to a concrete branch. An organization-wide
+    // reference interval may not embed a branch-local method/device context
+    // and masquerade as a globally applicable clinical rule.
+    if(!branchId)deny("analyzer_branch_scope_required",409);
     const rows=await tx.$queryRaw<Array<{id:string;branch_id:string}>>`
       SELECT id,branch_id FROM analyzers WHERE id=${analyzerId}
       AND organization_id=${organizationId} AND status='ACTIVE' FOR UPDATE
