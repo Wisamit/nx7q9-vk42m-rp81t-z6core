@@ -3,7 +3,7 @@ import { canAccessBranch, getCurrentSession, permissionSet, requestContext } fro
 import { prisma } from "@/lib/db";
 import { normalizePopulationCode } from "@/lib/result-reference";
 import { planReferenceIntervalApproval } from "@/lib/reference-interval-governance";
-import { validateReferenceRangeDecimals } from "@/lib/reference-interval-draft-decimals";
+import { parseReferenceIntervalEffectiveFrom, validateReferenceRangeDecimals } from "@/lib/reference-interval-draft-decimals";
 
 // Never shorten an untrusted scope or clinical ID into an unrelated identity.
 function id(value: unknown) {
@@ -84,8 +84,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "invalid_source" }, { status: 400 });
   }
 
-  const effectiveFrom = body.effectiveFrom ? new Date(body.effectiveFrom) : new Date();
-  if (Number.isNaN(effectiveFrom.getTime())) {
+  const effectiveFrom = parseReferenceIntervalEffectiveFrom(body.effectiveFrom);
+  if (!effectiveFrom) {
     return NextResponse.json({ error: "invalid_effective_date" }, { status: 400 });
   }
 
