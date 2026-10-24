@@ -97,8 +97,8 @@ test("F8 §75 MariaDB: two simultaneous approval attempts cannot publish overlap
       "WHERE id=? AND approval_status='DRAFT' AND status='INACTIVE'",[draftA]);
     assert.equal(published.affectedRows,1);
     await winner.execute(
-      "INSERT INTO audit_events(organization_id,action,entity_type,entity_id) "+
-      "VALUES(?,'REFERENCE_INTERVAL_APPROVED','ReferenceInterval',?)",[org,draftA]);
+      "INSERT INTO audit_events(id,organization_id,action,entity_type,entity_id) "+
+      "VALUES(?,?,'REFERENCE_INTERVAL_APPROVED','ReferenceInterval',?)",[randomUUID(),org,draftA]);
     await winner.commit();
 
     await rival.beginTransaction();
