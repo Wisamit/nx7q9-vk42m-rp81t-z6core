@@ -7,7 +7,8 @@ import {
 
 /** Workstation-only normalized values. NEVER submit these to a LIS HTTP API. */
 export type F3SemanticKind =
-  "TEXT"|"TEXT_CASEFOLD"|"INTEGER"|"DECIMAL"|"BOOLEAN"|"DATE"|
+  "TEXT"|"TEXT_CASEFOLD"|"TEXT_NORMALIZED"|"TEXT_CASEFOLD_NORMALIZED"|
+  "INTEGER"|"DECIMAL"|"BOOLEAN"|"DATE"|
   "MEMBER_CODES"|"UNORDERED_MEMBER_CODES";
 export type F3SemanticField={
   sourceField:string;targetField:string;kind:F3SemanticKind;
@@ -46,10 +47,19 @@ function normalized(kind:F3SemanticKind,value:unknown):string|null{
   if(value===null)return "NULL";
   switch(kind){
     case "TEXT":
-    case "TEXT_CASEFOLD": {
+    case "TEXT_CASEFOLD":
+    case "TEXT_NORMALIZED":
+    case "TEXT_CASEFOLD_NORMALIZED": {
       if(typeof value!=="string"||value.length>10000)return null;
-      const clean=value.normalize("NFC").trim();
-      return "TEXT:"+ (kind==="TEXT_CASEFOLD"?clean.toLocaleLowerCase("en-US"):clean);
+      // Literal TEXT is byte-distinct in the supplied UTF-16 source values:
+      // report notes, delimiters, tabs, whitespace and combining sequences
+      // must not silently disappear during legacy parity checking.
+      // Other transformations are only authorized through an EXPLICIT kind.
+      const clean=kind==="TEXT_NORMALIZED"||kind==="TEXT_CASEFOLD_NORMALIZED"
+        ?value.normalize("NFC").trim():value;
+      const compare=kind==="TEXT_CASEFOLD"||kind==="TEXT_CASEFOLD_NORMALIZED"
+        ?clean.toLocaleLowerCase("en-US"):clean;
+      return "TEXT:"+compare;
     }
     case "INTEGER": {
       if(typeof value!=="string"||!/^[+-]?(?:0|[1-9]\d{0,14})$/.test(value))
@@ -110,8 +120,9 @@ function validatedPolicies(policies:readonly F3SemanticPolicy[]){
     for(const field of policy.fields){
       if(!shortName.test(field.sourceField)||
          !shortName.test(field.targetField)||
-         !["TEXT","TEXT_CASEFOLD","INTEGER","DECIMAL","BOOLEAN",
-           "DATE","MEMBER_CODES","UNORDERED_MEMBER_CODES"].includes(field.kind)||
+         !["TEXT","TEXT_CASEFOLD","TEXT_NORMALIZED","TEXT_CASEFOLD_NORMALIZED",
+           "INTEGER","DECIMAL","BOOLEAN","DATE",
+           "MEMBER_CODES","UNORDERED_MEMBER_CODES"].includes(field.kind)||
          sources.has(field.sourceField)||targets.has(field.targetField))
         throw Error("f3_semantic_policy_fields_invalid");
       sources.add(field.sourceField);targets.add(field.targetField);
