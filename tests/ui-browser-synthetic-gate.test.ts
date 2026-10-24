@@ -2,6 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+// @ts-expect-error The canonical shared F7 browser script is an ESM .mjs module.
+import { F7_SCENARIOS } from "../scripts/f7-browser-evidence-integrity.mjs";
 
 const script = readFileSync("scripts/ui-browser-evidence.mjs", "utf8");
 const workflow = readFileSync(".github/workflows/ci.yml", "utf8");
@@ -15,7 +17,14 @@ test("Issue #265: source-only gate requires 81 canonical routes with six RTL/LTR
   for (const viewport of ["desktop","tablet","mobile"]) {
     assert.ok(script.includes(viewport));
   }
-  for (const locale of ["ar","en"]) assert.ok(script.includes('locale:"'+locale+'"'));
+  assert.deepEqual(F7_SCENARIOS,[
+    "desktop-ar-light","desktop-en-dark","mobile-ar-dark",
+    "mobile-en-light","tablet-ar-light","tablet-en-dark",
+  ]);
+  assert.ok(script.includes("F7_SCENARIOS.map(name =>"),"collector must use exact shared scenarios");
+  assert.ok(script.includes('direction:locale==="ar"?"rtl":"ltr"'),
+    "the shared Arabic and English variants must retain RTL/LTR direction");
+  assert.equal(new Set(F7_SCENARIOS).size,6);
   assert.ok(script.includes('cases.length !== 486'));
   assert.ok(script.includes('new Set(cases.map(item => item.route)).size !== 81'));
   assert.ok(script.includes("readManifest()"));
