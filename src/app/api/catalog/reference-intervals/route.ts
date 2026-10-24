@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db";
 import { normalizePopulationCode } from "@/lib/result-reference";
 import { planReferenceIntervalApproval } from "@/lib/reference-interval-governance";
 import { parseReferenceIntervalEffectiveFrom, validateReferenceRangeDecimals } from "@/lib/reference-interval-draft-decimals";
-import { lockReferenceIntervalWriteAuthority, lockActiveReferenceComponent, ReferenceIntervalGateError } from "@/lib/reference-interval-live-authority";
+import { lockReferenceIntervalWriteAuthority, lockActiveReferenceComponent, lockActiveReferenceContext, ReferenceIntervalGateError } from "@/lib/reference-interval-live-authority";
 
 // Never shorten an untrusted scope or clinical ID into an unrelated identity.
 function id(value: unknown) {
@@ -148,6 +148,17 @@ export async function POST(request: NextRequest) {
 
   try {
     const interval = await prisma.$transaction(async tx => {
+      await lockReferenceIntervalWriteAuthority(tx,{
+        organizationId:session.user.organizationId,userId:session.userId,
+        branchId,permission:"catalog.reference_ranges.manage",
+        sessionBranchIds:session.user.branchScopes
+          .filter(item=>item.branch.status==="ACTIVE").map(item=>item.branchId),
+      });
+      await lockActiveReferenceComponent(tx,session.user.organizationId,componentId);
+      await lockActiveReferenceContext(tx,{
+        organizationId:session.user.organizationId,branchId,
+        methodId,analyzerId,specimenTypeId,
+      });
       const created = await tx.referenceInterval.create({
         data: {
           componentId,
@@ -216,7 +227,9 @@ export async function POST(request: NextRequest) {
       return created;
     });
     return NextResponse.json({ interval }, { status: 201 });
-  } catch {
+  } catch (error) {
+    if (error instanceof ReferenceIntervalGateError)
+      return NextResponse.json({ error: error.errorCode }, { status: error.status });
     return NextResponse.json({ error: "create_failed" }, { status: 409 });
   }
 }
