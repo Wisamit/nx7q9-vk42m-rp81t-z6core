@@ -125,7 +125,8 @@ function evidenceErrors(m,t) {
     if(g.reviewerRole!==t.gateRoles[g.gateId]||g.decision!=="APPROVED"||!idOk(g.reviewerId)||!idOk(g.evidenceRef)||!timeOk(g.decidedAt))errors.push("Gate "+g.gateId+" lacks approval metadata");
   }
   for(const g of Object.keys(t.gateRoles))if(!gates.has(g))errors.push("Gate "+g+" missing");
-  const owner=m.gateSignoffs?.find(g=>g?.gateId==="OWNER_FINAL");
+  const owner=Array.isArray(m.gateSignoffs)
+    ?m.gateSignoffs.find(g=>g?.gateId==="OWNER_FINAL"):null;
   if(owner && m.gateSignoffs.some(g=>g?.gateId!=="OWNER_FINAL"&&
      (!timeOk(g.decidedAt)||!timeOk(owner.decidedAt)||
       Date.parse(g.decidedAt)>Date.parse(owner.decidedAt))))
