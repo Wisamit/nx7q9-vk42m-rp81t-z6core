@@ -67,6 +67,29 @@ test("F2: transaction core creates three new effective-dated versions, keeps ori
     return {id:id(seq++)};
   };
   const tx={
+    // Unit fixture simulates ONLY active same-tenant read results. The
+    // separate MariaDB suite proves these really are locking database reads.
+    $queryRaw:async(parts:TemplateStringsArray,...values:unknown[])=>{
+      const sql=parts.join("?");
+      if(sql.includes("FROM test_components c JOIN lab_tests t")){
+        assert.deepEqual(values,[id(77),authority.organizationId]);
+        return [{id:id(77)}];
+      }
+      if(sql.includes("FROM price_lists")){
+        assert.deepEqual(values,[id(66),authority.organizationId]);
+        return [{id:id(66),branch_id:null}];
+      }
+      if(sql.includes("FROM lab_tests WHERE")){
+        assert.deepEqual(values,[id(44),authority.organizationId]);
+        return [{id:id(44)}];
+      }
+      if(sql.includes("FROM commercial_packages WHERE")){
+        assert.deepEqual(values,[id(55),authority.organizationId]);
+        return [{id:id(55)}];
+      }
+      if(sql.includes("FROM commercial_package_items"))return [];
+      throw Error("unexpected_F2_live_context_query");
+    },
     auditEvent:{
       findMany:async(query:{where:{action:string}})=>{
         if(query.where.action==="CATALOG_F2_EFFECTIVE_BATCH_REVERSED")
