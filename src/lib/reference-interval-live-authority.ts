@@ -62,3 +62,38 @@ export async function lockActiveReferenceComponent(
   `;
   if(matched.length!==1)deny("component_not_found",404);
 }
+
+/** Recheck and lock optional method, specimen and analyzer master identity.
+ * A branch-specific analyzer must belong to that exact branch. Approval never
+ * guesses a method, analyte, specimen or vendor interpretation. */
+export async function lockActiveReferenceContext(
+  tx:Prisma.TransactionClient,input:{
+    organizationId:string;branchId:string|null;
+    methodId:string|null;analyzerId:string|null;specimenTypeId:string|null;
+  },
+):Promise<void>{
+  const {organizationId,branchId,methodId,analyzerId,specimenTypeId}=input;
+  if(methodId){
+    const rows=await tx.$queryRaw<Array<{id:string}>>`
+      SELECT id FROM methods WHERE id=${methodId}
+      AND organization_id=${organizationId} AND status='ACTIVE' FOR UPDATE
+    `;
+    if(rows.length!==1)deny("method_not_found",404);
+  }
+  if(specimenTypeId){
+    const rows=await tx.$queryRaw<Array<{id:string}>>`
+      SELECT id FROM specimen_types WHERE id=${specimenTypeId}
+      AND organization_id=${organizationId} AND status='ACTIVE' FOR UPDATE
+    `;
+    if(rows.length!==1)deny("specimen_type_not_found",404);
+  }
+  if(analyzerId){
+    const rows=await tx.$queryRaw<Array<{id:string;branch_id:string}>>`
+      SELECT id,branch_id FROM analyzers WHERE id=${analyzerId}
+      AND organization_id=${organizationId} AND status='ACTIVE' FOR UPDATE
+    `;
+    if(rows.length!==1)deny("analyzer_not_found",404);
+    if(branchId && rows[0].branch_id!==branchId)
+      deny("analyzer_branch_mismatch",409);
+  }
+}
