@@ -25,7 +25,7 @@ function fixture(){
     rowDigest:hash(i+1),occurrence:1,classification:"APPROVED_MAPPING",
     source:{LegacyValue:policy.fields[0].kind==="INTEGER"?"0":values[i]},
     target:{CurrentValue:policy.fields[0].kind==="DECIMAL"?"99999.1234":
-      policy.fields[0].kind==="MEMBER_CODES"?["t-2","t.1"]:
+      policy.fields[0].kind==="MEMBER_CODES"?["t.1","t-2"]:
       policy.fields[0].kind==="INTEGER"?"0":values[i]},
   }));
   return {policies,rows};
