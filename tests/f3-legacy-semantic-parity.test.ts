@@ -25,7 +25,7 @@ function fixture(){
     rowDigest:hash(i+1),occurrence:1,classification:"APPROVED_MAPPING",
     source:{LegacyValue:policy.fields[0].kind==="INTEGER"?"0":values[i]},
     target:{CurrentValue:policy.fields[0].kind==="DECIMAL"?"99999.1234":
-      policy.fields[0].kind==="MEMBER_CODES"?["t-2","t.1"]:
+      policy.fields[0].kind==="MEMBER_CODES"?["t.1","t-2"]:
       policy.fields[0].kind==="INTEGER"?"0":values[i]},
   }));
   return {policies,rows};
@@ -115,4 +115,65 @@ test("F3: normalized membership, case-sensitive names and date validity never ma
   assert.equal(reconcileF3SemanticValues({...f,rows:wrong}).mismatched,1);
   const dates=f.rows.map((row,i)=>i===12?{...row,target:{CurrentValue:"2026-02-30"}}:row);
   assert.throws(()=>reconcileF3SemanticValues({...f,rows:dates}),/invalid_typed_value/);
+});
+
+
+test("F8 §88: reordered Access profile tests must be reported as semantic migration drift",()=>{
+  const original=fixture();
+  const reversed=original.rows.map((row,i)=>i===2?
+    {...row,target:{CurrentValue:["t-2","t.1"]}}:row);
+  const report=reconcileF3SemanticValues({...original,rows:reversed});
+  assert.equal(report.state,"SYNTHETIC_SEMANTIC_VALUE_GAPS");
+  assert.equal(report.mismatched,1);
+  const table=report.tables.find(x=>x.tableName===original.rows[2].tableName);
+  assert.deepEqual(table?.differingFields,["CurrentValue"]);
+  assert.equal(report.originalAccessFileVerified,false);
+  assert.equal(report.clinicalOrFinancialSignoff,false);
+  assert.equal(report.importOrCutoverAuthorized,false);
+  assert.equal(JSON.stringify(report).includes("t-2"),false);
+  assert.equal(JSON.stringify(report).includes(original.rows[2].rowDigest),false);
+});
+
+test("F8 §88: case-only changes remain equivalent without hiding changes to ordered membership",()=>{
+  const original=fixture();
+  const matching=original.rows.map((row,i)=>i===2?
+    {...row,target:{CurrentValue:["t.1","T-2"]}}:row);
+  const report=reconcileF3SemanticValues({...original,rows:matching});
+  assert.equal(report.mismatched,0);
+  for(const values of [["t.1"],["t.1","OTHER"],["t.1","T-2","OTHER"]]){
+    const wrong=original.rows.map((row,i)=>i===2?
+      {...row,target:{CurrentValue:values}}:row);
+    assert.equal(reconcileF3SemanticValues({...original,rows:wrong}).mismatched,1);
+  }
+});
+
+test("F8 §88: deliberately unordered membership requires an explicit typed parity policy",()=>{
+  const original=fixture();
+  const optedPolicy=original.policies.map((policy,i)=>i===2?
+    {...policy,fields:[{...policy.fields[0],kind:"UNORDERED_MEMBER_CODES" as const}]}:
+    policy);
+  const reordered=original.rows.map((row,i)=>i===2?
+    {...row,target:{CurrentValue:["t-2","t.1"]}}:row);
+  const report=reconcileF3SemanticValues({policies:optedPolicy,rows:reordered});
+  assert.equal(report.mismatched,0);
+  assert.equal(report.originalAccessFileVerified,false);
+  assert.equal(report.clinicalOrFinancialSignoff,false);
+  assert.equal(report.importOrCutoverAuthorized,false);
+  // Even opt-in unordered matching must reject repeated members and
+  // preserve actual membership: neither a duplicated nor omitted test is safe.
+  const duplicates=reordered.map((row,i)=>i===2?
+    {...row,target:{CurrentValue:["t-2","t-2"]}}:row);
+  assert.throws(()=>reconcileF3SemanticValues({policies:optedPolicy,rows:duplicates}),
+    /invalid_typed_value/);
+  const missing=reordered.map((row,i)=>i===2?
+    {...row,target:{CurrentValue:["t-2"]}}:row);
+  assert.equal(reconcileF3SemanticValues({policies:optedPolicy,rows:missing}).mismatched,1);
+});
+
+test("F8 §88: an unapproved or misspelled comparison kind cannot bypass ordered checking",()=>{
+  const original=fixture();
+  const policy=original.policies.map((p,i)=>i===2?
+    {...p,fields:[{...p.fields[0],kind:"MEMBERS_AUTO" as never}]}:p);
+  assert.throws(()=>reconcileF3SemanticValues({policies:policy,rows:original.rows}),
+    /policy_fields_invalid/);
 });
