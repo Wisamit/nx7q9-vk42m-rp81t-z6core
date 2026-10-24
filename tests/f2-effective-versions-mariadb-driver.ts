@@ -111,6 +111,15 @@ export function f2MysqlTransactionalTestClient(db:mysql.Connection){
   const price=table("price_list_items"),packagePrice=table("price_list_package_items");
   const range=table("reference_intervals");
   return {
+    // Execute the real tagged SQL used by the shared clinical/finance
+    // authority gates, including FOR UPDATE locks on a second connection.
+    $queryRaw: async <T=unknown>(parts:TemplateStringsArray,...values:unknown[]):Promise<T>=>{
+      const statement=parts.reduce((sql,part,index)=>
+        sql+part+(index<values.length?"?":""),"");
+      const [rows]=await db.execute<mysql.RowDataPacket[]>(statement,
+        values.map(scalar));
+      return rows as T;
+    },
     auditEvent:audit,
     priceListItem:{
       ...price,
