@@ -109,6 +109,10 @@ test("F8 clinical: route uses exact admission and never truncates clinical ident
   assert.ok(route.includes("validateReferenceRangeDecimals(body)"));
   assert.ok(route.includes("parseReferenceIntervalEffectiveFrom(body.effectiveFrom)"));
   assert.ok(route.includes("canAccessBranch(session, branchId)"));
+  assert.ok(route.includes("hasOrganizationWideReferenceScope("));
+  assert.ok(route.includes("session.user.branchScopes.filter("));
+  assert.ok(route.includes('error: "organization_scope_incomplete"'));
+  assert.ok(route.includes("canAccessBranch(session, interval.branchId)"));
   assert.ok(route.includes('status: "INACTIVE"'));
   assert.ok(route.includes('approvalStatus: "DRAFT"'));
   assert.ok(route.includes("tx.auditEvent.create"));
