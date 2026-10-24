@@ -149,6 +149,13 @@ function main(){
   if(violations.length){console.log("NO_GO_TEMPLATE: "+violations.join("; "));process.exitCode=1;return;}
   if(process.argv[2]==="--check-template"){console.log("TEMPLATE_VALID: 88/88 NOT_EXECUTED, 7 qualified gates; no real-world PASS claimed.");return;}
   if(process.argv[2]!=="--assess"||!process.argv[3]){console.error("Use --check-template or --assess /private/evidence.json");process.exitCode=2;return;}
+  // The legacy Stage 132 file remains a historical SOURCE baseline only:
+  // it does not contain F7's 486 required human reviews. An assessor must
+  // not accept an old 88-only evidence set as final combined owner UAT.
+  if(!suppliedTemplate||t.candidatePreparation!==F7_PRIVATE_PREP){
+    console.log("NO_GO_PRIVATE_CONSOLIDATED_CAMPAIGN_REQUIRED: use a qualified private F7 486 + F8 88 release candidate");
+    process.exitCode=1;return;
+  }
   // Private candidates require positive, exact-release deployment metadata.
   // This checks structure and traceability only; it never authenticates evidence.
   if(t.candidatePreparation==="PRIVATE_UNVERIFIED_MAIN_CI_HOSTINGER_AND_HUMAN_UAT_PENDING"){
