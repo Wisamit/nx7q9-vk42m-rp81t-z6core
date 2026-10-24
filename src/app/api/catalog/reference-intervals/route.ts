@@ -1,17 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentSession, permissionSet, requestContext } from "@/lib/auth";
+import { canAccessBranch, getCurrentSession, permissionSet, requestContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { normalizePopulationCode } from "@/lib/result-reference";
 import { planReferenceIntervalApproval } from "@/lib/reference-interval-governance";
+import { parseReferenceIntervalEffectiveFrom, validateReferenceRangeDecimals } from "@/lib/reference-interval-draft-decimals";
 
-function decimal(value: unknown) {
-  if (value === "" || value === null || value === undefined) return null;
-  const text = String(value).trim();
-  return /^-?\d+(\.\d+)?$/.test(text) ? text : undefined;
+// Never shorten an untrusted scope or clinical ID into an unrelated identity.
+function id(value: unknown) {
+  return typeof value === "string" && /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(value)
+    ? value : null;
 }
 
-function id(value: unknown) {
-  return typeof value === "string" && value.trim() ? value.trim().slice(0, 36) : null;
+async function hasOrganizationWideReferenceScope(
+  organizationId: string, authorizedBranchIds: readonly string[],
+) {
+  const active = await prisma.branch.findMany({
+    where: { organizationId, status: "ACTIVE" }, select: { id: true },
+  });
+  const granted = new Set(authorizedBranchIds);
+  return active.length > 0 && active.every(branch => granted.has(branch.id));
 }
 
 export async function POST(request: NextRequest) {
@@ -30,9 +37,30 @@ export async function POST(request: NextRequest) {
   const methodId = id(body.methodId);
   const analyzerId = id(body.analyzerId);
   const specimenTypeId = id(body.specimenTypeId);
+  if (["branchId", "methodId", "analyzerId", "specimenTypeId"].some(key =>
+      body[key] !== "" && body[key] !== null && body[key] !== undefined && !id(body[key]))) {
+    return NextResponse.json({ error: "invalid_reference_context_id" }, { status: 400 });
+  }
+  if (body.populationCode != null &&
+      (typeof body.populationCode !== "string" || body.populationCode.length > 80)) {
+    return NextResponse.json({ error: "invalid_population_code" }, { status: 400 });
+  }
   const populationCode = normalizePopulationCode(
-    typeof body.populationCode === "string" ? body.populationCode.slice(0, 80) : null,
+    typeof body.populationCode === "string" ? body.populationCode : null,
   );
+  if (branchId && !canAccessBranch(session, branchId)) {
+    return NextResponse.json({ error: "branch_forbidden" }, { status: 403 });
+  }
+  if (!branchId && !await hasOrganizationWideReferenceScope(
+    session.user.organizationId,
+    session.user.branchScopes.filter(item => item.branch.status === "ACTIVE").map(item => item.branchId),
+  )) {
+    return NextResponse.json({ error: "organization_scope_incomplete" }, { status: 403 });
+  }
+  if (body.sex != null && body.sex !== "" &&
+      !["ANY", "MALE", "FEMALE"].includes(body.sex)) {
+    return NextResponse.json({ error: "invalid_sex" }, { status: 400 });
+  }
 
   const pregnancyStatus =
     body.pregnancyStatus === "PREGNANT" || body.pregnancyStatus === "NOT_PREGNANT"
@@ -41,58 +69,39 @@ export async function POST(request: NextRequest) {
         ? null
         : undefined;
 
-  const ageFrom = decimal(body.ageFrom);
-  const ageTo = decimal(body.ageTo);
-  const gestationalAgeFromWeeks = decimal(body.gestationalAgeFromWeeks);
-  const gestationalAgeToWeeks = decimal(body.gestationalAgeToWeeks);
-  const lowValue = decimal(body.lowValue);
-  const highValue = decimal(body.highValue);
-  const criticalLow = decimal(body.criticalLow);
-  const criticalHigh = decimal(body.criticalHigh);
-
-  if (
-    [ageFrom, ageTo, gestationalAgeFromWeeks, gestationalAgeToWeeks, lowValue, highValue, criticalLow, criticalHigh]
-      .some(value => value === undefined)
-  ) {
-    return NextResponse.json({ error: "invalid_numeric_value" }, { status: 400 });
+  const admission = validateReferenceRangeDecimals(body);
+  if (!admission.ok) {
+    return NextResponse.json({ error: admission.error }, { status: 400 });
   }
+  const {
+    ageFrom, ageTo, gestationalAgeFromWeeks, gestationalAgeToWeeks,
+    lowValue, highValue, criticalLow, criticalHigh,
+  } = admission.values;
   if (pregnancyStatus === undefined) {
     return NextResponse.json({ error: "invalid_pregnancy_status" }, { status: 400 });
   }
   if ((ageFrom !== null || ageTo !== null) && !["DAY", "WEEK", "MONTH", "YEAR"].includes(body.ageUnit)) {
     return NextResponse.json({ error: "age_unit_required_for_age_bounds" }, { status: 400 });
   }
-  if (ageFrom !== null && Number(ageFrom) < 0 || ageTo !== null && Number(ageTo) < 0) {
-    return NextResponse.json({ error: "invalid_age_range" }, { status: 400 });
-  }
-  if (ageFrom !== null && ageTo !== null && Number(ageFrom) > Number(ageTo)) {
-    return NextResponse.json({ error: "invalid_age_range" }, { status: 400 });
-  }
-  if (
-    gestationalAgeFromWeeks !== null && Number(gestationalAgeFromWeeks) < 0 ||
-    gestationalAgeToWeeks !== null && Number(gestationalAgeToWeeks) < 0
-  ) {
-    return NextResponse.json({ error: "invalid_gestational_age_range" }, { status: 400 });
-  }
-  if (
-    gestationalAgeFromWeeks !== null &&
-    gestationalAgeToWeeks !== null &&
-    Number(gestationalAgeFromWeeks) > Number(gestationalAgeToWeeks)
-  ) {
-    return NextResponse.json({ error: "invalid_gestational_age_range" }, { status: 400 });
-  }
-  if ((gestationalAgeFromWeeks !== null || gestationalAgeToWeeks !== null) && pregnancyStatus !== "PREGNANT") {
+  if ((gestationalAgeFromWeeks !== null || gestationalAgeToWeeks !== null) &&
+      pregnancyStatus !== "PREGNANT") {
     return NextResponse.json({ error: "gestational_age_requires_pregnant_context" }, { status: 400 });
   }
-  if (lowValue !== null && highValue !== null && Number(lowValue) > Number(highValue)) {
-    return NextResponse.json({ error: "invalid_range" }, { status: 400 });
+  if (body.normalTextEn != null && (typeof body.normalTextEn !== "string" ||
+      body.normalTextEn.length > 500)) {
+    return NextResponse.json({ error: "invalid_normal_text" }, { status: 400 });
   }
-  if (criticalLow !== null && criticalHigh !== null && Number(criticalLow) > Number(criticalHigh)) {
-    return NextResponse.json({ error: "invalid_critical_range" }, { status: 400 });
+  if (body.normalTextAr != null && (typeof body.normalTextAr !== "string" ||
+      body.normalTextAr.length > 500)) {
+    return NextResponse.json({ error: "invalid_normal_text" }, { status: 400 });
+  }
+  if (body.source != null && (typeof body.source !== "string" ||
+      body.source.length > 255)) {
+    return NextResponse.json({ error: "invalid_source" }, { status: 400 });
   }
 
-  const effectiveFrom = body.effectiveFrom ? new Date(body.effectiveFrom) : new Date();
-  if (Number.isNaN(effectiveFrom.getTime())) {
+  const effectiveFrom = parseReferenceIntervalEffectiveFrom(body.effectiveFrom);
+  if (!effectiveFrom) {
     return NextResponse.json({ error: "invalid_effective_date" }, { status: 400 });
   }
 
@@ -225,7 +234,10 @@ export async function PATCH(request: NextRequest) {
 
   const intervalId = id(body.id);
   const action = typeof body.action === "string" ? body.action.trim().toUpperCase() : "";
-  const reason = typeof body.reason === "string" ? body.reason.trim().slice(0, 1000) : "";
+  if (body.reason != null && (typeof body.reason !== "string" || body.reason.length > 1000)) {
+    return NextResponse.json({ error: "invalid_reference_interval_reason" }, { status: 400 });
+  }
+  const reason = typeof body.reason === "string" ? body.reason.trim() : "";
   if (!intervalId || !["APPROVE", "RETIRE"].includes(action)) {
     return NextResponse.json({ error: "invalid_reference_interval_action" }, { status: 400 });
   }
@@ -237,6 +249,15 @@ export async function PATCH(request: NextRequest) {
     },
   });
   if (!interval) return NextResponse.json({ error: "reference_interval_not_found" }, { status: 404 });
+  if (interval.branchId && !canAccessBranch(session, interval.branchId)) {
+    return NextResponse.json({ error: "branch_forbidden" }, { status: 403 });
+  }
+  if (!interval.branchId && !await hasOrganizationWideReferenceScope(
+    session.user.organizationId,
+    session.user.branchScopes.filter(item => item.branch.status === "ACTIVE").map(item => item.branchId),
+  )) {
+    return NextResponse.json({ error: "organization_scope_incomplete" }, { status: 403 });
+  }
 
   if (action === "APPROVE") {
     if (interval.approvalStatus !== "DRAFT") {
