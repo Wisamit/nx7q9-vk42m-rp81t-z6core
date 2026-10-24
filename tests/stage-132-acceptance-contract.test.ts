@@ -33,10 +33,10 @@ test("stale or incomplete external evidence fails closed",()=>{
     const path=join(dir,"private.json");
     assert.equal(run(["--assess",path]).status,1);
     writeFileSync(path,JSON.stringify({releaseCandidateSha:"0".repeat(40),environment:"HOSTINGER_PRODUCTION",openCriticalDefects:1,cases:[{section:1,status:"PASS",evidence:[],executedBy:"same-user",reviewedBy:"same-user"}],gateSignoffs:[]}));
-    const r=run(["--assess",path]);assert.equal(r.status,1);assert.match(r.stdout,/NO_GO_MISSING_OR_INVALID_EVIDENCE/);assert.match(r.stdout,/independent operator/);
+    const r=run(["--assess",path]);assert.equal(r.status,1);assert.match(r.stdout,/NO_GO_PRIVATE_CONSOLIDATED_CAMPAIGN_REQUIRED/);
   }finally{rmSync(dir,{recursive:true,force:true});}
 });
-test("synthetic complete metadata still never implies real physical clinical GO",()=>{
+test("historical 88-only synthetic metadata cannot count as final combined F7+F8 UAT",()=>{
   const dir=mkdtempSync(join(tmpdir(),"familylab-uat-"));
   try {
     const path=join(dir,"synthetic.json");
@@ -44,7 +44,9 @@ test("synthetic complete metadata still never implies real physical clinical GO"
       cases:t.cases.map(c=>({section:c.section,status:"PASS",evidence:[{ref:"synthetic-fixture-"+c.section,sha256:"a".repeat(64)}],executedBy:"test-operator-"+c.section,reviewedBy:"test-reviewer-"+c.section,executedAt:"2026-10-15T10:00:00Z",reviewedAt:"2026-10-15T11:00:00Z"})),
       gateSignoffs:Object.entries(t.gateRoles).map(([gateId,reviewerRole])=>({gateId,reviewerRole,decision:"APPROVED",reviewerId:"synthetic-reviewer-"+gateId,decidedAt:"2026-10-15T12:00:00Z",evidenceRef:"synthetic-attestation-"+gateId}))};
     writeFileSync(path,JSON.stringify(m));
-    const ok=run(["--assess",path]);assert.equal(ok.status,0,ok.stdout+ok.stderr);assert.match(ok.stdout,/METADATA_COMPLETE_REQUIRES_HUMAN_SIGNOFF/);assert.match(ok.stdout,/NOT evidence authentication/);
+    const denied=run(["--assess",path]);
+    assert.equal(denied.status,1,denied.stdout+denied.stderr);
+    assert.match(denied.stdout,/NO_GO_PRIVATE_CONSOLIDATED_CAMPAIGN_REQUIRED/);
     m.cases[10].reviewedBy=m.cases[10].executedBy;writeFileSync(path,JSON.stringify(m));assert.equal(run(["--assess",path]).status,1);
     m.cases[10].reviewedBy="test-reviewer-11";m.cases[10].evidence=[];writeFileSync(path,JSON.stringify(m));assert.equal(run(["--assess",path]).status,1);
   }finally{rmSync(dir,{recursive:true,force:true});}
