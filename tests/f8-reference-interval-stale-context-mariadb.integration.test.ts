@@ -27,7 +27,7 @@ test("F8 §75/87 MariaDB: inactive method, specimen or analyzer cannot be approv
   const org=uuid(),branch=uuid(),testId=uuid(),component=uuid(),
     method=uuid(),specimen=uuid(),analyzer=uuid(),draft=uuid();
   const inserted:string[]=[];
-  async function add(table:string,sql:string,args:unknown[]){
+  async function add(table:string,sql:string,args:string[]){
     await setup.execute(sql,args);inserted.unshift(table);
   }
   try{
