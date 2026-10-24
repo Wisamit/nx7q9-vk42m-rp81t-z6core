@@ -118,16 +118,16 @@ test("F2 MariaDB: atomic synthetic price/package/range versions and compensating
       ["commercial_packages",packageId,/f2_apply_price_package_inactive_or_foreign/],
       ["test_components",componentId,/component_not_found/],
     ] as const) {
-      await query(`UPDATE \${table} SET status='INACTIVE' WHERE id=?`,[id]);
+      await query(`UPDATE ${table} SET status='INACTIVE' WHERE id=?`,[id]);
       await assert.rejects(
         ()=>transaction(tx=>applyF2EffectiveVersionsUnderLock(
           tx as never,plan,authority,new Date("2026-10-21T00:00:00.000Z"))),
-        expected,`inactive \${table} must block the entire signed application`);
+        expected,`inactive ${table} must block the entire signed application`);
       const [unchanged]=await sql.execute<mysql.RowDataPacket[]>(
         "SELECT COUNT(*) AS count FROM price_list_items WHERE price_list_id=?",
         [priceListId]);
       assert.equal(Number(unchanged[0].count),1,"no partially committed tariff clone");
-      await query(`UPDATE \${table} SET status='ACTIVE' WHERE id=?`,[id]);
+      await query(`UPDATE ${table} SET status='ACTIVE' WHERE id=?`,[id]);
     }
 
     // An independently changed money field must make the signed plan stale.
