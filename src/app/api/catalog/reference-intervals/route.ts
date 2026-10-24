@@ -142,6 +142,9 @@ export async function POST(request: NextRequest) {
   if (methodId && !method) return NextResponse.json({ error: "method_not_found" }, { status: 404 });
   if (analyzerId && !analyzer) return NextResponse.json({ error: "analyzer_not_found" }, { status: 404 });
   if (specimenTypeId && !specimenType) return NextResponse.json({ error: "specimen_type_not_found" }, { status: 404 });
+  if (analyzerId && !branchId) {
+    return NextResponse.json({ error: "analyzer_branch_scope_required" }, { status: 409 });
+  }
   if (branchId && analyzer && analyzer.branchId !== branchId) {
     return NextResponse.json({ error: "analyzer_branch_mismatch" }, { status: 409 });
   }
@@ -291,6 +294,16 @@ export async function PATCH(request: NextRequest) {
         if(interval.approvalStatus!=="DRAFT"||interval.status!=="INACTIVE")
           throw new ReferenceIntervalGateError("reference_interval_not_draft",409);
         await lockActiveReferenceComponent(tx,session.user.organizationId,interval.componentId);
+        // A DRAFT may have been stored days earlier. Every clinical context
+        // identity is re-locked and checked again at APPROVE, not inherited
+        // from the original DRAFT POST or stale preflight/signed session.
+        await lockActiveReferenceContext(tx,{
+          organizationId:session.user.organizationId,
+          branchId:interval.branchId,
+          methodId:interval.methodId,
+          analyzerId:interval.analyzerId,
+          specimenTypeId:interval.specimenTypeId,
+        });
         const approved=await tx.referenceInterval.findMany({
           where:{componentId:interval.componentId,approvalStatus:"APPROVED",
             status:"ACTIVE",id:{not:interval.id}},
