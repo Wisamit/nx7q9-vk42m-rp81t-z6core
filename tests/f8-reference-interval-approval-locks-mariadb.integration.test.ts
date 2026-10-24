@@ -87,7 +87,7 @@ test("F8 §75 MariaDB: two simultaneous approval attempts cannot publish overlap
     await rival.rollback();
     // The winning approval, predecessor closure and journal are one transaction.
     const [closed]=await winner.execute<mysql.ResultSetHeader>(
-      "UPDATE reference_intervals SET effective_to=DATE_SUB(?,INTERVAL 1 MICROSECOND) "+
+      "UPDATE reference_intervals SET effective_to=DATE_SUB(?,INTERVAL 1000 MICROSECOND) "+
       "WHERE id=? AND approval_status='APPROVED' AND status='ACTIVE' AND effective_to IS NULL",
       [dateNew,old]);
     assert.equal(closed.affectedRows,1);
