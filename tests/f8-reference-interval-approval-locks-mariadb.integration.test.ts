@@ -50,8 +50,9 @@ test("F8 §75 MariaDB: two simultaneous approval attempts cannot publish overlap
       [draftB,dateNew,"INACTIVE","DRAFT"],
     ]){
       await setup.execute(
-        "INSERT INTO reference_intervals(id,component_id,effective_from,status,approval_status) VALUES(?,?,?,?,?)",
-        [id,component,from,status,approval]);
+        "INSERT INTO reference_intervals(id,component_id,effective_from,status,approval_status,updated_at,approved_at) "+
+        "VALUES(?,?,?,?,?,NOW(3),?)",
+        [id,component,from,status,approval,approval==="APPROVED"?new Date("2026-01-01T00:00:00.000Z"):null]);
     }
     created.push("reference_intervals");
     await rival.query("SET SESSION innodb_lock_wait_timeout = 1");
