@@ -13,6 +13,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
 import { isAllowedSyntheticNetworkRequest } from "./f7-synthetic-network-origin.mjs";
+import { F7_SCENARIOS } from "./f7-browser-evidence-integrity.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MANIFEST = path.join(ROOT, "docs", "UI_ROUTE_MANIFEST.json");
@@ -21,14 +22,13 @@ const VIEWPORTS = Object.freeze({
   mobile: {width: 390, height: 844},
   tablet: {width: 820, height: 1180},
 });
-const SCENARIOS = Object.freeze([
-  {name:"desktop-ar-light",locale:"ar",direction:"rtl",viewport:"desktop",scheme:"light"},
-  {name:"desktop-en-dark",locale:"en",direction:"ltr",viewport:"desktop",scheme:"dark"},
-  {name:"mobile-ar-dark",locale:"ar",direction:"rtl",viewport:"mobile",scheme:"dark"},
-  {name:"mobile-en-light",locale:"en",direction:"ltr",viewport:"mobile",scheme:"light"},
-  {name:"tablet-ar-light",locale:"ar",direction:"rtl",viewport:"tablet",scheme:"light"},
-  {name:"tablet-en-dark",locale:"en",direction:"ltr",viewport:"tablet",scheme:"dark"},
-]);
+const SCENARIOS = Object.freeze(F7_SCENARIOS.map(name => {
+  const [viewport,locale,scheme] = name.split("-");
+  if (!VIEWPORTS[viewport] || !["ar","en"].includes(locale) ||
+      !["light","dark"].includes(scheme))
+    throw Error("Invalid canonical F7 visual acceptance context");
+  return {name,locale,direction:locale==="ar"?"rtl":"ltr",viewport,scheme};
+}));
 
 function readManifest() {
   const manifest = JSON.parse(fs.readFileSync(MANIFEST, "utf8"));
