@@ -67,9 +67,11 @@ test("F8 clinical: out-of-schema precision and scales fail closed without implic
 
 test("F8 clinical: reject JSON numbers, scientific notation, NaN, Infinity, punctuation and negative age",()=>{
   for(const value of [1,0.000001,Number.MAX_SAFE_INTEGER,Infinity,NaN,
-    "1e-6","1E6","NaN","Infinity","1,000.000","- 1","+1","01","1.","-0.000001"]) {
+    "1e-6","1E6","NaN","Infinity","1,000.000","- 1","+1","01","1.",]) {
     denied({...valid(),lowValue:value},"invalid_numeric_value");
   }
+  assert.equal(validateReferenceRangeDecimals({...valid(),lowValue:"-0.000001"}).ok,true,
+    "negative normal or critical limits are clinically legal and must remain reviewable");
   denied({...valid(),ageFrom:"-0.001"},"invalid_numeric_value");
   denied({...valid(),gestationalAgeFromWeeks:-1},"invalid_numeric_value");
   denied(null,"invalid_numeric_value");
