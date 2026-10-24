@@ -29,10 +29,9 @@ test("F3 private CLI: real synthetic Jet bytes + 15-table manifests + target par
       schemaVersion:1,evidenceType:LEGACY_COVERAGE_TYPE,...source,
       exportedAtUtc:date,includesPatientData:false,
       tables:LEGACY_COVERAGE_SOURCES.map(t=>({
-        tableName:t.tableName,present:t.tableName==="Test name",
+        tableName:t.tableName,present:true,
         rowCount:t.tableName==="Test name"?2:0,
-        columnCount:t.tableName==="Test name"?3:0,
-        schemaSha256:t.tableName==="Test name"?schema:null,
+        columnCount:3,schemaSha256:schema,
       })),
     };
     await writeFile(coverageFile,JSON.stringify(coverage));
@@ -46,6 +45,16 @@ test("F3 private CLI: real synthetic Jet bytes + 15-table manifests + target par
     };
     await writeFile(join(lineageDir,"legacy-row-hashes-Test_name-00000.json"),
       JSON.stringify(page));
+    // A CLI SUCCESS fixture must establish all 15 expected source tables,
+    // including tables observed as EMPTY. Absent tables now correctly require
+    // GAPS_REMAIN / exit 3 rather than an ambiguous partial-row success.
+    for(const {tableName} of LEGACY_COVERAGE_SOURCES) {
+      if(tableName==="Test name")continue;
+      const empty={...page,tableName,sourceRowCount:0,rows:[]};
+      const filename="legacy-row-hashes-"+
+        tableName.replace(/[^A-Za-z0-9]/g,"_")+"-00000.json";
+      await writeFile(join(lineageDir,filename),JSON.stringify(empty));
+    }
     const rows=page.rows.map((entry,i)=>({
       sourceTable:"Test name",sourceSha256:source.sourceSha256,
       sourceSchemaSha256:schema,digestKeyId:key,
