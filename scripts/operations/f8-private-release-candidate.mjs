@@ -55,7 +55,7 @@ function main() {
        new Set(F7_SCENARIOS).size!==6 ||
        new Set(routes.map(r=>r.route)).size!==81 ||
        routes.some(r=>typeof r.route!=="string" || !r.route.startsWith("/") ||
-         typeof r.file!=="string" || !/^src\/app\/.+\/page\.tsx$/.test(r.file) ||
+         typeof r.file!=="string" || !/^src\/app\/(?:.+\/)?page\.tsx$/.test(r.file) ||
          r.file.includes("..") ||
          !within(root,realpathSync(resolve(root,r.file)))))
       throw Error("f7_route_manifest_invalid");
