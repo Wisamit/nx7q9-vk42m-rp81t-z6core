@@ -99,6 +99,18 @@ function txMock(){
   const price=version("price"),packagePrice=version("package");
   const range=version("range");
   return {writes,tx:{
+    $queryRaw:async(parts:TemplateStringsArray,...values:unknown[])=>{
+      const query=parts.join("?");
+      const read=(ident:string)=>{assert.equal(values[0],ident);return [{id:ident}];};
+      if(query.includes("FROM test_components c JOIN lab_tests t"))
+        return read(uuid(20));
+      if(query.includes("FROM price_lists"))
+        return [{...read(uuid(21))[0],branch_id:null}];
+      if(query.includes("FROM lab_tests WHERE"))return read(uuid(22));
+      if(query.includes("FROM commercial_packages WHERE"))return read(uuid(23));
+      if(query.includes("FROM commercial_package_items"))return [];
+      throw Error("unexpected_f2_signed_apply_context");
+    },
     auditEvent:{
       findMany:async(args:{where:{action:string}})=>
         args.where.action==="CATALOG_F2_EFFECTIVE_BATCH_APPLIED"?applied:[],
