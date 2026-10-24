@@ -1,4 +1,5 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+import { f2ExactUtcInstant } from "./catalog-f2-utc-instant.ts";
 
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SHA=/^[a-f0-9]{64}$/;
@@ -8,8 +9,7 @@ const object=(v:unknown):v is Record<string,unknown> =>
   !!v && typeof v==="object" && !Array.isArray(v);
 const shape=(v:Record<string,unknown>,fields:readonly string[])=>
   Object.keys(v).sort().join(",")===[...fields].sort().join(",");
-const ms=(v:unknown)=>typeof v==="string" && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(v) &&
-  Number.isFinite(Date.parse(v)) ? Date.parse(v) : NaN;
+const ms=(v:unknown)=>f2ExactUtcInstant(v) ?? NaN;
 
 export type CatalogApprovalDomain="CLINICAL"|"FINANCIAL";
 export type CatalogApprovalContext={

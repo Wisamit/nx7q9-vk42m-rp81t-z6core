@@ -5,6 +5,7 @@ import { catalogBundleAllowedSourceFields } from "./catalog-bundle-source-bounda
 import { BUNDLE_REVIEW_MAX_ROWS } from "./catalog-bundle-review.ts";
 import { validF2ClinicalIntervalNumbers } from "./catalog-f2-clinical-values.ts";
 import { f2EffectiveCompositeMemberIds } from "./catalog-f2-effective-view.ts";
+import { f2ExactUtcInstant } from "./catalog-f2-utc-instant.ts";
 
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const record=(value:unknown):value is Record<string,unknown>=>
@@ -80,8 +81,7 @@ export function compileF2ApplyPlan(input:{
   if(input.signedStageVerified!==true ||
      input.independentDomainApprovalsVerified!==true ||
      input.scopedLiveSnapshotVerified!==true ||
-     !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(input.effectiveAt) ||
-     !Number.isFinite(Date.parse(input.effectiveAt)) ||
+     f2ExactUtcInstant(input.effectiveAt) === null ||
      input.rows.length<1||input.rows.length>BUNDLE_REVIEW_MAX_ROWS)
     return null;
   const seen=new Set<string>();

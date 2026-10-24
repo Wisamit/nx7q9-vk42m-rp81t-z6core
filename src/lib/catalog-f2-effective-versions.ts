@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Prisma } from "../../generated/prisma/client";
 import { verifyF2ApplyPlanIntegrity, type F2ApplyPlan } from "./catalog-f2-apply-plan.ts";
+import { f2ExactUtcInstant } from "./catalog-f2-utc-instant.ts";
 import { validF2ClinicalIntervalNumbers } from "./catalog-f2-clinical-values.ts";
 import {
   signF2ApplicationJournal,verifyF2ApplicationJournal,
@@ -10,8 +11,10 @@ const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MONEY=/^(?:0|[1-9][0-9]{0,13})(?:\.[0-9]{1,4})?$/;
 const obj=(v:unknown):v is Record<string,unknown> =>
   v!==null&&typeof v==="object"&&!Array.isArray(v);
-const date=(v:unknown)=>typeof v==="string"&&Number.isFinite(Date.parse(v))?
-  new Date(v):null;
+const date=(v:unknown)=>{
+  const ms=f2ExactUtcInstant(v);
+  return ms===null?null:new Date(ms);
+};
 
 /** Same compare-and-swap predicate for application and compensation.
  * Never reopen an interval whose patient population or clinical values
