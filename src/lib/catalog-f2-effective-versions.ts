@@ -4,7 +4,7 @@ import { verifyF2ApplyPlanIntegrity, type F2ApplyPlan } from "./catalog-f2-apply
 import { f2ExactUtcInstant } from "./catalog-f2-utc-instant.ts";
 import { validF2ClinicalIntervalNumbers } from "./catalog-f2-clinical-values.ts";
 import { lockActiveReferenceComponent, lockActiveReferenceContext } from "./reference-interval-live-authority.ts";
-import { lockF2ActivePriceContext } from "./catalog-f2-live-context.ts";
+import { lockF2ActivePriceContext, lockF2ActiveReferenceBranch } from "./catalog-f2-live-context.ts";
 import {
   signF2ApplicationJournal,verifyF2ApplicationJournal,
 } from "./catalog-f2-application-journal.ts";
@@ -218,6 +218,8 @@ export async function applyF2EffectiveVersionsUnderLock(
       // Signed medical values cannot override a subsequently deactivated
       // method, specimen or branch-owned analyzer.
       await lockActiveReferenceComponent(tx,authority.organizationId,componentId);
+      await lockF2ActiveReferenceBranch(tx,authority.organizationId,
+        prior.branchId as string|null);
       await lockActiveReferenceContext(tx,{
         organizationId:authority.organizationId,
         branchId:prior.branchId as string|null,

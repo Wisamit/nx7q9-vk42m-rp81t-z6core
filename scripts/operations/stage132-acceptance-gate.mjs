@@ -2,11 +2,83 @@
 // Structural metadata check ONLY; never a clinical, financial or regulatory GO decision.
 import { readFileSync } from "node:fs";
 import { isAbsolute, resolve } from "node:path";
+import { F7_SCENARIOS } from "../f7-browser-evidence-integrity.mjs";
 const idOk = x => typeof x === "string" && /^[a-zA-Z0-9][a-zA-Z0-9_:/.-]{2,159}$/.test(x);
 const timeOk = x => typeof x === "string" && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?(?:Z|[+-]\d\d:\d\d)$/.test(x) && Number.isFinite(Date.parse(x));
 const obj = x => x !== null && typeof x === "object" && !Array.isArray(x);
 const sha256 = x => typeof x === "string" && /^[0-9a-f]{64}$/i.test(x);
 const allowed = new Set(["APPROVAL_DEPENDENT","SOFTWARE_READY","VENDOR_OR_REAL_WORLD_DEPENDENT","BUSINESS_RULE_OR_DATA_UNRESOLVED"]);
+const F7_PRIVATE_PREP="PRIVATE_UNVERIFIED_MAIN_CI_HOSTINGER_AND_HUMAN_UAT_PENDING";
+const F7_REVIEW_CHECKS=[
+  "localeDirection","theme","viewportAndOverflow","keyboardAndDialogs",
+  "branchRoleIsolation","timezoneAndDates","patientPrivacy",
+];
+function f7RequiredCases() {
+  // Bind the eventual private review to the same versioned public route
+  // inventory and canonical browser contexts; never accept extra/spoofed rows.
+  const manifest=readJson(resolve(process.cwd(),"docs/UI_ROUTE_MANIFEST.json"));
+  if(manifest.expectedRouteCount!==81||!Array.isArray(manifest.routes)||
+     manifest.routes.length!==81||new Set(manifest.routes.map(r=>r.route)).size!==81||
+     F7_SCENARIOS.length!==6||new Set(F7_SCENARIOS).size!==6)
+    throw Error("f7_manifest_invalid");
+  const cases=new Map();
+  for(const r of manifest.routes){
+    if(typeof r.route!=="string"||!r.route.startsWith("/")||
+       typeof r.file!=="string"||!r.file.startsWith("src/app/"))
+      throw Error("f7_manifest_invalid");
+    for(const scenario of F7_SCENARIOS){
+      cases.set(JSON.stringify([r.route,scenario]),r.file);
+    }
+  }
+  if(cases.size!==486)throw Error("f7_manifest_incomplete");
+  return cases;
+}
+function f7TemplateErrors(t) {
+  const errors=[],f=t.f7VisualAcceptance;
+  if(!obj(f)||f.state!=="NOT_EXECUTED"||
+     f.routeManifest!=="docs/UI_ROUTE_MANIFEST.json"||
+     f.routeCount!==81||f.scenarioCount!==6||f.caseCount!==486||
+     !Array.isArray(f.cases)||f.cases.length!==486)
+    return ["F7 81x6 private review contract missing"];
+  let required;
+  try{required=f7RequiredCases();}catch{return ["F7 canonical route inventory unavailable"];}
+  const seen=new Set();
+  for(const c of f.cases){
+    if(!obj(c)){errors.push("F7 malformed case");continue;}
+    const k=JSON.stringify([c.route,c.scenario]);
+    if(seen.has(k)||!required.has(k)||required.get(k)!==c.sourceFile||
+       c.executionStatus!=="NOT_EXECUTED")errors.push("F7 case missing, forged or preapproved");
+    seen.add(k);
+  }
+  if(seen.size!==486)errors.push("F7 canonical route/context coverage incomplete");
+  return errors;
+}
+function f7EvidenceErrors(m,t){
+  if(!obj(t.f7VisualAcceptance))return [];
+  const errors=[],expected=new Set(t.f7VisualAcceptance.cases.map(c=>
+    JSON.stringify([c.route,c.scenario])));
+  const seen=new Set(),cases=Array.isArray(m.f7Cases)?m.f7Cases:[];
+  if(cases.length!==486)errors.push("F7 private human review requires all 486 cases");
+  for(const c of cases){
+    if(!obj(c)){errors.push("Malformed F7 private case");continue;}
+    const key=JSON.stringify([c.route,c.scenario]);
+    if(!expected.has(key)||seen.has(key))
+      errors.push("Unknown or duplicate F7 route/context");
+    seen.add(key);
+    if(c.status!=="PASS"||!obj(c.f7Checks)||
+       F7_REVIEW_CHECKS.some(flag=>c.f7Checks[flag]!==true))
+      errors.push("F7 case lacks independent human UX/role/privacy approval");
+    if(!Array.isArray(c.evidence)||!c.evidence.length||
+       c.evidence.some(e=>!obj(e)||!idOk(e.ref)||!sha256(e.sha256)))
+      errors.push("F7 private screenshot and review SHA256 missing");
+    if(!idOk(c.executedBy)||!idOk(c.reviewedBy)||c.executedBy===c.reviewedBy||
+       !timeOk(c.executedAt)||!timeOk(c.reviewedAt)||
+       Date.parse(c.reviewedAt)<Date.parse(c.executedAt))
+      errors.push("F7 case lacks independent dated operator/reviewer");
+  }
+  if(seen.size!==486)errors.push("F7 486-route/context review coverage incomplete");
+  return errors;
+}
 function templateErrors(t) {
   const errors=[];
   if (!obj(t) || t.stage!==132 || !/^[0-9a-f]{40}$/i.test(t.releaseCandidateSha ?? "") || t.stageStatus!=="NOT_EXECUTED") errors.push("Stage 132 template header or execution state is wrong");
@@ -20,6 +92,7 @@ function templateErrors(t) {
     if (!c.title || !c.minimumEvidence || !c.acceptanceMethod || !c.softwareSource || !t.gateRoles[c.primaryGate]) errors.push("Incomplete section "+c.section);
   }
   for(let i=1;i<=88;i++)if(!seen.has(i))errors.push("Section "+i+" missing");
+  if(t?.candidatePreparation===F7_PRIVATE_PREP)errors.push(...f7TemplateErrors(t));
   return errors;
 }
 function evidenceErrors(m,t) {
@@ -40,15 +113,24 @@ function evidenceErrors(m,t) {
     if(!timeOk(c.executedAt)||!timeOk(c.reviewedAt)||Date.parse(c.reviewedAt)<Date.parse(c.executedAt))errors.push("Section "+c.section+" has invalid review timeline");
   }
   for(let i=1;i<=88;i++)if(!seen.has(i))errors.push("Section "+i+" missing actual review");
-  const gates=new Set();
+  errors.push(...f7EvidenceErrors(m,t));
+  const gates=new Set(),reviewers=new Set();
   if(!Array.isArray(m.gateSignoffs)||m.gateSignoffs.length!==7)errors.push("All seven independent gate decisions required");
   for(const g of m.gateSignoffs??[]) {
     if(!obj(g)){errors.push("Malformed gate record");continue;}
     if(!Object.hasOwn(t.gateRoles,g.gateId??"")||gates.has(g.gateId))errors.push("Unknown/duplicate approval gate");
     gates.add(g.gateId);
+    if(reviewers.has(g.reviewerId))errors.push("Gate signers must be seven independent people");
+    reviewers.add(g.reviewerId);
     if(g.reviewerRole!==t.gateRoles[g.gateId]||g.decision!=="APPROVED"||!idOk(g.reviewerId)||!idOk(g.evidenceRef)||!timeOk(g.decidedAt))errors.push("Gate "+g.gateId+" lacks approval metadata");
   }
   for(const g of Object.keys(t.gateRoles))if(!gates.has(g))errors.push("Gate "+g+" missing");
+  const owner=Array.isArray(m.gateSignoffs)
+    ?m.gateSignoffs.find(g=>g?.gateId==="OWNER_FINAL"):null;
+  if(owner && m.gateSignoffs.some(g=>g?.gateId!=="OWNER_FINAL"&&
+     (!timeOk(g.decidedAt)||!timeOk(owner.decidedAt)||
+      Date.parse(g.decidedAt)>Date.parse(owner.decidedAt))))
+    errors.push("Final owner decision cannot predate independent domain signoffs");
   return errors;
 }
 function readJson(path){return JSON.parse(readFileSync(path,"utf8"));}
@@ -67,6 +149,13 @@ function main(){
   if(violations.length){console.log("NO_GO_TEMPLATE: "+violations.join("; "));process.exitCode=1;return;}
   if(process.argv[2]==="--check-template"){console.log("TEMPLATE_VALID: 88/88 NOT_EXECUTED, 7 qualified gates; no real-world PASS claimed.");return;}
   if(process.argv[2]!=="--assess"||!process.argv[3]){console.error("Use --check-template or --assess /private/evidence.json");process.exitCode=2;return;}
+  // The legacy Stage 132 file remains a historical SOURCE baseline only:
+  // it does not contain F7's 486 required human reviews. An assessor must
+  // not accept an old 88-only evidence set as final combined owner UAT.
+  if(!suppliedTemplate||t.candidatePreparation!==F7_PRIVATE_PREP){
+    console.log("NO_GO_PRIVATE_CONSOLIDATED_CAMPAIGN_REQUIRED: use a qualified private F7 486 + F8 88 release candidate");
+    process.exitCode=1;return;
+  }
   // Private candidates require positive, exact-release deployment metadata.
   // This checks structure and traceability only; it never authenticates evidence.
   if(t.candidatePreparation==="PRIVATE_UNVERIFIED_MAIN_CI_HOSTINGER_AND_HUMAN_UAT_PENDING"){
