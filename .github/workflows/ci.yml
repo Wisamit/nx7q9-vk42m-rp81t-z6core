@@ -220,6 +220,7 @@ jobs:
       - run: node --experimental-strip-types --test tests/stage-120-clinical-governance-reflex-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-121-exact-clinical-decimal-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/f8-reference-interval-decimal-mariadb.integration.test.ts
+      - run: node --experimental-strip-types --test tests/f8-reference-interval-approval-locks-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-122-clinical-approval-links-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-123-clinical-governance-scope-mariadb.integration.test.ts
       - run: node --experimental-strip-types --test tests/stage-124-delta-history-identity-mariadb.integration.test.ts
